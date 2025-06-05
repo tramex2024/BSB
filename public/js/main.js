@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!token) { // First step: request token
             try {
-                const response = await fetch('https://bsb-backend-t441.onrender.com', { // Replace with your Render URL
+                const response = await fetch('https://bsb-backend-t441.onrender.com/api/auth/request-token', { // Replace with your Render URL
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else { // Second step: verify token and sign in/up
             try {
-                const response = await fetch('https://bsb-backend-t441.onrender.com', { // Replace with your Render URL
+                const response = await fetch('https://bsb-backend-t441.onrender.com/api/auth/verify-token', { // Replace with your Render URL
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, token })
