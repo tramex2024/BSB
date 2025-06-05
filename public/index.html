@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSB - Bitmart Spot Bots</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body class="dark-mode">
+    <header class="fixed-header">
+        <div class="header-left">
+            <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
+            <span class="app-name">BSB (Bitmart Spot Bots)</span>
+        </div>
+        <nav class="header-middle">
+            <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
+            <a href="#testbot" class="nav-tab" data-tab="testbot">TESTBOT</a>
+            <a href="#autobot" class="nav-tab" data-tab="autobot">AUTOBOT</a>
+            <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
+        </nav>
+        <div class="header-right">
+            <i class="fas fa-sign-in-alt icon" title="Login"></i>
+            <i class="fas fa-globe icon" title="Language"></i>
+            <i class="fas fa-users icon" title="Users"></i>
+            <i class="fas fa-cog icon" title="Settings"></i>
+            <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
+            <i class="fas fa-key icon" title="API"></i>
+            <i class="fas fa-envelope icon" title="Contact"></i>
+        </div>
+    </header>
+
+    <main class="content">
+        <section id="dashboard-section" class="tab-content active">
+            <h2>Welcome to your Dashboard!</h2>
+            </section>
+        <section id="testbot-section" class="tab-content">
+            <h2>TestBot Interface</h2>
+            </section>
+        <section id="autobot-section" class="tab-content">
+            <h2>AutoBot Interface</h2>
+            </section>
+        <section id="aibot-section" class="tab-content">
+            <h2>AIBot Interface</h2>
+            </section>
+    </main>
+
+    <div id="auth-modal" class="modal">
+        <div class="modal-content">
+            <h3>Sign In / Sign Up</h3>
+            <form id="auth-form">
+                <input type="email" id="email" placeholder="Email" required>
+                <input type="text" id="token" placeholder="Token (from email)" style="display: none;">
+                <button type="submit" id="auth-button">Continue</button>
+            </form>
+            <p id="auth-message"></p>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

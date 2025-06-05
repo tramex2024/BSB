@@ -1,0 +1,210 @@
+:root {
+    --dark-bg: #1a1a2e;
+    --dark-header-bg: #16213e;
+    --dark-text: #e0e0e0;
+    --dark-accent: #0f3460;
+    --dark-border: #007bff; /* Blue for highlights/borders */
+    --input-bg: #2b3a55;
+    --button-bg: #007bff;
+    --button-text: #ffffff;
+    --modal-bg: #2b3a55;
+}
+
+body.dark-mode {
+    background-color: var(--dark-bg);
+    color: var(--dark-text);
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding-top: 60px; /* Space for fixed header */
+    overflow-x: hidden;
+}
+
+/* Header Styles */
+.fixed-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60px;
+    background-color: var(--dark-header-bg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+}
+
+.logo {
+    height: 40px; /* Adjust as needed */
+    margin-right: 10px;
+}
+
+.app-name {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--dark-text);
+}
+
+.header-middle {
+    display: flex;
+    gap: 25px; /* Spacing between tabs */
+}
+
+.nav-tab {
+    color: var(--dark-text);
+    text-decoration: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.nav-tab:hover {
+    background-color: var(--dark-accent);
+}
+
+.nav-tab.active {
+    background-color: var(--dark-accent);
+    border-bottom: 2px solid var(--dark-border);
+}
+
+.header-right {
+    display: flex;
+    gap: 20px; /* Spacing between icons */
+}
+
+.header-right .icon {
+    color: var(--dark-text);
+    font-size: 1.3em;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.header-right .icon:hover {
+    color: var(--dark-border);
+}
+
+/* Content Area */
+.content {
+    padding: 20px;
+}
+
+.tab-content {
+    display: none; /* Hidden by default */
+    min-height: calc(100vh - 80px); /* Adjust based on header/footer if any */
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Auth Modal */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 1001;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: var(--modal-bg);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    text-align: center;
+    width: 350px;
+}
+
+.modal-content h3 {
+    color: var(--dark-text);
+    margin-bottom: 20px;
+}
+
+.modal-content input[type="email"],
+.modal-content input[type="text"] {
+    width: calc(100% - 20px);
+    padding: 12px;
+    margin-bottom: 15px;
+    border: 1px solid var(--dark-border);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    color: var(--dark-text);
+    font-size: 1em;
+}
+
+.modal-content input[type="email"]::placeholder,
+.modal-content input[type="text"]::placeholder {
+    color: #999;
+}
+
+
+.modal-content button {
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    padding: 12px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    width: 100%;
+    transition: background-color 0.3s ease;
+}
+
+.modal-content button:hover {
+    background-color: #0056b3;
+}
+
+#auth-message {
+    margin-top: 15px;
+    color: #ffda79; /* A light warning color */
+    font-size: 0.9em;
+}
+
+/* Lite Mode - Add these if you implement the toggle */
+body.lite-mode {
+    background-color: #f0f2f5;
+    color: #333;
+}
+
+body.lite-mode .fixed-header {
+    background-color: #ffffff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+body.lite-mode .app-name,
+body.lite-mode .nav-tab,
+body.lite-mode .header-right .icon {
+    color: #333;
+}
+
+body.lite-mode .nav-tab:hover {
+    background-color: #e0e0e0;
+}
+
+body.lite-mode .nav-tab.active {
+    background-color: #e0e0e0;
+    border-bottom: 2px solid #007bff;
+}
+
+body.lite-mode .modal-content {
+    background-color: #ffffff;
+}
+
+body.lite-mode .modal-content input {
+    background-color: #f9f9f9;
+    border: 1px solid #ccc;
+    color: #333;
+}

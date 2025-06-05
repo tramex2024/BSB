@@ -1,0 +1,22 @@
+bsb-trading-app/
+├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
+│   ├── index.html
+│   ├── css/
+│   │   └── style.css
+│   ├── js/
+│   │   └── main.js
+│   └── images/
+│       └── bsb-logo.png
+├── server/                # Backend files - Deployed on Render
+│   ├── server.js
+│   ├── models/
+│   │   └── User.js
+│   ├── routes/
+│   │   └── auth.js
+│   ├── controllers/
+│   │   └── authController.js
+│   └── utils/
+│       └── mailer.js
+├── .env                   # Environment variables (MongoDB URI, etc.)
+├── package.json
+└── README.md
