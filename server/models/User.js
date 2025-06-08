@@ -1,3 +1,4 @@
+// backend/models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs'); // Asumo que usas bcrypt para encriptar contraseñas si las manejas
 
@@ -33,11 +34,12 @@ const userSchema = new mongoose.Schema({
         type: String,
         // No es required para que un usuario pueda existir sin API keys configuradas
     },
-    bitmartSecretKey: {
+    // ¡CORRECCIÓN CRÍTICA AQUÍ! El nombre del campo debe coincidir con 'bitmartSecretKeyEncrypted'
+    bitmartSecretKeyEncrypted: { 
         type: String,
         // No es required por la misma razón
     },
-    bitmartMemo: {
+    bitmartApiMemo: {
         type: String,
         // No es required
     },
