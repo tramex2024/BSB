@@ -1,3 +1,5 @@
+// server/models/BotState.js
+
 const mongoose = require('mongoose');
 
 // Define the schema for your bot's state
