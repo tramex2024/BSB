@@ -1,4 +1,4 @@
-bsb-trading-app/
+BSB/
 ├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
 │   ├── index.html
 │   ├── css/
@@ -11,12 +11,22 @@ bsb-trading-app/
 │   ├── server.js
 │   ├── models/
 │   │   └── User.js
+│   │   └── BotState.js
+│   ├── middleware/
+│   │   └── bitmartAuthMiddleware.js
+│   │   └── authMiddleware.js
+│   ├── services/
+│   │   └── bitmartService.js
 │   ├── routes/
 │   │   └── auth.js
+│   │   └── userRoutes.js 
 │   ├── controllers/
 │   │   └── authController.js
+│   ├── config/
+│   │   └── db.js
 │   └── utils/
-│       └── mailer.js
-├── .env                   # Environment variables (MongoDB URI, etc.)
-├── package.json
-└── README.md
+│   │   └── 
+│   │   └── encryption.js
+│   ├── .env                   # Environment variables (MongoDB URI, etc.)
+│   ├── package.json
+│   └── README.md

@@ -9,6 +9,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabContents = document.querySelectorAll('.tab-content');
     const darkModeToggle = document.querySelector('.dark-mode-toggle');
 
+    // --- NEW API Key Modal Elements ---
+    const apiIcon = document.querySelector('.fa-cogs'); // Assuming this is your API icon
+    const apiModal = document.getElementById('api-modal');
+    const apiCloseButton = apiModal.querySelector('.close-button');
+    const apiForm = document.getElementById('api-form');
+    const apiKeyInput = document.getElementById('api-key');
+    const secretKeyInput = document.getElementById('secret-key');
+    const apiMemoInput = document.getElementById('api-memo');
+    const validateApiButton = document.getElementById('validate-api-button');
+    const apiStatusMessage = document.getElementById('api-status-message');
+    const connectionIndicator = document.getElementById('connection-indicator');
+    const connectionText = document.getElementById('connection-text');
+
+    // Backend URL for API key validation and storage
+    // *** IMPORTANT: REPLACE THIS WITH YOUR RENDER BACKEND URL ***
+    const BACKEND_API_URL = 'https://bsb-backend-t441.onrender.com';
+
     // Function to show a specific tab
     const showTab = (tabId) => {
         tabContents.forEach(content => {
@@ -24,8 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check for existing token in localStorage for persistent login
     const userToken = localStorage.getItem('bsb_user_token');
     if (userToken) {
-        // In a real app, you'd send this token to your backend to validate
-        // and fetch user data. For this example, we'll just assume login.
         console.log('User already logged in with token:', userToken);
         showTab('dashboard'); // Go to dashboard if already logged in
         authModal.style.display = 'none'; // Hide modal
@@ -41,7 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!token) { // First step: request token
             try {
-                const response = await fetch('https://bsb-backend-t441.onrender.com/api/auth/request-token', { // Replace with your Render URL
+                authMessage.textContent = 'Requesting token...';
+                const response = await fetch(`${BACKEND_API_URL}/api/auth/request-token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
@@ -58,7 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else { // Second step: verify token and sign in/up
             try {
-                const response = await fetch('https://bsb-backend-t441.onrender.com/api/auth/verify-token', { // Replace with your Render URL
+                authMessage.textContent = 'Verifying token...';
+                const response = await fetch(`${BACKEND_API_URL}/api/auth/verify-token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, token })
@@ -68,6 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (response.ok && data.token) {
                     localStorage.setItem('bsb_user_token', data.token); // Store token
+                    // Also store user ID and email if available from backend response for API keys
+                    localStorage.setItem('bsb_user_id', data.user._id);
+                    localStorage.setItem('bsb_user_email', data.user.email);
+
                     authModal.style.display = 'none'; // Hide modal
                     showTab('dashboard'); // Redirect to dashboard
                     console.log('Login successful:', data.user);
@@ -114,7 +135,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Placeholder for other icon functionalities (Login, Language, Users, Setting, API, Contact)
-    // You would implement separate functions or modals for these
     document.querySelector('.fa-sign-in-alt').addEventListener('click', () => {
         if (!localStorage.getItem('bsb_user_token')) {
             authModal.style.display = 'flex';
@@ -123,5 +143,104 @@ document.addEventListener('DOMContentLoaded', () => {
             // Or show a user profile/logout modal
         }
     });
-    // Add similar event listeners for other icons
+
+    // --- API Icon Click Event Listener ---
+    apiIcon.addEventListener('click', () => {
+        // Ensure user is logged in before showing API modal
+        if (!localStorage.getItem('bsb_user_token')) {
+            alert('Please sign in/up first to configure API keys.');
+            authModal.style.display = 'flex'; // Show login modal
+            return;
+        }
+        apiModal.style.display = 'flex'; // Show the API modal
+        // Optionally fetch existing API keys for this user and pre-fill the form
+        // (This would require another backend API endpoint)
+    });
+
+    // --- Close API Modal ---
+    apiCloseButton.addEventListener('click', () => {
+        apiModal.style.display = 'none';
+        apiStatusMessage.textContent = ''; // Clear status message
+        connectionIndicator.classList.remove('connected', 'disconnected'); // Clear indicator
+        connectionText.textContent = '';
+    });
+
+    // Close modal if clicking outside
+    window.addEventListener('click', (event) => {
+        if (event.target === apiModal) {
+            apiModal.style.display = 'none';
+            apiStatusMessage.textContent = '';
+            connectionIndicator.classList.remove('connected', 'disconnected');
+            connectionText.textContent = '';
+        }
+    });
+
+
+    // --- API Form Submission for Validation and Storage ---
+    apiForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const apiKey = apiKeyInput.value;
+        const secretKey = secretKeyInput.value;
+        const apiMemo = apiMemoInput.value;
+        const userId = localStorage.getItem('bsb_user_id'); // Get user ID from local storage
+        const userEmail = localStorage.getItem('bsb_user_email'); // Get user Email from local storage
+        const token = localStorage.getItem('bsb_user_token'); // Get auth token for backend auth
+
+        if (!userId || !userEmail || !token) {
+            apiStatusMessage.textContent = 'Authentication error: User not logged in fully.';
+            apiStatusMessage.style.color = 'red';
+            return;
+        }
+
+        apiStatusMessage.textContent = 'Validating API keys...';
+        apiStatusMessage.style.color = 'orange';
+        connectionIndicator.classList.remove('connected', 'disconnected'); // Clear previous state
+        connectionIndicator.style.backgroundColor = '#ccc'; // Grey during validation
+        connectionText.textContent = '';
+
+
+        try {
+            // Send API keys to your backend for validation with BitMart and storage
+            const response = await fetch(`${BACKEND_API_URL}/api/user/save-api-keys`, { // You'll create this new route in your backend
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` // Send user's auth token for security
+                },
+                body: JSON.stringify({
+                    userId,
+                    email: userEmail,
+                    apiKey,
+                    secretKey,
+                    apiMemo
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                apiStatusMessage.textContent = data.message || 'API keys saved and validated successfully!';
+                apiStatusMessage.style.color = 'green';
+                connectionIndicator.classList.add('connected');
+                connectionText.textContent = 'CONNECTED';
+            } else {
+                apiStatusMessage.textContent = data.message || 'Failed to validate or save API keys. Check your inputs.';
+                apiStatusMessage.style.color = 'red';
+                connectionIndicator.classList.add('disconnected');
+                connectionText.textContent = 'DISCONNECTED';
+            }
+        } catch (error) {
+            apiStatusMessage.textContent = 'Server error during API key validation. Please try again later.';
+            apiStatusMessage.style.color = 'red';
+            connectionIndicator.classList.add('disconnected');
+            connectionText.textContent = 'DISCONNECTED';
+            console.error('Error validating API keys:', error);
+        }
+    });
+
+    // Ensure initial API icon is correctly selected if needed
+    // You might need to add an ID to your API icon in HTML if it's not the only fa-cogs
+    // For example: <i class="fas fa-cogs nav-icon" id="api-nav-icon"></i>
+    // Then use: const apiIcon = document.getElementById('api-nav-icon');
 });
