@@ -1,79 +1,64 @@
-// backend/models/User.js
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs'); // Asumo que usas bcrypt para encriptar contraseñas si las manejas
 
-const UserSchema = new mongoose.Schema({
+const userSchema = new mongoose.Schema({
     email: {
         type: String,
         required: true,
-        unique: true
+        unique: true,
+        lowercase: true,
+        trim: true,
+        match: [/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/, 'Please fill a valid email address']
     },
-    token: {
-        type: String, // El token para el Magic Link
-        required: true
+    // Si tu aplicación va a tener contraseñas normales (además del login con token), las definirías aquí.
+    // Por ahora, si solo usas login con token, este campo podría no ser necesario si no lo tienes en tu código.
+    // password: {
+    //     type: String,
+    //     required: function() { return this.isNew || this.password; } // Required solo si es nuevo o se está estableciendo
+    // },
+    
+    // Campos para el token de autenticación de un solo uso (para login sin contraseña)
+    // Estos campos NO deben ser required: true, ya que se anulan después de la verificación.
+    token: { // Este es el campo que causaba el error 'token: Path `token` is required.'
+        type: String
+        // NOTA: 'required: true' ha sido eliminado de aquí.
     },
-    tokenExpires: {
-        type: Date,
-        required: true
+    tokenExpires: { // Este es el campo que causaba el error 'tokenExpires: Path `tokenExpires` is required.'
+        type: Date
+        // NOTA: 'required: true' ha sido eliminado de aquí.
     },
+
+    // Campos para las API Keys de BitMart
     bitmartApiKey: {
         type: String,
-        default: null
+        // No es required para que un usuario pueda existir sin API keys configuradas
     },
-    bitmartSecretKeyEncrypted: { // Ahora almacena la clave encriptada
+    bitmartSecretKey: {
         type: String,
-        default: null
+        // No es required por la misma razón
     },
-    bitmartApiMemo: {
+    bitmartMemo: {
         type: String,
-        default: null
+        // No es required
     },
-    createdAt: {
-        type: Date,
-        default: Date.now,
-    },
-    // ... otros campos que ya tengas
-}, {
-    timestamps: true // Para createdAt y updatedAt
-});
-
-// Middleware de Mongoose para hashear la contraseña antes de guardar
-UserSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) {
-        return next();
+    // Puedes añadir un campo para saber si las claves de BitMart están validadas
+    bitmartApiValidated: {
+        type: Boolean,
+        default: false
     }
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-});
 
-// Método para comparar contraseñas
-UserSchema.methods.matchPassword = async function (enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
-};
+}, { timestamps: true }); // 'timestamps: true' añade createdAt y updatedAt automáticamente
 
-// Middleware de Mongoose para encriptar las API keys ANTES de guardar
-UserSchema.pre('save', async function (next) {
-    if (this.isModified('bitmartApiKey') && this.bitmartApiKey) {
-        this.bitmartApiKey = encrypt(this.bitmartApiKey);
-    }
-    if (this.isModified('bitmartSecretKey') && this.bitmartSecretKey) {
-        this.bitmartSecretKey = encrypt(this.bitmartSecretKey);
-    }
-    if (this.isModified('bitmartApiMemo') && this.bitmartApiMemo) {
-        this.bitmartApiMemo = encrypt(this.bitmartApiMemo);
-    }
-    next();
-});
+// Si tu esquema maneja contraseñas, aquí iría el pre-save hook para encriptarlas.
+// userSchema.pre('save', async function(next) {
+//     if (!this.isModified('password')) return next();
+//     this.password = await bcrypt.hash(this.password, 10);
+//     next();
+// });
 
-// Métodos para desencriptar las API keys al recuperarlas (no se guarda en la DB desencriptado)
-UserSchema.methods.getDecryptedBitmartCredentials = function () {
-    return {
-        apiKey: this.bitmartApiKey ? decrypt(this.bitmartApiKey) : null,
-        secretKey: this.bitmartSecretKey ? decrypt(this.bitmartSecretKey) : null,
-        apiMemo: this.bitmartApiMemo ? decrypt(this.bitmartApiMemo) : null,
-    };
-};
+// Si tu esquema maneja la comparación de contraseñas
+// userSchema.methods.comparePassword = async function(candidatePassword) {
+//     return await bcrypt.compare(candidatePassword, this.password);
+// };
 
-const User = mongoose.model('User', UserSchema);
-
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);
