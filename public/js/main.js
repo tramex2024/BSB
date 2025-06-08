@@ -722,7 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 // Aquí llamamos a la ruta en tu backend que guardará y validará las API Keys
-                const response = await fetchFromBackend('/api/user/bitmart/save-api-keys', {
+                const response = await fetchFromBackend('/api/user/save-api-keys', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ apiKey, secretKey, apiMemo })
