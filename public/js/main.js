@@ -685,16 +685,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Opcional: Cargar las API keys existentes si ya están guardadas para el usuario
                 // Esto requeriría una ruta en el backend como /api/user/bitmart/api-keys
                 // fetchFromBackend('/api/user/bitmart/api-keys')
-                //     .then(data => {
-                //         if (data && data.apiKey) {
-                //             apiKeyInput.value = data.apiKey;
-                //             secretKeyInput.value = '********'; // No mostrar la secret key
-                //             apiMemoInput.value = data.apiMemo || '';
-                //             connectionIndicator.classList.replace('bg-gray-500', 'bg-green-500');
-                //             connectionText.textContent = 'Last Connected';
-                //         }
-                //     })
-                //     .catch(error => console.error("Error loading existing API keys:", error));
+                //    .then(data => {
+                //        if (data && data.apiKey) {
+                //            apiKeyInput.value = data.apiKey;
+                //            secretKeyInput.value = '********'; // No mostrar la secret key
+                //            apiMemoInput.value = data.apiMemo || '';
+                //            connectionIndicator.classList.replace('bg-gray-500', 'bg-green-500');
+                //            connectionText.textContent = 'Last Connected';
+                //        }
+                //    })
+                //    .catch(error => console.error("Error loading existing API keys:", error));
             }
         });
     }
@@ -728,7 +728,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ apiKey, secretKey, apiMemo })
                 });
 
-                if (response && response.success) { // Tu backend debería responder con { success: true, message: "..." }
+                // --- MODIFICACIÓN CLAVE AQUÍ ---
+                // Tu backend responde con { message: "...", connected: true }.
+                // No hay una propiedad 'success'. Revisamos 'connected' o 'message'.
+                if (response && response.connected) { // Cambiado de response.success a response.connected
                     apiStatusMessage.textContent = response.message || 'API keys validated and saved!';
                     apiStatusMessage.style.color = 'green';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
@@ -740,7 +743,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Opcional: Cerrar el modal después de un éxito
                     // setTimeout(() => { apiModal.style.display = 'none'; }, 2000);
                 } else {
-                    const errorMessage = response.error || 'Failed to validate or save API keys.';
+                    // Si el backend envió un error (HTTP 4xx/5xx), fetchFromBackend ya lo lanzó.
+                    // Si llegó aquí y `response.connected` es `false` (o no existe pero response no es null),
+                    // significa que el backend respondió con un mensaje de error explícito pero HTTP 200.
+                    const errorMessage = response.message || 'Failed to validate or save API keys.'; // Usamos response.message
                     apiStatusMessage.textContent = errorMessage;
                     apiStatusMessage.style.color = 'red';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
@@ -748,8 +754,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     connectionText.textContent = 'Disconnected';
                 }
             } catch (error) {
+                // Este bloque captura errores de red o errores lanzados por fetchFromBackend
+                // cuando el backend responde con un HTTP !res.ok
                 console.error('Error submitting API keys:', error);
-                apiStatusMessage.textContent = `Error: ${error.message || 'Network issue.'}`;
+                apiStatusMessage.textContent = `Error: ${error.message}`;
                 apiStatusMessage.style.color = 'red';
                 connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                 connectionIndicator.classList.add('bg-red-500');
@@ -757,42 +765,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    // Cierra el modal de API con el botón de cerrar
-    if (closeApiModalButton) {
-        closeApiModalButton.addEventListener('click', () => {
-            if (apiModal) {
-                apiModal.style.display = 'none';
-            }
-        });
-    }
-
-    // Cierra cualquier modal al hacer clic fuera de él
-    window.addEventListener('click', (event) => {
-        if (event.target === authModal) {
-            toggleAuthModal(false);
-        }
-        if (event.target === apiModal) {
-            apiModal.style.display = 'none';
-        }
-    });
-
-    // Toggle Dark/Lite Mode
-    const darkModeToggle = document.querySelector('.dark-mode-toggle');
-    if (darkModeToggle) {
-        darkModeToggle.addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-            if (document.body.classList.contains('dark-mode')) {
-                localStorage.setItem('theme', 'dark');
-            } else {
-                localStorage.setItem('theme', 'lite');
-            }
-        });
-        if (localStorage.getItem('theme') === 'lite') {
-            document.body.classList.remove('dark-mode');
-        } else {
-            document.body.classList.add('dark-mode');
-        }
-    }
-
-}); // Fin de DOMContentLoaded
+});
