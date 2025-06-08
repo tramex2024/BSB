@@ -339,3 +339,111 @@ body.dark-mode #api-modal input {
     color: #eee;
     border-color: #555;
 }
+/* MODAL STYLES */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.7); /* Black w/ opacity */
+    display: flex; /* Use flexbox for centering */
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+}
+
+.modal-content {
+    background-color: #2c3e50; /* Darker background for content */
+    margin: auto; /* Ensures it stays centered */
+    padding: 30px;
+    border: 1px solid #888;
+    width: 90%; /* Adjust width as needed */
+    max-width: 400px; /* Max width for larger screens */
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    color: #ecf0f1; /* Light text for dark background */
+    position: relative; /* For close button positioning */
+}
+
+.modal-content h3, .modal-content h2 {
+    color: #ecf0f1;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.modal-content input[type="email"],
+.modal-content input[type="text"],
+.modal-content input[type="password"] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #34495e; /* Slightly lighter border */
+    border-radius: 4px;
+    background-color: #34495e; /* Input background */
+    color: #ecf0f1; /* Input text color */
+}
+
+.modal-content button {
+    width: 100%;
+    padding: 10px;
+    background-color: #27ae60; /* Green for buttons */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+}
+
+.modal-content button:hover {
+    background-color: #2ecc71;
+}
+
+.modal-content p.message-text {
+    margin-top: 15px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* Close button for modals */
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    cursor: pointer;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* API Modal specific indicators */
+.indicator-circle {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #6b7280; /* Default gray */
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.indicator-text {
+    display: inline-block;
+    vertical-align: middle;
+    color: #9ca3af;
+}
+
+/* Override default display: none to hide properly */
+#auth-modal, #api-modal {
+    display: none;
