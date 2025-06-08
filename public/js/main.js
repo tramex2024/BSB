@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Backend URL for API key validation and storage
     // *** IMPORTANT: REPLACE THIS WITH YOUR RENDER BACKEND URL ***
-    const BACKEND_API_URL = 'https://bsb-backend-t441.onrender.com';
+    const BACKEND_API_URL = 'https://bsb-ppex.onrender.com';
 
     // Function to show a specific tab
     const showTab = (tabId) => {
