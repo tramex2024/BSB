@@ -25,15 +25,15 @@
             <i class="fas fa-users icon" title="Users"></i>
             <i class="fas fa-cog icon" title="Settings"></i>
             <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
-            <i class="fas fa-key icon" title="API"></i>
-            <i class="fas fa-envelope icon" title="Contact"></i>
+            <i class="fas fa-key icon" id="api-key-icon" title="API"></i> <i class="fas fa-envelope icon" title="Contact"></i>
         </div>
     </header>
 
     <main class="content">
         <section id="dashboard-section" class="tab-content active">
             <h2>Welcome to your Dashboard!</h2>
-            </section>
+        </section>
+
         <section id="autobot-section" class="tab-content">
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -159,398 +159,15 @@
                     container_id: "tvchart"
                 });
             </script>
+        </body>
+        </section>
 
-            <script>
-                // IMPORTANT: This BACKEND_URL should be set as an environment variable in Vercel
-                // and dynamically loaded here. For now, we'll keep it as a placeholder.
-                // const BACKEND_URL = 'http://localhost:3001'; // Your backend URL (placeholder)
-
-                // --- Use environment variable for production ---
-                // This is how you'd typically get it in a build system (like Vite or Create React App)
-                // However, since this is a plain HTML file, you might need to manually
-                // replace this during your build/deployment process or fetch it dynamically.
-                // For a simple setup like this, you can just hardcode your Render URL for testing once confirmed.
-                // For Vercel deployments, the best way is usually via Vercel's environment variables
-                // for the frontend build. For now, we'll assume it's correctly set.
-                // If this is *not* a React/Vue build, you might need to embed it in `index.html`
-                // as a global variable or rely on a `config.js` file.
-                // For now, I'll use a placeholder variable that you *must* replace with your Render URL.
-                const BACKEND_URL = 'https://bsb-ppex.onrender.com'; 
-                
-                const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
-
-                let isRunning = false;
-                let ultimoCoverageValido = 0.00;
-                let currentTab = 'opened'; // Default active tab
-                let currentDisplayedOrders = new Map(); // Mapa para mantener las órdenes mostradas y evitar el parpadeo
-
-                // --- Helper Function for API Calls ---
-                async function fetchFromBackend(url, options = {}) {
-                    try {
-                        const res = await fetch(`${BACKEND_URL}${url}`, options);
-
-                        if (!res.ok) {
-                            let errorDetails = `HTTP error! status: ${res.status}`;
-                            try {
-                                // Try to parse error as JSON
-                                const errorData = await res.json();
-                                if (errorData.error) {
-                                    errorDetails = errorData.error;
-                                } else if (errorData.message) {
-                                    errorDetails = errorData.message;
-                                } else {
-                                    // Fallback if JSON is valid but doesn't have 'error' or 'message'
-                                    errorDetails = JSON.stringify(errorData);
-                                }
-                            } catch (jsonError) {
-                                // If parsing as JSON fails, use response text or a default message
-                                errorDetails = await res.text() || `HTTP error! status: ${res.status} (non-JSON response or empty)`;
-                            }
-                            throw new Error(errorDetails);
-                        }
-                        return await res.json();
-                    } catch (error) {
-                        console.error(`Error fetching from ${url}:`, error);
-                        // Ensure error.message is always a string, or provide a generic message
-                        const errorMessage = error instanceof Error ? error.message : String(error || "Unknown error occurred.");
-                        document.getElementById('order-list').innerHTML = `<p class="text-red-400">Error: ${errorMessage}</p>`;
-                        return null; // Ensure null is returned on error
-                    }
-                }
-
-                // --- Display Functions ---
-                function createOrderElement(order) {
-                    const orderDiv = document.createElement('div');
-                    orderDiv.className = 'bg-gray-700 p-3 rounded-md border border-gray-600';
-                    orderDiv.id = `order-${order.orderId}`; // Asignar un ID único al elemento de la orden
-                    orderDiv.dataset.orderId = order.orderId; // Guardar el orderId como data attribute
-                    return orderDiv;
-                }
-
-                function updateOrderElement(orderDiv, order) {
-                    orderDiv.innerHTML = `
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="font-bold">${order.symbol || 'N/A'}</span>
-                            <span class="${order.side === 'BUY' ? 'text-green-400' : 'text-red-400'}">${(order.side || 'N/A').toUpperCase()}</span>
-                            <span>${(order.type || 'N/A').toUpperCase()}</span>
-                        </div>
-                        <div class="flex justify-between text-xs text-gray-300">
-                            <span>Price: ${parseFloat(order.price || '0').toFixed(2)}</span>
-                            <span>Size: ${parseFloat(order.size || '0').toFixed(5)}</span>
-                            <span>Filled: ${parseFloat(order.filledSize || '0').toFixed(5)}</span>
-                            <span>State: <span class="${order.state === 'filled' || order.state === 'fully_filled' ? 'text-green-400' : order.state === 'cancelled' ? 'text-red-400' : 'text-yellow-400'}">${(order.state || 'N/A').toUpperCase()}</span></span>
-                        </div>
-                        <div class="flex justify-between text-xs text-gray-500 mt-1">
-                            <span>Order ID: ${order.orderId || 'N/A'}</span>
-                            <span>Time: ${order.createTime ? new Date(parseInt(order.createTime)).toLocaleString() : 'N/A'}</span>
-                        </div>
-                    `;
-                }
-
-                function displayOrders(newOrders, tab) {
-                    const orderListDiv = document.getElementById('order-list');
-
-                    if (!newOrders || newOrders.length === 0) {
-                        if (currentDisplayedOrders.size === 0 || tab !== 'opened') { // Evitar vaciar si no hay órdenes en la pestaña actual (para evitar parpadeo si no hay órdenes)
-                            orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
-                        }
-                        currentDisplayedOrders.clear();
-                        return;
-                    }
-
-                    const incomingOrderIds = new Set(newOrders.map(order => order.orderId));
-                    const ordersToRemove = [];
-
-                    // Identificar órdenes a eliminar (ya no están en la nueva lista)
-                    currentDisplayedOrders.forEach((orderElement, orderId) => {
-                        if (!incomingOrderIds.has(orderId)) {
-                            ordersToRemove.push(orderElement);
-                        }
-                    });
-
-                    ordersToRemove.forEach(orderElement => {
-                        orderListDiv.removeChild(orderElement);
-                        currentDisplayedOrders.delete(orderElement.dataset.orderId);
-                    });
-
-                    // Añadir o actualizar órdenes
-                    newOrders.forEach(order => {
-                        let orderElement = document.getElementById(`order-${order.orderId}`);
-                        if (orderElement) {
-                            // La orden ya existe, actualizarla
-                            updateOrderElement(orderElement, order);
-                        } else {
-                            // La orden es nueva, crearla y añadirla
-                            orderElement = createOrderElement(order);
-                            updateOrderElement(orderElement, order);
-                            orderListDiv.appendChild(orderElement);
-                        }
-                        currentDisplayedOrders.set(order.orderId, orderElement);
-                    });
-
-                    // Si no hay órdenes después de la actualización (y no había antes), mostrar mensaje
-                    if (currentDisplayedOrders.size === 0 && newOrders.length === 0) {
-                        orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
-                    }
-                }
-
-
-                // --- Fetching Functions for BitMart Data ---
-
-                async function getBalances() {
-                    try {
-                        const walletData = await fetchFromBackend('/api/balance');
-                        if (walletData) {
-                            const usdt = walletData.find(w => w.currency === "USDT");
-                            const balance = usdt ? parseFloat(usdt.available).toFixed(2) : '0.00';
-                            document.getElementById('balance').textContent = balance;
-                            actualizarCalculos();
-                        } else {
-                            document.getElementById('balance').textContent = 'Error';
-                        }
-                    } catch (error) {
-                        console.error('Error al cargar balances:', error);
-                        document.getElementById('balance').textContent = 'Error';
-                    }
-                }
-
-                async function fetchOpenOrdersData() {
-                    try {
-                        const orders = await fetchFromBackend(`/api/open-orders?symbol=${TRADE_SYMBOL}`);
-                        return orders || [];
-                    } catch (error) {
-                        console.error("Error fetching open orders data:", error);
-                        return [];
-                    }
-                }
-
-                async function fetchHistoryOrdersData(tab) {
-                    try {
-                        console.warn(`Funcionalidad para ${tab} aún no implementada en el backend para historial.`);
-                        return [];
-                    } catch (error) {
-                        console.error("Error fetching historical orders data:", error);
-                        return [];
-                    }
-                }
-
-                async function fetchOrders(tab) {
-                    // Mostrar "Loading orders..." solo si no hay órdenes actualmente o si la pestaña cambia
-                    if (currentDisplayedOrders.size === 0 || currentTab !== tab) {
-                        document.getElementById('order-list').innerHTML = '<p class="text-gray-400">Loading orders...</p>';
-                        currentDisplayedOrders.clear(); // Limpiar el mapa si se cambia de pestaña o no hay órdenes
-                    }
-
-                    let orders = [];
-
-                    try {
-                        if (tab === 'opened') {
-                            orders = await fetchOpenOrdersData();
-                        } else {
-                            const historyOrders = await fetchHistoryOrdersData(tab);
-                            if (historyOrders) {
-                                if (tab === 'filled') {
-                                    orders = historyOrders.filter(order => order.state === 'filled' || order.state === 'fully_filled');
-                                } else if (tab === 'cancelled') {
-                                    orders = historyOrders.filter(order => order.state === 'cancelled');
-                                } else if (tab === 'all') {
-                                    orders = historyOrders;
-                                }
-                            }
-                        }
-                    } catch (error) {
-                        console.error(`Failed to fetch orders for tab ${tab}:`, error);
-                        document.getElementById('order-list').innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
-                        return;
-                    }
-
-                    displayOrders(orders, tab);
-                }
-
-                // --- Existing Functions (Adjusted for backend calls) ---
-                async function cargarPrecioEnVivo() {
-                    try {
-                        const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
-                        const data = await res.json();
-                        const price = parseFloat(data.price).toFixed(2);
-                        document.getElementById('price').textContent = price + ' USDT';
-                        actualizarCalculos();
-                    } catch (error) {
-                        console.error('Error al cargar precio en vivo:', error);
-                        document.getElementById('price').textContent = 'Error';
-                    }
-                }
-
-                async function checkConnection() {
-                    try {
-                        const response = await fetchFromBackend('/ping');
-                        const dot = document.getElementById('status-dot');
-                        const text = document.getElementById('status-text');
-                        if (response && response.status === 'ok') {
-                            dot.classList.replace('bg-red-500', 'bg-green-500');
-                            text.textContent = 'Connected';
-                        } else {
-                            throw new Error('Backend did not return OK status');
-                        }
-                    } catch (error) {
-                        const dot = document.getElementById('status-dot');
-                        const text = document.getElementById('status-text');
-                        dot.classList.replace('bg-green-500', 'bg-red-500');
-                        text.textContent = 'Disconnected';
-                        console.error('Connection check failed:', error);
-                    }
-                }
-
-                function calcularORQ(purchase, increment, balance) {
-                    let total = 0;
-                    let n = 0;
-                    while (true) {
-                        const nextOrder = purchase * Math.pow(increment / 100, n);
-                        if (total + nextOrder <= balance) {
-                            total += nextOrder;
-                            n++;
-                        } else break;
-                    }
-                    return n;
-                }
-
-                function calcularCoverage(orq, price, decrement) {
-                    if (orq === 0) return 0;
-                    return price * Math.pow(1 - decrement / 100, orq - 1);
-                }
-
-                function actualizarCalculos() {
-                    const purchase = parseFloat(document.getElementById("purchase").value) || 0;
-                    const increment = parseFloat(document.getElementById("increment").value) || 100;
-                    const decrement = parseFloat(document.getElementById("decrement").value) || 1;
-                    const priceText = document.getElementById("price").textContent;
-                    const price = parseFloat(priceText.replace(' USDT', '')) || 0;
-                    const balanceText = document.getElementById("balance").textContent;
-                    const balance = parseFloat(balanceText) || 0;
-
-                    const orq = calcularORQ(purchase, increment, balance);
-                    const coverage = calcularCoverage(orq, price, decrement);
-
-                    document.getElementById("orq").textContent = orq;
-                    document.getElementById("coverage").textContent = coverage.toFixed(2);
-                    ultimoCoverageValido = coverage;
-                }
-
-                async function toggleBotState() {
-                    const startBtn = document.getElementById('start-btn');
-                    const resetBtn = document.getElementById('reset-btn');
-                    const botStateDisplay = document.getElementById('bot-state');
-                    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end'); // Get the checkbox
-
-                    // Read parameters from inputs
-                    const purchase = parseFloat(document.getElementById("purchase").value);
-                    const increment = parseFloat(document.getElementById("increment").value);
-                    const decrement = parseFloat(document.getElementById("decrement").value);
-                    const trigger = parseFloat(document.getElementById("trigger").value);
-                    const stopAtCycleEnd = stopAtCycleEndCheckbox.checked; // Get checkbox value
-
-                    const action = startBtn.textContent === 'START' ? 'start' : 'stop'; // Determine action based on current button text
-
-                    try {
-                        const response = await fetchFromBackend('/api/toggle-bot', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            // Include stopAtCycleEnd in the parameters sent to the backend
-                            body: JSON.stringify({ action, params: { purchase, increment, decrement, trigger, stopAtCycleEnd } })
-                        });
-
-                        if (response && response.success) {
-                            // Update frontend based on backend's state
-                            const newBotState = response.botState.status;
-                            isRunning = (newBotState === 'RUNNING'); // Update local isRunning flag
-
-                            botStateDisplay.textContent = newBotState;
-                            botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
-                            startBtn.textContent = isRunning ? 'STOP' : 'START';
-                            resetBtn.disabled = isRunning;
-                            // Disable/enable the checkbox based on bot running state
-                            stopAtCycleEndCheckbox.disabled = isRunning;
-
-                            // Update other bot state indicators if they are sent back
-                            document.getElementById('cycle').textContent = response.botState.cycle;
-                            document.getElementById('profit').textContent = response.botState.profit.toFixed(2);
-                            document.getElementById('cycleprofit').textContent = response.botState.cycleProfit.toFixed(2);
-                            // No es necesario actualizar 'coverage' ni 'orq' aquí, ya que 'actualizarCalculos' se encarga de eso.
-
-                            console.log(`Bot status updated: ${newBotState}`);
-                        } else {
-                            throw new Error(response.message || 'Failed to toggle bot state.');
-                        }
-                    } catch (error) {
-                        console.error('Error toggling bot state:', error);
-                        alert(`Error: ${error.message}`);
-                        // Revert UI if there was an error
-                        isRunning = !isRunning; // Revert the flag
-                        botStateDisplay.textContent = isRunning ? 'RUNNING' : 'STOPPED';
-                        botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
-                        startBtn.textContent = isRunning ? 'STOP' : 'START';
-                        resetBtn.disabled = isRunning;
-                        stopAtCycleEndCheckbox.disabled = isRunning; // Revert checkbox state as well
-                    }
-                }
-
-                function resetBot() {
-                    document.getElementById('purchase').value = 5.00;
-                    document.getElementById('increment').value = 100;
-                    document.getElementById('decrement').value = 1.0;
-                    document.getElementById('trigger').value = 1.5;
-                    document.getElementById('stop-at-cycle-end').checked = false; // Reset checkbox state
-                    actualizarCalculos();
-                }
-
-                // --- Tab Switching Logic ---
-                function setActiveTab(tabId) {
-                    document.querySelectorAll('.border-b-2').forEach(button => {
-                        button.classList.remove('active-tab', 'border-white');
-                        button.classList.add('border-transparent');
-                    });
-                    const activeButton = document.getElementById(tabId);
-                    activeButton.classList.add('active-tab', 'border-white');
-                    activeButton.classList.remove('border-transparent');
-                    currentTab = tabId.replace('tab-', '');
-                    fetchOrders(currentTab);
-                }
-
-                // --- Event Listeners ---
-                document.addEventListener('DOMContentLoaded', () => {
-                    getBalances();
-                    cargarPrecioEnVivo();
-                    checkConnection();
-                    setActiveTab('tab-opened');
-
-                    setInterval(getBalances, 10000);
-                    setInterval(cargarPrecioEnVivo, 250);
-                    setInterval(checkConnection, 10000);
-                    setInterval(() => fetchOrders(currentTab), 15000);
-
-                    document.getElementById('start-btn').addEventListener('click', toggleBotState);
-                    document.getElementById('reset-btn').addEventListener('click', resetBot);
-
-                    document.getElementById('tab-opened').addEventListener('click', () => setActiveTab('tab-opened'));
-                    document.getElementById('tab-filled').addEventListener('click', () => setActiveTab('tab-filled'));
-                    document.getElementById('tab-cancelled').addEventListener('click', () => setActiveTab('tab-cancelled'));
-                    document.getElementById('tab-all').addEventListener('click', () => setActiveTab('tab-all'));
-
-                    document.getElementById('purchase').addEventListener('input', actualizarCalculos);
-                    document.getElementById('increment').addEventListener('input', actualizarCalculos);
-                    document.getElementById('decrement').addEventListener('input', actualizarCalculos);
-                    document.getElementById('trigger').addEventListener('input', actualizarCalculos);
-                });
-            </script>
-
-
-            </section>
         <section id="testbot-section" class="tab-content">
-            <h2>AutoBot Interface</h2>
-            </section>
+            <h2>TestBot Interface</h2>
+        </section>
         <section id="aibot-section" class="tab-content">
             <h2>AIBot Interface</h2>
-            </section>
+        </section>
     </main>
 
     <div id="auth-modal" class="modal">
@@ -564,27 +181,29 @@
             <p id="auth-message"></p>
         </div>
     </div>
-<div id="api-modal" class="modal">
-    <div class="modal-content">
-        <span class="close-button">&times;</span>
-        <h2>BitMart API Configuration</h2>
-        <form id="api-form">
-            <label for="api-key">API Key:</label>
-            <input type="text" id="api-key" placeholder="Your API Key" required>
 
-            <label for="secret-key">Secret Key:</label>
-            <input type="password" id="secret-key" placeholder="Your Secret Key" required>
+    <div id="api-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>BitMart API Configuration</h2>
+            <form id="api-form">
+                <label for="api-key">API Key:</label>
+                <input type="text" id="api-key" placeholder="Your API Key" required>
 
-            <label for="api-memo">API Memo (Optional):</label>
-            <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
+                <label for="secret-key">Secret Key:</label>
+                <input type="password" id="secret-key" placeholder="Your Secret Key" required>
 
-            <button type="submit" id="validate-api-button">VALIDATE</button>
-            <p id="api-status-message" class="message-text"></p>
-            <div id="connection-indicator" class="indicator-circle"></div>
-            <span id="connection-text" class="indicator-text"></span>
-        </form>
+                <label for="api-memo">API Memo (Optional):</label>
+                <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
+
+                <button type="submit" id="validate-api-button">VALIDATE</button>
+                <p id="api-status-message" class="message-text"></p>
+                <div id="connection-indicator" class="indicator-circle"></div>
+                <span id="connection-text" class="indicator-text"></span>
+            </form>
+        </div>
     </div>
-</div>
+
     <script src="js/main.js"></script>
 </body>
 </html>
