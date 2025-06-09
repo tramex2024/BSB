@@ -181,12 +181,12 @@ async function placeFirstBuyOrder() {
     console.log(`[DEBUG_ORDER] Balance USDT disponible: ${availableUSDT.toFixed(2)} USDT.`);
     if (availableUSDT < sizeUSDT) {
         console.warn(`[AUTOBOT] Balance insuficiente para la primera orden. Necesario: ${sizeUSDT} USDT, Disponible: ${availableUSDT.toFixed(2)} USDT.`);
-        botState.state = 'NO_COVERAGE'; // <-- ¡Cambiado de 'status' a 'state'!
+        botState.state = 'NO_COVERAGE';
         return;
     }
     if (botState.currentPrice === 0) {
         console.error('[AUTOBOT] Precio actual no disponible para la primera orden. Reintentando...');
-        botState.state = 'RUNNING'; // <-- ¡Cambiado de 'status' a 'state'!
+        botState.state = 'RUNNING';
         return;
     }
 
@@ -196,7 +196,7 @@ async function placeFirstBuyOrder() {
 
     if (sizeUSDT < MIN_USDT_VALUE_FOR_BITMART) {
         console.error(`[AUTOBOT] El valor de la orden (${sizeUSDT} USDT) es menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART} USDT). Ajusta tu PURCHASE.`);
-        botState.state = 'STOPPED'; // <-- ¡Cambiado de 'status' a 'state'!
+        botState.state = 'STOPPED';
         return;
     }
     try {
@@ -243,19 +243,19 @@ async function placeFirstBuyOrder() {
                 botState.openOrders = botState.openOrders.filter(o => o.orderId !== orderResult.order_id);
 
                 console.log(`[AUTOBOT] Primera orden de compra COMPLETA. PPC: ${botState.ppc.toFixed(2)}, CP: ${botState.cp.toFixed(2)}, AC: ${botState.ac.toFixed(5)} ${TRADE_SYMBOL.split('_')[0]}. Órdenes en ciclo: ${botState.orderCountInCycle}`);
-                botState.state = 'BUYING'; // <-- ¡Cambiado de 'status' a 'state'! Cambia el estado a 'BUYING' para que el bot empiece a gestionar futuras compras/ventas
+                botState.state = 'BUYING'; // Cambia el estado a 'BUYING' para que el bot empiece a gestionar futuras compras/ventas
             } else {
                 console.warn(`[AUTOBOT] La primera orden ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
-                botState.state = 'RUNNING'; // <-- ¡Cambiado de 'status' a 'state'! Reintentar buscar punto de entrada
+                botState.state = 'RUNNING'; // Reintentar buscar punto de entrada
             }
 
         } else {
             console.error('[AUTOBOT] Error al colocar la primera orden: No se recibió order_id o la respuesta es inválida.');
-            botState.state = 'RUNNING'; // <-- ¡Cambiado de 'status' a 'state'! Reintentar buscar punto de entrada
+            botState.state = 'RUNNING'; // Reintentar buscar punto de entrada
         }
     } catch (error) {
         console.error('[AUTOBOT] Excepción al colocar la primera orden:', error.message);
-        botState.state = 'RUNNING'; // <-- ¡Cambiado de 'status' a 'state'! Reintentar buscar punto de entrada
+        botState.state = 'RUNNING'; // Reintentar buscar punto de entrada
     }
 }
 
@@ -274,7 +274,7 @@ async function placeCoverageBuyOrder() {
 
     if (availableUSDT < sizeUSDT || sizeUSDT < MIN_USDT_VALUE_FOR_BITMART) {
         console.warn(`[AUTOBOT] Balance insuficiente (${availableUSDT.toFixed(2)} USDT) o monto de orden (${sizeUSDT.toFixed(2)} USDT) es menor al mínimo para orden de cobertura. Cambiando a NO_COVERAGE.`);
-        botState.state = 'NO_COVERAGE'; // <-- ¡Cambiado de 'status' a 'state'!
+        botState.state = 'NO_COVERAGE';
         return;
     }
 
@@ -339,12 +339,11 @@ async function placeCoverageBuyOrder() {
                 console.warn(`[AUTOBOT] La orden de cobertura ${orderResult.order_id} se llenó parcialmente. Estado: ${filledOrder.state}.`);
                 // En caso de llenado parcial, podrías actualizar AC y CP con lo llenado
                 // y dejar la orden en openOrders para que se monitoree en la próxima iteración.
-                const actualPrice = parseFloat(filledOrder.price);
-                const actualSize = parseFloat(filledOrder.filled_size);
-                const actualAmountUSD = actualPrice * actualSize;
+                const currentFilledSize = parseFloat(filledOrder.filled_size) - (order.filled_size || 0); // Solo el nuevo llenado
+                const currentFilledAmountUSD = parseFloat(filledOrder.price) * currentFilledSize;
 
-                botState.ac += actualSize;
-                botState.cp += actualAmountUSD;
+                botState.ac += currentFilledSize;
+                botState.cp += currentFilledAmountUSD;
                 botState.ppc = botState.cp / botState.ac;
                 // No incrementar orderCountInCycle ni lastOrderUSDTAmount si solo es llenado parcial
                 // para que la lógica de "próxima orden de cobertura" no se altere.
@@ -355,7 +354,7 @@ async function placeCoverageBuyOrder() {
                 const existingOrderIndex = botState.openOrders.findIndex(o => o.orderId === orderResult.order_id);
                 if (existingOrderIndex !== -1) {
                     botState.openOrders[existingOrderIndex].state = 'partial_fill';
-                    botState.openOrders[existingOrderIndex].filled_size = actualSize;
+                    botState.openOrders[existingOrderIndex].filled_size = parseFloat(filledOrder.filled_size); // Actualizar el tamaño llenado total
                 }
                 console.log(`[AUTOBOT] Orden de cobertura PARCIALMENTE COMPLETA. Nuevo AC: ${botState.ac.toFixed(8)}, Nuevo CP: ${botState.cp.toFixed(2)}, Nuevo PPC: ${botState.ppc.toFixed(2)}.`);
             } else {
@@ -380,7 +379,7 @@ async function placeSellOrder() {
 
     if (botState.ac <= 0) {
         console.warn('[AUTOBOT] No hay activo para vender (AC = 0).');
-        botState.state = 'RUNNING'; // <-- ¡Cambiado de 'status' a 'state'! Volver a RUNNING para buscar nueva entrada
+        botState.state = 'RUNNING'; // Volver a RUNNING para buscar nueva entrada
         return;
     }
 
@@ -425,7 +424,7 @@ async function placeSellOrder() {
 
                 resetCycleVariables(); // Resetear variables para el nuevo ciclo
                 botState.cycle++; // Incrementar el ciclo para el nuevo inicio
-                botState.state = 'RUNNING'; // <-- ¡Cambiado de 'status' a 'state'! Volver a RUNNING para que espere la nueva señal de COMPRA
+                botState.state = 'RUNNING'; // Volver a RUNNING para que espere la nueva señal de COMPRA
                 console.log('[AUTOBOT] Bot listo para el nuevo ciclo en estado RUNNING, esperando próxima señal de COMPRA.');
 
             } else if (filledOrder && filledOrder.state === 'partial_fill') {
@@ -449,7 +448,7 @@ async function placeSellOrder() {
 
 // --- Función Principal de Lógica del Bot ---
 async function runBotLogic() {
-    console.log(`\n--- Ejecutando lógica del bot. Estado actual: ${botState.state} ---`); // <-- ¡Cambiado de 'status' a 'state'!
+    console.log(`\n--- Ejecutando lógica del bot. Estado actual: ${botState.state} ---`);
 
     try {
         // Siempre obtén el precio actual al inicio de cada ejecución del loop
@@ -505,10 +504,16 @@ async function runBotLogic() {
 
                     // Actualizar métricas del bot según si fue compra o venta
                     if (order.side === 'buy') {
-                        botState.ac += actualSize;
-                        botState.cp += actualAmountUSD;
+                        // Calcula el nuevo llenado para actualizar AC y CP
+                        const filledAmountSinceLastCheck = actualSize - (order.filled_size || 0); // Lo que se llenó desde la última vez
+                        const amountUSDSinceLastCheck = actualPrice * filledAmountSinceLastCheck;
+
+                        botState.ac += filledAmountSinceLastCheck;
+                        botState.cp += amountUSDSinceLastCheck;
                         botState.ppc = botState.cp / botState.ac;
-                        botState.orderCountInCycle++;
+                        if (order.state !== 'partial_fill' || order.state === 'new') { // Solo cuenta como "nueva orden" si no era un llenado parcial previo
+                             botState.orderCountInCycle++;
+                        }
                         botState.lastOrderUSDTAmount = actualAmountUSD;
                     } else if (order.side === 'sell') {
                         // Lógica de cálculo de ganancias al vender
@@ -536,17 +541,28 @@ async function runBotLogic() {
                 } else if (latestOrderDetails && latestOrderDetails.state === 'partial_fill') {
                     console.warn(`[AUTOBOT] Orden ${order.orderId} sigue parcialmente llena. Cantidad llenada: ${latestOrderDetails.filled_size}.`);
                     // Actualizar la orden en el array con los nuevos detalles de llenado parcial
-                    botState.openOrders[i].state = 'partial_fill';
-                    botState.openOrders[i].filled_size = parseFloat(latestOrderDetails.filled_size);
-                    // Actualizar métricas si es una compra parcial
-                    if (order.side === 'buy') {
-                         const currentFilledSize = parseFloat(latestOrderDetails.filled_size) - (order.filled_size || 0); // Solo el nuevo llenado
-                         const currentFilledAmountUSD = parseFloat(latestOrderDetails.price) * currentFilledSize;
-                         botState.ac += currentFilledSize;
-                         botState.cp += currentFilledAmountUSD;
-                         botState.ppc = botState.cp / botState.ac;
-                         console.log(`[AUTOBOT] AC y CP actualizados por llenado parcial de orden ${order.orderId}.`);
+                    
+                    // Solo actualiza AC y CP si la cantidad llenada es mayor que la registrada
+                    const newFilledSize = parseFloat(latestOrderDetails.filled_size);
+                    const previousFilledSize = order.filled_size || 0;
+
+                    if (newFilledSize > previousFilledSize) {
+                        const newlyFilledAmount = newFilledSize - previousFilledSize;
+                        const actualPrice = parseFloat(latestOrderDetails.price); // Asume el mismo precio para el llenado parcial
+                        const actualAmountUSD = actualPrice * newlyFilledAmount;
+
+                        if (order.side === 'buy') {
+                            botState.ac += newlyFilledAmount;
+                            botState.cp += actualAmountUSD;
+                            botState.ppc = botState.cp / botState.ac;
+                            console.log(`[AUTOBOT] AC y CP actualizados por nuevo llenado parcial de orden ${order.orderId}.`);
+                        }
                     }
+
+                    // Actualizar el estado y el tamaño llenado en la orden dentro de botState.openOrders
+                    botState.openOrders[i].state = 'partial_fill';
+                    botState.openOrders[i].filled_size = newFilledSize;
+
                 } else {
                     console.log(`[AUTOBOT] Orden ${order.orderId} sigue abierta/nueva. Monitoreando...`);
                 }
@@ -554,7 +570,7 @@ async function runBotLogic() {
         }
 
 
-        switch (botState.state) { // <-- ¡Cambiado de 'status' a 'state'!
+        switch (botState.state) {
             case 'RUNNING':
                 console.log('[AUTOBOT] Estado: RUNNING. Esperando señal de entrada de COMPRA desde el analizador de indicadores...');
 
@@ -572,7 +588,7 @@ async function runBotLogic() {
                     console.log(`[AUTOBOT] Analizador de indicadores resultado: ${analysisResult.action} - Razón: ${analysisResult.reason}`);
 
                     // Si el analizador indica una señal de COMPRA y aún no hemos comprado en este ciclo (ac === 0)
-                    if (analysisResult.action === 'COMPRA') { // No necesitamos '&& botState.ac === 0' aquí porque ya lo manejamos arriba.
+                    if (analysisResult.action === 'COMPRA') {
                         console.log('[AUTOBOT] ¡Señal de entrada de COMPRA DETECTADA por los indicadores!');
                         // Antes de transicionar a BUYING, aseguramos que haya capital para la primera compra
                         if (availableUSDT >= botState.purchaseAmount && botState.purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART) {
@@ -598,9 +614,10 @@ async function runBotLogic() {
                 // Lógica para órdenes de cobertura (si el precio cae)
                 if (botState.ac > 0) { // Solo busca cobertura si ya tenemos activo comprado
                     let nextUSDTAmount;
-                    if (botState.orderCountInCycle === 0) {
+                    if (botState.orderCountInCycle === 0 || !botState.lastOrderUSDTAmount) {
                         // Si ac > 0 pero orderCountInCycle es 0, significa que es la primera orden que se está procesando
                         // o un estado inconsistente. Asumimos que la primera orden ya se colocó y usamos purchaseAmount.
+                        // O si lastOrderUSDTAmount no está definido (carga inicial).
                         nextUSDTAmount = botState.purchaseAmount; 
                     } else {
                         nextUSDTAmount = botState.lastOrderUSDTAmount * (1 + botState.incrementPercentage / 100);
@@ -660,7 +677,7 @@ async function runBotLogic() {
                     // if (botState.pv <= botState.ppc) {
                     //     console.warn('[AUTOBOT] PV calculado es menor o igual al PPC. Ajustando PV para asegurar ganancia mínima.');
                     //     // Ajusta el PV para que sea PPC + un pequeño margen (ej. 0.3% de ganancia)
-                    //     botState.pv = botState.ppc * 1.003; 
+                    //     // botState.pv = botState.ppc * 1.003;  // Comentado para usar la lógica de PC
                     // }
                 }
                 // Si el precio actual cae por debajo del precio de caída (pc)
@@ -690,7 +707,7 @@ async function runBotLogic() {
                 // Si el balance USDT disponible ahora es suficiente, intenta volver a BUYING
                 if (availableUSDT >= botState.nextCoverageUSDTAmount && botState.nextCoverageUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART) {
                     console.log('[AUTOBOT] Fondos disponibles. Volviendo a estado BUYING para intentar la orden de cobertura.');
-                    botState.state = 'BUYING';  // Transiciona a BUYING
+                    botState.state = 'BUYING';
                     // La próxima ejecución de runBotLogic en estado BUYING detectará la necesidad de colocar la orden.
                 }
                 // Si la lógica de venta global no ha movido al bot a SELLING, se queda aquí esperando fondos.
@@ -726,7 +743,7 @@ async function runBotLogic() {
 }
 
 // --- Funciones para iniciar/detener el bot ---
-async function startBotStrategy() { // Eliminé `params` de aquí, ya que se actualizan en server.js
+async function startBotStrategy() {
     // Si el botState.state ya está RUNNING, BUYING o SELLING, significa que ya está activo
     if (botState.state !== 'STOPPED' && botState.state !== 'NO_COVERAGE') {
         console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${botState.state}.`);
@@ -736,16 +753,17 @@ async function startBotStrategy() { // Eliminé `params` de aquí, ya que se act
         return { success: false, message: `Bot is already ${botState.state}.`, botState: { ...botState } };
     }
 
+    // Validación mínima: Asegurar que los parámetros esenciales ya se hayan establecido
+    // Esto es crucial porque server.js los setea directamente en botState antes de llamar aquí.
+    if (botState.purchaseAmount <= 0 || botState.incrementPercentage < 0 || botState.decrementPercentage < 0 || botState.triggerPercentage < 0) {
+        console.error('[AUTOBOT] Error al iniciar: Parámetros del bot no inicializados o inválidos.');
+        return { success: false, message: 'Parámetros del bot no inicializados o inválidos. Por favor, configura todos los campos.', botState: { ...botState } };
+    }
+
     console.log('[AUTOBOT] Iniciando estrategia del bot...');
-    // Los parámetros se deben haber actualizado en server.js antes de llamar a esta función
-    botState.state = 'RUNNING'; // Inicializa en RUNNING para buscar la primera señal
-    // Solo reiniciar ciclos y ganancias si no es una reanudación avanzada.
-    // Si quieres que los ciclos y ganancias se resetee cada vez que se presiona "start",
-    // mantén estas líneas. Si quieres que persistan a menos que se resetee manualmente,
-    // muévelas a `resetCycleVariables` y llama a `resetCycleVariables` solo cuando sea un "nuevo inicio".
-    // Por ahora, como está, cada "start" resetea.
-    botState.cycle = 0; 
-    botState.profit = 0; 
+    botState.state = 'RUNNING';
+    botState.cycle = 0;
+    botState.profit = 0;
     resetCycleVariables(); // Asegurar que las variables del ciclo estén limpias
 
     // Limpiar cualquier intervalo anterior si existe (por seguridad)
@@ -790,5 +808,6 @@ module.exports = {
     startBotStrategy,
     stopBotStrategy,
     // Exporta runBotLogic si necesitas llamarla directamente desde server.js para pruebas
-    runBotLogic
+    runBotLogic,
+    MIN_USDT_VALUE_FOR_BITMART // Exportar esta constante para que server.js la pueda usar en validación
 };
