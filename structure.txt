@@ -9,6 +9,8 @@ BSB/
 │       └── bsb-logo.png
 ├── server/                # Backend files - Deployed on Render
 │   ├── server.js
+│   ├── autobotLogic.js
+│   ├── bitmart_indicator_analyzer.js
 │   ├── models/
 │   │   └── User.js
 │   │   └── BotState.js
@@ -18,15 +20,17 @@ BSB/
 │   ├── services/
 │   │   └── bitmartService.js
 │   ├── routes/
-│   │   └── auth.js
+│   │   └── authRoutes.js
 │   │   └── userRoutes.js 
 │   ├── controllers/
 │   │   └── authController.js
+│   │   └── userController.js
 │   ├── config/
 │   │   └── db.js
-│   └── utils/
-│   │   └── 
+│   ├── utils/
 │   │   └── encryption.js
+│   ├── seeders/
+│   │   └── seed.js
 │   ├── .env                   # Environment variables (MongoDB URI, etc.)
 │   ├── package.json
 │   └── README.md
