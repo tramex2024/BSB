@@ -6,36 +6,6 @@
     <title>BSB - Bitmart Spot Bots</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Custom scrollbar for order list (Tailwind's scrollbar-hide might be an alternative) */
-        .overflow-y-auto::-webkit-scrollbar {
-            width: 8px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-track {
-            background: #374151; /* gray-700 */
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-            background: #6b7280; /* gray-500 */
-            border-radius: 4px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af; /* gray-400 */
-        }
-
-        /* Active tab style */
-        /* Asegúrate de que esta clase se aplique dinámicamente con JS para las pestañas de navegación principal */
-        .nav-tab.active {
-            border-bottom: 2px solid white; /* Ejemplo de estilo para la pestaña activa de navegación */
-            color: white;
-        }
-
-        /* Estilo para las pestañas de órdenes dentro del Autobot */
-        .order-tab.active-order-tab { /* Cambié a 'active-order-tab' para evitar conflicto con 'active' general */
-            border-color: white !important; /* Forces white border for active tab */
-        }
-    </style>
-</head>
 <body class="dark-mode">
     <header class="fixed-header">
         <div class="header-left">
@@ -54,19 +24,46 @@
             <i class="fas fa-users icon" title="Users"></i>
             <i class="fas fa-cog icon" title="Settings"></i>
             <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
-            <i class="fas fa-key icon" id="api-key-icon" title="API"></i> 
-            <i class="fas fa-envelope icon" title="Contact"></i>
+            <i class="fas fa-key icon" id="api-key-icon" title="API"></i> <i class="fas fa-envelope icon" title="Contact"></i>
         </div>
     </header>
 
     <main class="content">
         <section id="dashboard-section" class="tab-content active">
             <h2>Welcome to your Dashboard!</h2>
-            <p>Aquí verás un resumen de tu actividad.</p>
         </section>
 
         <section id="autobot-section" class="tab-content">
-            <div class="flex h-screen bg-gray-900 text-white"> <div class="w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+            <title>AUTOBOT Panel</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+                /* Custom scrollbar for order list */
+                .overflow-y-auto::-webkit-scrollbar {
+                    width: 8px;
+                }
+                .overflow-y-auto::-webkit-scrollbar-track {
+                    background: #374151; /* gray-700 */
+                }
+                .overflow-y-auto::-webkit-scrollbar-thumb {
+                    background: #6b7280; /* gray-500 */
+                    border-radius: 4px;
+                }
+                .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+                    background: #9ca3af; /* gray-400 */
+                }
+
+                /* Active tab style */
+                .active-tab {
+                    border-color: white !important; /* Forces white border for active tab */
+                }
+            </style>
+        </head>
+        <body class="bg-gray-900 text-white">
+
+            <div class="flex h-screen">
+                <div class="w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
                     <div class="bg-gray-700 p-4 rounded-lg space-y-2">
                         <div class="flex justify-between items-center">
                             <h2 class="text-lg font-bold">AUTOBOT</h2>
@@ -74,28 +71,25 @@
                         </div>
                         <div class="flex justify-between text-sm">
                             <div id="connection-status" class="flex items-center space-x-2">
-                                <span id="connectionIndicator" class="h-3 w-3 rounded-full bg-red-500"></span> <span id="connectionText">Disconnected</span> </div>
-                            <div><strong>Status:</strong> <span id="botStatusDisplay" class="text-yellow-400">STOPPED</span></div> </div>
+                                <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                                <span id="status-text">Disconnected</span>
+                            </div>
+                            <div><strong>Status:</strong> <span id="bot-state" class="text-yellow-400">STOPPED</span></div>
+                        </div>
                     </div>
 
                     <div class="bg-gray-700 p-4 rounded-lg space-y-2">
                         <div class="flex justify-between text-sm">
-                            <div><strong>Price:</strong> <span id="currentPriceDisplay">0.00</span></div> <div><strong>CycleProfit:</strong> <span id="cycleProfitDisplay">0.00</span></div> </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>PPC:</strong> <span id="ppcDisplay">0.00</span></div> <div><strong>CP:</strong> <span id="cpDisplay">0.00</span></div> </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>AC:</strong> <span id="acDisplay">0.00</span></div> <div><strong>Cycle:</strong> <span id="cycleDisplay">0</span></div> </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>PM:</strong> <span id="pmDisplay">0.00</span></div> <div><strong>PV:</strong> <span id="pvDisplay">0.00</span></div> </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>PC:</strong> <span id="pcDisplay">0.00</span></div> <div><strong>OrderCount:</strong> <span id="orderCountDisplay">0</span></div> </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>Last Order USDT:</strong> <span id="lastOrderUSDTAmountDisplay">0.00</span></div> </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>Next Coverage USDT:</strong> <span id="nextCoverageUSDTAmountDisplay">0.00</span></div>
+                            <div><strong>Price:</strong> <span id="price">0.00</span></div>
+                            <div><strong>CycleProfit:</strong> <span id="cycleprofit">0.00</span></div>
                         </div>
                         <div class="flex justify-between text-sm">
-                            <div><strong>Next Coverage Price:</strong> <span id="nextCoverageTargetPriceDisplay">0.00</span></div>
+                            <div><strong>Coverage:</strong> <span id="coverage">0.00</span></div>
+                            <div><strong>Cycle:</strong> <span id="cycle">0</span></div>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <div><strong>Balance:</strong> <span id="balance">0.00</span></div>
+                            <div><strong>ORQ:</strong> <span id="orq">0</span></div>
                         </div>
                     </div>
 
@@ -103,24 +97,31 @@
                         <hr class="border-gray-600"/>
                         <div>
                             <label class="block">Purchase (USDT)</label>
-                            <input id="purchaseAmount" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/> </div>
+                            <input id="purchase" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
                         <div>
                             <label class="block">Increment (%)</label>
-                            <input id="incrementPercentage" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/> </div>
+                            <input id="increment" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
                         <div>
                             <label class="block">Decrement (%)</label>
-                            <input id="decrementPercentage" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/> </div>
+                            <input id="decrement" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
                         <div>
                             <label class="block">Trigger (%)</label>
-                            <input id="triggerPercentage" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/> </div>
+                            <input id="trigger" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
                     </div>
 
                     <div class="flex flex-col space-y-2 mt-4">
                         <div class="flex items-center">
-                            <input type="checkbox" id="stopAtCycleEnd" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded"> <label for="stopAtCycleEnd" class="ml-2 block text-sm text-gray-200">Stop with the cycle end</label>
+                            <input type="checkbox" id="stop-at-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
+                            <label for="stop-at-cycle-end" class="ml-2 block text-sm text-gray-200">Stop with the cycle end</label>
                         </div>
                         <div class="flex space-x-2">
-                            <button id="toggleBotButton" data-action="start" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START BOT</button> <button id="resetBotButton" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button> </div>
+                            <button id="start-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
+                            <button id="reset-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button>
+                        </div>
                     </div>
                 </div>
                 <div class="w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
@@ -128,10 +129,10 @@
                     <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
                         <h3 class="text-lg font-semibold mb-2">Order History</h3>
                         <div class="flex border-b border-gray-600 mb-4">
-                            <button id="tab-opened" class="order-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
-                            <button id="tab-filled" class="order-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
-                            <button id="tab-cancelled" class="order-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
-                            <button id="tab-all" class="order-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
+                            <button id="tab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
+                            <button id="tab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
+                            <button id="tab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
+                            <button id="tab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
                         </div>
 
                         <div id="order-list" class="overflow-y-auto text-sm space-y-2 flex-grow">
@@ -157,15 +158,14 @@
                     container_id: "tvchart"
                 });
             </script>
+        </body>
         </section>
 
         <section id="testbot-section" class="tab-content">
             <h2>TestBot Interface</h2>
-            <p>Aquí puedes probar tu bot en un entorno simulado.</p>
         </section>
         <section id="aibot-section" class="tab-content">
             <h2>AIBot Interface</h2>
-            <p>Este es el panel de control para el AIBot.</p>
         </section>
     </main>
 
@@ -187,15 +187,22 @@
             <h2>BitMart API Configuration</h2>
             <form id="api-form">
                 <label for="api-key">API Key:</label>
-                <input type="text" id="apiKey" placeholder="Your API Key" required> <label for="secret-key">Secret Key:</label>
-                <input type="password" id="secretKey" placeholder="Your Secret Key" required> <label for="api-memo">API Memo (Optional):</label>
-                <input type="text" id="apiMemo" placeholder="Your API Memo (if any)"> <button type="submit" id="saveApiKeysBtn">VALIDATE</button> <p id="apiStatusMessage" class="message-text"></p> <div id="connection-indicator" class="indicator-circle"></div>
+                <input type="text" id="api-key" placeholder="Your API Key" required>
+
+                <label for="secret-key">Secret Key:</label>
+                <input type="password" id="secret-key" placeholder="Your Secret Key" required>
+
+                <label for="api-memo">API Memo (Optional):</label>
+                <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
+
+                <button type="submit" id="validate-api-button">VALIDATE</button>
+                <p id="api-status-message" class="message-text"></p>
+                <div id="connection-indicator" class="indicator-circle"></div>
                 <span id="connection-text" class="indicator-text"></span>
             </form>
         </div>
     </div>
 
     <script src="js/main.js"></script>
-    <script src="/socket.io/socket.io.js"></script> 
 </body>
 </html>
