@@ -532,7 +532,7 @@ async function runBotLogic() {
                 console.log('[AUTOBOT] Estado: SELLING. Gestionando ventas...');
                 // Si el precio actual es mayor que el precio máximo registrado (botState.pm), actualiza pm.
                 // Esto es para asegurar que el pm siempre represente el precio más alto alcanzado desde la última compra.
-                if (botState.pm === 0 || botState.currentPrice > botState.pm) {                                       
+                if (botState.pm === 0 || botState.currentPrice > botState.pm) {
                     botState.pm = botState.currentPrice;
                     // Calcula el precio de venta (pv) como PM - 0.5% (o el porcentaje que defina tu estrategia)
                     botState.pv = botState.pm * (1 - 0.005);   
@@ -540,9 +540,9 @@ async function runBotLogic() {
                     // Asegura que el precio de venta (pv) no sea menor o igual al precio promedio de compra (ppc)
                     // Esto es para intentar siempre vender con una ganancia mínima o al menos a precio de costo.
                     // if (botState.pv <= botState.ppc) {
-                    //    console.warn('[AUTOBOT] PV calculado es menor o igual al PPC. Ajustando PV para asegurar ganancia mínima.');
-                    //    // Ajusta el PV para que sea PPC + un pequeño margen (ej. 0.3% de ganancia)
-                    //    botState.pv = botState.ppc * 1.003; 
+                    //     console.warn('[AUTOBOT] PV calculado es menor o igual al PPC. Ajustando PV para asegurar ganancia mínima.');
+                    //     // Ajusta el PV para que sea PPC + un pequeño margen (ej. 0.3% de ganancia)
+                    //     botState.pv = botState.ppc * 1.003; 
                     // }
                 }
                 // Si el precio actual cae por debajo del precio de caída (pc)

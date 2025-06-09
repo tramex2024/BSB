@@ -57,8 +57,8 @@ mongoose
         // Opcional: Reanudar el bot si su último estado guardado era 'RUNNING' al reiniciar el servidor
         // Esto depende de tu lógica de negocio, si quieres que el bot se reanude automáticamente
         // if (autobotLogic.botState.status === 'RUNNING') {
-        //    console.log('[AUTOBOT] Reanudando bot desde el último estado guardado...');
-        //    autobotLogic.startBotStrategy();
+        //     console.log('[AUTOBOT] Reanudando bot desde el último estado guardado...');
+        //     autobotLogic.startBotStrategy();
         // }
     })
     .catch((error) => {
@@ -125,11 +125,74 @@ app.post('/api/toggle-bot', async (req, res) => {
 
     try {
         if (action === 'start') {
-            const result = await autobotLogic.startBotStrategy(params);
-            res.json(result); // result ya contiene success, message y botState
+            if (autobotLogic.botState.status !== 'STOPPED') {
+                console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState.status}`);
+                return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState.status}.`, botState: { ...autobotLogic.botState } });
+            }
+
+            console.log(`[SERVER] Parámetros recibidos del frontend para iniciar:`, params);
+
+            // Actualizar solo los parámetros si se proporcionan
+            if (params) {
+                autobotLogic.botState.purchaseAmount = parseFloat(params.purchase) || autobotLogic.botState.purchaseAmount;
+                autobotLogic.botState.incrementPercentage = parseFloat(params.increment) || autobotLogic.botState.incrementPercentage;
+                autobotLogic.botState.decrementPercentage = parseFloat(params.decrement) || autobotLogic.botState.decrementPercentage;
+                autobotLogic.botState.triggerPercentage = parseFloat(params.trigger) || autobotLogic.botState.triggerPercentage;
+                // Considera si `stopAtCycleEnd` debe ser parte de `botState` y persistir
+                autobotLogic.botState.stopAtCycleEnd = typeof params.stopAtCycleEnd === 'boolean' ? params.stopAtCycleEnd : autobotLogic.botState.stopAtCycleEnd;
+
+                console.log(`[SERVER] botState parámetros actualizados.`);
+            } else {
+                console.warn('[SERVER] No se recibieron parámetros del frontend para iniciar. Usando valores predeterminados de botState.');
+            }
+
+            // Reiniciar o establecer los estados iniciales del ciclo si se inicia el bot
+            Object.assign(autobotLogic.botState, {
+                status: 'RUNNING',
+                // Solo reiniciar ciclo y ganancias si no es una reanudación avanzada.
+                // Si 'stopAtCycleEnd' lo detuvo, podrías querer mantener 'profit'.
+                // Por ahora, reiniciamos para un "nuevo inicio".
+                cycle: 1,
+                profit: 0,
+                cycleProfit: 0,
+                ppc: 0,
+                cp: 0,
+                ac: 0,
+                pm: 0,
+                pv: 0,
+                pc: 0,
+                lastOrder: null,
+                openOrders: [],
+            });
+
+            console.log(`[AUTOBOT] Bot INICIADO. Estado: ${autobotLogic.botState.status}, Parámetros FINALES:`, {
+                purchase: autobotLogic.botState.purchaseAmount,
+                increment: autobotLogic.botState.incrementPercentage,
+                decrement: autobotLogic.botState.decrementPercentage,
+                trigger: autobotLogic.botState.triggerPercentage,
+                stopAtCycleEnd: autobotLogic.botState.stopAtCycleEnd
+            });
+
+            autobotLogic.startBotStrategy();
+
+            // Enviar una COPIA del botState para evitar modificar el original fuera de la lógica del bot
+            const botStateForFrontend = { ...autobotLogic.botState };
+            console.log('[SERVER] Enviando botState al frontend:', botStateForFrontend);
+            res.json({ success: true, message: 'Bot started', botState: botStateForFrontend });
+
         } else if (action === 'stop') {
-            const result = await autobotLogic.stopBotStrategy();
-            res.json(result); // result ya contiene success, message y botState
+            if (autobotLogic.botState.status === 'STOPPED') {
+                console.warn('[AUTOBOT] Intento de detener bot ya detenido.');
+                return res.status(400).json({ success: false, message: 'Bot is already stopped.', botState: { ...autobotLogic.botState } });
+            }
+
+            console.log('[AUTOBOT] Solicitud de DETENCIÓN del bot.');
+            autobotLogic.stopBotStrategy();
+
+            console.log('[AUTOBOT] Bot DETENIDO.');
+            // Enviar una COPIA del botState para evitar modificar el original fuera de la lógica del bot
+            const botStateForFrontend = { ...autobotLogic.botState };
+            res.json({ success: true, message: 'Bot stopped', botState: botStateForFrontend });
         } else {
             console.error('[SERVER] Acción inválida recibida:', action);
             res.status(400).json({ success: false, message: 'Invalid action. Use "start" or "stop".', botState: { ...autobotLogic.botState } });
@@ -149,7 +212,7 @@ server.listen(port, () => {
 process.on('SIGINT', async () => {
     console.log('\n[AUTOBOT] Señal de apagado recibida. Deteniendo bot y guardando estado...');
     autobotLogic.stopBotStrategy();
-    autobotLogic.botState.state = 'STOPPED'; // Asegura que el estado final sea STOPPED antes de guardar
+    autobotLogic.botState.status = 'STOPPED'; // Asegura que el estado final sea STOPPED antes de guardar
     await autobotLogic.saveBotStateToDB();
     console.log('[AUTOBOT] Bot detenido y estado guardado. Apagando servidor.');
     process.exit(0);
