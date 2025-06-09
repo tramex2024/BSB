@@ -125,10 +125,9 @@ app.post('/api/toggle-bot', async (req, res) => {
 
     try {
         if (action === 'start') {
-            // Comprobación CRÍTICA: Asegúrate de que botState esté definido antes de acceder a sus propiedades
-            if (!autobotLogic.botState || autobotLogic.botState.status !== 'STOPPED') {
-                console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState ? autobotLogic.botState.status : 'undefined'}. botState:`, autobotLogic.botState);
-                return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState ? autobotLogic.botState.status : 'undefined'}.`, botState: { ...autobotLogic.botState } });
+            if (autobotLogic.botState.status !== 'STOPPED') {
+                console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState.status}`);
+                return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState.status}.`, botState: { ...autobotLogic.botState } });
             }
 
             console.log(`[SERVER] Parámetros recibidos del frontend para iniciar:`, params);
@@ -182,9 +181,8 @@ app.post('/api/toggle-bot', async (req, res) => {
             res.json({ success: true, message: 'Bot started', botState: botStateForFrontend });
 
         } else if (action === 'stop') {
-            // Comprobación CRÍTICA: Asegúrate de que botState esté definido antes de acceder a sus propiedades
-            if (!autobotLogic.botState || autobotLogic.botState.status === 'STOPPED') {
-                console.warn('[AUTOBOT] Intento de detener bot ya detenido. botState:', autobotLogic.botState);
+            if (autobotLogic.botState.status === 'STOPPED') {
+                console.warn('[AUTOBOT] Intento de detener bot ya detenido.');
                 return res.status(400).json({ success: false, message: 'Bot is already stopped.', botState: { ...autobotLogic.botState } });
             }
 
