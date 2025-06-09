@@ -44,9 +44,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const effectiveParamsOrData = { ...paramsOrData };
     if (isPrivate) {
-        // recvWindow is often a GET parameter, but BitMart API sometimes requires it in POST body.
-        // For consistency and general case, it's included in effectiveParamsOrData
-        // and then stringified or JSON.stringified as needed.
         effectiveParamsOrData.recvWindow = 10000;
     }
 
@@ -85,10 +82,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             ...requestConfig
         });
 
-        // BitMart API generally returns { code: 1000, message: "OK", data: ... } on success.
-        // We'll return the whole response.data object for the caller to parse.
-        if (response.data && response.data.code === 1000) {
-            return response.data; // Return the entire response.data from BitMart
+        if (response.data.message === 'success' || response.data.code === 1000 || response.data.message === 'OK') {
+            return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
             throw new Error(`Error de BitMart API: ${response.data.message || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
@@ -102,7 +97,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
         } else if (error.request) {
             console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
-            throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
+            throw new Error('No se recibió respuesta de BitMart API. Posible problema de red o firewall o la API no está disponible.');
         } else {
             console.error('Error Message:', error.message);
             throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
@@ -121,10 +116,9 @@ async function getTicker(symbol) {
         const params = { symbol: symbol };
         console.log(`--- Solicitud GET Ticker para ${symbol} ---`);
         const response = await makeRequest('GET', url, params, false);
-        // BitMart's ticker response might be under response.data.data
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Ticker para ${symbol} obtenido con éxito.`);
-            return response.data; // This data often contains a 'ticker' array or similar
+            return response.data;
         } else {
             console.error(`❌ Respuesta inesperada del ticker para ${symbol}:`, JSON.stringify(response, null, 2));
             throw new Error(`Respuesta inesperada del ticker de BitMart: ${JSON.stringify(response)}`);
@@ -170,11 +164,11 @@ async function getOpenOrders(authCredentials, symbol) {
     if (symbol) { requestBody.symbol = symbol; }
     try {
         const response = await makeRequest('POST', path, requestBody, true, authCredentials);
-        const responseData = response.data; // This is the 'data' property from BitMart's outer response
+        const responseData = response.data;
         let orders = [];
-        if (Array.isArray(responseData)) { // Sometimes response.data is directly the list
+        if (Array.isArray(responseData)) {
             orders = responseData;
-        } else if (responseData && Array.isArray(responseData.list)) { // Other times, it's under a 'list' property
+        } else if (responseData && Array.isArray(responseData.list)) {
             orders = responseData.list;
         } else {
             console.warn('ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
@@ -237,17 +231,8 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         requestBody.size = size.toString();
         requestBody.price = price.toString();
     } else if (type === 'market') {
-        if (side === 'buy') {
-            // For market BUY, BitMart API often expects 'notional' (quote currency amount, e.g., USDT amount)
-            // or sometimes 'client_order_id' to differentiate. 'size' is usually base currency.
-            // Check BitMart docs for exact requirement. Using notional for market buy.
-            requestBody.notional = size.toString();
-        } else if (side === 'sell') {
-            // For market SELL, BitMart API often expects 'size' (base currency amount, e.g., BTC amount)
-            requestBody.size = size.toString();
-        } else {
-            throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
-        }
+        if (side === 'buy') { requestBody.notional = size.toString(); }
+        else if (side === 'sell') { requestBody.size = size.toString(); }
     } else { throw new Error(`Tipo de orden no soportado: ${type}`); }
 
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
@@ -294,14 +279,14 @@ async function cancelOrder(authCredentials, symbol, order_id) {
 /**
  * Obtiene la lista de órdenes spot históricas (completadas, canceladas, etc.). (Privado)
  * @param {object} authCredentials - Objeto con { apiKey, secretKey, apiMemo } del usuario actual.
- * @param {object} options - Objeto con opciones de filtrado (symbol, orderMode, startTime, endTime, limit).
+ * @param {object} options - Objeto con opciones de filtrado.
  * @returns {Promise<object[]>} - Promesa que resuelve con un array de órdenes o un error.
  */
 async function getHistoryOrdersV4(authCredentials, options = {}) {
     console.log(`\n--- Listando Historial de Órdenes (V4 POST) ---`);
     const requestBody = {};
     if (options.symbol) { requestBody.symbol = options.symbol; }
-    if (options.orderMode) { requestBody.orderMode = options.orderMode; } // e.g., 'spot'
+    if (options.orderMode) { requestBody.orderMode = options.orderMode; }
     if (options.startTime) { requestBody.startTime = options.startTime; }
     if (options.endTime) { requestBody.endTime = options.endTime; }
     if (options.limit) { requestBody.limit = options.limit; }
@@ -379,7 +364,7 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
 /**
  * Obtiene datos de velas (OHLCV) para un símbolo y período de tiempo. (Público)
  * @param {string} symbol - Par de trading.
- * @param {string} interval - Intervalo de las velas (e.g., "1m", "5m", "1H", "1D").
+ * @param {string} interval - Intervalo de las velas.
  * @param {number} [limit=200] - Número de velas a obtener (máx. 200).
  * @returns {Promise<Array<Object>>} - Promesa que resuelve con un array de objetos de vela.
  */
