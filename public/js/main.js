@@ -1,6 +1,6 @@
 // js/main.js
 
-const BACKEND_URL = 'https://bsb-ppex.onrender.com';
+const BACKEND_URL = 'https://bsb-ppex.onrender.com'; 
 const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
 
 // --- Elementos del DOM ---
@@ -23,14 +23,6 @@ const apiStatusMessage = document.getElementById('api-status-message'); // Nuevo
 const connectionIndicator = document.getElementById('connection-indicator'); // Nuevo: círculo indicador API
 const connectionText = document.getElementById('connection-text'); // Nuevo: texto indicador API
 
-// Bot-related DOM elements
-const startBtn = document.getElementById('start-btn');
-const resetBtn = document.getElementById('reset-btn');
-const botStateDisplay = document.getElementById('bot-state');
-const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
-const cycleDisplay = document.getElementById('cycle');
-const profitDisplay = document.getElementById('profit');
-const cycleProfitDisplay = document.getElementById('cycleprofit');
 
 // --- Estado de la Aplicación ---
 let isLoggedIn = false;
@@ -48,6 +40,8 @@ let currentDisplayedOrders = new Map();
 function checkLoginStatus() {
     const token = localStorage.getItem('authToken');
     if (token) {
+        // Opcional: Podrías hacer una llamada al backend para validar el token si es muy viejo,
+        // pero por ahora, con que exista, lo consideramos logueado.
         isLoggedIn = true;
     } else {
         isLoggedIn = false;
@@ -124,28 +118,45 @@ async function handleLogout() {
 }
 
 // --- Helper Function for API Calls (Maneja tokens y rutas dinámicas) ---
-async function fetchFromBackend(endpoint, options) {
+async function fetchFromBackend(url, options = {}) {
     try {
-        const response = await fetch(`https://bsb-ppex.onrender.com${endpoint}`, options);
-
-        if (!response.ok) {
-            // Handle HTTP errors (4xx, 5xx)
-            // Read the body *once* for error details
-            const errorBody = await response.text(); // or response.json() if you expect JSON
-            console.error(`HTTP error! Status: ${response.status}, Body: ${errorBody}`);
-            throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorBody}`);
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            options.headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${token}`
+            };
         }
 
-        // If successful, read the body *once*
-        const data = await response.json(); // or .text(), .blob(), etc., depending on what you expect
-        return data;
+        const res = await fetch(`${BACKEND_URL}${url}`, options);
 
+        if (!res.ok) {
+            let errorDetails = `HTTP error! status: ${res.status}`;
+            try {
+                const errorData = await res.json();
+                errorDetails = errorData.error || errorData.message || JSON.stringify(errorData);
+            } catch (jsonError) {
+                errorDetails = await res.text() || `HTTP error! status: ${res.status} (non-JSON response or empty)`;
+            }
+
+            if (res.status === 401 || res.status === 403) {
+                console.warn("Token inválido o expirado. Iniciando deslogueo automático.");
+                alert("Tu sesión ha expirado o no es válida. Por favor, inicia sesión de nuevo.");
+                handleLogout(); // Llama a la función de deslogueo
+            }
+            throw new Error(errorDetails);
+        }
+        return await res.json();
     } catch (error) {
-        console.error(`Error fetching from ${endpoint}:`, error);
-        // Do not try to read response.text() here if 'response' is not available or already consumed.
-        throw error; // Re-throw to be caught by checkConnection
+        console.error(`Error fetching from ${url}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error || "Unknown error occurred.");
+        if (document.getElementById('order-list')) {
+             document.getElementById('order-list').innerHTML = `<p class="text-red-400">Error: ${errorMessage}</p>`;
+        }
+        return null;
     }
 }
+
 
 // --- Funciones de Display para Órdenes ---
 function createOrderElement(order) {
@@ -273,12 +284,10 @@ async function fetchHistoryOrdersData(tab) {
     if (!isLoggedIn) {
         return [];
     }
-    try {
-        console.warn(`Funcionalidad para ${tab} aún no implementada completamente en el frontend para historial.`);
+     try {
+        console.warn(`Funcionalidad para ${tab} aún no implementada en el backend para historial.`);
         // Aquí deberías llamar a la ruta `/api/user/bitmart/history-orders` con el filtro de estado si existe
-        // Asegúrate de que tu backend tenga esta ruta y maneje los parámetros `tab` o `status`
-        const historyOrders = await fetchFromBackend(`/api/user/bitmart/history-orders?status=${tab}&symbol=${TRADE_SYMBOL}`);
-        return historyOrders || [];
+        return [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
         return [];
@@ -306,7 +315,7 @@ async function fetchOrders(tab) {
         if (tab === 'opened') {
             orders = await fetchOpenOrdersData();
         } else {
-            const historyOrders = await fetchHistoryOrdersData(tab); // <-- Pass the tab here
+            const historyOrders = await fetchHistoryOrdersData(tab);
             if (historyOrders) {
                 if (tab === 'filled') {
                     orders = historyOrders.filter(order => order.state === 'filled' || order.state === 'fully_filled');
@@ -347,6 +356,9 @@ async function cargarPrecioEnVivo() {
 }
 
 async function checkConnection() {
+    // Esta función chequea la conexión con TU backend, no con BitMart.
+    // Aunque no necesita token para /ping, la estamos llamando con fetchFromBackend
+    // por consistencia. Podría ser una llamada fetch simple sin token si /ping no lo requiere.
     try {
         const response = await fetchFromBackend('/ping');
         const dot = document.getElementById('status-dot');
@@ -357,7 +369,6 @@ async function checkConnection() {
                 dot.classList.replace('bg-red-500', 'bg-green-500');
                 text.textContent = 'Connected';
             } else {
-                // If backend returns OK but status is not 'ok', still an issue
                 throw new Error('Backend did not return OK status');
             }
         }
@@ -426,11 +437,13 @@ async function toggleBotState() {
         alert("Please login first to control the bot.");
         return;
     }
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const botStateDisplay = document.getElementById('bot-state');
+    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 
-    // Ensure all necessary DOM elements exist
-    if (!startBtn || !resetBtn || !botStateDisplay || !stopAtCycleEndCheckbox || !cycleDisplay || !profitDisplay || !cycleProfitDisplay) {
-        console.error("Missing one or more required DOM elements for bot control.");
-        alert("Initialization error: Bot control elements not found.");
+    if (!startBtn || !resetBtn || !botStateDisplay || !stopAtCycleEndCheckbox) {
+        console.warn("Faltan elementos DOM para controlar el estado del bot.");
         return;
     }
 
@@ -443,16 +456,13 @@ async function toggleBotState() {
     const action = startBtn.textContent === 'START' ? 'start' : 'stop';
 
     try {
-        // fetchFromBackend will throw an error if res.ok is false,
-        // so we can directly check for success and data.
         const response = await fetchFromBackend('/api/toggle-bot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, params: { purchase, increment, decrement, trigger, stopAtCycleEnd } })
         });
 
-        // The server.js sends `success: true` and `botState` directly.
-        if (response && response.success && response.botState) {
+        if (response && response.success) {
             const newBotState = response.botState.status;
             isRunning = (newBotState === 'RUNNING');
 
@@ -462,29 +472,18 @@ async function toggleBotState() {
             resetBtn.disabled = isRunning;
             stopAtCycleEndCheckbox.disabled = isRunning;
 
-            cycleDisplay.textContent = response.botState.cycle || 0;
-            profitDisplay.textContent = (response.botState.profit || 0).toFixed(2);
-            cycleProfitDisplay.textContent = (response.botState.cycleProfit || 0).toFixed(2);
+            document.getElementById('cycle').textContent = response.botState.cycle || 0;
+            document.getElementById('profit').textContent = (response.botState.profit || 0).toFixed(2);
+            document.getElementById('cycleprofit').textContent = (response.botState.cycleProfit || 0).toFixed(2);
 
             console.log(`Bot status updated: ${newBotState}`);
         } else {
-            // This case would primarily be if fetchFromBackend didn't throw,
-            // but the backend response structure was unexpected (e.g., missing success/botState)
-            throw new Error(response ? (response.message || 'Failed to toggle bot state with unexpected response.') : 'No response from backend.');
+            throw new Error(response.message || 'Failed to toggle bot state.');
         }
     } catch (error) {
         console.error('Error toggling bot state:', error);
-        // Use error.message which fetchFromBackend now ensures is available
         alert(`Error: ${error.message}`);
-
-        // If an error occurred, ensure UI reflects the actual state or revert
-        // This is a common pattern: assume the action failed if an error occurred.
-        // The `isRunning` state should probably be re-fetched or remain as it was before the failed attempt.
-        // For simplicity, we'll just re-set UI based on the presumed failure.
-        // A more advanced solution might fetch the *actual* bot state from backend after an error.
-        const previousActionWasStart = (action === 'start');
-        isRunning = previousActionWasStart ? false : true; // If we tried to start and failed, it's stopped. If we tried to stop and failed, it's running.
-
+        isRunning = !isRunning; // Revertir el estado si hubo error
         botStateDisplay.textContent = isRunning ? 'RUNNING' : 'STOPPED';
         botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
         startBtn.textContent = isRunning ? 'STOP' : 'START';
@@ -563,6 +562,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => fetchOrders(currentTab), 15000); // Actualiza órdenes cada 15 segundos
 
     // Event listeners para los botones del bot
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
 
@@ -684,16 +685,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Opcional: Cargar las API keys existentes si ya están guardadas para el usuario
                 // Esto requeriría una ruta en el backend como /api/user/bitmart/api-keys
                 // fetchFromBackend('/api/user/bitmart/api-keys')
-                //     .then(data => {
-                //         if (data && data.apiKey) {
-                //             apiKeyInput.value = data.apiKey;
-                //             secretKeyInput.value = '********'; // No mostrar la secret key
-                //             apiMemoInput.value = data.apiMemo || '';
-                //             connectionIndicator.classList.replace('bg-gray-500', 'bg-green-500');
-                //             connectionText.textContent = 'Last Connected';
-                //         }
-                //     })
-                //     .catch(error => console.error("Error loading existing API keys:", error));
+                //    .then(data => {
+                //        if (data && data.apiKey) {
+                //            apiKeyInput.value = data.apiKey;
+                //            secretKeyInput.value = '********'; // No mostrar la secret key
+                //            apiMemoInput.value = data.apiMemo || '';
+                //            connectionIndicator.classList.replace('bg-gray-500', 'bg-green-500');
+                //            connectionText.textContent = 'Last Connected';
+                //        }
+                //    })
+                //    .catch(error => console.error("Error loading existing API keys:", error));
             }
         });
     }
@@ -727,9 +728,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ apiKey, secretKey, apiMemo })
                 });
 
-                // Si fetchFromBackend no lanzó un error, la respuesta HTTP fue 2xx
-                // Ahora verificamos la propiedad `connected` o `success` de tu backend
-                if (response && response.connected) { // Cambiado de response.success a response.connected, según tu backend
+                // --- MODIFICACIÓN CLAVE AQUÍ ---
+                // Tu backend responde con { message: "...", connected: true }.
+                // No hay una propiedad 'success'. Revisamos 'connected' o 'message'.
+                if (response && response.connected) { // Cambiado de response.success a response.connected
                     apiStatusMessage.textContent = response.message || 'API keys validated and saved!';
                     apiStatusMessage.style.color = 'green';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
@@ -741,8 +743,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Opcional: Cerrar el modal después de un éxito
                     // setTimeout(() => { apiModal.style.display = 'none'; }, 2000);
                 } else {
-                    // Si el backend respondió OK pero connected es false o no hay mensaje
-                    const errorMessage = response.message || 'Failed to validate or save API keys with an unexpected response.';
+                    // Si el backend envió un error (HTTP 4xx/5xx), fetchFromBackend ya lo lanzó.
+                    // Si llegó aquí y `response.connected` es `false` (o no existe pero response no es null),
+                    // significa que el backend respondió con un mensaje de error explícito pero HTTP 200.
+                    const errorMessage = response.message || 'Failed to validate or save API keys.'; // Usamos response.message
                     apiStatusMessage.textContent = errorMessage;
                     apiStatusMessage.style.color = 'red';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
@@ -751,8 +755,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (error) {
                 // Este bloque captura errores de red o errores lanzados por fetchFromBackend
+                // cuando el backend responde con un HTTP !res.ok
                 console.error('Error submitting API keys:', error);
-                apiStatusMessage.textContent = `Error: ${error.message}`; // Display the error message from fetchFromBackend
+                apiStatusMessage.textContent = `Error: ${error.message}`;
                 apiStatusMessage.style.color = 'red';
                 connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                 connectionIndicator.classList.add('bg-red-500');
