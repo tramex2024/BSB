@@ -124,50 +124,28 @@ async function handleLogout() {
 }
 
 // --- Helper Function for API Calls (Maneja tokens y rutas dinámicas) ---
-async function fetchFromBackend(url, options = {}) {
+async function fetchFromBackend(endpoint, options) {
     try {
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            options.headers = {
-                ...options.headers,
-                'Authorization': `Bearer ${token}`
-            };
+        const response = await fetch(`https://bsb-ppex.onrender.com${endpoint}`, options);
+
+        if (!response.ok) {
+            // Handle HTTP errors (4xx, 5xx)
+            // Read the body *once* for error details
+            const errorBody = await response.text(); // or response.json() if you expect JSON
+            console.error(`HTTP error! Status: ${response.status}, Body: ${errorBody}`);
+            throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorBody}`);
         }
 
-        const res = await fetch(`${BACKEND_URL}${url}`, options);
+        // If successful, read the body *once*
+        const data = await response.json(); // or .text(), .blob(), etc., depending on what you expect
+        return data;
 
-        if (!res.ok) {
-            let errorDetails = `HTTP error! status: ${res.status}`;
-            try {
-                const errorData = await res.json();
-                errorDetails = errorData.error || errorData.message || JSON.stringify(errorData);
-            } catch (jsonError) {
-                // If response is not JSON, try to get plain text
-                errorDetails = await res.text() || `HTTP error! status: ${res.status} (non-JSON response or empty)`;
-            }
-
-            if (res.status === 401 || res.status === 403) {
-                console.warn("Token inválido o expirado. Iniciando deslogueo automático.");
-                alert("Tu sesión ha expirado o no es válida. Por favor, inicia sesión de nuevo.");
-                handleLogout(); // Llama a la función de deslogueo
-            }
-            // Throw an Error object for consistency, containing all details
-            throw new Error(`Backend Error for ${url}: ${errorDetails}`);
-        }
-        return await res.json();
     } catch (error) {
-        console.error(`Error fetching from ${url}:`, error);
-        // Ensure error is an Error object before accessing .message
-        const errorMessage = error instanceof Error ? error.message : String(error || "Unknown error occurred.");
-
-        if (document.getElementById('order-list')) {
-            document.getElementById('order-list').innerHTML = `<p class="text-red-400">Error: ${errorMessage}</p>`;
-        }
-        // Re-throw the error so calling functions can catch it
-        throw error;
+        console.error(`Error fetching from ${endpoint}:`, error);
+        // Do not try to read response.text() here if 'response' is not available or already consumed.
+        throw error; // Re-throw to be caught by checkConnection
     }
 }
-
 
 // --- Funciones de Display para Órdenes ---
 function createOrderElement(order) {
