@@ -15,14 +15,14 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "https://bsb-lime.vercel.app";
 
 const io = new socketIo.Server(server, { // Initialize Socket.IO server
     cors: {
-        origin: FRONTEND_URL, // <--- Aquí va la URL exacta de tu frontend en Vercel
+        origin: https://bsb-lime.vercel.app/, // <--- Aquí va la URL exacta de tu frontend en Vercel
         methods: ["GET", "POST"]
     }
 });
 
 // Middleware CORS para Express
 app.use(cors({
-    origin: FRONTEND_URL, // <--- Aquí también va la URL exacta de tu frontend en Vercel
+    origin: https://bsb-lime.vercel.app/, // <--- Aquí también va la URL exacta de tu frontend en Vercel
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
     optionsSuccessStatus: 204
