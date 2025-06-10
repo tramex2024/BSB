@@ -1,23 +1,33 @@
+// server/models/BotState.js
+
 const mongoose = require('mongoose');
 
-const botStateSchema = new mongoose.Schema({
-    userId: { type: String, required: true, unique: true },
-    state: { type: String, default: 'STOPPED' },
-    cycle: { type: Number, default: 0 },
-    profit: { type: Number, default: 0 },
-    purchaseAmount: { type: Number, default: 0 },
-    incrementPercentage: { type: Number, default: 0 },
-    decrementPercentage: { type: Number, default: 0 },
-    triggerPercentage: { type: Number, default: 0 },
-    ppc: { type: Number, default: 0 },
-    cp: { type: Number, default: 0 },
-    ac: { type: Number, default: 0 },
-    pm: { type: Number, default: 0 },
-    pv: { type: Number, default: 0 },
-    pc: { type: Number, default: 0 },
-    lastOrder: { type: Object, default: null },
-    openOrders: { type: Array, default: [] },
-    stopOnCycleEnd: { type: Boolean, default: false }
-}, { timestamps: true });
+// Define the schema for your bot's state
+const BotStateSchema = new mongoose.Schema({
+    userId: {
+        type: String,
+        required: true,
+        unique: true // Ensures each user has only one state entry
+    },
+    state: {
+        type: String,
+        required: true
+    },
+    // You can add more fields here as needed for your bot's state
+    // For example:
+    // conversationHistory: {
+    //     type: Array,
+    //     default: []
+    // },
+    // lastInteraction: {
+    //     type: Date,
+    //     default: Date.now
+    // }
+}, {
+    timestamps: true // Adds createdAt and updatedAt fields automatically
+});
 
-module.exports = mongoose.model('BotState', botStateSchema);
+// Create the Mongoose model from the schema
+const BotState = mongoose.model('BotState', BotStateSchema);
+
+module.exports = BotState;
