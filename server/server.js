@@ -1,8 +1,9 @@
 // server/server.js
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors'); // <-- ¡NUEVA LÍNEA AÑADIDA!
+const cors = require('cors');
 const autobotLogic = require('./autobotLogic'); // Tu lógica del bot
+const bitmartService = require('./services/bitmartService'); // <--- AÑADE ESTA LÍNEA
 const http = require('http'); // Para Socket.IO
 const { Server } = require("socket.io"); // Para Socket.IO
 
@@ -17,13 +18,12 @@ const io = new Server(server, {
 
 // --- Configuración de CORS para Express REST API ---
 const corsOptions = {
-    // Aquí defines qué dominios están permitidos para acceder a tu backend
-    origin: ['https://bsb-lime.vercel.app', 'http://localhost:3000'], // <-- ¡CORRECCIÓN AQUÍ! Las URLs deben ir entre comillas
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Permite estos métodos HTTP
-    credentials: true, // Importante si tu app usa cookies o sesiones
-    optionsSuccessStatus: 204 // Código de estado para respuestas preflight exitosas
+    origin: ['https://bsb-lime.vercel.app', 'http://localhost:3000'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+    optionsSuccessStatus: 204
 };
-app.use(cors(corsOptions)); // <-- ¡Usa el middleware CORS!
+app.use(cors(corsOptions));
 // --- Fin de la configuración CORS para Express ---
 
 
@@ -36,10 +36,44 @@ mongoose.connect(process.env.MONGODB_URI)
 autobotLogic.setIoInstance(io);
 autobotLogic.loadBotStateFromDB();
 
-// Middleware para parsear JSON (debe ir después de CORS general, pero antes de rutas)
+// Middleware para parsear JSON
 app.use(express.json());
 
 // --- Tus rutas de la API ---
+
+// Ruta para verificar la conexión (GET /ping)
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
+
+// Ruta para obtener balances de BitMart (GET /api/user/bitmart/balance)
+app.get('/api/user/bitmart/balance', async (req, res) => {
+    try {
+        const balances = await bitmartService.getBalance();
+        res.json(balances);
+    } catch (error) {
+        console.error('Error fetching BitMart balances:', error.message);
+        res.status(500).json({ error: 'Failed to fetch BitMart balances', details: error.message });
+    }
+});
+
+// Ruta para obtener órdenes abiertas de BitMart (GET /api/user/bitmart/open-orders)
+app.get('/api/user/bitmart/open-orders', async (req, res) => {
+    const { symbol } = req.query; // Obtener el símbolo desde los parámetros de la URL
+    if (!symbol) {
+        return res.status(400).json({ error: 'Symbol parameter is required.' });
+    }
+    try {
+        const openOrders = await bitmartService.getOpenOrders(symbol);
+        res.json(openOrders);
+    } catch (error) {
+        console.error(`Error fetching BitMart open orders for ${symbol}:`, error.message);
+        res.status(500).json({ error: `Failed to fetch BitMart open orders for ${symbol}`, details: error.message });
+    }
+});
+
+
+// Ruta para alternar el estado del bot (POST /api/toggle-bot)
 app.post('/api/toggle-bot', async (req, res) => {
     // console.log(`[SERVER] Recibida solicitud para /api/toggle-bot. Estado actual del bot: ${autobotLogic.botState.state}`);
 
@@ -84,7 +118,7 @@ app.post('/api/toggle-bot', async (req, res) => {
     }
 });
 
-// Ruta para obtener el estado actual del bot (útil para que el frontend lo cargue al inicio)
+// Ruta para obtener el estado actual del bot
 app.get('/api/bot-state', (req, res) => {
     // console.log('[SERVER] Solicitud para obtener estado del bot.');
     res.status(200).json({ success: true, botState: { ...autobotLogic.botState } });
