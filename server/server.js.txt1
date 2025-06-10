@@ -125,9 +125,9 @@ app.post('/api/toggle-bot', async (req, res) => {
 
     try {
         if (action === 'start') {
-            if (autobotLogic.botState.state !== 'STOPPED') {
-                console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState.state}`);
-                return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState.state}.`, botState: { ...autobotLogic.botState } });
+            if (autobotLogic.botState.status !== 'STOPPED') {
+                console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState.status}`);
+                return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState.status}.`, botState: { ...autobotLogic.botState } });
             }
 
             console.log(`[SERVER] Parámetros recibidos del frontend para iniciar:`, params);
@@ -165,7 +165,7 @@ app.post('/api/toggle-bot', async (req, res) => {
                 openOrders: [],
             });
 
-            console.log(`[AUTOBOT] Bot INICIADO. Estado: ${autobotLogic.botState.state}, Parámetros FINALES:`, {
+            console.log(`[AUTOBOT] Bot INICIADO. Estado: ${autobotLogic.botState.status}, Parámetros FINALES:`, {
                 purchase: autobotLogic.botState.purchaseAmount,
                 increment: autobotLogic.botState.incrementPercentage,
                 decrement: autobotLogic.botState.decrementPercentage,
@@ -181,7 +181,7 @@ app.post('/api/toggle-bot', async (req, res) => {
             res.json({ success: true, message: 'Bot started', botState: botStateForFrontend });
 
         } else if (action === 'stop') {
-            if (autobotLogic.botState.state === 'STOPPED') {
+            if (autobotLogic.botState.status === 'STOPPED') {
                 console.warn('[AUTOBOT] Intento de detener bot ya detenido.');
                 return res.status(400).json({ success: false, message: 'Bot is already stopped.', botState: { ...autobotLogic.botState } });
             }
@@ -212,7 +212,7 @@ server.listen(port, () => {
 process.on('SIGINT', async () => {
     console.log('\n[AUTOBOT] Señal de apagado recibida. Deteniendo bot y guardando estado...');
     autobotLogic.stopBotStrategy();
-    autobotLogic.botState.state = 'STOPPED'; // Asegura que el estado final sea STOPPED antes de guardar
+    autobotLogic.botState.status = 'STOPPED'; // Asegura que el estado final sea STOPPED antes de guardar
     await autobotLogic.saveBotStateToDB();
     console.log('[AUTOBOT] Bot detenido y estado guardado. Apagando servidor.');
     process.exit(0);
