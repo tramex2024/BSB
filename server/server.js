@@ -13,6 +13,17 @@ const server = http.createServer(app); // Create HTTP server for Socket.IO
 // --- Configuración de CORS para Socket.IO y Express ---
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://bsb-lime.vercel.app";
 
+// Configuración de CORS
+const corsOptions = {
+    origin: 'https://bsb-lime.vercel.app', // <-- ¡Asegúrate de que esta URL sea exactamente la de tu frontend!
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true, // Si usas cookies o sesiones, déjalo en true
+    optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions)); // <-- Usar el middleware CORS
+
+app.use(express.json()); // Para parsear JSON en el cuerpo de las solicitudes
+
 const io = new socketIo.Server(server, { // Initialize Socket.IO server
     cors: {
         origin: https://bsb-lime.vercel.app/, // <--- Aquí va la URL exacta de tu frontend en Vercel
