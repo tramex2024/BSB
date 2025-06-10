@@ -463,7 +463,7 @@ async function toggleBotState() {
         });
 
         if (response && response.success) {
-            const newBotState = response.botState.status;
+            const newBotState = response.botState.state;
             isRunning = (newBotState === 'RUNNING');
 
             botStateDisplay.textContent = newBotState;
@@ -476,7 +476,7 @@ async function toggleBotState() {
             document.getElementById('profit').textContent = (response.botState.profit || 0).toFixed(2);
             document.getElementById('cycleprofit').textContent = (response.botState.cycleProfit || 0).toFixed(2);
 
-            console.log(`Bot status updated: ${newBotState}`);
+            console.log(`Bot state updated: ${newBotState}`);
         } else {
             throw new Error(response.message || 'Failed to toggle bot state.');
         }
