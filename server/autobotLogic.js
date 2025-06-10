@@ -54,13 +54,34 @@ let botState = {
 };
 
 // Referencia global para Socket.IO (se inyectará desde server.js)
-let ioInstance;
+let authCredentialsInstance = {}; // Para almacenar las credenciales
 
 // Función para inyectar la instancia de Socket.IO
 function setIoInstance(io) {
     ioInstance = io;
     console.log('[AUTOBOT] Socket.IO instance attached to autobotLogic.');
 }
+
+// NUEVA FUNCIÓN: Para inyectar las credenciales
+function setAuthCredentials(credentials) {
+    authCredentialsInstance = credentials;
+    console.log('[AUTOBOT] BitMart API credentials attached to autobotLogic.');
+}
+
+// Luego, en todas las llamadas a bitmartService.js dentro de autobotLogic.js, usa `authCredentialsInstance`
+async function placeFirstBuyOrder() {
+    // ...
+    const balanceInfo = await bitmartService.getBalance(authCredentialsInstance);
+    // ...
+    const orderResult = await bitmartService.placeOrder(authCredentialsInstance, tradeSymbol, side, orderType, sizeUSDT.toString());
+    // ...
+    const filledOrder = await bitmartService.getOrderDetail(authCredentialsInstance, TRADE_SYMBOL, orderResult.order_id);
+    // ...
+}
+
+// Y así para todas las demás funciones de autobotLogic que llaman a bitmartService:
+// placeCoverageBuyOrder(), placeSellOrder(), cancelOpenOrders(), getTicker(), getOrderDetail().
+// SIEMPRE pasa `authCredentialsInstance` como el primer argumento.
 
 // Guarda el estado actual del bot en la base de datos
 async function saveBotStateToDB() {
