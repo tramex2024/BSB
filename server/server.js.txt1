@@ -125,7 +125,7 @@ app.post('/api/toggle-bot', async (req, res) => {
 
     try {
         if (action === 'start') {
-            if (autobotLogic.botState.state !== 'STOPPED') {
+            if (autobotLogic.botState.status !== 'STOPPED') {
                 console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState.status}`);
                 return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState.status}.`, botState: { ...autobotLogic.botState } });
             }
@@ -181,7 +181,7 @@ app.post('/api/toggle-bot', async (req, res) => {
             res.json({ success: true, message: 'Bot started', botState: botStateForFrontend });
 
         } else if (action === 'stop') {
-            if (autobotLogic.botState.state === 'STOPPED') {
+            if (autobotLogic.botState.status === 'STOPPED') {
                 console.warn('[AUTOBOT] Intento de detener bot ya detenido.');
                 return res.status(400).json({ success: false, message: 'Bot is already stopped.', botState: { ...autobotLogic.botState } });
             }
