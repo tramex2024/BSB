@@ -4,6 +4,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const http = require('http'); // Import http for Socket.IO
 const { Server } = require('socket.io'); // Import Server from socket.io
+const path = require('path'); // NEW: Import path module for serving static files
 
 require('dotenv').config(); // Load environment variables from .env
 
@@ -73,22 +74,13 @@ app.use('/api/auth', authRoutes); // Prefijo para rutas de autenticación (login
 app.use('/api/user', userRoutes); // Prefijo para rutas de usuario (como guardar API keys, obtener balance específico del usuario)
 
 // --- Endpoints Específicos del Bot (PROTEGIDOS POR AUTHENTICACIÓN) ---
-// Nota: Las rutas como /api/balance, /api/open-orders, etc. que estaban sin prefijo y sin autenticación
-// han sido eliminadas para evitar confusión y problemas de seguridad.
-// Se recomienda usar las rutas ya definidas en userRoutes (ej. /api/user/bitmart/balance)
-// que ya incluyen el middleware de autenticación del usuario.
-
 // Endpoint para obtener el estado del bot (para que el frontend lo muestre)
 // PROTEGIDA POR AUTHENTICATION
 app.get('/api/bot-state', authMiddleware, async (req, res) => {
     try {
-        // En un entorno multi-usuario, podrías querer cargar el estado del bot específico para req.user.id
-        // Si DEFAULT_BOT_USER_ID en autobotLogic.js es fijo para un solo bot, asegúrate que se corresponda
-        // con el ID del usuario actual o de un usuario de prueba para fines de demostración.
         const botStateForUser = await BotState.findOne({ userId: req.user.id }); // Cargar el estado del bot para el usuario autenticado
 
         if (botStateForUser) {
-            // Enviar una COPIA del botState para evitar modificar el original fuera de la lógica del bot
             const stateToEmit = botStateForUser.toObject();
             delete stateToEmit.strategyIntervalId; // Asegúrate de no enviar esto
             res.json(stateToEmit);
@@ -136,15 +128,12 @@ app.post('/api/toggle-bot', authMiddleware, async (req, res) => {
     try {
         let result;
         if (action === 'start') {
-            // Asegúrate de que los 'params' sean los esperados por 'startBotStrategy'
-            // El frontend envía: { purchase, increment, decrement, trigger, stopAtCycleEnd }
-            // autobotLogic espera: { purchaseAmount, incrementPercentage, decrementPercentage, triggerPercentage, stopOnCycleEnd }
             const formattedParams = {
                 purchaseAmount: parseFloat(params.purchase),
                 incrementPercentage: parseFloat(params.increment),
                 decrementPercentage: parseFloat(params.decrement),
                 triggerPercentage: parseFloat(params.trigger),
-                stopOnCycleEnd: typeof params.stopAtCycleEnd === 'boolean' ? params.stopAtCycleEnd : false // Asegura el tipo
+                stopOnCycleEnd: typeof params.stopAtCycleEnd === 'boolean' ? params.stopAtCycleEnd : false
             };
 
             result = await autobotLogic.startBotStrategy(formattedParams);
@@ -156,8 +145,6 @@ app.post('/api/toggle-bot', authMiddleware, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid action. Use "start" or "stop".', botState: { ...autobotLogic.botState } });
         }
         
-        // El resultado ya contiene 'success', 'message' y 'botState'
-        // Simplemente reenviamos la respuesta de autobotLogic.
         res.json(result);
 
     } catch (error) {
@@ -166,8 +153,18 @@ app.post('/api/toggle-bot', authMiddleware, async (req, res) => {
     }
 });
 
-// Servir archivos estáticos (tu frontend) - Asegúrate de que 'public' sea la ruta correcta a tu frontend build
+// NEW: Route to serve the Socket.IO client library explicitly
+// This must come BEFORE app.use(express.static('public')) to take precedence
+app.get('/socket.io/socket.io.js', (req, res) => {
+    // __dirname is the directory of the current module (server.js)
+    // '../node_modules/socket.io/client-dist/socket.io.js'
+    // resolves to the client distribution file within the installed socket.io package
+    res.sendFile(path.resolve(__dirname, '../node_modules/socket.io/client-dist/socket.io.js'));
+});
+
+// Serve static files (your frontend) - Ensure 'public' is the correct path to your frontend build
 app.use(express.static('public'));
+
 
 // --- Iniciar el servidor HTTP y Socket.IO ---
 server.listen(port, () => {
@@ -177,8 +174,7 @@ server.listen(port, () => {
 // --- Manejo de apagado para limpiar el intervalo ---
 process.on('SIGINT', async () => {
     console.log('\n[AUTOBOT] Señal de apagado recibida. Deteniendo bot y guardando estado...');
-    // Asegurarse de que el botState esté actualizado antes de detener y guardar
-    await autobotLogic.stopBotStrategy(); // Esto ya pone el estado en STOPPED y guarda
+    await autobotLogic.stopBotStrategy();
     console.log('[AUTOBOT] Bot detenido y estado guardado. Apagando servidor.');
     process.exit(0);
 });
