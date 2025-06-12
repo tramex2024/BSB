@@ -4,8 +4,202 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSB - Bitmart Spot Bots</title>
+    <!-- Incluye Tailwind CSS CDN aquí para asegurar que las clases funcionen -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Custom scrollbar for order list (moved from autobot section) */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: #374151; /* gray-700 */
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: #6b7280; /* gray-500 */
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af; /* gray-400 */
+        }
+
+        /* Active tab style (moved from autobot section) */
+        .active-tab {
+            border-color: white !important; /* Forces white border for active tab */
+        }
+
+        /* Asegúrate de que tu main.js pueda ocultar/mostrar estas secciones */
+        .tab-content {
+            display: none; /* Oculta todas las secciones por defecto */
+        }
+        .tab-content.active {
+            display: block; /* Muestra solo la sección activa */
+        }
+
+        /* Algunos estilos generales para el body si no están en style.css */
+        body {
+            font-family: 'Inter', sans-serif; /* Asumiendo la fuente Inter */
+            margin: 0;
+            padding-top: 60px; /* Espacio para el header fijo */
+            background-color: #1a202c; /* Fondo oscuro por defecto */
+            color: #e2e8f0; /* Texto claro por defecto */
+        }
+
+        /* Estilos del header si no están en style.css */
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #2d3748; /* Fondo oscuro del header */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+
+        .header-left, .header-right, .header-middle {
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            height: 40px;
+            margin-right: 10px;
+        }
+
+        .app-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .nav-tab {
+            padding: 8px 15px;
+            margin: 0 5px;
+            color: #a0aec0;
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tab.active {
+            color: #fff;
+            border-color: white;
+        }
+
+        .nav-tab:hover {
+            color: #fff;
+        }
+
+        .icon {
+            margin-left: 15px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #a0aec0;
+        }
+
+        .icon:hover {
+            color: #fff;
+        }
+
+        /* Estilos para modales */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1001; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #374151; /* gray-700 */
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+            color: #e2e8f0;
+            position: relative;
+        }
+
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: #e2e8f0;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .modal-content input[type="email"],
+        .modal-content input[type="text"],
+        .modal-content input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #4a5568; /* gray-600 */
+            border-radius: 4px;
+            box-sizing: border-box;
+            background-color: #2d3748; /* gray-800 */
+            color: #e2e8f0;
+        }
+
+        .modal-content button {
+            background-color: #4c51bf; /* indigo-700 */
+            color: white;
+            padding: 10px 15px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .modal-content button:hover {
+            opacity: 0.9;
+        }
+
+        .message-text {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .indicator-circle {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: 10px;
+        }
+
+        .indicator-text {
+            text-align: center;
+            display: block;
+            margin-top: 5px;
+        }
+    </style>
+</head>
 <body class="dark-mode">
     <header class="fixed-header">
         <div class="header-left">
@@ -19,129 +213,147 @@
             <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
         </nav>
         <div class="header-right">
-            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i> 
+            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i>
             <i class="fas fa-globe icon" title="Language"></i>
             <i class="fas fa-users icon" title="Users"></i>
             <i class="fas fa-cog icon" title="Settings"></i>
             <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
-            <i class="fas fa-key icon" id="api-key-icon" title="API"></i> <i class="fas fa-envelope icon" title="Contact"></i>
+            <i class="fas fa-key icon" id="api-key-icon" title="API"></i>
+            <i class="fas fa-envelope icon" title="Contact"></i>
         </div>
     </header>
 
     <main class="content">
         <section id="dashboard-section" class="tab-content active">
-            <h2>Welcome to your Dashboard!</h2>
+            <div class="container mx-auto p-4">
+                <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">Welcome to your Dashboard!</h2>
+                <!-- Aquí puedes añadir contenido específico del dashboard -->
+            </div>
         </section>
 
+        <!-- Esta es la sección donde va el contenido del Autobot -->
         <section id="autobot-section" class="tab-content">
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-            <title>AUTOBOT Panel</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-                /* Custom scrollbar for order list */
-                .overflow-y-auto::-webkit-scrollbar {
-                    width: 8px;
-                }
-                .overflow-y-auto::-webkit-scrollbar-track {
-                    background: #374151; /* gray-700 */
-                }
-                .overflow-y-auto::-webkit-scrollbar-thumb {
-                    background: #6b7280; /* gray-500 */
-                    border-radius: 4px;
-                }
-                .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-                    background: #9ca3af; /* gray-400 */
-                }
+            <!-- CONTENIDO DE LA PESTAÑA AUTOBOT (tomado del Canvas 'autobot-html-structure') -->
+            <div class="container mx-auto p-4 max-w-lg">
+                <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">Panel de Control del Autobot</h2>
 
-                /* Active tab style */
-                .active-tab {
-                    border-color: white !important; /* Forces white border for active tab */
-                }
-            </style>
-        </head>
-        <body class="bg-gray-900 text-white">
-
-            <div class="flex h-screen">
-                <div class="w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
-                    <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-                        <div class="flex justify-between items-center">
-                            <h2 class="text-lg font-bold">AUTOBOT</h2>
-                            <div><strong>Profit:</strong> <span id="profit" class="text-green-400">0.00</span></div>
-                        </div>
-                        <div class="flex justify-between text-sm">
-                            <div id="connection-status" class="flex items-center space-x-2">
-                                <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-                                <span id="status-text">Disconnected</span>
-                            </div>
-                            <div><strong>State:</strong> <span id="bot-state" class="text-yellow-400">STOPPED</span></div>
-                        </div>
+                <!-- Estado de la Conexión de la API -->
+                <div class="bg-white shadow-md rounded-lg p-4 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-3">Conexión BitMart API</h3>
+                    <div class="flex items-center space-x-2 mb-3">
+                        <div id="connection-indicator" class="w-4 h-4 rounded-full bg-yellow-500"></div>
+                        <span id="connection-text" class="text-gray-600 font-medium">Cargando...</span>
                     </div>
+                    <p id="api-status-message" class="text-sm text-gray-500"></p>
+                </div>
 
-                    <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-                        <div class="flex justify-between text-sm">
-                            <div><strong>Price:</strong> <span id="price">0.00</span></div>
-                            <div><strong>CycleProfit:</strong> <span id="cycleprofit">0.00</span></div>
+                <!-- Formulario de Conexión de API (si aún necesitas configurarlo) -->
+                <div class="bg-white shadow-md rounded-lg p-4 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-3">Configurar API Keys</h3>
+                    <form id="connect-api-form" class="space-y-4">
+                        <div>
+                            <label for="bitmart-api-key" class="block text-sm font-medium text-gray-700">API Key</label>
+                            <input type="text" id="bitmart-api-key" name="apiKey" required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                         </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>Coverage:</strong> <span id="coverage">0.00</span></div>
-                            <div><strong>Cycle:</strong> <span id="cycle">0</span></div>
+                        <div>
+                            <label for="bitmart-secret-key" class="block text-sm font-medium text-gray-700">Secret Key</label>
+                            <input type="password" id="bitmart-secret-key" name="secretKey" required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                         </div>
-                        <div class="flex justify-between text-sm">
-                            <div><strong>Balance:</strong> <span id="balance">0.00</span></div>
-                            <div><strong>ORQ:</strong> <span id="orq">0</span></div>
+                        <div>
+                            <label for="bitmart-api-memo" class="block text-sm font-medium text-gray-700">API Memo (Opcional)</label>
+                            <input type="text" id="bitmart-api-memo" name="apiMemo"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                         </div>
-                    </div>
+                        <button type="submit"
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            Guardar y Conectar API
+                        </button>
+                    </form>
+                </div>
 
-                    <div class="space-y-4 text-sm">
-                        <hr class="border-gray-600"/>
-                        <div>
-                            <label class="block">Purchase (USDT)</label>
-                            <input id="purchase" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                        </div>
-                        <div>
-                            <label class="block">Increment (%)</label>
-                            <input id="increment" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                        </div>
-                        <div>
-                            <label class="block">Decrement (%)</label>
-                            <input id="decrement" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                        </div>
-                        <div>
-                            <label class="block">Trigger (%)</label>
-                            <input id="trigger" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                        </div>
-                    </div>
+                <!-- Estado Actual del Bot -->
+                <div class="bg-white shadow-md rounded-lg p-4 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-3">Estado del Bot</h3>
+                    <ul class="space-y-2 text-gray-600">
+                        <li><span class="font-medium">Estado:</span> <span id="bot-status-text">Cargando...</span></li>
+                        <li><span class="font-medium">Ciclo:</span> <span id="cycle-text">0</span></li>
+                        <li><span class="font-medium">Ganancia del Ciclo:</span> <span id="cycle-profit-text">0.00 USDT</span></li>
+                        <li><span class="font-medium">Ganancia Total:</span> <span id="profit-text">0.00 USDT</span></li>
+                        <li><span class="font-medium">Precio Actual:</span> <span id="current-price-text">0.00 USDT</span></li>
+                    </ul>
+                </div>
 
-                    <div class="flex flex-col space-y-2 mt-4">
+                <!-- Balances de la Cuenta -->
+                <div class="bg-white shadow-md rounded-lg p-4 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-3">Balances</h3>
+                    <ul class="space-y-2 text-gray-600">
+                        <li><span class="font-medium">USDT:</span> <span id="balance-usdt">0.00</span></li>
+                        <li><span class="font-medium">BTC:</span> <span id="balance-btc">0.00000</span></li>
+                    </ul>
+                </div>
+
+                <!-- Configuración del Bot -->
+                <div class="bg-white shadow-md rounded-lg p-4 mb-6">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-3">Configuración del Bot</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="purchase-amount" class="block text-sm font-medium text-gray-700">Monto de Compra (USDT)</label>
+                            <input type="number" id="purchase-amount" step="0.01" min="5" required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="increment-percentage" class="block text-sm font-medium text-gray-700">Incremento (%)</label>
+                            <input type="number" id="increment-percentage" step="0.1" min="0" required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="decrement-percentage" class="block text-sm font-medium text-gray-700">Decremento (%)</label>
+                            <input type="number" id="decrement-percentage" step="0.1" min="0" required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="trigger-percentage" class="block text-sm font-medium text-gray-700">Trigger (%)</label>
+                            <input type="number" id="trigger-percentage" step="0.1" min="0" required
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
                         <div class="flex items-center">
-                            <input type="checkbox" id="stop-at-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
-                            <label for="stop-at-cycle-end" class="ml-2 block text-sm text-gray-200">Stop with the cycle end</label>
-                        </div>
-                        <div class="flex space-x-2">
-                            <button id="start-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
-                            <button id="reset-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button>
+                            <input type="checkbox" id="stop-on-cycle-end"
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            <label for="stop-on-cycle-end" class="ml-2 block text-sm text-gray-900">Detener al Finalizar Ciclo</label>
                         </div>
                     </div>
                 </div>
-                <div class="w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
-                    <div id="tvchart" class="bg-gray-800 rounded p-2 h-[400px]"></div>
-                    <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
-                        <h3 class="text-lg font-semibold mb-2">Order History</h3>
-                        <div class="flex border-b border-gray-600 mb-4">
-                            <button id="tab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
-                            <button id="tab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
-                            <button id="tab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
-                            <button id="tab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
-                        </div>
 
-                        <div id="order-list" class="overflow-y-auto text-sm space-y-2 flex-grow">
-                            <p class="text-gray-400">Loading orders...</p>
-                        </div>
+                <!-- Controles del Bot -->
+                <div class="bg-white shadow-md rounded-lg p-4">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-3">Controles</h3>
+                    <div class="flex justify-around space-x-4">
+                        <button id="start-bot-btn"
+                                class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Iniciar Bot
+                        </button>
+                        <button id="stop-bot-btn"
+                                class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Detener Bot
+                        </button>
                     </div>
+                </div>
+
+                <!-- Botón de Salir -->
+                <div class="text-center mt-8">
+                    <button id="logout-btn"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-700 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                        Cerrar Sesión
+                    </button>
                 </div>
             </div>
+            <!-- FIN DEL CONTENIDO DE LA PESTAÑA AUTOBOT -->
 
+            <!-- Aquí iría el widget de TradingView si lo quieres mantener en esta sección
+                 Asegúrate de que 'tvchart' sea un ID único para el contenedor del widget. -->
+            <!-- <div id="tvchart" class="bg-gray-800 rounded p-2 h-[400px]"></div>
             <script src="https://s3.tradingview.com/tv.js"></script>
             <script>
                 new TradingView.widget({
@@ -157,15 +369,20 @@
                     allow_symbol_change: true,
                     container_id: "tvchart"
                 });
-            </script>
-        </body>
+            </script> -->
         </section>
 
         <section id="testbot-section" class="tab-content">
-            <h2>TestBot Interface</h2>
+            <div class="container mx-auto p-4">
+                <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">TestBot Interface</h2>
+                <!-- Contenido del TestBot -->
+            </div>
         </section>
         <section id="aibot-section" class="tab-content">
-            <h2>AIBot Interface</h2>
+            <div class="container mx-auto p-4">
+                <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">AIBot Interface</h2>
+                <!-- Contenido del AIBot -->
+            </div>
         </section>
     </main>
 
@@ -203,6 +420,27 @@
         </div>
     </div>
 
+    <!-- Script principal de tu aplicación -->
     <script src="js/main.js"></script>
+    <!-- TradingView widget script si lo necesitas globalmente o en otra sección -->
+    <!-- <script src="https://s3.tradingview.com/tv.js"></script> -->
+    <!-- <script>
+        // Si el widget de TradingView no está en la sección autobot
+        // o si es un widget general para el dashboard, configúralo aquí
+        // asegúrate de que el 'container_id' exista en tu HTML.
+        // new TradingView.widget({
+        //     autosize: true,
+        //     symbol: "BINANCE:BTCUSDT",
+        //     interval: "1",
+        //     timezone: "Etc/UTC",
+        //     theme: "dark",
+        //     style: "1",
+        //     locale: "en",
+        //     toolbar_bg: "#f1f3f6",
+        //     enable_publishing: false,
+        //     allow_symbol_change: true,
+        //     container_id: "tvchart-dashboard" // Ejemplo de un ID diferente para un widget general
+        // });
+    </script> -->
 </body>
 </html>
