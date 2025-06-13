@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSB - Bitmart Spot Bots</title>
-    <!-- Incluye Tailwind CSS CDN aquí -->
+    <!-- Incluye Tailwind CSS CDN aquí para asegurar que las clases funcionen -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -233,12 +233,13 @@
         </div>
     </div>
 
-    <!-- Contenedor principal de la aplicación - inicialmente oculto, controlado por main.js -->
-    <div id="app-section" class="hidden"> 
+    <!-- Contenedor principal de la aplicación - NO oculto por defecto para esta prueba -->
+    <div id="app-section"> 
         <main class="content">
             <section id="dashboard-section" class="tab-content active">
                 <div class="container mx-auto p-4">
                     <h2 class="text-3xl font-bold text-center text-white mb-6">Welcome to your Dashboard!</h2>
+                    <p class="text-gray-300">Este es el contenido de la pestaña DASHBOARD.</p>
                 </div>
             </section>
 
@@ -252,9 +253,10 @@
                                 <div><strong>Profit:</strong> <span id="profit-text" class="text-green-400">0.00</span></div>
                             </div>
                             <div class="flex justify-between text-sm">
-                                <div id="connection-status" class="flex items-center space-x-2">
-                                    <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-                                    <span id="status-text">Disconnected</span>
+                                <!-- IDs corregidos para el panel de conexión en la sección autobot -->
+                                <div id="api-connection-status-panel" class="flex items-center space-x-2">
+                                    <span id="connection-indicator-panel" class="h-3 w-3 rounded-full bg-red-500"></span>
+                                    <span id="connection-text-panel">Disconnected</span>
                                 </div>
                                 <div><strong>State:</strong> <span id="bot-status-text" class="text-yellow-400">STOPPED</span></div>
                             </div>
@@ -266,7 +268,6 @@
                                 <div><strong>CycleProfit:</strong> <span id="cycle-profit-text">0.00</span></div>
                             </div>
                             <div class="flex justify-between text-sm">
-                                <!-- Asumo que 'Coverage' es AC (Activo Comprado) y 'Balance' es USDT disponible -->
                                 <div><strong>BTC AC:</strong> <span id="balance-btc">0.00</span></div> 
                                 <div><strong>Cycle:</strong> <span id="cycle-text">0</span></div>
                             </div>
@@ -360,9 +361,10 @@
                 <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
 
                 <button type="submit" id="validate-api-button">VALIDATE</button>
-                <p id="api-status-message" class="message-text"></p>
-                <div id="connection-indicator" class="indicator-circle"></div>
-                <span id="connection-text" class="indicator-text"></span>
+                <!-- IDs corregidos para el panel de conexión en el modal de API -->
+                <p id="api-status-message-modal" class="message-text"></p>
+                <div id="connection-indicator-modal" class="indicator-circle"></div>
+                <span id="connection-text-modal" class="indicator-text"></span>
             </form>
         </div>
     </div>
