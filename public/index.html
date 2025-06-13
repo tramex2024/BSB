@@ -4,200 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSB - Bitmart Spot Bots</title>
-    <!-- Incluye Tailwind CSS CDN aquí para asegurar que las clases funcionen -->
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style>
-        /* Estilos generales del cuerpo */
-        body {
-            font-family: 'Inter', sans-serif; /* Asumiendo la fuente Inter */
-            margin: 0;
-            padding-top: 60px; /* Espacio para el header fijo */
-            background-color: #1a202c; /* Fondo oscuro por defecto */
-            color: #e2e8f0; /* Texto claro por defecto */
-        }
-
-        /* Estilos de la barra de desplazamiento personalizada para listas de órdenes */
-        .overflow-y-auto::-webkit-scrollbar {
-            width: 8px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-track {
-            background: #374151; /* gray-700 */
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-            background: #6b7280; /* gray-500 */
-            border-radius: 4px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af; /* gray-400 */
-        }
-
-        /* Estilo para la pestaña de navegación activa */
-        .nav-tab.active {
-            color: #fff;
-            border-color: white !important; /* Fuerza el borde blanco para la pestaña activa */
-        }
-
-        /* Reglas CSS para las secciones de contenido de las pestañas */
-        .tab-content {
-            display: none !important; /* Oculta todos los contenidos de las pestañas por defecto */
-            padding: 1rem;
-            background-color: #1a202c; /* Fondo de la sección de contenido */
-            min-height: calc(100vh - 60px); /* Para que ocupe el resto de la altura */
-        }
-        .tab-content.active {
-            display: block !important; /* Muestra solo la sección activa */
-        }
-
-        /* Estilos del encabezado fijo */
-        .fixed-header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 20px;
-            background-color: #2d3748; /* Fondo oscuro del header */
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-        }
-
-        .header-left, .header-right, .header-middle {
-            display: flex;
-            align-items: center;
-        }
-
-        .logo {
-            height: 40px;
-            margin-right: 10px;
-        }
-
-        .app-name {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        .nav-tab {
-            padding: 8px 15px;
-            margin: 0 5px;
-            color: #a0aec0;
-            text-decoration: none;
-            border-bottom: 2px solid transparent;
-            transition: all 0.3s ease;
-        }
-
-        .nav-tab:hover {
-            color: #fff;
-        }
-
-        .icon {
-            margin-left: 15px;
-            font-size: 1.2rem;
-            cursor: pointer;
-            color: #a0aec0;
-        }
-
-        .icon:hover {
-            color: #fff;
-        }
-
-        /* Estilos para modales */
-        .modal {
-            display: none; /* Oculto por defecto - main.js controlará la visibilidad */
-            position: fixed;
-            z-index: 1001;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.4);
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-content {
-            background-color: #374151; /* gray-700 */
-            margin: auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%;
-            max-width: 500px;
-            border-radius: 8px;
-            color: #e2e8f0;
-            position: relative;
-        }
-
-        .close-button {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            position: absolute;
-            top: 10px;
-            right: 20px;
-            cursor: pointer;
-        }
-
-        .close-button:hover,
-        .close-button:focus {
-            color: #e2e8f0;
-            text-decoration: none;
-        }
-
-        .modal-content input[type="email"],
-        .modal-content input[type="text"],
-        .modal-content input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            display: inline-block;
-            border: 1px solid #4a5568; /* gray-600 */
-            border-radius: 4px;
-            box-sizing: border-box;
-            background-color: #2d3748; /* gray-800 */
-            color: #e2e8f0;
-        }
-
-        .modal-content button {
-            background-color: #4c51bf; /* indigo-700 */
-            color: white;
-            padding: 10px 15px;
-            margin: 8px 0;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        .modal-content button:hover {
-            opacity: 0.9;
-        }
-
-        .message-text {
-            margin-top: 10px;
-            text-align: center;
-        }
-
-        .indicator-circle {
-            width: 15px;
-            height: 15px;
-            border-radius: 50%;
-            margin-left: auto;
-            margin-right: auto;
-            margin-top: 10px;
-        }
-
-        .indicator-text {
-            text-align: center;
-            display: block;
-            margin-top: 5px;
-        }
-    </style>
-</head>
 <body class="dark-mode">
     <header class="fixed-header">
         <div class="header-left">
@@ -211,7 +19,7 @@
             <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
         </nav>
         <div class="header-right">
-            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i>
+            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i> 
             <i class="fas fa-globe icon" title="Language"></i>
             <i class="fas fa-users icon" title="Users"></i>
             <i class="fas fa-cog icon" title="Settings"></i>
@@ -220,7 +28,147 @@
         </div>
     </header>
 
-    <!-- Modal de autenticación - inicialmente oculto, controlado por main.js -->
+    <main class="content">
+        <section id="dashboard-section" class="tab-content active">
+            <h2>Welcome to your Dashboard!</h2>
+        </section>
+
+        <section id="autobot-section" class="tab-content">
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+            <title>AUTOBOT Panel</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+                /* Custom scrollbar for order list */
+                .overflow-y-auto::-webkit-scrollbar {
+                    width: 8px;
+                }
+                .overflow-y-auto::-webkit-scrollbar-track {
+                    background: #374151; /* gray-700 */
+                }
+                .overflow-y-auto::-webkit-scrollbar-thumb {
+                    background: #6b7280; /* gray-500 */
+                    border-radius: 4px;
+                }
+                .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+                    background: #9ca3af; /* gray-400 */
+                }
+
+                /* Active tab style */
+                .active-tab {
+                    border-color: white !important; /* Forces white border for active tab */
+                }
+            </style>
+        </head>
+        <body class="bg-gray-900 text-white">
+
+            <div class="flex h-screen">
+                <div class="w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
+                    <div class="bg-gray-700 p-4 rounded-lg space-y-2">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-lg font-bold">AUTOBOT</h2>
+                            <div><strong>Profit:</strong> <span id="profit" class="text-green-400">0.00</span></div>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <div id="connection-status" class="flex items-center space-x-2">
+                                <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                                <span id="status-text">Disconnected</span>
+                            </div>
+                            <div><strong>State:</strong> <span id="bot-state" class="text-yellow-400">STOPPED</span></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-700 p-4 rounded-lg space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <div><strong>Price:</strong> <span id="price">0.00</span></div>
+                            <div><strong>CycleProfit:</strong> <span id="cycleprofit">0.00</span></div>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <div><strong>Coverage:</strong> <span id="coverage">0.00</span></div>
+                            <div><strong>Cycle:</strong> <span id="cycle">0</span></div>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <div><strong>Balance:</strong> <span id="balance">0.00</span></div>
+                            <div><strong>ORQ:</strong> <span id="orq">0</span></div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4 text-sm">
+                        <hr class="border-gray-600"/>
+                        <div>
+                            <label class="block">Purchase (USDT)</label>
+                            <input id="purchase" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
+                        <div>
+                            <label class="block">Increment (%)</label>
+                            <input id="increment" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
+                        <div>
+                            <label class="block">Decrement (%)</label>
+                            <input id="decrement" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
+                        <div>
+                            <label class="block">Trigger (%)</label>
+                            <input id="trigger" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col space-y-2 mt-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="stop-at-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
+                            <label for="stop-at-cycle-end" class="ml-2 block text-sm text-gray-200">Stop with the cycle end</label>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button id="start-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
+                            <button id="reset-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
+                    <div id="tvchart" class="bg-gray-800 rounded p-2 h-[400px]"></div>
+                    <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
+                        <h3 class="text-lg font-semibold mb-2">Order History</h3>
+                        <div class="flex border-b border-gray-600 mb-4">
+                            <button id="tab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
+                            <button id="tab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
+                            <button id="tab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
+                            <button id="tab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
+                        </div>
+
+                        <div id="order-list" class="overflow-y-auto text-sm space-y-2 flex-grow">
+                            <p class="text-gray-400">Loading orders...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <script src="https://s3.tradingview.com/tv.js"></script>
+            <script>
+                new TradingView.widget({
+                    autosize: true,
+                    symbol: "BINANCE:BTCUSDT",
+                    interval: "1",
+                    timezone: "Etc/UTC",
+                    theme: "dark",
+                    style: "1",
+                    locale: "en",
+                    toolbar_bg: "#f1f3f6",
+                    enable_publishing: false,
+                    allow_symbol_change: true,
+                    container_id: "tvchart"
+                });
+            </script>
+        </body>
+        </section>
+
+        <section id="testbot-section" class="tab-content">
+            <h2>TestBot Interface</h2>
+        </section>
+        <section id="aibot-section" class="tab-content">
+            <h2>AIBot Interface</h2>
+        </section>
+    </main>
+
     <div id="auth-modal" class="modal">
         <div class="modal-content">
             <h3>Sign In / Sign Up</h3>
@@ -233,119 +181,6 @@
         </div>
     </div>
 
-    <!-- Contenedor principal de la aplicación - NO oculto por defecto para esta prueba -->
-    <div id="app-section"> 
-        <main class="content">
-            <section id="dashboard-section" class="tab-content active">
-                <div class="container mx-auto p-4">
-                    <h2 class="text-3xl font-bold text-center text-white mb-6">Welcome to your Dashboard!</h2>
-                    <p class="text-gray-300">Este es el contenido de la pestaña DASHBOARD.</p>
-                </div>
-            </section>
-
-            <section id="autobot-section" class="tab-content">
-                <div class="container mx-auto p-4 max-w-lg bg-gray-900 text-white flex h-full">
-                    <!-- Columna Izquierda (Panel de Control) -->
-                    <div class="w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto rounded-lg">
-                        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-                            <div class="flex justify-between items-center">
-                                <h2 class="text-lg font-bold">AUTOBOT</h2>
-                                <div><strong>Profit:</strong> <span id="profit-text" class="text-green-400">0.00</span></div>
-                            </div>
-                            <div class="flex justify-between text-sm">
-                                <!-- IDs corregidos para el panel de conexión en la sección autobot -->
-                                <div id="api-connection-status-panel" class="flex items-center space-x-2">
-                                    <span id="connection-indicator-panel" class="h-3 w-3 rounded-full bg-red-500"></span>
-                                    <span id="connection-text-panel">Disconnected</span>
-                                </div>
-                                <div><strong>State:</strong> <span id="bot-status-text" class="text-yellow-400">STOPPED</span></div>
-                            </div>
-                        </div>
-
-                        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-                            <div class="flex justify-between text-sm">
-                                <div><strong>Price:</strong> <span id="current-price-text">0.00</span></div>
-                                <div><strong>CycleProfit:</strong> <span id="cycle-profit-text">0.00</span></div>
-                            </div>
-                            <div class="flex justify-between text-sm">
-                                <div><strong>BTC AC:</strong> <span id="balance-btc">0.00</span></div> 
-                                <div><strong>Cycle:</strong> <span id="cycle-text">0</span></div>
-                            </div>
-                            <div class="flex justify-between text-sm">
-                                <div><strong>USDT Balance:</strong> <span id="balance-usdt">0.00</span></div>
-                                <div><strong>Open Orders:</strong> <span id="orq-text">0</span></div>
-                            </div>
-                        </div>
-
-                        <div class="space-y-4 text-sm">
-                            <hr class="border-gray-600"/>
-                            <div>
-                                <label class="block">Purchase (USDT)</label>
-                                <input id="purchase-amount" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                            </div>
-                            <div>
-                                <label class="block">Increment (%)</label>
-                                <input id="increment-percentage" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                            </div>
-                            <div>
-                                <label class="block">Decrement (%)</label>
-                                <input id="decrement-percentage" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                            </div>
-                            <div>
-                                <label class="block">Trigger (%)</label>
-                                <input id="trigger-percentage" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col space-y-2 mt-4">
-                            <div class="flex items-center">
-                                <input type="checkbox" id="stop-on-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
-                                <label for="stop-on-cycle-end" class="ml-2 block text-sm text-gray-200">Stop with the cycle end</label>
-                            </div>
-                            <div class="flex space-x-2">
-                                <button id="start-bot-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
-                                <button id="stop-bot-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>STOP</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Columna Derecha (TradingView y Historial de Órdenes) -->
-                    <div class="w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
-                        <div id="tvchart" class="bg-gray-800 rounded p-2 h-[400px]"></div>
-                        <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
-                            <h3 class="text-lg font-semibold mb-2">Order History</h3>
-                            <div class="flex border-b border-gray-600 mb-4">
-                                <button id="tab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
-                                <button id="tab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
-                                <button id="tab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
-                                <button id="tab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
-                            </div>
-
-                            <div id="order-list" class="overflow-y-auto text-sm space-y-2 flex-grow">
-                                <p class="text-gray-400">Loading orders...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Cierre del flex h-screen -->
-            </section>
-
-            <section id="testbot-section" class="tab-content">
-                <div class="container mx-auto p-4">
-                    <h2 class="text-3xl font-bold text-center text-white mb-6">TestBot Interface</h2>
-                    <p class="text-gray-300">Este es el contenido de la pestaña TESTBOT.</p>
-                </div>
-            </section>
-            <section id="aibot-section" class="tab-content">
-                <div class="container mx-auto p-4">
-                    <h2 class="text-3xl font-bold text-center text-white mb-6">AIBot Interface</h2>
-                    <p class="text-gray-300">Este es el contenido de la pestaña AIBOT.</p>
-                </div>
-            </section>
-        </main>
-    </div> <!-- Fin de #app-section -->
-
-    <!-- Modal de configuración de API - inicialmente oculto, controlado por main.js -->
     <div id="api-modal" class="modal">
         <div class="modal-content">
             <span class="close-button">&times;</span>
@@ -361,35 +196,13 @@
                 <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
 
                 <button type="submit" id="validate-api-button">VALIDATE</button>
-                <!-- IDs corregidos para el panel de conexión en el modal de API -->
-                <p id="api-status-message-modal" class="message-text"></p>
-                <div id="connection-indicator-modal" class="indicator-circle"></div>
-                <span id="connection-text-modal" class="indicator-text"></span>
+                <p id="api-status-message" class="message-text"></p>
+                <div id="connection-indicator" class="indicator-circle"></div>
+                <span id="connection-text" class="indicator-text"></span>
             </form>
         </div>
     </div>
 
-    <!-- Script de TradingView - debe ir después del div 'tvchart' -->
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-        new TradingView.widget({
-            autosize: true,
-            symbol: "BINANCE:BTCUSDT",
-            interval: "1",
-            timezone: "Etc/UTC",
-            theme: "dark",
-            style: "1",
-            locale: "en",
-            toolbar_bg: "#f1f3f6",
-            enable_publishing: false,
-            allow_symbol_change: true,
-            container_id: "tvchart"
-        });
-    </script>
-    
-    <!-- Script de Socket.IO CLIENTE - DEBE ESTAR ANTES DE main.js -->
-    <script src="/socket.io/socket.io.js"></script>
-    <!-- Script principal de tu aplicación -->
     <script src="js/main.js"></script>
 </body>
 </html>
