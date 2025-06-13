@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const http = require('http'); // Import http for Socket.IO
-const socketIo = require('socket.io'); // Import socket.io
+const { Server } = require('socket.io'); // Import Server from socket.io
+const path = require('path'); // NEW: Import path module for serving static files
 
 require('dotenv').config(); // Load environment variables from .env
 
@@ -13,7 +14,7 @@ const server = http.createServer(app); // Create HTTP server for Socket.IO
 // --- Configuración de CORS para Socket.IO y Express ---
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://bsb-lime.vercel.app";
 
-const io = new socketIo.Server(server, { // Initialize Socket.IO server
+const io = new Server(server, { // Initialize Socket.IO server
     cors: {
         origin: FRONTEND_URL, // <--- Aquí va la URL exacta de tu frontend en Vercel
         methods: ["GET", "POST"]
@@ -34,11 +35,13 @@ app.use(express.json()); // Middleware para parsear el cuerpo de las solicitudes
 // --- Importaciones de Módulos y Servicios ---
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
-// const bitmartService = require('./services/bitmartService'); // No es necesario importar aquí si solo se usa en userRoutes
 const BotState = require('./models/BotState');
 
 // Importar la lógica del bot
 const autobotLogic = require('./autobotLogic');
+// Importar middleware de autenticación para proteger rutas del bot
+const authMiddleware = require('./middleware/authMiddleware'); // DESCOMENTADO
+
 // Inyectar la instancia de io en la lógica del bot
 autobotLogic.setIoInstance(io);
 
@@ -52,14 +55,8 @@ mongoose
     })
     .then(async () => {
         console.log('✅ Conectado a MongoDB correctamente');
-        // Cargar el estado del bot desde la base de datos al iniciar el servidor
-        await autobotLogic.loadBotStateFromDB();
-        // Opcional: Reanudar el bot si su último estado guardado era 'RUNNING' al reiniciar el servidor
-        // Esto depende de tu lógica de negocio, si quieres que el bot se reanude automáticamente
-        // if (autobotLogic.botState.state === 'RUNNING') {
-        //     console.log('[AUTOBOT] Reanudando bot desde el último estado guardado...');
-        //     autobotLogic.startBotStrategy();
-        // }
+        // Cargar el estado del bot por defecto o el último estado global al iniciar el servidor
+        await autobotLogic.loadBotStateFromDB(); // Esta carga el estado por DEFAULT_BOT_USER_ID
     })
     .catch((error) => {
         console.error('❌ Error conectando a MongoDB:', error.message);
@@ -74,87 +71,35 @@ app.get('/ping', (req, res) => {
 
 // Usar las rutas importadas
 app.use('/api/auth', authRoutes); // Prefijo para rutas de autenticación (login, registro)
-app.use('/api/user', userRoutes); // Prefijo para rutas de usuario (como guardar API keys, obtener balance específico del usuario)
+app.use('/api/user', userRoutes); // Prefijo para rutas de usuario (ej. guardar API keys, obtener balance)
 
 
-// --- Endpoints Específicos del Bot/BitMart (¡Recomendación: Mover estos a userRoutes para usar autenticación!) ---
-// Las rutas /api/balance, /api/open-orders, etc. que no están prefijadas con /api/user
-// no usarán el middleware de autenticación de userRoutes.
-// Si quieres que estas rutas usen las credenciales del usuario logueado, DEBES moverlas
-// dentro de userRoutes o crear un middleware de autenticación para ellas.
-
-app.get('/api/balance', (req, res) => {
-    console.warn('⚠️ La ruta /api/balance no tiene autenticación de usuario y podría no funcionar sin credenciales BitMart explícitas. Considera usar /api/user/bitmart/balance con autenticación.');
-    res.status(501).json({ message: 'Endpoint /api/balance no implementado con credenciales dinámicas. Usa /api/user/bitmart/balance con autenticación.' });
-});
-
-app.get('/test-balance', (req, res) => {
-    console.warn('⚠️ La ruta /test-balance no tiene credenciales de BitMart hardcodeadas ni autenticación de usuario. Necesitará credenciales para funcionar o mover a userRoutes.');
-    res.status(501).json({ message: 'Endpoint /test-balance necesita credenciales BitMart para funcionar o ser movido a userRoutes.' });
-});
-
-app.get('/api/open-orders', (req, res) => {
-    console.warn('⚠️ La ruta /api/open-orders no tiene autenticación de usuario y podría no funcionar sin credenciales BitMart explícitas. Considera usar /api/user/bitmart/open-orders con autenticación.');
-    res.status(501).json({ message: 'Endpoint /api/open-orders no implementado con credenciales dinámicas. Usa /api/user/bitmart/open-orders con autenticación.' });
-});
-
-app.get('/test-open-orders', (req, res) => {
-    console.warn('⚠️ La ruta /test-open-orders no tiene credenciales de BitMart hardcodeadas ni autenticación de usuario. Necesitará credenciales para funcionar o mover a userRoutes.');
-    res.status(501).json({ message: 'Endpoint /test-open-orders necesita credenciales BitMart para funcionar o ser movido a userRoutes.' });
-});
-
-app.get('/api/history-orders', (req, res) => {
-    console.warn(`[SERVER] La funcionalidad para obtener historial de órdenes de BitMart aún no está implementada completamente en el backend.`);
-    // Esta ruta debería usar autobotLogic.getHistoryOrders si es relevante,
-    // o ser movida a userRoutes para obtener historial de un usuario autenticado.
-    res.json([]); // Devuelve un array vacío por ahora
-});
-
-
+// --- Endpoints Específicos del Bot (PROTEGIDOS POR AUTENTICACIÓN) ---
 // Endpoint para obtener el estado del bot (para que el frontend lo muestre)
-app.get('/api/bot-state', (req, res) => {
-    // Asegúrate de que el botState sea un objeto plano para enviar al frontend
-    res.json({ ...autobotLogic.botState });
-});
-
-// Endpoint para INICIAR/DETENER el bot
-app.post('/api/toggle-bot', async (req, res) => {
-    const { action, params } = req.body;
-
-    console.log(`[SERVER] Recibida solicitud para /api/toggle-bot. Action: ${action}, Params:`, params);
-
+app.get('/api/bot-state', authMiddleware, async (req, res) => { // authMiddleware APLICADO
     try {
-        if (action === 'start') {
-            if (autobotLogic.botState.state !== 'STOPPED') {
-                console.warn(`[AUTOBOT] Intento de iniciar bot ya en estado: ${autobotLogic.botState.state}`);
-                return res.status(400).json({ success: false, message: `Bot is already ${autobotLogic.botState.state}.`, botState: { ...autobotLogic.botState } });
-            }
+        // Carga el estado del bot específico para el usuario autenticado
+        const botStateForUser = await autobotLogic.getBotStateForUser(req.user.id);
 
-            console.log(`[SERVER] Parámetros recibidos del frontend para iniciar:`, params);
-
-            // Actualizar solo los parámetros si se proporcionan
-            if (params) {
-                autobotLogic.botState.purchaseAmount = parseFloat(params.purchase) || autobotLogic.botState.purchaseAmount;
-                autobotLogic.botState.incrementPercentage = parseFloat(params.increment) || autobotLogic.botState.incrementPercentage;
-                autobotLogic.botState.decrementPercentage = parseFloat(params.decrement) || autobotLogic.botState.decrementPercentage;
-                autobotLogic.botState.triggerPercentage = parseFloat(params.trigger) || autobotLogic.botState.triggerPercentage;
-                // Considera si `stopAtCycleEnd` debe ser parte de `botState` y persistir
-                autobotLogic.botState.stopAtCycleEnd = typeof params.stopAtCycleEnd === 'boolean' ? params.stopAtCycleEnd : autobotLogic.botState.stopAtCycleEnd;
-
-                console.log(`[SERVER] botState parámetros actualizados.`);
-            } else {
-                console.warn('[SERVER] No se recibieron parámetros del frontend para iniciar. Usando valores predeterminados de botState.');
-            }
-
-            // Reiniciar o establecer los estados iniciales del ciclo si se inicia el bot
-            Object.assign(autobotLogic.botState, {
-                state: 'RUNNING',
-                // Solo reiniciar ciclo y ganancias si no es una reanudación avanzada.
-                // Si 'stopAtCycleEnd' lo detuvo, podrías querer mantener 'profit'.
-                // Por ahora, reiniciamos para un "nuevo inicio".
-                cycle: 1,
+        if (botStateForUser) {
+            // Enviamos un objeto plano para evitar problemas de serialización
+            const stateToEmit = botStateForUser;
+            delete stateToEmit.strategyIntervalId; // Asegúrate de no enviar esto
+            res.json(stateToEmit);
+        } else {
+            // Si no hay estado guardado para este usuario, envía un estado por defecto (detenido)
+            // Usa los valores por defecto definidos en autobotLogic o un BotState nuevo
+            res.json({
+                userId: req.user.id,
+                state: 'STOPPED',
+                cycle: 0,
                 profit: 0,
                 cycleProfit: 0,
+                currentPrice: 0,
+                purchaseAmount: 0,
+                incrementPercentage: 0,
+                decrementPercentage: 0,
+                triggerPercentage: 0,
                 ppc: 0,
                 cp: 0,
                 ac: 0,
@@ -163,45 +108,64 @@ app.post('/api/toggle-bot', async (req, res) => {
                 pc: 0,
                 lastOrder: null,
                 openOrders: [],
+                orderCountInCycle: 0,
+                lastOrderUSDTAmount: 0,
+                nextCoverageUSDTAmount: 0,
+                nextCoverageTargetPrice: 0,
+                stopOnCycleEnd: false
             });
-
-            console.log(`[AUTOBOT] Bot INICIADO. Estado: ${autobotLogic.botState.state}, Parámetros FINALES:`, {
-                purchase: autobotLogic.botState.purchaseAmount,
-                increment: autobotLogic.botState.incrementPercentage,
-                decrement: autobotLogic.botState.decrementPercentage,
-                trigger: autobotLogic.botState.triggerPercentage,
-                stopAtCycleEnd: autobotLogic.botState.stopAtCycleEnd
-            });
-
-            autobotLogic.startBotStrategy();
-
-            // Enviar una COPIA del botState para evitar modificar el original fuera de la lógica del bot
-            const botStateForFrontend = { ...autobotLogic.botState };
-            console.log('[SERVER] Enviando botState al frontend:', botStateForFrontend);
-            res.json({ success: true, message: 'Bot started', botState: botStateForFrontend });
-
-        } else if (action === 'stop') {
-            if (autobotLogic.botState.state === 'STOPPED') {
-                console.warn('[AUTOBOT] Intento de detener bot ya detenido.');
-                return res.status(400).json({ success: false, message: 'Bot is already stopped.', botState: { ...autobotLogic.botState } });
-            }
-
-            console.log('[AUTOBOT] Solicitud de DETENCIÓN del bot.');
-            autobotLogic.stopBotStrategy();
-
-            console.log('[AUTOBOT] Bot DETENIDO.');
-            // Enviar una COPIA del botState para evitar modificar el original fuera de la lógica del bot
-            const botStateForFrontend = { ...autobotLogic.botState };
-            res.json({ success: true, message: 'Bot stopped', botState: botStateForFrontend });
-        } else {
-            console.error('[SERVER] Acción inválida recibida:', action);
-            res.status(400).json({ success: false, message: 'Invalid action. Use "start" or "stop".', botState: { ...autobotLogic.botState } });
         }
     } catch (error) {
-        console.error('[SERVER] Error al manejar la solicitud de toggle-bot:', error);
-        res.status(500).json({ success: false, message: `Server error: ${error.message || 'Unknown error'}`, botState: { ...autobotLogic.botState } });
+        console.error('Error al obtener el estado del bot para el usuario:', error.message);
+        res.status(500).json({ success: false, message: 'Error interno del servidor al obtener el estado del bot.', error: error.message });
     }
 });
+
+// Endpoint para INICIAR/DETENER el bot
+app.post('/api/toggle-bot', authMiddleware, async (req, res) => { // authMiddleware APLICADO
+    const { action, params } = req.body;
+    const userId = req.user.id; // Obtener userId del usuario autenticado
+
+    console.log(`[SERVER] Recibida solicitud para /api/toggle-bot (user: ${userId}). Action: ${action}, Params:`, params);
+
+    try {
+        let result;
+        if (action === 'start') {
+            const formattedParams = {
+                purchaseAmount: parseFloat(params.purchase),
+                incrementPercentage: parseFloat(params.increment),
+                decrementPercentage: parseFloat(params.decrement),
+                triggerPercentage: parseFloat(params.trigger),
+                stopOnCycleEnd: typeof params.stopOnCycleEnd === 'boolean' ? params.stopOnCycleEnd : false
+            };
+            // Pasa el userId a la función startBotStrategy
+            result = await autobotLogic.startBotStrategy(userId, formattedParams);
+
+        } else if (action === 'stop') {
+            // Pasa el userId a la función stopBotStrategy
+            result = await autobotLogic.stopBotStrategy(userId);
+        } else {
+            console.error('[SERVER] Acción inválida recibida:', action);
+            return res.status(400).json({ success: false, message: 'Invalid action. Use "start" or "stop".', botState: { ...(await autobotLogic.getBotStateForUser(userId)) } });
+        }
+        
+        res.json(result);
+
+    } catch (error) {
+        console.error('[SERVER] Error al manejar la solicitud de toggle-bot:', error.message);
+        res.status(500).json({ success: false, message: `Server error: ${error.message || 'Unknown error'}`, botState: { ...(await autobotLogic.getBotStateForUser(userId)) } });
+    }
+});
+
+// NEW: Ruta para servir la librería cliente de Socket.IO explícitamente
+// Esto debe ir ANTES de app.use(express.static('public')) para tener precedencia
+app.get('/socket.io/socket.io.js', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../node_modules/socket.io/client-dist/socket.io.js'));
+});
+
+// Servir archivos estáticos (tu frontend) - Asegúrate de que 'public' es la ruta correcta a tu frontend build
+app.use(express.static('public'));
+
 
 // --- Iniciar el servidor HTTP y Socket.IO ---
 server.listen(port, () => {
@@ -211,9 +175,9 @@ server.listen(port, () => {
 // --- Manejo de apagado para limpiar el intervalo ---
 process.on('SIGINT', async () => {
     console.log('\n[AUTOBOT] Señal de apagado recibida. Deteniendo bot y guardando estado...');
-    autobotLogic.stopBotStrategy();
-    autobotLogic.botState.state = 'STOPPED'; // Asegura que el estado final sea STOPPED antes de guardar
-    await autobotLogic.saveBotStateToDB();
+    // Al apagar, podemos detener el bot global o asumir que los bots de usuario se gestionan por separado
+    // Para simplificar, si no hay un userId en este contexto, usamos el default.
+    await autobotLogic.stopBotStrategy(autobotLogic.botState.userId); // Asumiendo que esta detención global es aceptable
     console.log('[AUTOBOT] Bot detenido y estado guardado. Apagando servidor.');
     process.exit(0);
 });
