@@ -1,6 +1,7 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
 const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
+const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
 const jwt = require('jsonwebtoken'); // Para verificar el token JWT
 const crypto = require('crypto'); // Para encriptar/desencriptar las claves
 const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
@@ -108,8 +109,8 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
         // Encriptar las claves antes de guardarlas
         user.bitmartApiKey = encrypt(apiKey);
-        user.bitmartSecretKey = encrypt(secretKey);
-        user.bitmartMemo = memo ? encrypt(memo) : null; // El memo es opcional
+        user.bitmartSecretKeyEncrypted = encrypt(secretKey); // Asegúrate de usar el nombre correcto del campo del modelo
+        user.bitmartApiMemo = memo ? encrypt(memo) : null; // El memo es opcional
 
         user.bitmartApiValidated = false; // Se validará al intentar la primera llamada
         await user.save();
@@ -128,15 +129,15 @@ exports.getBitmartBalance = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKey) {
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el campo correcto
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         // Desencriptar las claves antes de usarlas
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKey);
-        const decryptedMemo = user.bitmartMemo ? decrypt(user.bitmartMemo) : null;
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el campo correcto
+        const decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null; // Usar el campo correcto
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -161,15 +162,15 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKey) {
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el campo correcto
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         // Desencriptar las claves
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKey);
-        const decryptedMemo = user.bitmartMemo ? decrypt(user.bitmartMemo) : null;
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el campo correcto
+        const decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null; // Usar el campo correcto
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -193,13 +194,13 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKey) {
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el campo correcto
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKey);
-        const decryptedMemo = user.bitmartMemo ? decrypt(user.bitmartMemo) : null;
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el campo correcto
+        const decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null; // Usar el campo correcto
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -214,5 +215,41 @@ exports.getBitmartHistoryOrders = async (req, res) => {
     } catch (error) {
         console.error('Error getting BitMart history orders:', error);
         res.status(500).json({ message: error.message || 'Error fetching BitMart history orders.' });
+    }
+};
+
+// --- NUEVA FUNCIÓN CONTROLADORA: Obtener Configuración y Estado del Bot ---
+exports.getBotConfigAndState = async (req, res) => {
+    const userId = req.user.id; // ID del usuario autenticado
+
+    try {
+        // Busca el estado del bot para el usuario actual
+        const botState = await BotState.findOne({ userId });
+
+        if (!botState) {
+            // Si no se encuentra un estado de bot para el usuario,
+            // devolvemos un estado predeterminado.
+            // Esto es importante para la primera carga de un usuario nuevo o sin configuración.
+            console.log(`[getBotConfigAndState] No se encontró estado de bot para el usuario ${userId}. Devolviendo valores predeterminados.`);
+            return res.status(200).json({
+                isRunning: false,
+                state: 'STOPPED',
+                cycle: 0,
+                profit: 0.00,
+                cycleProfit: 0.00,
+                purchase: 5.00,
+                increment: 100,
+                decrement: 1.0,
+                trigger: 1.5,
+                stopAtCycleEnd: false
+            });
+        }
+
+        console.log(`[getBotConfigAndState] Estado de bot encontrado para el usuario ${userId}.`);
+        res.status(200).json(botState); // Devolvemos el objeto completo del estado del bot
+
+    } catch (error) {
+        console.error('Error al obtener la configuración y estado del bot:', error);
+        res.status(500).json({ message: 'Error interno del servidor al obtener la configuración y estado del bot.' });
     }
 };
