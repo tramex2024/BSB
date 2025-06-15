@@ -1,8 +1,8 @@
 // server/middleware/bitmartAuthMiddleware.js
 
 const User = require('../models/User');
-// IMPORTANTE: Importar las funciones de encriptación/desencriptación desde userController
-const { decrypt, encrypt } = require('../controllers/userController'); 
+// IMPORTANTE: Importar las funciones de encriptación/desencriptación desde cryptoUtils
+const { decrypt } = require('../utils/cryptoUtils'); 
 
 const bitmartAuthMiddleware = async (req, res, next) => {
     try {
@@ -11,20 +11,23 @@ const bitmartAuthMiddleware = async (req, res, next) => {
         const user = await User.findById(userId);
 
         if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-            // Si el usuario no tiene las claves configuradas, no es un error de autenticación per se para el middleware,
-            // pero el controlador posterior necesitará manejarlo.
-            // No se debe llamar a next() con un error aquí si simplemente faltan las claves,
-            // ya que algunos endpoints (como guardar claves) no requieren que estén presentes aún.
-            // Para proteger los controladores, estos deben verificar la presencia de las claves.
+            // Si el usuario no tiene las claves configuradas, permite que la solicitud continúe
+            // para que el controlador pueda manejarlo (ej. retornar 400 'claves no configuradas').
             return next(); 
         }
 
+        // --- DEBUGGING CRÍTICO: Verificar si decrypt está disponible ---
+        console.log(`[DEBUG MIDDLEWARE] Tipo de 'decrypt' antes de usarlo: ${typeof decrypt}`);
+        if (typeof decrypt !== 'function') {
+            console.error(`[CRITICAL ERROR] 'decrypt' NO ES UNA FUNCIÓN en bitmartAuthMiddleware. Revisa la importación desde cryptoUtils.js.`);
+            throw new Error("Internal server error: Crypto functions not loaded correctly.");
+        }
+        // --- FIN DEBUGGING CRÍTICO ---
+
         // Desencriptar las claves para pasarlas a los controladores o servicios
-        // Los logs de depuración para la desencriptación ya están en userController.js
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // FIX: Asegurar que memo se maneje como null si está vacío/indefinido en DB,
-        // para que bitmartService.js pueda interpretarlo correctamente.
+        // Si el memo desencriptado es una cadena vacía, pasamos null.
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo);
 
         // Adjuntar las credenciales desencriptadas a la solicitud para que los controladores las usen
