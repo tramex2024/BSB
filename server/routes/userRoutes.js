@@ -12,8 +12,8 @@ const {
 } = require('../controllers/userController');
 
 const bitmartAuthMiddleware = require('../middleware/bitmartAuthMiddleware'); // Necesario para otras rutas
-// No necesitamos importar bitmartService ni User aquí si los controladores los manejan.
-// Tampoco necesitamos { encrypt } si la encriptación se hace dentro del controlador (como en userController.js)
+const bitmartService = require('../services/bitmartService'); // ¡CORRECCIÓN: Importar bitmartService!
+
 
 // Ruta para guardar y validar las API keys de BitMart
 router.post('/save-api-keys', authenticateToken, saveBitmartApiKeys);
@@ -25,13 +25,6 @@ router.get('/bitmart/balance', authenticateToken, bitmartAuthMiddleware, getBitm
 router.get('/bitmart/open-orders', authenticateToken, bitmartAuthMiddleware, getBitmartOpenOrders);
 
 // Ruta para colocar una orden (requiere credenciales de BitMart)
-// Si esta lógica está en el controlador, la llamamos. Si no, debería estar en un controlador.
-// Suponiendo que placeOrder es un método en bitmartService directamente, la ruta original era:
-// router.post('/bitmart/place-order', authMiddleware, bitmartAuthMiddleware, async (req, res) => { ... });
-// Necesitamos un controlador si queremos seguir el patrón. Por ahora, lo dejaré con la lógica original si existe.
-// Si tu placeOrder del frontend llama a '/api/toggle-bot' para iniciar el bot, esa es una ruta diferente.
-// Si esta es una ruta para colocar UNA orden específica manualmente, entonces necesitaría un controlador para ella.
-// Asumo que 'placeOrder' en userRoutes es una acción directa de BitMart, no la lógica del bot.
 router.post('/bitmart/place-order', authenticateToken, bitmartAuthMiddleware, async (req, res) => {
     const { symbol, side, type, size, price } = req.body;
     try {
