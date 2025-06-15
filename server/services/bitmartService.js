@@ -306,7 +306,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         if (side === 'buy') {
             requestBody.notional = size.toString(); // Notional for market BUY
         } else if (side === 'sell') {
-            requestRequest.size = size.toString(); // Size for market SELL
+            requestBody.size = size.toString(); // Size for market SELL
         } else {
             throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
         }
@@ -396,36 +396,27 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
 }
 
 /**
- * Obtiene datos de velas (OHLCV) para un símbolo y período de tiempo. (Público)
- * @param {string} symbol - Par de trading.
- * @param {string} interval - Intervalo de las velas (e.g., "1m", "5m", "1H", "1D").
- * @param {number} [limit=200] - Número de velas a obtener (máx. 200).
- * @returns {Promise<Array<Object>>} - Promesa que resuelve con un array de objetos de vela.
+ * Valida las credenciales API de BitMart proporcionadas.
+ * @param {string} apiKey - La API Key a validar.
+ * @param {string} secretKey - La Secret Key a validar.
+ * @param {string} apiMemo - El API Memo a validar.
+ * @returns {Promise<boolean>} - True si las credenciales son válidas y la conexión es exitosa, false en caso contrario.
  */
-async function getKlines(symbol, interval, limit = 200) {
-    console.log(`\n--- Solicitud GET Klines (Candlesticks) para ${symbol}, intervalo ${interval}, ${limit} velas ---`);
-    const path = `/spot/quotation/v3/klines`;
-    const params = { symbol: symbol, step: interval, size: limit };
+async function validateApiKeys(apiKey, secretKey, apiMemo) {
+    console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
+    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
+        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
+        return false;
+    }
+
     try {
-        const response = await makeRequest('GET', path, params, false);
-        if (response && response.code === 1000 && response.data) {
-            console.log(`✅ Klines (Candlesticks) para ${symbol} obtenidos con éxito.`);
-            const candles = response.data.map(c => ({
-                timestamp: parseInt(c[0]),
-                open: parseFloat(c[1]),
-                high: parseFloat(c[2]),
-                low: parseFloat(c[3]),
-                close: parseFloat(c[4]),
-                volume: parseFloat(c[5])
-            }));
-            return candles;
-        } else {
-            console.error(`❌ Respuesta inesperada de klines (candlesticks) para ${symbol}:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada de Klines (Candlesticks) de BitMart: ${JSON.stringify(response)}`);
-        }
+        // Al llamar a getBalance, pasamos las credenciales para que makeRequest las use
+        await getBalance({ apiKey, secretKey, apiMemo });
+        console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
+        return true;
     } catch (error) {
-        console.error(`❌ Falló la solicitud a getKlines para ${symbol}.`);
-        throw error;
+        console.error('❌ Falló la validación de credenciales API de BitMart:', error.message);
+        return false;
     }
 }
 
@@ -438,7 +429,7 @@ module.exports = {
     placeOrder,
     cancelOrder,
     getHistoryOrdersV4,
-    getKlines, // <--- This line is where the ReferenceError occurs if getKlines isn't defined above.
-    validateApiKeys,
+    getKlines, // Asegúrate de que getKlines esté definida antes de este punto
+    validateApiKeys, // Asegúrate de que validateApiKeys esté definida antes de este punto
     getSystemTime,
 };
