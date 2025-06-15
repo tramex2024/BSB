@@ -7,6 +7,24 @@ const querystring = require('querystring');
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
 /**
+ * Función auxiliar para ordenar recursivamente las claves de un objeto
+ * Esto es CRÍTICO para la firma de BitMart en solicitudes POST,
+ * ya que JSON.stringify no garantiza el orden y BitMart lo requiere.
+ */
+function sortObjectKeys(obj) {
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+        return obj; // Devolver tipos primitivos, nulos o arrays sin modificar
+    }
+
+    const sortedKeys = Object.keys(obj).sort();
+    const sortedObj = {};
+    for (const key of sortedKeys) {
+        sortedObj[key] = sortObjectKeys(obj[key]); // Ordenar recursivamente objetos anidados
+    }
+    return sortedObj;
+}
+
+/**
  * Genera la firma para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp actual en milisegundos.
  * @param {string} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía.
@@ -15,16 +33,15 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    const effectiveMemo = memo || ''; // Asegurarse de que memo sea una cadena, incluso si es null o undefined
+    const effectiveMemo = memo || '';
     const message = timestamp + '#' + effectiveMemo + '#' + bodyOrQueryString;
 
-    // --- NUEVOS LOGS DE DEPURACIÓN DE LA FIRMA ---
+    // Logs de depuración de la firma
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo: '${effectiveMemo}' (Length: ${effectiveMemo.length})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${bodyOrQueryString}' (Length: ${bodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
-    // --- FIN NUEVOS LOGS ---
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
@@ -50,24 +67,21 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         timeout: 15000
     };
 
-    const { apiKey, secretKey, apiMemo } = authCredentials; // apiMemo podría ser ""
+    const { apiKey, secretKey, apiMemo } = authCredentials;
 
     const effectiveParamsOrData = { ...paramsOrData };
     if (isPrivate) {
-        effectiveParamsOrData.recvWindow = 10000; // BitMart recomienda 5000, 10000 para recvWindow
+        effectiveParamsOrData.recvWindow = 10000;
     }
 
     if (method === 'GET') {
-        // Importante: querystring.stringify ordena alfabéticamente las propiedades por defecto.
-        // BitMart es estricto con el orden en la firma, así que este debería ser el orden.
         bodyForSign = querystring.stringify(effectiveParamsOrData);
         requestConfig.params = effectiveParamsOrData;
     } else if (method === 'POST') {
-        // Importante: JSON.stringify no garantiza un orden de propiedades.
-        // Si BitMart es estricto, esto podría ser un problema. Una solución sería ordenar las claves.
-        // Por ahora, asumimos que no es un problema para BitMart V4 para cuerpos JSON simples.
-        bodyForSign = JSON.stringify(effectiveParamsOrData);
-        requestConfig.data = effectiveParamsOrData;
+        // --- CORRECCIÓN CLAVE AQUÍ: Ordenar las claves antes de JSON.stringify ---
+        const sortedParamsOrData = sortObjectKeys(effectiveParamsOrData);
+        bodyForSign = JSON.stringify(sortedParamsOrData);
+        requestConfig.data = sortedParamsOrData; // También enviar el objeto ordenado en la data de la solicitud
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -76,26 +90,25 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el usuario haya configurado sus claves.");
         }
         
-        // La función generateSign ahora toma memo directamente como string (puede ser vacío)
         const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
 
-        // --- NUEVOS LOGS DE DEPURACIÓN DE HEADERS ---
+        // Logs de depuración de headers
         console.log(`[REQUEST_HEADERS_DEBUG] X-BM-KEY: ${apiKey.substring(0,5)}... (Length: ${apiKey.length})`);
         console.log(`[REQUEST_HEADERS_DEBUG] X-BM-TIMESTAMP: ${timestamp}`);
         console.log(`[REQUEST_HEADERS_DEBUG] X-BM-SIGN: ${sign}`);
         console.log(`[REQUEST_HEADERS_DEBUG] X-BM-MEMO: '${apiMemo}' (Length: ${apiMemo.length})`);
-        // --- FIN NUEVOS LOGS ---
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
-        requestConfig.headers['X-BM-MEMO'] = apiMemo; // Puede ser una cadena vacía
+        requestConfig.headers['X-BM-MEMO'] = apiMemo;
     }
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado:', JSON.stringify(effectiveParamsOrData));
+        console.log('Body enviado:', JSON.stringify(effectiveParamsOrData)); // Mostrar el original para referencia
+        console.log('Body para Firma (JSON ordenado):', bodyForSign); // Mostrar el ordenado para firma
     } else {
         console.log('Query Params:', JSON.stringify(effectiveParamsOrData));
     }
@@ -377,13 +390,13 @@ async function getSystemTime() {
  */
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
     console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) { // Permite memo vacío
+    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
         console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
         return false;
     }
 
     try {
-        await getBalance({ apiKey, secretKey, apiMemo }); // Intenta obtener el balance para validar
+        await getBalance({ apiKey, secretKey, apiMemo });
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
