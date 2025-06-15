@@ -1,12 +1,12 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
-const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
-const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
-const jwt = require('jsonwebtoken'); // Para verificar el token JWT
-const crypto = require('crypto'); // Para encriptar/desencriptar las claves
-const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
+const User = require('../models/User');
+const BotState = require('../models/BotState');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const bitmartService = require('../services/bitmartService');
 
-// --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
+// --- Middleware de Autenticación ---
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -35,7 +35,10 @@ const getEncryptionKey = () => {
         console.error("ERROR: ENCRYPTION_KEY is not defined in environment variables!");
         throw new Error("ENCRYPTION_KEY is not defined.");
     }
-    return crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
+    const derivedKey = crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
+    // TEMPORAL: Log the key being used
+    console.log(`[DEBUG] ENCRYPTION_KEY being used (derived): '${derivedKey}' (Length: ${derivedKey.length})`);
+    return derivedKey;
 };
 
 const getEncryptionIv = () => {
@@ -44,6 +47,8 @@ const getEncryptionIv = () => {
         console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
         throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string.");
     }
+    // TEMPORAL: Log the IV being used
+    console.log(`[DEBUG] ENCRYPTION_IV being used (raw from env): '${iv}' (Length: ${iv.length})`);
     return Buffer.from(iv, 'hex');
 };
 
@@ -73,14 +78,15 @@ const decrypt = (encryptedText) => {
         return decrypted;
     } catch (error) {
         console.error("Decryption failed:", error);
-        throw new Error("Failed to decrypt data. Check ENCRYPTION_KEY/IV consistency.");
+        console.error(`Attempting to decrypt: '${encryptedText}'`); // Log the problematic encrypted text
+        throw new Error("Error interno del servidor al obtener y desencriptar credenciales de BitMart."); // Mensaje específico para el frontend
     }
 };
 
 
 // --- Controlador para guardar las API Keys de BitMart ---
 exports.saveBitmartApiKeys = async (req, res) => {
-    const { apiKey, secretKey, memo } = req.body; // memo podría ser undefined
+    const { apiKey, secretKey, memo } = req.body;
 
     try {
         if (!apiKey || !secretKey) {
@@ -94,10 +100,7 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
         user.bitmartApiKey = encrypt(apiKey);
         user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-
-        // CORRECCIÓN CLAVE: Asegura que 'memo' siempre sea una cadena antes de encriptar
-        // Si 'memo' es undefined o null, se usará una cadena vacía ('').
-        user.bitmartApiMemo = encrypt(memo || ''); // Encripta la cadena (vacía o no)
+        user.bitmartApiMemo = encrypt(memo || '');
 
         user.bitmartApiValidated = false;
         await user.save();
@@ -106,7 +109,6 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
     } catch (error) {
         console.error('Error saving BitMart API keys:', error);
-        // Puedes añadir un mensaje más específico si el error es de encriptación
         if (error.message.includes("Failed to encrypt data")) {
             return res.status(500).json({ message: "Error encrypting API keys. Ensure ENCRYPTION_KEY and ENCRYPTION_IV are correctly set in your environment variables." });
         }
@@ -127,7 +129,6 @@ exports.getBitmartBalance = async (req, res) => {
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // CORRECCIÓN CLAVE: Asegura que decryptedMemo también maneje undefined/null de la DB.
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
@@ -159,7 +160,6 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // CORRECCIÓN CLAVE: Asegura que decryptedMemo también maneje undefined/null de la DB.
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
@@ -207,7 +207,7 @@ exports.getBitmartHistoryOrders = async (req, res) => {
     }
 };
 
-// --- NUEVA FUNCIÓN CONTROLADORA: Obtener Configuración y Estado del Bot ---
+// --- Función Controladora: Obtener Configuración y Estado del Bot ---
 exports.getBotConfigAndState = async (req, res) => {
     const userId = req.user.id;
 
