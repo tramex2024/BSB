@@ -1,12 +1,12 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
-const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
-const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
-const jwt = require('jsonwebtoken'); // Para verificar el token JWT
-const crypto = require('crypto'); // Para encriptar/desencriptar las claves
-const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
+const User = require('../models/User');
+const BotState = require('../models/BotState');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const bitmartService = require('../services/bitmartService');
 
-// --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
+// --- Middleware de Autenticación ---
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -98,10 +98,9 @@ exports.saveBitmartApiKeys = async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         user.bitmartApiKey = encrypt(apiKey);
-        user.bitmartSecretKeyEncrypted = encrypt(secretKey); // Usar el nombre que aparece en tu DB
-        user.bitmartApiMemo = encrypt(memo || ''); // Usar el nombre que aparece en tu DB, y asegurar que siempre sea string
+        user.bitmartSecretKeyEncrypted = encrypt(secretKey);
+        user.bitmartApiMemo = encrypt(memo || '');
 
         user.bitmartApiValidated = false;
         await user.save();
@@ -123,16 +122,14 @@ exports.getBitmartBalance = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -156,16 +153,14 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -189,15 +184,13 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -205,7 +198,6 @@ exports.getBitmartHistoryOrders = async (req, res) => {
             apiMemo: decryptedMemo
         };
 
-        // Asumiendo que bitmartService.getHistoryOrdersV4 ya existe
         const historyOrders = await bitmartService.getHistoryOrdersV4(authCredentials, { symbol, status });
         res.status(200).json(historyOrders);
 
@@ -216,7 +208,6 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 };
 
 // --- Función Controladora: Obtener Configuración y Estado del Bot ---
-// Asegúrate de importar el modelo BotState al principio de este archivo
 exports.getBotConfigAndState = async (req, res) => {
     const userId = req.user.id;
 
