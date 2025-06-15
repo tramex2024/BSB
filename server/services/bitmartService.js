@@ -131,7 +131,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            throw new Error(`Error de BitMart API: ${response.data.message || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
+            throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
         console.error(`\n❌ Falló la solicitud a ${path}.`);
@@ -158,15 +158,17 @@ async function getSystemTime() {
     console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
         // makeRequest con isPrivate=false para este endpoint público
-        // CAMBIO CLAVE AQUÍ: De /spot/v1/time a /api/v1/time
-        const response = await makeRequest('GET', '/api/v1/time', {}, false);
+        // CAMBIO CLAVE AQUÍ: A '/system/time'
+        const response = await makeRequest('GET', '/system/time', {}, false);
         if (response && response.code === 1000 && response.data && response.data.server_time) {
             const serverTime = response.data.server_time.toString(); // Asegurar que sea string
             console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
             return serverTime;
         } else {
+            // Manejar si la respuesta tiene 'error_msg' en lugar de 'message'
+            const errorMessage = response.message || response.error_msg || 'Respuesta inesperada';
             console.error(`❌ Respuesta inesperada al obtener la hora del servidor:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${errorMessage}`);
         }
     } catch (error) {
         console.error(`❌ Error al obtener la hora del servidor de BitMart:`, error.message);
@@ -213,7 +215,7 @@ async function getBalance(authCredentials) {
             return response.data.wallet;
         } else {
             console.error('❌ Falló la obtención del balance de la cuenta. Respuesta inesperada:', JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada al obtener balance de BitMart: ${JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada al obtener balance de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
         }
     }
     catch (error) {
@@ -323,7 +325,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
             return response.data;
         } else {
             console.error(`❌ Falló la colocación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada al colocar orden de BitMart: ${response.data.message || JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada al colocar orden de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
         }
     } catch (error) {
         console.error('\n❌ Error al colocar la orden:', error.message);
@@ -349,7 +351,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
             return response.data;
         } else {
             console.error(`❌ Falló la cancelación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada al cancelar orden de BitMart: ${response.data.message || JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada al cancelar orden de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
         }
     } catch (error) {
         console.error('\n❌ Error al cancelar la orden:', error.message);
