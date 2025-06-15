@@ -80,33 +80,36 @@ const decrypt = (encryptedText) => {
 
 // --- Controlador para guardar las API Keys de BitMart ---
 exports.saveBitmartApiKeys = async (req, res) => {
-    const { apiKey, secretKey, memo } = req.body;
-    const userId = req.user.id;
+    const { apiKey, secretKey, memo } = req.body; // memo podría ser undefined
 
     try {
         if (!apiKey || !secretKey) {
             return res.status(400).json({ message: 'API Key and Secret Key are required.' });
         }
 
-        const user = await User.findById(userId);
+        const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
 
         user.bitmartApiKey = encrypt(apiKey);
         user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-        // MODIFICACIÓN CLAVE: Si 'memo' es una cadena vacía, guarda una cadena vacía en lugar de null.
-        // Esto permite guardar explícitamente un memo vacío en lugar de dejar el campo como null.
-        user.bitmartApiMemo = memo === '' ? '' : encrypt(memo);
+
+        // CORRECCIÓN CLAVE: Asegura que 'memo' siempre sea una cadena antes de encriptar
+        // Si 'memo' es undefined o null, se usará una cadena vacía ('').
+        user.bitmartApiMemo = encrypt(memo || ''); // Encripta la cadena (vacía o no)
 
         user.bitmartApiValidated = false;
         await user.save();
 
-        // Se envía 'connected: true' para que el frontend pueda actualizar el indicador.
         res.status(200).json({ message: 'BitMart API keys saved successfully. Please try to connect to validate them.', connected: true });
 
     } catch (error) {
         console.error('Error saving BitMart API keys:', error);
+        // Puedes añadir un mensaje más específico si el error es de encriptación
+        if (error.message.includes("Failed to encrypt data")) {
+            return res.status(500).json({ message: "Error encrypting API keys. Ensure ENCRYPTION_KEY and ENCRYPTION_IV are correctly set in your environment variables." });
+        }
         res.status(500).json({ message: 'Error saving BitMart API keys. Please check server logs.' });
     }
 };
@@ -124,9 +127,8 @@ exports.getBitmartBalance = async (req, res) => {
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // Al desencriptar, si 'bitmartApiMemo' es una cadena vacía, se usa tal cual.
-        // Si está encriptado, se desencripta. Si es null, sigue siendo null.
-        const decryptedMemo = user.bitmartApiMemo === '' ? '' : (user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null);
+        // CORRECCIÓN CLAVE: Asegura que decryptedMemo también maneje undefined/null de la DB.
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -157,7 +159,8 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = user.bitmartApiMemo === '' ? '' : (user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null);
+        // CORRECCIÓN CLAVE: Asegura que decryptedMemo también maneje undefined/null de la DB.
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -187,7 +190,7 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = user.bitmartApiMemo === '' ? '' : (user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
