@@ -10,10 +10,16 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
  * Función auxiliar para ordenar recursivamente las claves de un objeto
  * Esto es CRÍTICO para la firma de BitMart en solicitudes POST,
  * ya que JSON.stringify no garantiza el orden y BitMart lo requiere.
+ * También asegura que los elementos de arrays que son objetos se ordenen.
  */
 function sortObjectKeys(obj) {
-    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
-        return obj; // Devolver tipos primitivos, nulos o arrays sin modificar
+    if (typeof obj !== 'object' || obj === null) {
+        return obj; // Devolver tipos primitivos o nulos sin modificar
+    }
+
+    if (Array.isArray(obj)) {
+        // Si es un array, ordenar recursivamente cada elemento si es un objeto
+        return obj.map(item => sortObjectKeys(item));
     }
 
     const sortedKeys = Object.keys(obj).sort();
@@ -33,7 +39,7 @@ function sortObjectKeys(obj) {
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    const effectiveMemo = memo || '';
+    const effectiveMemo = memo || ''; // Asegurarse de que memo sea una cadena, incluso si es null o undefined
     const message = timestamp + '#' + effectiveMemo + '#' + bodyOrQueryString;
 
     // Logs de depuración de la firma
@@ -53,10 +59,11 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
  * @param {object} [paramsOrData={}] - Parámetros para GET o cuerpo para POST.
  * @param {boolean} [isPrivate=true] - Si la solicitud requiere autenticación.
  * @param {object} [authCredentials={}] - REQUERIDO para solicitudes privadas: Objeto con { apiKey, secretKey, apiMemo }.
+ * @param {string} [timestampOverride] - Opcional: timestamp a usar en lugar de Date.now().toString().
  * @returns {Promise<object>} - Promesa que resuelve con los datos de la respuesta.
  */
-async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}) {
-    const timestamp = Date.now().toString();
+async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
+    const timestamp = timestampOverride || Date.now().toString(); // Usar timestamp proporcionado o Date.now()
     const url = `${BASE_URL}${path}`;
     let bodyForSign = '';
     let requestConfig = {
@@ -71,14 +78,14 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const effectiveParamsOrData = { ...paramsOrData };
     if (isPrivate) {
-        effectiveParamsOrData.recvWindow = 10000;
+        effectiveParamsOrData.recvWindow = 10000; // BitMart recomienda 5000, 10000 para recvWindow
     }
 
     if (method === 'GET') {
         bodyForSign = querystring.stringify(effectiveParamsOrData);
         requestConfig.params = effectiveParamsOrData;
     } else if (method === 'POST') {
-        // --- CORRECCIÓN CLAVE AQUÍ: Ordenar las claves antes de JSON.stringify ---
+        // CORRECCIÓN CLAVE: Ordenar las claves antes de JSON.stringify
         const sortedParamsOrData = sortObjectKeys(effectiveParamsOrData);
         bodyForSign = JSON.stringify(sortedParamsOrData);
         requestConfig.data = sortedParamsOrData; // También enviar el objeto ordenado en la data de la solicitud
@@ -107,7 +114,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado:', JSON.stringify(effectiveParamsOrData)); // Mostrar el original para referencia
+        console.log('Body enviado (original):', JSON.stringify(paramsOrData)); // Mostrar el original para referencia
         console.log('Body para Firma (JSON ordenado):', bodyForSign); // Mostrar el ordenado para firma
     } else {
         console.log('Query Params:', JSON.stringify(effectiveParamsOrData));
@@ -144,6 +151,29 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 }
 
 /**
+ * Obtiene la hora del servidor de BitMart (API pública).
+ * @returns {Promise<string>} - Promesa que resuelve con el timestamp del servidor en milisegundos.
+ */
+async function getSystemTime() {
+    console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
+    try {
+        // makeRequest con isPrivate=false para este endpoint público
+        const response = await makeRequest('GET', '/spot/v1/time', {}, false);
+        if (response && response.code === 1000 && response.data && response.data.server_time) {
+            const serverTime = response.data.server_time.toString(); // Asegurar que sea string
+            console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
+            return serverTime;
+        } else {
+            console.error('❌ Respuesta inesperada al obtener la hora del servidor:', JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error('❌ Error al obtener la hora del servidor de BitMart:', error.message);
+        throw error;
+    }
+}
+
+/**
  * Obtiene el precio (ticker) de un símbolo específico. (Público)
  * @param {string} symbol - Par de trading, ej: "BTC_USDT"
  * @returns {Promise<object>} - Promesa que resuelve con los datos del ticker.
@@ -175,7 +205,8 @@ async function getTicker(symbol) {
 async function getBalance(authCredentials) {
     console.log('\n--- Obteniendo Balance de la Cuenta ---');
     try {
-        const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials);
+        const serverTime = await getSystemTime(); // Obtener la hora del servidor de BitMart
+        const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data && response.data.wallet) {
             console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
             return response.data.wallet;
@@ -201,7 +232,8 @@ async function getOpenOrders(authCredentials, symbol) {
     const requestBody = {};
     if (symbol) { requestBody.symbol = symbol; }
     try {
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials);
+        const serverTime = await getSystemTime(); // Obtener la hora del servidor de BitMart
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -236,7 +268,8 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
     console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
     const requestBody = { symbol: symbol, orderId: orderId };
     try {
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials);
+        const serverTime = await getSystemTime(); // Obtener la hora del servidor de BitMart
+        const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Detalle de orden ${orderId} obtenido con éxito.`);
             return response.data;
@@ -258,7 +291,7 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
  * @param {string} type - "limit" o "market".
  * @param {string} size - Cantidad de la moneda base a comprar/vender.
  * @param {string} [price] - Precio de la orden (requerido para órdenes "limit").
- * @returns {Promise<object>} - Promesa que resuelve con la respuesta de la orden.
+ * @returns {Promise<object>} - Promesa que resuelve con la respuesta de la la orden.
  */
 async function placeOrder(authCredentials, symbol, side, type, size, price) {
     console.log(`[DEBUG_BITMART_SERVICE] placeOrder - symbol: ${symbol}, side: ${side}, type: ${type}, size: ${size}`);
@@ -281,7 +314,8 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
 
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
     try {
-        const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials);
+        const serverTime = await getSystemTime(); // Obtener la hora del servidor de BitMart
+        const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden colocada con éxito:`, response.data);
             return response.data;
@@ -306,7 +340,8 @@ async function cancelOrder(authCredentials, symbol, order_id) {
     console.log(`\n--- Cancelando Orden ${order_id} para ${symbol} ---`);
     const requestBody = { symbol: symbol, order_id: order_id };
     try {
-        const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials);
+        const serverTime = await getSystemTime(); // Obtener la hora del servidor de BitMart
+        const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden ${order_id} cancelada con éxito.`);
             return response.data;
@@ -336,7 +371,8 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     if (options.endTime) { requestBody.endTime = options.endTime; }
     if (options.limit) { requestBody.limit = options.limit; }
     try {
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials);
+        const serverTime = await getSystemTime(); // Obtener la hora del servidor de BitMart
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -355,86 +391,6 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
         return orders;
     } catch (error) {
         console.error('\n❌ Falló la obtención del historial de órdenes V4.');
-        throw error;
-    }
-}
-
-/**
- * Obtiene la hora del servidor de BitMart (API pública).
- * @returns {Promise<number>} - Promesa que resuelve con el timestamp del servidor.
- */
-async function getSystemTime() {
-    console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
-    try {
-        const response = await makeRequest('GET', '/spot/v1/time', {}, false);
-        if (response && response.code === 1000 && response.data && response.data.server_time) {
-            const serverTime = parseInt(response.data.server_time);
-            console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(serverTime).toISOString()})`);
-            return serverTime;
-        } else {
-            console.error('❌ Respuesta inesperada al obtener la hora del servidor:', JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${JSON.stringify(response)}`);
-        }
-    } catch (error) {
-        console.error('❌ Error al obtener la hora del servidor de BitMart:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Valida las credenciales API de BitMart proporcionadas.
- * @param {string} apiKey - La API Key a validar.
- * @param {string} secretKey - La Secret Key a validar.
- * @param {string} apiMemo - El API Memo a validar.
- * @returns {Promise<boolean>} - True si las credenciales son válidas y la conexión es exitosa, false en caso contrario.
- */
-async function validateApiKeys(apiKey, secretKey, apiMemo) {
-    console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
-        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
-        return false;
-    }
-
-    try {
-        await getBalance({ apiKey, secretKey, apiMemo });
-        console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
-        return true;
-    } catch (error) {
-        console.error('❌ Falló la validación de credenciales API de BitMart:', error.message);
-        return false;
-    }
-}
-
-/**
- * Obtiene datos de velas (OHLCV) para un símbolo y período de tiempo. (Público)
- * @param {string} symbol - Par de trading.
- * @param {string} interval - Intervalo de las velas (e.g., "1m", "5m", "1H", "1D").
- * @param {number} [limit=200] - Número de velas a obtener (máx. 200).
- * @returns {Promise<Array<Object>>} - Promesa que resuelve con un array de objetos de vela.
- */
-async function getKlines(symbol, interval, limit = 200) {
-    console.log(`\n--- Solicitud GET Klines (Candlesticks) para ${symbol}, intervalo ${interval}, ${limit} velas ---`);
-    const path = `/spot/quotation/v3/klines`;
-    const params = { symbol: symbol, step: interval, size: limit };
-    try {
-        const response = await makeRequest('GET', path, params, false);
-        if (response && response.code === 1000 && response.data) {
-            console.log(`✅ Klines (Candlesticks) para ${symbol} obtenidos con éxito.`);
-            const candles = response.data.map(c => ({
-                timestamp: parseInt(c[0]),
-                open: parseFloat(c[1]),
-                high: parseFloat(c[2]),
-                low: parseFloat(c[3]),
-                close: parseFloat(c[4]),
-                volume: parseFloat(c[5])
-            }));
-            return candles;
-        } else {
-            console.error(`❌ Respuesta inesperada de klines (candlesticks) para ${symbol}:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada de Klines (Candlesticks) de BitMart: ${JSON.stringify(response)}`);
-        }
-    } catch (error) {
-        console.error(`❌ Falló la solicitud a getKlines para ${symbol}.`);
         throw error;
     }
 }
