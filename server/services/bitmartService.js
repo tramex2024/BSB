@@ -76,16 +76,26 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
 
+    // Clonar los parámetros/datos para modificarlos si es una solicitud privada
+    // Esto se usa para el cuerpo de la solicitud HTTP y para la cadena de firma.
+    const dataForRequestAndSign = { ...paramsOrData };
+
+    if (isPrivate) {
+        // Añadir recvWindow directamente al objeto de datos para la solicitud y la firma.
+        // Esto replica el comportamiento de tu versión antigua que funcionaba.
+        dataForRequestAndSign.recvWindow = 10000;
+        // También añadir recvWindow como un encabezado, como medida de seguridad adicional
+        // dado que la documentación de BitMart puede ser ambigua o variar por endpoint.
+        requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
+    }
+
     if (method === 'GET') {
-        // Para solicitudes GET, paramsOrData son parámetros de consulta
-        requestConfig.params = paramsOrData; // Usamos los paramsOrData originales como query parameters
-        bodyForSign = querystring.stringify(paramsOrData); // Stringify para la firma
+        requestConfig.params = dataForRequestAndSign; // Los query params incluyen recvWindow si es privado
+        bodyForSign = querystring.stringify(dataForRequestAndSign); // La cadena para firmar incluye recvWindow
     } else if (method === 'POST') {
-        // Para solicitudes POST, paramsOrData es el cuerpo real de la solicitud.
-        // Necesita ser ordenado para consistencia antes de la stringificación para la firma.
-        const sortedRequestBody = sortObjectKeys(paramsOrData);
-        bodyForSign = JSON.stringify(sortedRequestBody); // Esta es la parte del cuerpo que se firma
-        requestConfig.data = sortedRequestBody; // Estos son los datos enviados en el cuerpo de la solicitud POST
+        const sortedData = sortObjectKeys(dataForRequestAndSign); // Ordenar para consistencia
+        bodyForSign = JSON.stringify(sortedData); // La cadena para firmar es el JSON stringificado del cuerpo (con recvWindow)
+        requestConfig.data = sortedData; // El cuerpo de la solicitud HTTP es el JSON (con recvWindow)
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -101,16 +111,16 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
         requestConfig.headers['X-BM-MEMO'] = apiMemo;
-        requestConfig.headers['X-BM-RECVWINDOW'] = 10000; // Añadir recvWindow como un encabezado para solicitudes privadas
+        // X-BM-RECVWINDOW ya se añadió al principio de esta función
     }
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado (original):', JSON.stringify(paramsOrData)); // Mostrar el original para referencia
-        console.log('Body para Firma (JSON ordenado):', bodyForSign); // Mostrar el ordenado para firma
+        console.log('Body enviado (para solicitud y firma):', JSON.stringify(dataForRequestAndSign)); // Mostrar lo que realmente se envía/firma
+        console.log('Body para Firma (JSON stringificado y ordenado):', bodyForSign); // Debe ser idéntico al anterior pero stringificado
     } else {
-        console.log('Query Params:', JSON.stringify(requestConfig.params)); // Mostrar los query params para GET
+        console.log('Query Params (para solicitud y firma):', JSON.stringify(dataForRequestAndSign)); // Mostrar los query params
     }
 
     try {
