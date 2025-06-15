@@ -65,7 +65,7 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
     const timestamp = timestampOverride || Date.now().toString(); // Usar timestamp proporcionado o Date.now()
     const url = `${BASE_URL}${path}`;
-    let bodyForSign = '';
+    let bodyForSign = ''; // Esta será la cadena utilizada para la firma
     let requestConfig = {
         headers: {
             'User-Agent': 'axios/1.9.0',
@@ -76,19 +76,16 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
 
-    const effectiveParamsOrData = { ...paramsOrData };
-    if (isPrivate) {
-        effectiveParamsOrData.recvWindow = 10000; // BitMart recomienda 5000, 10000 para recvWindow
-    }
-
     if (method === 'GET') {
-        bodyForSign = querystring.stringify(effectiveParamsOrData);
-        requestConfig.params = effectiveParamsOrData;
+        // Para solicitudes GET, paramsOrData son parámetros de consulta
+        requestConfig.params = paramsOrData; // Usamos los paramsOrData originales como query parameters
+        bodyForSign = querystring.stringify(paramsOrData); // Stringify para la firma
     } else if (method === 'POST') {
-        // CORRECCIÓN CLAVE: Ordenar las claves antes de JSON.stringify
-        const sortedParamsOrData = sortObjectKeys(effectiveParamsOrData);
-        bodyForSign = JSON.stringify(sortedParamsOrData);
-        requestConfig.data = sortedParamsOrData; // También enviar el objeto ordenado en la data de la solicitud
+        // Para solicitudes POST, paramsOrData es el cuerpo real de la solicitud.
+        // Necesita ser ordenado para consistencia antes de la stringificación para la firma.
+        const sortedRequestBody = sortObjectKeys(paramsOrData);
+        bodyForSign = JSON.stringify(sortedRequestBody); // Esta es la parte del cuerpo que se firma
+        requestConfig.data = sortedRequestBody; // Estos son los datos enviados en el cuerpo de la solicitud POST
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -99,16 +96,12 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         
         const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
 
-        // Logs de depuración de headers
-        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-KEY: ${apiKey.substring(0,5)}... (Length: ${apiKey.length})`);
-        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-TIMESTAMP: ${timestamp}`);
-        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-SIGN: ${sign}`);
-        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-MEMO: '${apiMemo}' (Length: ${apiMemo.length})`);
-
+        // Añadir todos los encabezados privados requeridos
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
         requestConfig.headers['X-BM-MEMO'] = apiMemo;
+        requestConfig.headers['X-BM-RECVWINDOW'] = 10000; // Añadir recvWindow como un encabezado para solicitudes privadas
     }
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
@@ -117,7 +110,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.log('Body enviado (original):', JSON.stringify(paramsOrData)); // Mostrar el original para referencia
         console.log('Body para Firma (JSON ordenado):', bodyForSign); // Mostrar el ordenado para firma
     } else {
-        console.log('Query Params:', JSON.stringify(effectiveParamsOrData));
+        console.log('Query Params:', JSON.stringify(requestConfig.params)); // Mostrar los query params para GET
     }
 
     try {
@@ -157,15 +150,12 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 async function getSystemTime() {
     console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
-        // makeRequest con isPrivate=false para este endpoint público
-        // CAMBIO CLAVE AQUÍ: A '/system/time'
         const response = await makeRequest('GET', '/system/time', {}, false);
         if (response && response.code === 1000 && response.data && response.data.server_time) {
             const serverTime = response.data.server_time.toString(); // Asegurar que sea string
             console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
             return serverTime;
         } else {
-            // Manejar si la respuesta tiene 'error_msg' en lugar de 'message'
             const errorMessage = response.message || response.error_msg || 'Respuesta inesperada';
             console.error(`❌ Respuesta inesperada al obtener la hora del servidor:`, JSON.stringify(response, null, 2));
             throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${errorMessage}`);
