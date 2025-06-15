@@ -1,4 +1,4 @@
-// server/controllers/userController.js
+// backend/controllers/userController.js
 
 const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
 const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
@@ -7,10 +7,9 @@ const crypto = require('crypto'); // Para encriptar/desencriptar las claves
 const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
 
 // --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
-// Este middleware se usará en las rutas que requieren que el usuario esté autenticado.
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Espera "Bearer TOKEN"
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (token == null) {
         console.warn("[AUTH MIDDLEWARE] No token provided.");
@@ -20,51 +19,38 @@ exports.authenticateToken = (req, res, next) => {
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) {
             console.error("[AUTH MIDDLEWARE] JWT Verification Error:", err.message);
-            // Si el token es inválido o ha expirado, responde con 403 Forbidden.
             return res.status(403).json({ message: 'Invalid or expired authentication token.' });
         }
-        req.user = user; // Guarda la información del usuario del token en el objeto de la petición
-        next(); // Continúa con la siguiente función middleware/controlador
+        req.user = user;
+        next();
     });
 };
 
 // --- Funciones de Ayuda para Encriptación/Desencriptación ---
-// Asegúrate de que process.env.ENCRYPTION_KEY esté configurado en Render y sea un string de 32 caracteres (256 bits).
-// Usa un IV (Initialization Vector) fijo o genera uno por clave guardada (más complejo).
-// Para simplificar, aquí usaremos un IV fijo. ENCRYPTION_IV también DEBE estar en Render.
-const algorithm = 'aes-256-cbc'; // Algoritmo de encriptación
+const algorithm = 'aes-256-cbc';
 
-// Asegúrate de que tu ENCRYPTION_KEY sea de 32 bytes (256 bits)
 const getEncryptionKey = () => {
     const key = process.env.ENCRYPTION_KEY;
     if (!key) {
         console.error("ERROR: ENCRYPTION_KEY is not defined in environment variables!");
         throw new Error("ENCRYPTION_KEY is not defined.");
     }
-    // Asegurarse de que la clave tenga el tamaño correcto (32 bytes para aes-256)
-    // Puedes truncar o rellenar si es necesario, pero es mejor que la clave generada sea exacta.
     return crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
 };
 
-// Asegúrate de que tu ENCRYPTION_IV sea de 16 bytes (128 bits)
 const getEncryptionIv = () => {
     const iv = process.env.ENCRYPTION_IV;
     if (!iv) {
         console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
-        // Para desarrollo o una primera vez, puedes generar uno y luego copiarlo a Render.
-        // const generatedIv = crypto.randomBytes(16).toString('hex');
-        // console.log("Generated IV for first time (COPY THIS TO RENDER ENCRYPTION_IV):", generatedIv);
         throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string.");
     }
-    // Convertir el IV de hex a Buffer
-    return Buffer.from(iv, 'hex'); // Asume que ENCRYPTION_IV es un string hexadecimal de 32 caracteres (16 bytes)
+    return Buffer.from(iv, 'hex');
 };
-
 
 const encrypt = (text) => {
     try {
-        const key = Buffer.from(getEncryptionKey(), 'utf8'); // Convertir la clave a Buffer
-        const iv = getEncryptionIv(); // Obtener el IV como Buffer
+        const key = Buffer.from(getEncryptionKey(), 'utf8');
+        const iv = getEncryptionIv();
 
         const cipher = crypto.createCipheriv(algorithm, key, iv);
         let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -78,8 +64,8 @@ const encrypt = (text) => {
 
 const decrypt = (encryptedText) => {
     try {
-        const key = Buffer.from(getEncryptionKey(), 'utf8'); // Convertir la clave a Buffer
-        const iv = getEncryptionIv(); // Obtener el IV como Buffer
+        const key = Buffer.from(getEncryptionKey(), 'utf8');
+        const iv = getEncryptionIv();
 
         const decipher = crypto.createDecipheriv(algorithm, key, iv);
         let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
@@ -95,7 +81,7 @@ const decrypt = (encryptedText) => {
 // --- Controlador para guardar las API Keys de BitMart ---
 exports.saveBitmartApiKeys = async (req, res) => {
     const { apiKey, secretKey, memo } = req.body;
-    const userId = req.user.id; // Obtenido del token JWT verificado
+    const userId = req.user.id;
 
     try {
         if (!apiKey || !secretKey) {
@@ -107,15 +93,17 @@ exports.saveBitmartApiKeys = async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // Encriptar las claves antes de guardarlas
         user.bitmartApiKey = encrypt(apiKey);
-        user.bitmartSecretKeyEncrypted = encrypt(secretKey); // Asegúrate de usar el nombre correcto del campo del modelo
-        user.bitmartApiMemo = memo ? encrypt(memo) : null; // El memo es opcional
+        user.bitmartSecretKeyEncrypted = encrypt(secretKey);
+        // MODIFICACIÓN CLAVE: Si 'memo' es una cadena vacía, guarda una cadena vacía en lugar de null.
+        // Esto permite guardar explícitamente un memo vacío en lugar de dejar el campo como null.
+        user.bitmartApiMemo = memo === '' ? '' : encrypt(memo);
 
-        user.bitmartApiValidated = false; // Se validará al intentar la primera llamada
+        user.bitmartApiValidated = false;
         await user.save();
 
-        res.status(200).json({ message: 'BitMart API keys saved successfully. Please try to connect to validate them.' });
+        // Se envía 'connected: true' para que el frontend pueda actualizar el indicador.
+        res.status(200).json({ message: 'BitMart API keys saved successfully. Please try to connect to validate them.', connected: true });
 
     } catch (error) {
         console.error('Error saving BitMart API keys:', error);
@@ -129,15 +117,16 @@ exports.getBitmartBalance = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el campo correcto
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // Desencriptar las claves antes de usarlas
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el campo correcto
-        const decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null; // Usar el campo correcto
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        // Al desencriptar, si 'bitmartApiMemo' es una cadena vacía, se usa tal cual.
+        // Si está encriptado, se desencripta. Si es null, sigue siendo null.
+        const decryptedMemo = user.bitmartApiMemo === '' ? '' : (user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -149,7 +138,6 @@ exports.getBitmartBalance = async (req, res) => {
         res.status(200).json(balances);
 
     } catch (error) {
-        // Este es el error que estabas viendo antes si fallaba la desencriptación
         console.error('Error getting BitMart balance:', error);
         res.status(500).json({ message: error.message || 'Error fetching BitMart balance.' });
     }
@@ -158,19 +146,18 @@ exports.getBitmartBalance = async (req, res) => {
 // --- Controlador para obtener órdenes abiertas de BitMart ---
 exports.getBitmartOpenOrders = async (req, res) => {
     const userId = req.user.id;
-    const { symbol } = req.query; // Espera el símbolo como query parameter, ej: ?symbol=BTC_USDT
+    const { symbol } = req.query;
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el campo correcto
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // Desencriptar las claves
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el campo correcto
-        const decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null; // Usar el campo correcto
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        const decryptedMemo = user.bitmartApiMemo === '' ? '' : (user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -190,17 +177,17 @@ exports.getBitmartOpenOrders = async (req, res) => {
 // --- Controlador para obtener el historial de órdenes (si ya lo tienes en bitmartService) ---
 exports.getBitmartHistoryOrders = async (req, res) => {
     const userId = req.user.id;
-    const { symbol, status } = req.query; // 'filled', 'cancelled', 'all'
+    const { symbol, status } = req.query;
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el campo correcto
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el campo correcto
-        const decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null; // Usar el campo correcto
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        const decryptedMemo = user.bitmartApiMemo === '' ? '' : (user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : null);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -208,7 +195,6 @@ exports.getBitmartHistoryOrders = async (req, res) => {
             apiMemo: decryptedMemo
         };
 
-        // Asumiendo que bitmartService.getHistoryOrdersV4 ya existe
         const historyOrders = await bitmartService.getHistoryOrdersV4(authCredentials, { symbol, status });
         res.status(200).json(historyOrders);
 
@@ -220,16 +206,12 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
 // --- NUEVA FUNCIÓN CONTROLADORA: Obtener Configuración y Estado del Bot ---
 exports.getBotConfigAndState = async (req, res) => {
-    const userId = req.user.id; // ID del usuario autenticado
+    const userId = req.user.id;
 
     try {
-        // Busca el estado del bot para el usuario actual
         const botState = await BotState.findOne({ userId });
 
         if (!botState) {
-            // Si no se encuentra un estado de bot para el usuario,
-            // devolvemos un estado predeterminado.
-            // Esto es importante para la primera carga de un usuario nuevo o sin configuración.
             console.log(`[getBotConfigAndState] No se encontró estado de bot para el usuario ${userId}. Devolviendo valores predeterminados.`);
             return res.status(200).json({
                 isRunning: false,
@@ -246,7 +228,7 @@ exports.getBotConfigAndState = async (req, res) => {
         }
 
         console.log(`[getBotConfigAndState] Estado de bot encontrado para el usuario ${userId}.`);
-        res.status(200).json(botState); // Devolvemos el objeto completo del estado del bot
+        res.status(200).json(botState);
 
     } catch (error) {
         console.error('Error al obtener la configuración y estado del bot:', error);
