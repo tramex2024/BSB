@@ -108,20 +108,18 @@ body.dark-mode {
 
 /* --- Consolidated Modal Styles (for both Auth and API modals) --- */
 .modal {
-    display: none; /* Crucial: Modal is hidden by default */
-    position: fixed; /* Fixed position to cover the whole screen */
-    z-index: 1001; /* Ensure it's above other elements */
+    display: none; /* CRUCIAL: Modal está oculto por defecto en CSS. JS lo mostrará con display: flex; */
+    position: fixed; /* Posicionamiento fijo para cubrir toda la pantalla */
+    z-index: 1001; /* Asegura que esté por encima de otros elementos */
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto; /* Allows scrolling if content overflows */
-    background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent dark background */
-    /* Use flexbox for centering the modal content */
-    display: flex; /* This is what JS will toggle to show it */
-    justify-content: center;
-    align-items: center;
-    padding: 20px; /* Padding around the modal on smaller screens */
+    overflow: auto; /* Permite desplazamiento si el contenido es muy grande */
+    background-color: rgba(0, 0, 0, 0.7); /* Fondo oscuro semitransparente */
+    justify-content: center; /* Centra horizontalmente el contenido del modal (cuando display: flex) */
+    align-items: center; /* Centra verticalmente el contenido del modal (cuando display: flex) */
+    padding: 20px; /* Espaciado alrededor del modal en pantallas pequeñas */
 }
 
 .modal-content {
