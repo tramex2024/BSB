@@ -104,7 +104,6 @@ const decrypt = (encryptedText) => {
     } catch (error) {
         console.error("Decryption failed:", error);
         console.error(`Attempting to decrypt: '${encryptedText}'`); // Log the problematic encrypted text
-        // NO cambiar el mensaje de error para el frontend aquí, ya lo hace el catch de abajo
         throw new Error("Failed to decrypt BitMart credentials with current keys."); // Mensaje más específico para debug
     }
 };
@@ -282,3 +281,8 @@ exports.getBotConfigAndState = async (req, res) => {
         res.status(500).json({ message: 'Error interno del servidor al obtener la configuración y estado del bot.' });
     }
 };
+
+// --- Exportaciones Adicionales ---
+// Exportar encrypt y decrypt para que puedan ser usadas por otros módulos (como middleware/bitmartAuthMiddleware.js)
+module.exports.encrypt = encrypt;
+module.exports.decrypt = decrypt;
