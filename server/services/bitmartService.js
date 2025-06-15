@@ -306,7 +306,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         if (side === 'buy') {
             requestBody.notional = size.toString(); // Notional for market BUY
         } else if (side === 'sell') {
-            requestBody.size = size.toString(); // Size for market SELL
+            requestRequest.size = size.toString(); // Size for market SELL
         } else {
             throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
         }
@@ -395,6 +395,41 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     }
 }
 
+/**
+ * Obtiene datos de velas (OHLCV) para un símbolo y período de tiempo. (Público)
+ * @param {string} symbol - Par de trading.
+ * @param {string} interval - Intervalo de las velas (e.g., "1m", "5m", "1H", "1D").
+ * @param {number} [limit=200] - Número de velas a obtener (máx. 200).
+ * @returns {Promise<Array<Object>>} - Promesa que resuelve con un array de objetos de vela.
+ */
+async function getKlines(symbol, interval, limit = 200) {
+    console.log(`\n--- Solicitud GET Klines (Candlesticks) para ${symbol}, intervalo ${interval}, ${limit} velas ---`);
+    const path = `/spot/quotation/v3/klines`;
+    const params = { symbol: symbol, step: interval, size: limit };
+    try {
+        const response = await makeRequest('GET', path, params, false);
+        if (response && response.code === 1000 && response.data) {
+            console.log(`✅ Klines (Candlesticks) para ${symbol} obtenidos con éxito.`);
+            const candles = response.data.map(c => ({
+                timestamp: parseInt(c[0]),
+                open: parseFloat(c[1]),
+                high: parseFloat(c[2]),
+                low: parseFloat(c[3]),
+                close: parseFloat(c[4]),
+                volume: parseFloat(c[5])
+            }));
+            return candles;
+        } else {
+            console.error(`❌ Respuesta inesperada de klines (candlesticks) para ${symbol}:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada de Klines (Candlesticks) de BitMart: ${JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error(`❌ Falló la solicitud a getKlines para ${symbol}.`);
+        throw error;
+    }
+}
+
+
 module.exports = {
     getTicker,
     getBalance,
@@ -403,7 +438,7 @@ module.exports = {
     placeOrder,
     cancelOrder,
     getHistoryOrdersV4,
-    getKlines,
+    getKlines, // <--- This line is where the ReferenceError occurs if getKlines isn't defined above.
     validateApiKeys,
     getSystemTime,
 };
