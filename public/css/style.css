@@ -1,3 +1,4 @@
+/* public/style.css */
 :root {
     --dark-bg: #1a1a2e;
     --dark-header-bg: #16213e;
@@ -7,7 +8,7 @@
     --input-bg: #2b3a55;
     --button-bg: #007bff;
     --button-text: #ffffff;
-    --modal-bg: #2b3a55;
+    --modal-bg: #2b3a55; /* Keep this variable, but override specifically for modal-content */
 }
 
 body.dark-mode {
@@ -105,55 +106,70 @@ body.dark-mode {
     display: block;
 }
 
-/* Auth Modal */
+/* --- Consolidated Modal Styles (for both Auth and API modals) --- */
 .modal {
-    display: none; /* Hidden by default */
-    position: fixed;
-    z-index: 1001;
+    display: none; /* Crucial: Modal is hidden by default */
+    position: fixed; /* Fixed position to cover the whole screen */
+    z-index: 1001; /* Ensure it's above other elements */
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
+    overflow: auto; /* Allows scrolling if content overflows */
+    background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent dark background */
+    /* Use flexbox for centering the modal content */
+    display: flex; /* This is what JS will toggle to show it */
     justify-content: center;
     align-items: center;
+    padding: 20px; /* Padding around the modal on smaller screens */
 }
 
 .modal-content {
-    background-color: var(--modal-bg);
+    background-color: #2d3748; /* Dark grey for modal content (Tailwind gray-800 equivalent) */
+    margin: auto; /* Auto margin for centering */
     padding: 30px;
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     text-align: center;
-    width: 350px;
+    width: 90%; /* Responsive width */
+    max-width: 400px; /* Max width for larger screens */
+    color: white; /* Text color for modal content */
+    position: relative; /* For close button positioning */
 }
 
-.modal-content h3 {
-    color: var(--dark-text);
+.modal-content h3, .modal-content h2 {
     margin-bottom: 20px;
+    color: #4CAF50; /* A green color for titles */
+    text-align: center;
+}
+
+.modal-content label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: var(--dark-text); /* Use your general dark text color */
 }
 
 .modal-content input[type="email"],
-.modal-content input[type="text"] {
-    width: calc(100% - 20px);
+.modal-content input[type="text"],
+.modal-content input[type="password"] {
+    width: calc(100% - 20px); /* Adjust width accounting for padding */
     padding: 12px;
     margin-bottom: 15px;
-    border: 1px solid var(--dark-border);
+    border: 1px solid #4a5568; /* Darker border color */
     border-radius: 5px;
-    background-color: var(--input-bg);
-    color: var(--dark-text);
+    background-color: #1a202c; /* Even darker background for inputs */
+    color: white; /* Input text color */
     font-size: 1em;
 }
 
-.modal-content input[type="email"]::placeholder,
-.modal-content input[type="text"]::placeholder {
-    color: #999;
+.modal-content input::placeholder {
+    color: #999; /* Placeholder color */
 }
 
-
 .modal-content button {
-    background-color: var(--button-bg);
-    color: var(--button-text);
+    background-color: #4CAF50; /* Green for buttons */
+    color: white;
     padding: 12px 20px;
     border: none;
     border-radius: 5px;
@@ -164,13 +180,72 @@ body.dark-mode {
 }
 
 .modal-content button:hover {
-    background-color: #0056b3;
+    background-color: #45a049; /* Darker green on hover */
 }
 
-#auth-message {
+.message-text {
     margin-top: 15px;
-    color: #ffda79; /* A light warning color */
-    font-size: 0.9em;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+/* Close button for modals */
+.close-button {
+    color: #aaa; /* Light gray for the close button */
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    cursor: pointer;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Connection Indicator Styles (for API modal, but can be general) */
+.indicator-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.indicator-circle {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #6b7280; /* Default gray */
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.indicator-circle.bg-red-500 {
+    background-color: #ef4444; /* Tailwind red-500 */
+}
+
+.indicator-circle.bg-green-500 {
+    background-color: #22c55e; /* Tailwind green-500 */
+}
+
+.indicator-circle.bg-yellow-500 {
+    background-color: #eab308; /* Tailwind yellow-500 */
+}
+
+.indicator-circle.bg-gray-500 {
+    background-color: #6b7280; /* Tailwind gray-500 */
+}
+
+.indicator-text {
+    display: inline-block;
+    vertical-align: middle;
+    color: #9ca3af; /* Light gray text for indicators */
+    font-weight: bold;
 }
 
 /* Lite Mode - Add these if you implement the toggle */
@@ -201,6 +276,11 @@ body.lite-mode .nav-tab.active {
 
 body.lite-mode .modal-content {
     background-color: #ffffff;
+    color: #333;
+}
+
+body.lite-mode .modal-content h3, body.lite-mode .modal-content h2 {
+    color: #4CAF50; /* Keep green for title in lite mode too */
 }
 
 body.lite-mode .modal-content input {
@@ -208,242 +288,12 @@ body.lite-mode .modal-content input {
     border: 1px solid #ccc;
     color: #333;
 }
-/* --- API Key Modal Styles (Add this to style.css) --- */
-#api-modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1000; /* Sit on top */
-    left: 0;
-    top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0,0,0,0.7); /* Black w/ opacity */
-    justify-content: center; /* Center horizontally */
-    align-items: center; /* Center vertically */
-}
 
-#api-modal .modal-content {
-    background-color: var(--secondary-bg-color); /* Use your existing theme variables */
-    margin: auto;
-    padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    width: 90%;
-    max-width: 400px; /* Adjust as needed */
-    position: relative;
-    color: var(--text-color);
-}
-
-#api-modal .close-button {
-    color: var(--accent-color);
-    font-size: 28px;
-    font-weight: bold;
-    position: absolute;
-    top: 10px;
-    right: 20px;
-    cursor: pointer;
-}
-
-#api-modal .close-button:hover,
-#api-modal .close-button:focus {
-    color: #000;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-#api-modal h2 {
-    text-align: center;
-    margin-bottom: 20px;
-    color: var(--primary-color);
-}
-
-#api-modal label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: bold;
-}
-
-#api-modal input[type="text"],
-#api-modal input[type="password"] {
-    width: calc(100% - 20px); /* Account for padding */
-    padding: 10px;
-    margin-bottom: 15px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    background-color: var(--input-bg-color);
-    color: var(--text-color);
-}
-
-#api-modal button {
-    width: 100%;
-    padding: 12px;
-    background-color: var(--primary-color);
+body.lite-mode .modal-content button {
+    background-color: #27ae60; /* Keep green button */
     color: white;
-    border: none;
-    border-radius: 5px;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
 }
 
-#api-modal button:hover {
-    background-color: var(--secondary-color);
-}
-
-#api-modal .message-text {
-    text-align: center;
-    margin-top: 15px;
-    font-size: 0.9em;
-    color: var(--text-color); /* Default message color */
-}
-
-/* Connection Indicator Styles */
-.indicator-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 20px;
-}
-
-.indicator-circle {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: #ccc; /* Default grey */
-    margin-right: 10px;
-    display: inline-block;
-    vertical-align: middle;
-}
-
-.indicator-circle.connected {
-    background-color: #28a745; /* Green */
-}
-
-.indicator-circle.disconnected {
-    background-color: #dc3545; /* Red */
-}
-
-.indicator-text {
-    font-weight: bold;
-    vertical-align: middle;
-}
-
-/* Dark Mode Specific Styles for API Modal */
-body.dark-mode #api-modal .modal-content {
-    background-color: #333; /* Darker background for dark mode */
-}
-
-body.dark-mode #api-modal input {
-    background-color: #444;
-    color: #eee;
-    border-color: #555;
-}
-/* MODAL STYLES */
-.modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1000; /* Sit on top */
-    left: 0;
-    top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0,0,0,0.7); /* Black w/ opacity */
-    display: flex; /* Use flexbox for centering */
-    justify-content: center; /* Center horizontally */
-    align-items: center; /* Center vertically */
-}
-
-.modal-content {
-    background-color: #2c3e50; /* Darker background for content */
-    margin: auto; /* Ensures it stays centered */
-    padding: 30px;
-    border: 1px solid #888;
-    width: 90%; /* Adjust width as needed */
-    max-width: 400px; /* Max width for larger screens */
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-    color: #ecf0f1; /* Light text for dark background */
-    position: relative; /* For close button positioning */
-}
-
-.modal-content h3, .modal-content h2 {
-    color: #ecf0f1;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.modal-content input[type="email"],
-.modal-content input[type="text"],
-.modal-content input[type="password"] {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 15px;
-    border: 1px solid #34495e; /* Slightly lighter border */
-    border-radius: 4px;
-    background-color: #34495e; /* Input background */
-    color: #ecf0f1; /* Input text color */
-}
-
-.modal-content button {
-    width: 100%;
-    padding: 10px;
-    background-color: #27ae60; /* Green for buttons */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 16px;
-    transition: background-color 0.3s ease;
-}
-
-.modal-content button:hover {
+body.lite-mode .modal-content button:hover {
     background-color: #2ecc71;
 }
-
-.modal-content p.message-text {
-    margin-top: 15px;
-    text-align: center;
-    font-weight: bold;
-}
-
-/* Close button for modals */
-.close-button {
-    color: #aaa;
-    float: right;
-    font-size: 28px;
-    font-weight: bold;
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    cursor: pointer;
-}
-
-.close-button:hover,
-.close-button:focus {
-    color: white;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-/* API Modal specific indicators */
-.indicator-circle {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: #6b7280; /* Default gray */
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 8px;
-}
-
-.indicator-text {
-    display: inline-block;
-    vertical-align: middle;
-    color: #9ca3af;
-}
-
-/* Override default display: none to hide properly */
-#auth-modal, #api-modal {
-    display: none;
