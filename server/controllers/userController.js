@@ -100,7 +100,8 @@ const decrypt = (encryptedText) => {
     } catch (error) {
         console.error("Decryption failed:", error);
         console.error(`Attempting to decrypt: '${encryptedText}'`); // Log the problematic encrypted text
-        throw new Error("Error interno del servidor al obtener y desencriptar credenciales de BitMart."); // Mensaje específico para el frontend
+        // NO cambiar el mensaje de error para el frontend aquí, ya lo hace el catch de abajo
+        throw new Error("Failed to decrypt BitMart credentials with current keys."); // Mensaje más específico para debug
     }
 };
 
@@ -152,6 +153,12 @@ exports.getBitmartBalance = async (req, res) => {
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
 
+        // --- NUEVOS LOGS DE DEPURACIÓN DE DESENCRIPTACIÓN ---
+        console.log(`[DEBUG DECRYPT] Decrypted API Key (partial): ${decryptedApiKey.substring(0, 5)}...${decryptedApiKey.substring(decryptedApiKey.length - 5)} (Length: ${decryptedApiKey.length})`);
+        console.log(`[DEBUG DECRYPT] Decrypted Secret Key (partial): ${decryptedSecretKey.substring(0, 5)}...${decryptedSecretKey.substring(decryptedSecretKey.length - 5)} (Length: ${decryptedSecretKey.length})`);
+        console.log(`[DEBUG DECRYPT] Decrypted Memo: '${decryptedMemo}' (Length: ${decryptedMemo.length})`);
+        // --- FIN NUEVOS LOGS ---
+
         const authCredentials = {
             apiKey: decryptedApiKey,
             secretKey: decryptedSecretKey,
@@ -163,6 +170,10 @@ exports.getBitmartBalance = async (req, res) => {
 
     } catch (error) {
         console.error('Error getting BitMart balance:', error);
+        // Mensaje de error general para el frontend si la desencriptación falló
+        if (error.message.includes("Failed to decrypt BitMart credentials")) {
+             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+        }
         res.status(500).json({ message: error.message || 'Error fetching BitMart balance.' });
     }
 };
@@ -194,6 +205,9 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     } catch (error) {
         console.error('Error getting BitMart open orders:', error);
+        if (error.message.includes("Failed to decrypt BitMart credentials")) {
+             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+        }
         res.status(500).json({ message: error.message || 'Error fetching BitMart open orders.' });
     }
 };
@@ -225,6 +239,9 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
     } catch (error) {
         console.error('Error getting BitMart history orders:', error);
+         if (error.message.includes("Failed to decrypt BitMart credentials")) {
+             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+        }
         res.status(500).json({ message: error.message || 'Error fetching BitMart history orders.' });
     }
 };
@@ -261,3 +278,4 @@ exports.getBotConfigAndState = async (req, res) => {
         res.status(500).json({ message: 'Error interno del servidor al obtener la configuración y estado del bot.' });
     }
 };
+
