@@ -1,4 +1,4 @@
-// ./services/bitmartService.js
+// server/services/bitmartService.js
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -9,13 +9,15 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 /**
  * Genera la firma para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp actual en milisegundos.
- * @param {string} memo - El memo de la API (X-BM-MEMO).
+ * @param {string} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía.
  * @param {string} bodyOrQueryString - El cuerpo stringificado JSON (para POST) o la query string (para GET).
  * @param {string} apiSecret - La clave secreta de la API a usar para la firma.
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    const message = timestamp + '#' + memo + '#' + bodyOrQueryString;
+    // Asegurarse de que memo sea una cadena, incluso si es null o undefined
+    const effectiveMemo = memo || '';
+    const message = timestamp + '#' + effectiveMemo + '#' + bodyOrQueryString;
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
@@ -40,7 +42,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         timeout: 15000
     };
 
-    const { apiKey, secretKey, apiMemo } = authCredentials;
+    const { apiKey, secretKey, apiMemo } = authCredentials; // apiMemo podría ser ""
 
     const effectiveParamsOrData = { ...paramsOrData };
     if (isPrivate) {
@@ -60,14 +62,16 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     }
 
     if (isPrivate) {
-        if (!apiKey || !secretKey || !apiMemo) {
+        // --- CORRECCIÓN CLAVE AQUÍ: Permite que apiMemo sea una cadena vacía ---
+        if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
             throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el usuario haya configurado sus claves.");
         }
+        // Si apiMemo existe pero es una cadena vacía, se pasará como cadena vacía a generateSign
         const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
-        requestConfig.headers['X-BM-MEMO'] = apiMemo;
+        requestConfig.headers['X-BM-MEMO'] = apiMemo; // Puede ser una cadena vacía
     }
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
@@ -77,6 +81,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     } else {
         console.log('Query Params:', JSON.stringify(effectiveParamsOrData));
     }
+    // Opcional: Logear Headers (solo para debug, ¡cuidado con secretKey si se incluye accidentalmente!)
+    // console.log('Request Headers:', requestConfig.headers);
 
     try {
         const response = await axios({
@@ -185,7 +191,7 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        return orders;
+        return { orders: orders }; // Devuelve un objeto con la propiedad 'orders'
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
@@ -360,8 +366,10 @@ async function getSystemTime() {
  */
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
     console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    if (!apiKey || !secretKey || !apiMemo) {
-        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación.");
+    // La validación aquí debe ser solo que los strings no sean null o undefined.
+    // El check de si son vacíos o no-válidos debe hacerse en makeRequest o por la API de BitMart.
+    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) { // Modificado para permitir memo vacío
+        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
         return false;
     }
 
@@ -416,6 +424,7 @@ module.exports = {
     getOpenOrders,
     getOrderDetail,
     placeOrder,
+    // La función 'cancelOrder' ya existe en tu código, así que solo la exportamos.
     cancelOrder,
     getHistoryOrdersV4,
     getKlines,
