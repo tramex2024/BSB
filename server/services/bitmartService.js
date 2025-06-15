@@ -32,20 +32,17 @@ function sortObjectKeys(obj) {
 /**
  * Genera la firma para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp actual en milisegundos.
- * @param {string} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía o nula.
+ * @param {string} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía.
  * @param {string} bodyOrQueryString - El cuerpo stringificado JSON (para POST) o la query string (para GET).
  * @param {string} apiSecret - La clave secreta de la API a usar para la firma.
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // FIX: Ensure memo is converted to "undefined" string if it's null/undefined,
-    // or remains an empty string if it's already an empty string.
-    // This matches how Node.js converts undefined/null in string concatenation for the original code.
-    const memoForHash = (memo === undefined || memo === null) ? '' : String(memo); 
-    const message = timestamp + '#' + memoForHash + '#' + bodyOrQueryString;
+    const effectiveMemo = memo || '';
+    const message = timestamp + '#' + effectiveMemo + '#' + bodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
-    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
+    console.log(`[SIGN_DEBUG] Memo: '${effectiveMemo}' (Length: ${effectiveMemo.length})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${bodyOrQueryString}' (Length: ${bodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
@@ -97,14 +94,18 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     } else if (method === 'POST') {
         // CORRECCIÓN CLAVE: Para /spot/v4/query/open-orders POST, forzamos el orden del JSON stringificado
         if (path === '/spot/v4/query/open-orders') {
-            const tempBody = { recvWindow: 10000 }; // Forzar recvWindow a ser la primera propiedad
+            const tempBody = {};
             if (dataForRequestAndSign.symbol) {
-                tempBody.symbol = dataForRequestAndSign.symbol; // Añadir symbol después
+                tempBody.symbol = dataForRequestAndSign.symbol;
             }
-            bodyForSign = JSON.stringify(tempBody); // Stringify el objeto temporal con orden forzado
-            requestConfig.data = tempBody; // Usar el mismo objeto para el cuerpo de la solicitud
+            // Aseguramos que recvWindow se añada después de symbol si symbol existe,
+            // o sea el único campo si symbol no existe.
+            tempBody.recvWindow = 10000; 
+            
+            bodyForSign = JSON.stringify(tempBody); // Stringify the temp object with forced order
+            requestConfig.data = tempBody; // Use the same object for the request body
         } else {
-            // Para otras solicitudes POST, stringificamos el objeto con sus propiedades existentes
+            // Para otras solicitudes POST, simplemente stringificamos el objeto tal como está (orden de inserción)
             bodyForSign = JSON.stringify(dataForRequestAndSign);
             requestConfig.data = dataForRequestAndSign;
         }
@@ -127,7 +128,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado (para solicitud y firma):', JSON.stringify(requestConfig.data)); 
+        console.log('Body enviado (para solicitud y firma):', requestConfig.data); 
         console.log('Body para Firma (JSON stringificado, con orden forzado para /open-orders POST):', bodyForSign);
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));

@@ -1,46 +1,51 @@
 // server/middleware/bitmartAuthMiddleware.js
-
-const User = require('../models/User');
-// IMPORTANTE: Importar las funciones de encriptación/desencriptación desde cryptoUtils
-const { decrypt } = require('../utils/cryptoUtils'); 
+// Importa las funciones de encriptación/desencriptación directamente desde userController
+// para asegurar que se utilice la misma lógica y variables de entorno.
+const { decrypt } = require('../controllers/userController'); // Importa la función decrypt directamente
+const User = require('../models/User'); // Importa tu modelo de usuario
 
 const bitmartAuthMiddleware = async (req, res, next) => {
     try {
-        const userId = req.user.id; // Asume que req.user.id ya está establecido por authenticateToken
+        const userId = req.user.id; // ID del usuario obtenido del JWT
 
         const user = await User.findById(userId);
 
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-            // Si el usuario no tiene las claves configuradas, permite que la solicitud continúe
-            // para que el controlador pueda manejarlo (ej. retornar 400 'claves no configuradas').
-            return next(); 
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
-        // --- DEBUGGING CRÍTICO: Verificar si decrypt está disponible ---
-        console.log(`[DEBUG MIDDLEWARE] Tipo de 'decrypt' antes de usarlo: ${typeof decrypt}`);
-        if (typeof decrypt !== 'function') {
-            console.error(`[CRITICAL ERROR] 'decrypt' NO ES UNA FUNCIÓN en bitmartAuthMiddleware. Revisa la importación desde cryptoUtils.js.`);
-            throw new Error("Internal server error: Crypto functions not loaded correctly.");
+        // Comprobar si el usuario tiene las claves de BitMart configuradas
+        // (Nota: bitmartApiMemo puede ser null si no se proporcionó inicialmente)
+        if (!user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
+            return res.status(400).json({ message: 'Las API keys de BitMart no están configuradas para este usuario. Por favor, configúralas.' });
         }
-        // --- FIN DEBUGGING CRÍTICO ---
 
-        // Desencriptar las claves para pasarlas a los controladores o servicios
+        // --- CORRECCIÓN CLAVE: Desencriptar TODAS las claves aquí ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // Si el memo desencriptado es una cadena vacía, pasamos null.
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo);
+        // El memo es opcional, si es null o undefined en la DB, se tratará como cadena vacía.
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
-        // Adjuntar las credenciales desencriptadas a la solicitud para que los controladores las usen
-        req.bitmartAuth = {
-            apiKey: decryptedApiKey,
-            secretKey: decryptedSecretKey,
-            apiMemo: decryptedMemo
+        // --- NUEVOS LOGS DE DEPURACIÓN EN EL MIDDLEWARE ---
+        // ¡ADVERTENCIA DE SEGURIDAD! Estos logs exponen partes de las claves en texto plano.
+        // ELIMÍNALOS DESPUÉS DE QUE LA DEPURACIÓN TERMINE.
+        console.log(`[MIDDLEWARE DECRYPT] Decrypted API Key (partial): ${decryptedApiKey.substring(0, 5)}...${decryptedApiKey.substring(decryptedApiKey.length - 5)} (Length: ${decryptedApiKey.length})`);
+        console.log(`[MIDDLEWARE DECRYPT] Decrypted Secret Key (partial): ${decryptedSecretKey.substring(0, 5)}...${decryptedSecretKey.substring(decryptedSecretKey.length - 5)} (Length: ${decryptedSecretKey.length})`);
+        console.log(`[MIDDLEWARE DECRYPT] Decrypted Memo: '${decryptedMemo}' (Length: ${decryptedMemo.length})`);
+        // --- FIN LOGS ---
+
+
+        // Adjuntar las credenciales desencriptadas al objeto de solicitud
+        req.bitmartCreds = {
+            apiKey: decryptedApiKey, // Ahora desencriptada
+            secretKey: decryptedSecretKey, // Ya desencriptada
+            apiMemo: decryptedMemo // Ahora desencriptada
         };
         next();
     } catch (error) {
         console.error('Error en bitmartAuthMiddleware:', error.message);
-        // Aquí sí es un error crítico si la desencriptación falla.
-        return res.status(500).json({ message: 'Error interno del servidor al procesar las credenciales de BitMart.' });
+        // Mensaje de error más descriptivo para el frontend
+        res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus API Keys en la aplicación.' });
     }
 };
 

@@ -1,13 +1,12 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
-const User = require('../models/User'); 
-const BotState = require('../models/BotState'); 
-const jwt = require('jsonwebtoken'); 
-// IMPORTANTE: Importar las funciones de encriptación/desencriptación desde el nuevo archivo cryptoUtils
-const { encrypt, decrypt } = require('../utils/cryptoUtils'); 
-const bitmartService = require('../services/bitmartService'); 
+const User = require('../models/User');
+const BotState = require('../models/BotState');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const bitmartService = require('../services/bitmartService');
 
-// --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
+// --- Middleware de Autenticación ---
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -27,6 +26,63 @@ exports.authenticateToken = (req, res, next) => {
     });
 };
 
+// --- Funciones de Ayuda para Encriptación/Desencriptación ---
+const algorithm = 'aes-256-cbc';
+
+const getEncryptionKey = () => {
+    const key = process.env.ENCRYPTION_KEY;
+    if (!key) {
+        console.error("ERROR: ENCRYPTION_KEY is not defined in environment variables!");
+        throw new Error("ENCRYPTION_KEY is not defined.");
+    }
+    const derivedKey = crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
+    // TEMPORAL: Log the key being used
+    console.log(`[DEBUG] ENCRYPTION_KEY being used (derived): '${derivedKey}' (Length: ${derivedKey.length})`);
+    return derivedKey;
+};
+
+const getEncryptionIv = () => {
+    const iv = process.env.ENCRYPTION_IV;
+    if (!iv) {
+        console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
+        throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string.");
+    }
+    // TEMPORAL: Log the IV being used
+    console.log(`[DEBUG] ENCRYPTION_IV being used (raw from env): '${iv}' (Length: ${iv.length})`);
+    return Buffer.from(iv, 'hex');
+};
+
+const encrypt = (text) => {
+    try {
+        const key = Buffer.from(getEncryptionKey(), 'utf8');
+        const iv = getEncryptionIv();
+
+        const cipher = crypto.createCipheriv(algorithm, key, iv);
+        let encrypted = cipher.update(text, 'utf8', 'hex');
+        encrypted += cipher.final('hex');
+        return encrypted;
+    } catch (error) {
+        console.error("Encryption failed:", error);
+        throw new Error("Failed to encrypt data.");
+    }
+};
+
+const decrypt = (encryptedText) => {
+    try {
+        const key = Buffer.from(getEncryptionKey(), 'utf8');
+        const iv = getEncryptionIv();
+
+        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch (error) {
+        console.error("Decryption failed:", error);
+        console.error(`Attempting to decrypt: '${encryptedText}'`); // Log the problematic encrypted text
+        throw new Error("Error interno del servidor al obtener y desencriptar credenciales de BitMart."); // Mensaje específico para el frontend
+    }
+};
+
 
 // --- Controlador para guardar las API Keys de BitMart ---
 exports.saveBitmartApiKeys = async (req, res) => {
@@ -43,8 +99,8 @@ exports.saveBitmartApiKeys = async (req, res) => {
         }
 
         user.bitmartApiKey = encrypt(apiKey);
-        user.bitmartSecretKeyEncrypted = encrypt(secretKey); 
-        user.bitmartApiMemo = encrypt(memo || ''); 
+        user.bitmartSecretKeyEncrypted = encrypt(secretKey);
+        user.bitmartApiMemo = encrypt(memo || '');
 
         user.bitmartApiValidated = false;
         await user.save();
@@ -66,15 +122,14 @@ exports.getBitmartBalance = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { 
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // Si el memo desencriptado es una cadena vacía, pasamos null.
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -98,14 +153,14 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { 
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -135,7 +190,7 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
