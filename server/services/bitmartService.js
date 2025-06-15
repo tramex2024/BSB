@@ -7,8 +7,8 @@ const querystring = require('querystring');
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
 /**
- * Función auxiliar para ordenar recursivamente las claves de un objeto
- * Esto es CRÍTICO para la firma de BitMart en solicitudes POST,
+ * Función auxiliar para ordenar recursivamente las claves de un objeto.
+ * Es crucial para la firma de BitMart en solicitudes POST,
  * ya que JSON.stringify no garantiza el orden y BitMart lo requiere.
  * También asegura que los elementos de arrays que son objetos se ordenen.
  */
