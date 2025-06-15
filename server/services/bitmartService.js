@@ -158,7 +158,8 @@ async function getSystemTime() {
     console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
         // makeRequest con isPrivate=false para este endpoint público
-        const response = await makeRequest('GET', '/spot/v1/time', {}, false);
+        // CAMBIO CLAVE AQUÍ: De /spot/v1/time a /api/v1/time
+        const response = await makeRequest('GET', '/api/v1/time', {}, false);
         if (response && response.code === 1000 && response.data && response.data.server_time) {
             const serverTime = response.data.server_time.toString(); // Asegurar que sea string
             console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
