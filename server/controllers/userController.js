@@ -54,7 +54,6 @@ const getEncryptionIv = () => {
 
 const encrypt = (text) => {
     try {
-        // FIX: Convert the derived key from Base64 string to Buffer using 'base64' encoding, not 'utf8'
         const key = Buffer.from(getEncryptionKey(), 'base64');
         const iv = getEncryptionIv();
 
@@ -70,7 +69,6 @@ const encrypt = (text) => {
 
 const decrypt = (encryptedText) => {
     try {
-        // FIX: Convert the derived key from Base64 string to Buffer using 'base64' encoding, not 'utf8'
         const key = Buffer.from(getEncryptionKey(), 'base64');
         const iv = getEncryptionIv();
 
@@ -240,3 +238,7 @@ exports.getBotConfigAndState = async (req, res) => {
         res.status(500).json({ message: 'Error interno del servidor al obtener la configuración y estado del bot.' });
     }
 };
+
+// --- Exportar las funciones de encriptación/desencriptación ---
+module.exports.encrypt = encrypt;
+module.exports.decrypt = decrypt;
