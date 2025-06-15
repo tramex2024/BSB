@@ -6,6 +6,11 @@ const jwt = require('jsonwebtoken'); // Para verificar el token JWT
 const crypto = require('crypto'); // Para encriptar/desencriptar las claves
 const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
 
+// --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno ---
+// Estas líneas se ejecutarán tan pronto como el archivo sea requerido por server.js
+console.log(`[VERY EARLY DEBUG] ENCRYPTION_KEY_ENV: '${process.env.ENCRYPTION_KEY}'`);
+console.log(`[VERY EARLY DEBUG] ENCRYPTION_IV_ENV: '${process.env.ENCRYPTION_IV}'`);
+
 // --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -36,8 +41,7 @@ const getEncryptionKey = () => {
         throw new Error("ENCRYPTION_KEY is not defined.");
     }
     const derivedKey = crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
-    // TEMPORAL: Log the key being used
-    console.log(`[DEBUG] ENCRYPTION_KEY being used (derived): '${derivedKey}' (Length: ${derivedKey.length})`);
+    // console.log(`[DEBUG] ENCRYPTION_KEY being used (derived): '${derivedKey}' (Length: ${derivedKey.length})`); // Ya tenemos logs VERY EARLY
     return derivedKey;
 };
 
@@ -45,11 +49,21 @@ const getEncryptionIv = () => {
     const iv = process.env.ENCRYPTION_IV;
     if (!iv) {
         console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
-        throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string.");
+        throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string (32 hex characters).");
     }
-    // TEMPORAL: Log the IV being used
-    console.log(`[DEBUG] ENCRYPTION_IV being used (raw from env): '${iv}' (Length: ${iv.length})`);
-    return Buffer.from(iv, 'hex');
+    // console.log(`[DEBUG] ENCRYPTION_IV being used (raw from env): '${iv}' (Length: ${iv.length})`); // Ya tenemos logs VERY EARLY
+    try {
+        const ivBuffer = Buffer.from(iv, 'hex');
+        // CRÍTICO: Validar que el IV tenga la longitud correcta (16 bytes = 32 caracteres hex)
+        if (ivBuffer.length !== 16) {
+            console.error(`[CRITICAL ERROR] ENCRYPTION_IV del entorno NO es de 16 bytes. Longitud real (bytes): ${ivBuffer.length}. IV: '${iv}'`);
+            throw new Error(`Invalid initialization vector: IV debe ser de 16 bytes (32 caracteres hexadecimales).`);
+        }
+        return ivBuffer;
+    } catch (e) {
+        console.error(`[CRITICAL ERROR] Falló la conversión de ENCRYPTION_IV a Buffer. ¿Es un string hexadecimal válido? IV: '${iv}'. Error: ${e.message}`);
+        throw new Error(`Invalid initialization vector: Error al procesar IV.`);
+    }
 };
 
 const encrypt = (text) => {
@@ -98,7 +112,6 @@ exports.saveBitmartApiKeys = async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         user.bitmartApiKey = encrypt(apiKey);
         user.bitmartSecretKeyEncrypted = encrypt(secretKey); // Usar el nombre que aparece en tu DB
         user.bitmartApiMemo = encrypt(memo || ''); // Usar el nombre que aparece en tu DB, y asegurar que siempre sea string
@@ -123,13 +136,11 @@ exports.getBitmartBalance = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
@@ -156,13 +167,11 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
@@ -189,12 +198,10 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
-        // --- CORRECCIÓN CLAVE: Usar nombres de campos consistentes con tu DB ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
         const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
