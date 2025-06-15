@@ -1,12 +1,17 @@
 // backend/controllers/userController.js
 
-const User = require('../models/User');
-const BotState = require('../models/BotState');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const bitmartService = require('../services/bitmartService');
+const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
+const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
+const jwt = require('jsonwebtoken'); // Para verificar el token JWT
+const crypto = require('crypto'); // Para encriptar/desencriptar las claves
+const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
 
-// --- Middleware de Autenticación ---
+// --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno ---
+// Estas líneas se ejecutarán tan pronto como el archivo sea requerido por server.js
+console.log(`[VERY EARLY DEBUG] ENCRYPTION_KEY_ENV (raw): '${process.env.ENCRYPTION_KEY}'`);
+console.log(`[VERY EARLY DEBUG] ENCRYPTION_IV_ENV (raw): '${process.env.ENCRYPTION_IV}'`);
+
+// --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -35,30 +40,44 @@ const getEncryptionKey = () => {
         console.error("ERROR: ENCRYPTION_KEY is not defined in environment variables!");
         throw new Error("ENCRYPTION_KEY is not defined.");
     }
-    // FIX: Directly return the 32-byte Buffer from SHA256 hash.
-    // SHA256 always produces a 32-byte (256-bit) hash.
-    const derivedKeyBuffer = crypto.createHash('sha256').update(key).digest(); 
-    console.log(`[DEBUG_ENCRYPTION_KEY] Derived key (Buffer, hex partial): ${derivedKeyBuffer.toString('hex').substring(0, 10)}...${derivedKeyBuffer.toString('hex').substring(derivedKeyBuffer.toString('hex').length - 10)} (Length: ${derivedKeyBuffer.length} bytes)`);
-    return derivedKeyBuffer; // This is now guaranteed to be a 32-byte Buffer
+    // Derivar la clave a un hash SHA256 y luego obtener los primeros 32 bytes en formato HEXADECIMAL (64 caracteres)
+    const derivedKeyHex = crypto.createHash('sha256').update(key).digest('hex').substring(0, 64);
+    
+    // Validar la longitud de la clave derivada en HEX
+    if (derivedKeyHex.length !== 64) {
+        console.error(`[CRITICAL ERROR] ENCRYPTION_KEY derivada NO es de 32 bytes (64 caracteres hex). Longitud real: ${derivedKeyHex.length}. Key (raw): '${key}'`);
+        throw new Error(`Invalid encryption key: La clave derivada debe ser de 32 bytes (64 caracteres hexadecimales).`);
+    }
+    return derivedKeyHex;
 };
 
 const getEncryptionIv = () => {
     const iv = process.env.ENCRYPTION_IV;
     if (!iv) {
         console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
-        throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string.");
+        throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string (32 hex characters).");
     }
-    // Convert the IV from hex to Buffer. A 32-char hex string represents a 16-byte IV.
-    console.log(`[DEBUG_ENCRYPTION_IV] IV (hex, partial): ${iv.substring(0, 5)}...${iv.substring(iv.length - 5)} (Length: ${iv.length})`);
-    return Buffer.from(iv, 'hex'); // This will correctly produce a 16-byte Buffer if iv.length is 32
+    try {
+        const ivBuffer = Buffer.from(iv, 'hex');
+        // Validar que el IV tenga la longitud correcta (16 bytes = 32 caracteres hex)
+        if (ivBuffer.length !== 16) {
+            console.error(`[CRITICAL ERROR] ENCRYPTION_IV del entorno NO es de 16 bytes. Longitud real (bytes): ${ivBuffer.length}. IV (raw): '${iv}'`);
+            throw new Error(`Invalid initialization vector: IV debe ser de 16 bytes (32 caracteres hexadecimales).`);
+        }
+        return ivBuffer;
+    } catch (e) {
+        console.error(`[CRITICAL ERROR] Falló la conversión de ENCRYPTION_IV a Buffer. ¿Es un string hexadecimal válido? IV (raw): '${iv}'. Error: ${e.message}`);
+        throw new Error(`Invalid initialization vector: Error al procesar IV.`);
+    }
 };
 
 const encrypt = (text) => {
     try {
-        const key = getEncryptionKey(); // This now returns the 32-byte Buffer directly
-        const iv = getEncryptionIv();   // This returns the 16-byte Buffer (from hex string)
+        // Usar la clave derivada en formato HEX para crear el Buffer
+        const keyBuffer = Buffer.from(getEncryptionKey(), 'hex'); 
+        const iv = getEncryptionIv();
 
-        const cipher = crypto.createCipheriv(algorithm, key, iv);
+        const cipher = crypto.createCipheriv(algorithm, keyBuffer, iv);
         let encrypted = cipher.update(text, 'utf8', 'hex');
         encrypted += cipher.final('hex');
         return encrypted;
@@ -70,17 +89,18 @@ const encrypt = (text) => {
 
 const decrypt = (encryptedText) => {
     try {
-        const key = getEncryptionKey(); // This now returns the 32-byte Buffer directly
-        const iv = getEncryptionIv();   // This returns the 16-byte Buffer (from hex string)
+        // Usar la clave derivada en formato HEX para crear el Buffer
+        const keyBuffer = Buffer.from(getEncryptionKey(), 'hex');
+        const iv = getEncryptionIv();
 
-        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        const decipher = crypto.createDecipheriv(algorithm, keyBuffer, iv);
         let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
         decrypted += decipher.final('utf8');
         return decrypted;
     } catch (error) {
         console.error("Decryption failed:", error);
-        console.error(`Attempting to decrypt: '${encryptedText}'`);
-        throw new Error("Error interno del servidor al obtener y desencriptar credenciales de BitMart.");
+        console.error(`Attempting to decrypt: '${encryptedText}'`); // Log the problematic encrypted text
+        throw new Error("Error interno del servidor al obtener y desencriptar credenciales de BitMart."); // Mensaje específico para el frontend
     }
 };
 
@@ -100,8 +120,8 @@ exports.saveBitmartApiKeys = async (req, res) => {
         }
 
         user.bitmartApiKey = encrypt(apiKey);
-        user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-        user.bitmartApiMemo = encrypt(memo || ''); // Encrypt empty string if memo is not provided
+        user.bitmartSecretKeyEncrypted = encrypt(secretKey); // Usar el nombre que aparece en tu DB
+        user.bitmartApiMemo = encrypt(memo || ''); // Usar el nombre que aparece en tu DB, y asegurar que siempre sea string
 
         user.bitmartApiValidated = false;
         await user.save();
@@ -123,14 +143,15 @@ exports.getBitmartBalance = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
+        // FIX: Si el memo desencriptado es una cadena vacía, pasamos null.
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -154,14 +175,15 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
+        // FIX: Si el memo desencriptado es una cadena vacía, pasamos null.
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -185,13 +207,13 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || decrypt(user.bitmartApiMemo) === '') ? null : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -199,6 +221,7 @@ exports.getBitmartHistoryOrders = async (req, res) => {
             apiMemo: decryptedMemo
         };
 
+        // Asumiendo que bitmartService.getHistoryOrdersV4 ya existe
         const historyOrders = await bitmartService.getHistoryOrdersV4(authCredentials, { symbol, status });
         res.status(200).json(historyOrders);
 
@@ -209,6 +232,7 @@ exports.getBitmartHistoryOrders = async (req, res) => {
 };
 
 // --- Función Controladora: Obtener Configuración y Estado del Bot ---
+// Asegúrate de importar el modelo BotState al principio de este archivo
 exports.getBotConfigAndState = async (req, res) => {
     const userId = req.user.id;
 
@@ -239,8 +263,3 @@ exports.getBotConfigAndState = async (req, res) => {
         res.status(500).json({ message: 'Error interno del servidor al obtener la configuración y estado del bot.' });
     }
 };
-
-// --- Exportar las funciones de encriptación/desencriptación ---
-// Esto permite que otros módulos, como tu middleware de autenticación, las utilicen.
-module.exports.encrypt = encrypt;
-module.exports.decrypt = decrypt;
