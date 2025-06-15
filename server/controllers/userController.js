@@ -35,10 +35,11 @@ const getEncryptionKey = () => {
         console.error("ERROR: ENCRYPTION_KEY is not defined in environment variables!");
         throw new Error("ENCRYPTION_KEY is not defined.");
     }
-    // Hash the key to ensure it's 32 bytes (256 bits) and return as base64 string
-    const derivedKey = crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
-    console.log(`[DEBUG_ENCRYPTION_KEY] Derived key (base64, partial): ${derivedKey.substring(0, 10)}...${derivedKey.substring(derivedKey.length - 10)} (Length: ${derivedKey.length})`);
-    return derivedKey;
+    // FIX: Directly return the 32-byte Buffer from SHA256 hash.
+    // SHA256 always produces a 32-byte (256-bit) hash.
+    const derivedKeyBuffer = crypto.createHash('sha256').update(key).digest(); 
+    console.log(`[DEBUG_ENCRYPTION_KEY] Derived key (Buffer, hex partial): ${derivedKeyBuffer.toString('hex').substring(0, 10)}...${derivedKeyBuffer.toString('hex').substring(derivedKeyBuffer.toString('hex').length - 10)} (Length: ${derivedKeyBuffer.length} bytes)`);
+    return derivedKeyBuffer; // This is now guaranteed to be a 32-byte Buffer
 };
 
 const getEncryptionIv = () => {
@@ -47,15 +48,15 @@ const getEncryptionIv = () => {
         console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
         throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string.");
     }
-    // Convert the IV from hex to Buffer
+    // Convert the IV from hex to Buffer. A 32-char hex string represents a 16-byte IV.
     console.log(`[DEBUG_ENCRYPTION_IV] IV (hex, partial): ${iv.substring(0, 5)}...${iv.substring(iv.length - 5)} (Length: ${iv.length})`);
-    return Buffer.from(iv, 'hex');
+    return Buffer.from(iv, 'hex'); // This will correctly produce a 16-byte Buffer if iv.length is 32
 };
 
 const encrypt = (text) => {
     try {
-        const key = Buffer.from(getEncryptionKey(), 'base64');
-        const iv = getEncryptionIv();
+        const key = getEncryptionKey(); // This now returns the 32-byte Buffer directly
+        const iv = getEncryptionIv();   // This returns the 16-byte Buffer (from hex string)
 
         const cipher = crypto.createCipheriv(algorithm, key, iv);
         let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -69,8 +70,8 @@ const encrypt = (text) => {
 
 const decrypt = (encryptedText) => {
     try {
-        const key = Buffer.from(getEncryptionKey(), 'base64');
-        const iv = getEncryptionIv();
+        const key = getEncryptionKey(); // This now returns the 32-byte Buffer directly
+        const iv = getEncryptionIv();   // This returns the 16-byte Buffer (from hex string)
 
         const decipher = crypto.createDecipheriv(algorithm, key, iv);
         let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
@@ -240,5 +241,6 @@ exports.getBotConfigAndState = async (req, res) => {
 };
 
 // --- Exportar las funciones de encriptación/desencriptación ---
+// Esto permite que otros módulos, como tu middleware de autenticación, las utilicen.
 module.exports.encrypt = encrypt;
 module.exports.decrypt = decrypt;
