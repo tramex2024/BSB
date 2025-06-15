@@ -1,4 +1,4 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
 const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
 const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
@@ -8,8 +8,8 @@ const bitmartService = require('../services/bitmartService'); // Tu servicio par
 
 // --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno ---
 // Estas líneas se ejecutarán tan pronto como el archivo sea requerido por server.js
-console.log(`[VERY EARLY DEBUG] ENCRYPTION_KEY_ENV: '${process.env.ENCRYPTION_KEY}'`);
-console.log(`[VERY EARLY DEBUG] ENCRYPTION_IV_ENV: '${process.env.ENCRYPTION_IV}'`);
+console.log(`[VERY EARLY DEBUG] ENCRYPTION_KEY_ENV (raw): '${process.env.ENCRYPTION_KEY}'`);
+console.log(`[VERY EARLY DEBUG] ENCRYPTION_IV_ENV (raw): '${process.env.ENCRYPTION_IV}'`);
 
 // --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
 exports.authenticateToken = (req, res, next) => {
@@ -40,9 +40,15 @@ const getEncryptionKey = () => {
         console.error("ERROR: ENCRYPTION_KEY is not defined in environment variables!");
         throw new Error("ENCRYPTION_KEY is not defined.");
     }
-    const derivedKey = crypto.createHash('sha256').update(key).digest('base64').substring(0, 32);
-    // console.log(`[DEBUG] ENCRYPTION_KEY being used (derived): '${derivedKey}' (Length: ${derivedKey.length})`); // Ya tenemos logs VERY EARLY
-    return derivedKey;
+    // Derivar la clave a un hash SHA256 y luego obtener los primeros 32 bytes en formato HEXADECIMAL (64 caracteres)
+    const derivedKeyHex = crypto.createHash('sha256').update(key).digest('hex').substring(0, 64);
+    
+    // Validar la longitud de la clave derivada en HEX
+    if (derivedKeyHex.length !== 64) {
+        console.error(`[CRITICAL ERROR] ENCRYPTION_KEY derivada NO es de 32 bytes (64 caracteres hex). Longitud real: ${derivedKeyHex.length}. Key (raw): '${key}'`);
+        throw new Error(`Invalid encryption key: La clave derivada debe ser de 32 bytes (64 caracteres hexadecimales).`);
+    }
+    return derivedKeyHex;
 };
 
 const getEncryptionIv = () => {
@@ -51,27 +57,27 @@ const getEncryptionIv = () => {
         console.error("ERROR: ENCRYPTION_IV is not defined in environment variables!");
         throw new Error("ENCRYPTION_IV is not defined. Please set it to a 16-byte hex string (32 hex characters).");
     }
-    // console.log(`[DEBUG] ENCRYPTION_IV being used (raw from env): '${iv}' (Length: ${iv.length})`); // Ya tenemos logs VERY EARLY
     try {
         const ivBuffer = Buffer.from(iv, 'hex');
-        // CRÍTICO: Validar que el IV tenga la longitud correcta (16 bytes = 32 caracteres hex)
+        // Validar que el IV tenga la longitud correcta (16 bytes = 32 caracteres hex)
         if (ivBuffer.length !== 16) {
-            console.error(`[CRITICAL ERROR] ENCRYPTION_IV del entorno NO es de 16 bytes. Longitud real (bytes): ${ivBuffer.length}. IV: '${iv}'`);
+            console.error(`[CRITICAL ERROR] ENCRYPTION_IV del entorno NO es de 16 bytes. Longitud real (bytes): ${ivBuffer.length}. IV (raw): '${iv}'`);
             throw new Error(`Invalid initialization vector: IV debe ser de 16 bytes (32 caracteres hexadecimales).`);
         }
         return ivBuffer;
     } catch (e) {
-        console.error(`[CRITICAL ERROR] Falló la conversión de ENCRYPTION_IV a Buffer. ¿Es un string hexadecimal válido? IV: '${iv}'. Error: ${e.message}`);
+        console.error(`[CRITICAL ERROR] Falló la conversión de ENCRYPTION_IV a Buffer. ¿Es un string hexadecimal válido? IV (raw): '${iv}'. Error: ${e.message}`);
         throw new Error(`Invalid initialization vector: Error al procesar IV.`);
     }
 };
 
 const encrypt = (text) => {
     try {
-        const key = Buffer.from(getEncryptionKey(), 'utf8');
+        // Usar la clave derivada en formato HEX para crear el Buffer
+        const keyBuffer = Buffer.from(getEncryptionKey(), 'hex'); 
         const iv = getEncryptionIv();
 
-        const cipher = crypto.createCipheriv(algorithm, key, iv);
+        const cipher = crypto.createCipheriv(algorithm, keyBuffer, iv);
         let encrypted = cipher.update(text, 'utf8', 'hex');
         encrypted += cipher.final('hex');
         return encrypted;
@@ -83,10 +89,11 @@ const encrypt = (text) => {
 
 const decrypt = (encryptedText) => {
     try {
-        const key = Buffer.from(getEncryptionKey(), 'utf8');
+        // Usar la clave derivada en formato HEX para crear el Buffer
+        const keyBuffer = Buffer.from(getEncryptionKey(), 'hex');
         const iv = getEncryptionIv();
 
-        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        const decipher = crypto.createDecipheriv(algorithm, keyBuffer, iv);
         let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
         decrypted += decipher.final('utf8');
         return decrypted;
