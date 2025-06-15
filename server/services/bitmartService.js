@@ -11,8 +11,6 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
  * Es crucial para la firma de BitMart en solicitudes POST,
  * ya que JSON.stringify no garantiza el orden y BitMart lo requiere.
  * También asegura que los elementos de arrays que son objetos se ordenen.
- * NOTA: Esta función ahora solo se usa en `makeRequest` para GET, o si se decide
- * reintroducir una ordenación estricta para POST si la aproximación sin ordenar no funciona.
  */
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) {
@@ -96,11 +94,11 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.params = sortObjectKeys(dataForRequestAndSign); // Los query params incluyen recvWindow si es privado, y se ordenan
         bodyForSign = querystring.stringify(sortObjectKeys(dataForRequestAndSign)); // La cadena para firmar incluye recvWindow y está ordenada
     } else if (method === 'POST') {
-        // Para POST, basándonos en tu código anterior que funcionaba, NO ordenamos explícitamente.
-        // Confiamos en el comportamiento predeterminado de JSON.stringify (que puede variar,
-        // pero es el que BitMart pareció aceptar antes para este endpoint).
-        bodyForSign = JSON.stringify(dataForRequestAndSign); // La cadena para firmar es el JSON stringificado del cuerpo (con recvWindow)
-        requestConfig.data = dataForRequestAndSign; // El cuerpo de la solicitud HTTP es el JSON (con recvWindow)
+        // Para POST, aplicamos explícitamente la ordenación para garantizar consistencia en la firma,
+        // replicando el comportamiento que parece funcionar para GET y resolviendo ambigüedades.
+        const sortedDataForRequestAndSign = sortObjectKeys(dataForRequestAndSign);
+        bodyForSign = JSON.stringify(sortedDataForRequestAndSign); // La cadena para firmar es el JSON stringificado del cuerpo (con recvWindow)
+        requestConfig.data = sortedDataForRequestAndSign; // El cuerpo de la solicitud HTTP es el JSON (con recvWindow)
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -123,7 +121,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`URL: ${url}`);
     if (method === 'POST') {
         console.log('Body enviado (para solicitud y firma):', JSON.stringify(dataForRequestAndSign)); // Mostrar lo que realmente se envía/firma
-        console.log('Body para Firma (JSON stringificado, sin ordenación explícita para POST):', bodyForSign); // Debe ser idéntico al anterior pero stringificado
+        console.log('Body para Firma (JSON stringificado y ordenado explícitamente para POST):', bodyForSign); // Debe ser idéntico al anterior pero stringificado
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params)); // Mostrar los query params
     }
