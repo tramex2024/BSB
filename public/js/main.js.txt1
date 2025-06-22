@@ -1,4 +1,4 @@
-// public/js/main.js (CORREGIDO - V3 para Pestaña "Opened" con objeto anidado)
+// public/js/main.js (CORREGIDO - V2 para Pestaña "Opened")
 
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
@@ -17,7 +17,7 @@ const apiModal = document.getElementById('api-modal');
 const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
 const apiForm = document.getElementById('api-form');
 const apiKeyInput = document.getElementById('api-key');
-const secretKeyInput = document = "secret-key";
+const secretKeyInput = document.getElementById('secret-key');
 const apiMemoInput = document.getElementById('api-memo');
 const apiStatusMessage = document.getElementById('api-status-message');
 const connectionIndicator = document.getElementById('connection-indicator');
@@ -28,7 +28,7 @@ const connectionText = document.getElementById('connection-text');
 const purchaseInput = document.getElementById("purchase");
 const incrementInput = document.getElementById("increment");
 const decrementInput = document.getElementById("decrement");
-const triggerInput = document.getElementById("trigger");
+const triggerInput = document="trigger";
 const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 const botStateDisplay = document.getElementById('bot-state');
 const cycleDisplay = document.getElementById('cycle');
@@ -346,12 +346,15 @@ async function fetchOpenOrdersData() {
     }
     try {
         const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-        // *** CAMBIO CLAVE AQUÍ: Accede a response.orders.orders ***
-        if (!response || !response.orders || !Array.isArray(response.orders.orders)) {
-            console.warn("fetchOpenOrdersData: Backend response was null/undefined or missing 'orders.orders'.");
+        // Ensure response is valid before accessing .orders
+        if (!response || !response.orders) {
+            console.warn("fetchOpenOrdersData: Backend response was null/undefined or missing 'orders'.");
             return [];
         }
-        const openOrders = response.orders.orders; // Accede al array anidado
+        // BitMart V4 open orders do not have a 'status' field in the same way historical orders do.
+        // We'll implicitly consider them 'open' or 'new'.
+        // The backend returns { success: true, orders: [...] }
+        const openOrders = response.orders || [];
         return openOrders;
     } catch (error) {
         console.error("Error fetching open orders data:", error);
