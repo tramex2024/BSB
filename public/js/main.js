@@ -331,12 +331,12 @@ async function fetchOpenOrdersData() {
     }
     try {
         const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-        // BitMart V4 open orders do not have a 'status' field in the same way historical orders do.
-        // We'll implicitly consider them 'open' or 'new'.
-        // The backend returns { success: true, orders: [...] }
+        // ADD THIS NULL CHECK:
+        if (!response) {
+            console.warn("fetchOpenOrdersData: Backend response was null or undefined.");
+            return [];
+        }
         const openOrders = response.orders || [];
-        // Optional: You could add a 'state' field here for consistency if your display logic relies heavily on it.
-        // For example: openOrders.map(order => ({ ...order, state: 'new' }));
         return openOrders;
     } catch (error) {
         console.error("Error fetching open orders data:", error);
@@ -344,7 +344,7 @@ async function fetchOpenOrdersData() {
     }
 }
 
-async function fetchHistoryOrdersData(tab) {
+async function fetchHistoryOrdersData(tab) { // 'tab' parameter is not used here but kept for consistency
     if (!isLoggedIn) {
         return [];
     }
@@ -362,14 +362,17 @@ async function fetchHistoryOrdersData(tab) {
         }).toString();
 
         const response = await fetchFromBackend(`/api/user/history-orders?${queryParams}`);
-        // The backend returns { success: true, orders: [...] }
+        // ADD THIS NULL CHECK:
+        if (!response) {
+            console.warn("fetchHistoryOrdersData: Backend response was null or undefined.");
+            return [];
+        }
         return response.orders || [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
         return [];
     }
 }
-
 async function fetchOrders(tab) {
     const orderListDiv = document.getElementById('order-list');
     if (!orderListDiv) return;
