@@ -518,19 +518,164 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
             case 'SELLING':
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: SELLING. Gestionando ventas...`);
+
+                // Siempre actualiza PM, PV, PC en cada iteración del estado SELLING
                 if (botStateObj.pm === 0 || botStateObj.currentPrice > botStateObj.pm) {
                     botStateObj.pm = botStateObj.currentPrice;
-                    
-                    // Calcula el precio de venta (pv) como PM - 0.5% (o el porcentaje que defina tu estrategia)
-                    botStateObj.pv = botStateObj.pm * (1 - 0.005);    
-                    botStateObj.pc = botStateObj.pm * (1 - 0.004); // Este es un ejemplo, ajusta el porcentaje de caída (0.4%)
+                    // Asegúrate de que botStateObj.trailingStop esté configurado correctamente (ej. 0.5)
+                    botStateObj.pv = botStateObj.pm * (1 - (botStateObj.trailingStop || 0.5) / 100); // 0.5% de caída desde PM
+                    const cutLossPercentage = 0.4; // Porcentaje para la activación de venta (0.4% de caída desde PM)
+                    botStateObj.pc = botStateObj.pm * (1 - cutLossPercentage / 100);
+                    console.log(`[AUTOBOT][${botStateObj.userId}] Actualizando precios de venta. PM: ${botStateObj.pm.toFixed(2)}, PV (0.5%): ${botStateObj.pv.toFixed(2)}, PC (0.4%): ${botStateObj.pc.toFixed(2)}`);
                 }
-                if ((botStateObj.currentPrice <= botStateObj.pc) && botStateObj.ac > 0) {
-                    console.log(`[AUTOBOT][${botStateObj.userId}] Condiciones de venta alcanzadas! Colocando orden de venta.`);
-                    await placeSellOrder(botStateObj, bitmartCreds); // Pasar botStateObj y credenciales
-                } else {
-                    console.log(`[AUTOBOT][${botStateObj.userId}] Esperando condiciones para la venta. Precio actual: ${botStateObj.currentPrice.toFixed(2)}, PM: ${botStateObj.pm.toFixed(2)}, PV: ${botStateObj.pv.toFixed(2)}, PC: ${botStateObj.pc.toFixed(2)}`);
+
+                // Lógica de VENTA
+                if (botStateObj.orderId === null || botStateObj.orderType !== 'limit_sell') {
+                    // Solo intentar colocar una nueva orden si no hay una orden de venta límite activa
+                    if (botStateObj.currentPrice <= botStateObj.pc && botStateObj.ac > 0) {
+                        console.log(`[AUTOBOT][${botStateObj.userId}] ✅ Condiciones de VENTA (caída del 0.4% desde PM - PC) alcanzadas! Colocando orden de VENTA LÍMITE al precio PV (${botStateObj.pv.toFixed(2)}).`);
+                        // Llama a la función placeSellOrder con el precio límite
+                        await placeSellOrder(botStateObj, bitmartCreds, botStateObj.pv);
+                        // El estado del bot y el orderId se actualizan dentro de placeSellOrder si es exitosa.
+                        // Luego, en la próxima iteración, pasaremos a la sección de monitoreo.
+                    } else {
+                        console.log(`[AUTOBOT][${botStateObj.userId}] Esperando que el precio caiga al ${botStateObj.pc.toFixed(2)} (0.4% de ${botStateObj.pm.toFixed(2)}) para colocar orden LÍMITE de venta.`);
+                    }
+                } else if (botStateObj.orderId && botStateObj.orderType === 'limit_sell') {
+                    // Si ya hay una orden de venta LÍMITE en curso, monitorearla
+                    console.log(`[AUTOBOT][${botStateObj.userId}] Monitoreando orden de venta LÍMITE ID: ${botStateObj.orderId}.`);
+                    try {
+                        const orderDetails = await bitmartService.getOrderDetail(bitmartCreds, TRADE_SYMBOL, botStateObj.orderId);
+
+                        if (orderDetails && (orderDetails.state === 'filled' || orderDetails.state === 'fully_filled')) {
+                            console.log(`[AUTOBOT][${botStateObj.userId}] ✅ Orden de VENTA LÍMITE ID ${botStateObj.orderId} COMPLETA.`);
+
+                            let soldQty = 0;
+                            let revenueAmount = 0;
+                            let sellAvgPrice = 0;
+
+                            // Lógica de extracción de filledQty y filledAmount (ya existente y robusta)
+                            if (orderDetails.deal_money && orderDetails.deal_quantity) {
+                                revenueAmount = parseFloat(orderDetails.deal_money);
+                                soldQty = parseFloat(orderDetails.deal_quantity);
+                                if (soldQty > 0) sellAvgPrice = revenueAmount / soldQty;
+                            } else if (orderDetails.executed_qty && orderDetails.cummulative_quote_qty) {
+                                soldQty = parseFloat(orderDetails.executed_qty);
+                                revenueAmount = parseFloat(orderDetails.cummulative_quote_qty);
+                                if (soldQty > 0) sellAvgPrice = revenueAmount / soldQty;
+                            } else if (orderDetails.filled_notional && orderDetails.price_avg) {
+                                revenueAmount = parseFloat(orderDetails.filled_notional);
+                                sellAvgPrice = parseFloat(orderDetails.price_avg);
+                                if (sellAvgPrice > 0) soldQty = revenueAmount / sellAvgPrice;
+                            } else {
+                                console.warn(`[AUTOBOT][${botStateObj.userId}] ⚠️ ADVERTENCIA: Campos no estándar en orderDetails para VENTA LÍMITE monitoreada. Intentando fallback:`, orderDetails);
+                                revenueAmount = parseFloat(orderDetails.total_money || orderDetails.notional_value || '0');
+                                soldQty = parseFloat(orderDetails.actual_qty || orderDetails.total_qty || '0');
+                                if (soldQty > 0) sellAvgPrice = revenueAmount / soldQty;
+                            }
+
+                            if (soldQty <= 0 || revenueAmount <= 0 || sellAvgPrice <= 0) {
+                                console.error(`[AUTOBOT][${botStateObj.userId}] ❌ Error: No se pudieron extraer valores válidos de la orden de venta LÍMITE monitoreada ID ${botStateObj.orderId}.`);
+                                botStateObj.failedOrderAttempts = (botStateObj.failedOrderAttempts || 0) + 1;
+                                if (botStateObj.failedOrderAttempts >= MAX_FAILED_ATTEMPTS) {
+                                    botStateObj.state = 'ESPERA';
+                                    botStateObj.reason = `Demasiados fallos (${MAX_FAILED_ATTEMPTS}) al procesar detalles de orden de venta LÍMITE monitoreada.`;
+                                }
+                                await saveBotState(botStateObj);
+                                break;
+                            }
+
+                            botStateObj.failedOrderAttempts = 0; // Resetear si la orden se procesó con éxito
+
+                            const commissionRate = 0.001;
+                            const buyCommission = botStateObj.totalInvestedUSDT * commissionRate;
+                            const sellCommission = revenueAmount * commissionRate;
+
+                            botStateObj.cycleProfit = revenueAmount - botStateObj.totalInvestedUSDT - buyCommission - sellCommission;
+                            botStateObj.profit += botStateObj.cycleProfit;
+
+                            console.log(`[AUTOBOT][${botStateObj.userId}] Ciclo ${botStateObj.cycle} completado. Ganancia/Pérdida del ciclo: ${botStateObj.cycleProfit.toFixed(2)} USDT. Ganancia total: ${botStateObj.profit.toFixed(2)} USDT.`);
+
+                            // --- ACCIONES POST-VENTA EXITOSA ---
+                            // 1. Enviar email al usuario (placeholder)
+                            // if (userEmail) {
+                            //     await emailService.sendEmail(userEmail,
+                            //         `¡Ciclo de Autobot Completado! 🎉`,
+                            //         `Tu bot ha completado el ciclo ${botStateObj.cycle} con una ganancia de ${botStateObj.cycleProfit.toFixed(2)} USDT. Tu ganancia total acumulada es de ${botStateObj.profit.toFixed(2)} USDT.`
+                            //     );
+                            //     console.log(`[AUTOBOT][${botStateObj.userId}] Email de ganancia de ciclo enviado a ${userEmail}.`);
+                            // }
+
+                            // 2. Lógica de detención por 'stop on cycle end'
+                            if (botStateObj.stopAtCycleEnd) {
+                                console.log(`[AUTOBOT][${botStateObj.userId}] Bandera "Stop on Cycle End" activada. Deteniendo el bot al final del ciclo.`);
+                                await stopBotStrategy(botStateObj, bitmartCreds);
+                                return;
+                            }
+
+                            // 3. Reiniciar parámetros y comenzar nuevo ciclo
+                            resetCycleVariables(botStateObj);
+                            botStateObj.cycle = 1;
+                            botStateObj.state = 'RUNNING'; // Vuelve a RUNNING para esperar nueva señal de COMPRA
+                            botStateObj.reason = '';
+                            console.log(`[AUTOBOT][${botStateObj.userId}] Bot listo para el nuevo ciclo en estado RUNNING, esperando próxima señal de COMPRA.`);
+
+                        } else if (orderDetails && orderDetails.state === 'canceled') {
+                            console.warn(`[AUTOBOT][${botStateObj.userId}] ⚠️ Orden de VENTA LÍMITE ID ${botStateObj.orderId} CANCELADA (externamente o por el bot). Buscando colocar nueva orden de venta.`);
+                            botStateObj.orderId = null; // Limpiar para intentar de nuevo
+                            botStateObj.orderType = null;
+                            botStateObj.orderPlacedTime = null;
+                            botStateObj.failedOrderAttempts = 0; // Resetear, ya que la cancelación es una situación manejada.
+                            await saveBotState(botStateObj);
+                            // IMPORTANTE: Después de la cancelación, el bot volverá a evaluar la condición de venta (currentPrice <= pc)
+                            // en la próxima iteración. Si el precio sigue por debajo de pc, intentará colocar la orden de nuevo.
+                            // Si el precio ha subido por encima de pc, esperará a que se cumpla la condición.
+
+                        } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
+                            console.log(`[AUTOBOT][${botStateObj.userId}] Orden de VENTA LÍMITE ID ${botStateObj.orderId} aún ${orderDetails.state}. Esperando cumplimiento.`);
+                            botStateObj.failedOrderAttempts = 0;
+
+                            // --- NUEVA LÓGICA: REEVALUACIÓN DE ORDEN LÍMITE DE VENTA PENDIENTE ---
+                            // Si la orden no se ha llenado y el precio del mercado se ha movido significativamente
+                            // en contra (es decir, subió mucho por encima de nuestro PV), podría ser mejor cancelarla
+                            // y esperar a que las condiciones de venta se cumplan de nuevo (quizás con un PM actualizado)
+                            const timeSincePlaced = (Date.now() - botStateObj.orderPlacedTime) / 1000; // Segundos
+                            const MAX_WAIT_TIME_FOR_SELL_ORDER = 120; // Espera 2 minutos para que la orden límite se llene
+
+                            // Si el precio actual sube por encima de nuestro PV más un pequeño margen,
+                            // o si la orden lleva mucho tiempo sin llenarse, cancelar y reevaluar.
+                            const RE_EVALUATE_THRESHOLD_PERCENT = 0.1; // 0.1% por encima de PV
+                            if (botStateObj.currentPrice > (botStateObj.pv * (1 + RE_EVALUATE_THRESHOLD_PERCENT / 100)) || timeSincePlaced > MAX_WAIT_TIME_FOR_SELL_ORDER) {
+                                console.warn(`[AUTOBOT][${botStateObj.userId}] ⚠️ Orden de venta LÍMITE ID ${botStateObj.orderId} no llenada. Precio actual (${botStateObj.currentPrice.toFixed(2)}) se aleja de PV (${botStateObj.pv.toFixed(2)}) o tiempo de espera agotado. Cancelando orden para reevaluar.`);
+                                await bitmartService.cancelOrder(bitmartCreds, TRADE_SYMBOL, botStateObj.orderId);
+                                botStateObj.orderId = null; // Limpiar para que en la próxima iteración se intente colocar de nuevo si las condiciones se cumplen
+                                botStateObj.orderType = null;
+                                botStateObj.orderPlacedTime = null;
+                                botStateObj.failedOrderAttempts = 0; // Se considera un manejo exitoso del escenario
+                                botStateObj.reason = 'Orden de venta límite cancelada por precio alejado o timeout.';
+                                await saveBotState(botStateObj);
+                                // No break, permite que el loop continúe y la lógica se reevalúe.
+                            }
+
+
+                        } else {
+                            console.error(`[AUTOBOT][${botStateObj.userId}] Estado desconocido o inesperado para orden de venta LÍMITE ID ${botStateObj.orderId}:`, orderDetails);
+                            botStateObj.failedOrderAttempts = (botStateObj.failedOrderAttempts || 0) + 1;
+                            if (botStateObj.failedOrderAttempts >= MAX_FAILED_ATTEMPTS) {
+                                botStateObj.state = 'ESPERA';
+                                botStateObj.reason = `Demasiados fallos (${MAX_FAILED_ATTEMPTS}) al obtener estado de orden de venta LÍMITE ID ${botStateObj.orderId}.`;
+                            }
+                        }
+                    } catch (orderDetailError) {
+                        console.error(`[AUTOBOT][${botStateObj.userId}] Error al obtener detalles de la orden de venta LÍMITE ${botStateObj.orderId}:`, orderDetailError.message);
+                        botStateObj.failedOrderAttempts = (botStateObj.failedOrderAttempts || 0) + 1;
+                        if (botStateObj.failedOrderAttempts >= MAX_FAILED_ATTEMPTS) {
+                            botStateObj.state = 'ESPERA';
+                            botStateObj.reason = `Demasiados fallos (${MAX_FAILED_ATTEMPTS}) al comunicarse con BitMart para detalles de orden de venta LÍMITE.`;
+                        }
+                    }
                 }
+                await saveBotState(botStateObj);
                 break;
 
             case 'NO_COVERAGE':
