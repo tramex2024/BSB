@@ -1,5 +1,3 @@
-// server/services/bitmartService.js
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
@@ -44,18 +42,11 @@ function sortObjectKeys(obj) {
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     // Determine the memo string to use for the hash.
-    // If the memo is empty or null/undefined, it should result in '##' for some APIs,
-    // or be completely omitted for others (as we've seen BitMart behave inconsistently).
-    // For now, `memo` passed here should already be the one we want to use (empty string or DEFAULT_V4_POST_MEMO).
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
     
     const finalBodyOrQueryString = bodyOrQueryString || ''; 
 
     let message;
-    // IMPORTANT: For BitMart, if the memo is truly an empty string '', it appears
-    // to expect the memo part of the signature to be completely omitted.
-    // However, if the memo has a value (e.g., 'GainBot'), it expects `timestamp#memo#body`.
-    // This `generateSign` function should correctly handle the memo as it's passed.
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
@@ -127,7 +118,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     if (isPrivate) {
         if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) { 
-            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
+            throw new new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
         }
         
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
@@ -169,7 +160,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
+            throw new new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
         console.error(`\n❌ Falló la solicitud a ${path}.`);
@@ -177,13 +168,13 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
             console.error('Error Status:', error.response.status);
             console.error('Error Headers:', error.response.headers);
-            throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
+            throw new new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
         } else if (error.request) {
             console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
-            throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
+            throw new new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
         } else {
             console.error('Error Message:', error.message);
-            throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
+            throw new new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
         }
     }
 }
@@ -272,7 +263,6 @@ async function getOpenOrders(authCredentials, symbol) {
     if (symbol) { requestBody.symbol = symbol; }
     try {
         const serverTime = await getSystemTime();
-        // === Important: requestBody here for makeRequest is what gets JSON.stringified for the signature ===
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
@@ -399,6 +389,11 @@ async function cancelOrder(authCredentials, symbol, order_id) {
  * Obtiene la lista de órdenes spot históricas (completadas, canceladas, etc.). (Privado)
  * @param {object} authCredentials - Objeto con { apiKey, secretKey, apiMemo } del usuario actual.
  * @param {object} options - Objeto con opciones de filtrado (symbol, orderMode, startTime, endTime, limit).
+ * @param {string} [options.symbol] - Símbolo del par de trading, ej: "BTC_USDT". Opcional.
+ * @param {string} [options.orderMode] - Modo de orden: "spot" o "iso_margin". Opcional.
+ * @param {number} [options.startTime] - Marca de tiempo de inicio en milisegundos (Unix). Opcional.
+ * @param {number} [options.endTime] - Marca de tiempo de fin en milisegundos (Unix). Opcional.
+ * @param {number} [options.limit] - Número de órdenes a devolver, rango [1,200], default 200. Opcional.
  * @returns {Promise<object[]>} - Promesa que resuelve con un array de órdenes o un error.
  */
 async function getHistoryOrdersV4(authCredentials, options = {}) {
@@ -415,6 +410,7 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
+        // BitMart a veces devuelve el array directamente en 'data' y a veces lo anida en 'data.list'.
         if (Array.isArray(responseData)) {
             orders = responseData;
         } else if (responseData && Array.isArray(responseData.list)) {
