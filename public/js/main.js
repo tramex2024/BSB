@@ -1,4 +1,4 @@
-// public/js/main.js
+// js/main.js
 
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
@@ -15,14 +15,13 @@ const apiKeyIcon = document.getElementById('api-key-icon');
 
 const apiModal = document.getElementById('api-modal');
 const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
-const apiForm = document.getElementById('api-form');
-const apiKeyInput = document.getElementById('api-key');
-const secretKeyInput = document.getElementById('secret-key');
-const apiMemoInput = document.getElementById('api-memo');
-const apiStatusMessage = document.getElementById('api-status-message');
-const connectionIndicator = document.getElementById('connection-indicator');
-const connectionText = document.getElementById('connection-text');
-
+const apiForm = document.getElementById('api-form'); // Nuevo: form API
+const apiKeyInput = document.getElementById('api-key'); // Nuevo: input API Key
+const secretKeyInput = document.getElementById('secret-key'); // Nuevo: input Secret Key
+const apiMemoInput = document.getElementById('api-memo'); // Nuevo: input API Memo
+const apiStatusMessage = document.getElementById('api-status-message'); // Nuevo: mensaje estado API
+const connectionIndicator = document.getElementById('connection-indicator'); // Nuevo: círculo indicador API
+const connectionText = document.getElementById('connection-text'); // Nuevo: texto indicador API
 
 // Inputs de configuración del bot
 const purchaseInput = document.getElementById("purchase");
@@ -40,7 +39,7 @@ const resetBtn = document.getElementById('reset-btn');
 
 // --- Estado de la Aplicación ---
 let isLoggedIn = false;
-let isRunning = false;
+let isRunning = false; // Indica si el bot del usuario está en estado 'RUNNING'
 let ultimoCoverageValido = 0.00;
 let currentTab = 'opened';
 let currentDisplayedOrders = new Map();
@@ -97,30 +96,6 @@ function toggleAuthModal(show) {
             authButton.textContent = 'Continue';
         } else {
             authModal.style.display = 'none';
-        }
-    }
-}
-
-/**
- * NUEVA FUNCIÓN: Muestra u oculta el modal de configuración de API.
- * @param {boolean} show - `true` para mostrar el modal, `false` para ocultarlo.
- */
-function toggleApiModal(show) {
-    if (apiModal) {
-        if (show) {
-            apiModal.style.display = 'flex'; // Usar 'flex' para centrado CSS
-            apiStatusMessage.textContent = '';
-            // Reset connection indicator to gray/not connected when opening
-            connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-yellow-500');
-            connectionIndicator.classList.add('bg-gray-500');
-            connectionText.textContent = 'Not Connected';
-            // Secret key input should always be cleared for security reasons
-            secretKeyInput.value = '';
-            // You might want to pre-fill apiMemo if it was saved as "" or an actual value,
-            // but for simplicity, clearing is fine for now or fetching it.
-            // For now, it keeps the value that the user might have typed before closing.
-        } else {
-            apiModal.style.display = 'none';
         }
     }
 }
@@ -387,8 +362,7 @@ async function cargarPrecioEnVivo() {
             document.getElementById('price').textContent = price + ' USDT';
             actualizarCalculos();
         }
-    }
-    catch (error) {
+    } catch (error) {
         console.error('Error al cargar precio en vivo:', error);
         if (document.getElementById('price')) {
             document.getElementById('price').textContent = 'Error';
@@ -488,7 +462,7 @@ async function loadBotConfigAndState() {
 
     console.log('[FRONTEND] Cargando configuración y estado del bot...');
     try {
-        const botData = await fetchFromBackend('/api/user/bot-config-and-state'); // CORRECTED ROUTE
+        const botData = await fetchFromBackend('/api/user/bot-state');
         if (botData) {
             console.log('[FRONTEND] Datos del bot cargados:', botData);
 
@@ -778,7 +752,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleAuthModal(true);
                 return;
             }
-            toggleApiModal(true); // Se usa la nueva función para mostrar el modal de API
+            if (apiModal) {
+                apiModal.style.display = 'flex'; // Usar 'flex' para centrado CSS
+                apiStatusMessage.textContent = '';
+                connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-yellow-500');
+                connectionIndicator.classList.add('bg-gray-500'); // Default gray for not connected
+                connectionText.textContent = 'Not Connected';
+
+                // Opcional: Cargar las API keys existentes si ya están guardadas para el usuario
+                // Esto requeriría una ruta en el backend como /api/user/bitmart/api-keys
+                // fetchFromBackend('/api/user/bitmart/api-keys')
+                //    .then(data => {
+                //        if (data && data.apiKey) {
+                //            apiKeyInput.value = data.apiKey;
+                //            secretKeyInput.value = '********'; // No mostrar la secret key
+                //            apiMemoInput.value = data.apiMemo || '';
+                //            connectionIndicator.classList.replace('bg-gray-500', 'bg-green-500');
+                //            connectionText.textContent = 'Last Connected';
+                //        }
+                //    })
+                //    .catch(error => console.error("Error loading existing API keys:", error));
+            }
         });
     }
 
@@ -800,7 +794,7 @@ document.addEventListener('DOMContentLoaded', () => {
             apiStatusMessage.textContent = 'Validating API keys...';
             apiStatusMessage.style.color = 'yellow';
             connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
-            connectionIndicator.classList.add('bg-yellow-500');
+            connectionIndicator.classList.add('bg-yellow-500'); // Indicador de "cargando"
             connectionText.textContent = 'Connecting...';
 
             try {
@@ -813,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Tu backend responde con { message: "...", connected: true }.
                 // No hay una propiedad 'success'. Revisamos 'connected' o 'message'.
-                if (response && response.connected) {
+                if (response && response.connected) { // Cambiado de response.success a response.connected
                     apiStatusMessage.textContent = response.message || 'API keys validated and saved!';
                     apiStatusMessage.style.color = 'green';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
@@ -822,13 +816,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Disparar una actualización de balances y órdenes después de guardar las API keys
                     getBalances();
                     fetchOrders(currentTab);
-                    // Opcional: Cerrar el modal después de un éxito (descomentar si se desea)
-                    // setTimeout(() => { toggleApiModal(false); }, 2000);
+                    // Opcional: Cerrar el modal después de un éxito
+                    // setTimeout(() => { apiModal.style.display = 'none'; }, 2000);
                 } else {
                     // Si el backend envió un error (HTTP 4xx/5xx), fetchFromBackend ya lo lanzó.
                     // Si llegó aquí y `response.connected` es `false` (o no existe pero response no es null),
                     // significa que el backend respondió con un mensaje de error explícito pero HTTP 200.
-                    const errorMessage = response.message || 'Failed to validate or save API keys.';
+                    const errorMessage = response.message || 'Failed to validate or save API keys.'; // Usamos response.message
                     apiStatusMessage.textContent = errorMessage;
                     apiStatusMessage.style.color = 'red';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
@@ -845,13 +839,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 connectionIndicator.classList.add('bg-red-500');
                 connectionText.textContent = 'Disconnected';
             }
-        });
-    }
-
-    // NUEVO: Manejador del click para el botón de cerrar del modal de API
-    if (closeApiModalButton) {
-        closeApiModalButton.addEventListener('click', () => {
-            toggleApiModal(false); // Llama a la función para ocultar el modal
         });
     }
 });
