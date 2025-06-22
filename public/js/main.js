@@ -186,7 +186,7 @@ async function fetchFromBackend(url, options = {}) {
         if (document.getElementById('order-list')) {
             document.getElementById('order-list').innerHTML = `<p class="text-red-400">Error: ${errorMessage}</p>`;
         }
-        return null;
+        return null; // Ensure null is returned on error
     }
 }
 
@@ -201,30 +201,26 @@ function createOrderElement(order) {
 }
 
 function updateOrderElement(orderDiv, order) {
-    // Determine the state string and color based on BitMart's 'status' field
-    // For open orders, you might not have a 'status' field, so we default to 'Open'.
-    const orderStatus = order.status ? order.status.toLowerCase() : 'open';
-    let stateText = orderStatus;
-    let stateColorClass = 'text-yellow-400'; // Default for open/pending
+    // Determine the state string and color based on BitMart's 'state' field (corrected from 'status')
+    const orderStatus = order.state ? String(order.state).toLowerCase() : (currentTab === 'opened' ? 'open' : 'unknown');
+    let stateText = orderStatus.toUpperCase(); // Default to uppercase of actual state
+    let stateColorClass = 'text-gray-400'; // Default neutral color
 
-    if (orderStatus === 'fullyfilled') {
+    if (orderStatus === 'filled') { // Exact match from API response
         stateText = 'FILLED';
         stateColorClass = 'text-green-400';
-    } else if (orderStatus === 'canceled') {
-        stateText = 'CANCELLED';
+    } else if (orderStatus === 'partially_canceled') { // Exact match from API response
+        stateText = 'PARTIALLY CANCELED';
         stateColorClass = 'text-red-400';
-    } else if (orderStatus === 'new' || orderStatus === 'partiallyfilled' || orderStatus === 'pendingcancel') {
-        stateText = orderStatus.toUpperCase(); // Display actual status from BitMart
+    } else if (orderStatus === 'canceled') { // Possible state for fully canceled (verify with API if needed)
+        stateText = 'CANCELED';
+        stateColorClass = 'text-red-400';
+    } else if (orderStatus === 'new' || orderStatus === 'partiallyfilled' || orderStatus === 'pendingcancel' || orderStatus === 'open') {
+        stateText = orderStatus.toUpperCase(); // Display actual status from BitMart (e.g., 'NEW', 'PARTIALLYFILLED')
         stateColorClass = 'text-yellow-400';
     } else if (orderStatus === 'rejected') {
         stateText = 'REJECTED';
         stateColorClass = 'text-red-600';
-    }
-    // If it's an open order without a specific BitMart status (i.e., from getOpenOrders),
-    // it's implicitly 'OPEN'.
-    if (!order.status && currentTab === 'opened') {
-        stateText = 'OPEN';
-        stateColorClass = 'text-yellow-400';
     }
 
 
@@ -251,8 +247,16 @@ function displayOrders(newOrders, tab) {
     const orderListDiv = document.getElementById('order-list');
     if (!orderListDiv) return;
 
+    // Check if newOrders is actually an array before mapping
+    if (!Array.isArray(newOrders)) {
+        console.error("displayOrders received non-array data:", newOrders);
+        orderListDiv.innerHTML = `<p class="text-red-400">Error: Failed to display orders. Data format incorrect.</p>`;
+        currentDisplayedOrders.clear();
+        return;
+    }
+
     // Clear existing orders only if the tab changed or no new orders are provided
-    if (!newOrders || newOrders.length === 0) {
+    if (newOrders.length === 0) {
         if (currentDisplayedOrders.size === 0 || currentTab !== tab) {
             orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
         }
@@ -331,12 +335,14 @@ async function fetchOpenOrdersData() {
     }
     try {
         const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-        // --- ADD THIS NULL CHECK ---
-        if (!response) {
-            console.warn("fetchOpenOrdersData: Backend response was null or undefined.");
-            return []; // Ensure an empty array is returned
+        // Ensure response is valid before accessing .orders
+        if (!response || !response.orders) {
+            console.warn("fetchOpenOrdersData: Backend response was null/undefined or missing 'orders'.");
+            return [];
         }
-        // ---------------------------
+        // BitMart V4 open orders do not have a 'status' field in the same way historical orders do.
+        // We'll implicitly consider them 'open' or 'new'.
+        // The backend returns { success: true, orders: [...] }
         const openOrders = response.orders || [];
         return openOrders;
     } catch (error) {
@@ -359,16 +365,15 @@ async function fetchHistoryOrdersData(tab) {
             orderMode: 'spot',
             startTime: defaultStartTime,
             endTime: defaultEndTime,
-            limit: 200
+            limit: 200 // BitMart V4 historical orders default limit is 200
         }).toString();
 
         const response = await fetchFromBackend(`/api/user/history-orders?${queryParams}`);
-        // --- ADD THIS NULL CHECK ---
-        if (!response) {
-            console.warn("fetchHistoryOrdersData: Backend response was null or undefined.");
-            return []; // Ensure an empty array is returned
+        // Ensure response is valid before accessing .orders
+        if (!response || !response.orders) {
+            console.warn("fetchHistoryOrdersData: Backend response was null/undefined or missing 'orders'.");
+            return [];
         }
-        // ---------------------------
         return response.orders || [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
@@ -404,11 +409,12 @@ async function fetchOrders(tab) {
             const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
 
             if (tab === 'filled') {
-                // BitMart V4 'status' for filled orders: 'FullyFilled' or 'PartiallyFilled'
-                orders = historyOrders.filter(order => order.status === 'FullyFilled' || order.status === 'PartiallyFilled');
+                // CORRECTED: Use 'order.state' and the exact 'filled' string from your API response
+                orders = historyOrders.filter(order => order.state === 'filled');
             } else if (tab === 'cancelled') {
-                // BitMart V4 'status' for cancelled orders: 'Canceled' or 'PendingCancel'
-                orders = historyOrders.filter(order => order.status === 'Canceled' || order.status === 'PendingCancel');
+                // CORRECTED: Use 'order.state' and the exact 'partially_canceled' string.
+                // Added 'canceled' as a possibility for fully canceled orders.
+                orders = historyOrders.filter(order => order.state === 'partially_canceled' || order.state === 'canceled');
             } else if (tab === 'all') {
                 orders = historyOrders;
             }
