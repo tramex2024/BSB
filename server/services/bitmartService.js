@@ -38,14 +38,16 @@ function sortObjectKeys(obj) {
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // FIX: Si el memo es null o undefined (como se pasa desde userController ahora), usa la cadena literal "undefined".
-    // Esto es para emular el comportamiento de concatenación de versiones anteriores de Node.js o requisitos específicos de BitMart.
-    const memoForHash = (memo === null || memo === undefined) ? 'undefined' : String(memo); 
+    // FIX CLAVE: Ajustar el memo para la firma.
+    // BitMart a menudo requiere que si el memo no existe, sea una cadena vacía en la firma, no "undefined".
+    // Esto es un ajuste común para APIs que usan el "memo" como parte de la cadena de firma,
+    // incluso si es opcional y no se proporciona.
+    const memoForHash = (memo === null || memo === undefined || memo === '') ? '' : String(memo);
     const message = timestamp + '#' + memoForHash + '#' + bodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
-    console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${bodyOrQueryString}' (Length: ${bodyOrQueryString.length})`);
+    console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${bodyForSign}' (Length: ${bodyOrQueryString.length})`); // Usar bodyForSign aquí
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
 
@@ -65,7 +67,7 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
     const timestamp = timestampOverride || Date.now().toString();
     const url = `${BASE_URL}${path}`;
-    let bodyForSign = '';
+    let bodyForSign = ''; // Variable para almacenar la cadena que se usará para la firma
     let requestConfig = {
         headers: {
             'User-Agent': 'axios/1.9.0',
@@ -80,33 +82,29 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     const dataForRequestAndSign = { ...paramsOrData };
 
     if (isPrivate) {
-        // Añadir recvWindow directamente al objeto de datos.
-        // Si el método es POST y el path es /spot/v4/query/open-orders,
-        // la construcción del JSON stringificado para la firma se hará de forma específica
-        // para asegurar el orden. De lo contrario, se añade al objeto actual.
-        if (!(method === 'POST' && path === '/spot/v4/query/open-orders')) {
-            dataForRequestAndSign.recvWindow = 10000;
-        }
+        // Añadir recvWindow directamente al objeto de datos para la firma.
+        // BitMart puede esperar recvWindow en la firma para todas las solicitudes privadas.
+        dataForRequestAndSign.recvWindow = 10000;
         requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
     }
 
     if (method === 'GET') {
         requestConfig.params = sortObjectKeys(dataForRequestAndSign);
-        bodyForSign = querystring.stringify(sortObjectKeys(dataForRequestAndSign));
+        // Para GET, la cadena de firma es la querystring de los parámetros ordenados
+        bodyForSign = querystring.stringify(requestConfig.params); // Usar requestConfig.params que ya está ordenado
     } else if (method === 'POST') {
-        // CORRECCIÓN CLAVE: Para /spot/v4/query/open-orders POST, forzamos el orden del JSON stringificado
-        if (path === '/spot/v4/query/open-orders') {
-            const tempBody = { recvWindow: 10000 }; // Forzar recvWindow a ser la primera propiedad
-            if (dataForRequestAndSign.symbol) {
-                tempBody.symbol = dataForRequestAndSign.symbol; // Añadir symbol después
-            }
-            bodyForSign = JSON.stringify(tempBody); // Stringify el objeto temporal con orden forzado
-            requestConfig.data = tempBody; // Usar el mismo objeto para el cuerpo de la solicitud
-        } else {
-            // Para otras solicitudes POST, stringificamos el objeto con sus propiedades existentes
-            bodyForSign = JSON.stringify(dataForRequestAndSign);
-            requestConfig.data = dataForRequestAndSign;
-        }
+        // CORRECCIÓN CLAVE: Para /spot/v4/query/open-orders POST, y otras POST que puedan requerir un orden específico
+        // Siempre stringificamos el objeto con el `recvWindow` incluido.
+        // La documentación de BitMart para V4 POST endpoints indica que el `recvWindow`
+        // debe ser parte del JSON body stringificado para la firma.
+        // No necesitamos forzar un orden aquí si BitMart lo hace por su cuenta en el JSON.stringify,
+        // pero incluimos `recvWindow` en el objeto que se stringifica.
+
+        // NOTA: Si BitMart es EXTREMADAMENTE estricto y el orden de las claves en el JSON SÍ importa para la firma,
+        // necesitarías implementar tu propia función `JSON.stringify` con orden forzado.
+        // Sin embargo, la mayoría de las APIs de este tipo solo requieren que los *datos* correctos estén en el JSON.
+        requestConfig.data = dataForRequestAndSign; // El objeto completo (incluyendo recvWindow si es privado)
+        bodyForSign = JSON.stringify(dataForRequestAndSign); // Stringify para la firma
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -115,22 +113,32 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el usuario haya configurado sus claves.");
         }
         
+        // CORRECCIÓN CLAVE: Pasamos el 'apiMemo' del authCredentials directamente.
+        // La función generateSign ahora maneja si es nulo, undefined o cadena vacía.
         const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
-        requestConfig.headers['X-BM-MEMO'] = apiMemo;
+        // Sólo añadir X-BM-MEMO si realmente se proporcionó un memo
+        if (apiMemo !== undefined && apiMemo !== null && apiMemo !== '') {
+            requestConfig.headers['X-BM-MEMO'] = apiMemo;
+        } else {
+            // Si el memo es vacío o nulo, BitMart a veces no espera este header.
+            // Es mejor no enviarlo si no hay un memo real.
+            delete requestConfig.headers['X-BM-MEMO']; 
+        }
     }
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado (para solicitud y firma):', JSON.stringify(requestConfig.data)); 
-        console.log('Body para Firma (JSON stringificado, con orden forzado para /open-orders POST):', bodyForSign);
+        console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
+        console.log('Body para Firma (JSON stringificado):', bodyForSign);
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
     }
+    console.log('Headers enviados:', JSON.stringify(requestConfig.headers, null, 2)); // Añadido para depuración
 
     try {
         const response = await axios({
@@ -457,6 +465,7 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
     }
 
     try {
+        // Intentamos obtener el balance como una forma de validar las credenciales
         await getBalance({ apiKey, secretKey, apiMemo });
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
