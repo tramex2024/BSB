@@ -38,18 +38,24 @@ function sortObjectKeys(obj) {
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // === RE-CORRECCIÓN CLAVE AQUÍ ===
-    // Aseguramos que el memo sea una cadena vacía si es null/undefined/vacío.
-    // BitMart API V4 (especialmente POST) parece requerir los separadores de memo
-    // incluso si el memo es una cadena vacía.
-    const memoForHash = (memo === null || memo === undefined) ? '' : String(memo); // Convertir null/undefined a ''
-
+    // === ¡¡¡CORRECCIÓN FINAL DEL MEMO AQUÍ!!! ===
+    // BitMart es inconsistente: para memos vacíos, a veces no quiere el '##'.
+    // Si el memo es vacío, omitimos el segmento del memo por completo de la cadena de firma.
+    // Si el memo NO es vacío, lo incluimos.
+    const memoForHash = (memo === null || memo === undefined || memo === '') ? '' : String(memo);
+    
     // Si no hay body/query string, la cadena para la firma debería ser simplemente ''.
     const finalBodyOrQueryString = bodyOrQueryString || ''; 
 
-    // El formato es SIEMPRE timestamp#memo#bodyOrQueryString,
-    // incluso si el memo es una cadena vacía (lo que resulta en ##).
-    const message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
+    let message;
+    if (memoForHash === '') {
+        // Si el memo es vacío, el formato esperado es timestamp#bodyOrQueryString (un solo #)
+        message = timestamp + '#' + finalBodyOrQueryString;
+    } else {
+        // Si hay memo, el formato es timestamp#memo#bodyOrQueryString
+        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
+    }
+    // === FIN CORRECCIÓN FINAL DEL MEMO ===
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
@@ -88,12 +94,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     const dataForRequest = { ...paramsOrData }; // Usamos esta para el request.data
 
     if (isPrivate) {
-        // X-BM-RECVWINDOW es un header, no un parámetro del body en general
-        // PERO para algunos V4 POST, BitMart requiere recvWindow en el body para la firma
-        // Para /account/v1/wallet (GET), recvWindow va como query param y en la firma
-        // Para /spot/v4/query/open-orders (POST), recvWindow puede no ser requerido en el body
-        // Vamos a manejar recvWindow de forma explícita para GET y POST V4.
-
         requestConfig.headers['X-BM-RECVWINDOW'] = 10000; // Siempre enviar el header para privados
     }
 
@@ -105,23 +105,13 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
-        // Para POST, el cuerpo JSON se usa para la firma.
-        // === RE-CORRECCIÓN CLAVE AQUÍ: recvWindow en POST V4 ===
-        // Para los endpoints V4 POST, la documentación indica que recvWindow es un parámetro del body.
-        // Pero tu ejemplo anterior que funciona no lo incluye en el body para /open-orders.
-        // Vamos a mantenerlo en el body si se requiere explícitamente en `paramsOrData`
-        // o si es un endpoint donde la doc lo especifica CLARAMENTE en el body.
-        // Por ahora, lo retiramos del body por defecto para POST si no está en paramsOrData.
-        
-        // Si el endpoint es de la API V4 POST y la doc dice que recvWindow va en el body, lo añadimos
-        // Actualmente, para /spot/v4/query/open-orders y /spot/v4/query/history-orders,
-        // parece que el `recvWindow` NO debería estar en el `requestBody` para la firma,
-        // O si lo está, entonces la API lo ignora en la firma, lo cual es inconsistente.
-        // Tu código antiguo no lo incluía en el body, ¡y funcionaba!
-        // Entonces, asumamos que para V4 POST, recvWindow NO va en el body para la firma.
-        
         requestConfig.data = dataForRequest; // El cuerpo de la solicitud para Axios
-        bodyForSign = JSON.stringify(dataForRequest); // Stringify el objeto REAL del cuerpo para la firma
+        // === RE-CORRECCIÓN FINAL: Body para la firma en POST V4 ===
+        // Para POST V4, tu versión anterior que funcionaba para /open-orders
+        // usaba un body vacío "{}" para la firma. No incluía recvWindow aquí.
+        // Nos aseguramos de que bodyForSign sea el JSON string del dataForRequest.
+        // Si dataForRequest está vacío, bodyForSign será "{}".
+        bodyForSign = JSON.stringify(dataForRequest);
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -137,12 +127,10 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-SIGN'] = sign;
         
         // Solo enviar el header X-BM-MEMO si el memo es una cadena no vacía.
-        // Esto es crucial porque enviar X-BM-MEMO con un valor vacío puede causar fallos de firma en algunos endpoints.
         if (apiMemo !== undefined && apiMemo !== null && apiMemo !== '') {
             requestConfig.headers['X-BM-MEMO'] = apiMemo;
         } else {
             // Si el memo es vacío o nulo/undefined, aseguramos que el header X-BM-MEMO no se envíe.
-            // Para algunas APIs de BitMart, esto es necesario para una firma correcta.
             delete requestConfig.headers['X-BM-MEMO']; 
         }
     }
@@ -271,6 +259,7 @@ async function getOpenOrders(authCredentials, symbol) {
     if (symbol) { requestBody.symbol = symbol; }
     try {
         const serverTime = await getSystemTime();
+        // === Importante: Aquí requestBody para makeRequest es el que se convierte a JSON para la firma ===
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
