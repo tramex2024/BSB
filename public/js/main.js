@@ -391,31 +391,36 @@ async function fetchOrders(tab) {
         currentDisplayedOrders.clear();
     }
 
-    let orders = [];
+    let orders = []; // Always initialize as an array
 
     try {
         if (tab === 'opened') {
-            orders = await fetchOpenOrdersData();
+            const fetchedOrders = await fetchOpenOrdersData();
+            // Ensure fetchedOrders is an array before assigning
+            orders = Array.isArray(fetchedOrders) ? fetchedOrders : [];
         } else {
-            const historyOrders = await fetchHistoryOrdersData(tab);
-            if (historyOrders) {
-                if (tab === 'filled') {
-                    // BitMart V4 'status' for filled orders: 'fullyFilled' or 'PartiallyFilled'
-                    orders = historyOrders.filter(order => order.status === 'FullyFilled' || order.status === 'PartiallyFilled');
-                } else if (tab === 'cancelled') {
-                    // BitMart V4 'status' for cancelled orders: 'Canceled' or 'PendingCancel'
-                    orders = historyOrders.filter(order => order.status === 'Canceled' || order.status === 'PendingCancel');
-                } else if (tab === 'all') {
-                    orders = historyOrders;
-                }
+            const historyOrdersRaw = await fetchHistoryOrdersData(tab);
+            // Ensure historyOrdersRaw is an array before processing
+            const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
+
+            if (tab === 'filled') {
+                // BitMart V4 'status' for filled orders: 'FullyFilled' or 'PartiallyFilled'
+                orders = historyOrders.filter(order => order.status === 'FullyFilled' || order.status === 'PartiallyFilled');
+            } else if (tab === 'cancelled') {
+                // BitMart V4 'status' for cancelled orders: 'Canceled' or 'PendingCancel'
+                orders = historyOrders.filter(order => order.status === 'Canceled' || order.status === 'PendingCancel');
+            } else if (tab === 'all') {
+                orders = historyOrders;
             }
         }
     } catch (error) {
         console.error(`Failed to fetch orders for tab ${tab}:`, error);
         orderListDiv.innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
-        return;
+        // Crucial: Set orders to an empty array on error to prevent subsequent map error
+        orders = [];
     }
 
+    // Now, 'orders' is guaranteed to be an array (even if empty)
     displayOrders(orders, tab);
 }
 
