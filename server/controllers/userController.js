@@ -1,4 +1,4 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
 const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
 const jwt = require('jsonwebtoken'); // Para verificar el token JWT
