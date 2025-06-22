@@ -331,11 +331,12 @@ async function fetchOpenOrdersData() {
     }
     try {
         const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-        // ADD THIS NULL CHECK:
+        // --- ADD THIS NULL CHECK ---
         if (!response) {
             console.warn("fetchOpenOrdersData: Backend response was null or undefined.");
-            return [];
+            return []; // Ensure an empty array is returned
         }
+        // ---------------------------
         const openOrders = response.orders || [];
         return openOrders;
     } catch (error) {
@@ -344,7 +345,7 @@ async function fetchOpenOrdersData() {
     }
 }
 
-async function fetchHistoryOrdersData(tab) { // 'tab' parameter is not used here but kept for consistency
+async function fetchHistoryOrdersData(tab) {
     if (!isLoggedIn) {
         return [];
     }
@@ -358,21 +359,23 @@ async function fetchHistoryOrdersData(tab) { // 'tab' parameter is not used here
             orderMode: 'spot',
             startTime: defaultStartTime,
             endTime: defaultEndTime,
-            limit: 200 // BitMart V4 historical orders default limit is 200
+            limit: 200
         }).toString();
 
         const response = await fetchFromBackend(`/api/user/history-orders?${queryParams}`);
-        // ADD THIS NULL CHECK:
+        // --- ADD THIS NULL CHECK ---
         if (!response) {
             console.warn("fetchHistoryOrdersData: Backend response was null or undefined.");
-            return [];
+            return []; // Ensure an empty array is returned
         }
+        // ---------------------------
         return response.orders || [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
         return [];
     }
 }
+
 async function fetchOrders(tab) {
     const orderListDiv = document.getElementById('order-list');
     if (!orderListDiv) return;
