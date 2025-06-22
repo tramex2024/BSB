@@ -38,23 +38,17 @@ function sortObjectKeys(obj) {
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // Aseguramos que el memo sea una cadena vacía si es null/undefined/vacío.
+    // === CORRECCIÓN CLAVE AQUÍ ===
+    // Aseguramos que el memo sea una cadena vacía si es null/undefined/vacío,
+    // y lo usamos directamente en la cadena de firma.
+    // BitMart API v4 para POST generalmente espera '' si no hay memo.
     const memoForHash = (memo === null || memo === undefined || memo === '') ? '' : String(memo);
     
     // Si no hay body/query string (ej. para un POST sin parámetros o un GET sin parámetros),
     // la cadena del body/query string para la firma debería ser simplemente ''.
     const finalBodyOrQueryString = bodyOrQueryString || ''; 
 
-    let message;
-    // --- CORRECCIÓN CLAVE AQUÍ: Lógica condicional para el memo en la firma ---
-    if (memoForHash === '') {
-        // Si no hay memo, el formato esperado es timestamp#bodyOrQueryString
-        message = timestamp + '#' + finalBodyOrQueryString;
-    } else {
-        // Si hay memo, el formato es timestamp#memo#bodyOrQueryString
-        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
-    }
-    // --- FIN CORRECCIÓN CLAVE ---
+    const message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
@@ -122,6 +116,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
         
+        // === CORRECCIÓN CLAVE AQUÍ ===
         // Solo enviar el header X-BM-MEMO si el memo es una cadena no vacía.
         // Esto es crucial porque enviar X-BM-MEMO con un valor vacío puede causar fallos de firma en algunos endpoints.
         if (apiMemo !== undefined && apiMemo !== null && apiMemo !== '') {
