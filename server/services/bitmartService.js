@@ -6,6 +6,10 @@ const querystring = require('querystring');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
+// Define a default memo for V4 POST requests if the user's memo is blank.
+// This is a workaround for BitMart's inconsistent API signature requirements.
+const DEFAULT_V4_POST_MEMO = 'GainBot'; // Or any other string you want to use.
+
 /**
  * Función auxiliar para ordenar recursivamente las claves de un objeto.
  * Se usa para GET requests, donde el orden de los query parameters es alfabético.
@@ -33,30 +37,31 @@ function sortObjectKeys(obj) {
  * Genera la firma para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp actual en milisegundos.
  * @param {string | null | undefined} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía, nula o undefined.
+ * IMPORTANT: This is the memo that will actually be used in the signature.
  * @param {string} bodyOrQueryString - El cuerpo stringificado JSON (para POST) o la query string (para GET).
  * @param {string} apiSecret - La clave secreta de la API a usar para la firma.
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // === ¡¡¡CORRECCIÓN FINAL DEL MEMO AQUÍ!!! ===
-    // BitMart es inconsistente: para memos vacíos, a veces no quiere el '##'.
-    // Si el memo es vacío, omitimos el segmento del memo por completo de la cadena de firma.
-    // Si el memo NO es vacío, lo incluimos.
-    const memoForHash = (memo === null || memo === undefined || memo === '') ? '' : String(memo);
+    // Determine the memo string to use for the hash.
+    // If the memo is empty or null/undefined, it should result in '##' for some APIs,
+    // or be completely omitted for others (as we've seen BitMart behave inconsistently).
+    // For now, `memo` passed here should already be the one we want to use (empty string or DEFAULT_V4_POST_MEMO).
+    const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
     
-    // Si no hay body/query string, la cadena para la firma debería ser simplemente ''.
     const finalBodyOrQueryString = bodyOrQueryString || ''; 
 
     let message;
+    // IMPORTANT: For BitMart, if the memo is truly an empty string '', it appears
+    // to expect the memo part of the signature to be completely omitted.
+    // However, if the memo has a value (e.g., 'GainBot'), it expects `timestamp#memo#body`.
+    // This `generateSign` function should correctly handle the memo as it's passed.
     if (memoForHash === '') {
-        // Si el memo es vacío, el formato esperado es timestamp#bodyOrQueryString (un solo #)
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
-        // Si hay memo, el formato es timestamp#memo#bodyOrQueryString
         message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
     }
-    // === FIN CORRECCIÓN FINAL DEL MEMO ===
-
+    
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
@@ -89,6 +94,15 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     };
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
+    
+    // Determine the API memo to use for the request and signature.
+    // For V4 POST requests, if the user's memo is blank, we use a default.
+    let apiMemoForRequestAndSign = apiMemo;
+    if (method === 'POST' && path.includes('/v4/') && (apiMemo === '' || apiMemo === null || apiMemo === undefined)) {
+        apiMemoForRequestAndSign = DEFAULT_V4_POST_MEMO;
+        console.warn(`[API_MEMO_WORKAROUND] Using default memo '${DEFAULT_V4_POST_MEMO}' for V4 POST request '${path}' as user's memo is blank.`);
+    }
+
 
     // Clonar los parámetros/datos para modificarlos si es una solicitud privada
     const dataForRequest = { ...paramsOrData }; // Usamos esta para el request.data
@@ -106,31 +120,30 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
         requestConfig.data = dataForRequest; // El cuerpo de la solicitud para Axios
-        // === RE-CORRECCIÓN FINAL: Body para la firma en POST V4 ===
-        // Para POST V4, tu versión anterior que funcionaba para /open-orders
-        // usaba un body vacío "{}" para la firma. No incluía recvWindow aquí.
-        // Nos aseguramos de que bodyForSign sea el JSON string del dataForRequest.
-        // Si dataForRequest está vacío, bodyForSign será "{}".
+        // For POST, the JSON stringified body is used for the signature.
         bodyForSign = JSON.stringify(dataForRequest);
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
     if (isPrivate) {
         if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) { 
-            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el usuario haya configurado sus claves.");
+            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
         }
         
-        const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
+        const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
         
-        // Solo enviar el header X-BM-MEMO si el memo es una cadena no vacía.
-        if (apiMemo !== undefined && apiMemo !== null && apiMemo !== '') {
-            requestConfig.headers['X-BM-MEMO'] = apiMemo;
+        // Only send the X-BM-MEMO header if the memo is not empty.
+        // This is crucial because sending X-BM-MEMO with an empty value might cause signature failures on some endpoints.
+        // We use `apiMemoForRequestAndSign` here, which might be `DEFAULT_V4_POST_MEMO`.
+        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
+            requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
-            // Si el memo es vacío o nulo/undefined, aseguramos que el header X-BM-MEMO no se envíe.
+            // If the memo is empty or null/undefined (e.g., for GET requests where it's truly optional),
+            // ensure the X-BM-MEMO header is not sent.
             delete requestConfig.headers['X-BM-MEMO']; 
         }
     }
@@ -143,7 +156,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
     }
-    console.log('Headers enviados:', JSON.stringify(requestConfig.headers, null, 2)); // Añadido para depuración
+    console.log('Headers enviados:', JSON.stringify(requestConfig.headers, null, 2)); // Added for debugging
 
     try {
         const response = await axios({
@@ -259,7 +272,7 @@ async function getOpenOrders(authCredentials, symbol) {
     if (symbol) { requestBody.symbol = symbol; }
     try {
         const serverTime = await getSystemTime();
-        // === Importante: Aquí requestBody para makeRequest es el que se convierte a JSON para la firma ===
+        // === Important: requestBody here for makeRequest is what gets JSON.stringified for the signature ===
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
