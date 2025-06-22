@@ -70,7 +70,7 @@ function calculateIndicators(candles) {
 
     // Validar que tenemos suficientes datos para cada indicador
     const requiredWarmUp = RSI_PERIOD; // Para RSI
-    // Necesitas al menos (periodo + 1) velas para calcular el RSI y tener un 'prevCandle'
+    // Necesitas al menos (periodo + 1) velas para calcular el RSI y tener un 'prevCandle' para análisis de cruces.
     if (closePrices.length < requiredWarmUp + 1) { 
         console.warn(`[ANALYZER] calculateIndicators: Se necesitan al menos ${requiredWarmUp + 1} velas para calcular RSI y realizar el análisis de cruces. Solo se tienen ${closePrices.length}.`);
         return [];
@@ -103,7 +103,6 @@ function calculateIndicators(candles) {
 function determineEntryPoint(candlesWithIndicators, symbol = SYMBOL) {
     // Necesitamos al menos dos velas completas con indicadores para un análisis de cruces o tendencias recientes.
     if (!candlesWithIndicators || candlesWithIndicators.length < 2) {
-        // CAMBIO: Ahora devuelve ESPERA en lugar de un error si no hay suficientes datos
         const result = { action: "ESPERA", symbol: symbol, reason: "No hay suficientes datos de velas para determinar punto de entrada (necesita al menos 2 velas completas con indicadores después del warmup)." };
         console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
@@ -113,8 +112,7 @@ function determineEntryPoint(candlesWithIndicators, symbol = SYMBOL) {
     const prevCandle = candlesWithIndicators[candlesWithIndicators.length - 2];
 
     if (lastCandle.rsi === undefined || prevCandle.rsi === undefined || isNaN(lastCandle.rsi) || isNaN(prevCandle.rsi)) {
-        // CAMBIO: Ahora devuelve ESPERA si el RSI es inválido
-        const result = { action: "ESPERA", symbol: symbol, reason: `RSI no calculado o inválido para las últimas velas. Last RSI: ${lastCandle.rsi}, Prev RSI: ${prevCandle.rsi}. Se pasará a ESPERA hasta tener datos válidos.` };
+        const result = { action: "ESPERA", symbol: symbol, reason: `ERROR INTERNO: RSI no calculado o inválido para las últimas velas. Last RSI: ${lastCandle.rsi}, Prev RSI: ${prevCandle.rsi}.` };
         console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
@@ -169,6 +167,11 @@ function determineEntryPoint(candlesWithIndicators, symbol = SYMBOL) {
     }
 
     if (sellSignalDetected) {
+        // Tu autobotLogic ya maneja la lógica de venta por "triggerPercentage" de forma global.
+        // Aquí puedes decidir si quieres que esta señal de VENTA del analizador
+        // tenga prioridad, o si simplemente la registras y el bot sigue con su lógica de trigger.
+        // Por ahora, para no interferir con la lógica de venta del autobot,
+        // devolvemos la señal de VENTA aquí, que `autobotLogic` podría usar o ignorar.
         const result = { action: "VENTA", symbol: symbol, reason: sellReason.join('. ') };
         console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
@@ -201,18 +204,15 @@ async function runAnalysis() {
     console.log(`\n[ANALYZER] --- Iniciando análisis para ${SYMBOL} ---`);
 
     // Paso 1: Obtener las velas de BitMart
-    const rawCandlesFromAPI = await getCandles(SYMBOL, '5', 500);
+    // Pedimos 500 velas para asegurarnos de tener suficientes datos para el cálculo del RSI.
+    // Intervalo '5' significa velas de 5 minutos.
+    const rawCandlesFromAPI = await getCandles(SYMBOL, '5', 500); // Usando intervalo de '5' minutos
 
     console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
 
     if (rawCandlesFromAPI.length === 0) {
-        // CAMBIO: Ahora devuelve ESPERA en lugar de ERROR si no se obtienen velas
-        console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Devolviendo ESPERA.");
-        const signal = { action: "ESPERA", symbol: SYMBOL, reason: "No se obtuvieron datos de velas para el análisis." };
-        console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
-        console.log(signal);
-        await writeEntryPointToFile(signal);
-        return signal;
+        console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Deteniendo.");
+        return { action: "ERROR", symbol: SYMBOL, reason: "No se obtuvieron datos de velas." };
     }
 
     // Cortar la última vela de la API porque podría estar incompleta
@@ -230,8 +230,13 @@ async function runAnalysis() {
             console.log(`[ANALYZER-DEBUG]   Cierre: ${parseFloat(candle.close).toFixed(2)}, RSI: ${candle.rsi?.toFixed(2) || 'N/A'}`);
         });
     } else {
-        console.warn("[ANALYZER-DEBUG] No hay velas completas con indicadores para mostrar. Esto puede ocurrir si no hay suficientes datos para el RSI.");
-        // CAMBIO: Si no hay suficientes velas con indicadores (ej. por pocas velas raw), también devuelve ESPERA
+        console.warn("[ANALYZER-DEBUG] No hay velas completas con indicadores para mostrar.");
+    }
+
+    // Paso 3: Determinar el punto de entrada.
+    // Aseguramos que tenemos al menos 2 velas para el análisis después del cálculo de indicadores.
+    // Esto es crucial para la lógica de cruces (prevCandle y lastCandle).
+    if (candlesWithIndicators.length < 2) {
         const signal = { action: "ESPERA", symbol: SYMBOL, reason: "No hay suficientes velas con todos los indicadores calculados para determinar una señal clara." };
         console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
         console.log(signal);
@@ -239,8 +244,6 @@ async function runAnalysis() {
         return signal;
     }
 
-    // Paso 3: Determinar el punto de entrada.
-    // Esto ya se maneja en determineEntryPoint, que ahora devuelve ESPERA si no hay suficientes datos válidos.
     const signal = determineEntryPoint(candlesWithIndicators, SYMBOL);
 
     console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
@@ -258,8 +261,7 @@ async function runAnalysis() {
 if (require.main === module) {
     // Si estás ejecutando este archivo directamente
     runAnalysis().catch(error => {
-        console.error("[ANALYZER] Error al ejecutar el análisis general:", error);
-        // Incluso si hay un error general no capturado, la función runAnalysis ya intentaría devolver ESPERA
+        console.error("[ANALYZER] Error al ejecutar el análisis:", error);
     });
 }
 
