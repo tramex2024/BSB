@@ -1,5 +1,5 @@
 {
-  "name": "bsb-backend",
+  "name": "bsb",
   "version": "1.0.0",
   "description": "Backend for BSB Trading App",
   "main": "server.js",

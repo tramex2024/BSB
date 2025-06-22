@@ -1,6 +1,6 @@
-// js/main.js
+// public/js/main.js
 
-const BACKEND_URL = 'https://bsb-ppex.onrender.com'; 
+const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
 
 // --- Elementos del DOM ---
@@ -15,13 +15,27 @@ const apiKeyIcon = document.getElementById('api-key-icon');
 
 const apiModal = document.getElementById('api-modal');
 const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
-const apiForm = document.getElementById('api-form'); // Nuevo: form API
-const apiKeyInput = document.getElementById('api-key'); // Nuevo: input API Key
-const secretKeyInput = document.getElementById('secret-key'); // Nuevo: input Secret Key
-const apiMemoInput = document.getElementById('api-memo'); // Nuevo: input API Memo
-const apiStatusMessage = document.getElementById('api-status-message'); // Nuevo: mensaje estado API
-const connectionIndicator = document.getElementById('connection-indicator'); // Nuevo: círculo indicador API
-const connectionText = document.getElementById('connection-text'); // Nuevo: texto indicador API
+const apiForm = document.getElementById('api-form');
+const apiKeyInput = document.getElementById('api-key');
+const secretKeyInput = document.getElementById('secret-key');
+const apiMemoInput = document.getElementById('api-memo');
+const apiStatusMessage = document.getElementById('api-status-message');
+const connectionIndicator = document.getElementById('connection-indicator');
+const connectionText = document.getElementById('connection-text');
+
+
+// Inputs de configuración del bot
+const purchaseInput = document.getElementById("purchase");
+const incrementInput = document.getElementById("increment");
+const decrementInput = document.getElementById("decrement");
+const triggerInput = document.getElementById("trigger");
+const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
+const botStateDisplay = document.getElementById('bot-state');
+const cycleDisplay = document.getElementById('cycle');
+const profitDisplay = document.getElementById('profit');
+const cycleProfitDisplay = document.getElementById('cycleprofit');
+const startBtn = document.getElementById('start-btn');
+const resetBtn = document.getElementById('reset-btn');
 
 
 // --- Estado de la Aplicación ---
@@ -40,7 +54,7 @@ let currentDisplayedOrders = new Map();
 function checkLoginStatus() {
     const token = localStorage.getItem('authToken');
     if (token) {
-        // Opcional: Podrías hacer una llamada al backend para validar el token si es muy viejo,
+        // Podrías hacer una llamada al backend para validar el token si es muy viejo,
         // pero por ahora, con que exista, lo consideramos logueado.
         isLoggedIn = true;
     } else {
@@ -88,13 +102,40 @@ function toggleAuthModal(show) {
 }
 
 /**
+ * NUEVA FUNCIÓN: Muestra u oculta el modal de configuración de API.
+ * @param {boolean} show - `true` para mostrar el modal, `false` para ocultarlo.
+ */
+function toggleApiModal(show) {
+    if (apiModal) {
+        if (show) {
+            apiModal.style.display = 'flex'; // Usar 'flex' para centrado CSS
+            apiStatusMessage.textContent = '';
+            // Reset connection indicator to gray/not connected when opening
+            connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-yellow-500');
+            connectionIndicator.classList.add('bg-gray-500');
+            connectionText.textContent = 'Not Connected';
+            // Secret key input should always be cleared for security reasons
+            secretKeyInput.value = '';
+            // You might want to pre-fill apiMemo if it was saved as "" or an actual value,
+            // but for simplicity, clearing is fine for now or fetching it.
+            // For now, it keeps the value that the user might have typed before closing.
+        } else {
+            apiModal.style.display = 'none';
+        }
+    }
+}
+
+/**
  * Maneja el proceso de deslogueo del usuario.
  * Borra el token local y notifica al backend.
  */
 async function handleLogout() {
     console.log('[FRONTEND] Intentando desloguear...');
     try {
-        const response = await fetch(`${BACKEND_URL}/api/logout`, { // Asumo que esta ruta no requiere token de auth
+        // Considera si realmente necesitas una ruta de logout en el backend que haga algo más
+        // que invalidar la sesión del usuario si no hay estado de sesión complejo en el server.
+        // Si el logout solo es eliminar el token del cliente, esta llamada podría ser opcional.
+        const response = await fetch(`${BACKEND_URL}/api/auth/logout`, { // Cambiado a /api/auth/logout si esa es tu ruta
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
@@ -113,7 +154,10 @@ async function handleLogout() {
         updateLoginIcon();
         toggleAuthModal(false);
         alert('Has cerrado sesión exitosamente.');
-        window.location.reload(); // Recargar para limpiar todo el estado
+        // No recargamos aquí para evitar bucles o comportamientos inesperados,
+        // la UI ya se resetea al estado no logueado. Si la recarga es vital por otros elementos,
+        // se puede mantener, pero es mejor una gestión de estado más suave.
+        window.location.reload(); // Mantenemos la recarga para asegurar el estado limpio en el bot.
     }
 }
 
@@ -241,9 +285,6 @@ async function getBalances() {
         return;
     }
     try {
-        // Usamos la nueva ruta que tu backend sugirió en los logs.
-        // Asume que esta ruta en el backend manejará la autenticación JWT
-        // y buscará las credenciales de BitMart del usuario.
         const walletData = await fetchFromBackend('/api/user/bitmart/balance');
         if (walletData && Array.isArray(walletData)) {
             const usdt = walletData.find(w => w.currency === "USDT");
@@ -271,7 +312,6 @@ async function fetchOpenOrdersData() {
         return [];
     }
     try {
-        // Usamos la nueva ruta que tu backend sugiere
         const orders = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
         return orders || [];
     } catch (error) {
@@ -284,7 +324,7 @@ async function fetchHistoryOrdersData(tab) {
     if (!isLoggedIn) {
         return [];
     }
-     try {
+    try {
         console.warn(`Funcionalidad para ${tab} aún no implementada en el backend para historial.`);
         // Aquí deberías llamar a la ruta `/api/user/bitmart/history-orders` con el filtro de estado si existe
         return [];
@@ -347,7 +387,8 @@ async function cargarPrecioEnVivo() {
             document.getElementById('price').textContent = price + ' USDT';
             actualizarCalculos();
         }
-    } catch (error) {
+    }
+    catch (error) {
         console.error('Error al cargar precio en vivo:', error);
         if (document.getElementById('price')) {
             document.getElementById('price').textContent = 'Error';
@@ -402,15 +443,9 @@ function calcularCoverage(orq, price, decrement) {
 }
 
 function actualizarCalculos() {
-    const purchaseInput = document.getElementById("purchase");
-    const incrementInput = document.getElementById("increment");
-    const decrementInput = document.getElementById("decrement");
-    const priceElement = document.getElementById("price");
-    const balanceElement = document.getElementById("balance");
-    const orqElement = document.getElementById("orq");
-    const coverageElement = document.getElementById("coverage");
-
-    if (!purchaseInput || !incrementInput || !decrementInput || !priceElement || !balanceElement || !orqElement || !coverageElement) {
+    // Los elementos DOM ahora se capturan una sola vez al inicio del script si existen
+    // y se usan las variables globales purchaseInput, incrementInput, etc.
+    if (!purchaseInput || !incrementInput || !decrementInput || !document.getElementById("price") || !document.getElementById("balance") || !document.getElementById("orq") || !document.getElementById("coverage")) {
         console.warn("Faltan elementos DOM para actualizar cálculos.");
         return;
     }
@@ -418,18 +453,80 @@ function actualizarCalculos() {
     const purchase = parseFloat(purchaseInput.value) || 0;
     const increment = parseFloat(incrementInput.value) || 100;
     const decrement = parseFloat(decrementInput.value) || 1;
-    const priceText = priceElement.textContent;
+    const priceText = document.getElementById("price").textContent;
     const price = parseFloat(priceText.replace(' USDT', '')) || 0;
-    const balanceText = balanceElement.textContent;
+    const balanceText = document.getElementById("balance").textContent;
     const balance = balanceText === 'Login to see' ? 0 : parseFloat(balanceText) || 0;
-
 
     const orq = calcularORQ(purchase, increment, balance);
     const coverage = calcularCoverage(orq, price, decrement);
 
-    orqElement.textContent = orq;
-    coverageElement.textContent = coverage.toFixed(2);
+    document.getElementById("orq").textContent = orq;
+    document.getElementById("coverage").textContent = coverage.toFixed(2);
     ultimoCoverageValido = coverage;
+}
+
+/**
+ * Carga la configuración y el estado del bot del usuario desde el backend
+ * y actualiza los elementos de la UI.
+ */
+async function loadBotConfigAndState() {
+    if (!isLoggedIn) {
+        console.log('[FRONTEND] No logueado, no se carga la configuración del bot.');
+        // Opcional: resetear la UI del bot a valores por defecto si no está logueado
+        // resetBot(); // Esto resetearía los inputs a valores predeterminados
+        if (botStateDisplay) botStateDisplay.textContent = 'STOPPED';
+        if (botStateDisplay) botStateDisplay.className = 'text-yellow-400';
+        if (startBtn) startBtn.textContent = 'START';
+        if (resetBtn) resetBtn.disabled = false;
+        if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = false;
+        if (cycleDisplay) cycleDisplay.textContent = '0';
+        if (profitDisplay) profitDisplay.textContent = '0.00';
+        if (cycleProfitDisplay) cycleProfitDisplay.textContent = '0.00';
+        return;
+    }
+
+    console.log('[FRONTEND] Cargando configuración y estado del bot...');
+    try {
+        const botData = await fetchFromBackend('/api/user/bot-config-and-state'); // CORRECTED ROUTE
+        if (botData) {
+            console.log('[FRONTEND] Datos del bot cargados:', botData);
+
+            // Actualizar inputs de configuración
+            if (purchaseInput) purchaseInput.value = botData.purchase || 5.00;
+            if (incrementInput) incrementInput.value = botData.increment || 100;
+            if (decrementInput) decrementInput.value = botData.decrement || 1.0;
+            if (triggerInput) triggerInput.value = botData.trigger || 1.5;
+            if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = botData.stopAtCycleEnd || false;
+
+            // Actualizar displays de estado
+            isRunning = (botData.state === 'RUNNING');
+            if (botStateDisplay) {
+                botStateDisplay.textContent = botData.state;
+                botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
+            }
+            if (startBtn) startBtn.textContent = isRunning ? 'STOP' : 'START';
+            if (resetBtn) resetBtn.disabled = isRunning; // Deshabilitar reset si está corriendo
+            if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = isRunning; // Deshabilitar checkbox si está corriendo
+
+            if (cycleDisplay) cycleDisplay.textContent = botData.cycle || 0;
+            if (profitDisplay) profitDisplay.textContent = (botData.profit || 0).toFixed(2);
+            if (cycleProfitDisplay) cycleProfitDisplay.textContent = (botData.cycleProfit || 0).toFixed(2);
+
+            // Recalcular el ORQ y Coverage con los valores cargados
+            actualizarCalculos();
+
+        } else {
+            console.warn('[FRONTEND] No se pudieron cargar los datos del bot. Usando valores predeterminados de la UI.');
+            // Si falla la carga, asegúrate de que la UI refleje un estado inicial
+            // Los valores por defecto de los inputs HTML ya deberían estar presentes.
+            actualizarCalculos(); // Calcular con los valores por defecto
+        }
+    } catch (error) {
+        console.error('Error al cargar la configuración y estado del bot:', error);
+        // En caso de error, puedes optar por mostrar un mensaje al usuario o mantener los valores predeterminados.
+        actualizarCalculos(); // Calcular con los valores por defecto
+    }
 }
 
 async function toggleBotState() {
@@ -437,26 +534,23 @@ async function toggleBotState() {
         alert("Please login first to control the bot.");
         return;
     }
-    const startBtn = document.getElementById('start-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    const botStateDisplay = document.getElementById('bot-state');
-    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
-
+    // Asegurarse de que los elementos DOM existan
     if (!startBtn || !resetBtn || !botStateDisplay || !stopAtCycleEndCheckbox) {
         console.warn("Faltan elementos DOM para controlar el estado del bot.");
         return;
     }
 
-    const purchase = parseFloat(document.getElementById("purchase").value);
-    const increment = parseFloat(document.getElementById("increment").value);
-    const decrement = parseFloat(document.getElementById("decrement").value);
-    const trigger = parseFloat(document.getElementById("trigger").value);
+    const purchase = parseFloat(purchaseInput.value);
+    const increment = parseFloat(incrementInput.value);
+    const decrement = parseFloat(decrementInput.value);
+    const trigger = parseFloat(triggerInput.value);
     const stopAtCycleEnd = stopAtCycleEndCheckbox.checked;
 
     const action = startBtn.textContent === 'START' ? 'start' : 'stop';
 
     try {
-        const response = await fetchFromBackend('/api/toggle-bot', {
+        // MODIFICACIÓN CLAVE: Cambiar la ruta a la nueva ruta protegida del usuario
+        const response = await fetchFromBackend('/api/user/toggle-bot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action, params: { purchase, increment, decrement, trigger, stopAtCycleEnd } })
@@ -472,32 +566,40 @@ async function toggleBotState() {
             resetBtn.disabled = isRunning;
             stopAtCycleEndCheckbox.disabled = isRunning;
 
-            document.getElementById('cycle').textContent = response.botState.cycle || 0;
-            document.getElementById('profit').textContent = (response.botState.profit || 0).toFixed(2);
-            document.getElementById('cycleprofit').textContent = (response.botState.cycleProfit || 0).toFixed(2);
+            cycleDisplay.textContent = response.botState.cycle || 0;
+            profitDisplay.textContent = (response.botState.profit || 0).toFixed(2);
+            cycleProfitDisplay.textContent = (response.botState.cycleProfit || 0).toFixed(2);
 
             console.log(`Bot state updated: ${newBotState}`);
+            actualizarCalculos(); // Recalcular después de actualizar el estado
         } else {
             throw new Error(response.message || 'Failed to toggle bot state.');
         }
     } catch (error) {
         console.error('Error toggling bot state:', error);
         alert(`Error: ${error.message}`);
-        isRunning = !isRunning; // Revertir el estado si hubo error
-        botStateDisplay.textContent = isRunning ? 'RUNNING' : 'STOPPED';
-        botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
-        startBtn.textContent = isRunning ? 'STOP' : 'START';
-        resetBtn.disabled = isRunning;
-        stopAtCycleEndCheckbox.disabled = isRunning;
+        // Revertir la UI si hubo un error en la solicitud
+        const previousIsRunning = isRunning; // Guardar estado antes del intento de cambio
+        isRunning = previousIsRunning; // Mantener el estado anterior
+        if (botStateDisplay) {
+            botStateDisplay.textContent = previousIsRunning ? 'RUNNING' : 'STOPPED';
+            botStateDisplay.className = previousIsRunning ? 'text-green-400' : 'text-yellow-400';
+        }
+        if (startBtn) startBtn.textContent = previousIsRunning ? 'STOP' : 'START';
+        if (resetBtn) resetBtn.disabled = previousIsRunning;
+        if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = previousIsRunning;
     }
 }
 
 function resetBot() {
-    document.getElementById('purchase').value = 5.00;
-    document.getElementById('increment').value = 100;
-    document.getElementById('decrement').value = 1.0;
-    document.getElementById('trigger').value = 1.5;
-    document.getElementById('stop-at-cycle-end').checked = false;
+    // Restablece los valores de los inputs a sus valores predeterminados.
+    // Esto es un reset LOCAL de la UI. El estado persistido en la DB solo cambia
+    // cuando el bot se 'starta' con estos nuevos valores.
+    if (purchaseInput) purchaseInput.value = 5.00;
+    if (incrementInput) incrementInput.value = 100;
+    if (decrementInput) decrementInput.value = 1.0;
+    if (triggerInput) triggerInput.value = 1.5;
+    if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = false;
     actualizarCalculos();
 }
 
@@ -548,6 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup de los tabs principales de navegación
     setupNavTabs();
 
+    // Cargar la configuración y estado del bot si el usuario está logueado
+    // Esto es CLAVE para la persistencia
+    loadBotConfigAndState();
+
     // Inicializar los cálculos y el estado de conexión del bot (si los elementos existen)
     // Se han añadido checks de isLoggedIn para estas funciones
     if (document.getElementById('balance')) getBalances(); // Llama a getBalances al inicio
@@ -562,8 +668,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => fetchOrders(currentTab), 15000); // Actualiza órdenes cada 15 segundos
 
     // Event listeners para los botones del bot
-    const startBtn = document.getElementById('start-btn');
-    const resetBtn = document.getElementById('reset-btn');
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
 
@@ -579,11 +683,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tabAll) tabAll.addEventListener('click', () => setActiveTab('tab-all'));
 
     // Event listeners para los inputs de cálculos del bot
-    const purchaseInput = document.getElementById('purchase');
-    const incrementInput = document.getElementById('increment');
-    const decrementInput = document.getElementById('decrement');
-    const triggerInput = document.getElementById('trigger');
-
     if (purchaseInput) purchaseInput.addEventListener('input', actualizarCalculos);
     if (incrementInput) incrementInput.addEventListener('input', actualizarCalculos);
     if (decrementInput) decrementInput.addEventListener('input', actualizarCalculos);
@@ -650,9 +749,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateLoginIcon(); // Actualiza el icono inmediatamente
                         authMessage.textContent = data.message;
                         authMessage.style.color = 'green';
-                        setTimeout(() => {
+                        setTimeout(async () => { // Usar async aquí para el await
                             toggleAuthModal(false);
-                            window.location.reload(); // Recargar la página es clave para que los intervalos y checks se reinicien con el estado logueado
+                            // Llamar a loadBotConfigAndState, getBalances y fetchOrders directamente
+                            // en lugar de recargar toda la página.
+                            await loadBotConfigAndState();
+                            await getBalances();
+                            await fetchOrders(currentTab);
                         }, 1500);
                     } else {
                         authMessage.textContent = data.error || 'Invalid token or email.';
@@ -675,27 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleAuthModal(true);
                 return;
             }
-            if (apiModal) {
-                apiModal.style.display = 'flex'; // Usar 'flex' para centrado CSS
-                apiStatusMessage.textContent = '';
-                connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-yellow-500');
-                connectionIndicator.classList.add('bg-gray-500'); // Default gray for not connected
-                connectionText.textContent = 'Not Connected';
-
-                // Opcional: Cargar las API keys existentes si ya están guardadas para el usuario
-                // Esto requeriría una ruta en el backend como /api/user/bitmart/api-keys
-                // fetchFromBackend('/api/user/bitmart/api-keys')
-                //    .then(data => {
-                //        if (data && data.apiKey) {
-                //            apiKeyInput.value = data.apiKey;
-                //            secretKeyInput.value = '********'; // No mostrar la secret key
-                //            apiMemoInput.value = data.apiMemo || '';
-                //            connectionIndicator.classList.replace('bg-gray-500', 'bg-green-500');
-                //            connectionText.textContent = 'Last Connected';
-                //        }
-                //    })
-                //    .catch(error => console.error("Error loading existing API keys:", error));
-            }
+            toggleApiModal(true); // Se usa la nueva función para mostrar el modal de API
         });
     }
 
@@ -717,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
             apiStatusMessage.textContent = 'Validating API keys...';
             apiStatusMessage.style.color = 'yellow';
             connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
-            connectionIndicator.classList.add('bg-yellow-500'); // Indicador de "cargando"
+            connectionIndicator.classList.add('bg-yellow-500');
             connectionText.textContent = 'Connecting...';
 
             try {
@@ -728,10 +811,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ apiKey, secretKey, apiMemo })
                 });
 
-                // --- MODIFICACIÓN CLAVE AQUÍ ---
                 // Tu backend responde con { message: "...", connected: true }.
                 // No hay una propiedad 'success'. Revisamos 'connected' o 'message'.
-                if (response && response.connected) { // Cambiado de response.success a response.connected
+                if (response && response.connected) {
                     apiStatusMessage.textContent = response.message || 'API keys validated and saved!';
                     apiStatusMessage.style.color = 'green';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
@@ -740,13 +822,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Disparar una actualización de balances y órdenes después de guardar las API keys
                     getBalances();
                     fetchOrders(currentTab);
-                    // Opcional: Cerrar el modal después de un éxito
-                    // setTimeout(() => { apiModal.style.display = 'none'; }, 2000);
+                    // Opcional: Cerrar el modal después de un éxito (descomentar si se desea)
+                    // setTimeout(() => { toggleApiModal(false); }, 2000);
                 } else {
                     // Si el backend envió un error (HTTP 4xx/5xx), fetchFromBackend ya lo lanzó.
                     // Si llegó aquí y `response.connected` es `false` (o no existe pero response no es null),
                     // significa que el backend respondió con un mensaje de error explícito pero HTTP 200.
-                    const errorMessage = response.message || 'Failed to validate or save API keys.'; // Usamos response.message
+                    const errorMessage = response.message || 'Failed to validate or save API keys.';
                     apiStatusMessage.textContent = errorMessage;
                     apiStatusMessage.style.color = 'red';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
@@ -763,6 +845,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 connectionIndicator.classList.add('bg-red-500');
                 connectionText.textContent = 'Disconnected';
             }
+        });
+    }
+
+    // NUEVO: Manejador del click para el botón de cerrar del modal de API
+    if (closeApiModalButton) {
+        closeApiModalButton.addEventListener('click', () => {
+            toggleApiModal(false); // Llama a la función para ocultar el modal
         });
     }
 });

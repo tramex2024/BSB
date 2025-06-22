@@ -1,4 +1,4 @@
-// backend/models/User.js
+// server/models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs'); // Asumo que usas bcrypt para encriptar contraseñas si las manejas
 
@@ -14,8 +14,8 @@ const userSchema = new mongoose.Schema({
     // Si tu aplicación va a tener contraseñas normales (además del login con token), las definirías aquí.
     // Por ahora, si solo usas login con token, este campo podría no ser necesario si no lo tienes en tu código.
     // password: {
-    //     type: String,
-    //     required: function() { return this.isNew || this.password; } // Required solo si es nuevo o se está estableciendo
+    //      type: String,
+    //      required: function() { return this.isNew || this.password; } // Required solo si es nuevo o se está estableciendo
     // },
     
     // Campos para el token de autenticación de un solo uso (para login sin contraseña)
@@ -53,14 +53,14 @@ const userSchema = new mongoose.Schema({
 
 // Si tu esquema maneja contraseñas, aquí iría el pre-save hook para encriptarlas.
 // userSchema.pre('save', async function(next) {
-//     if (!this.isModified('password')) return next();
-//     this.password = await bcrypt.hash(this.password, 10);
-//     next();
+//      if (!this.isModified('password')) return next();
+//      this.password = await bcrypt.hash(this.password, 10);
+//      next();
 // });
 
 // Si tu esquema maneja la comparación de contraseñas
 // userSchema.methods.comparePassword = async function(candidatePassword) {
-//     return await bcrypt.compare(candidatePassword, this.password);
+//      return await bcrypt.compare(candidatePassword, this.password);
 // };
 
 module.exports = mongoose.model('User', userSchema);

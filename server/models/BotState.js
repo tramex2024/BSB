@@ -1,33 +1,60 @@
 // server/models/BotState.js
-
 const mongoose = require('mongoose');
 
-// Define the schema for your bot's state
+// Define el esquema para el estado y configuración de tu bot para cada usuario.
 const BotStateSchema = new mongoose.Schema({
     userId: {
         type: String,
         required: true,
-        unique: true // Ensures each user has only one state entry
+        unique: true // Asegura que cada usuario tenga solo una entrada de estado de bot
     },
-    state: {
+    // Estado de ejecución del bot
+    isRunning: {
+        type: Boolean,
+        default: false // Indica si el bot está actualmente en ejecución
+    },
+    state: { // Puede ser 'RUNNING', 'STOPPED', 'PAUSED', etc.
         type: String,
-        required: true
+        default: 'STOPPED'
     },
-    // You can add more fields here as needed for your bot's state
-    // For example:
-    // conversationHistory: {
-    //     type: Array,
-    //     default: []
-    // },
-    // lastInteraction: {
-    //     type: Date,
-    //     default: Date.now
-    // }
+    cycle: {
+        type: Number,
+        default: 0
+    },
+    profit: {
+        type: Number,
+        default: 0.00
+    },
+    cycleProfit: {
+        type: Number,
+        default: 0.00
+    },
+    // Configuración del bot
+    purchase: {
+        type: Number,
+        default: 5.00 // Valor inicial predeterminado
+    },
+    increment: {
+        type: Number,
+        default: 100 // Valor inicial predeterminado
+    },
+    decrement: {
+        type: Number,
+        default: 1.0 // Valor inicial predeterminado
+    },
+    trigger: {
+        type: Number,
+        default: 1.5 // Valor inicial predeterminado
+    },
+    stopAtCycleEnd: {
+        type: Boolean,
+        default: false // Valor inicial predeterminado
+    }
 }, {
-    timestamps: true // Adds createdAt and updatedAt fields automatically
+    timestamps: true // Añade campos createdAt y updatedAt automáticamente
 });
 
-// Create the Mongoose model from the schema
+// Crea el modelo Mongoose a partir del esquema
 const BotState = mongoose.model('BotState', BotStateSchema);
 
 module.exports = BotState;
