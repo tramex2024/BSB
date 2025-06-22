@@ -7,24 +7,19 @@ const querystring = require('querystring');
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
 /**
- * Función auxiliar para ordenar recursivamente las claves de un objeto.
- * Se usa para GET requests, donde el orden de los query parameters es alfabético.
- * No se usa para la stringificación del body de POST requests para BitMart,
- * ya que su API parece requerir un orden de inserción específico.
+ * Función auxiliar para ordenar recursivamente las claves de un objeto
+ * Esto es CRÍTICO para la firma de BitMart en solicitudes POST,
+ * ya que JSON.stringify no garantiza el orden y BitMart lo requiere.
  */
 function sortObjectKeys(obj) {
-    if (typeof obj !== 'object' || obj === null) {
-        return obj;
-    }
-
-    if (Array.isArray(obj)) {
-        return obj.map(item => sortObjectKeys(item));
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+        return obj; // Devolver tipos primitivos, nulos o arrays sin modificar
     }
 
     const sortedKeys = Object.keys(obj).sort();
     const sortedObj = {};
     for (const key of sortedKeys) {
-        sortedObj[key] = sortObjectKeys(obj[key]);
+        sortedObj[key] = sortObjectKeys(obj[key]); // Ordenar recursivamente objetos anidados
     }
     return sortedObj;
 }
@@ -32,19 +27,18 @@ function sortObjectKeys(obj) {
 /**
  * Genera la firma para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp actual en milisegundos.
- * @param {string | null | undefined} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía, nula o undefined.
+ * @param {string} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía.
  * @param {string} bodyOrQueryString - El cuerpo stringificado JSON (para POST) o la query string (para GET).
  * @param {string} apiSecret - La clave secreta de la API a usar para la firma.
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // FIX: Si el memo es null o undefined (como se pasa desde userController ahora), usa la cadena literal "undefined".
-    // Esto es para emular el comportamiento de concatenación de versiones anteriores de Node.js o requisitos específicos de BitMart.
-    const memoForHash = (memo === null || memo === undefined) ? 'undefined' : String(memo); 
-    const message = timestamp + '#' + memoForHash + '#' + bodyOrQueryString;
+    const effectiveMemo = memo || '';
+    const message = timestamp + '#' + effectiveMemo + '#' + bodyOrQueryString;
 
+    // Logs de depuración de la firma
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
-    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
+    console.log(`[SIGN_DEBUG] Memo: '${effectiveMemo}' (Length: ${effectiveMemo.length})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${bodyOrQueryString}' (Length: ${bodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
@@ -59,11 +53,10 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
  * @param {object} [paramsOrData={}] - Parámetros para GET o cuerpo para POST.
  * @param {boolean} [isPrivate=true] - Si la solicitud requiere autenticación.
  * @param {object} [authCredentials={}] - REQUERIDO para solicitudes privadas: Objeto con { apiKey, secretKey, apiMemo }.
- * @param {string} [timestampOverride] - Opcional: timestamp a usar en lugar de Date.now().toString().
  * @returns {Promise<object>} - Promesa que resuelve con los datos de la respuesta.
  */
-async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
-    const timestamp = timestampOverride || Date.now().toString();
+async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}) {
+    const timestamp = Date.now().toString();
     const url = `${BASE_URL}${path}`;
     let bodyForSign = '';
     let requestConfig = {
@@ -76,37 +69,19 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
 
-    // Clonar los parámetros/datos para modificarlos si es una solicitud privada
-    const dataForRequestAndSign = { ...paramsOrData };
-
+    const effectiveParamsOrData = { ...paramsOrData };
     if (isPrivate) {
-        // Añadir recvWindow directamente al objeto de datos.
-        // Si el método es POST y el path es /spot/v4/query/open-orders,
-        // la construcción del JSON stringificado para la firma se hará de forma específica
-        // para asegurar el orden. De lo contrario, se añade al objeto actual.
-        if (!(method === 'POST' && path === '/spot/v4/query/open-orders')) {
-            dataForRequestAndSign.recvWindow = 10000;
-        }
-        requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
+        effectiveParamsOrData.recvWindow = 10000;
     }
 
     if (method === 'GET') {
-        requestConfig.params = sortObjectKeys(dataForRequestAndSign);
-        bodyForSign = querystring.stringify(sortObjectKeys(dataForRequestAndSign));
+        bodyForSign = querystring.stringify(effectiveParamsOrData);
+        requestConfig.params = effectiveParamsOrData;
     } else if (method === 'POST') {
-        // CORRECCIÓN CLAVE: Para /spot/v4/query/open-orders POST, forzamos el orden del JSON stringificado
-        if (path === '/spot/v4/query/open-orders') {
-            const tempBody = { recvWindow: 10000 }; // Forzar recvWindow a ser la primera propiedad
-            if (dataForRequestAndSign.symbol) {
-                tempBody.symbol = dataForRequestAndSign.symbol; // Añadir symbol después
-            }
-            bodyForSign = JSON.stringify(tempBody); // Stringify el objeto temporal con orden forzado
-            requestConfig.data = tempBody; // Usar el mismo objeto para el cuerpo de la solicitud
-        } else {
-            // Para otras solicitudes POST, stringificamos el objeto con sus propiedades existentes
-            bodyForSign = JSON.stringify(dataForRequestAndSign);
-            requestConfig.data = dataForRequestAndSign;
-        }
+        // --- CORRECCIÓN CLAVE AQUÍ: Ordenar las claves antes de JSON.stringify ---
+        const sortedParamsOrData = sortObjectKeys(effectiveParamsOrData);
+        bodyForSign = JSON.stringify(sortedParamsOrData);
+        requestConfig.data = sortedParamsOrData; // También enviar el objeto ordenado en la data de la solicitud
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -117,6 +92,12 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         
         const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
 
+        // Logs de depuración de headers
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-KEY: ${apiKey.substring(0,5)}... (Length: ${apiKey.length})`);
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-TIMESTAMP: ${timestamp}`);
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-SIGN: ${sign}`);
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-MEMO: '${apiMemo}' (Length: ${apiMemo.length})`);
+
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
@@ -126,10 +107,10 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado (para solicitud y firma):', JSON.stringify(requestConfig.data)); 
-        console.log('Body para Firma (JSON stringificado, con orden forzado para /open-orders POST):', bodyForSign);
+        console.log('Body enviado:', JSON.stringify(effectiveParamsOrData)); // Mostrar el original para referencia
+        console.log('Body para Firma (JSON ordenado):', bodyForSign); // Mostrar el ordenado para firma
     } else {
-        console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
+        console.log('Query Params:', JSON.stringify(effectiveParamsOrData));
     }
 
     try {
@@ -143,7 +124,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
+            throw new Error(`Error de BitMart API: ${response.data.message || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
         console.error(`\n❌ Falló la solicitud a ${path}.`);
@@ -159,29 +140,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             console.error('Error Message:', error.message);
             throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
         }
-    }
-}
-
-/**
- * Obtiene la hora del servidor de BitMart (API pública).
- * @returns {Promise<string>} - Promesa que resuelve con el timestamp del servidor en milisegundos.
- */
-async function getSystemTime() {
-    console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
-    try {
-        const response = await makeRequest('GET', '/system/time', {}, false);
-        if (response && response.code === 1000 && response.data && response.data.server_time) {
-            const serverTime = response.data.server_time.toString();
-            console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
-            return serverTime;
-        } else {
-            const errorMessage = response.message || response.error_msg || 'Respuesta inesperada';
-            console.error(`❌ Respuesta inesperada al obtener la hora del servidor:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${errorMessage}`);
-        }
-    } catch (error) {
-        console.error(`❌ Error al obtener la hora del servidor de BitMart:`, error.message);
-        throw error;
     }
 }
 
@@ -217,17 +175,15 @@ async function getTicker(symbol) {
 async function getBalance(authCredentials) {
     console.log('\n--- Obteniendo Balance de la Cuenta ---');
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
+        const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials);
         if (response && response.code === 1000 && response.data && response.data.wallet) {
             console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
             return response.data.wallet;
         } else {
             console.error('❌ Falló la obtención del balance de la cuenta. Respuesta inesperada:', JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada al obtener balance de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada al obtener balance de BitMart: ${JSON.stringify(response)}`);
         }
-    }
-    catch (error) {
+    } catch (error) {
         console.error('\n❌ Error al obtener balance de la cuenta:', error.message);
         throw error;
     }
@@ -245,8 +201,7 @@ async function getOpenOrders(authCredentials, symbol) {
     const requestBody = {};
     if (symbol) { requestBody.symbol = symbol; }
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -262,7 +217,7 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        return { orders: orders };
+        return { orders: orders }; // Devolver siempre un objeto con la propiedad 'orders'
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
@@ -281,8 +236,7 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
     console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
     const requestBody = { symbol: symbol, orderId: orderId };
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Detalle de orden ${orderId} obtenido con éxito.`);
             return response.data;
@@ -304,7 +258,7 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
  * @param {string} type - "limit" o "market".
  * @param {string} size - Cantidad de la moneda base a comprar/vender.
  * @param {string} [price] - Precio de la orden (requerido para órdenes "limit").
- * @returns {Promise<object>} - Promesa que resuelve con la respuesta de la la orden.
+ * @returns {Promise<object>} - Promesa que resuelve con la respuesta de la orden.
  */
 async function placeOrder(authCredentials, symbol, side, type, size, price) {
     console.log(`[DEBUG_BITMART_SERVICE] placeOrder - symbol: ${symbol}, side: ${side}, type: ${type}, size: ${size}`);
@@ -317,9 +271,9 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         requestBody.price = price.toString();
     } else if (type === 'market') {
         if (side === 'buy') {
-            requestBody.notional = size.toString();
+            requestBody.notional = size.toString(); // Notional for market BUY
         } else if (side === 'sell') {
-            requestBody.size = size.toString();
+            requestBody.size = size.toString(); // Size for market SELL
         } else {
             throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
         }
@@ -327,14 +281,13 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
 
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden colocada con éxito:`, response.data);
             return response.data;
         } else {
             console.error(`❌ Falló la colocación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada al colocar orden de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada al colocar orden de BitMart: ${response.data.message || JSON.stringify(response)}`);
         }
     } catch (error) {
         console.error('\n❌ Error al colocar la orden:', error.message);
@@ -350,17 +303,16 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
  * @returns {Promise<object>} - Promesa que resuelve con la respuesta de la cancelación.
  */
 async function cancelOrder(authCredentials, symbol, order_id) {
-    console.log(`\n--- Cancando Orden ${order_id} para ${symbol} ---`);
+    console.log(`\n--- Cancelando Orden ${order_id} para ${symbol} ---`);
     const requestBody = { symbol: symbol, order_id: order_id };
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden ${order_id} cancelada con éxito.`);
             return response.data;
         } else {
             console.error(`❌ Falló la cancelación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada al cancelar orden de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
+            throw new Error(`Respuesta inesperada al cancelar orden de BitMart: ${response.data.message || JSON.stringify(response)}`);
         }
     } catch (error) {
         console.error('\n❌ Error al cancelar la orden:', error.message);
@@ -379,13 +331,12 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     const path = '/spot/v4/query/history-orders';
     const requestBody = {};
     if (options.symbol) { requestBody.symbol = options.symbol; }
-    if (options.orderMode) { requestBody.orderMode = options.orderMode; }
+    if (options.orderMode) { requestBody.orderMode = options.orderMode; } // e.g., 'spot'
     if (options.startTime) { requestBody.startTime = options.startTime; }
     if (options.endTime) { requestBody.endTime = options.endTime; }
     if (options.limit) { requestBody.limit = options.limit; }
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -405,6 +356,52 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     } catch (error) {
         console.error('\n❌ Falló la obtención del historial de órdenes V4.');
         throw error;
+    }
+}
+
+/**
+ * Obtiene la hora del servidor de BitMart (API pública).
+ * @returns {Promise<number>} - Promesa que resuelve con el timestamp del servidor.
+ */
+async function getSystemTime() {
+    console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
+    try {
+        const response = await makeRequest('GET', '/spot/v1/time', {}, false);
+        if (response && response.code === 1000 && response.data && response.data.server_time) {
+            const serverTime = parseInt(response.data.server_time);
+            console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(serverTime).toISOString()})`);
+            return serverTime;
+        } else {
+            console.error('❌ Respuesta inesperada al obtener la hora del servidor:', JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error('❌ Error al obtener la hora del servidor de BitMart:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Valida las credenciales API de BitMart proporcionadas.
+ * @param {string} apiKey - La API Key a validar.
+ * @param {string} secretKey - La Secret Key a validar.
+ * @param {string} apiMemo - El API Memo a validar.
+ * @returns {Promise<boolean>} - True si las credenciales son válidas y la conexión es exitosa, false en caso contrario.
+ */
+async function validateApiKeys(apiKey, secretKey, apiMemo) {
+    console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
+    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
+        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
+        return false;
+    }
+
+    try {
+        await getBalance({ apiKey, secretKey, apiMemo });
+        console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
+        return true;
+    } catch (error) {
+        console.error('❌ Falló la validación de credenciales API de BitMart:', error.message);
+        return false;
     }
 }
 
@@ -441,31 +438,6 @@ async function getKlines(symbol, interval, limit = 200) {
         throw error;
     }
 }
-
-/**
- * Valida las credenciales API de BitMart proporcionadas.
- * @param {string} apiKey - La API Key a validar.
- * @param {string} secretKey - La Secret Key a validar.
- * @param {string} apiMemo - El API Memo a validar.
- * @returns {Promise<boolean>} - True si las credenciales son válidas y la conexión es exitosa, false en caso contrario.
- */
-async function validateApiKeys(apiKey, secretKey, apiMemo) {
-    console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
-        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
-        return false;
-    }
-
-    try {
-        await getBalance({ apiKey, secretKey, apiMemo });
-        console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
-        return true;
-    } catch (error) {
-        console.error('❌ Falló la validación de credenciales API de BitMart:', error.message);
-        return false;
-    }
-}
-
 
 module.exports = {
     getTicker,
