@@ -7,6 +7,24 @@ const querystring = require('querystring');
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
 /**
+ * Función auxiliar para ordenar recursivamente las claves de un objeto
+ * Esto es CRÍTICO para la firma de BitMart en solicitudes POST,
+ * ya que JSON.stringify no garantiza el orden y BitMart lo requiere.
+ */
+function sortObjectKeys(obj) {
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+        return obj; // Devolver tipos primitivos, nulos o arrays sin modificar
+    }
+
+    const sortedKeys = Object.keys(obj).sort();
+    const sortedObj = {};
+    for (const key of sortedKeys) {
+        sortedObj[key] = sortObjectKeys(obj[key]); // Ordenar recursivamente objetos anidados
+    }
+    return sortedObj;
+}
+
+/**
  * Genera la firma para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp actual en milisegundos.
  * @param {string} memo - El memo de la API (X-BM-MEMO). Puede ser una cadena vacía.
@@ -15,9 +33,16 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
  * @returns {string} - Firma HMAC SHA256.
  */
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // Asegurarse de que memo sea una cadena, incluso si es null o undefined
     const effectiveMemo = memo || '';
     const message = timestamp + '#' + effectiveMemo + '#' + bodyOrQueryString;
+
+    // Logs de depuración de la firma
+    console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
+    console.log(`[SIGN_DEBUG] Memo: '${effectiveMemo}' (Length: ${effectiveMemo.length})`);
+    console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${bodyOrQueryString}' (Length: ${bodyOrQueryString.length})`);
+    console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
+    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
+
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
@@ -42,13 +67,10 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         timeout: 15000
     };
 
-    const { apiKey, secretKey, apiMemo } = authCredentials; // apiMemo podría ser ""
+    const { apiKey, secretKey, apiMemo } = authCredentials;
 
     const effectiveParamsOrData = { ...paramsOrData };
     if (isPrivate) {
-        // recvWindow is often a GET parameter, but BitMart API sometimes requires it in POST body.
-        // For consistency and general case, it's included in effectiveParamsOrData
-        // and then stringified or JSON.stringified as needed.
         effectiveParamsOrData.recvWindow = 10000;
     }
 
@@ -56,33 +78,40 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         bodyForSign = querystring.stringify(effectiveParamsOrData);
         requestConfig.params = effectiveParamsOrData;
     } else if (method === 'POST') {
-        bodyForSign = JSON.stringify(effectiveParamsOrData);
-        requestConfig.data = effectiveParamsOrData;
+        // --- CORRECCIÓN CLAVE AQUÍ: Ordenar las claves antes de JSON.stringify ---
+        const sortedParamsOrData = sortObjectKeys(effectiveParamsOrData);
+        bodyForSign = JSON.stringify(sortedParamsOrData);
+        requestConfig.data = sortedParamsOrData; // También enviar el objeto ordenado en la data de la solicitud
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
     if (isPrivate) {
-        // --- CORRECCIÓN CLAVE AQUÍ: Permite que apiMemo sea una cadena vacía ---
         if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
             throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el usuario haya configurado sus claves.");
         }
-        // Si apiMemo existe pero es una cadena vacía, se pasará como cadena vacía a generateSign
+        
         const sign = generateSign(timestamp, apiMemo, bodyForSign, secretKey);
+
+        // Logs de depuración de headers
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-KEY: ${apiKey.substring(0,5)}... (Length: ${apiKey.length})`);
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-TIMESTAMP: ${timestamp}`);
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-SIGN: ${sign}`);
+        console.log(`[REQUEST_HEADERS_DEBUG] X-BM-MEMO: '${apiMemo}' (Length: ${apiMemo.length})`);
+
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
-        requestConfig.headers['X-BM-MEMO'] = apiMemo; // Puede ser una cadena vacía
+        requestConfig.headers['X-BM-MEMO'] = apiMemo;
     }
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado:', JSON.stringify(effectiveParamsOrData));
+        console.log('Body enviado:', JSON.stringify(effectiveParamsOrData)); // Mostrar el original para referencia
+        console.log('Body para Firma (JSON ordenado):', bodyForSign); // Mostrar el ordenado para firma
     } else {
         console.log('Query Params:', JSON.stringify(effectiveParamsOrData));
     }
-    // Opcional: Logear Headers (solo para debug, ¡cuidado con secretKey si se incluye accidentalmente!)
-    // console.log('Request Headers:', requestConfig.headers);
 
     try {
         const response = await axios({
@@ -91,10 +120,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             ...requestConfig
         });
 
-        // BitMart API generally returns { code: 1000, message: "OK", data: ... } on success.
-        // We'll return the whole response.data object for the caller to parse.
         if (response.data && response.data.code === 1000) {
-            return response.data; // Return the entire response.data from BitMart
+            return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
             throw new Error(`Error de BitMart API: ${response.data.message || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
@@ -127,10 +154,9 @@ async function getTicker(symbol) {
         const params = { symbol: symbol };
         console.log(`--- Solicitud GET Ticker para ${symbol} ---`);
         const response = await makeRequest('GET', url, params, false);
-        // BitMart's ticker response might be under response.data.data
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Ticker para ${symbol} obtenido con éxito.`);
-            return response.data; // This data often contains a 'ticker' array or similar
+            return response.data;
         } else {
             console.error(`❌ Respuesta inesperada del ticker para ${symbol}:`, JSON.stringify(response, null, 2));
             throw new Error(`Respuesta inesperada del ticker de BitMart: ${JSON.stringify(response)}`);
@@ -167,7 +193,7 @@ async function getBalance(authCredentials) {
  * Obtiene la lista de órdenes spot abiertas usando el endpoint v4 POST. (Privado)
  * @param {object} authCredentials - Objeto con { apiKey, secretKey, apiMemo } del usuario actual.
  * @param {string} [symbol] - Símbolo del par de trading, ej: "BTC_USDT". Opcional.
- * @returns {Promise<object[]>} - Promesa que resuelve con un array de órdenes o un error.
+ * @returns {Promise<object>} - Promesa que resuelve con un objeto que contiene 'orders'.
  */
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol || 'todos los símbolos'} ---`);
@@ -176,11 +202,11 @@ async function getOpenOrders(authCredentials, symbol) {
     if (symbol) { requestBody.symbol = symbol; }
     try {
         const response = await makeRequest('POST', path, requestBody, true, authCredentials);
-        const responseData = response.data; // This is the 'data' property from BitMart's outer response
+        const responseData = response.data;
         let orders = [];
-        if (Array.isArray(responseData)) { // Sometimes response.data is directly the list
+        if (Array.isArray(responseData)) {
             orders = responseData;
-        } else if (responseData && Array.isArray(responseData.list)) { // Other times, it's under a 'list' property
+        } else if (responseData && Array.isArray(responseData.list)) {
             orders = responseData.list;
         } else {
             console.warn('ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
@@ -191,12 +217,13 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        return { orders: orders }; // Devuelve un objeto con la propiedad 'orders'
+        return { orders: orders }; // Devolver siempre un objeto con la propiedad 'orders'
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
     }
 }
+
 
 /**
  * Obtiene el detalle de una orden específica. (Privado)
@@ -244,13 +271,9 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         requestBody.price = price.toString();
     } else if (type === 'market') {
         if (side === 'buy') {
-            // For market BUY, BitMart API often expects 'notional' (quote currency amount, e.g., USDT amount)
-            // or sometimes 'client_order_id' to differentiate. 'size' is usually base currency.
-            // Check BitMart docs for exact requirement. Using notional for market buy.
-            requestBody.notional = size.toString();
+            requestBody.notional = size.toString(); // Notional for market BUY
         } else if (side === 'sell') {
-            // For market SELL, BitMart API often expects 'size' (base currency amount, e.g., BTC amount)
-            requestBody.size = size.toString();
+            requestBody.size = size.toString(); // Size for market SELL
         } else {
             throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
         }
@@ -305,6 +328,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
  */
 async function getHistoryOrdersV4(authCredentials, options = {}) {
     console.log(`\n--- Listando Historial de Órdenes (V4 POST) ---`);
+    const path = '/spot/v4/query/history-orders';
     const requestBody = {};
     if (options.symbol) { requestBody.symbol = options.symbol; }
     if (options.orderMode) { requestBody.orderMode = options.orderMode; } // e.g., 'spot'
@@ -312,7 +336,7 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     if (options.endTime) { requestBody.endTime = options.endTime; }
     if (options.limit) { requestBody.limit = options.limit; }
     try {
-        const response = await makeRequest('POST', '/spot/v4/query/history-orders', requestBody, true, authCredentials);
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -366,15 +390,12 @@ async function getSystemTime() {
  */
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
     console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    // La validación aquí debe ser solo que los strings no sean null o undefined.
-    // El check de si son vacíos o no-válidos debe hacerse en makeRequest o por la API de BitMart.
-    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) { // Modificado para permitir memo vacío
+    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
         console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
         return false;
     }
 
     try {
-        // Para la validación inicial, pasamos las claves recibidas directamente
         await getBalance({ apiKey, secretKey, apiMemo });
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
@@ -424,7 +445,6 @@ module.exports = {
     getOpenOrders,
     getOrderDetail,
     placeOrder,
-    // La función 'cancelOrder' ya existe en tu código, así que solo la exportamos.
     cancelOrder,
     getHistoryOrdersV4,
     getKlines,
