@@ -1,4 +1,4 @@
-// public/js/main.js (CORREGIDO)
+// public/js/main.js (CORREGIDO - V2 para Pestaña "Opened")
 
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
@@ -28,7 +28,7 @@ const connectionText = document.getElementById('connection-text');
 const purchaseInput = document.getElementById("purchase");
 const incrementInput = document.getElementById("increment");
 const decrementInput = document.getElementById("decrement");
-const triggerInput = document.getElementById("trigger");
+const triggerInput = document="trigger";
 const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 const botStateDisplay = document.getElementById('bot-state');
 const cycleDisplay = document.getElementById('cycle');
@@ -202,6 +202,7 @@ function createOrderElement(order) {
 
 function updateOrderElement(orderDiv, order) {
     // Determine the state string and color based on BitMart's 'state' field (corrected from 'status')
+    // For 'opened' tab, if 'order.state' is not present, we assume it's 'open'
     const orderStatus = order.state ? String(order.state).toLowerCase() : (currentTab === 'opened' ? 'open' : 'unknown');
     let stateText = orderStatus.toUpperCase(); // Default to uppercase of actual state
     let stateColorClass = 'text-gray-400'; // Default neutral color
@@ -215,12 +216,21 @@ function updateOrderElement(orderDiv, order) {
     } else if (orderStatus === 'canceled') { // Possible state for fully canceled (verify with API if needed)
         stateText = 'CANCELED';
         stateColorClass = 'text-red-400';
-    } else if (orderStatus === 'new' || orderStatus === 'partiallyfilled' || orderStatus === 'pendingcancel' || orderStatus === 'open') {
-        stateText = orderStatus.toUpperCase(); // Display actual status from BitMart (e.g., 'NEW', 'PARTIALLYFILLED')
+    } else if (orderStatus === 'new' || orderStatus === 'partiallyfilled' || orderStatus === 'pendingcancel') { // General pending states
+        stateText = orderStatus.toUpperCase();
         stateColorClass = 'text-yellow-400';
     } else if (orderStatus === 'rejected') {
         stateText = 'REJECTED';
         stateColorClass = 'text-red-600';
+    }
+    // NUEVA LÓGICA: Si la pestaña actual es 'opened' y la orden no tiene un estado de finalización/cancelación,
+    // o si el estado es 'new' o 'partiallyfilled', la consideramos "OPEN"
+    else if (currentTab === 'opened') {
+        stateText = 'OPEN'; // Manually set to OPEN for this tab context
+        stateColorClass = 'text-yellow-400'; // Or another suitable color for open orders
+    } else { // Fallback for any other 'unknown' state for historical orders
+        stateText = 'UNKNOWN';
+        stateColorClass = 'text-gray-500';
     }
 
 
@@ -256,8 +266,9 @@ function displayOrders(newOrders, tab) {
     }
 
     // Clear existing orders only if the tab changed or no new orders are provided
+    // OR if the newOrders array is empty but we previously had orders
     if (newOrders.length === 0) {
-        if (currentDisplayedOrders.size === 0 || currentTab !== tab) {
+        if (currentDisplayedOrders.size > 0 || currentTab !== tab) { // Only clear if we actually had orders or tab changed
             orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
         }
         currentDisplayedOrders.clear();
@@ -409,11 +420,8 @@ async function fetchOrders(tab) {
             const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
 
             if (tab === 'filled') {
-                // CORRECTED: Use 'order.state' and the exact 'filled' string from your API response
                 orders = historyOrders.filter(order => order.state === 'filled');
             } else if (tab === 'cancelled') {
-                // CORRECTED: Use 'order.state' and the exact 'partially_canceled' string.
-                // Added 'canceled' as a possibility for fully canceled orders.
                 orders = historyOrders.filter(order => order.state === 'partially_canceled' || order.state === 'canceled');
             } else if (tab === 'all') {
                 orders = historyOrders;
@@ -692,7 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('balance')) getBalances();
     if (document.getElementById('price')) cargarPrecioEnVivo();
     if (document.getElementById('status-dot')) checkConnection();
-    if (document.getElementById('tab-opened')) setActiveTab('tab-opened');
+    if (document.getElementById('tab-opened')) setActiveTab('tab-opened'); // Asegúrate de que la pestaña "Opened" se active al inicio
 
     // Configurar intervalos de actualización
     setInterval(getBalances, 10000);
