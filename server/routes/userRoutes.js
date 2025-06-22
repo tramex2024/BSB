@@ -1,51 +1,55 @@
-// server/routes/userRoutes.js
+// backend/routes/userRoutes.js
+
 const express = require('express');
 const router = express.Router();
-// Importamos directamente las funciones del userController
-const {
-    authenticateToken, // Usado como middleware en algunas rutas
-    saveBitmartApiKeys,
-    getBitmartBalance,
-    getBitmartOpenOrders,
-    getBitmartHistoryOrders,
-    getBotConfigAndState // ¡NUEVA FUNCIÓN IMPORTADA!
-} = require('../controllers/userController');
+// Importamos todo el objeto userController
+const userController = require('../controllers/userController');
 
-const bitmartAuthMiddleware = require('../middleware/bitmartAuthMiddleware'); // Necesario para otras rutas
-const bitmartService = require('../services/bitmartService'); // ¡CORRECCIÓN: Importar bitmartService!
+const bitmartAuthMiddleware = require('../middleware/bitmartAuthMiddleware');
+const bitmartService = require('../services/bitmartService'); // Asegúrate de que esta línea esté presente
 
+// Middleware de autenticación global para todas las rutas de usuario
+// Esto simplifica la aplicación de authenticateToken a todas las rutas.
+// Si necesitas alguna ruta pública en userRoutes, podrías moverla antes de esta línea.
+router.use(userController.authenticateToken);
+
+// --- Rutas específicas del usuario (protegidas por authenticateToken) ---
 
 // Ruta para guardar y validar las API keys de BitMart
-router.post('/save-api-keys', authenticateToken, saveBitmartApiKeys);
+router.post('/save-api-keys', userController.saveBitmartApiKeys);
 
 // Ruta para obtener el balance del usuario (requiere credenciales de BitMart)
-router.get('/bitmart/balance', authenticateToken, bitmartAuthMiddleware, getBitmartBalance);
+// NOTA: 'bitmartAuthMiddleware' se asegura de que req.bitmartCreds esté disponible
+router.get('/bitmart/balance', bitmartAuthMiddleware, userController.getBitmartBalance);
 
 // Ruta para obtener órdenes abiertas del usuario (requiere credenciales de BitMart)
-router.get('/bitmart/open-orders', authenticateToken, bitmartAuthMiddleware, getBitmartOpenOrders);
+router.get('/bitmart/open-orders', bitmartAuthMiddleware, userController.getBitmartOpenOrders);
 
 // Ruta para colocar una orden (requiere credenciales de BitMart)
-router.post('/bitmart/place-order', authenticateToken, bitmartAuthMiddleware, async (req, res) => {
+router.post('/bitmart/place-order', bitmartAuthMiddleware, async (req, res) => {
     const { symbol, side, type, size, price } = req.body;
     try {
-        console.log('[placeOrder] Colocando orden para usuario:', req.user.id); // Log de inicio
-        // Asegúrate de que el bitmartService.placeOrder tome req.bitmartCreds
+        console.log('[placeOrder] Colocando orden para usuario:', req.user.id);
+        // Asegúrate de que bitmartService.placeOrder tome req.bitmartCreds
         const orderResult = await bitmartService.placeOrder(req.bitmartCreds, symbol, side, type, size, price);
-        console.log('[placeOrder] Orden colocada con éxito.'); // Log de éxito
+        console.log('[placeOrder] Orden colocada con éxito.');
         res.status(200).json(orderResult);
     } catch (error) {
-        console.error('Error al colocar orden en BitMart (en userRoutes):', error); // Log detallado del error
+        console.error('Error al colocar orden en BitMart (en userRoutes):', error);
         res.status(500).json({ message: 'Error al colocar orden en BitMart.', error: error.message });
     }
 });
 
+// --- RUTA CLAVE: Historial de Órdenes (para Opened, Filled, Cancelled, All en el frontend) ---
+// La ruta del frontend es '/api/user/history-orders', así que aquí solo necesitamos '/history-orders'
+// Esta ruta ahora usa 'userController.getHistoryOrders' que renombramos en el userController.
+router.get('/history-orders', bitmartAuthMiddleware, userController.getHistoryOrders);
 
-// Ruta para obtener el historial de órdenes (si ya lo tienes en bitmartService)
-router.get('/bitmart/history-orders', authenticateToken, bitmartAuthMiddleware, getBitmartHistoryOrders);
+// Ruta para obtener la configuración y el estado del bot
+router.get('/bot-config-and-state', userController.getBotConfigAndState);
 
-
-// --- NUEVA RUTA: Obtener Configuración y Estado del Bot ---
-router.get('/bot-config-and-state', authenticateToken, getBotConfigAndState);
+// Ruta para alternar el estado del bot (start/stop)
+router.post('/toggle-bot', userController.toggleBotState);
 
 
 module.exports = router;
