@@ -12,7 +12,7 @@ const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
 // --- Configuración de Indicadores (Ajustables) ---
 // Puedes ajustar estos valores según tus pruebas y backtesting.
 
-const RSI_PERIOD = 14;
+const RSI_PERIOD = 21; // Usando 21 para velas de 5 minutos
 const RSI_OVERSOLD = 30; // Nivel donde se considera "sobrevendido"
 const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado"
 
@@ -27,21 +27,21 @@ const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado"
  * @returns {Promise<Array<Object>>} Un array de objetos de velas.
  */
 async function getCandles(symbol, interval, size = 500) {
-    console.log(`--- Obteniendo velas reales para ${symbol} en intervalo '${interval}' a través de bitmartService ---`);
+    console.log(`[ANALYZER] --- Obteniendo velas reales para ${symbol} en intervalo '${interval}' a través de bitmartService ---`);
     try {
         const candlesData = await bitmartService.getKlines(symbol, interval, size);
 
         if (!candlesData || candlesData.length === 0) {
-            console.error("Tu bitmartService no devolvió datos de velas o los datos están vacíos.");
+            console.error("[ANALYZER] Tu bitmartService no devolvió datos de velas o los datos están vacíos.");
             return [];
         }
 
-        console.log(`✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${candlesData[candlesData.length - 1]?.close || 'N/A'}).`);
+        console.log(`[ANALYZER] ✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${candlesData[candlesData.length - 1]?.close || 'N/A'}).`);
         return candlesData;
 
     } catch (error) {
-        console.error(`❌ Falló la obtención de velas para ${symbol} usando bitmartService.`);
-        console.error('Error:', error.message);
+        console.error(`[ANALYZER] ❌ Falló la obtención de velas para ${symbol} usando bitmartService.`);
+        console.error('[ANALYZER] Error:', error.message);
         return [];
     }
 }
@@ -57,17 +57,22 @@ async function getCandles(symbol, interval, size = 500) {
  */
 function calculateIndicators(candles) {
     if (!candles || candles.length === 0) {
-        console.warn("calculateIndicators: No hay datos de velas para calcular indicadores.");
+        console.warn("[ANALYZER] calculateIndicators: No hay datos de velas para calcular indicadores.");
         return [];
     }
 
     // Asegúrate de que los precios de cierre sean números
     const closePrices = candles.map(c => parseFloat(c.close));
 
+    // LOG TEMPORAL: Mostrar precios de cierre que se usan para RSI
+    console.log(`[ANALYZER-DEBUG] Precios de cierre para RSI (${closePrices.length} velas):`, closePrices.map(p => p.toFixed(2)).join(', '));
+
+
     // Validar que tenemos suficientes datos para cada indicador
     const requiredWarmUp = RSI_PERIOD; // Para RSI
-    if (closePrices.length < requiredWarmUp) {
-        console.warn(`calculateIndicators: Se necesitan al menos ${requiredWarmUp} velas para calcular RSI. Solo se tienen ${closePrices.length}.`);
+    // Necesitas al menos (periodo + 1) velas para calcular el RSI y tener un 'prevCandle' para análisis de cruces.
+    if (closePrices.length < requiredWarmUp + 1) { 
+        console.warn(`[ANALYZER] calculateIndicators: Se necesitan al menos ${requiredWarmUp + 1} velas para calcular RSI y realizar el análisis de cruces. Solo se tienen ${closePrices.length}.`);
         return [];
     }
 
@@ -82,7 +87,7 @@ function calculateIndicators(candles) {
         candlesWithIndicators.push(candle);
     }
 
-    console.log(`DEBUG: calculateIndicators produjo ${candlesWithIndicators.length} velas con indicadores.`);
+    console.log(`[ANALYZER-DEBUG] calculateIndicators produjo ${candlesWithIndicators.length} velas con indicadores.`);
     return candlesWithIndicators;
 }
 
@@ -98,34 +103,38 @@ function calculateIndicators(candles) {
 function determineEntryPoint(candlesWithIndicators, symbol = SYMBOL) {
     // Necesitamos al menos dos velas completas con indicadores para un análisis de cruces o tendencias recientes.
     if (!candlesWithIndicators || candlesWithIndicators.length < 2) {
-        const result = { action: "ESPERA", symbol: symbol, reason: "No hay suficientes datos de velas para determinar punto de entrada (necesita al menos 2 velas completas con indicadores)." };
-        console.log(`[SEÑAL] ${result.action} - ${result.reason}`);
+        const result = { action: "ESPERA", symbol: symbol, reason: "No hay suficientes datos de velas para determinar punto de entrada (necesita al menos 2 velas completas con indicadores después del warmup)." };
+        console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
 
     const lastCandle = candlesWithIndicators[candlesWithIndicators.length - 1];
     const prevCandle = candlesWithIndicators[candlesWithIndicators.length - 2];
 
-    if (lastCandle.rsi === undefined || prevCandle.rsi === undefined) {
-        const result = { action: "ESPERA", symbol: symbol, reason: "ERROR INTERNO: RSI no calculado para las últimas velas." };
-        console.log(`[SEÑAL] ${result.action} - ${result.reason}`);
+    if (lastCandle.rsi === undefined || prevCandle.rsi === undefined || isNaN(lastCandle.rsi) || isNaN(prevCandle.rsi)) {
+        const result = { action: "ESPERA", symbol: symbol, reason: `ERROR INTERNO: RSI no calculado o inválido para las últimas velas. Last RSI: ${lastCandle.rsi}, Prev RSI: ${prevCandle.rsi}.` };
+        console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
 
-    // --- Lógica de Compra Simplificada y Más Directa ---
+    // LOG TEMPORAL: Mostrar valores del RSI actual y anterior
+    console.log(`[ANALYZER-DEBUG] Analizando señales - Último RSI: ${lastCandle.rsi.toFixed(2)}, RSI Anterior: ${prevCandle.rsi.toFixed(2)}`);
+
+    // --- Lógica de COMPRA ---
     let buySignalDetected = false;
     let buyReason = [];
 
-    // Estrategia 1: RSI cruzando la zona de sobreventa al alza
-    // Si la vela anterior estaba en sobreventa o tocando el límite, y la actual está por encima
+    // Estrategia 1 de Compra: RSI cruzando la zona de sobreventa al alza
     if (prevCandle.rsi <= RSI_OVERSOLD && lastCandle.rsi > RSI_OVERSOLD) {
         buySignalDetected = true;
         buyReason.push(`RSI cruzó ${RSI_OVERSOLD} al alza (${prevCandle.rsi.toFixed(2)} -> ${lastCandle.rsi.toFixed(2)})`);
+        console.log(`[ANALYZER-DEBUG] ✅ Condición de COMPRA (RSI cruzó oversold al alza) detectada.`);
     }
-    // Estrategia 2: RSI en zona de sobreventa y empezando a subir (señal de reversión)
+    // Estrategia 2 de Compra: RSI en zona de sobreventa y empezando a subir (señal de reversión)
     else if (lastCandle.rsi < RSI_OVERSOLD && lastCandle.rsi > prevCandle.rsi) {
         buySignalDetected = true;
         buyReason.push(`RSI en sobreventa (${lastCandle.rsi.toFixed(2)}) y subiendo desde ${prevCandle.rsi.toFixed(2)}`);
+        console.log(`[ANALYZER-DEBUG] ✅ Condición de COMPRA (RSI en oversold y subiendo) detectada.`);
     }
 
     if (buySignalDetected) {
@@ -136,41 +145,41 @@ function determineEntryPoint(candlesWithIndicators, symbol = SYMBOL) {
             timestamp: new Date().toISOString(),
             reason: `Señal de COMPRA: ${buyReason.join('. ')}. Precio de cierre de la vela: ${lastCandle.close}`
         };
-        console.log(`[SEÑAL] ${result.action} - ${result.reason}`);
+        console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
 
-    // --- Lógica de Venta (Puedes expandirla si el bot no gestiona la venta con el trigger) ---
-    // NOTA: Tu autobotLogic ya maneja la lógica de venta por "triggerPercentage" de forma global.
-    // Esta sección aquí sería para una estrategia de venta basada puramente en indicadores,
-    // que podría coexistir o ser secundaria a tu lógica de trigger.
+    // --- Lógica de VENTA ---
     let sellSignalDetected = false;
     let sellReason = [];
 
-    // Estrategia 1: RSI cruzando la zona de sobrecompra a la baja
+    // Estrategia 1 de Venta: RSI cruzando la zona de sobrecompra a la baja
     if (prevCandle.rsi >= RSI_OVERBOUGHT && lastCandle.rsi < RSI_OVERBOUGHT) {
         sellSignalDetected = true;
         sellReason.push(`RSI cruzó ${RSI_OVERBOUGHT} a la baja (${prevCandle.rsi.toFixed(2)} -> ${lastCandle.rsi.toFixed(2)})`);
+        console.log(`[ANALYZER-DEBUG] ✅ Condición de VENTA (RSI cruzó overbought a la baja) detectada.`);
     }
-    // Estrategia 2: RSI en zona de sobrecompra y empezando a bajar
+    // Estrategia 2 de Venta: RSI en zona de sobrecompra y empezando a bajar
     else if (lastCandle.rsi > RSI_OVERBOUGHT && lastCandle.rsi < prevCandle.rsi) {
         sellSignalDetected = true;
         sellReason.push(`RSI en sobrecompra (${lastCandle.rsi.toFixed(2)}) y bajando desde ${prevCandle.rsi.toFixed(2)}`);
+        console.log(`[ANALYZER-DEBUG] ✅ Condición de VENTA (RSI en overbought y bajando) detectada.`);
     }
 
     if (sellSignalDetected) {
-        // En tu caso, la venta la maneja 'autobotLogic' con el trigger.
-        // Podrías devolver 'ESPERA' incluso si hay señal de VENTA aquí,
-        // o podrías usar esto como una señal de 'alerta' para el bot si lo deseas.
+        // Tu autobotLogic ya maneja la lógica de venta por "triggerPercentage" de forma global.
+        // Aquí puedes decidir si quieres que esta señal de VENTA del analizador
+        // tenga prioridad, o si simplemente la registras y el bot sigue con su lógica de trigger.
         // Por ahora, para no interferir con la lógica de venta del autobot,
-        // si no hay señal de COMPRA, devolvemos 'ESPERA'.
-        console.log(`[SEÑAL] DETECTADA SEÑAL DE VENTA POR INDICADOR (RSI: ${lastCandle.rsi.toFixed(2)}). El bot usa TRIGER para vender. Acción: ESPERA.`);
-        return { action: "ESPERA", symbol: symbol, reason: sellReason.join('. ') + " (Señal de venta por indicador, bot prioriza Trigger para venta)." };
+        // devolvemos la señal de VENTA aquí, que `autobotLogic` podría usar o ignorar.
+        const result = { action: "VENTA", symbol: symbol, reason: sellReason.join('. ') };
+        console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
+        return result;
     }
 
-    // Si no se detecta ninguna señal clara de compra o venta (según las reglas de compra/venta definidas aquí)
+    // Si no se detecta ninguna señal clara de COMPRA o VENTA, la acción por defecto es ESPERA
     const result = { action: "ESPERA", symbol: symbol, reason: "No se encontraron señales de entrada o salida claras en este momento." };
-    console.log(`[SEÑAL] ${result.action} - ${result.reason}`);
+    console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
     return result;
 }
 
@@ -183,43 +192,45 @@ function determineEntryPoint(candlesWithIndicators, symbol = SYMBOL) {
 async function writeEntryPointToFile(entryPointData, filename = "bitmart_entry_point.json") {
     try {
         await fs.writeFile(filename, JSON.stringify(entryPointData, null, 4), 'utf8');
-        console.log(`[Archivo] Punto de entrada escrito en '${filename}'`);
+        console.log(`[ANALYZER-FILE] Punto de entrada escrito en '${filename}'`);
     } catch (error) {
-        console.error(`[Archivo] Error al escribir el archivo '${filename}':`, error);
+        console.error(`[ANALYZER-FILE] Error al escribir el archivo '${filename}':`, error);
     }
 }
 
 // --- FUNCIÓN PRINCIPAL PARA EJECUTAR EL ANÁLISIS ---
 // Esta función es la que vas a ejecutar para obtener la señal.
 async function runAnalysis() {
-    console.log(`\n--- Iniciando análisis para ${SYMBOL} ---`);
+    console.log(`\n[ANALYZER] --- Iniciando análisis para ${SYMBOL} ---`);
 
     // Paso 1: Obtener las velas de BitMart
     // Pedimos 500 velas para asegurarnos de tener suficientes datos para el cálculo del RSI.
-    // Intervalo '1' significa velas de 1 minuto.
-    const rawCandlesFromAPI = await getCandles(SYMBOL, '1', 500);
+    // Intervalo '5' significa velas de 5 minutos.
+    const rawCandlesFromAPI = await getCandles(SYMBOL, '5', 500); // Usando intervalo de '5' minutos
 
-    console.log(`DEBUG: Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
+    console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
 
     if (rawCandlesFromAPI.length === 0) {
-        console.error("No se pudieron obtener velas para el análisis. Deteniendo.");
+        console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Deteniendo.");
         return { action: "ERROR", symbol: SYMBOL, reason: "No se obtuvieron datos de velas." };
     }
 
     // Cortar la última vela de la API porque podría estar incompleta
     const candlesForAnalysis = rawCandlesFromAPI.slice(0, -1);
 
-    console.log(`DEBUG: Se usarán ${candlesForAnalysis.length} velas para el cálculo de indicadores (última vela de la API ignorada para seguridad).`);
+    console.log(`[ANALYZER-DEBUG] Se usarán ${candlesForAnalysis.length} velas para el cálculo de indicadores (última vela de la API ignorada para seguridad).`);
 
     // Paso 2: Calcular los indicadores técnicos
     const candlesWithIndicators = calculateIndicators(candlesForAnalysis);
 
     // DEBUG: Muestra las últimas 5 velas con sus indicadores calculados
-    console.log("\nDEBUG: Últimas 5 velas (con indicadores completos):");
+    console.log("\n[ANALYZER-DEBUG] Últimas 5 velas (con indicadores completos):");
     if (candlesWithIndicators.length > 0) {
         candlesWithIndicators.slice(-5).forEach(candle => {
-            console.log(`Cierre: ${candle.close}, RSI: ${candle.rsi?.toFixed(2) || 'N/A'}`);
+            console.log(`[ANALYZER-DEBUG]   Cierre: ${parseFloat(candle.close).toFixed(2)}, RSI: ${candle.rsi?.toFixed(2) || 'N/A'}`);
         });
+    } else {
+        console.warn("[ANALYZER-DEBUG] No hay velas completas con indicadores para mostrar.");
     }
 
     // Paso 3: Determinar el punto de entrada.
@@ -227,7 +238,7 @@ async function runAnalysis() {
     // Esto es crucial para la lógica de cruces (prevCandle y lastCandle).
     if (candlesWithIndicators.length < 2) {
         const signal = { action: "ESPERA", symbol: SYMBOL, reason: "No hay suficientes velas con todos los indicadores calculados para determinar una señal clara." };
-        console.log("\n--- Señal de Trading Generada ---");
+        console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
         console.log(signal);
         await writeEntryPointToFile(signal);
         return signal;
@@ -235,7 +246,7 @@ async function runAnalysis() {
 
     const signal = determineEntryPoint(candlesWithIndicators, SYMBOL);
 
-    console.log("\n--- Señal de Trading Generada ---");
+    console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
     console.log(signal);
 
     // Paso 4: Guardar la señal en un archivo
@@ -250,7 +261,7 @@ async function runAnalysis() {
 if (require.main === module) {
     // Si estás ejecutando este archivo directamente
     runAnalysis().catch(error => {
-        console.error("Error al ejecutar el análisis:", error);
+        console.error("[ANALYZER] Error al ejecutar el análisis:", error);
     });
 }
 
