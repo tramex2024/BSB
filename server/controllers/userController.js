@@ -1,4 +1,4 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
 const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
 const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
@@ -188,14 +188,14 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { // Usar el nombre que aparece en tu DB
+        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
             console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
             return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
         }
 
         const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted); // Usar el nombre que aparece en tu DB
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo); // Usar el nombre que aparece en tu DB
+        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         const authCredentials = {
             apiKey: decryptedApiKey,
@@ -203,13 +203,17 @@ exports.getBitmartOpenOrders = async (req, res) => {
             apiMemo: decryptedMemo
         };
 
-        const openOrders = await bitmartService.getOpenOrders(authCredentials, symbol);
-        res.status(200).json({ success: true, orders: openOrders }); // Envía un objeto con 'success' y 'orders'
+        // bitmartService.getOpenOrders already returns { orders: [...] }
+        const responseFromService = await bitmartService.getOpenOrders(authCredentials, symbol);
+        
+        // FIX HERE: Access the 'orders' property from the service's response
+        // and send *that array* as the 'orders' property in the final JSON response.
+        res.status(200).json({ success: true, orders: responseFromService.orders || [] }); 
 
     } catch (error) {
         console.error('Error getting BitMart open orders:', error);
         if (error.message.includes("Failed to decrypt BitMart credentials")) {
-             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+            return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
         }
         res.status(500).json({ message: error.message || 'Error fetching BitMart open orders.' });
     }
