@@ -54,7 +54,7 @@ class BotManager {
             return { success: false, message: `Failed to activate test AIBot license: ${error.message}` };
         }
     }
-}
+
     async getBotInstance(userId, botType, apiCredentials) {
         if (!this.activeBots[userId]) {
             this.activeBots[userId] = {};
