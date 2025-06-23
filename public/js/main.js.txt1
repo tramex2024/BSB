@@ -17,14 +17,11 @@ const apiModal = document.getElementById('api-modal');
 const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
 const apiForm = document.getElementById('api-form');
 const apiKeyInput = document.getElementById('api-key');
-// CORRECCIÓN: 'secretKeyInput' estaba mal asignado, debe ser document.getElementById
-const secretKeyInput = document.getElementById('secret-key');
+const secretKeyInput = document = "secret-key";
 const apiMemoInput = document.getElementById('api-memo');
 const apiStatusMessage = document.getElementById('api-status-message');
 const connectionIndicator = document.getElementById('connection-indicator');
 const connectionText = document.getElementById('connection-text');
-// NEW: Botón de Validar en el modal de API Keys (ID agregado)
-const validateApiKeysButton = document.getElementById('validate-api-keys-button');
 
 
 // Inputs de configuración del bot
@@ -117,8 +114,6 @@ function toggleApiModal(show) {
             connectionText.textContent = 'Not Connected';
             // Secret key input should always be cleared for security reasons
             secretKeyInput.value = '';
-            // Fetch current API Keys for display when opening the modal
-            loadApiKeysForDisplay(); // NEW: Load existing API keys
         } else {
             apiModal.style.display = 'none';
         }
@@ -324,12 +319,8 @@ async function getBalances() {
     }
     try {
         const walletData = await fetchFromBackend('/api/user/bitmart/balance');
-        // REVISIÓN: El backend de balance puede devolver { success: true, balances: [...] }
-        // o directamente el array. Hay que manejarlo.
-        const balancesArray = walletData && walletData.balances ? walletData.balances : walletData;
-
-        if (balancesArray && Array.isArray(balancesArray)) {
-            const usdt = balancesArray.find(w => w.currency === "USDT");
+        if (walletData && Array.isArray(walletData)) {
+            const usdt = walletData.find(w => w.currency === "USDT");
             const balance = usdt ? parseFloat(usdt.available).toFixed(2) : '0.00';
             if (document.getElementById('balance')) {
                 document.getElementById('balance').textContent = balance;
@@ -355,22 +346,12 @@ async function fetchOpenOrdersData() {
     }
     try {
         const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-        // Para la ruta '/spot/v4/query/open-orders', el bitmartService devuelve { orders: [...] }
-        // o en algunos casos antiguos { orders: { orders: [...] } }. Normalizamos a un array.
-        let openOrders = [];
-        if (response && response.orders) {
-            // Si response.orders es un objeto con la propiedad 'orders' (ej: { orders: [{...}, {...}] })
-            if (Array.isArray(response.orders.orders)) {
-                openOrders = response.orders.orders;
-            } else if (Array.isArray(response.orders)) { // Si response.orders es directamente un array
-                openOrders = response.orders;
-            }
-        }
-        
-        if (!Array.isArray(openOrders)) {
-            console.warn("fetchOpenOrdersData: 'orders' property is not an array after parsing. Actual type:", typeof openOrders, openOrders);
+        // *** CAMBIO CLAVE AQUÍ: Accede a response.orders.orders ***
+        if (!response || !response.orders || !Array.isArray(response.orders.orders)) {
+            console.warn("fetchOpenOrdersData: Backend response was null/undefined or missing 'orders.orders'.");
             return [];
         }
+        const openOrders = response.orders.orders; // Accede al array anidado
         return openOrders;
     } catch (error) {
         console.error("Error fetching open orders data:", error);
@@ -395,23 +376,13 @@ async function fetchHistoryOrdersData(tab) {
             limit: 200 // BitMart V4 historical orders default limit is 200
         }).toString();
 
-        // CORREGIDO: Asegurarse de que la ruta sea '/api/user/bitmart/history-orders'
-        const response = await fetchFromBackend(`/api/user/bitmart/history-orders?${queryParams}`);
-        // BitMart's history-orders often returns an array directly or an object like { list: [...] }
-        if (!response) {
-            console.warn("fetchHistoryOrdersData: Backend response was null/undefined.");
+        const response = await fetchFromBackend(`/api/user/history-orders?${queryParams}`);
+        // Ensure response is valid before accessing .orders
+        if (!response || !response.orders) {
+            console.warn("fetchHistoryOrdersData: Backend response was null/undefined or missing 'orders'.");
             return [];
         }
-        // Si la respuesta es un objeto con una propiedad 'list' (común en algunas APIs de historial)
-        if (response.list && Array.isArray(response.list)) {
-            return response.list;
-        }
-        // Si la respuesta es directamente el array (común en otras)
-        if (Array.isArray(response)) {
-            return response;
-        }
-        console.warn("fetchHistoryOrdersData: Unexpected response format:", response);
-        return [];
+        return response.orders || [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
         return [];
@@ -513,9 +484,6 @@ function calcularORQ(purchase, increment, balance) {
     let total = 0;
     let n = 0;
     while (true) {
-        // CORRECCIÓN: el cálculo del siguiente orden debe ser con el porcentaje, no potencia
-        // Es decir, si increment es 100, significa 100%, entonces la siguiente orden es purchase * (100/100) = purchase
-        // Si increment es 105, significa 105%, entonces la siguiente orden es purchase * (105/100)
         const nextOrder = purchase * Math.pow(increment / 100, n);
         if (total + nextOrder <= balance) {
             total += nextOrder;
@@ -527,8 +495,6 @@ function calcularORQ(purchase, increment, balance) {
 
 function calcularCoverage(orq, price, decrement) {
     if (orq === 0) return 0;
-    // CORRECCIÓN: el cálculo de coverage debe ser sobre el porcentaje de decremento
-    // Si decrement es 1, significa 1%, entonces (1 - 1/100) = 0.99
     return price * Math.pow(1 - decrement / 100, orq - 1);
 }
 
@@ -716,101 +682,6 @@ function setActiveTab(tabId) {
     }
 }
 
-// --- Funciones para manejar API Keys (GUARDAR y VALIDAR) ---
-
-/**
- * Guarda las API Keys y el Memo en el backend.
- * Nota: Tu código ya maneja esto a través del `submit` del `apiForm`.
- */
-async function saveApiKeys(apiKey, secretKey, apiMemo) {
-    try {
-        const response = await fetchFromBackend('/api/user/bitmart/save-api-keys', { // CORREGIDO: Ruta a /api/user/bitmart/save-api-keys
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ apiKey, secretKey, memo: apiMemo }) // Asegúrate de que el backend espere 'memo'
-        });
-        return response; // Devuelve la respuesta para que el formulario la procese
-    } catch (error) {
-        console.error('Error al guardar API keys:', error);
-        // Propaga el error para que el formulario lo maneje
-        throw new Error('Error de conexión o del servidor al guardar las API Keys.');
-    }
-}
-
-/**
- * Valida las API Keys de BitMart con el backend.
- * Esta función se llama después de guardar o al hacer clic en "Validar".
- */
-async function validateApiKeys() {
-    if (!isLoggedIn) {
-        apiStatusMessage.textContent = 'Please login first to validate API keys.';
-        apiStatusMessage.style.color = 'red';
-        return;
-    }
-
-    apiStatusMessage.textContent = 'Validating API keys...';
-    apiStatusMessage.style.color = 'yellow';
-    connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
-    connectionIndicator.classList.add('bg-yellow-500');
-    connectionText.textContent = 'Connecting...';
-
-    try {
-        // La validación ahora solo necesita llamar al backend. El backend usará las claves
-        // que ya deben estar guardadas para intentar una operación (ej. obtener balances).
-        const response = await fetchFromBackend('/api/user/bitmart/validate-api-keys', { // CORREGIDO: Ruta a /api/user/bitmart/validate-api-keys
-            method: 'GET' // Asume que la validación es un GET que prueba las credenciales guardadas
-        });
-
-        if (response && response.success && response.connected) {
-            apiStatusMessage.textContent = response.message || 'API keys validated successfully!';
-            apiStatusMessage.style.color = 'green';
-            connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
-            connectionIndicator.classList.add('bg-green-500');
-            connectionText.textContent = 'Connected';
-            // Refrescar balances y órdenes después de una validación exitosa
-            getBalances();
-            fetchOrders(currentTab);
-        } else {
-            const errorMessage = response.message || 'Failed to validate API keys. Please check them and try again.';
-            apiStatusMessage.textContent = errorMessage;
-            apiStatusMessage.style.color = 'red';
-            connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
-            connectionIndicator.classList.add('bg-red-500');
-            connectionText.textContent = 'Disconnected';
-        }
-    } catch (error) {
-        console.error('Error during API key validation:', error);
-        apiStatusMessage.textContent = `Error: ${error.message}`;
-        apiStatusMessage.style.color = 'red';
-        connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
-        connectionIndicator.classList.add('bg-red-500');
-        connectionText.textContent = 'Disconnected';
-    }
-}
-
-/**
- * Carga las API Keys existentes en los campos del modal (solo API Key y Memo, no Secret Key por seguridad).
- */
-async function loadApiKeysForDisplay() {
-    if (!isLoggedIn) return;
-    try {
-        const response = await fetchFromBackend('/api/user/bitmart/get-api-keys', { method: 'GET' });
-        if (response && response.success && response.keys) {
-            apiKeyInput.value = response.keys.apiKey || '';
-            apiMemoInput.value = response.keys.memo || ''; // Asegúrate de que el backend devuelva 'memo'
-        } else {
-            console.warn('No existing API keys found or error fetching them.');
-            apiKeyInput.value = '';
-            apiMemoInput.value = '';
-        }
-    } catch (error) {
-        console.error('Error loading API keys for display:', error);
-        apiKeyInput.value = '';
-        apiMemoInput.value = '';
-    }
-}
-
-
 // --- Event Listeners del DOMContentLoaded (punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar la verificación del estado de login al cargar la página
@@ -948,15 +819,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Manejador del submit del formulario de API
-    // Este manejador ahora solo se encarga de GUARDAR las claves.
-    // La VALIDACIÓN se puede hacer por separado o después del guardado exitoso.
     if (apiForm) {
         apiForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const apiKey = apiKeyInput.value.trim();
             const secretKey = secretKeyInput.value.trim();
-            const apiMemo = apiMemoInput.value.trim(); // Se asegura que sea una cadena vacía si no hay valor
+            const apiMemo = apiMemoInput.value.trim();
 
             if (!apiKey || !secretKey) {
                 apiStatusMessage.textContent = 'API Key and Secret Key are required.';
@@ -964,27 +833,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            apiStatusMessage.textContent = 'Saving API keys...';
+            apiStatusMessage.textContent = 'Validating API keys...';
             apiStatusMessage.style.color = 'yellow';
             connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
             connectionIndicator.classList.add('bg-yellow-500');
-            connectionText.textContent = 'Saving...';
+            connectionText.textContent = 'Connecting...';
 
             try {
-                const response = await saveApiKeys(apiKey, secretKey, apiMemo); // Llama a la función saveApiKeys
+                const response = await fetchFromBackend('/api/user/save-api-keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey, secretKey, apiMemo })
+                });
 
-                if (response && response.success) {
-                    apiStatusMessage.textContent = response.message || 'API keys saved successfully!';
+                if (response && response.connected) {
+                    apiStatusMessage.textContent = response.message || 'API keys validated and saved!';
                     apiStatusMessage.style.color = 'green';
-                    // Después de guardar, intenta VALIDAR las claves
-                    await validateApiKeys(); // <-- Llama a la función de validación aquí
+                    connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
+                    connectionIndicator.classList.add('bg-green-500');
+                    connectionText.textContent = 'Connected';
+                    getBalances();
+                    fetchOrders(currentTab);
                 } else {
-                    const errorMessage = response.message || 'Failed to save API keys.';
+                    const errorMessage = response.message || 'Failed to validate or save API keys.';
                     apiStatusMessage.textContent = errorMessage;
                     apiStatusMessage.style.color = 'red';
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                     connectionIndicator.classList.add('bg-red-500');
-                    connectionText.textContent = 'Disconnected (Save Error)';
+                    connectionText.textContent = 'Disconnected';
                 }
             } catch (error) {
                 console.error('Error submitting API keys:', error);
@@ -992,7 +868,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 apiStatusMessage.style.color = 'red';
                 connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                 connectionIndicator.classList.add('bg-red-500');
-                connectionText.textContent = 'Disconnected (Network Error)';
+                connectionText.textContent = 'Disconnected';
             }
         });
     }
@@ -1001,25 +877,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeApiModalButton) {
         closeApiModalButton.addEventListener('click', () => {
             toggleApiModal(false);
-        });
-    }
-
-    // NEW: Click handler for the dedicated "Validate API Keys" button
-    if (validateApiKeysButton) {
-        validateApiKeysButton.addEventListener('click', async () => {
-            // Asegúrate de que los campos del formulario estén llenos si se va a validar sin guardar primero
-            const apiKey = apiKeyInput.value.trim();
-            const secretKey = secretKeyInput.value.trim();
-            const apiMemo = apiMemoInput.value.trim();
-
-            if (!apiKey || !secretKey) {
-                apiStatusMessage.textContent = 'Please enter API Key and Secret Key before validating.';
-                apiStatusMessage.style.color = 'red';
-                return;
-            }
-            // Si las claves están en los campos, puedes llamar a `validateApiKeys`
-            // que internamente intentará probar con las claves guardadas o lo que se pueda inferir
-            await validateApiKeys();
         });
     }
 });
