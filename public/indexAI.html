@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <h1>Trading Bot Dashboard</h1>
+
+        <div id="aibot" class="tab-content">
+            <div class="aibot-license-section">
+                <h3>Gestión de Licencia del AIBot</h3>
+                <p>Costo: 0.30 USDT por día.</p>
+                <button id="requestLicenseExtension">Solicitar Extensión de Licencia</button>
+                <p id="licenseStatus" class="status-message"></p>
+
+                <button id="activateTestLicense" class="test-button">Activar Licencia de Prueba (100 Días)</button>
+            </div>
+
+            <div class="aibot-chart-section">
+                <h3>Gráfico de Precio y Operaciones del AIBot</h3>
+                <canvas id="aibotChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('paymentModal')">&times;</span>
+            <h2>Extender Licencia del AIBot</h2>
+            <p>Por favor, transfiere el monto deseado a una de las siguientes billeteras:</p>
+
+            <div class="wallet-info">
+                <p><strong>BTC (Bitcoin Network):</strong> <span id="modalBtcAddress">bc1qxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</span></p>
+                <p><strong>USDT (TRC20 Network):</strong> <span id="modalUsdtAddress">TRC20_WALLET_ADDRESS_EXAMPLE_TXXXXXXXXXXXXXXXXXXXXXX</span></p>
+                <p class="small-text">Costo: 0.30 USDT por día. Puedes pagar el equivalente en BTC.</p>
+            </div>
+
+            <hr>
+
+            <div class="input-group">
+                <label for="paymentCurrency">Moneda a Transferir:</label>
+                <select id="paymentCurrency">
+                    <option value="USDT">USDT</option>
+                    <option value="BTC">BTC</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="paymentNetwork">Red de Transferencia:</label>
+                <select id="paymentNetwork">
+                    <option value="TRC20">TRC20 (USDT)</option>
+                    <option value="Bitcoin">Bitcoin (BTC)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="paymentAmount">Monto a Transferir (USDT o BTC):</label>
+                <input type="number" id="paymentAmount" value="3.00" step="0.01">
+            </div>
+            <div class="input-group">
+                <label for="paymentTransactionId">ID de Transacción:</label>
+                <input type="text" id="paymentTransactionId" placeholder="ID de la transacción de tu billetera">
+            </div>
+            <div class="input-group">
+                <label for="paymentSourceWallet">Tu Billetera de Origen:</label>
+                <input type="text" id="paymentSourceWallet" placeholder="Tu billetera desde la que enviaste el pago">
+            </div>
+            <button id="confirmPayment">Confirmar Envío</button>
+            <p id="paymentStatusMessage" class="status-message"></p>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script> <script src="/js/main.js"></script>
+</body>
+</html>

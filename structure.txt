@@ -25,6 +25,8 @@ BSB/
 │   ├── controllers/
 │   │   └── authController.js
 │   │   └── userController.js
+│   ├── config/
+│   │   └── db.js
 │   ├── utils/
 │   │   └── encryption.js
 │   ├── seeders/
