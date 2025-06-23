@@ -203,11 +203,11 @@ exports.getBitmartOpenOrders = async (req, res) => {
             apiMemo: decryptedMemo
         };
 
-        // bitmartService.getOpenOrders already returns { orders: [...] }
+        // Aquí es donde obtendremos { orders: [...] } del servicio
         const responseFromService = await bitmartService.getOpenOrders(authCredentials, symbol);
         
-        // FIX HERE: Access the 'orders' property from the service's response
-        // and send *that array* as the 'orders' property in the final JSON response.
+        // ¡IMPORTANTE! Envía directamente el ARRAY de órdenes al frontend
+        // Si responseFromService es { orders: [...] }, entonces responseFromService.orders es el array.
         res.status(200).json({ success: true, orders: responseFromService.orders || [] }); 
 
     } catch (error) {
