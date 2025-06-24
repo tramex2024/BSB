@@ -593,24 +593,23 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                     if (botStateObj.pm === 0 || botStateObj.currentPrice > botStateObj.pm) {
                         botStateObj.pm = botStateObj.currentPrice;
                         // Calcular el precio de venta (pv) con un porcentaje de trailing stop (ej. 0.5%)
-                        botStateObj.pv = botStateObj.pm * (1 - (botStateObj.trailingStop || 0.5) / 100); 
+                        botStateObj.pv = botStateObj.pm * (1 - (botStateObj.trailingStop || 0.5) / 100);
                         // Calcular el precio de corte (pc) con un porcentaje adicional de caída (ej. 0.4%)
-                        // CAMBIO: Usar un parámetro configurable para PC, o un valor fijo.
-                        // Usaremos un valor fijo por ahora para mantener la simplicidad si no hay un parámetro `cutLossPercentage`
                         const cutLossPercentage = 0.4; // Porcentaje de caída adicional desde PM para activar venta
-                        botStateObj.pc = botStateObj.pm * (1 - cutLossPercentage / 100); 
+                        botStateObj.pc = botStateObj.pm * (1 - cutLossPercentage / 100);
                         console.log(`[AUTOBOT][${botStateObj.userId}] Actualizando precios de venta. PM: ${botStateObj.pm.toFixed(2)}, PV: ${botStateObj.pv.toFixed(2)}, PC: ${botStateObj.pc.toFixed(2)}`);
                     }
 
                     // Condición para colocar la orden de venta
+                    // PRIORIDAD: PC (Cut-Loss) antes que PV (Trailing Stop)
                     if (botStateObj.currentPrice <= botStateObj.pc && botStateObj.ac > 0) {
                         console.log(`[AUTOBOT][${botStateObj.userId}] Condiciones de venta (PC) alcanzadas! Colocando orden de venta.`);
                         await placeSellOrder(botStateObj, bitmartCreds);
                         // Después de placeSellOrder, el bot puede ir a RUNNING o STOPPED si stopAtCycleEnd es true.
                         // No es necesario un break aquí ya que placeSellOrder maneja la transición de estado.
                     } else if (botStateObj.currentPrice <= botStateObj.pv && botStateObj.ac > 0 && botStateObj.currentPrice < botStateObj.pm) {
-                         console.log(`[AUTOBOT][${botStateObj.userId}] Precio de venta (PV) alcanzado! Colocando orden de venta.`);
-                         await placeSellOrder(botStateObj, bitmartCreds);
+                        console.log(`[AUTOBOT][${botStateObj.userId}] Precio de venta (PV) alcanzado! Colocando orden de venta.`);
+                        await placeSellOrder(botStateObj, bitmartCreds);
                     } else {
                         console.log(`[AUTOBOT][${botStateObj.userId}] Esperando condiciones para la venta. Precio actual: ${botStateObj.currentPrice.toFixed(2)}, PM: ${botStateObj.pm.toFixed(2)}, PV: ${botStateObj.pv.toFixed(2)}, PC: ${botStateObj.pc.toFixed(2)}`);
                     }
@@ -622,14 +621,14 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
                         if (orderDetails && (orderDetails.state === 'filled' || orderDetails.state === 'fully_filled')) {
                             console.log(`[AUTOBOT][${botStateObj.userId}] ✅ Orden de VENTA ID ${botStateObj.orderId} COMPLETA.`);
-                            // CAMBIO: Reutilizar lógica de extracción de venta
-                            let soldQty = 0; 
-                            let revenueAmount = 0; 
-                            let sellAvgPrice = 0; 
+                            // Reutilizar lógica de extracción de venta
+                            let soldQty = 0;
+                            let revenueAmount = 0;
+                            let sellAvgPrice = 0;
 
                             if (orderDetails.deal_money && orderDetails.deal_quantity) {
-                                revenueAmount = parseFloat(orderDetails.deal_money); 
-                                soldQty = parseFloat(orderDetails.deal_quantity); 
+                                revenueAmount = parseFloat(orderDetails.deal_money);
+                                soldQty = parseFloat(orderDetails.deal_quantity);
                                 if (soldQty > 0) sellAvgPrice = revenueAmount / soldQty;
                             } else if (orderDetails.executed_qty && orderDetails.cummulative_quote_qty) {
                                 soldQty = parseFloat(orderDetails.executed_qty);
@@ -659,7 +658,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
                             botStateObj.failedOrderAttempts = 0; // Resetear si la orden se procesó con éxito
 
-                            const commissionRate = 0.001; 
+                            const commissionRate = 0.001;
                             const buyCommission = botStateObj.totalInvestedUSDT * commissionRate;
                             const sellCommission = revenueAmount * commissionRate;
 
@@ -671,13 +670,44 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                             if (botStateObj.stopAtCycleEnd) {
                                 console.log(`[AUTOBOT][${botStateObj.userId}] Bandera "Stop on Cycle End" activada. Deteniendo el bot al final del ciclo.`);
                                 await stopBotStrategy(botStateObj, bitmartCreds);
-                                return;
+                                return; // Salir de la función ya que el bot se detuvo
                             }
 
+                            // --- INICIO DE LA CORRECCIÓN: Colocar nueva orden de compra a mercado ---
+
+                            // Reiniciar variables para el nuevo ciclo
                             resetCycleVariables(botStateObj);
-                            botStateObj.cycle = 1; // Inicia el nuevo ciclo en 1.
-                            botStateObj.state = 'RUNNING'; // Volver a RUNNING para esperar nueva señal de COMPRA
-                            console.log(`[AUTOBOT][${botStateObj.userId}] Bot listo para el nuevo ciclo en estado RUNNING.`);
+                            botStateObj.cycle++; // Avanzar al siguiente ciclo
+
+                            console.log(`[AUTOBOT][${botStateObj.userId}] Venta completada y 'stopAtCycleEnd' es false. Colocando nueva orden de compra a mercado para el ciclo ${botStateObj.cycle}.`);
+                            try {
+                                // Usar el 'purchase' inicial para la nueva primera compra del ciclo.
+                                const amountToBuy = botStateObj.purchase;
+                                const availableUSDT = await bitmartService.getUSDTBalance(bitmartCreds);
+
+                                if (availableUSDT >= amountToBuy && amountToBuy >= MIN_USDT_VALUE_FOR_BITMART) {
+                                    const buyOrder = await bitmartService.placeMarketOrder(bitmartCreds, TRADE_SYMBOL, 'buy', amountToBuy, 'quote'); // Compra por monto USDT
+                                    botStateObj.orderId = buyOrder.order_id;
+                                    botStateObj.orderType = 'market_buy';
+                                    botStateObj.orderPlacedTime = Date.now();
+                                    botStateObj.state = 'BUYING'; // Transicionar a BUYING para monitorear esta nueva orden
+                                    console.log(`[AUTOBOT][${botStateObj.userId}] Orden de compra a mercado colocada para el nuevo ciclo. ID: ${botStateObj.orderId}`);
+                                } else {
+                                    botStateObj.state = 'NO_COVERAGE';
+                                    botStateObj.reason = `Fondos insuficientes para la compra inicial del nuevo ciclo. Necesario: ${amountToBuy} USDT, Disponible: ${availableUSDT} USDT.`;
+                                    console.warn(`[AUTOBOT][${botStateObj.userId}] ${botStateObj.reason}`);
+                                }
+                            } catch (placeOrderError) {
+                                console.error(`[AUTOBOT][${botStateObj.userId}] ❌ Error al colocar la orden de compra a mercado después de la venta:`, placeOrderError.message);
+                                botStateObj.state = 'ESPERA';
+                                botStateObj.reason = `Error crítico al colocar orden de compra inicial del nuevo ciclo: ${placeOrderError.message}`;
+                            }
+
+                            // --- FIN DE LA CORRECCIÓN ---
+
+                            await saveBotState(botStateObj); // Guardar el estado actualizado después de la nueva orden de compra
+                            console.log(`[AUTOBOT][${botStateObj.userId}] Bot listo para el nuevo ciclo en estado ${botStateObj.state}.`);
+
                         } else if (orderDetails && orderDetails.state === 'canceled') {
                             console.warn(`[AUTOBOT][${botStateObj.userId}] ⚠️ Orden de VENTA ID ${botStateObj.orderId} CANCELADA. Volviendo al monitoreo de venta.`);
                             botStateObj.orderId = null;
@@ -705,19 +735,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                         }
                     }
                 }
-                await saveBotState(botStateObj);
-                break;
-
-            case 'NO_COVERAGE':
-                console.log(`[AUTOBOT][${botStateObj.userId}] Estado: NO_COVERAGE. Esperando fondos para la próxima orden de ${botStateObj.purchase.toFixed(2)} USDT.`);
-                // Si hay balance suficiente, volver a BUYING para intentar la orden.
-                if (availableUSDT >= botStateObj.purchase && botStateObj.purchase >= MIN_USDT_VALUE_FOR_BITMART) {
-                    console.log(`[AUTOBOT][${botStateObj.userId}] Fondos disponibles. Volviendo a estado BUYING para intentar la orden de compra.`);
-                    botStateObj.state = 'BUYING';
-                    botStateObj.failedOrderAttempts = 0; // Resetear intentos al recuperar cobertura
-                    botStateObj.reason = ''; // Limpiar la razón de NO_COVERAGE
-                }
-                await saveBotState(botStateObj);
+                await saveBotState(botStateObj); // Asegúrate de guardar el estado al final de la lógica del SELLING
                 break;
 
             case 'ESPERA': // Nuevo estado para manejo de errores graves o suspensión temporal
