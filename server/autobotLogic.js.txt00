@@ -382,27 +382,17 @@ async function placeSellOrder(botStateObj, bitmartCreds) {
                 console.log(`[AUTOBOT][${botStateObj.userId}] Ciclo ${botStateObj.cycle} completado. Ganancia/Pérdida del ciclo: ${botStateObj.cycleProfit.toFixed(2)} USDT. Ganancia total: ${botStateObj.profit.toFixed(2)} USDT.`);
 
                 // LÓGICA DE DETENCIÓN POR 'STOP ON CYCLE END'
-                // LÓGICA DE DETENCIÓN POR 'STOP ON CYCLE END'
-                if (botStateObj.stopAtCycleEnd) {
+                if (botStateObj.stopAtCycleEnd) { // Usar stopAtCycleEnd del botStateObj
                     console.log(`[AUTOBOT][${botStateObj.userId}] Bandera "Stop on Cycle End" activada. Deteniendo el bot al final del ciclo.`);
-                    await stopBotStrategy(botStateObj, bitmartCreds);
-                    return; // Exit after stopping the bot
+                    // Asumiendo que stopBotStrategy ahora es asíncrono y guarda el estado
+                    await stopBotStrategy(botStateObj, bitmartCreds); // Llama a la función de detención completa, pasando botStateObj y credenciales
+                    return; // Salir después de detener el bot
                 }
 
-                // If not stopping, proceed to a new cycle
-                resetCycleVariables(botStateObj); // Reset variables for the new cycle
-                botStateObj.cycle++; // Increment the cycle for the new start
-
-                // --- NEW LOGIC FOR IMMEDIATE BUY ---
-                console.log(`[AUTOBOT][${botStateObj.userId}] Bot listo para el nuevo ciclo. Colocando la primera orden de compra inmediatamente.`);
-                botStateObj.state = 'BUYING'; // Set state to BUYING
-                // You'll need to ensure botStateObj.currentPrice is up-to-date here
-                // before calling placeFirstBuyOrder, which it should be from runBotLogic's start.
-                await placeFirstBuyOrder(botStateObj, bitmartCreds);
-                // The placeFirstBuyOrder function already sets the state to 'BUYING' on success
-                // or 'NO_COVERAGE'/'RUNNING' on failure/insufficient funds.
-                // So, no need to set state here after the call.
-                // --- END NEW LOGIC ---
+                resetCycleVariables(botStateObj); // Resetear variables para el nuevo ciclo
+                botStateObj.cycle++; // Incrementar el ciclo para el nuevo inicio
+                botStateObj.state = 'RUNNING'; // Volver a RUNNING para que espere la nueva señal de COMPRA
+                console.log(`[AUTOBOT][${botStateObj.userId}] Bot listo para el nuevo ciclo en estado RUNNING, esperando próxima señal de COMPRA.`);
 
             } else {
                 console.warn(`[AUTOBOT][${botStateObj.userId}] La orden de venta ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
