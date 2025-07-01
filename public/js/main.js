@@ -523,21 +523,59 @@ async function checkConnection() {
 }
 
 function calcularORQ(purchase, increment, balance) {
-    let total = 0;
-    let n = 0;
-    while (true) {
-        const nextOrder = purchase * Math.pow(increment / 100, n);
-        if (total + nextOrder <= balance) {
-            total += nextOrder;
-            n++;
-        } else break;
+    let totalSpent = 0; // Acumulará el costo total de las órdenes
+    let orderCount = 0; // Cantidad de órdenes que se pueden ejecutar (ORQ)
+    let currentOrderSize = purchase; // Tamaño de la primera orden
+
+    // La primera orden siempre se intenta si el balance es suficiente
+    if (balance >= currentOrderSize) {
+        totalSpent += currentOrderSize;
+        orderCount = 1;
+    } else {
+        return 0; // No hay balance ni para la primera orden
     }
-    return n;
+
+    for (let n = 1; ; n++) {
+        // Calcular el porcentaje de incremento para esta orden
+        // La fórmula es: porcentaje base * (número de orden actual - 1)
+        // Ejemplo: 100% para la 2da orden (n=1), 200% para la 3ra (n=2), etc.
+        const effectiveIncrementPercentage = increment * n; // Multiplicamos el INCREMENT base por (n-1) si n es el número de orden, o n si n es el índice
+                                                          // Tu ejemplo usa el índice de la orden -1 para el multiplicador: 2da orden (índice 1) usa 100% * 1; 3ra orden (índice 2) usa 100% * 2.
+                                                          // Por eso, 'n' es el multiplicador para 'increment'.
+
+        const incrementAmount = currentOrderSize * (effectiveIncrementPercentage / 100);
+        const nextOrderSize = currentOrderSize + incrementAmount;
+
+        if (totalSpent + nextOrderSize <= balance) {
+            totalSpent += nextOrderSize;
+            currentOrderSize = nextOrderSize; // La orden actual se convierte en la anterior para el próximo cálculo
+            orderCount++;
+        } else {
+            break; // No hay balance suficiente para la próxima orden
+        }
+    }
+    return orderCount;
 }
 
-function calcularCoverage(orq, price, decrement) {
-    if (orq === 0) return 0;
-    return price * Math.pow(1 - decrement / 100, orq - 1);
+function calcularCoverage(orq, initialPrice, decrement) {
+    if (orq === 0) {
+        return 0; // Si no se pueden ejecutar órdenes, la cobertura es 0
+    }
+
+    let currentPrice = initialPrice; // El precio de la primera orden
+    let coveragePrice = initialPrice; // Por defecto, si ORQ es 1, la cobertura es el precio inicial.
+    
+    for (let n = 1; n < orq; n++) {
+        const effectiveDecrementPercentage = decrement * n; // Multiplicamos el DECREMENT base por (número de orden actual - 1)
+
+        const decrementAmount = currentPrice * (effectiveDecrementPercentage / 100);
+        const nextPrice = currentPrice - decrementAmount;
+        
+        currentPrice = nextPrice; // Actualizamos el precio para la próxima iteración
+        coveragePrice = nextPrice; // Este será el precio de la última orden calculada
+    }
+
+    return coveragePrice;
 }
 
 function actualizarCalculos() {
