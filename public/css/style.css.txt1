@@ -18,15 +18,14 @@ body.dark-mode {
     color: var(--dark-text);
     font-family: 'Arial', sans-serif;
     margin: 0;
-    /* Ajustamos el padding-top para el header y la log-bar que serán sticky */
-    padding-top: 90px; /* 60px del header + 30px de la log-bar */
+    padding-top: 90px; /* Aumentado para espacio para el header fijo (60px) + log-bar (30px) */
     overflow-x: hidden;
 }
 
 /* Header Styles */
 .fixed-header {
-    position: sticky; /* Cambiado de fixed a sticky */
-    top: 0; /* Se pega al top cuando haces scroll */
+    position: fixed;
+    top: 0;
     left: 0;
     width: 100%;
     height: 60px;
@@ -95,47 +94,10 @@ body.dark-mode {
     color: var(--dark-border);
 }
 
-/* --- ESTILOS RESPONSIVOS PARA EL HEADER --- */
-@media (max-width: 768px) {
-    .fixed-header {
-        flex-wrap: wrap; /* Permite que los elementos se envuelvan */
-        height: auto; /* Altura automática para acomodar el contenido envuelto */
-        padding: 10px; /* Reducir padding */
-        justify-content: center; /* Centrar elementos en móvil */
-        text-align: center;
-    }
-
-    .header-middle {
-        width: 100%; /* Ocupa todo el ancho */
-        justify-content: center; /* Centrar las pestañas de navegación */
-        flex-wrap: wrap; /* Permite que las pestañas se envuelvan si son muchas */
-        gap: 10px; /* Reducir el espacio entre pestañas en móvil */
-        margin-top: 10px; /* Espacio entre el logo/nombre y las pestañas */
-        margin-bottom: 5px;
-    }
-
-    .header-right {
-        width: 100%; /* Ocupa todo el ancho */
-        justify-content: center; /* Centrar los iconos */
-        flex-wrap: wrap; /* Permite que los iconos se envuelvan */
-        gap: 15px; /* Espacio entre iconos */
-        margin-top: 5px;
-    }
-
-    .app-name {
-        font-size: 1.2em; /* Reducir tamaño del nombre de la app */
-    }
-
-    .logo {
-        height: 30px; /* Reducir tamaño del logo */
-    }
-}
-
-
 /* --- NUEVOS ESTILOS PARA LA FRANJA DE LOGS --- */
 .log-bar {
-    position: sticky; /* Cambiado de fixed a sticky */
-    top: 60px; /* Justo debajo del header (60px de alto), se pega a esta posición al hacer scroll */
+    position: fixed; /* Fijo para que se mantenga visible */
+    top: 60px; /* Justo debajo del header fijo (60px de alto) */
     left: 0;
     width: 100%;
     height: 30px; /* Altura de la barra de logs */
@@ -152,19 +114,9 @@ body.dark-mode {
     text-overflow: ellipsis; /* Añade puntos suspensivos si el texto es demasiado largo */
 }
 
-/* Ajuste para pantallas pequeñas: el log-bar puede necesitar un top diferente si el header se envuelve */
-@media (max-width: 768px) {
-    .log-bar {
-        /* Para calcular el top: Altura del header base (60px) + altura extra por wrap si la hubiera (aprox. 40-50px) */
-        /* Esto es un estimado, puede requerir ajustes finos dependiendo de cuánto se envuelva el header */
-        top: 110px; /* 60px (header original) + 50px (wrap extra) */
-        padding: 0 10px; /* Reducir padding */
-        font-size: 0.8em; /* Reducir tamaño de fuente */
-    }
-     body.dark-mode {
-        /* Ajustar padding-top del body para que todo el contenido sea visible debajo del header y log-bar pegados */
-        padding-top: 140px; /* Suma aproximada del header envuelto y la log-bar */
-    }
+#log-message {
+    margin: 0; /* Elimina el margen por defecto del párrafo */
+    width: 100%; /* Asegura que ocupe todo el ancho disponible */
 }
 
 
@@ -176,15 +128,8 @@ body.dark-mode {
 
 .tab-content {
     display: none; /* Hidden by default */
-    min-height: calc(100vh - 110px); /* Ajustado: 60px header + 30px log-bar + 20px padding = 110px (para desktop) */
+    min-height: calc(100vh - 110px); /* Ajustado: 60px header + 30px log-bar + 20px padding = 110px */
 }
-/* Para móviles, el min-height del content tendrá que ser más dinámico */
-@media (max-width: 768px) {
-    .tab-content {
-        min-height: calc(100vh - 160px); /* Ajustado para el header y logbar que se expanden en móvil */
-    }
-}
-
 
 .tab-content.active {
     display: block;
