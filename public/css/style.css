@@ -18,8 +18,8 @@ body.dark-mode {
     color: var(--dark-text);
     font-family: 'Arial', sans-serif;
     margin: 0;
-    /* Ajustamos el padding-top para el header y la log-bar que serán sticky */
-    padding-top: 90px; /* 60px del header + 30px de la log-bar */
+    /* Reducido el padding-top para compensar el comportamiento sticky */
+    padding-top: 90px; /* Ajustar este valor si es necesario */
     overflow-x: hidden;
 }
 
@@ -155,15 +155,15 @@ body.dark-mode {
 /* Ajuste para pantallas pequeñas: el log-bar puede necesitar un top diferente si el header se envuelve */
 @media (max-width: 768px) {
     .log-bar {
-        /* Para calcular el top: Altura del header base (60px) + altura extra por wrap si la hubiera (aprox. 40-50px) */
-        /* Esto es un estimado, puede requerir ajustes finos dependiendo de cuánto se envuelva el header */
-        top: 110px; /* 60px (header original) + 50px (wrap extra) */
-        padding: 0 10px; /* Reducir padding */
+        /* Para calcular el top: Altura del header base (60px) + altura extra por wrap si la hubiera */
+        top: auto; /* Dejamos que el flujo normal lo posicione */
+        padding: 5px 10px; /* Reducir padding */
         font-size: 0.8em; /* Reducir tamaño de fuente */
+        position: relative; /* Para que esté en el flujo normal debajo del header */
     }
      body.dark-mode {
-        /* Ajustar padding-top del body para que todo el contenido sea visible debajo del header y log-bar pegados */
-        padding-top: 140px; /* Suma aproximada del header envuelto y la log-bar */
+        /* Ajustar padding-top del body para que todo el contenido sea visible */
+        padding-top: 60px; /* Ajustado para la altura del header */
     }
 }
 
@@ -176,12 +176,13 @@ body.dark-mode {
 
 .tab-content {
     display: none; /* Hidden by default */
-    min-height: calc(100vh - 110px); /* Ajustado: 60px header + 30px log-bar + 20px padding = 110px (para desktop) */
+    min-height: calc(100vh - 90px); /* Ajustado: 60px header + 30px log-bar */
 }
 /* Para móviles, el min-height del content tendrá que ser más dinámico */
 @media (max-width: 768px) {
     .tab-content {
-        min-height: calc(100vh - 160px); /* Ajustado para el header y logbar que se expanden en móvil */
+        min-height: auto; /* Altura automática en móviles */
+        margin-top: 10px; /* Espacio del header y log bar */
     }
 }
 
@@ -232,9 +233,9 @@ body.dark-mode {
     color: var(--dark-text); /* Use your general dark text color */
 }
 
-.modal-content input[type="email"],
-.modal-content input[type="text"],
-.modal-content input[type="password"] {
+.modal-content input [type="email"],
+.modal-content input [type="text"],
+.modal-content input [type="password"] {
     width: calc(100% - 20px); /* Adjust width accounting for padding */
     padding: 12px;
     margin-bottom: 15px;
@@ -245,7 +246,7 @@ body.dark-mode {
     font-size: 1em;
 }
 
-.modal-content input::placeholder {
+.modal-content input ::placeholder {
     color: #999; /* Placeholder color */
 }
 
