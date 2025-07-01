@@ -9,8 +9,6 @@
     --button-bg: #007bff;
     --button-text: #ffffff;
     --modal-bg: #2b3a55; /* Keep this variable, but override specifically for modal-content */
-    --log-bar-bg: #2c3e50; /* Un color oscuro para la barra de logs */
-    --log-text-color: #ecf0f1; /* Color de texto claro para los logs */
 }
 
 body.dark-mode {
@@ -18,7 +16,7 @@ body.dark-mode {
     color: var(--dark-text);
     font-family: 'Arial', sans-serif;
     margin: 0;
-    padding-top: 90px; /* Aumentado para espacio para el header fijo (60px) + log-bar (30px) */
+    padding-top: 60px; /* Space for fixed header */
     overflow-x: hidden;
 }
 
@@ -94,41 +92,14 @@ body.dark-mode {
     color: var(--dark-border);
 }
 
-/* --- NUEVOS ESTILOS PARA LA FRANJA DE LOGS --- */
-.log-bar {
-    position: fixed; /* Fijo para que se mantenga visible */
-    top: 60px; /* Justo debajo del header fijo (60px de alto) */
-    left: 0;
-    width: 100%;
-    height: 30px; /* Altura de la barra de logs */
-    background-color: var(--log-bar-bg);
-    color: var(--log-text-color);
-    display: flex; /* Para centrar el texto verticalmente */
-    align-items: center; /* Centrar verticalmente */
-    padding: 0 20px;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
-    z-index: 999; /* Justo debajo del header, pero encima del contenido */
-    font-size: 0.9em;
-    white-space: nowrap; /* Evita que el texto se envuelva */
-    overflow: hidden; /* Oculta el desbordamiento si el texto es muy largo */
-    text-overflow: ellipsis; /* Añade puntos suspensivos si el texto es demasiado largo */
-}
-
-#log-message {
-    margin: 0; /* Elimina el margen por defecto del párrafo */
-    width: 100%; /* Asegura que ocupe todo el ancho disponible */
-}
-
-
 /* Content Area */
 .content {
     padding: 20px;
-    /* No se necesita padding-top aquí ya que body ya lo tiene */
 }
 
 .tab-content {
     display: none; /* Hidden by default */
-    min-height: calc(100vh - 110px); /* Ajustado: 60px header + 30px log-bar + 20px padding = 110px */
+    min-height: calc(100vh - 80px); /* Adjust based on header/footer if any */
 }
 
 .tab-content.active {
@@ -323,10 +294,4 @@ body.lite-mode .modal-content button {
 
 body.lite-mode .modal-content button:hover {
     background-color: #2ecc71;
-}
-
-body.lite-mode .log-bar {
-    background-color: #dcdcdc; /* Un color claro para la barra de logs en modo claro */
-    color: #333; /* Texto oscuro para los logs en modo claro */
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
 }

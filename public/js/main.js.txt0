@@ -1,4 +1,4 @@
-// public/js/main.js
+// public/js/main.js (CORREGIDO - V3 para Pestaña "Opened" con objeto anidado)
 
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las órdenes
@@ -15,15 +15,14 @@ const apiKeyIcon = document.getElementById('api-key-icon');
 
 const apiModal = document.getElementById('api-modal');
 const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
+const apiForm = document.getElementById('api-form');
 const apiKeyInput = document.getElementById('api-key');
-const secretKeyInput = document.getElementById('secret-key'); // CORREGIDO AQUÍ
+const secretKeyInput = document = "secret-key";
 const apiMemoInput = document.getElementById('api-memo');
 const apiStatusMessage = document.getElementById('api-status-message');
 const connectionIndicator = document.getElementById('connection-indicator');
 const connectionText = document.getElementById('connection-text');
 
-// Elemento para la nueva franja de logs
-const logMessageElement = document.getElementById('log-message');
 
 // Inputs de configuración del bot
 const purchaseInput = document.getElementById("purchase");
@@ -47,21 +46,6 @@ let currentTab = 'opened';
 let currentDisplayedOrders = new Map();
 
 // --- FUNCIONES DE AUTENTICACIÓN Y ESTADO DEL USUARIO ---
-
-/**
- * Muestra un mensaje en la franja de logs superior.
- * @param {string} message - El mensaje a mostrar.
- * @param {string} type - 'success', 'error', 'info', 'warning' (opcional, para futuros estilos)
- */
-function displayLogMessage(message, type = 'info') {
-    if (logMessageElement) {
-        logMessageElement.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        // Puedes añadir clases para estilos específicos según el tipo si lo deseas en style.css
-        // Por ejemplo:
-        // logMessageElement.className = `log-${type}`;
-        console.log(`[Log Bar] ${message}`);
-    }
-}
 
 /**
  * Verifica si el usuario está logueado comprobando un token en localStorage.
@@ -150,14 +134,11 @@ async function handleLogout() {
         const data = await response.json();
         if (response.ok) {
             console.log('[FRONTEND] Deslogueo en backend exitoso:', data.message);
-            displayLogMessage('Logout successful!', 'success');
         } else {
             console.error('[FRONTEND] Error en deslogueo de backend:', data.message || 'Error desconocido');
-            displayLogMessage(`Logout error: ${data.message || 'Unknown error'}`, 'error');
         }
     } catch (error) {
         console.error('[FRONTEND] Falló la llamada al backend para deslogueo:', error);
-        displayLogMessage('Network error during logout.', 'error');
     } finally {
         localStorage.removeItem('authToken');
         localStorage.removeItem('userEmail');
@@ -193,7 +174,6 @@ async function fetchFromBackend(url, options = {}) {
 
             if (res.status === 401 || res.status === 403) {
                 console.warn("Token inválido o expirado. Iniciando deslogueo automático.");
-                displayLogMessage("Your session has expired or is invalid. Please log in again.", "error"); // Mensaje en la franja de logs
                 alert("Tu sesión ha expirado o no es válida. Por favor, inicia sesión de nuevo.");
                 handleLogout(); // Llama a la función de deslogueo
             }
@@ -206,7 +186,6 @@ async function fetchFromBackend(url, options = {}) {
         if (document.getElementById('order-list')) {
             document.getElementById('order-list').innerHTML = `<p class="text-red-400">Error: ${errorMessage}</p>`;
         }
-        displayLogMessage(`Backend communication error: ${errorMessage}`, 'error'); // Mensaje en la franja de logs
         return null; // Ensure null is returned on error
     }
 }
@@ -283,7 +262,6 @@ function displayOrders(newOrders, tab) {
         console.error("displayOrders received non-array data:", newOrders);
         orderListDiv.innerHTML = `<p class="text-red-400">Error: Failed to display orders. Data format incorrect.</p>`;
         currentDisplayedOrders.clear();
-        displayLogMessage("Error: Failed to display orders. Invalid data format.", "error"); // Log para el usuario
         return;
     }
 
@@ -292,7 +270,6 @@ function displayOrders(newOrders, tab) {
     if (newOrders.length === 0) {
         if (currentDisplayedOrders.size > 0 || currentTab !== tab) { // Only clear if we actually had orders or tab changed
             orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
-            displayLogMessage(`No orders found for the "${tab}" tab.`, "info"); // Log para el usuario
         }
         currentDisplayedOrders.clear();
         return;
@@ -327,10 +304,6 @@ function displayOrders(newOrders, tab) {
     // Ensure message if no orders are found after update
     if (currentDisplayedOrders.size === 0 && newOrders.length === 0) {
         orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
-        displayLogMessage(`No orders found for the "${tab}" tab.`, "info");
-    } else if (newOrders.length > 0 && currentDisplayedOrders.size > 0 && currentTab === tab) {
-        // Only log if orders were successfully loaded for the current tab and there are actual orders
-        displayLogMessage(`Successfully loaded ${newOrders.length} ${tab} orders.`, "success");
     }
 }
 
@@ -353,26 +326,22 @@ async function getBalances() {
                 document.getElementById('balance').textContent = balance;
                 actualizarCalculos();
             }
-            displayLogMessage(`USDT Balance: ${balance}`, 'info');
         } else {
             if (document.getElementById('balance')) {
                 document.getElementById('balance').textContent = 'Error fetching balances.';
             }
             console.error('getBalances: Respuesta inesperada del backend:', walletData);
-            displayLogMessage('Error fetching balances: Unexpected response.', 'error');
         }
     } catch (error) {
         console.error('Error al cargar balances:', error);
         if (document.getElementById('balance')) {
             document.getElementById('balance').textContent = 'Error';
         }
-        displayLogMessage(`Error loading balances: ${error.message}`, 'error');
     }
 }
 
 async function fetchOpenOrdersData() {
     if (!isLoggedIn) {
-        displayLogMessage("Login required to fetch open orders.", "warning");
         return [];
     }
     try {
@@ -380,21 +349,18 @@ async function fetchOpenOrdersData() {
         // *** CAMBIO CLAVE AQUÍ: Accede a response.orders.orders ***
         if (!response || !response.orders || !Array.isArray(response.orders.orders)) {
             console.warn("fetchOpenOrdersData: Backend response was null/undefined or missing 'orders.orders'.");
-            displayLogMessage("No open orders found or unexpected response.", "info");
             return [];
         }
         const openOrders = response.orders.orders; // Accede al array anidado
         return openOrders;
     } catch (error) {
         console.error("Error fetching open orders data:", error);
-        displayLogMessage(`Error fetching open orders: ${error.message}`, "error");
         return [];
     }
 }
 
 async function fetchHistoryOrdersData(tab) {
     if (!isLoggedIn) {
-        displayLogMessage("Login required to fetch historical orders.", "warning");
         return [];
     }
     try {
@@ -414,13 +380,11 @@ async function fetchHistoryOrdersData(tab) {
         // Ensure response is valid before accessing .orders
         if (!response || !response.orders) {
             console.warn("fetchHistoryOrdersData: Backend response was null/undefined or missing 'orders'.");
-            displayLogMessage("No historical orders found or unexpected response.", "info");
             return [];
         }
         return response.orders || [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
-        displayLogMessage(`Error fetching historical orders: ${error.message}`, "error");
         return [];
     }
 }
@@ -432,14 +396,12 @@ async function fetchOrders(tab) {
     if (!isLoggedIn) {
         orderListDiv.innerHTML = `<p class="text-gray-400">Please login to view order history.</p>`;
         currentDisplayedOrders.clear();
-        displayLogMessage("Please login to view order history.", "info");
         return;
     }
 
     if (currentDisplayedOrders.size === 0 || currentTab !== tab) {
         orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
         currentDisplayedOrders.clear();
-        displayLogMessage(`Loading ${tab} orders...`, "info");
     }
 
     let orders = []; // Always initialize as an array
@@ -465,7 +427,6 @@ async function fetchOrders(tab) {
     } catch (error) {
         console.error(`Failed to fetch orders for tab ${tab}:`, error);
         orderListDiv.innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
-        displayLogMessage(`Failed to load orders for "${tab}" tab.`, "error");
         // Crucial: Set orders to an empty array on error to prevent subsequent map error
         orders = [];
     }
@@ -491,7 +452,6 @@ async function cargarPrecioEnVivo() {
         if (document.getElementById('price')) {
             document.getElementById('price').textContent = 'Error';
         }
-        displayLogMessage(`Error loading live price: ${error.message}`, 'error');
     }
 }
 
@@ -505,7 +465,6 @@ async function checkConnection() {
             if (response && response.status === 'ok') {
                 dot.classList.replace('bg-red-500', 'bg-green-500');
                 text.textContent = 'Connected';
-                displayLogMessage('Backend connection: OK.', 'success');
             } else {
                 throw new Error('Backend did not return OK status');
             }
@@ -518,7 +477,6 @@ async function checkConnection() {
             text.textContent = 'Disconnected';
         }
         console.error('Connection check failed:', error);
-        displayLogMessage(`Backend connection: DISCONNECTED. ${error.message}`, 'error');
     }
 }
 
@@ -577,7 +535,6 @@ async function loadBotConfigAndState() {
         if (cycleDisplay) cycleDisplay.textContent = '0';
         if (profitDisplay) profitDisplay.textContent = '0.00';
         if (cycleProfitDisplay) cycleProfitDisplay.textContent = '0.00';
-        displayLogMessage('Bot configuration not loaded. User not logged in.', 'info');
         return;
     }
 
@@ -607,29 +564,24 @@ async function loadBotConfigAndState() {
             if (cycleProfitDisplay) cycleProfitDisplay.textContent = (botData.cycleProfit || 0).toFixed(2);
 
             actualizarCalculos();
-            displayLogMessage(`Bot configuration loaded. State: ${botData.state}.`, 'success');
 
         } else {
             console.warn('[FRONTEND] No se pudieron cargar los datos del bot. Usando valores predeterminados de la UI.');
             actualizarCalculos();
-            displayLogMessage('Failed to load bot configuration. Using default UI values.', 'warning');
         }
     } catch (error) {
         console.error('Error al cargar la configuración y estado del bot:', error);
         actualizarCalculos();
-        displayLogMessage(`Error loading bot config: ${error.message}`, 'error');
     }
 }
 
 async function toggleBotState() {
     if (!isLoggedIn) {
         alert("Please login first to control the bot.");
-        displayLogMessage("Login required to control the bot.", "warning");
         return;
     }
     if (!startBtn || !resetBtn || !botStateDisplay || !stopAtCycleEndCheckbox) {
         console.warn("Faltan elementos DOM para controlar el estado del bot.");
-        displayLogMessage("UI elements missing for bot control.", "error");
         return;
     }
 
@@ -640,7 +592,6 @@ async function toggleBotState() {
     const stopAtCycleEnd = stopAtCycleEndCheckbox.checked;
 
     const action = startBtn.textContent === 'START' ? 'start' : 'stop';
-    displayLogMessage(`Sending request to ${action} bot...`, 'info');
 
     try {
         const response = await fetchFromBackend('/api/user/toggle-bot', {
@@ -664,7 +615,6 @@ async function toggleBotState() {
             cycleProfitDisplay.textContent = (response.botState.cycleProfit || 0).toFixed(2);
 
             console.log(`Bot state updated: ${newBotState}`);
-            displayLogMessage(`Bot state changed to: ${newBotState}. Message: ${response.message}`, 'success');
             actualizarCalculos();
         } else {
             throw new Error(response.message || 'Failed to toggle bot state.');
@@ -672,7 +622,6 @@ async function toggleBotState() {
     } catch (error) {
         console.error('Error toggling bot state:', error);
         alert(`Error: ${error.message}`);
-        displayLogMessage(`Error toggling bot: ${error.message}`, 'error');
         const previousIsRunning = isRunning;
         isRunning = previousIsRunning;
         if (botStateDisplay) {
@@ -692,7 +641,6 @@ function resetBot() {
     if (triggerInput) triggerInput.value = 1.5;
     if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = false;
     actualizarCalculos();
-    displayLogMessage('Bot parameters reset to default values.', 'info');
 }
 
 // --- Lógica de Cambio de Pestañas (Dashboard, Testbot, Autobot, Aibot) ---
@@ -715,7 +663,6 @@ function setupNavTabs() {
                     content.classList.remove('active');
                 }
             });
-            displayLogMessage(`Switched to ${this.dataset.tab} tab.`, 'info');
         });
     });
 }
@@ -732,7 +679,6 @@ function setActiveTab(tabId) {
         activeButton.classList.remove('border-transparent');
         currentTab = tabId.replace('tab-', '');
         fetchOrders(currentTab);
-        displayLogMessage(`Viewing ${currentTab} orders.`, 'info');
     }
 }
 
@@ -803,7 +749,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             authMessage.textContent = 'Processing...';
             authMessage.style.color = 'yellow';
-            displayLogMessage('Authentication process started...', 'info');
 
             try {
                 let response;
@@ -823,11 +768,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         emailInput.disabled = true;
                         tokenInput.style.display = 'block';
                         authButton.textContent = 'Verify';
-                        displayLogMessage(`Verification token sent to ${email}.`, 'success');
                     } else {
                         authMessage.textContent = data.error || 'Server error. Please try again later.';
                         authMessage.style.color = 'red';
-                        displayLogMessage(`Token request failed: ${data.error || 'Unknown error'}.`, 'error');
                     }
                 } else { // Segunda etapa: verificar token
                     response = await fetch(`${BACKEND_URL}/api/auth/verify-token`, {
@@ -844,7 +787,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateLoginIcon();
                         authMessage.textContent = data.message;
                         authMessage.style.color = 'green';
-                        displayLogMessage('Login successful!', 'success');
                         setTimeout(async () => {
                             toggleAuthModal(false);
                             await loadBotConfigAndState();
@@ -854,14 +796,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         authMessage.textContent = data.error || 'Invalid token or email.';
                         authMessage.style.color = 'red';
-                        displayLogMessage(`Token verification failed: ${data.error || 'Invalid token or email'}.`, 'error');
                     }
                 }
             } catch (error) {
                 console.error('Authentication error:', error);
                 authMessage.textContent = 'Network error or server unavailable. Please try again later.';
                 authMessage.style.color = 'red';
-                displayLogMessage(`Authentication network error: ${error.message}.`, 'error');
             }
         });
     }
@@ -871,7 +811,6 @@ document.addEventListener('DOMContentLoaded', () => {
         apiKeyIcon.addEventListener('click', () => {
             if (!isLoggedIn) {
                 alert("Please login first to configure API keys.");
-                displayLogMessage("Login required to configure API keys.", "warning");
                 toggleAuthModal(true);
                 return;
             }
@@ -891,7 +830,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!apiKey || !secretKey) {
                 apiStatusMessage.textContent = 'API Key and Secret Key are required.';
                 apiStatusMessage.style.color = 'red';
-                displayLogMessage('API Key and Secret Key are required.', 'warning');
                 return;
             }
 
@@ -900,7 +838,6 @@ document.addEventListener('DOMContentLoaded', () => {
             connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
             connectionIndicator.classList.add('bg-yellow-500');
             connectionText.textContent = 'Connecting...';
-            displayLogMessage('Validating BitMart API keys...', 'info');
 
             try {
                 const response = await fetchFromBackend('/api/user/save-api-keys', {
@@ -917,7 +854,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     connectionText.textContent = 'Connected';
                     getBalances();
                     fetchOrders(currentTab);
-                    displayLogMessage('BitMart API keys validated and saved. Connected!', 'success');
                 } else {
                     const errorMessage = response.message || 'Failed to validate or save API keys.';
                     apiStatusMessage.textContent = errorMessage;
@@ -925,7 +861,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                     connectionIndicator.classList.add('bg-red-500');
                     connectionText.textContent = 'Disconnected';
-                    displayLogMessage(`BitMart API connection failed: ${errorMessage}`, 'error');
                 }
             } catch (error) {
                 console.error('Error submitting API keys:', error);
@@ -934,7 +869,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                 connectionIndicator.classList.add('bg-red-500');
                 connectionText.textContent = 'Disconnected';
-                displayLogMessage(`Error submitting API keys: ${error.message}`, 'error');
             }
         });
     }
@@ -943,7 +877,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeApiModalButton) {
         closeApiModalButton.addEventListener('click', () => {
             toggleApiModal(false);
-            displayLogMessage('API configuration modal closed.', 'info');
         });
     }
 });

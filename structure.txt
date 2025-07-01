@@ -27,6 +27,7 @@ BSB/
 │   │   └── userController.js
 │   ├── utils/
 │   │   └── encryption.js
+│   │   └── cryptoUtils.js
 │   ├── seeders/
 │   │   └── seed.js
 │   ├── .env                   # Environment variables (MongoDB URI, etc.)
