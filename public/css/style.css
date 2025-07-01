@@ -18,18 +18,18 @@ body.dark-mode {
     color: var(--dark-text);
     font-family: 'Arial', sans-serif;
     margin: 0;
-    /* Reducido el padding-top para compensar el comportamiento sticky */
-    padding-top: 90px; /* Ajustar este valor si es necesario */
+    /* Eliminamos el padding-top del body; lo manejaremos en .content */
+    padding-top: 0;
     overflow-x: hidden;
 }
 
 /* Header Styles */
 .fixed-header {
-    position: sticky; /* Cambiado de fixed a sticky */
-    top: 0; /* Se pega al top cuando haces scroll */
+    position: sticky; /* Se pega al top cuando haces scroll */
+    top: 0;
     left: 0;
     width: 100%;
-    height: 60px;
+    height: 60px; /* Altura fija para desktop */
     background-color: var(--dark-header-bg);
     display: flex;
     justify-content: space-between;
@@ -45,7 +45,7 @@ body.dark-mode {
 }
 
 .logo {
-    height: 40px; /* Adjust as needed */
+    height: 40px;
     margin-right: 10px;
 }
 
@@ -57,7 +57,7 @@ body.dark-mode {
 
 .header-middle {
     display: flex;
-    gap: 25px; /* Spacing between tabs */
+    gap: 25px;
 }
 
 .nav-tab {
@@ -81,7 +81,7 @@ body.dark-mode {
 
 .header-right {
     display: flex;
-    gap: 20px; /* Spacing between icons */
+    gap: 20px;
 }
 
 .header-right .icon {
@@ -98,94 +98,105 @@ body.dark-mode {
 /* --- ESTILOS RESPONSIVOS PARA EL HEADER --- */
 @media (max-width: 768px) {
     .fixed-header {
-        flex-wrap: wrap; /* Permite que los elementos se envuelvan */
-        height: auto; /* Altura automática para acomodar el contenido envuelto */
-        padding: 10px; /* Reducir padding */
-        justify-content: center; /* Centrar elementos en móvil */
+        flex-wrap: wrap;
+        height: auto; /* Altura automática en móvil para el wrap */
+        padding: 10px;
+        justify-content: center;
         text-align: center;
     }
 
     .header-middle {
-        width: 100%; /* Ocupa todo el ancho */
-        justify-content: center; /* Centrar las pestañas de navegación */
-        flex-wrap: wrap; /* Permite que las pestañas se envuelvan si son muchas */
-        gap: 10px; /* Reducir el espacio entre pestañas en móvil */
-        margin-top: 10px; /* Espacio entre el logo/nombre y las pestañas */
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
         margin-bottom: 5px;
     }
 
     .header-right {
-        width: 100%; /* Ocupa todo el ancho */
-        justify-content: center; /* Centrar los iconos */
-        flex-wrap: wrap; /* Permite que los iconos se envuelvan */
-        gap: 15px; /* Espacio entre iconos */
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 15px;
         margin-top: 5px;
     }
 
     .app-name {
-        font-size: 1.2em; /* Reducir tamaño del nombre de la app */
+        font-size: 1.2em;
     }
 
     .logo {
-        height: 30px; /* Reducir tamaño del logo */
+        height: 30px;
     }
 }
-
 
 /* --- NUEVOS ESTILOS PARA LA FRANJA DE LOGS --- */
 .log-bar {
-    position: sticky; /* Cambiado de fixed a sticky */
-    top: 60px; /* Justo debajo del header (60px de alto), se pega a esta posición al hacer scroll */
+    position: sticky; /* Se pega al top */
+    top: 60px; /* Justo debajo del header de 60px */
     left: 0;
     width: 100%;
-    height: 30px; /* Altura de la barra de logs */
+    height: 30px;
     background-color: var(--log-bar-bg);
     color: var(--log-text-color);
-    display: flex; /* Para centrar el texto verticalmente */
-    align-items: center; /* Centrar verticalmente */
+    display: flex;
+    align-items: center;
     padding: 0 20px;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
-    z-index: 999; /* Justo debajo del header, pero encima del contenido */
+    z-index: 999;
     font-size: 0.9em;
-    white-space: nowrap; /* Evita que el texto se envuelva */
-    overflow: hidden; /* Oculta el desbordamiento si el texto es muy largo */
-    text-overflow: ellipsis; /* Añade puntos suspensivos si el texto es demasiado largo */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Ajuste para pantallas pequeñas: el log-bar puede necesitar un top diferente si el header se envuelve */
+/* Ajuste para pantallas pequeñas: la log-bar ya no será sticky sino relativa en móvil */
 @media (max-width: 768px) {
     .log-bar {
-        /* Para calcular el top: Altura del header base (60px) + altura extra por wrap si la hubiera */
-        top: auto; /* Dejamos que el flujo normal lo posicione */
-        padding: 5px 10px; /* Reducir padding */
-        font-size: 0.8em; /* Reducir tamaño de fuente */
-        position: relative; /* Para que esté en el flujo normal debajo del header */
-    }
-     body.dark-mode {
-        /* Ajustar padding-top del body para que todo el contenido sea visible */
-        padding-top: 60px; /* Ajustado para la altura del header */
+        position: relative; /* Cambiado a relative para fluir en móvil */
+        top: auto; /* Desactivar el top fijo */
+        padding: 5px 10px;
+        font-size: 0.8em;
+        height: auto; /* Permitir que la altura se ajuste al contenido */
     }
 }
-
 
 /* Content Area */
 .content {
     padding: 20px;
-    /* No se necesita padding-top aquí ya que body ya lo tiene */
+    /* Empujamos el contenido hacia abajo. Esto es más consistente. */
+    /* Calculamos 60px (header) + 30px (log-bar) = 90px */
+    margin-top: 90px;
+    box-sizing: border-box; /* Asegura que padding no sume al width/height */
 }
 
-.tab-content {
-    display: none; /* Hidden by default */
-    min-height: calc(100vh - 90px); /* Ajustado: 60px header + 30px log-bar */
-}
-/* Para móviles, el min-height del content tendrá que ser más dinámico */
+/* Ajuste para móviles en el content margin-top */
 @media (max-width: 768px) {
-    .tab-content {
-        min-height: auto; /* Altura automática en móviles */
-        margin-top: 10px; /* Espacio del header y log bar */
+    .content {
+        /* En móvil, el header es auto de alto, y log-bar es relative.
+           Necesitamos un valor que empuje el contenido por debajo del header
+           expandido Y la log-bar, que ahora es parte del flujo normal.
+           Estimamos la altura máxima del header + log-bar en móvil. */
+        margin-top: 0; /* Volvemos a 0 y el header/log-bar no son sticky en móvil */
+        /* Podemos añadir un padding-top aquí si el primer elemento del contenido
+           todavía se solapa con el header/log-bar en mobile después de scroll. */
+        padding-top: 10px; /* Pequeño padding para asegurar separación */
     }
 }
 
+
+.tab-content {
+    display: none;
+    /* La altura mínima puede necesitar más ajustes dependiendo del contenido */
+    min-height: calc(100vh - 110px); /* Ejemplo: 90px de margen + 20px de padding */
+}
+
+@media (max-width: 768px) {
+    .tab-content {
+        min-height: auto; /* Altura automática en móviles */
+    }
+}
 
 .tab-content.active {
     display: block;
@@ -193,36 +204,36 @@ body.dark-mode {
 
 /* --- Consolidated Modal Styles (for both Auth and API modals) --- */
 .modal {
-    display: none; /* CRUCIAL: Modal está oculto por defecto en CSS. JS lo mostrará con display: flex; */
-    position: fixed; /* Posicionamiento fijo para cubrir toda la pantalla */
-    z-index: 1001; /* Asegura que esté por encima de otros elementos */
+    display: none;
+    position: fixed;
+    z-index: 1001;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto; /* Permite desplazamiento si el contenido es muy grande */
-    background-color: rgba(0, 0, 0, 0.7); /* Fondo oscuro semitransparente */
-    justify-content: center; /* Centra horizontalmente el contenido del modal (cuando display: flex) */
-    align-items: center; /* Centra verticalmente el contenido del modal (cuando display: flex) */
-    padding: 20px; /* Espaciado alrededor del modal en pantallas pequeñas */
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.7);
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
 }
 
 .modal-content {
-    background-color: #2d3748; /* Dark grey for modal content (Tailwind gray-800 equivalent) */
-    margin: auto; /* Auto margin for centering */
+    background-color: #2d3748;
+    margin: auto;
     padding: 30px;
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     text-align: center;
-    width: 90%; /* Responsive width */
-    max-width: 400px; /* Max width for larger screens */
-    color: white; /* Text color for modal content */
-    position: relative; /* For close button positioning */
+    width: 90%;
+    max-width: 400px;
+    color: white;
+    position: relative;
 }
 
 .modal-content h3, .modal-content h2 {
     margin-bottom: 20px;
-    color: #4CAF50; /* A green color for titles */
+    color: #4CAF50;
     text-align: center;
 }
 
@@ -230,28 +241,28 @@ body.dark-mode {
     display: block;
     margin-bottom: 8px;
     font-weight: bold;
-    color: var(--dark-text); /* Use your general dark text color */
+    color: var(--dark-text);
 }
 
-.modal-content input [type="email"],
-.modal-content input [type="text"],
-.modal-content input [type="password"] {
-    width: calc(100% - 20px); /* Adjust width accounting for padding */
+.modal-content input[type="email"],
+.modal-content input[type="text"],
+.modal-content input[type="password"] {
+    width: calc(100% - 20px);
     padding: 12px;
     margin-bottom: 15px;
-    border: 1px solid #4a5568; /* Darker border color */
+    border: 1px solid #4a5568;
     border-radius: 5px;
-    background-color: #1a202c; /* Even darker background for inputs */
-    color: white; /* Input text color */
+    background-color: #1a202c;
+    color: white;
     font-size: 1em;
 }
 
-.modal-content input ::placeholder {
-    color: #999; /* Placeholder color */
+.modal-content input::placeholder {
+    color: #999;
 }
 
 .modal-content button {
-    background-color: #4CAF50; /* Green for buttons */
+    background-color: #4CAF50;
     color: white;
     padding: 12px 20px;
     border: none;
@@ -263,7 +274,7 @@ body.dark-mode {
 }
 
 .modal-content button:hover {
-    background-color: #45a049; /* Darker green on hover */
+    background-color: #45a049;
 }
 
 .message-text {
@@ -274,7 +285,7 @@ body.dark-mode {
 
 /* Close button for modals */
 .close-button {
-    color: #aaa; /* Light gray for the close button */
+    color: #aaa;
     font-size: 28px;
     font-weight: bold;
     position: absolute;
@@ -302,32 +313,32 @@ body.dark-mode {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background-color: #6b7280; /* Default gray */
+    background-color: #6b7280;
     display: inline-block;
     vertical-align: middle;
     margin-right: 8px;
 }
 
 .indicator-circle.bg-red-500 {
-    background-color: #ef4444; /* Tailwind red-500 */
+    background-color: #ef4444;
 }
 
 .indicator-circle.bg-green-500 {
-    background-color: #22c55e; /* Tailwind green-500 */
+    background-color: #22c55e;
 }
 
 .indicator-circle.bg-yellow-500 {
-    background-color: #eab308; /* Tailwind yellow-500 */
+    background-color: #eab308;
 }
 
 .indicator-circle.bg-gray-500 {
-    background-color: #6b7280; /* Tailwind gray-500 */
+    background-color: #6b7280;
 }
 
 .indicator-text {
     display: inline-block;
     vertical-align: middle;
-    color: #9ca3af; /* Light gray text for indicators */
+    color: #9ca3af;
     font-weight: bold;
 }
 
@@ -363,7 +374,7 @@ body.lite-mode .modal-content {
 }
 
 body.lite-mode .modal-content h3, body.lite-mode .modal-content h2 {
-    color: #4CAF50; /* Keep green for title in lite mode too */
+    color: #4CAF50;
 }
 
 body.lite-mode .modal-content input {
@@ -373,7 +384,7 @@ body.lite-mode .modal-content input {
 }
 
 body.lite-mode .modal-content button {
-    background-color: #27ae60; /* Keep green button */
+    background-color: #27ae60;
     color: white;
 }
 
@@ -382,7 +393,7 @@ body.lite-mode .modal-content button:hover {
 }
 
 body.lite-mode .log-bar {
-    background-color: #dcdcdc; /* Un color claro para la barra de logs en modo claro */
-    color: #333; /* Texto oscuro para los logs en modo claro */
+    background-color: #dcdcdc;
+    color: #333;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
 }
