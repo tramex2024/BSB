@@ -32,4 +32,5 @@ BSB/
 │   │   └── seed.js
 │   ├── .env                   # Environment variables (MongoDB URI, etc.)
 │   ├── package.json
+│   ├── bitmart_entry_point.json
 │   └── README.md

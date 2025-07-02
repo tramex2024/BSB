@@ -101,7 +101,7 @@ async function saveBotState(botStateObj) {
 /**
  * Resetea las variables de un ciclo para un objeto de estado del bot dado.
  * @param {Object} botStateObj - El objeto del estado del bot a resetear.
- */
+*/
 function resetCycleVariables(botStateObj) {
     console.log(`[AUTOBOT] Reseteando variables del ciclo para usuario ${botStateObj.userId}.`);
     botStateObj.ppc = 0;
@@ -124,7 +124,7 @@ function resetCycleVariables(botStateObj) {
  * Intenta cancelar todas las órdenes abiertas para un símbolo y usuario dados.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario (apiKey, secretKey, apiMemo).
  * @param {string} symbol - Símbolo de trading (ej. 'BTC_USDT').
- */
+*/
 async function cancelOpenOrders(bitmartCreds, symbol) {
     console.log(`[AUTOBOT] Intentando cancelar órdenes abiertas para ${symbol}...`);
     try {
@@ -151,7 +151,7 @@ async function cancelOpenOrders(bitmartCreds, symbol) {
  * Coloca la primera orden de compra (Market) para iniciar un ciclo.
  * @param {Object} botStateObj - El objeto del estado del bot.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function placeFirstBuyOrder(botStateObj, bitmartCreds) {
     console.log(`[AUTOBOT][${botStateObj.userId}] Intentando colocar la primera orden de compra (CICLO ${botStateObj.cycle})...`);
     const tradeSymbol = TRADE_SYMBOL;
@@ -260,7 +260,7 @@ async function placeFirstBuyOrder(botStateObj, bitmartCreds) {
  * Coloca una orden de compra de cobertura (Limit).
  * @param {Object} botStateObj - El objeto del estado del bot.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function placeCoverageBuyOrder(botStateObj, bitmartCreds) {
     console.log(`[AUTOBOT][${botStateObj.userId}] Intentando colocar orden de compra de COBERTURA (CICLO ${botStateObj.cycle})...`);
     const tradeSymbol = TRADE_SYMBOL;
@@ -354,7 +354,7 @@ async function placeCoverageBuyOrder(botStateObj, bitmartCreds) {
     } catch (error) {
         console.error(`[AUTOBOT][${botStateObj.userId}] Excepción al colocar orden de cobertura:`, error.message);
     } finally {
-        await saveBotState(botStateObj); // Ensure state is saved even if errors occur
+        await saveBotState(botStateObj); // Ensure state is saved even if errors occurs
     }
 }
 
@@ -362,7 +362,7 @@ async function placeCoverageBuyOrder(botStateObj, bitmartCreds) {
  * Coloca una orden de venta (Market) para cerrar un ciclo.
  * @param {Object} botStateObj - El objeto del estado del bot.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function placeSellOrder(botStateObj, bitmartCreds) {
     console.log(`[AUTOBOT][${botStateObj.userId}] Intentando colocar orden de VENTA (CICLO ${botStateObj.cycle})...`);
     const tradeSymbol = TRADE_SYMBOL;
@@ -437,7 +437,7 @@ async function placeSellOrder(botStateObj, bitmartCreds) {
  * Función Principal de Lógica del Bot.
  * @param {Object} botStateObj - El objeto del estado del bot.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function runBotLogic(botStateObj, bitmartCreds) {
     console.log(`\n--- Ejecutando lógica del bot para ${botStateObj.userId}. Estado actual: ${botStateObj.state} ---`);
 
@@ -451,7 +451,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
             console.warn(`[AUTOBOT][${botStateObj.userId}] No se pudo obtener el precio actual. Reintentando...`);
             // Emitir un evento al frontend para notificar sobre el problema de precio
             if (ioInstance) {
-                ioInstance.emit('botError', { message: `Bot para ${botStateObj.userId}: No se pudo obtener el precio actual de ${TRADE_SYMBOL}. Reintentando.` });
+                ioInstance.to(botStateObj.userId).emit('botError', { message: `Bot para ${botStateObj.userId}: No se pudo obtener el precio actual de ${TRADE_SYMBOL}. Reintentando.`, userId: botStateObj.userId });
             }
             return; // Salir si no hay precio, para evitar errores en cálculos
         }
@@ -476,12 +476,14 @@ async function runBotLogic(botStateObj, bitmartCreds) {
         const ppc = parseFloat(botStateObj.ppc || 0);
         const trigger = parseFloat(botStateObj.trigger || 1.5); // Default to 1.5 if not set
         const expectedSellPrice = ppc * (1 + (trigger / 100));
+        let currentSignal = 'ESPERA'; // Default signal state
 
         // Use parseFloat to ensure ac is a number
         if (parseFloat(botStateObj.ac || 0) > 0 && botStateObj.currentPrice >= expectedSellPrice && botStateObj.state !== 'SELLING') {
             console.log(`[AUTOBOT][${botStateObj.userId}] ¡PRECIO DE VENTA GLOBAL ALCANZADO! (${botStateObj.currentPrice.toFixed(2)} >= ${expectedSellPrice.toFixed(2)})`);
             console.log(`[AUTOBOT][${botStateObj.userId}] Transicionando a SELLING para ejecutar la estrategia de venta.`);
             botStateObj.state = 'SELLING';
+            currentSignal = 'VENTA'; // Set signal to SELL
         }
 
         switch (botStateObj.state) {
@@ -491,13 +493,15 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                 if (parseFloat(botStateObj.ac || 0) > 0) { // Ensure ac is a number
                     console.warn(`[AUTOBOT][${botStateObj.userId}] Detectado AC > 0 en estado RUNNING. Transicionando a BUYING para reanudar ciclo.`);
                     botStateObj.state = 'BUYING';
+                    // The signal might already be 'VENTA' from global check, or 'ESPERA' otherwise
                 } else {
                     const analysisResult = await bitmartIndicatorAnalyzer.runAnalysis(botStateObj.currentPrice); // Pasar precio actual
                     console.log(`[AUTOBOT][${botStateObj.userId}] Analizador de indicadores resultado: ${analysisResult.action} - Razón: ${analysisResult.reason}`);
 
-                    const purchaseAmount = parseFloat(botStateObj.purchase || 0); // Ensure purchase is a number
                     if (analysisResult.action === 'COMPRA') {
+                        currentSignal = 'COMPRA'; // Set signal to BUY
                         console.log(`[AUTOBOT][${botStateObj.userId}] ¡Señal de entrada de COMPRA DETECTADA por los indicadores!`);
+                        const purchaseAmount = parseFloat(botStateObj.purchase || 0); // Ensure purchase is a number
                         if (availableUSDT >= purchaseAmount && purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART) {
                             botStateObj.state = 'BUYING';
                             await placeFirstBuyOrder(botStateObj, bitmartCreds); // Pasar botStateObj y credenciales
@@ -507,7 +511,13 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                             botStateObj.nextCoverageUSDTAmount = purchaseAmount;
                             botStateObj.nextCoverageTargetPrice = botStateObj.currentPrice;
                         }
-                    } else {
+                    } else if (analysisResult.action === 'VENTA') {
+                        // This case should ideally be handled by the global sell logic if AC > 0.
+                        // If AC is 0 and indicator says 'VENTA', it means no position to sell, so it's a HOLD/ESPERA.
+                        currentSignal = 'ESPERA'; // Or handle specifically if you want to log a 'SELL' signal with no AC
+                        console.log(`[AUTOBOT][${botStateObj.userId}] Indicador sugiere VENTA, pero no hay activo (AC = 0). Manteniendo ESPERA.`);
+                    } else { // Default to HOLD if no clear BUY/SELL signal
+                        currentSignal = 'ESPERA';
                         console.log(`[AUTOBOT][${botStateObj.userId}] Esperando una señal de COMPRA de los indicadores.`);
                     }
                 }
@@ -517,6 +527,8 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: BUYING. Gestionando compras y coberturas...`);
                 console.log(`[AUTOBOT][${botStateObj.userId}] PPC: ${parseFloat(botStateObj.ppc || 0).toFixed(2)}, CP: ${parseFloat(botStateObj.cp || 0).toFixed(2)}, AC: ${parseFloat(botStateObj.ac || 0).toFixed(8)} BTC`);
                 console.log(`[AUTOBOT][${botStateObj.userId}] Último precio de orden: ${botStateObj.lastOrder?.price?.toFixed(2) ?? 'N/A'}`); // Use optional chaining
+
+                currentSignal = 'COMPRA'; // While in BUYING state, the bot is actively looking to buy or cover.
 
                 if (parseFloat(botStateObj.ac || 0) > 0) { // Ensure ac is a number
                     let nextUSDTAmount;
@@ -544,6 +556,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                             botStateObj.state = 'NO_COVERAGE';
                             botStateObj.nextCoverageUSDTAmount = nextUSDTAmount;
                             botStateObj.nextCoverageTargetPrice = roundedNextCoveragePrice;
+                            currentSignal = 'ESPERA'; // No coverage means we are waiting
                         }
                     } else if (botStateObj.currentPrice <= roundedNextCoveragePrice) {
                         console.log(`[AUTOBOT][${botStateObj.userId}] Precio de cobertura alcanzado! Intentando colocar orden de cobertura.`);
@@ -552,14 +565,18 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                         await placeCoverageBuyOrder(botStateObj, bitmartCreds); // Pasar botStateObj y credenciales
                     } else {
                         console.log(`[AUTOBOT][${botStateObj.userId}] Esperando precio para próxima cobertura o venta.`);
+                        currentSignal = 'ESPERA'; // Waiting for price drop for coverage
                     }
                 } else if (parseFloat(botStateObj.ac || 0) === 0 && botStateObj.lastOrder && botStateObj.lastOrder.side === 'buy' && botStateObj.lastOrder.state !== 'filled') {
                     console.log(`[AUTOBOT][${botStateObj.userId}] Esperando confirmación de la primera orden o actualización de AC (puede que la primera orden esté pendiente).`);
+                    currentSignal = 'ESPERA'; // Waiting for the initial buy to fill
                 }
                 break;
 
             case 'SELLING':
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: SELLING. Gestionando ventas...`);
+                currentSignal = 'VENTA'; // While in SELLING state, the bot is actively looking to sell.
+
                 // Ensure pm, pv, pc are numbers and handle potential currentPrice issues
                 botStateObj.pm = Math.max(parseFloat(botStateObj.pm || 0), parseFloat(botStateObj.currentPrice || 0)); // Ensure pm updates
                 botStateObj.pv = parseFloat((botStateObj.pm * (1 - 0.005)).toFixed(2)); // Calculate PV from PM, fixed 0.5% fallback
@@ -575,6 +592,8 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
             case 'NO_COVERAGE':
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: NO_COVERAGE. Esperando fondos para la próxima orden de ${parseFloat(botStateObj.nextCoverageUSDTAmount || 0).toFixed(2)} USDT @ ${parseFloat(botStateObj.nextCoverageTargetPrice || 0).toFixed(2)}.`);
+                currentSignal = 'ESPERA'; // No coverage means we are waiting for funds
+
                 if (availableUSDT >= parseFloat(botStateObj.nextCoverageUSDTAmount || 0) && parseFloat(botStateObj.nextCoverageUSDTAmount || 0) >= MIN_USDT_VALUE_FOR_BITMART) {
                     console.log(`[AUTOBOT][${botStateObj.userId}] Fondos disponibles. Volviendo a estado BUYING para intentar la orden de cobertura.`);
                     botStateObj.state = 'BUYING';
@@ -583,15 +602,24 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
             case 'ERROR':
                 console.error(`[AUTOBOT][${botStateObj.userId}] Estado: ERROR. El bot ha encontrado un error crítico. Requiere intervención manual.`);
+                currentSignal = 'ERROR'; // Indicates an error state for the signal
                 break;
 
             case 'STOPPED':
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: STOPPED. El bot está inactivo.`);
+                currentSignal = 'DETENIDO'; // Indicates bot is stopped, not actively trading
                 break;
             default:
                 console.warn(`[AUTOBOT][${botStateObj.userId}] Estado desconocido del bot: ${botStateObj.state}. Estableciendo a STOPPED.`);
                 botStateObj.state = 'STOPPED';
+                currentSignal = 'DETENIDO';
                 break;
+        }
+
+        // Emitir el estado de la señal después de toda la lógica del bot
+        if (ioInstance) {
+            ioInstance.to(botStateObj.userId).emit('signalUpdate', { signal: currentSignal, userId: botStateObj.userId });
+            console.log(`[AUTOBOT][${botStateObj.userId}] Señal emitida al frontend: ${currentSignal}`);
         }
 
         // Siempre guarda el estado después de cada ciclo de lógica
@@ -610,6 +638,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                 // Emit an event to the frontend to notify about the credentials problem
                 if (ioInstance) {
                     ioInstance.to(botStateObj.userId).emit('botError', { message: 'Credenciales de BitMart inválidas o no configuradas. Bot detenido.', userId: botStateObj.userId });
+                    ioInstance.to(botStateObj.userId).emit('signalUpdate', { signal: 'ERROR_CREDENCIALES', userId: botStateObj.userId }); // Specific error signal
                 }
             }
         } else if (error.message.includes("Cannot read properties of undefined (reading 'toFixed')") || error.message.includes("is not a function")) {
@@ -620,12 +649,22 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                 await saveBotState(botStateObj);
                 if (ioInstance) {
                     ioInstance.to(botStateObj.userId).emit('botError', { message: 'Error de cálculo interno. Bot en estado de ERROR. Revisa los logs del servidor.', userId: botStateObj.userId });
+                    ioInstance.to(botStateObj.userId).emit('signalUpdate', { signal: 'ERROR_INTERNO', userId: botStateObj.userId }); // Specific error signal
+                }
+            }
+        } else {
+            // General error handling
+            if (botStateObj) {
+                // Do not change state to 'ERROR' automatically for all errors,
+                // keep it as is or revert to 'STOPPED' based on your preference.
+                // botStateObj.state = 'ERROR'; // Uncomment if you want all unhandled errors to set bot to ERROR
+                // await saveBotState(botStateObj);
+                if (ioInstance) {
+                    ioInstance.to(botStateObj.userId).emit('botError', { message: `Error inesperado: ${error.message}. Revisar logs.`, userId: botStateObj.userId });
+                    ioInstance.to(botStateObj.userId).emit('signalUpdate', { signal: 'ERROR_INESPERADO', userId: botStateObj.userId });
                 }
             }
         }
-        // You can change the bot state to 'ERROR' if you want manual intervention
-        // botStateObj.state = 'ERROR';
-        // await saveBotState(botStateObj);
     }
 }
 
@@ -637,7 +676,7 @@ const userBotIntervals = new Map(); // Mapa para almacenar los IDs de intervalo 
  * @param {string} userId - El ID del usuario.
  * @param {Object} botParams - Parámetros iniciales para el bot.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function startBotStrategy(userId, botParams, bitmartCreds) {
     console.log(`[AUTOBOT] Iniciando estrategia para el usuario: ${userId}`);
     let botState = await loadBotStateForUser(userId);
@@ -703,7 +742,7 @@ async function startBotStrategy(userId, botParams, bitmartCreds) {
  * Detiene la estrategia del bot para un usuario.
  * @param {Object} botStateObj - El objeto del estado del bot a detener.
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function stopBotStrategy(botStateObj, bitmartCreds) {
     console.log(`[AUTOBOT] Deteniendo estrategia para el usuario: ${botStateObj.userId}`);
 
@@ -723,6 +762,11 @@ async function stopBotStrategy(botStateObj, bitmartCreds) {
     botStateObj.isRunning = false; // Actualizar isRunning
     await saveBotState(botStateObj); // Guarda el estado actualizado
     console.log(`[AUTOBOT] Estrategia detenida y estado actualizado en DB para ${botStateObj.userId}.`);
+    // Emitir que el bot está detenido al frontend
+    if (ioInstance) {
+        ioInstance.to(botStateObj.userId).emit('signalUpdate', { signal: 'DETENIDO', userId: botStateObj.userId });
+        ioInstance.to(botStateObj.userId).emit('botStateUpdate', { botState: botStateObj.toObject(), userId: botStateObj.userId });
+    }
     return botStateObj; // Devuelve el estado actualizado
 }
 
@@ -733,7 +777,7 @@ async function stopBotStrategy(botStateObj, bitmartCreds) {
  * @param {string} action - 'start' o 'stop'.
  * @param {Object} botParams - Parámetros del bot (purchase, increment, decrement, trigger, stopAtCycleEnd).
  * @param {Object} bitmartCreds - Credenciales de BitMart del usuario.
- */
+*/
 async function toggleBotState(userId, action, botParams, bitmartCreds) {
     let botState = await loadBotStateForUser(userId);
     console.log(`[AUTOBOT] Solicitud para ${action} el bot para usuario ${userId}. Estado actual: ${botState.state}`);
