@@ -49,9 +49,7 @@ router.get('/history-orders', bitmartAuthMiddleware, userController.getHistoryOr
 router.get('/bot-config-and-state', userController.getBotConfigAndState);
 
 // Ruta para alternar el estado del bot (start/stop)
-// Esta ruta también necesita el middleware de autenticación de BitMart para acceder a las credenciales
-// del usuario y pasárselas a autobotLogic.toggleBotState.
-router.post('/toggle-bot', bitmartAuthMiddleware, userController.toggleBotState);
+router.post('/toggle-bot', userController.toggleBotState);
 
 
 module.exports = router;
