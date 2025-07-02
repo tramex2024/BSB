@@ -62,7 +62,7 @@ async function getCandles(symbol, interval, size = 500) {
  *
  * @param {Array<Object>} candles - Un array de objetos de vela.
  * @returns {Array<Object>} Un nuevo array de velas con los indicadores calculados.
- */
+*/
 function calculateIndicators(candles) {
     if (!candles || candles.length === 0) {
         console.warn("[ANALYZER] calculateIndicators: No hay datos de velas para calcular indicadores.");
@@ -136,16 +136,6 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
             console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
             return result;
         }
-
-        // Si tenemos un prevCandle válido y currentPrice disponible,
-        // calculamos un RSI "actual" basado en el currentPrice y el historial.
-        // Esto es un poco hacky para un RSI preciso, pero nos da un valor de referencia.
-        // Para un RSI preciso, necesitarías alimentar el `currentPrice` a la serie de `closePrices` y recalcular el RSI completo.
-        // Por ahora, usaremos el RSI de la `lastCandle` disponible si no es nulo.
-
-        // Si currentPrice es significativamente diferente, podríamos considerar esto como un movimiento en la última "no-vela"
-        // Para simplificar, si no hay lastCandle o el precio actual es el más alto, simplemente considera la última vela calculada
-        // y el currentPrice como el dato más fresco.
 
         // Para el RSI, necesitamos una serie de valores de cierre. Si currentPrice es el nuevo cierre,
         // lo añadimos a la serie para recalcular el RSI más actual.
@@ -237,7 +227,7 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
  *
  * @param {Object} entryPointData - El objeto con los datos del punto de entrada.
  * @param {string} filename - El nombre del archivo donde se guardará.
- */
+*/
 async function writeEntryPointToFile(entryPointData, filename = "bitmart_entry_point.json") {
     try {
         await fs.writeFile(filename, JSON.stringify(entryPointData, null, 4), 'utf8');
