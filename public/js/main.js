@@ -793,7 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Configurar intervalos de actualización
     setInterval(getBalances, 10000);
-    setInterval(cargarPrecioEnVivo, 250);
+    setInterval(cargarPrecioEnVivo, 200);
     setInterval(checkConnection, 10000);
     setInterval(() => fetchOrders(currentTab), 15000);
 
