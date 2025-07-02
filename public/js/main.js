@@ -282,7 +282,7 @@ function displayOrders(newOrders, tab) {
     // Check if newOrders is actually an array before mapping
     if (!Array.isArray(newOrders)) {
         console.error("displayOrders received non-array data:", newOrders);
-//        orderListDiv.innerHTML = `<p class="text-red-400">Error: Failed to display orders. Data format incorrect.</p>`;
+        orderListDiv.innerHTML = `<p class="text-red-400">Error: Failed to display orders. Data format incorrect.</p>`;
         currentDisplayedOrders.clear();
         displayLogMessage("Error: Failed to display orders. Invalid data format.", "error"); // Log para el usuario
         return;
@@ -292,7 +292,7 @@ function displayOrders(newOrders, tab) {
     // OR if the newOrders array is empty but we previously had orders
     if (newOrders.length === 0) {
         if (currentDisplayedOrders.size > 0 || currentTab !== tab) { // Only clear if we actually had orders or tab changed
-//            orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
+            orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
             displayLogMessage(`No orders found for the "${tab}" tab.`, "info"); // Log para el usuario
         }
         currentDisplayedOrders.clear();
@@ -327,7 +327,7 @@ function displayOrders(newOrders, tab) {
 
     // Ensure message if no orders are found after update
     if (currentDisplayedOrders.size === 0 && newOrders.length === 0) {
-  //      orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
+        orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
         displayLogMessage(`No orders found for the "${tab}" tab.`, "info");
     } else if (newOrders.length > 0 && currentDisplayedOrders.size > 0 && currentTab === tab) {
         // Only log if orders were successfully loaded for the current tab and there are actual orders
@@ -438,7 +438,7 @@ async function fetchOrders(tab) {
     }
 
     if (currentDisplayedOrders.size === 0 || currentTab !== tab) {
-   //     orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
+        orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
         currentDisplayedOrders.clear();
         displayLogMessage(`Loading ${tab} orders...`, "info");
     }
@@ -465,7 +465,7 @@ async function fetchOrders(tab) {
         }
     } catch (error) {
         console.error(`Failed to fetch orders for tab ${tab}:`, error);
-//        orderListDiv.innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
+        orderListDiv.innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
         displayLogMessage(`Failed to load orders for "${tab}" tab.`, "error");
         // Crucial: Set orders to an empty array on error to prevent subsequent map error
         orders = [];
