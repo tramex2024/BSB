@@ -5,7 +5,6 @@ const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el mod
 const jwt = require('jsonwebtoken'); // Para verificar el token JWT
 const crypto = require('crypto'); // Para encriptar/desencriptar las claves
 const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
-const autobotLogic = require('../autobotLogic'); // <-- ¡IMPORTADO: La lógica del bot!
 
 // --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno (raw) ---
 // Estas líneas se ejecutarán tan pronto como el archivo sea requerido por server.js
@@ -81,7 +80,7 @@ const getEncryptionIv = () => {
 const encrypt = (text) => {
     try {
         const keyBuffer = getEncryptionKey(); // Ahora directamente retorna un Buffer
-        const iv = getEncryptionIv();         // Ahora directamente retorna un Buffer
+        const iv = getEncryptionIv();        // Ahora directamente retorna un Buffer
 
         const cipher = crypto.createCipheriv(algorithm, keyBuffer, iv);
         let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -96,7 +95,7 @@ const encrypt = (text) => {
 const decrypt = (encryptedText) => {
     try {
         const keyBuffer = getEncryptionKey(); // Ahora directamente retorna un Buffer
-        const iv = getEncryptionIv();         // Ahora directamente retorna un Buffer
+        const iv = getEncryptionIv();        // Ahora directamente retorna un Buffer
 
         const decipher = crypto.createDecipheriv(algorithm, keyBuffer, iv);
         let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
@@ -319,20 +318,6 @@ exports.toggleBotState = async (req, res) => {
             });
         }
 
-        // Obtener las credenciales de BitMart (desencriptadas) para pasárselas a autobotLogic
-        const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-            return res.status(400).json({ success: false, message: 'BitMart API keys not configured for this user. Cannot start/stop bot.' });
-        }
-        const decryptedApiKey = decrypt(user.bitmartApiKey);
-        const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
-        const bitmartCreds = {
-            apiKey: decryptedApiKey,
-            secretKey: decryptedSecretKey,
-            apiMemo: decryptedMemo
-        };
-
         if (action === 'start') {
             if (botState.state === 'RUNNING') {
                 return res.status(400).json({ success: false, message: 'Bot is already running.' });
@@ -345,16 +330,12 @@ exports.toggleBotState = async (req, res) => {
             botState.stopAtCycleEnd = params.stopAtCycleEnd;
             botState.state = 'RUNNING'; // Cambia el estado a RUNNING
             console.log(`[toggleBotState] Bot started for user ${userId}.`);
-            // <--- ¡IMPORTANTE: Llama a la lógica del bot para iniciar la estrategia! --->
-            await autobotLogic.startBotStrategy(userId, botState.toObject(), bitmartCreds); // Pasar botState como objeto plano
         } else if (action === 'stop') {
             if (botState.state === 'STOPPED') {
                 return res.status(400).json({ success: false, message: 'Bot is already stopped.' });
             }
             botState.state = 'STOPPED'; // Cambia el estado a STOPPED
             console.log(`[toggleBotState] Bot stopped for user ${userId}.`);
-            // <--- ¡IMPORTANTE: Llama a la lógica del bot para detener la estrategia! --->
-            await autobotLogic.stopBotStrategy(userId);
         } else {
             return res.status(400).json({ success: false, message: 'Invalid action specified.' });
         }
@@ -364,7 +345,7 @@ exports.toggleBotState = async (req, res) => {
 
     } catch (error) {
         console.error('Error toggling bot state:', error);
-        res.status(500).json({ success: false, message: `Error interno del servidor al intentar cambiar el estado del bot: ${error.message}` });
+        res.status(500).json({ success: false, message: 'Error internal server when trying to change bot state.' });
     }
 };
 
