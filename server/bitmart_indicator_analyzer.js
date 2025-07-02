@@ -111,7 +111,7 @@ function calculateIndicators(candles) {
  */
 function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBOL) {
     if (!candlesWithIndicators || candlesWithIndicators.length < 2) { // Necesitamos al menos 2 velas con RSI para un cruce
-        const result = { action: "ESPERA", symbol: symbol, reason: "No hay suficientes datos de velas completas con RSI para determinar punto de entrada." };
+        const result = { action: "HOLD", symbol: symbol, reason: "No hay suficientes datos de velas completas con RSI para determinar punto de entrada." };
         console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
@@ -130,7 +130,7 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
     const currentRSI = latestRsiValues[latestRsiValues.length - 1]; // Este es el RSI más actual considerando currentPrice
 
     if (isNaN(prevCandleRSI) || isNaN(lastCandleRSI) || isNaN(currentRSI)) {
-        const result = { action: "ESPERA", symbol: symbol, reason: `RSI no calculado o inválido para las últimas velas o precio actual. Prev RSI: ${prevCandleRSI}, Last Candle RSI: ${lastCandleRSI}, Current Price RSI: ${currentRSI}.` };
+        const result = { action: "HOLD", symbol: symbol, reason: `RSI no calculado o inválido para las últimas velas o precio actual. Prev RSI: ${prevCandleRSI}, Last Candle RSI: ${lastCandleRSI}, Current Price RSI: ${currentRSI}.` };
         console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
@@ -159,7 +159,7 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
 
     if (buySignalDetected) {
         const result = {
-            action: "COMPRA",
+            action: "BUY",
             symbol: symbol,
             entryPrice: currentPrice, // Usar el currentPrice real recibido de autobotLogic
             timestamp: new Date().toISOString(),
@@ -187,13 +187,13 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
     }
 
     if (sellSignalDetected) {
-        const result = { action: "VENTA", symbol: symbol, reason: sellReason.join('. ') };
+        const result = { action: "SELL", symbol: symbol, reason: sellReason.join('. ') };
         console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
         return result;
     }
 
     // Si no se detecta ninguna señal clara de COMPRA o VENTA, la acción por defecto es ESPERA
-    const result = { action: "ESPERA", symbol: symbol, reason: "No se encontraron señales de entrada o salida claras en este momento." };
+    const result = { action: "HOLD", symbol: symbol, reason: "No se encontraron señales de entrada o salida claras en este momento." };
     console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
     return result;
 }
@@ -224,8 +224,8 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
 
     if (rawCandlesFromAPI.length === 0) {
-        console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Devolviendo ESPERA.");
-        const signal = { action: "ESPERA", symbol: SYMBOL, reason: "No se obtuvieron datos de velas para el análisis." };
+        console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Devolviendo HOLD.");
+        const signal = { action: "HOLD", symbol: SYMBOL, reason: "No se obtuvieron datos de velas para el análisis." };
         console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
         console.log(signal);
         await writeEntryPointToFile(signal);
@@ -249,7 +249,7 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
         });
     } else {
         console.warn("[ANALYZER-DEBUG] No hay velas completas con indicadores para mostrar. Esto puede ocurrir si no hay suficientes datos para el RSI.");
-        const signal = { action: "ESPERA", symbol: SYMBOL, reason: "No hay suficientes velas con todos los indicadores calculados para determinar una señal clara." };
+        const signal = { action: "HOLD", symbol: SYMBOL, reason: "No hay suficientes velas con todos los indicadores calculados para determinar una señal clara." };
         console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
         console.log(signal);
         await writeEntryPointToFile(signal);

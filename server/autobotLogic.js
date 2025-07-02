@@ -476,14 +476,14 @@ async function runBotLogic(botStateObj, bitmartCreds) {
         const ppc = parseFloat(botStateObj.ppc || 0);
         const trigger = parseFloat(botStateObj.trigger || 1.5); // Default to 1.5 if not set
         const expectedSellPrice = ppc * (1 + (trigger / 100));
-        let currentSignal = 'ESPERA'; // Default signal state
+        let currentSignal = 'HOLD'; // Default signal state
 
         // Use parseFloat to ensure ac is a number
         if (parseFloat(botStateObj.ac || 0) > 0 && botStateObj.currentPrice >= expectedSellPrice && botStateObj.state !== 'SELLING') {
             console.log(`[AUTOBOT][${botStateObj.userId}] ¡PRECIO DE VENTA GLOBAL ALCANZADO! (${botStateObj.currentPrice.toFixed(2)} >= ${expectedSellPrice.toFixed(2)})`);
             console.log(`[AUTOBOT][${botStateObj.userId}] Transicionando a SELLING para ejecutar la estrategia de venta.`);
             botStateObj.state = 'SELLING';
-            currentSignal = 'VENTA'; // Set signal to SELL
+            currentSignal = 'SELL'; // Set signal to SELL
         }
 
         switch (botStateObj.state) {
@@ -493,13 +493,13 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                 if (parseFloat(botStateObj.ac || 0) > 0) { // Ensure ac is a number
                     console.warn(`[AUTOBOT][${botStateObj.userId}] Detectado AC > 0 en estado RUNNING. Transicionando a BUYING para reanudar ciclo.`);
                     botStateObj.state = 'BUYING';
-                    // The signal might already be 'VENTA' from global check, or 'ESPERA' otherwise
+                    // The signal might already be 'SELL' from global check, or 'HOLD' otherwise
                 } else {
                     const analysisResult = await bitmartIndicatorAnalyzer.runAnalysis(botStateObj.currentPrice); // Pasar precio actual
                     console.log(`[AUTOBOT][${botStateObj.userId}] Analizador de indicadores resultado: ${analysisResult.action} - Razón: ${analysisResult.reason}`);
 
-                    if (analysisResult.action === 'COMPRA') {
-                        currentSignal = 'COMPRA'; // Set signal to BUY
+                    if (analysisResult.action === 'BUY') {
+                        currentSignal = 'BUY'; // Set signal to BUY
                         console.log(`[AUTOBOT][${botStateObj.userId}] ¡Señal de entrada de COMPRA DETECTADA por los indicadores!`);
                         const purchaseAmount = parseFloat(botStateObj.purchase || 0); // Ensure purchase is a number
                         if (availableUSDT >= purchaseAmount && purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART) {
@@ -511,13 +511,13 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                             botStateObj.nextCoverageUSDTAmount = purchaseAmount;
                             botStateObj.nextCoverageTargetPrice = botStateObj.currentPrice;
                         }
-                    } else if (analysisResult.action === 'VENTA') {
+                    } else if (analysisResult.action === 'SELL') {
                         // This case should ideally be handled by the global sell logic if AC > 0.
-                        // If AC is 0 and indicator says 'VENTA', it means no position to sell, so it's a HOLD/ESPERA.
-                        currentSignal = 'ESPERA'; // Or handle specifically if you want to log a 'SELL' signal with no AC
-                        console.log(`[AUTOBOT][${botStateObj.userId}] Indicador sugiere VENTA, pero no hay activo (AC = 0). Manteniendo ESPERA.`);
+                        // If AC is 0 and indicator says 'SELL', it means no position to sell, so it's a HOLD/ESPERA.
+                        currentSignal = 'HOLD'; // Or handle specifically if you want to log a 'SELL' signal with no AC
+                        console.log(`[AUTOBOT][${botStateObj.userId}] Indicador sugiere VENTA, pero no hay activo (AC = 0). Manteniendo HOLD.`);
                     } else { // Default to HOLD if no clear BUY/SELL signal
-                        currentSignal = 'ESPERA';
+                        currentSignal = 'HOLD';
                         console.log(`[AUTOBOT][${botStateObj.userId}] Esperando una señal de COMPRA de los indicadores.`);
                     }
                 }
@@ -528,7 +528,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                 console.log(`[AUTOBOT][${botStateObj.userId}] PPC: ${parseFloat(botStateObj.ppc || 0).toFixed(2)}, CP: ${parseFloat(botStateObj.cp || 0).toFixed(2)}, AC: ${parseFloat(botStateObj.ac || 0).toFixed(8)} BTC`);
                 console.log(`[AUTOBOT][${botStateObj.userId}] Último precio de orden: ${botStateObj.lastOrder?.price?.toFixed(2) ?? 'N/A'}`); // Use optional chaining
 
-                currentSignal = 'COMPRA'; // While in BUYING state, the bot is actively looking to buy or cover.
+                currentSignal = 'BUY'; // While in BUYING state, the bot is actively looking to buy or cover.
 
                 if (parseFloat(botStateObj.ac || 0) > 0) { // Ensure ac is a number
                     let nextUSDTAmount;
@@ -556,7 +556,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                             botStateObj.state = 'NO_COVERAGE';
                             botStateObj.nextCoverageUSDTAmount = nextUSDTAmount;
                             botStateObj.nextCoverageTargetPrice = roundedNextCoveragePrice;
-                            currentSignal = 'ESPERA'; // No coverage means we are waiting
+                            currentSignal = 'HOLD'; // No coverage means we are waiting
                         }
                     } else if (botStateObj.currentPrice <= roundedNextCoveragePrice) {
                         console.log(`[AUTOBOT][${botStateObj.userId}] Precio de cobertura alcanzado! Intentando colocar orden de cobertura.`);
@@ -565,17 +565,17 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                         await placeCoverageBuyOrder(botStateObj, bitmartCreds); // Pasar botStateObj y credenciales
                     } else {
                         console.log(`[AUTOBOT][${botStateObj.userId}] Esperando precio para próxima cobertura o venta.`);
-                        currentSignal = 'ESPERA'; // Waiting for price drop for coverage
+                        currentSignal = 'HOLD'; // Waiting for price drop for coverage
                     }
                 } else if (parseFloat(botStateObj.ac || 0) === 0 && botStateObj.lastOrder && botStateObj.lastOrder.side === 'buy' && botStateObj.lastOrder.state !== 'filled') {
                     console.log(`[AUTOBOT][${botStateObj.userId}] Esperando confirmación de la primera orden o actualización de AC (puede que la primera orden esté pendiente).`);
-                    currentSignal = 'ESPERA'; // Waiting for the initial buy to fill
+                    currentSignal = 'HOLD'; // Waiting for the initial buy to fill
                 }
                 break;
 
             case 'SELLING':
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: SELLING. Gestionando ventas...`);
-                currentSignal = 'VENTA'; // While in SELLING state, the bot is actively looking to sell.
+                currentSignal = 'SELL'; // While in SELLING state, the bot is actively looking to sell.
 
                 // Ensure pm, pv, pc are numbers and handle potential currentPrice issues
                 botStateObj.pm = Math.max(parseFloat(botStateObj.pm || 0), parseFloat(botStateObj.currentPrice || 0)); // Ensure pm updates
@@ -592,7 +592,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
             case 'NO_COVERAGE':
                 console.log(`[AUTOBOT][${botStateObj.userId}] Estado: NO_COVERAGE. Esperando fondos para la próxima orden de ${parseFloat(botStateObj.nextCoverageUSDTAmount || 0).toFixed(2)} USDT @ ${parseFloat(botStateObj.nextCoverageTargetPrice || 0).toFixed(2)}.`);
-                currentSignal = 'ESPERA'; // No coverage means we are waiting for funds
+                currentSignal = 'HOLD'; // No coverage means we are waiting for funds
 
                 if (availableUSDT >= parseFloat(botStateObj.nextCoverageUSDTAmount || 0) && parseFloat(botStateObj.nextCoverageUSDTAmount || 0) >= MIN_USDT_VALUE_FOR_BITMART) {
                     console.log(`[AUTOBOT][${botStateObj.userId}] Fondos disponibles. Volviendo a estado BUYING para intentar la orden de cobertura.`);
