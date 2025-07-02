@@ -43,10 +43,10 @@ const getEncryptionKey = () => {
     }
     // Derivar la clave a un hash SHA256 y tomar los primeros 32 bytes como Buffer
     const derivedKeyBuffer = crypto.createHash('sha256').update(key, 'utf8').digest().slice(0, 32);
-    
+
     // --- NUEVO LOG DE DEPURACIÓN EN PROFUNDIDAD ---
     console.log(`[DEBUG KEY BUFFER] Derived ENCRYPTION_KEY Buffer (hex representation): '${derivedKeyBuffer.toString('hex')}' (Length: ${derivedKeyBuffer.length} bytes)`);
-    
+
     if (derivedKeyBuffer.length !== 32) {
         console.error(`[CRITICAL ERROR] Derived ENCRYPTION_KEY Buffer NO es de 32 bytes. Longitud real: ${derivedKeyBuffer.length}.`);
         throw new Error(`Invalid encryption key: La clave derivada debe ser de 32 bytes.`);
@@ -151,7 +151,7 @@ exports.getBitmartBalance = async (req, res) => {
             console.warn(`[BALANCE] User ${userId} tried to fetch balance but req.bitmartCreds is missing.`);
             return res.status(400).json({ message: 'BitMart API keys not configured or could not be decrypted.' });
         }
-        
+
         const balances = await bitmartService.getBalance(req.bitmartCreds);
         res.status(200).json(balances);
 
@@ -209,7 +209,7 @@ exports.getHistoryOrders = async (req, res) => {
         };
 
         const historyOrders = await bitmartService.getHistoryOrdersV4(req.bitmartCreds, historyParams);
-        
+
         res.status(200).json({ success: true, orders: historyOrders });
 
     } catch (error) {
@@ -231,6 +231,7 @@ exports.getBotConfigAndState = async (req, res) => {
         if (!botState) {
             console.log(`[getBotConfigAndState] No se encontró estado de bot para el usuario ${userId}. Devolviendo valores predeterminados.`);
             // Asegúrate de que estos valores predeterminados coincidan con los de tu modelo BotState
+            // Ensure all numerical values are handled safely, either by being actual numbers or 0.
             return res.status(200).json({
                 isRunning: false,
                 state: 'STOPPED',
@@ -242,7 +243,7 @@ exports.getBotConfigAndState = async (req, res) => {
                 decrement: 1.0,
                 trigger: 1.5,
                 stopAtCycleEnd: false,
-                currentPrice: 0, // Añadir campos importantes para el frontend
+                currentPrice: 0,
                 ppc: 0,
                 ac: 0,
                 pm: 0,
@@ -291,6 +292,10 @@ exports.toggleBotState = async (req, res) => {
         // Mejorar el mensaje de error para el frontend
         if (error.message.includes("Failed to decrypt BitMart credentials")) {
             return res.status(500).json({ success: false, message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+        }
+        // Specific handling for the 'toFixed' error
+        if (error.message.includes("Cannot read properties of undefined (reading 'toFixed')")) {
+            return res.status(500).json({ success: false, message: 'Error de cálculo: un valor numérico esencial es nulo o indefinido. Esto suele indicar un problema con los datos de mercado o un balance inesperado. Por favor, revisa tus logs de servidor para más detalles.' });
         }
         res.status(500).json({ success: false, message: error.message || 'Error interno del servidor al intentar cambiar el estado del bot.' });
     }
