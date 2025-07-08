@@ -13,7 +13,7 @@ const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
 // Puedes ajustar estos valores según tus pruebas y backtesting.
 
 const RSI_PERIOD = 21; // Usando 21 para velas de 1 minutos
-const RSI_OVERSOLD = 40; // Umbral de Compra (se mantiene en 35 como en tu último log)
+const RSI_OVERSOLD = 35; // Umbral de Compra
 const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado" (para señales de venta)
 
 /**
@@ -29,17 +29,13 @@ const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado" (para se�
 async function getCandles(symbol, interval, size = 500) {
     console.log(`[ANALYZER] --- Obteniendo velas reales para ${symbol} en intervalo '${interval}' a través de bitmartService ---`);
     try {
-        // rawCandlesData ahora se espera que sea un array de OBJETOS,
-        // ya formateados por bitmartService, por ejemplo:
-        // [{ timestamp: 123, open: 456, high: 789, low: 123, close: 456, volume: 789 }, ...]
         const rawCandlesData = await bitmartService.getKlines(symbol, interval, size);
 
-        // --- LÍNEAS DE DEPURACIÓN (Mantenidas temporalmente para confirmar) ---
+        // --- LÍNEAS DE DEPURACIÓN (Mantenidas temporalmente para confirmar el formato) ---
         console.log(`[ANALYZER-DEBUG-RAW] Datos crudos de velas recibidos de bitmartService.getKlines. Longitud: ${rawCandlesData?.length}`);
         if (rawCandlesData && rawCandlesData.length > 0) {
             console.log(`[ANALYZER-DEBUG-RAW] Primer elemento de vela (rawCandlesData[0]):`, rawCandlesData[0]);
             console.log(`[ANALYZER-DEBUG-RAW] Tipo del primer elemento:`, typeof rawCandlesData[0]);
-            // Ya no necesitamos c[0][4] porque ahora es un objeto, no un array de arrays.
             if (rawCandlesData[0] && typeof rawCandlesData[0].close !== 'undefined') {
                 console.log(`[ANALYZER-DEBUG-RAW] Valor del cierre (rawCandlesData[0].close):`, rawCandlesData[0].close);
                 console.log(`[ANALYZER-DEBUG-RAW] Tipo del valor del cierre (rawCandlesData[0].close):`, typeof rawCandlesData[0].close);
@@ -54,8 +50,7 @@ async function getCandles(symbol, interval, size = 500) {
             return [];
         }
 
-        // Simplemente aseguramos que los valores sean números, aunque ya deberían serlo.
-        // Y filtramos cualquier objeto de vela que no tenga un 'close' válido.
+        // Simplemente aseguramos que los valores sean números, y filtramos cualquier objeto de vela que no tenga un 'close' válido.
         const formattedCandles = rawCandlesData.map(c => {
             if (c && typeof c.open === 'number' && typeof c.high === 'number' && typeof c.low === 'number' && typeof c.close === 'number' && typeof c.volume === 'number') {
                 return c; // La vela ya está en el formato correcto y sus valores son números
@@ -161,7 +156,7 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
     console.log(`[ANALYZER-DEBUG] Umbral de Compra (RSI_OVERSOLD): ${RSI_OVERSOLD}`);
 
 
-    // --- Lógica de COMPRA ---
+    // --- Lógica de COMPRA (Refinada) ---
     let buySignalDetected = false;
     let buyReason = [];
 
@@ -181,14 +176,6 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
         buyReason.push(`RSI (con precio actual) en sobreventa (${currentRSI.toFixed(2)}) y subiendo desde el RSI de la última vela completa (${lastCompleteCandleRSI.toFixed(2)})`);
         console.log(`[ANALYZER-DEBUG] ✅ Condición de COMPRA (RSI en oversold y subiendo) detectada.`);
     }
-    // ESTRATEGIA ADICIONAL TEMPORAL DE PRUEBA: Si el RSI con el precio actual está simplemente por debajo del umbral de compra.
-    // Esto es muy permisivo y solo para confirmar que se genera la señal.
-    else if (currentRSI < RSI_OVERSOLD && !buySignalDetected) { // Asegura que no se duplique si ya se detectó arriba
-        buySignalDetected = true;
-        buyReason.push(`RSI (con precio actual) está por debajo del umbral de compra de prueba (${RSI_OVERSOLD}).`);
-        console.log(`[ANALYZER-DEBUG] ✅ Condición de COMPRA (RSI < Umbral de prueba) detectada.`);
-    }
-
 
     if (buySignalDetected) {
         const result = {
