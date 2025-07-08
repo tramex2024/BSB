@@ -29,12 +29,10 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
-    let message;
-    if (memoForHash === '') {
-        message = timestamp + '#' + finalBodyOrQueryString;
-    } else {
-        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
-    }
+    // --- CAMBIO CLAVE AQUÍ ---
+    // Siempre incluye el memoForHash y el #, incluso si memoForHash es una cadena vacía
+    const message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
+    // --- FIN CAMBIO CLAVE ---
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
