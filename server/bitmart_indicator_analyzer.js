@@ -1,7 +1,7 @@
 // bitmart_indicator_analyzer.js
 
 const technicalindicators = require('technicalindicators');
-const bitmartService = require('./bitmartService'); // Asegúrate de que la ruta sea correcta
+const bitmartService = require('./services/bitmartService'); // Asegúrate de que la ruta sea correcta
 const fs = require('fs');
 
 // Constantes de configuración (ajústalas según tu estrategia real)
