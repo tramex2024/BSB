@@ -41,11 +41,13 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
 
-    // --- LOG DE EXTREMA SENSIBILIDAD ---
-    // ESTO REVELARÁ TU CLAVE SECRETA COMPLETA EN LOS LOGS DEL SERVIDOR.
-    // ¡ÚSALO SOLO PARA DEPURACIÓN EN UN ENTORNO SEGURO Y ELIMÍNALO INMEDIATAMENTE DESPUÉS!
-    console.log(`[SIGN_DEBUG] FULL API Secret (for hash): '${apiSecret}' (Length: ${apiSecret.length})`); 
-    // --- FIN LOG DE EXTREMA SENSIBILIDAD ---
+    console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
+
+    // --- ¡ADVERTENCIA DE SEGURIDAD CRÍTICA! ---
+    // ESTA LÍNEA REVELARÁ TU CLAVE SECRETA COMPLETA EN LOS LOGS DEL SERVIDOR.
+    // ÚSALA ÚNICAMENTE PARA DEPURACIÓN EN UN ENTORNO SEGURO Y ELIMÍNALA INMEDIATAMENTE DESPUÉS DE LA PRUEBA.
+    console.log(`[SIGN_DEBUG] FULL API Secret (for hash): '${apiSecret}' (Length: ${apiSecret.length})`);
+    // --- FIN ADVERTENCIA ---
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
