@@ -1,4 +1,4 @@
-// server/services/bitmartService.js (CORREGIDO FINALMENTE)
+// server/services/bitmartService.js 
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -126,7 +126,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     } else if (method === 'POST') {
         // IMPORTANTE: Ordenar el objeto de datos ANTES de stringificarlo para la firma.
         const sortedDataForSign = sortObjectKeys(dataForRequest);
-        bodyForSign = JSON.stringify(sortedDataForSign); // Esta es la cadena JSON usada para la firma
+        bodyForSign = JSON.stringify(sortedDataForSign, null, 0); // Modificado para eliminar espacios y formateo
 
         // Los datos enviados en el cuerpo de la solicitud (sin ordenar, o podrías ordenar también si BitMart lo exigiera para el cuerpo real)
         requestConfig.data = dataForRequest;
