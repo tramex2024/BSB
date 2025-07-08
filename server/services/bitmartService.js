@@ -1,4 +1,4 @@
-// server/services/bitmartService.js 
+// server/services/bitmartService.js (CORREGIDO)
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -30,8 +30,6 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
     let message;
-    // La lógica de la firma del memo que acordamos previamente:
-    // Si el memo es una cadena vacía, se comporta como si no hubiera memo en la firma (sin el doble ##).
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
@@ -39,13 +37,10 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     }
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
-    // --- LOG CRÍTICO DEL MEMO ---
-    console.log(`[SIGN_DEBUG] Memo value for hashing: '${memoForHash}' (Length: ${memoForHash.length}, Type: ${typeof memoForHash})`);
-    // --- FIN LOG CRÍTICO ---
+    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
-    // Opcional: El log del Secret Key que ya habías puesto para verificarlo
-    // console.log(`[SIGN_DEBUG] FULL API Secret (for hash): '${apiSecret}' (Length: ${apiSecret.length})`); 
+    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
@@ -70,7 +65,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.warn(`[API_MEMO_WORKAROUND] Using default memo '${DEFAULT_V4_POST_MEMO}' for V4 POST request '${path}' as user's memo is blank.`);
     }
 
-    let dataForRequest = { ...paramsOrData }; // Clona paramsOrData
+    const dataForRequest = { ...paramsOrData };
 
     if (isPrivate) {
         requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
@@ -80,24 +75,16 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         if (isPrivate) {
             dataForRequest.recvWindow = 10000;
         }
-        requestConfig.params = sortObjectKeys(dataForRequest); // Ordena los parámetros para GET
+        requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
-        // --- CAMBIO CLAVE AQUÍ ---
-        // 1. Ordena las claves del objeto antes de stringificarlo para la firma.
-        const sortedDataForRequest = sortObjectKeys(dataForRequest);
-        
-        // 2. Usa el objeto ordenado para el cuerpo de la solicitud real.
-        requestConfig.data = sortedDataForRequest; 
-        
-        // 3. Stringifica el objeto ordenado para la firma.
-        bodyForSign = JSON.stringify(sortedDataForRequest); 
-        // --- FIN CAMBIO CLAVE ---
-
+        requestConfig.data = dataForRequest;
+        bodyForSign = JSON.stringify(dataForRequest);
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
     if (isPrivate) {
+        // Corrected: Removed 'new' duplicate
         if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
             throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
         }
@@ -108,7 +95,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null) {
+        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
             delete requestConfig.headers['X-BM-MEMO'];
@@ -118,8 +105,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
     console.log(`URL: ${url}`);
     if (method === 'POST') {
-        // Asegúrate de que aquí se imprima el body ordenado para depuración
-        console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data)); 
+        console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
         console.log('Body para Firma (JSON stringificado):', bodyForSign);
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
@@ -137,6 +123,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
+            // Corrected: Removed 'new' duplicate
             throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
@@ -145,16 +132,20 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
             console.error('Error Status:', error.response.status);
             console.error('Error Headers:', error.response.headers);
+            // Corrected: Removed 'new' duplicate
             throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
         } else if (error.request) {
             console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
+            // Corrected: Removed 'new' duplicate
             throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
         } else {
             console.error('Error Message:', error.message);
+            // Corrected: Removed 'new' duplicate
             throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
         }
     }
 }
+
 async function getSystemTime() {
     console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
