@@ -29,9 +29,15 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
-    // --- CAMBIO CLAVE AQUÍ ---
-    // Siempre incluye el memoForHash y el #, incluso si memoForHash es una cadena vacía
-    const message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
+    let message;
+    // --- REVERTIR Y AJUSTAR LÓGICA DE FIRMA AQUÍ ---
+    // Si el memo es una cadena vacía, se comporta como si no hubiera memo en la firma.
+    // ESTO SÓLO FUNCIONARÁ SI BITMART REQUIERE QUE EL HEADER X-BM-MEMO SEA '' CUANDO EL MEMO ES VACÍO.
+    if (memoForHash === '') {
+        message = timestamp + '#' + finalBodyOrQueryString; // Sin el doble ##
+    } else {
+        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString; // Con memo
+    }
     // --- FIN CAMBIO CLAVE ---
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
