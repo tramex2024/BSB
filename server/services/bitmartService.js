@@ -30,21 +30,22 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
     let message;
-    // --- REVERTIR Y AJUSTAR LÓGICA DE FIRMA AQUÍ ---
-    // Si el memo es una cadena vacía, se comporta como si no hubiera memo en la firma.
-    // ESTO SÓLO FUNCIONARÁ SI BITMART REQUIERE QUE EL HEADER X-BM-MEMO SEA '' CUANDO EL MEMO ES VACÍO.
     if (memoForHash === '') {
-        message = timestamp + '#' + finalBodyOrQueryString; // Sin el doble ##
+        message = timestamp + '#' + finalBodyOrQueryString;
     } else {
-        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString; // Con memo
+        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
     }
-    // --- FIN CAMBIO CLAVE ---
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
-    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
+
+    // --- LOG DE EXTREMA SENSIBILIDAD ---
+    // ESTO REVELARÁ TU CLAVE SECRETA COMPLETA EN LOS LOGS DEL SERVIDOR.
+    // ¡ÚSALO SOLO PARA DEPURACIÓN EN UN ENTORNO SEGURO Y ELIMÍNALO INMEDIATAMENTE DESPUÉS!
+    console.log(`[SIGN_DEBUG] FULL API Secret (for hash): '${apiSecret}' (Length: ${apiSecret.length})`); 
+    // --- FIN LOG DE EXTREMA SENSIBILIDAD ---
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
