@@ -480,15 +480,18 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
         switch (botStateObj.state) {
             case 'RUNNING':
-                console.log(`[AUTOBOT][${botStateObj.userId}] Estado: RUNNING. Esperando señal de entrada de COMPRA desde el analizador de indicadores...`);
+                console.log(`[AUTOBOT][${botStateObj.userId}] Estado: RUNNING. Esperando señal de entrada de BUY desde el analizador de indicadores...`);
 
                 if (parseFloat(botStateObj.ac || 0) > 0) { // Ensure ac is a number
                     console.warn(`[AUTOBOT][${botStateObj.userId}] Detectado AC > 0 en estado RUNNING. Transicionando a BUYING para reanudar ciclo.`);
                     botStateObj.state = 'BUYING';
                 } else {
-                    const analysisResult = await bitmartIndicatorAnalyzer.runAnalysis(botStateObj.currentPrice); // Pasar precio actual
+//                    const analysisResult = await bitmartIndicatorAnalyzer.runAnalysis(botStateObj.currentPrice); // Pasar precio actual
                     console.log(`[AUTOBOT][${botStateObj.userId}] Analizador de indicadores resultado: ${analysisResult.action} - Razón: ${analysisResult.reason}`);
 
+//////////B O R R A R 
+ analysisResult.action = 'BUY';
+//////////
                     if (analysisResult.action === 'BUY') {
                         currentSignal = 'BUY'; // Set signal to BUY
                         console.log(`[AUTOBOT][${botStateObj.userId}] ¡Señal de entrada de COMPRA DETECTADA por los indicadores!`);
