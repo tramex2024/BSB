@@ -13,7 +13,7 @@ const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
 // Puedes ajustar estos valores según tus pruebas y backtesting.
 
 const RSI_PERIOD = 21; // Usando 21 para velas de 1 minutos
-const RSI_OVERSOLD = 35; // Umbral de Compra
+const RSI_OVERSOLD = 30; // Umbral de Compra
 const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado" (para señales de venta)
 
 /**
