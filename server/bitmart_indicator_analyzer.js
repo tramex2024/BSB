@@ -20,7 +20,7 @@ const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado" (para se�
  * Obtiene datos de velas (ohlcv) de BitMart para un símbolo y período de tiempo dados,
  * utilizando tu `bitmartService.js` existente.
  *
- * @param {string} symbol - El par de trading (ej. "BTC_USMT").
+ * @param {string} symbol - El par de trading (ej. "BTC_USDT").
  * @param {string} interval - El intervalo de las velas (ej. "1", "5", "60", "1D").
  * Debe coincidir con los valores esperados por BitMart V3 Klines API.
  * @param {number} size - El número de velas a obtener (máx. 500 para BitMart).
@@ -33,19 +33,40 @@ async function getCandles(symbol, interval, size = 500) {
         // [ ["1678229820000", "22244.69", "22258.91", "22244.69", "22256.7", "0.20300"], ... ]
         const rawCandlesData = await bitmartService.getKlines(symbol, interval, size);
 
+        // --- ¡NUEVAS LÍNEAS DE DEPURACIÓN PARA NaN! ---
+        console.log(`[ANALYZER-DEBUG-NAN] Datos crudos de velas recibidos de bitmartService.getKlines. Longitud: ${rawCandlesData?.length}`);
+        if (rawCandlesData && rawCandlesData.length > 0) {
+            console.log(`[ANALYZER-DEBUG-NAN] Primer elemento de vela (rawCandlesData[0]):`, rawCandlesData[0]);
+            console.log(`[ANALYZER-DEBUG-NAN] Tipo del primer elemento:`, typeof rawCandlesData[0]);
+            if (Array.isArray(rawCandlesData[0]) && rawCandlesData[0].length > 4) {
+                console.log(`[ANALYZER-DEBUG-NAN] Valor del cierre (rawCandlesData[0][4]):`, rawCandlesData[0][4]);
+                console.log(`[ANALYZER-DEBUG-NAN] Tipo del valor del cierre (rawCandlesData[0][4]):`, typeof rawCandlesData[0][4]);
+            } else {
+                console.log(`[ANALYZER-DEBUG-NAN] El primer elemento no es un array o no tiene suficientes elementos.`);
+            }
+        }
+        // --- FIN DE LAS NUEVAS LÍNEAS DE DEPURACIÓN ---
+
         if (!rawCandlesData || rawCandlesData.length === 0) {
             console.error("[ANALYZER] Tu bitmartService no devolvió datos de velas o los datos están vacíos.");
             return [];
         }
 
-        const formattedCandles = rawCandlesData.map(c => ({
-            timestamp: parseFloat(c[0]), // Timestamp
-            open: parseFloat(c[1]),
-            high: parseFloat(c[2]),
-            low: parseFloat(c[3]),
-            close: parseFloat(c[4]), // ¡Este es el crucial!
-            volume: parseFloat(c[5])
-        }));
+        const formattedCandles = rawCandlesData.map(c => {
+            // Asegúrate de que 'c' sea un array válido antes de intentar acceder a sus índices
+            if (!Array.isArray(c) || c.length < 6) { // Una vela completa tiene al menos 6 elementos
+                console.warn(`[ANALYZER-DEBUG-WARN] Vela mal formada encontrada:`, c);
+                return null; // Devuelve null para filtrar más tarde
+            }
+            return {
+                timestamp: parseFloat(c[0]), // Timestamp
+                open: parseFloat(c[1]),
+                high: parseFloat(c[2]),
+                low: parseFloat(c[3]),
+                close: parseFloat(c[4]), // ¡Este es el crucial!
+                volume: parseFloat(c[5])
+            };
+        }).filter(c => c !== null); // Filtra cualquier vela mal formada
 
         console.log(`[ANALYZER] ✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${formattedCandles[formattedCandles.length - 1]?.close?.toFixed(2) || 'N/A'}).`);
         return formattedCandles;
