@@ -30,6 +30,8 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
     let message;
+    // La lógica de la firma del memo que acordamos previamente:
+    // Si el memo es una cadena vacía, se comporta como si no hubiera memo en la firma (sin el doble ##).
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
@@ -37,17 +39,13 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     }
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
-    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
+    // --- LOG CRÍTICO DEL MEMO ---
+    console.log(`[SIGN_DEBUG] Memo value for hashing: '${memoForHash}' (Length: ${memoForHash.length}, Type: ${typeof memoForHash})`);
+    // --- FIN LOG CRÍTICO ---
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
-
-    console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
-
-    // --- ¡ADVERTENCIA DE SEGURIDAD CRÍTICA! ---
-    // ESTA LÍNEA REVELARÁ TU CLAVE SECRETA COMPLETA EN LOS LOGS DEL SERVIDOR.
-    // ÚSALA ÚNICAMENTE PARA DEPURACIÓN EN UN ENTORNO SEGURO Y ELIMÍNALA INMEDIATAMENTE DESPUÉS DE LA PRUEBA.
-    console.log(`[SIGN_DEBUG] FULL API Secret (for hash): '${apiSecret}' (Length: ${apiSecret.length})`);
-    // --- FIN ADVERTENCIA ---
+    // Opcional: El log del Secret Key que ya habías puesto para verificarlo
+    // console.log(`[SIGN_DEBUG] FULL API Secret (for hash): '${apiSecret}' (Length: ${apiSecret.length})`); 
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
