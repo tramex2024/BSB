@@ -12,7 +12,7 @@ const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
 // --- Configuración de Indicadores (Ajustables) ---
 // Puedes ajustar estos valores según tus pruebas y backtesting.
 
-const RSI_PERIOD = 21; // Usando 21 para velas de 1 minutos
+const RSI_PERIOD = 21; // Usando 21 para velas de 5 minutos
 const RSI_OVERSOLD = 30; // Nivel donde se considera "sobrevendido"
 const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado"
 
@@ -219,7 +219,7 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     console.log(`\n[ANALYZER] --- Iniciando análisis para ${SYMBOL}. Precio actual recibido: ${currentPriceFromBotLogic?.toFixed(2) || 'N/A'} ---`);
 
     // Paso 1: Obtener las velas de BitMart
-    const rawCandlesFromAPI = await getCandles(SYMBOL, '1', 500);
+    const rawCandlesFromAPI = await getCandles(SYMBOL, '5', 500);
 
     console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
 
@@ -241,8 +241,8 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     // Paso 2: Calcular los indicadores técnicos
     const candlesWithIndicators = calculateIndicators(candlesForAnalysis);
 
-    // DEBUG: Muestra las últimas 1 velas con sus indicadores calculados
-    console.log("\n[ANALYZER-DEBUG] Últimas 1 velas (con indicadores completos):");
+    // DEBUG: Muestra las últimas 5 velas con sus indicadores calculados
+    console.log("\n[ANALYZER-DEBUG] Últimas 5 velas (con indicadores completos):");
     if (candlesWithIndicators.length > 0) {
         candlesWithIndicators.slice(-5).forEach(candle => {
             console.log(`[ANALYZER-DEBUG]    Cierre: ${parseFloat(candle.close).toFixed(2)}, RSI: ${candle.rsi?.toFixed(2) || 'N/A'}`);
@@ -267,6 +267,17 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     await writeEntryPointToFile(signal);
 
     return signal;
+}
+
+// --- LÓGICA PARA EJECUTAR EL ARCHIVO DIRECTAMENTE ---
+// Esto permite que puedas ejecutar este archivo con `node bitmart_indicator_analyzer.js`
+// y ver la señal directamente en la consola y en el archivo JSON.
+if (require.main === module) {
+    // Si estás ejecutando este archivo directamente para pruebas, puedes pasar un precio simulado
+    const simulatedPrice = 65000; // Por ejemplo, un precio actual simulado
+    runAnalysis(simulatedPrice).catch(error => {
+        console.error("[ANALYZER] Error al ejecutar el análisis general:", error);
+    });
 }
 
 // Exportar la función principal para que pueda ser llamada desde otro script (autobotLogic.js)
