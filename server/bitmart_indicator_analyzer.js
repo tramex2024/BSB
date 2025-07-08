@@ -4,7 +4,7 @@
 const { RSI } = require('technicalindicators');
 const fs = require('fs').promises; // Usamos fs.promises para operaciones asíncronas de archivo
 
-const bitmartService = require('./services/bitmartService'); // Asegúrate de que la ruta sea correcta si tu estructura de carpetas cambió
+const bitmartService = require('./services/bitmartService'); // Asegúrate de que la ruta sea correcta
 
 // Define el par de trading
 const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
@@ -13,14 +13,14 @@ const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
 // Puedes ajustar estos valores según tus pruebas y backtesting.
 
 const RSI_PERIOD = 21; // Usando 21 para velas de 1 minutos
-const RSI_OVERSOLD = 35; // TEMPORAL PARA PRUEBAS: Nivel donde se considera "sobrevendido" para activar BUY. Normalmente 30 o 35.
+const RSI_OVERSOLD = 35; // Umbral de Compra (se mantiene en 35 como en tu último log)
 const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado" (para señales de venta)
 
 /**
  * Obtiene datos de velas (ohlcv) de BitMart para un símbolo y período de tiempo dados,
  * utilizando tu `bitmartService.js` existente.
  *
- * @param {string} symbol - El par de trading (ej. "BTC_USDT").
+ * @param {string} symbol - El par de trading (ej. "BTC_USMT").
  * @param {string} interval - El intervalo de las velas (ej. "1", "5", "60", "1D").
  * Debe coincidir con los valores esperados por BitMart V3 Klines API.
  * @param {number} size - El número de velas a obtener (máx. 500 para BitMart).
@@ -30,7 +30,7 @@ async function getCandles(symbol, interval, size = 500) {
     console.log(`[ANALYZER] --- Obteniendo velas reales para ${symbol} en intervalo '${interval}' a través de bitmartService ---`);
     try {
         // bitmartService.getKlines devuelve un array de arrays, por ejemplo:
-        // [ [timestamp, open, high, low, close, volume], ... ]
+        // [ ["1678229820000", "22244.69", "22258.91", "22244.69", "22256.7", "0.20300"], ... ]
         const rawCandlesData = await bitmartService.getKlines(symbol, interval, size);
 
         if (!rawCandlesData || rawCandlesData.length === 0) {
@@ -39,15 +39,15 @@ async function getCandles(symbol, interval, size = 500) {
         }
 
         const formattedCandles = rawCandlesData.map(c => ({
-            timestamp: parseFloat(c[0]), // El timestamp
+            timestamp: parseFloat(c[0]), // Timestamp
             open: parseFloat(c[1]),
             high: parseFloat(c[2]),
             low: parseFloat(c[3]),
-            close: parseFloat(c[4]),
+            close: parseFloat(c[4]), // ¡Este es el crucial!
             volume: parseFloat(c[5])
         }));
 
-        console.log(`[ANALYZER] ✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${formattedCandles[formattedCandles.length - 1]?.close || 'N/A'}).`);
+        console.log(`[ANALYZER] ✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${formattedCandles[formattedCandles.length - 1]?.close?.toFixed(2) || 'N/A'}).`);
         return formattedCandles;
 
     } catch (error) {
@@ -60,8 +60,7 @@ async function getCandles(symbol, interval, size = 500) {
 /**
  * Calcula varios indicadores técnicos para los datos de velas.
  * Los datos de velas deben ser un array de objetos, donde cada objeto
- * tiene una propiedad 'close' (y opcionalmente 'open', 'high', 'low', 'volume')
- * con valores numéricos.
+ * tiene una propiedad 'close' con valores numéricos.
  *
  * @param {Array<Object>} candles - Un array de objetos de vela.
  * @returns {Array<Object>} Un nuevo array de velas con los indicadores calculados.
