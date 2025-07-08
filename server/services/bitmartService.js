@@ -101,7 +101,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
+        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null) {
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
             delete requestConfig.headers['X-BM-MEMO'];
