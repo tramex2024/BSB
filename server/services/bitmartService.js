@@ -1,4 +1,4 @@
-// server/services/bitmartService.js 
+// server/services/bitmartService.js (CORREGIDO FINALMENTE PARA EL PROBLEMA DEL NOTIONAL/SIZE EN LA FIRMA)
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -32,6 +32,48 @@ function sortObjectKeys(obj) {
 }
 
 /**
+ * Formatea el cuerpo de la solicitud JSON en una cadena compacta específica
+ * para la firma de BitMart, manejando 'notional' y 'size' como números sin comillas
+ * si son numéricos. Otros valores se tratarán como cadenas.
+ * @param {object} data El objeto de datos a formatear.
+ * @returns {string} La cadena JSON formateada para la firma.
+ */
+function formatBodyForSignature(data) {
+    // Primero, ordena las claves recursivamente
+    const sortedData = sortObjectKeys(data);
+
+    // Lista de campos que BitMart podría esperar como números sin comillas en la firma
+    const numericFields = ['notional', 'size', 'price'];
+
+    // Construye la cadena manualmente para asegurar el formato sin comillas para números
+    let parts = [];
+    for (const key in sortedData) {
+        if (sortedData.hasOwnProperty(key)) {
+            let value = sortedData[key];
+            let formattedValue;
+
+            // Intenta convertir a número si es uno de los campos especiales y se ve numérico
+            if (numericFields.includes(key) && !isNaN(parseFloat(value)) && isFinite(value)) {
+                // Si es un número (o una cadena que representa un número), lo inserta sin comillas.
+                // Usamos parseFloat y luego lo volvemos a stringificar para evitar problemas de tipo.
+                formattedValue = String(parseFloat(value));
+            } else if (typeof value === 'object' && value !== null) {
+                // Si es un objeto anidado o un array, lo stringifica recursivamente
+                formattedValue = formatBodyForSignature(value);
+            }
+             else {
+                // Para todos los demás casos, lo trata como una cadena y añade comillas.
+                // Escapa cualquier comilla interna si las hubiera.
+                formattedValue = JSON.stringify(String(value));
+            }
+            parts.push(`"${key}":${formattedValue}`);
+        }
+    }
+    return `{${parts.join(',')}}`;
+}
+
+
+/**
  * Genera la firma HMAC-SHA256 para la autenticación de BitMart.
  * La estructura del mensaje a firmar varía según si se incluye un memo y la versión de la API.
  * @param {string} timestamp El timestamp de la solicitud en milisegundos.
@@ -60,6 +102,7 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     console.log(`[SIGN_DEBUG] Mensaje COMPLETO a Hashear: '${message}' (Longitud: ${message.length})`);
     // Oculta parte de la clave secreta por seguridad en los logs
     console.log(`[SIGN_DEBUG] API Secret (parcial): ${apiSecret.substring(0, 5)}...${apiSecret.substring(apiSecret.length - 5)} (Longitud: ${apiSecret.length})`);
+    console.log(`[SIGN_DEBUG] ¡ULTIMO MENSAJE A HASHEAR ANTES DE ENVIAR!: >>>${message}<<<`); // Añadida por si acaso
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
@@ -124,12 +167,12 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
-        // IMPORTANTE: Ordenar el objeto de datos ANTES de stringificarlo para la firma.
-        const sortedDataForSign = sortObjectKeys(dataForRequest);
-        bodyForSign = JSON.stringify(sortedDataForSign, null, 0); // Modificado para eliminar espacios y formateo
+        // ¡IMPORTANTE CAMBIO AQUÍ! Usamos la nueva función para formatear el cuerpo para la firma.
+        bodyForSign = formatBodyForSignature(dataForRequest);
 
-        // Los datos enviados en el cuerpo de la solicitud (sin ordenar, o podrías ordenar también si BitMart lo exigiera para el cuerpo real)
-        requestConfig.data = dataForRequest;
+        // Los datos enviados en el cuerpo de la solicitud (puede ser el original, o también podrías ordenar aquí)
+        // BitMart generalmente espera el JSON estándar con comillas en el BODY real.
+        requestConfig.data = dataForRequest; // Se envía el objeto original.
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -160,7 +203,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`URL: ${url}`);
     if (method === 'POST') {
         console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
-        console.log('Body para Firma (JSON stringificado, ORDENADO):', bodyForSign); // Muestra el cuerpo ordenado para depuración
+        console.log('Body para Firma (JSON stringificado, ORDENADO, formato especial):', bodyForSign); // Muestra el cuerpo ordenado para depuración
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
     }
