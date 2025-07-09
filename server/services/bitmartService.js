@@ -1,4 +1,4 @@
-// server/services/bitmartService.js (CORREGIDO FINALMENTE PARA EL PROBLEMA DEL NOTIONAL/SIZE EN LA FIRMA)
+// server/services/bitmartService.js 
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -89,16 +89,16 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 
     let message;
     if (memoForHash === '') {
-        // Formato de firma para API v2 y API v4 sin memo (o memo vacío)
-        message = timestamp + '#' + finalBodyOrQueryString;
-    } else {
-        // Formato de firma para API v4 con memo
-        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
-    }
+    // Formato de firma para API v2 y API v4 sin memo (o memo vacío)
+    message = timestamp + '#' + finalBodyOrQueryString;
+} else {
+    // Formato de firma para API v4 con memo
+    message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
+}
 
     console.log(`[SIGN_DEBUG] Timestamp para Firma: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo para Firma: '${memoForHash}' (Original: ${memo === null ? 'null' : memo === undefined ? 'undefined' : `'${memo}'`})`);
-    console.log(`[SIGN_DEBUG] Cuerpo/Query String para Firma: '${finalBodyOrQueryString}' (Longitud: ${finalBodyOrQueryString.length})`);
+    console.log(`[SIGN_DEBUG] Cuerpo/Query String para Firma: ${finalBodyOrQueryString} (Longitud: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Mensaje COMPLETO a Hashear: '${message}' (Longitud: ${message.length})`);
     // Oculta parte de la clave secreta por seguridad en los logs
     console.log(`[SIGN_DEBUG] API Secret (parcial): ${apiSecret.substring(0, 5)}...${apiSecret.substring(apiSecret.length - 5)} (Longitud: ${apiSecret.length})`);
