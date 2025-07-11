@@ -1,7 +1,7 @@
 // server/middleware/bitmartAuthMiddleware.js
-// Importa las funciones de encriptación/desencriptación directamente desde el módulo 'utils/encryption'.
-// ESTA ES LA CORRECCIÓN CLAVE: Asegura que se use la función 'decrypt' correcta.
-const { decrypt } = require('../utils/encryption'); // <--- ¡CAMBIADO AQUÍ!
+// Importa las funciones de encriptación/desencriptación directamente desde userController
+// para asegurar que se utilice la misma lógica y variables de entorno.
+const { decrypt } = require('../controllers/userController'); // Importa la función decrypt directamente
 const User = require('../models/User'); // Importa tu modelo de usuario
 
 const bitmartAuthMiddleware = async (req, res, next) => {
@@ -20,15 +20,11 @@ const bitmartAuthMiddleware = async (req, res, next) => {
             return res.status(400).json({ message: 'Las API keys de BitMart no están configuradas para este usuario. Por favor, configúralas.' });
         }
 
-        // --- Desencriptar TODAS las claves aquí ---
+        // --- CORRECCIÓN CLAVE: Desencriptar TODAS las claves aquí ---
         const decryptedApiKey = decrypt(user.bitmartApiKey);
         const decryptedSecretKey = decrypt(user.bitmartSecretKeyEncrypted);
-        // El memo es opcional. Si es null o undefined en la DB, se tratará como cadena vacía.
-        // Si el memo se guarda encriptado como una cadena vacía, se desencriptará como una cadena vacía.
-        // Si el memo se guarda como 'GainBot' (encriptado), se desencriptará como 'GainBot'.
-        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null || user.bitmartApiMemo === '')
-            ? ''
-            : decrypt(user.bitmartApiMemo);
+        // El memo es opcional, si es null o undefined en la DB, se tratará como cadena vacía.
+        const decryptedMemo = (user.bitmartApiMemo === undefined || user.bitmartApiMemo === null) ? '' : decrypt(user.bitmartApiMemo);
 
         // --- NUEVOS LOGS DE DEPURACIÓN EN EL MIDDLEWARE ---
         // ¡ADVERTENCIA DE SEGURIDAD! Estos logs exponen partes de las claves en texto plano.
@@ -41,9 +37,9 @@ const bitmartAuthMiddleware = async (req, res, next) => {
 
         // Adjuntar las credenciales desencriptadas al objeto de solicitud
         req.bitmartCreds = {
-            apiKey: decryptedApiKey,
-            secretKey: decryptedSecretKey,
-            apiMemo: decryptedMemo
+            apiKey: decryptedApiKey, // Ahora desencriptada
+            secretKey: decryptedSecretKey, // Ya desencriptada
+            apiMemo: decryptedMemo // Ahora desencriptada
         };
         next();
     } catch (error) {
