@@ -22,7 +22,7 @@ const sortAndCombineParams = (params) => {
 /**
  * Crea una query string a partir de un objeto de parámetros.
  * @param {Object} params - Objeto de parámetros.
- * @returns {string} La query string formateada (ej. "key1=value1&key2=value2").
+ * @returns {string} La query string formateada (ej. "key1=value1&key2=value1").
  */
 const createQueryString = (params) => {
     if (!params || Object.keys(params).length === 0) {
@@ -244,7 +244,7 @@ const getTicker = async (symbol) => {
 
 /**
  * Fetches candlestick (kline) data for a specific symbol and interval.
- * Endpoint: GET /public/spot/v1/candles
+ * Endpoint: GET /market/kline
  * @param {string} symbol - The trading symbol (e.g., 'BTC_USDT').
  * @param {string} interval - The candlestick interval (e.g., '1m', '5m', '1h', '1d').
  * @param {number} [size=300] - The number of data points to return. Max 300.
@@ -274,7 +274,7 @@ const getKlines = async (symbol, interval, size = 300) => {
     try {
         const responseData = await makeRequest({
             method: 'GET',
-            path: '/public/spot/v1/candles', // <--- CHANGED PATH AGAIN, now to /public/spot/v1/candles
+            path: '/market/kline', // <--- CHANGED PATH TO /market/kline, based on common working endpoints
             params: {
                 symbol: symbol,
                 step: bitmartStep,
@@ -282,9 +282,15 @@ const getKlines = async (symbol, interval, size = 300) => {
             }
         });
 
-        if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.candles)) {
-            console.log(`✅ Velas para ${symbol} obtenidas. Cantidad: ${responseData.data.candles.length}`);
-            return responseData.data.candles.map(candle => ({
+        // The structure for /market/kline might be slightly different.
+        // It typically returns an array directly under `data.klines` or `data.candles`.
+        // Let's assume it's `data.klines` and handle both `candles` and `klines`.
+        const klinesData = responseData?.data?.klines || responseData?.data?.candles;
+
+        if (responseData && responseData.code === 1000 && Array.isArray(klinesData)) {
+            console.log(`✅ Velas para ${symbol} obtenidas. Cantidad: ${klinesData.length}`);
+            // Each candle is an array: [timestamp, open, high, low, close, volume]
+            return klinesData.map(candle => ({
                 timestamp: parseInt(candle[0]), // Timestamp in milliseconds
                 open: parseFloat(candle[1]),
                 high: parseFloat(candle[2]),
