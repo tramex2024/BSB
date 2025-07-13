@@ -223,10 +223,10 @@ const getTicker = async (symbol) => {
         });
 
         // --- INICIO DE CORRECCIÓN ---
-        // BitMart's public ticker endpoint returns an array of tickers even for a single symbol.
-        // The actual ticker data is usually in the first element of the 'data' array.
-        if (responseData && responseData.code === 1000 && responseData.data && responseData.data.length > 0) {
-            const tickerData = responseData.data[0]; // Access the first element of the data array
+        // BitMart's public ticker endpoint returns an array of tickers nested inside a 'data' object.
+        // We need to access responseData.data.tickers to get the array.
+        if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.tickers) && responseData.data.tickers.length > 0) {
+            const tickerData = responseData.data.tickers[0]; // Access the first element of the 'tickers' array
             console.log(`✅ Ticker para ${symbol} obtenido: Último precio = ${tickerData.last_price}, High 24h = ${tickerData.high_24h}, Low 24h = ${tickerData.low_24h}`);
             return {
                 symbol: tickerData.symbol,
@@ -236,7 +236,7 @@ const getTicker = async (symbol) => {
                 // Add other relevant fields if needed, like volume, etc.
             };
         } else {
-            // If the response is successful (code 1000) but data is missing or empty
+            // If the response is successful (code 1000) but data.tickers is missing or empty
             const errorMessage = responseData.message || 'No ticker data or unexpected response structure.';
             console.error(`❌ Error fetching ticker for ${symbol}: ${errorMessage}. Raw response: ${JSON.stringify(responseData)}`);
             throw new Error(`Error fetching ticker for ${symbol}: ${errorMessage}`);
