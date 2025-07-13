@@ -222,20 +222,29 @@ const getTicker = async (symbol) => {
             // No authCredentials needed for public endpoints
         });
 
+        // --- INICIO DE CORRECCIÓN ---
+        // BitMart's public ticker endpoint returns an array of tickers even for a single symbol.
+        // The actual ticker data is usually in the first element of the 'data' array.
         if (responseData && responseData.code === 1000 && responseData.data && responseData.data.length > 0) {
-            const tickerData = responseData.data[0];
-            console.log(`✅ Ticker para ${symbol} obtenido: ${tickerData.last_price}`);
+            const tickerData = responseData.data[0]; // Access the first element of the data array
+            console.log(`✅ Ticker para ${symbol} obtenido: Último precio = ${tickerData.last_price}, High 24h = ${tickerData.high_24h}, Low 24h = ${tickerData.low_24h}`);
             return {
                 symbol: tickerData.symbol,
                 last: parseFloat(tickerData.last_price), // Ensure 'last' is a number
                 high: parseFloat(tickerData.high_24h),
                 low: parseFloat(tickerData.low_24h),
-                // Add other relevant fields if needed
+                // Add other relevant fields if needed, like volume, etc.
             };
         } else {
-            throw new Error(`Error fetching ticker for ${symbol}: ${responseData.message || 'Unknown error or no data'}`);
+            // If the response is successful (code 1000) but data is missing or empty
+            const errorMessage = responseData.message || 'No ticker data or unexpected response structure.';
+            console.error(`❌ Error fetching ticker for ${symbol}: ${errorMessage}. Raw response: ${JSON.stringify(responseData)}`);
+            throw new Error(`Error fetching ticker for ${symbol}: ${errorMessage}`);
         }
+        // --- FIN DE CORRECCIÓN ---
+
     } catch (error) {
+        // This catch block handles network errors or errors thrown by makeRequest
         console.error(`Error en getTicker para ${symbol}:`, error.message);
         throw error;
     }
