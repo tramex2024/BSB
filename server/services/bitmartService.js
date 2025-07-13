@@ -105,12 +105,23 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
         'Accept': 'application/json, text/plain, */*',
     };
 
-    // Only add X-BM-RECVWINDOW and Content-Type for non-public requests
-    // Or if there's a body being sent (POST/PUT)
-    if (!isPublic || (method === 'POST' || method === 'PUT')) {
+    // --- IMPORTANT CHANGE HERE: Header Initialization based on isPublic ---
+    if (!isPublic) {
+        // For authenticated requests, always include these
         headers['X-BM-RECVWINDOW'] = 10000;
-        headers['Content-Type'] = 'application/json';
+        headers['Content-Type'] = 'application/json'; // Default for authenticated endpoints
+    } else {
+        // For public GET requests, be very minimal with headers
+        if (method === 'GET' || method === 'DELETE') {
+            // Only user-agent and accept should typically be needed for public GETs
+            // No 'X-BM-RECVWINDOW' or 'Content-Type' for public GET
+        }
+        // If it's a public POST (less common but possible), we might need Content-Type
+        if (method === 'POST' || method === 'PUT') {
+            headers['Content-Type'] = 'application/json';
+        }
     }
+    // --- END IMPORTANT CHANGE ---
 
 
     if (method === 'GET' || method === 'DELETE') {
@@ -150,15 +161,11 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
             delete headers['X-BM-MEMO'];
         }
     } else if (isPublic) {
-        // For public requests, ensure no authentication headers are present
+        // Double-check: For public requests, ensure no authentication headers are present
         delete headers['X-BM-KEY'];
         delete headers['X-BM-TIMESTAMP'];
         delete headers['X-BM-SIGN'];
         delete headers['X-BM-MEMO'];
-        // Also ensure X-BM-RECVWINDOW is not present for public GET calls
-        if (method === 'GET') {
-            delete headers['X-BM-RECVWINDOW'];
-        }
     }
 
 
@@ -271,7 +278,7 @@ const getKlines = async (symbol, interval, size = 500) => {
             path: '/spot/v1/candles',
             params: {
                 symbol: symbol,
-                step: bitmartStep, // Use the converted step
+                step: bitmartStep,
                 size: size
             },
             isPublic: true // Crucial: Mark this as a public request
@@ -307,7 +314,7 @@ module.exports = {
                 method: 'GET',
                 path: '/account/v1/wallet',
                 authCredentials,
-                params: { recvWindow: 10000 }
+                params: { recvWindow: 10000 } // RecvWindow is needed for authenticated calls
             });
 
             if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.wallet)) {
