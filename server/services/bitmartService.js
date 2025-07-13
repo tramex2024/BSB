@@ -243,53 +243,36 @@ const getTicker = async (symbol) => {
 
 /**
  * Fetches candlestick (kline) data for a specific symbol and interval.
- * Endpoint: GET /spot/v1/klines (TEMPORARY PATH)
+ * Endpoint: GET /spot/v1/candles
  * @param {string} symbol - The trading symbol (e.g., 'BTC_USDT').
  * @param {string} interval - The candlestick interval (e.g., '1m', '5m', '1h', '1d').
- * @param {number} [size=300] - The number of data points to return. Max 300.
+ * @param {number} [size=500] - The number of data points to return. Default 500.
  * @returns {Promise<Array<Object>>} An array of kline objects.
  */
-const getKlines = async (symbol, interval, size = 300) => {
+const getKlines = async (symbol, interval, size = 500) => {
     console.log(`\n--- Obteniendo Velas (Klines) para ${symbol} en intervalo '${interval}' ---`);
-    let bitmartStep;
-    switch (interval) {
-        case '1m': bitmartStep = '1'; break;
-        case '3m': bitmartStep = '3'; break;
-        case '5m': bitmartStep = '5'; break;
-        case '15m': bitmartStep = '15'; break;
-        case '30m': bitmartStep = '30'; break;
-        case '1h': bitmartStep = '60'; break;
-        case '2h': bitmartStep = '120'; break;
-        case '4h': bitmartStep = '240'; break;
-        case '12h': bitmartStep = '720'; break;
-        case '1d': bitmartStep = '1D'; break;
-        case '3d': bitmartStep = '3D'; break;
-        case '1w': bitmartStep = '1W'; break;
-        default:
-            console.warn(`Intervalo '${interval}' no reconocido. Usando '1' (1 minuto) por defecto.`);
-            bitmartStep = '1'; // Default to 1 minute
-    }
+    // Original working code uses the interval directly for 'step' parameter.
+    // The previous switch statement is no longer needed if 'interval' directly maps to BitMart's 'step'.
+    // If 'interval' from your application (e.g., '1m', '1h') needs conversion to BitMart's 'step' (e.g., '1', '60'),
+    // you would need to re-introduce the switch or mapping logic.
+    // Based on the provided working example, it implies 'interval' is already in a compatible format for BitMart's 'step'.
 
     try {
         const responseData = await makeRequest({
             method: 'GET',
-            path: '/spot/v1/klines', // <--- CHANGED PATH TO /spot/v1/klines (Temporary)
+            path: '/spot/v1/candles', // <--- This is the working path from your old service!
             params: {
                 symbol: symbol,
-                step: bitmartStep,
+                step: interval, // Using the 'interval' directly as 'step' as per your working code
                 size: size
             }
         });
 
-        // The structure for /spot/v1/klines might be slightly different.
-        // It typically returns an array directly under `data.klines` or `data.candles`.
-        // Let's assume it's `data.klines` and handle both `candles` and `klines`.
-        const klinesData = responseData?.data?.klines || responseData?.data?.candles;
-
-        if (responseData && responseData.code === 1000 && Array.isArray(klinesData)) {
-            console.log(`✅ Velas para ${symbol} obtenidas. Cantidad: ${klinesData.length}`);
-            // Each candle is an array: [timestamp, open, high, low, close, volume]
-            return klinesData.map(candle => ({
+        // The working code showed 'response.data.candles'
+        if (responseData && responseData.code === 1000 && Array.isArray(responseData.data?.candles)) {
+            console.log(`✅ Velas para ${symbol} obtenidas. Cantidad: ${responseData.data.candles.length}`);
+            // Assuming the candles are in the format: [timestamp, open, high, low, close, volume]
+            return responseData.data.candles.map(candle => ({
                 timestamp: parseInt(candle[0]), // Timestamp in milliseconds
                 open: parseFloat(candle[1]),
                 high: parseFloat(candle[2]),
