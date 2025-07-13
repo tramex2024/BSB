@@ -46,12 +46,12 @@ const createQueryString = (params) => {
  */
 const generateSign = (timestamp, memo, requestBodyOrQueryString, secretKey) => {
     // Si memo es nulo, undefined o una cadena vacía, se usa una cadena vacía para el hashing.
-    const memoToHash = memo || '';
+    const memoToHash = memo || ''; 
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoToHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${requestBodyOrQueryString}' (Length: ${requestBodyOrQueryString.length})`);
-
+    
     // Concatenate the parts for hashing
     const messageToHash = `${timestamp}#${memoToHash}#${requestBodyOrQueryString}`;
     console.log(`[SIGN_DEBUG] Message to Hash: '${messageToHash}' (Length: ${messageToHash.length})`);
@@ -101,11 +101,11 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
 
     // **IMPORTANTE:** authCredentials.apiKey, .secretKey, .apiMemo se ASUME QUE ESTÁN EN TEXTO PLANO
     // porque bitmartAuthMiddleware ya se encargó de la desencriptación.
-    const { apiKey, secretKey, apiMemo } = authCredentials || {}; // Handle case where authCredentials might be undefined for public endpoints
+    const { apiKey, secretKey, apiMemo } = authCredentials;
 
     // Logs de depuración para la API Key y Memo antes de la generación de la firma
-    console.log(`[DECRYPT_DEBUG] API Key (para firma, parcial): ${apiKey ? apiKey.substring(0, 5) + '...' : 'N/A'} (Length: ${apiKey ? apiKey.length : 0})`);
-    console.log(`[DECRYPT_DEBUG] API Memo (para firma): '${apiMemo || 'N/A'}' (Length: ${apiMemo ? apiMemo.length : 0})`);
+    console.log(`[DECRYPT_DEBUG] API Key (para firma, parcial): ${apiKey.substring(0, 5)}... (Length: ${apiKey.length})`);
+    console.log(`[DECRYPT_DEBUG] API Memo (para firma): '${apiMemo}' (Length: ${apiMemo ? apiMemo.length : 0})`);
 
     // Determinar la cadena a ser hasheada basada en el tipo de método
     let requestBodyOrQueryString;
@@ -144,22 +144,19 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
         }
     }
 
-    // Only generate signature if API key and secret are provided (i.e., for authenticated requests)
-    let sign = '';
-    if (apiKey && secretKey) {
-        sign = generateSign(serverTime, memoForSignature, requestBodyOrQueryString, secretKey);
-        // Configurar los headers de autenticación
-        headers['X-BM-KEY'] = apiKey; // Esto debe ser ahora la API KEY EN TEXTO PLANO
-        headers['X-BM-TIMESTAMP'] = serverTime;
-        headers['X-BM-SIGN'] = sign;
+    const sign = generateSign(serverTime, memoForSignature, requestBodyOrQueryString, secretKey);
 
-        // Configurar el header X-BM-MEMO
-        if (memoForHeader !== undefined && memoForHeader !== null) {
-            headers['X-BM-MEMO'] = memoForHeader;
-        } else {
-            // Asegurarse de que el header no se envíe si no hay un memo válido
-            delete headers['X-BM-MEMO'];
-        }
+    // Configurar los headers de autenticación
+    headers['X-BM-KEY'] = apiKey; // Esto debe ser ahora la API KEY EN TEXTO PLANO
+    headers['X-BM-TIMESTAMP'] = serverTime;
+    headers['X-BM-SIGN'] = sign;
+    
+    // Configurar el header X-BM-MEMO
+    if (memoForHeader !== undefined && memoForHeader !== null) {
+        headers['X-BM-MEMO'] = memoForHeader;
+    } else {
+        // Asegurarse de que el header no se envíe si no hay un memo válido
+        delete headers['X-BM-MEMO']; 
     }
 
 
@@ -205,42 +202,6 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
     }
 };
 
-// --- AÑADIDA: Función para obtener el Ticker ---
-/**
- * Fetches the ticker information for a specific symbol.
- * Endpoint: GET /spot/v1/ticker
- * @param {string} symbol - The trading symbol (e.g., 'BTC_USDT').
- * @returns {Object} Ticker data (e.g., { symbol: 'BTC_USDT', last_price: '...', high_24h: '...', low_24h: '...' }).
- */
-const getTicker = async (symbol) => {
-    console.log(`\n--- Obteniendo Ticker Público para ${symbol} ---`);
-    try {
-        const responseData = await makeRequest({
-            method: 'GET',
-            path: '/spot/v1/ticker',
-            params: { symbol }
-            // No authCredentials needed for public endpoints
-        });
-
-        if (responseData && responseData.code === 1000 && responseData.data && responseData.data.length > 0) {
-            const tickerData = responseData.data[0];
-            console.log(`✅ Ticker para ${symbol} obtenido: ${tickerData.last_price}`);
-            return {
-                symbol: tickerData.symbol,
-                last: parseFloat(tickerData.last_price), // Ensure 'last' is a number
-                high: parseFloat(tickerData.high_24h),
-                low: parseFloat(tickerData.low_24h),
-                // Add other relevant fields if needed
-            };
-        } else {
-            throw new Error(`Error fetching ticker for ${symbol}: ${responseData.message || 'Unknown error or no data'}`);
-        }
-    } catch (error) {
-        console.error(`Error en getTicker para ${symbol}:`, error.message);
-        throw error;
-    }
-};
-
 // Exportar las funciones de servicio de BitMart
 module.exports = {
     getBalance: async (authCredentials) => {
@@ -264,7 +225,7 @@ module.exports = {
             });
 
             // CORRECTION: The array of orders is directly in responseData.data
-            if (responseData && Array.isArray(responseData.data)) {
+            if (responseData && Array.isArray(responseData.data)) { // <-- CHANGE THIS LINE
                 console.log(`✅ Órdenes abiertas V4 obtenidas. Cantidad: ${responseData.data.length}`);
                 return responseData.data; // <-- RETURN responseData.data directly
             } else {
@@ -292,7 +253,7 @@ module.exports = {
             // If it's also directly in `data` like open orders, then the same correction applies.
             // If history returns it in `data.orders`, then the original code was correct for history.
             // Let's assume for now it's similar to open orders based on this new log:
-            if (responseData && Array.isArray(responseData.data)) {
+            if (responseData && Array.isArray(responseData.data)) { // <-- Potentially change this if not already done
                 console.log(`✅ Historial de órdenes V4 obtenido. Cantidad: ${responseData.data.length}`);
                 return responseData.data; // <-- Return responseData.data directly
             } else if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
@@ -307,86 +268,6 @@ module.exports = {
             }
         } catch (error) {
             console.error('Error in getHistoryOrdersV4:', error.message);
-            throw error;
-        }
-    },
-
-    // AÑADIDA: Exportar la función getTicker
-    getTicker,
-
-    // Agrega aquí otras funciones de BitMart que puedas necesitar
-    // Por ejemplo, para colocar órdenes:
-    placeOrder: async (authCredentials, symbol, side, type, size, price) => {
-        console.log(`\n--- Colocando Orden ${side.toUpperCase()} ${type.toUpperCase()} para ${symbol} ---`);
-        const body = { symbol, side, type, size: parseFloat(size) };
-        if (type === 'limit' && price) {
-            body.price = parseFloat(price);
-        } else if (type === 'market' && side === 'buy') {
-            body.notional = parseFloat(size); // For market buy, 'size' is USDT amount
-            delete body.size;
-        }
-
-        try {
-            const responseData = await makeRequest({
-                method: 'POST',
-                path: '/spot/v4/submit-order',
-                authCredentials,
-                body
-            });
-            console.log(`✅ Orden colocada: ${JSON.stringify(responseData.data)}`);
-            return responseData.data; // Retorna el ID de la orden y otros detalles
-        } catch (error) {
-            console.error('Error al colocar la orden:', error.message);
-            throw error;
-        }
-    },
-
-    cancelOrder: async (authCredentials, symbol, order_id) => {
-        console.log(`\n--- Cancelando Orden ${order_id} para ${symbol} ---`);
-        try {
-            const responseData = await makeRequest({
-                method: 'POST',
-                path: '/spot/v4/cancel-order',
-                authCredentials,
-                body: { symbol, order_id }
-            });
-            console.log(`✅ Orden ${order_id} cancelada: ${JSON.stringify(responseData.data)}`);
-            return responseData.data;
-        } catch (error) {
-            console.error('Error al cancelar la orden:', error.message);
-            throw error;
-        }
-    },
-
-    getOrderDetail: async (authCredentials, symbol, order_id) => {
-        console.log(`\n--- Obteniendo Detalle de Orden ${order_id} para ${symbol} ---`);
-        try {
-            const responseData = await makeRequest({
-                method: 'POST', // V4 uses POST for query-order-by-id
-                path: '/spot/v4/query-order-by-id',
-                authCredentials,
-                body: { symbol, order_id }
-            });
-
-            if (responseData && responseData.code === 1000 && responseData.data) {
-                const order = responseData.data; // Assuming 'data' directly contains the order object
-                console.log(`✅ Detalle de orden ${order_id} obtenido: Estado - ${order.status}`);
-                return {
-                    order_id: order.order_id,
-                    symbol: order.symbol,
-                    side: order.side,
-                    type: order.type,
-                    price: parseFloat(order.price),
-                    size: parseFloat(order.size),
-                    filled_size: parseFloat(order.filled_size || 0),
-                    state: order.status, // BitMart uses 'status'
-                    // Add other fields you might need
-                };
-            } else {
-                throw new Error(`Error fetching order details for ${order_id}: ${responseData.message || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error al obtener el detalle de la orden:', error.message);
             throw error;
         }
     }
