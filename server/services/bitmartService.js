@@ -6,8 +6,6 @@ const querystring = require('querystring');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
-// Eliminado: DEFAULT_V4_POST_MEMO - Ahora el memo siempre debe ser proporcionado por el usuario.
-
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) {
         return obj;
@@ -25,19 +23,18 @@ function sortObjectKeys(obj) {
     return sortedObj;
 }
 
-function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
+function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
-    let message;
-    if (memoForHash === '') {
-        message = timestamp + '#' + finalBodyOrQueryString;
-    } else {
-        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
-    }
+    // CONSTRUCCIÓN DE LA CADENA DE MENSAJE SEGÚN LA DOCUMENTACIÓN DE BITMART V4
+    // Formato esperado: timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
+    const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + requestPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
+    console.log(`[SIGN_DEBUG] Method for Sign: '${requestMethod.toUpperCase()}'`);
+    console.log(`[SIGN_DEBUG] Path for Sign: '${requestPath}'`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
@@ -58,8 +55,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     };
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
-
-    // Eliminado: La lógica para usar DEFAULT_V4_POST_MEMO ha sido removida.
+    
     // apiMemoForRequestAndSign ahora siempre será el memo proporcionado en authCredentials.
     const apiMemoForRequestAndSign = apiMemo; 
 
@@ -87,7 +83,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
         }
 
-        const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
+        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
