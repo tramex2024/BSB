@@ -43,7 +43,7 @@ exports.saveBitmartApiKeys = async (req, res) => {
     // Asegúrate de que 'memo' se desestructure aquí. El frontend envía 'apiMemo', cámbialo a 'memo' si es necesario.
     // O si el frontend envía 'apiMemo', cambia aquí para que coincida.
     // Por simplicidad, asumo que el frontend envía 'memo'. Si no, ajusta esta línea.
-    const { apiKey, secretKey, memo } = req.body; 
+    const { apiKey, secretKey, apiMemo } = req.body; // Match the frontend's 'apiMemo' 
 
     try {
         if (!apiKey || !secretKey) {
@@ -58,8 +58,8 @@ exports.saveBitmartApiKeys = async (req, res) => {
         // Usar las funciones de encriptación importadas de utils/encryption.js
         user.bitmartApiKey = encrypt(apiKey);
         user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-        // CRUCIAL: Asegurarse de que el memo se encripte y guarde. Si `memo` es undefined, se guarda un string vacío.
-        user.bitmartApiMemo = encrypt(memo || ''); 
+        // CRUCIAL: Asegurarse de que el memo se encripte y guarde. Si `memo` es undefined, se guarda un string vacío.        
+          user.bitmartApiMemo = encrypt(apiMemo || ''); // Use the correctly destructuring 'apiMemo' 
 
         user.bitmartApiValidated = false;
         await user.save();
