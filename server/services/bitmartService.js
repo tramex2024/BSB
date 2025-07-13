@@ -99,48 +99,48 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
     const url = `${BASE_URL}${path}`;
     const serverTime = await getBitMartServerTime(); // Always get fresh server time
 
-    // **IMPORTANTE:** authCredentials.apiKey, .secretKey, .apiMemo se ASUME QUE ESTÁN EN TEXTO PLANO
-    // porque bitmartAuthMiddleware ya se encargó de la desencriptación.
+    // **IMPORTANT:** authCredentials.apiKey, .secretKey, .apiMemo are ASSUMED TO BE IN PLAINTEXT
+    // because bitmartAuthMiddleware has already handled decryption.
     const { apiKey, secretKey, apiMemo } = authCredentials || {}; // Handle case where authCredentials might be undefined for public endpoints
 
-    // Logs de depuración para la API Key y Memo antes de la generación de la firma
+    // Debug logs for API Key and Memo before signature generation
     console.log(`[DECRYPT_DEBUG] API Key (para firma, parcial): ${apiKey ? apiKey.substring(0, 5) + '...' : 'N/A'} (Length: ${apiKey ? apiKey.length : 0})`);
     console.log(`[DECRYPT_DEBUG] API Memo (para firma): '${apiMemo || 'N/A'}' (Length: ${apiMemo ? apiMemo.length : 0})`);
 
-    // Determinar la cadena a ser hasheada basada en el tipo de método
+    // Determine the string to be hashed based on the method type
     let requestBodyOrQueryString;
     let headers = {
         'User-Agent': 'axios/1.9.0',
         'Accept': 'application/json, text/plain, */*',
-        'X-BM-RECVWINDOW': 10000 // Aumentado para mayor tolerancia de tiempo
+        'X-BM-RECVWINDOW': 10000 // Increased for higher time tolerance
     };
 
     if (method === 'GET' || method === 'DELETE') {
         requestBodyOrQueryString = createQueryString(params);
-        headers['Content-Type'] = 'application/json'; // Buena práctica incluir, incluso si no hay body
+        headers['Content-Type'] = 'application/json'; // Good practice to include, even if no body
     } else if (method === 'POST' || method === 'PUT') {
         requestBodyOrQueryString = JSON.stringify(body);
-        headers['Content-Type'] = 'application/json'; // Requerido para body JSON
+        headers['Content-Type'] = 'application/json'; // Required for JSON body
     } else {
         throw new Error('Unsupported HTTP method.');
     }
 
-    // Lógica para el MEMO en la firma y en el header X-BM-MEMO
-    let memoForSignature = apiMemo || ''; // Si apiMemo es null/undefined, usar cadena vacía para la firma
-    let memoForHeader = apiMemo; // El header X-BM-MEMO debería contener el memo real del usuario
+    // Logic for MEMO in signature and X-BM-MEMO header
+    let memoForSignature = apiMemo || ''; // If apiMemo is null/undefined, use empty string for signature
+    let memoForHeader = apiMemo; // X-BM-MEMO header should contain the actual user memo
 
-    // Workaround específico para la API V4 si el memo está vacío, usa 'GainBot' en la firma y en el header.
-    // Para V1, si el memo del usuario es vacío/nulo, no se envía X-BM-MEMO o se envía vacío.
+    // Specific workaround for V4 API if memo is empty, use 'GainBot' in signature and header.
+    // For V1, if the user memo is empty/null, don't send X-BM-MEMO or send empty.
     if (path.startsWith('/spot/v4')) {
-        if (!memoForSignature) { // Si el memo del usuario está vacío para V4
+        if (!memoForSignature) { // If user memo is empty for V4
             console.log("[API_MEMO_WORKAROUND] Usando default memo 'GainBot' para V4 POST request porque el memo del usuario está en blanco/nulo.");
-            memoForSignature = 'GainBot'; // Usa 'GainBot' para la firma
-            memoForHeader = 'GainBot'; // Y también para el header X-BM-MEMO
+            memoForSignature = 'GainBot'; // Use 'GainBot' for signature
+            memoForHeader = 'GainBot'; // And also for X-BM-MEMO header
         }
-    } else { // Para V1, si el memo está vacío o nulo, no se envía X-BM-MEMO
+    } else { // For V1, if memo is empty or null, don't send X-BM-MEMO
         if (!memoForSignature) {
             console.log("[API_MEMO_WORKAROUND] Usando memo vacío para V1 GET/POST request porque el memo del usuario está en blanco/nulo.");
-            memoForHeader = undefined; // No enviar el header si el memo es vacío para V1
+            memoForHeader = undefined; // Do not send the header if memo is empty for V1
         }
     }
 
@@ -148,16 +148,16 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
     let sign = '';
     if (apiKey && secretKey) {
         sign = generateSign(serverTime, memoForSignature, requestBodyOrQueryString, secretKey);
-        // Configurar los headers de autenticación
-        headers['X-BM-KEY'] = apiKey; // Esto debe ser ahora la API KEY EN TEXTO PLANO
+        // Configure authentication headers
+        headers['X-BM-KEY'] = apiKey; // This must now be the PLAINTEXT API KEY
         headers['X-BM-TIMESTAMP'] = serverTime;
         headers['X-BM-SIGN'] = sign;
 
-        // Configurar el header X-BM-MEMO
+        // Configure X-BM-MEMO header
         if (memoForHeader !== undefined && memoForHeader !== null) {
             headers['X-BM-MEMO'] = memoForHeader;
         } else {
-            // Asegurarse de que el header no se envíe si no hay un memo válido
+            // Ensure the header is not sent if there's no valid memo
             delete headers['X-BM-MEMO'];
         }
     }
@@ -242,10 +242,9 @@ const getTicker = async (symbol) => {
     }
 };
 
-// --- CORRECCIÓN EN getKlines ---
 /**
  * Fetches candlestick (kline) data for a specific symbol and interval.
- * Endpoint: GET /spot/quotation/v3/candles
+ * Endpoint: GET /public/spot/v1/candles
  * @param {string} symbol - The trading symbol (e.g., 'BTC_USDT').
  * @param {string} interval - The candlestick interval (e.g., '1m', '5m', '1h', '1d').
  * @param {number} [size=300] - The number of data points to return. Max 300.
@@ -256,17 +255,17 @@ const getKlines = async (symbol, interval, size = 300) => {
     let bitmartStep;
     switch (interval) {
         case '1m': bitmartStep = '1'; break;
-        case '3m': bitmartStep = '3'; break; // Added 3-minute interval
+        case '3m': bitmartStep = '3'; break;
         case '5m': bitmartStep = '5'; break;
         case '15m': bitmartStep = '15'; break;
         case '30m': bitmartStep = '30'; break;
         case '1h': bitmartStep = '60'; break;
-        case '2h': bitmartStep = '120'; break; // Added 2-hour interval
+        case '2h': bitmartStep = '120'; break;
         case '4h': bitmartStep = '240'; break;
-        case '12h': bitmartStep = '720'; break; // Added 12-hour interval
+        case '12h': bitmartStep = '720'; break;
         case '1d': bitmartStep = '1D'; break;
-        case '3d': bitmartStep = '3D'; break; // Added 3-day interval
-        case '1w': bitmartStep = '1W'; break; // Added 1-week interval
+        case '3d': bitmartStep = '3D'; break;
+        case '1w': bitmartStep = '1W'; break;
         default:
             console.warn(`Intervalo '${interval}' no reconocido. Usando '1' (1 minuto) por defecto.`);
             bitmartStep = '1'; // Default to 1 minute
@@ -275,10 +274,10 @@ const getKlines = async (symbol, interval, size = 300) => {
     try {
         const responseData = await makeRequest({
             method: 'GET',
-            path: '/spot/quotation/v3/candles', // <-- CHANGED PATH TO V3
+            path: '/public/spot/v1/candles', // <--- CHANGED PATH AGAIN, now to /public/spot/v1/candles
             params: {
                 symbol: symbol,
-                step: bitmartStep, // Use the mapped BitMart step
+                step: bitmartStep,
                 size: size
             }
         });
