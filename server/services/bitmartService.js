@@ -27,7 +27,7 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
-    // CONSTRUCCIÓN DE LA CADENA DE MENSAJE SEGÚN LA DOCUMENTACIÓN DE BITMART V4
+    // ESTA ES LA LÍNEA CLAVE. DEBE INCLUIR method y path
     // Formato esperado: timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
     const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + requestPath + '#' + finalBodyOrQueryString;
 
@@ -83,7 +83,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
         }
 
-        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
+        // Inside makeRequest function, within the 'if (isPrivate)' block
+const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
