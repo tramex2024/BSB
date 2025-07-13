@@ -209,28 +209,58 @@ module.exports = {
         return makeRequest({
             method: 'GET',
             path: '/account/v1/wallet',
-            authCredentials, // Ahora contiene las claves desencriptadas
-            params: { recvWindow: 10000 } // Parámetro específico para esta API
+            authCredentials,
+            params: { recvWindow: 10000 }
         });
     },
 
     getOpenOrders: async (authCredentials, symbol) => {
         console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol} ---`);
-        return makeRequest({
-            method: 'POST', // V4 usa POST para órdenes abiertas
-            path: '/spot/v4/query/open-orders',
-            authCredentials, // Ahora contiene las claves desencriptadas
-            body: { symbol }
-        });
+        try {
+            const responseData = await makeRequest({
+                method: 'POST', // V4 usa POST para órdenes abiertas
+                path: '/spot/v4/query/open-orders',
+                authCredentials,
+                body: { symbol }
+            });
+
+            // Assuming BitMart V4 open orders also return within a 'data' object
+            if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
+                console.log(`✅ Órdenes abiertas V4 obtenidas. Cantidad: ${responseData.data.orders.length}`);
+                return responseData.data.orders; // <--- EXTRACT THE ARRAY HERE
+            } else {
+                console.warn("⚠️ BitMart API did not return an array of orders for open orders or unexpected structure.");
+                console.warn("Raw response data:", responseData);
+                return []; // Return an empty array if the expected data is not found
+            }
+        } catch (error) {
+            console.error('Error in getOpenOrders:', error.message);
+            throw error;
+        }
     },
 
     getHistoryOrdersV4: async (authCredentials, historyParams) => {
         console.log('\n--- Obteniendo Historial de Órdenes (V4 POST) ---');
-        return makeRequest({
-            method: 'POST', // V4 usa POST para historial de órdenes
-            path: '/spot/v4/query/history-orders',
-            authCredentials, // Ahora contiene las claves desencriptadas
-            body: historyParams // Pasa todos los parámetros relevantes como cuerpo
-        });
+        try {
+            const responseData = await makeRequest({
+                method: 'POST', // V4 usa POST para historial de órdenes
+                path: '/spot/v4/query/history-orders',
+                authCredentials, // Ahora contiene las claves desencriptadas
+                body: historyParams // Pasa todos los parámetros relevantes como cuerpo
+            });
+
+            // Check if responseData exists and contains a 'data' property, and if 'data.orders' is an array
+            if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
+                console.log(`✅ Historial de órdenes V4 obtenido. Cantidad: ${responseData.data.orders.length}`);
+                return responseData.data.orders; // <--- EXTRACT THE ARRAY HERE
+            } else {
+                console.warn("⚠️ BitMart API did not return an array of orders for history or unexpected structure.");
+                console.warn("Raw response data:", responseData);
+                return []; // Return an empty array if the expected data is not found
+            }
+        } catch (error) {
+            console.error('Error in getHistoryOrdersV4:', error.message);
+            throw error; // Re-throw to be handled by the controller
+        }
     }
 };
