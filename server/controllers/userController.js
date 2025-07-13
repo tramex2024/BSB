@@ -4,11 +4,12 @@ const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo
 const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
 const jwt = require('jsonwebtoken'); // Para verificar el token JWT
 
-// IMPORTANTE: Unificar la lógica de encriptación
-// Importar directamente las funciones de encriptación/desencriptación SEGURAS desde utils
-const { encrypt } = require('../utils/encryption'); // Solo necesitamos encrypt aquí para guardar las claves
-
+const { encrypt, decrypt } = require('../utils/encryption'); // Necesitas 'decrypt' también para las credenciales
 const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
+
+// IMPORTAR EL AUTOBOT LOGIC
+const autobotLogic = require('../autobotLogic'); // <--- AÑADE ESTA LÍNEA
+
 
 // --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno (raw) ---
 // Estas líneas se ejecutarán tan pronto como el archivo sea requerido por server.js
@@ -40,10 +41,7 @@ exports.authenticateToken = (req, res, next) => {
 
 // --- Controlador para guardar las API Keys de BitMart ---
 exports.saveBitmartApiKeys = async (req, res) => {
-    // Asegúrate de que 'memo' se desestructure aquí. El frontend envía 'apiMemo', cámbialo a 'memo' si es necesario.
-    // O si el frontend envía 'apiMemo', cambia aquí para que coincida.
-    // Por simplicidad, asumo que el frontend envía 'memo'. Si no, ajusta esta línea.
-    const { apiKey, secretKey, apiMemo } = req.body; // Match the frontend's 'apiMemo' 
+    const { apiKey, secretKey, apiMemo } = req.body;
 
     try {
         if (!apiKey || !secretKey) {
@@ -55,11 +53,9 @@ exports.saveBitmartApiKeys = async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // Usar las funciones de encriptación importadas de utils/encryption.js
         user.bitmartApiKey = encrypt(apiKey);
         user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-        // CRUCIAL: Asegurarse de que el memo se encripte y guarde. Si `memo` es undefined, se guarda un string vacío.        
-          user.bitmartApiMemo = encrypt(apiMemo || ''); // Use the correctly destructuring 'apiMemo' 
+        user.bitmartApiMemo = encrypt(apiMemo || '');
 
         user.bitmartApiValidated = false;
         await user.save();
@@ -68,7 +64,6 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
     } catch (error) {
         console.error('Error saving BitMart API keys:', error);
-        // Si el error es de la encriptación (ej. clave no definida en .env), se manejará aquí
         if (error.message.includes("ENCRYPTION_KEY no está definida")) {
             return res.status(500).json({ message: "Error interno del servidor al encriptar las claves. Asegúrate de que ENCRYPTION_KEY esté correctamente definida en tus variables de entorno." });
         }
@@ -78,16 +73,14 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
 // --- Controlador para obtener el balance de BitMart ---
 exports.getBitmartBalance = async (req, res) => {
-    // Usar las credenciales desencriptadas de req.bitmartCreds (poblado por bitmartAuthMiddleware)
     const authCredentials = req.bitmartCreds;
 
     try {
-        const balances = await bitmartService.getBalance(authCredentials); // Pasar credenciales desencriptadas
+        const balances = await bitmartService.getBalance(authCredentials);
         res.status(200).json(balances);
 
     } catch (error) {
         console.error('Error getting BitMart balance:', error);
-        // Mensaje de error general para el frontend si la desencriptación falló
         if (error.message.includes("Failed to decrypt BitMart credentials")) {
             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
         }
@@ -99,7 +92,6 @@ exports.getBitmartBalance = async (req, res) => {
 exports.getBitmartOpenOrders = async (req, res) => {
     const { symbol } = req.query;
 
-    // Usar las credenciales desencriptadas de req.bitmartCreds
     const authCredentials = req.bitmartCreds;
 
     try {
@@ -119,7 +111,6 @@ exports.getBitmartOpenOrders = async (req, res) => {
 exports.getHistoryOrders = async (req, res) => {
     const { symbol, orderMode, startTime, endTime, limit } = req.query;
 
-    // Usar las credenciales desencriptadas de req.bitmartCreds
     const authCredentials = req.bitmartCreds;
 
     try {
@@ -133,9 +124,7 @@ exports.getHistoryOrders = async (req, res) => {
 
         const historyOrders = await bitmartService.getHistoryOrdersV4(authCredentials, historyParams);
 
-        // MODIFICACIÓN CLAVE: Envía directamente el array de órdenes
-        // Esto resolverá el warning del frontend "not an array for history"
-        res.status(200).json(historyOrders); 
+        res.status(200).json(historyOrders);
 
     } catch (error) {
         console.error('Error getting BitMart history orders:', error);
@@ -178,55 +167,38 @@ exports.getBotConfigAndState = async (req, res) => {
     }
 };
 
+---
+
+## Modificación de `toggleBotState` en `userController.js` 🚀
+
+```javascript
 // --- Función Controladora: Alternar el estado del Bot (Start/Stop) ---
 exports.toggleBotState = async (req, res) => {
     const userId = req.user.id;
     const { action, params } = req.body; // `action` será 'start' o 'stop', `params` contendrá la configuración
 
+    // Las credenciales de BitMart se obtienen del `bitmartAuthMiddleware`
+    // y se adjuntan a `req.bitmartCreds`. Son necesarias para `autobotLogic.toggleBotState`.
+    const bitmartCreds = req.bitmartCreds; 
+
+    if (!bitmartCreds) {
+        return res.status(400).json({ success: false, message: 'BitMart API keys not configured or invalid. Cannot toggle bot state.' });
+    }
+
     try {
-        let botState = await BotState.findOne({ userId });
+        // Llamar a la función `toggleBotState` de `autobotLogic`
+        // Esta función ahora será la que realmente inicie o detenga el intervalo del bot.
+        const updatedBotState = await autobotLogic.toggleBotState(userId, action, params, bitmartCreds);
 
-        if (!botState) {
-            botState = new BotState({
-                userId,
-                purchase: params.purchase,
-                increment: params.increment,
-                decrement: params.decrement,
-                trigger: params.trigger,
-                stopAtCycleEnd: params.stopAtCycleEnd,
-                state: 'STOPPED',
-                cycle: 0,
-                profit: 0.00,
-                cycleProfit: 0.00
-            });
-        }
-
-        if (action === 'start') {
-            if (botState.state === 'RUNNING') {
-                return res.status(400).json({ success: false, message: 'Bot is already running.' });
-            }
-            botState.purchase = params.purchase;
-            botState.increment = params.increment;
-            botState.decrement = params.decrement;
-            botState.trigger = params.trigger;
-            botState.stopAtCycleEnd = params.stopAtCycleEnd;
-            botState.state = 'RUNNING';
-            console.log(`[toggleBotState] Bot started for user ${userId}.`);
-        } else if (action === 'stop') {
-            if (botState.state === 'STOPPED') {
-                return res.status(400).json({ success: false, message: 'Bot is already stopped.' });
-            }
-            botState.state = 'STOPPED';
-            console.log(`[toggleBotState] Bot stopped for user ${userId}.`);
-        } else {
-            return res.status(400).json({ success: false, message: 'Invalid action specified.' });
-        }
-
-        await botState.save();
-        res.status(200).json({ success: true, message: `Bot state set to ${botState.state}.`, botState });
+        // Envía la respuesta al frontend con el estado actualizado del bot
+        res.status(200).json({ success: true, message: `Bot state set to ${updatedBotState.state}.`, botState: updatedBotState });
 
     } catch (error) {
         console.error('Error toggling bot state:', error);
-        res.status(500).json({ success: false, message: 'Error internal server when trying to change bot state.' });
+        // Emitir el error al cliente a través de Socket.IO si `ioInstance` está disponible en autobotLogic
+        if (autobotLogic.ioInstance) { // Assuming ioInstance might be exposed or passed
+            autobotLogic.ioInstance.to(userId).emit('botError', { message: error.message, userId: userId });
+        }
+        res.status(500).json({ success: false, message: error.message || 'Error internal server when trying to change bot state.' });
     }
 };
