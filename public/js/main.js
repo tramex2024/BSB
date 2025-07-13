@@ -443,29 +443,34 @@ async function fetchOrders(tab) {
 
     if (!isLoggedIn) {
         orderListDiv.innerHTML = `<p class="text-gray-400">Please login to view order history.</p>`;
-        currentDisplayedOrders.clear();
+        currentDisplayedOrders.clear(); // Clear the map if not logged in
         displayLogMessage("Please login to view order history.", "info");
         return;
     }
 
-    // Only show "Loading orders..." if it's a fresh load for a tab, or a switch
-    if (currentTab !== tab || currentDisplayedOrders.size === 0) {
+    // Always clear the displayed orders map if the tab is changing
+    // or if we are refreshing the current tab and don't want to rely on incremental updates
+    // For a full refresh, it's safer to clear the map AND the DOM first.
+    if (currentTab !== tab) {
         orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
-        currentDisplayedOrders.clear();
+        currentDisplayedOrders.clear(); // Clear the map when switching tabs
+        displayLogMessage(`Loading ${tab} orders...`, "info");
+    } else if (currentDisplayedOrders.size === 0) {
+        // If it's the same tab but currently empty, show loading
+        orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
         displayLogMessage(`Loading ${tab} orders...`, "info");
     }
-    currentTab = tab; // Update currentTab here, right after setting loading message
+    // Set currentTab after potential clearing and before fetching orders
+    currentTab = tab;
 
     let orders = []; // Always initialize as an array
+
     try {
         if (tab === 'opened') {
             const fetchedOrders = await fetchOpenOrdersData();
-            // Ensure fetchedOrders is an array before assigning
             orders = Array.isArray(fetchedOrders) ? fetchedOrders : [];
         } else {
-            // For historical orders, we expect the backend to return an array directly
             const historyOrdersRaw = await fetchHistoryOrdersData(tab);
-            // Ensure historyOrdersRaw is an array before processing
             const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
 
             if (tab === 'filled') {
@@ -480,11 +485,10 @@ async function fetchOrders(tab) {
         console.error(`Failed to fetch orders for tab ${tab}:`, error);
         orderListDiv.innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
         displayLogMessage(`Failed to load orders for "${tab}" tab.`, "error");
-        // Crucial: Set orders to an empty array on error to prevent subsequent map error
-        orders = [];
+        orders = []; // Crucial: Set orders to an empty array on error
     }
 
-    // Now, 'orders' is guaranteed to be an array (even if empty)
+    // Pass the potentially new orders to displayOrders
     displayOrders(orders, tab);
 }
 
