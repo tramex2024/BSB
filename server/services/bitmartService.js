@@ -275,7 +275,7 @@ const getKlines = async (symbol, interval, size = 500) => {
     try {
         const responseData = await makeRequest({
             method: 'GET',
-            path: '/spot/v1/candles',
+            path: '/spot/quotation/v3/klines',
             params: {
                 symbol: symbol,
                 step: bitmartStep,
