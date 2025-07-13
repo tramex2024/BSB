@@ -1,4 +1,4 @@
-// server/services/bitmartService.js 
+// server/services/bitmartService.js
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -6,7 +6,7 @@ const querystring = require('querystring');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
-const DEFAULT_V4_POST_MEMO = 'GainBot';
+const DEFAULT_V4_POST_MEMO = 'GainBot'; // Se mantiene para V4, pero no afectará V2 directamente
 
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) {
@@ -25,11 +25,17 @@ function sortObjectKeys(obj) {
     return sortedObj;
 }
 
+// *** MODIFICACIÓN CLAVE: Lógica de generateSign ajustada ***
+// La clave está en cómo se construye el 'message' que se va a hashear
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
+    // Si memo es nulo, indefinido o cadena vacía, usar una cadena vacía para la firma
+    const memoForHash = (memo === null || memo === undefined || memo === '') ? '' : String(memo);
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
     let message;
+    // La documentación de BitMart implica que si el memo no existe o es vacío,
+    // el formato de la firma es 'timestamp#bodyOrQueryString'.
+    // Si el memo tiene un valor, es 'timestamp#memo#bodyOrQueryString'.
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
@@ -40,7 +46,8 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
-    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
+    // OJO: No loguear la API Secret completa en entornos de producción!
+    // console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
 
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
@@ -60,6 +67,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     const { apiKey, secretKey, apiMemo } = authCredentials;
 
     let apiMemoForRequestAndSign = apiMemo;
+    // Se mantiene la lógica del memo por defecto para V4 POST si no se proporciona memo
     if (method === 'POST' && path.includes('/v4/') && (apiMemo === '' || apiMemo === null || apiMemo === undefined)) {
         apiMemoForRequestAndSign = DEFAULT_V4_POST_MEMO;
         console.warn(`[API_MEMO_WORKAROUND] Using default memo '${DEFAULT_V4_POST_MEMO}' for V4 POST request '${path}' as user's memo is blank.`);
@@ -78,26 +86,35 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
-        requestConfig.data = dataForRequest;
-        bodyForSign = JSON.stringify(dataForRequest);
+        requestConfig.data = dataForRequest; // Esto es lo que se envía en el cuerpo de la solicitud
+        // *** MODIFICACIÓN CLAVE: Ordenar el cuerpo ANTES de stringificar para la firma ***
+        // Esto es crucial para BitMart, ya que a menudo esperan que el JSON a firmar
+        // tenga sus claves ordenadas alfabéticamente.
+        const sortedDataForSign = sortObjectKeys(dataForRequest);
+        bodyForSign = JSON.stringify(sortedDataForSign);
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
     if (isPrivate) {
-        // Corrected: Removed 'new' duplicate
         if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
             throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
         }
 
+        // Se pasa apiMemo como está, si es '', la función generateSign lo maneja
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
+        // *** MODIFICACIÓN CLAVE: Solo añadir X-BM-MEMO si apiMemoForRequestAndSign NO está vacío ***
+        // Si el memo es una cadena vacía, NO envíes el encabezado X-BM-MEMO.
+        // Esto es un punto común de error con BitMart.
+        if (apiMemoForRequestAndSign !== '') {
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
+            // Asegurarse de que el encabezado no esté presente si el memo es vacío.
+            // Aunque ya lo borras con el delete, es bueno ser explícito.
             delete requestConfig.headers['X-BM-MEMO'];
         }
     }
@@ -106,7 +123,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`URL: ${url}`);
     if (method === 'POST') {
         console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
-        console.log('Body para Firma (JSON stringificado):', bodyForSign);
+        console.log('Body para Firma (JSON stringificado, con claves ordenadas):', bodyForSign);
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
     }
@@ -123,7 +140,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            // Corrected: Removed 'new' duplicate
             throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
@@ -132,15 +148,12 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
             console.error('Error Status:', error.response.status);
             console.error('Error Headers:', error.response.headers);
-            // Corrected: Removed 'new' duplicate
             throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
         } else if (error.request) {
             console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
-            // Corrected: Removed 'new' duplicate
             throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
         } else {
             console.error('Error Message:', error.message);
-            // Corrected: Removed 'new' duplicate
             throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
         }
     }
@@ -226,9 +239,6 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        // BitMart's open orders endpoint doesn't return a 'status' field typically.
-        // For consistency in the frontend, you might want to add one here if your frontend strictly expects it.
-        // However, the `updateOrderElement` in main.js now handles the absence of 'status' for 'opened' tab.
         return { orders: orders };
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
