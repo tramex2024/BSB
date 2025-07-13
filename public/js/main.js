@@ -382,27 +382,27 @@ async function fetchOpenOrdersData() {
         return [];
     }
     try {
-    const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${symbol}`);
-    // Check if the response is valid and is an array directly
-    // based on how your bitmartService.js is now returning the data
-    if (response && Array.isArray(response)) { // Changed from response.orders.orders
-        const openOrdersData = response; // The response *is* the array
-        displayOrders(openOrdersData, 'opened');
-        if (openOrdersData.length === 0) {
-            displayLogMessage('No open orders found for ' + symbol + '.', 'info');
+        // CORRECTED: Using TRADE_SYMBOL instead of an undefined 'symbol'
+        const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`); 
+
+        if (response && Array.isArray(response)) {
+            const openOrdersData = response;
+            displayOrders(openOrdersData, 'opened');
+            if (openOrdersData.length === 0) {
+                displayLogMessage('No open orders found for ' + TRADE_SYMBOL + '.', 'info');
+            } else {
+                displayLogMessage('Open orders loaded successfully for ' + TRADE_SYMBOL + '.', 'success');
+            }
         } else {
-            displayLogMessage('Open orders loaded successfully for ' + symbol + '.', 'success');
+            console.warn('fetchOpenOrdersData: Backend response was null/undefined or not an array as expected for open orders.', response);
+            displayOrders([], 'opened');
+            displayLogMessage('No open orders found or unexpected response.', 'warning');
         }
-    } else {
-        // This log now makes sense if response isn't an array (e.g., null, undefined, or an object if BitMart API changes)
-        console.warn('fetchOpenOrdersData: Backend response was null/undefined or not an array as expected for open orders.', response);
-        displayOrders([], 'opened'); // Clear previous orders if any
-        displayLogMessage('No open orders found or unexpected response.', 'warning');
+    } catch (error) { // This catch now correctly corresponds to the above try
+        console.error('Error fetching open orders:', error);
+        displayLogMessage('Error fetching open orders: ' + error.message, 'error');
+        displayOrders([], 'opened');
     }
-} catch (error) {
-    console.error('Error fetching open orders:', error);
-    displayLogMessage('Error fetching open orders: ' + error.message, 'error');
-    displayOrders([], 'opened'); // Clear previous orders on error
 }
 
 async function fetchHistoryOrdersData(tab) {
