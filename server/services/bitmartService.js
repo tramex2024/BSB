@@ -10,7 +10,6 @@ const BASE_URL = 'https://api-cloud.bitmart.com'; // BitMart API base URL
  * @returns {string} String de parámetros ordenados y combinados.
  */
 const sortAndCombineParams = (params) => {
-    // If no params, return an empty string to avoid errors
     if (!params || Object.keys(params).length === 0) {
         return '';
     }
@@ -28,12 +27,11 @@ const createQueryString = (params) => {
         return '';
     }
     const queryString = Object.keys(params)
-        .sort() // Important: sort for consistency in signature if BitMart requires it
+        .sort()
         .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
         .join('&');
     return queryString;
 };
-
 
 /**
  * Genera la firma para las solicitudes BitMart.
@@ -44,17 +42,14 @@ const createQueryString = (params) => {
  * @returns {string} La firma SHA256.
  */
 const generateSign = (timestamp, memo, requestBodyOrQueryString, secretKey) => {
-    // If memo is null, undefined or an empty string, use an empty string for hashing.
     const memoToHash = memo || '';
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoToHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${requestBodyOrQueryString}' (Length: ${requestBodyOrQueryString.length})`);
 
-    // Concatenate the parts for hashing
     const messageToHash = `${timestamp}#${memoToHash}#${requestBodyOrQueryString}`;
     console.log(`[SIGN_DEBUG] Message to Hash: '${messageToHash}' (Length: ${messageToHash.length})`);
-    // WARNING: Do NOT log the full secret key. Only a partial for debugging if strictly necessary.
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${secretKey.substring(0, 5)}...${secretKey.substring(secretKey.length - 5)} (Length: ${secretKey.length})`);
 
     const signature = crypto.createHmac('sha256', secretKey)
@@ -72,7 +67,7 @@ const getBitMartServerTime = async () => {
     console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
         const response = await axios.get(`${BASE_URL}/system/time`);
-        const serverTime = response.data.data.server_time.toString(); // Ensure it's a string
+        const serverTime = response.data.data.server_time.toString();
         console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
         return serverTime;
     } catch (error) {
@@ -92,72 +87,77 @@ const getBitMartServerTime = async () => {
  * @param {string} [options.authCredentials.apiMemo] - El Memo de la API del usuario (TEXTO PLANO).
  * @param {Object} [options.params={}] - Parámetros de la query para solicitudes GET/DELETE.
  * @param {Object} [options.body={}] - Cuerpo de la solicitud para solicitudes POST/PUT.
+ * @param {boolean} [options.isPublic=false] - Indica si la solicitud es a un endpoint público que no requiere headers de autenticación.
  * @returns {Promise<Object>} La respuesta de la API de BitMart.
  */
-const makeRequest = async ({ method, path, authCredentials, params = {}, body = {} }) => {
+const makeRequest = async ({ method, path, authCredentials, params = {}, body = {}, isPublic = false }) => {
     const url = `${BASE_URL}${path}`;
-    const serverTime = await getBitMartServerTime(); // Always get fresh server time
+    const serverTime = await getBitMartServerTime();
 
-    // **IMPORTANT:** authCredentials.apiKey, .secretKey, .apiMemo are ASSUMED TO BE IN PLAINTEXT
-    // because bitmartAuthMiddleware has already handled decryption.
-    const { apiKey, secretKey, apiMemo } = authCredentials || {}; // Handle case where authCredentials might be undefined for public endpoints
+    const { apiKey, secretKey, apiMemo } = authCredentials || {};
 
-    // Debug logs for API Key and Memo before signature generation
     console.log(`[DECRYPT_DEBUG] API Key (para firma, parcial): ${apiKey ? apiKey.substring(0, 5) + '...' : 'N/A'} (Length: ${apiKey ? apiKey.length : 0})`);
     console.log(`[DECRYPT_DEBUG] API Memo (para firma): '${apiMemo || 'N/A'}' (Length: ${apiMemo ? apiMemo.length : 0})`);
 
-    // Determine the string to be hashed based on the method type
     let requestBodyOrQueryString;
     let headers = {
         'User-Agent': 'axios/1.9.0',
         'Accept': 'application/json, text/plain, */*',
-        'X-BM-RECVWINDOW': 10000 // Increased for higher time tolerance
     };
+
+    // Only add X-BM-RECVWINDOW and Content-Type for non-public requests
+    // Or if there's a body being sent (POST/PUT)
+    if (!isPublic || (method === 'POST' || method === 'PUT')) {
+        headers['X-BM-RECVWINDOW'] = 10000;
+        headers['Content-Type'] = 'application/json';
+    }
+
 
     if (method === 'GET' || method === 'DELETE') {
         requestBodyOrQueryString = createQueryString(params);
-        headers['Content-Type'] = 'application/json'; // Good practice to include, even if no body
     } else if (method === 'POST' || method === 'PUT') {
         requestBodyOrQueryString = JSON.stringify(body);
-        headers['Content-Type'] = 'application/json'; // Required for JSON body
     } else {
         throw new Error('Unsupported HTTP method.');
     }
 
-    // Logic for MEMO in signature and X-BM-MEMO header
-    let memoForSignature = apiMemo || ''; // If apiMemo is null/undefined, use empty string for signature
-    let memoForHeader = apiMemo; // X-BM-MEMO header should contain the actual user memo
+    let memoForSignature = apiMemo || '';
+    let memoForHeader = apiMemo;
 
-    // Specific workaround for V4 API if memo is empty, use 'GainBot' in signature and header.
-    // For V1, if the user memo is empty/null, don't send X-BM-MEMO or send empty.
     if (path.startsWith('/spot/v4')) {
-        if (!memoForSignature) { // If user memo is empty for V4
+        if (!memoForSignature) {
             console.log("[API_MEMO_WORKAROUND] Usando default memo 'GainBot' para V4 POST request porque el memo del usuario está en blanco/nulo.");
-            memoForSignature = 'GainBot'; // Use 'GainBot' for signature
-            memoForHeader = 'GainBot'; // And also for X-BM-MEMO header
+            memoForSignature = 'GainBot';
+            memoForHeader = 'GainBot';
         }
-    } else { // For V1, if memo is empty or null, don't send X-BM-MEMO
+    } else {
         if (!memoForSignature) {
             console.log("[API_MEMO_WORKAROUND] Usando memo vacío para V1 GET/POST request porque el memo del usuario está en blanco/nulo.");
-            memoForHeader = undefined; // Do not send the header if memo is empty for V1
+            memoForHeader = undefined;
         }
     }
 
-    // Only generate signature if API key and secret are provided (i.e., for authenticated requests)
     let sign = '';
-    if (apiKey && secretKey) {
+    if (!isPublic && apiKey && secretKey) { // Only sign if it's not a public request AND credentials exist
         sign = generateSign(serverTime, memoForSignature, requestBodyOrQueryString, secretKey);
-        // Configure authentication headers
-        headers['X-BM-KEY'] = apiKey; // This must now be the PLAINTEXT API KEY
+        headers['X-BM-KEY'] = apiKey;
         headers['X-BM-TIMESTAMP'] = serverTime;
         headers['X-BM-SIGN'] = sign;
 
-        // Configure X-BM-MEMO header
         if (memoForHeader !== undefined && memoForHeader !== null) {
             headers['X-BM-MEMO'] = memoForHeader;
         } else {
-            // Ensure the header is not sent if there's no valid memo
             delete headers['X-BM-MEMO'];
+        }
+    } else if (isPublic) {
+        // For public requests, ensure no authentication headers are present
+        delete headers['X-BM-KEY'];
+        delete headers['X-BM-TIMESTAMP'];
+        delete headers['X-BM-SIGN'];
+        delete headers['X-BM-MEMO'];
+        // Also ensure X-BM-RECVWINDOW is not present for public GET calls
+        if (method === 'GET') {
+            delete headers['X-BM-RECVWINDOW'];
         }
     }
 
@@ -168,8 +168,7 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
         headers,
         params: (method === 'GET' || method === 'DELETE') ? params : undefined,
         data: (method === 'POST' || method === 'PUT') ? body : undefined,
-        // Optional: add a timeout
-        timeout: 15000 // 15 seconds
+        timeout: 15000
     };
 
     console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
@@ -184,7 +183,6 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
         console.log(`✅ Solicitud a ${path} exitosa.`);
         return response.data;
     } catch (error) {
-        // Log the full error response from BitMart if available
         if (error.response) {
             console.error(`❌ Falló la solicitud a ${path}.`);
             console.error('Error Data:', error.response.data);
@@ -192,12 +190,10 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
             console.error('Error Headers:', error.response.headers);
             throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
         } else if (error.request) {
-            // The request was made but no response was received
             console.error(`❌ No se recibió respuesta de BitMart para la solicitud a ${path}.`);
             console.error('Error Request:', error.request);
             throw new Error(`No se recibió respuesta de BitMart para ${path}.`);
         } else {
-            // Something happened in setting up the request that triggered an Error
             console.error(`❌ Error al configurar la solicitud a ${path}:`, error.message);
             throw new Error(`Error al configurar la solicitud a ${path}: ${error.message}`);
         }
@@ -216,8 +212,8 @@ const getTicker = async (symbol) => {
         const responseData = await makeRequest({
             method: 'GET',
             path: '/spot/v1/ticker',
-            params: { symbol }
-            // No authCredentials needed for public endpoints
+            params: { symbol },
+            isPublic: true // Mark as public
         });
 
         if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.tickers) && responseData.data.tickers.length > 0) {
@@ -234,7 +230,6 @@ const getTicker = async (symbol) => {
             console.error(`❌ Error fetching ticker for ${symbol}: ${errorMessage}. Raw response: ${JSON.stringify(responseData)}`);
             throw new Error(`Error fetching ticker for ${symbol}: ${errorMessage}`);
         }
-
     } catch (error) {
         console.error(`Error en getTicker para ${symbol}:`, error.message);
         throw error;
@@ -251,29 +246,41 @@ const getTicker = async (symbol) => {
  */
 const getKlines = async (symbol, interval, size = 500) => {
     console.log(`\n--- Obteniendo Velas (Klines) para ${symbol} en intervalo '${interval}' ---`);
-    // Original working code uses the interval directly for 'step' parameter.
-    // The previous switch statement is no longer needed if 'interval' directly maps to BitMart's 'step'.
-    // If 'interval' from your application (e.g., '1m', '1h') needs conversion to BitMart's 'step' (e.g., '1', '60'),
-    // you would need to re-introduce the switch or mapping logic.
-    // Based on the provided working example, it implies 'interval' is already in a compatible format for BitMart's 'step'.
+    let bitmartStep;
+    switch (interval) {
+        case '1m': bitmartStep = '1'; break;
+        case '3m': bitmartStep = '3'; break;
+        case '5m': bitmartStep = '5'; break;
+        case '15m': bitmartStep = '15'; break;
+        case '30m': bitmartStep = '30'; break;
+        case '1h': bitmartStep = '60'; break;
+        case '2h': bitmartStep = '120'; break;
+        case '4h': bitmartStep = '240'; break;
+        case '12h': bitmartStep = '720'; break;
+        case '1d': bitmartStep = '1D'; break;
+        case '3d': bitmartStep = '3D'; break;
+        case '1w': bitmartStep = '1W'; break;
+        default:
+            console.warn(`Intervalo '${interval}' no reconocido. Usando '1' (1 minuto) por defecto.`);
+            bitmartStep = '1'; // Default to 1 minute
+    }
 
     try {
         const responseData = await makeRequest({
             method: 'GET',
-            path: '/spot/v1/candles', // <--- This is the working path from your old service!
+            path: '/spot/v1/candles',
             params: {
                 symbol: symbol,
-                step: interval, // Using the 'interval' directly as 'step' as per your working code
+                step: bitmartStep, // Use the converted step
                 size: size
-            }
+            },
+            isPublic: true // Crucial: Mark this as a public request
         });
 
-        // The working code showed 'response.data.candles'
         if (responseData && responseData.code === 1000 && Array.isArray(responseData.data?.candles)) {
             console.log(`✅ Velas para ${symbol} obtenidas. Cantidad: ${responseData.data.candles.length}`);
-            // Assuming the candles are in the format: [timestamp, open, high, low, close, volume]
             return responseData.data.candles.map(candle => ({
-                timestamp: parseInt(candle[0]), // Timestamp in milliseconds
+                timestamp: parseInt(candle[0]),
                 open: parseFloat(candle[1]),
                 high: parseFloat(candle[2]),
                 low: parseFloat(candle[3]),
@@ -290,7 +297,6 @@ const getKlines = async (symbol, interval, size = 500) => {
         throw error;
     }
 };
-
 
 // Exportar las funciones de servicio de BitMart
 module.exports = {
@@ -371,8 +377,7 @@ module.exports = {
     },
 
     getTicker,
-    getKlines, // Exporting the corrected getKlines function
-
+    getKlines,
     placeOrder: async (authCredentials, symbol, side, type, size, price) => {
         console.log(`\n--- Colocando Orden ${side.toUpperCase()} ${type.toUpperCase()} para ${symbol} ---`);
         const body = { symbol, side, type, size: parseFloat(size) };
