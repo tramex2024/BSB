@@ -205,7 +205,7 @@ const makeRequest = async ({ method, path, authCredentials, params = {}, body = 
     }
 };
 
-// --- AÑADIDA: Función para obtener el Ticker ---
+// --- FUNCIÓN getTicker (SIN CAMBIOS, YA ESTÁ CORRECTA) ---
 /**
  * Fetches the ticker information for a specific symbol.
  * Endpoint: GET /spot/v1/ticker
@@ -248,9 +248,56 @@ const getTicker = async (symbol) => {
     }
 };
 
+// --- NUEVA FUNCIÓN AÑADIDA: getKlines ---
+/**
+ * Fetches candlestick (kline) data for a specific symbol and interval.
+ * Endpoint: GET /spot/v1/candles
+ * @param {string} symbol - The trading symbol (e.g., 'BTC_USDT').
+ * @param {string} interval - The candlestick interval (e.g., '1' for 1 minute, '60' for 1 hour, '1D' for 1 day).
+ * @param {number} [size=300] - The number of data points to return. Max 300.
+ * @returns {Promise<Array<Object>>} An array of kline objects.
+ */
+const getKlines = async (symbol, interval, size = 300) => {
+    console.log(`\n--- Obteniendo Velas (Klines) para ${symbol} en intervalo '${interval}' ---`);
+    try {
+        const responseData = await makeRequest({
+            method: 'GET',
+            path: '/spot/v1/candles',
+            params: {
+                symbol: symbol,
+                step: interval, // BitMart uses 'step' for interval
+                size: size
+            }
+            // No authCredentials needed for public endpoints
+        });
+
+        // BitMart's klines endpoint returns an array of kline data directly under 'data.candles'
+        if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.candles)) {
+            console.log(`✅ Velas para ${symbol} obtenidas. Cantidad: ${responseData.data.candles.length}`);
+            // Each candle is an array: [timestamp, open, high, low, close, volume]
+            // We'll map them to more readable objects
+            return responseData.data.candles.map(candle => ({
+                timestamp: parseInt(candle[0]), // Timestamp in milliseconds
+                open: parseFloat(candle[1]),
+                high: parseFloat(candle[2]),
+                low: parseFloat(candle[3]),
+                close: parseFloat(candle[4]),
+                volume: parseFloat(candle[5])
+            }));
+        } else {
+            const errorMessage = responseData.message || 'No klines data or unexpected response structure.';
+            console.error(`❌ Error fetching klines for ${symbol} (interval ${interval}): ${errorMessage}. Raw response: ${JSON.stringify(responseData)}`);
+            throw new Error(`Error fetching klines for ${symbol}: ${errorMessage}`);
+        }
+    } catch (error) {
+        console.error(`Error en getKlines para ${symbol} (interval ${interval}):`, error.message);
+        throw error;
+    }
+};
+
+
 // Exportar las funciones de servicio de BitMart
 module.exports = {
-    // --- INICIO DE CORRECCIÓN PARA getBalance ---
     getBalance: async (authCredentials) => {
         console.log('\n--- Obteniendo Balance de la Cuenta ---');
         try {
@@ -274,7 +321,6 @@ module.exports = {
             throw error;
         }
     },
-    // --- FIN DE CORRECCIÓN PARA getBalance ---
 
     getOpenOrders: async (authCredentials, symbol) => {
         console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol} ---`);
@@ -286,10 +332,10 @@ module.exports = {
                 body: { symbol }
             });
 
-            // CORRECTION: The array of orders is directly in responseData.data
+            // The array of orders is directly in responseData.data
             if (responseData && Array.isArray(responseData.data)) {
                 console.log(`✅ Órdenes abiertas V4 obtenidas. Cantidad: ${responseData.data.length}`);
-                return responseData.data; // <-- RETURN responseData.data directly
+                return responseData.data;
             } else {
                 console.warn("⚠️ BitMart API did not return an array of orders for open orders or unexpected structure.");
                 console.warn("Raw response data:", responseData);
@@ -311,13 +357,9 @@ module.exports = {
                 body: historyParams // Pasa todos los parámetros relevantes como cuerpo
             });
 
-            // Based on your history orders structure, this part needs to be confirmed too.
-            // If it's also directly in `data` like open orders, then the same correction applies.
-            // If history returns it in `data.orders`, then the original code was correct for history.
-            // Let's assume for now it's similar to open orders based on this new log:
             if (responseData && Array.isArray(responseData.data)) {
                 console.log(`✅ Historial de órdenes V4 obtenido. Cantidad: ${responseData.data.length}`);
-                return responseData.data; // <-- Return responseData.data directly
+                return responseData.data;
             } else if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
                 // Keep this fallback in case history orders are still nested under 'orders'
                 console.log(`✅ Historial de órdenes V4 obtenido (anidado). Cantidad: ${responseData.data.orders.length}`);
@@ -334,11 +376,9 @@ module.exports = {
         }
     },
 
-    // AÑADIDA: Exportar la función getTicker
-    getTicker,
+    getTicker, // Now exporting getTicker
+    getKlines, // <-- ADDED: Exporting the new getKlines function
 
-    // Agrega aquí otras funciones de BitMart que puedas necesitar
-    // Por ejemplo, para colocar órdenes:
     placeOrder: async (authCredentials, symbol, side, type, size, price) => {
         console.log(`\n--- Colocando Orden ${side.toUpperCase()} ${type.toUpperCase()} para ${symbol} ---`);
         const body = { symbol, side, type, size: parseFloat(size) };
@@ -357,7 +397,7 @@ module.exports = {
                 body
             });
             console.log(`✅ Orden colocada: ${JSON.stringify(responseData.data)}`);
-            return responseData.data; // Retorna el ID de la orden y otros detalles
+            return responseData.data;
         } catch (error) {
             console.error('Error al colocar la orden:', error.message);
             throw error;
@@ -392,7 +432,7 @@ module.exports = {
             });
 
             if (responseData && responseData.code === 1000 && responseData.data) {
-                const order = responseData.data; // Assuming 'data' directly contains the order object
+                const order = responseData.data;
                 console.log(`✅ Detalle de orden ${order_id} obtenido: Estado - ${order.status}`);
                 return {
                     order_id: order.order_id,
@@ -402,7 +442,7 @@ module.exports = {
                     price: parseFloat(order.price),
                     size: parseFloat(order.size),
                     filled_size: parseFloat(order.filled_size || 0),
-                    state: order.status, // BitMart uses 'status'
+                    state: order.status,
                     // Add other fields you might need
                 };
             } else {
