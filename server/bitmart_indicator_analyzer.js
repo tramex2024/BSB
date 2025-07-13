@@ -29,39 +29,26 @@ const RSI_OVERBOUGHT = 70; // Nivel donde se considera "sobrecomprado" (para se�
 async function getCandles(symbol, interval, size = 500) {
     console.log(`[ANALYZER] --- Obteniendo velas reales para ${symbol} en intervalo '${interval}' a través de bitmartService ---`);
     try {
-        const rawCandlesData = await bitmartService.getKlines(symbol, interval, size);
+        // bitmartService.getKlines ya devuelve un array de objetos con propiedades numéricas
+        const candlesData = await bitmartService.getKlines(symbol, interval, size);
 
-        // --- LÍNEAS DE DEPURACIÓN (Mantenidas temporalmente para confirmar el formato) ---
-        console.log(`[ANALYZER-DEBUG-RAW] Datos crudos de velas recibidos de bitmartService.getKlines. Longitud: ${rawCandlesData?.length}`);
-        if (rawCandlesData && rawCandlesData.length > 0) {
-            console.log(`[ANALYZER-DEBUG-RAW] Primer elemento de vela (rawCandlesData[0]):`, rawCandlesData[0]);
-            console.log(`[ANALYZER-DEBUG-RAW] Tipo del primer elemento:`, typeof rawCandlesData[0]);
-            if (rawCandlesData[0] && typeof rawCandlesData[0].close !== 'undefined') {
-                console.log(`[ANALYZER-DEBUG-RAW] Valor del cierre (rawCandlesData[0].close):`, rawCandlesData[0].close);
-                console.log(`[ANALYZER-DEBUG-RAW] Tipo del valor del cierre (rawCandlesData[0].close):`, typeof rawCandlesData[0].close);
-            } else {
-                console.log(`[ANALYZER-DEBUG-RAW] El primer elemento es un objeto, pero no tiene la propiedad 'close' o es undefined.`);
-            }
-        }
-        // --- FIN DE LÍNEAS DE DEPURACIÓN ---
-
-        if (!rawCandlesData || rawCandlesData.length === 0) {
+        if (!candlesData || candlesData.length === 0) {
             console.error("[ANALYZER] Tu bitmartService no devolvió datos de velas o los datos están vacíos.");
             return [];
         }
 
-        // Simplemente aseguramos que los valores sean números, y filtramos cualquier objeto de vela que no tenga un 'close' válido.
-        const formattedCandles = rawCandlesData.map(c => {
-            if (c && typeof c.open === 'number' && typeof c.high === 'number' && typeof c.low === 'number' && typeof c.close === 'number' && typeof c.volume === 'number') {
-                return c; // La vela ya está en el formato correcto y sus valores son números
-            } else {
-                console.warn(`[ANALYZER-DEBUG-WARN] Vela mal formada o con valores no numéricos encontrada:`, c);
-                return null; // Devuelve null para filtrar más tarde
-            }
-        }).filter(c => c !== null); // Filtra cualquier vela mal formada
+        // Se elimina la lógica de mapeo adicional y filtrado aquí,
+        // porque `bitmartService.getKlines` ya debería devolver los datos en el formato correcto
+        // y con los tipos de datos adecuados.
+        // Las líneas de depuración son útiles, pero pueden ser removidas una vez que confirmes el flujo.
+        console.log(`[ANALYZER-DEBUG] Datos de velas recibidos y listos para usar de bitmartService.getKlines. Longitud: ${candlesData.length}`);
+        if (candlesData.length > 0) {
+            console.log(`[ANALYZER-DEBUG] Primer elemento de vela:`, candlesData[0]);
+            console.log(`[ANALYZER-DEBUG] Último elemento de vela:`, candlesData[candlesData.length - 1]);
+        }
 
-        console.log(`[ANALYZER] ✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${formattedCandles[formattedCandles.length - 1]?.close?.toFixed(2) || 'N/A'}).`);
-        return formattedCandles;
+        console.log(`[ANALYZER] ✅ Velas para ${symbol} obtenidas con éxito (último cierre: ${candlesData[candlesData.length - 1]?.close?.toFixed(2) || 'N/A'}).`);
+        return candlesData;
 
     } catch (error) {
         console.error(`[ANALYZER] ❌ Falló la obtención de velas para ${symbol} usando bitmartService.`);
