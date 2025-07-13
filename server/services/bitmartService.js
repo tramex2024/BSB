@@ -1,4 +1,4 @@
-// server/services/bitmartService.js 
+// server/services/bitmartService.js
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -23,11 +23,15 @@ function sortObjectKeys(obj) {
     return sortedObj;
 }
 
+// FUNCION generateSign CORREGIDA
 function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
-    const finalBodyOrQueryString = bodyOrQueryString || '';
 
-    // ESTA ES LA LÍNEA CLAVE. DEBE INCLUIR method y path
+    // FIX CLAVE: Aseguramos que bodyOrQueryString, si es un objeto JSON vacío ("{}"),
+    // no se convierta a una cadena vacía ("") para la firma.
+    const finalBodyOrQueryString = (bodyOrQueryString === undefined || bodyOrQueryString === null || bodyOrQueryString === '') ? '' : bodyOrQueryString;
+
+    // CONSTRUCCIÓN DE LA CADENA DE MENSAJE SEGÚN LA DOCUMENTACIÓN DE BITMART V4
     // Formato esperado: timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
     const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + requestPath + '#' + finalBodyOrQueryString;
 
@@ -42,6 +46,7 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
+// FUNCION makeRequest CORREGIDA (solo la línea de generateSign)
 async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
     const timestamp = timestampOverride || Date.now().toString();
     const url = `${BASE_URL}${path}`;
@@ -55,9 +60,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     };
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
-    
-    // apiMemoForRequestAndSign ahora siempre será el memo proporcionado en authCredentials.
-    const apiMemoForRequestAndSign = apiMemo; 
+
+    const apiMemoForRequestAndSign = apiMemo;
 
     const dataForRequest = { ...paramsOrData }; // Make a shallow copy to avoid modifying original paramsOrData
 
@@ -78,24 +82,21 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     }
 
     if (isPrivate) {
-        // Se ha hecho más estricta la validación del memo, ahora es un campo requerido para peticiones privadas
-        if (!apiKey || !secretKey || apiMemo === undefined || apiMemo === null || apiMemo === '') { 
+        if (!apiKey || !secretKey || apiMemo === undefined || apiMemo === null || apiMemo === '') {
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
         }
 
-        // Inside makeRequest function, within the 'if (isPrivate)' block
-const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
+        // FIX CLAVE: Se pasan 'method' y 'path' a generateSign
+        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        // Se envía X-BM-MEMO solo si apiMemoForRequestAndSign tiene un valor (no vacío, null o undefined)
-        if (apiMemoForRequestAndSign) { 
+        if (apiMemoForRequestAndSign) {
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
-            // Asegura que X-BM-MEMO no se envíe si el memo no existe o está vacío
-            delete requestConfig.headers['X-BM-MEMO']; 
+            delete requestConfig.headers['X-BM-MEMO'];
         }
     }
 
@@ -181,7 +182,7 @@ async function getBalance(authCredentials) {
     console.log('\n--- Obteniendo Balance de la Cuenta ---');
     try {
         // Always fetch server time for private requests to ensure timestamp is fresh
-        const serverTime = await getSystemTime(); 
+        const serverTime = await getSystemTime();
         const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data && response.data.wallet) {
             console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
@@ -264,8 +265,8 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         } else {
             throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
         }
-    } else { 
-        throw new Error(`Tipo de orden no soportado: ${type}`); 
+    } else {
+        throw new Error(`Tipo de orden no soportado: ${type}`);
     }
 
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
@@ -342,19 +343,19 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
 
 async function getKlines(symbol, interval, limit = 200) {
     console.log(`\n--- Solicitud GET Klines (Candlesticks) para ${symbol}, intervalo ${interval}, ${limit} velas ---`);
-    const path = `/spot/quotation/v3/klines`; 
-    const params = { symbol: symbol, step: interval, limit: limit }; 
+    const path = `/spot/quotation/v3/klines`;
+    const params = { symbol: symbol, step: interval, limit: limit };
     try {
-        const response = await makeRequest('GET', path, params, false); 
+        const response = await makeRequest('GET', path, params, false);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Klines (Candlesticks) para ${symbol} obtenidos con éxito.`);
             const candles = response.data.map(c => ({
-                timestamp: parseInt(c[0]), 
-                open: parseFloat(c[1]),    
-                high: parseFloat(c[2]),    
-                low: parseFloat(c[3]),     
-                close: parseFloat(c[4]),   
-                volume: parseFloat(c[5])   
+                timestamp: parseInt(c[0]),
+                open: parseFloat(c[1]),
+                high: parseFloat(c[2]),
+                low: parseFloat(c[3]),
+                close: parseFloat(c[4]),
+                volume: parseFloat(c[5])
             }));
             return candles;
         } else {
@@ -376,7 +377,7 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
     }
 
     try {
-        await getBalance({ apiKey, secretKey, apiMemo }); 
+        await getBalance({ apiKey, secretKey, apiMemo });
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
