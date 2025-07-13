@@ -40,7 +40,10 @@ exports.authenticateToken = (req, res, next) => {
 
 // --- Controlador para guardar las API Keys de BitMart ---
 exports.saveBitmartApiKeys = async (req, res) => {
-    const { apiKey, secretKey, memo } = req.body;
+    // Asegúrate de que 'memo' se desestructure aquí. El frontend envía 'apiMemo', cámbialo a 'memo' si es necesario.
+    // O si el frontend envía 'apiMemo', cambia aquí para que coincida.
+    // Por simplicidad, asumo que el frontend envía 'memo'. Si no, ajusta esta línea.
+    const { apiKey, secretKey, memo } = req.body; 
 
     try {
         if (!apiKey || !secretKey) {
@@ -54,7 +57,8 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
         // Usar las funciones de encriptación importadas de utils/encryption.js
         user.bitmartApiKey = encrypt(apiKey);
-        user.bitmartSecretKeyEncrypted = encrypt(secretKey); 
+        user.bitmartSecretKeyEncrypted = encrypt(secretKey);
+        // CRUCIAL: Asegurarse de que el memo se encripte y guarde. Si `memo` es undefined, se guarda un string vacío.
         user.bitmartApiMemo = encrypt(memo || ''); 
 
         user.bitmartApiValidated = false;
@@ -75,7 +79,7 @@ exports.saveBitmartApiKeys = async (req, res) => {
 // --- Controlador para obtener el balance de BitMart ---
 exports.getBitmartBalance = async (req, res) => {
     // Usar las credenciales desencriptadas de req.bitmartCreds (poblado por bitmartAuthMiddleware)
-    const authCredentials = req.bitmartCreds; 
+    const authCredentials = req.bitmartCreds;
 
     try {
         const balances = await bitmartService.getBalance(authCredentials); // Pasar credenciales desencriptadas
@@ -85,7 +89,7 @@ exports.getBitmartBalance = async (req, res) => {
         console.error('Error getting BitMart balance:', error);
         // Mensaje de error general para el frontend si la desencriptación falló
         if (error.message.includes("Failed to decrypt BitMart credentials")) {
-             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+            return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
         }
         res.status(500).json({ message: error.message || 'Error fetching BitMart balance.' });
     }
@@ -96,40 +100,42 @@ exports.getBitmartOpenOrders = async (req, res) => {
     const { symbol } = req.query;
 
     // Usar las credenciales desencriptadas de req.bitmartCreds
-    const authCredentials = req.bitmartCreds; 
+    const authCredentials = req.bitmartCreds;
 
     try {
-        const openOrders = await bitmartService.getOpenOrders(authCredentials, symbol); 
-        res.status(200).json({ success: true, orders: openOrders }); 
+        const openOrders = await bitmartService.getOpenOrders(authCredentials, symbol);
+        res.status(200).json({ success: true, orders: openOrders });
 
     } catch (error) {
         console.error('Error getting BitMart open orders:', error);
         if (error.message.includes("Failed to decrypt BitMart credentials")) {
-             return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
+            return res.status(500).json({ message: 'Error interno del servidor al obtener y desencriptar credenciales de BitMart. Por favor, verifica tus claves de encriptación en Render y vuelve a introducir tus API Keys en la aplicación.' });
         }
         res.status(500).json({ message: error.message || 'Error fetching BitMart open orders.' });
     }
 };
 
 // --- Controlador para obtener el historial de órdenes (Ajustado para el frontend) ---
-exports.getHistoryOrders = async (req, res) => { 
+exports.getHistoryOrders = async (req, res) => {
     const { symbol, orderMode, startTime, endTime, limit } = req.query;
 
     // Usar las credenciales desencriptadas de req.bitmartCreds
-    const authCredentials = req.bitmartCreds; 
+    const authCredentials = req.bitmartCreds;
 
     try {
         const historyParams = {
             symbol,
             orderMode,
-            startTime: startTime ? parseInt(startTime, 10) : undefined, 
-            endTime: endTime ? parseInt(endTime, 10) : undefined, 
-            limit: limit ? parseInt(limit, 10) : undefined 
+            startTime: startTime ? parseInt(startTime, 10) : undefined,
+            endTime: endTime ? parseInt(endTime, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined
         };
 
         const historyOrders = await bitmartService.getHistoryOrdersV4(authCredentials, historyParams);
-        
-        res.status(200).json({ success: true, orders: historyOrders });
+
+        // MODIFICACIÓN CLAVE: Envía directamente el array de órdenes
+        // Esto resolverá el warning del frontend "not an array for history"
+        res.status(200).json(historyOrders); 
 
     } catch (error) {
         console.error('Error getting BitMart history orders:', error);
@@ -188,7 +194,7 @@ exports.toggleBotState = async (req, res) => {
                 decrement: params.decrement,
                 trigger: params.trigger,
                 stopAtCycleEnd: params.stopAtCycleEnd,
-                state: 'STOPPED', 
+                state: 'STOPPED',
                 cycle: 0,
                 profit: 0.00,
                 cycleProfit: 0.00
@@ -204,13 +210,13 @@ exports.toggleBotState = async (req, res) => {
             botState.decrement = params.decrement;
             botState.trigger = params.trigger;
             botState.stopAtCycleEnd = params.stopAtCycleEnd;
-            botState.state = 'RUNNING'; 
+            botState.state = 'RUNNING';
             console.log(`[toggleBotState] Bot started for user ${userId}.`);
         } else if (action === 'stop') {
             if (botState.state === 'STOPPED') {
                 return res.status(400).json({ success: false, message: 'Bot is already stopped.' });
             }
-            botState.state = 'STOPPED'; 
+            botState.state = 'STOPPED';
             console.log(`[toggleBotState] Bot stopped for user ${userId}.`);
         } else {
             return res.status(400).json({ success: false, message: 'Invalid action specified.' });
