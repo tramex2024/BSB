@@ -1,19 +1,17 @@
 // server/controllers/userController.js
 
-const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
-const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
-const jwt = require('jsonwebtoken'); // Para verificar el token JWT
+const User = require('../models/User');
+const BotState = require('../models/BotState');
+const jwt = require('jsonwebtoken');
 
-const { encrypt, decrypt } = require('../utils/encryption'); // Necesitas 'decrypt' también para las credenciales
-const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
+const { encrypt, decrypt } = require('../utils/encryption');
+const bitmartService = require('../services/bitmartService');
 
 // IMPORTAR EL AUTOBOT LOGIC
-const autobotLogic = require('../autobotLogic'); // <--- AÑADE ESTA LÍNEA
+const autobotLogic = require('../autobotLogic');
 
 
 // --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno (raw) ---
-// Estas líneas se ejecutarán tan pronto como el archivo sea requerido por server.js
-// Estos logs son solo informativos y no afectan la lógica de encriptación que ahora está centralizada en utils/encryption.js
 console.log(`[VERY EARLY DEBUG] ENCRYPTION_KEY_ENV (raw from process.env): '${process.env.ENCRYPTION_KEY ? process.env.ENCRYPTION_KEY.substring(0, 5) + '...' : 'UNDEFINED'}'`);
 console.log(`[VERY EARLY DEBUG] JWT_SECRET_ENV (raw from process.env): '${process.env.JWT_SECRET ? process.env.JWT_SECRET.substring(0, 5) + '...' : 'UNDEFINED'}'`);
 
@@ -167,36 +165,25 @@ exports.getBotConfigAndState = async (req, res) => {
     }
 };
 
----
-
-## Modificación de `toggleBotState` en `userController.js` 🚀
-
-```javascript
 // --- Función Controladora: Alternar el estado del Bot (Start/Stop) ---
 exports.toggleBotState = async (req, res) => {
     const userId = req.user.id;
-    const { action, params } = req.body; // `action` será 'start' o 'stop', `params` contendrá la configuración
+    const { action, params } = req.body;
 
-    // Las credenciales de BitMart se obtienen del `bitmartAuthMiddleware`
-    // y se adjuntan a `req.bitmartCreds`. Son necesarias para `autobotLogic.toggleBotState`.
-    const bitmartCreds = req.bitmartCreds; 
+    const bitmartCreds = req.bitmartCreds;
 
     if (!bitmartCreds) {
         return res.status(400).json({ success: false, message: 'BitMart API keys not configured or invalid. Cannot toggle bot state.' });
     }
 
     try {
-        // Llamar a la función `toggleBotState` de `autobotLogic`
-        // Esta función ahora será la que realmente inicie o detenga el intervalo del bot.
         const updatedBotState = await autobotLogic.toggleBotState(userId, action, params, bitmartCreds);
 
-        // Envía la respuesta al frontend con el estado actualizado del bot
         res.status(200).json({ success: true, message: `Bot state set to ${updatedBotState.state}.`, botState: updatedBotState });
 
     } catch (error) {
         console.error('Error toggling bot state:', error);
-        // Emitir el error al cliente a través de Socket.IO si `ioInstance` está disponible en autobotLogic
-        if (autobotLogic.ioInstance) { // Assuming ioInstance might be exposed or passed
+        if (autobotLogic.ioInstance) {
             autobotLogic.ioInstance.to(userId).emit('botError', { message: error.message, userId: userId });
         }
         res.status(500).json({ success: false, message: error.message || 'Error internal server when trying to change bot state.' });
