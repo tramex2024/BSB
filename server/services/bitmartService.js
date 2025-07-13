@@ -1,12 +1,14 @@
-// server/services/bitmartService.js 
+// server/services/bitmartService.js
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
+// Importar la función de desencriptación
+const { decrypt } = require('../utils/encryption'); 
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
-const DEFAULT_V4_POST_MEMO = 'GainBot';
+const DEFAULT_V4_POST_MEMO = 'GainBot'; // Este memo solo se usa si el usuario no tiene uno para V4 POSTs
 
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) {
@@ -26,10 +28,13 @@ function sortObjectKeys(obj) {
 }
 
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
-    const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
+    // Si memo es null o undefined, o una cadena vacía, se convierte en '' para el hash,
+    // pero si es '', se omite en el 'message'
+    const memoForHash = (memo === null || memo === undefined || memo === '') ? '' : String(memo);
     const finalBodyOrQueryString = bodyOrQueryString || '';
 
     let message;
+    // La documentación de BitMart indica que si el memo no existe, no se incluye el segundo '#'
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
@@ -57,12 +62,34 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         timeout: 15000
     };
 
-    const { apiKey, secretKey, apiMemo } = authCredentials;
+    const { apiKey, secretKey, apiMemo: encryptedApiMemo } = authCredentials;
 
-    let apiMemoForRequestAndSign = apiMemo;
-    if (method === 'POST' && path.includes('/v4/') && (apiMemo === '' || apiMemo === null || apiMemo === undefined)) {
+    let apiMemoForRequestAndSign = null;
+
+    // --- AÑADIDO: Desencriptar y loguear el API MEMO ---
+    if (encryptedApiMemo) {
+        try {
+            apiMemoForRequestAndSign = decrypt(encryptedApiMemo);
+            console.log(`[DECRYPT_DEBUG] API Memo desencriptado: '${apiMemoForRequestAndSign}'`);
+            // Si después de desencriptar es una cadena vacía, la tratamos como null para la firma y el header
+            if (apiMemoForRequestAndSign === '') {
+                apiMemoForRequestAndSign = null;
+                console.log(`[DECRYPT_DEBUG] API Memo desencriptado es una cadena vacía, se tratará como NULL.`);
+            }
+        } catch (e) {
+            console.error(`❌ ERROR: Falló la desencriptación del API Memo. Usando null.`, e.message);
+            apiMemoForRequestAndSign = null;
+        }
+    } else {
+        console.log(`[DECRYPT_DEBUG] API Memo encriptado no proporcionado o es null/undefined.`);
+        apiMemoForRequestAndSign = null;
+    }
+    // --- FIN AÑADIDO ---
+
+    // Lógica para DEFAULT_V4_POST_MEMO si es un V4 POST y el memo desencriptado es null
+    if (method === 'POST' && path.includes('/v4/') && (apiMemoForRequestAndSign === null)) {
         apiMemoForRequestAndSign = DEFAULT_V4_POST_MEMO;
-        console.warn(`[API_MEMO_WORKAROUND] Using default memo '${DEFAULT_V4_POST_MEMO}' for V4 POST request '${path}' as user's memo is blank.`);
+        console.warn(`[API_MEMO_WORKAROUND] Usando default memo '${DEFAULT_V4_POST_MEMO}' para V4 POST request '${path}' porque el memo del usuario está en blanco/nulo.`);
     }
 
     const dataForRequest = { ...paramsOrData };
@@ -84,20 +111,22 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     }
 
     if (isPrivate) {
-        // Corrected: Removed 'new' duplicate
-        if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
-            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
+        if (!apiKey || !secretKey) { // apiMemo podría ser null si no se usa
+            throw new Error("Credenciales de BitMart API (API Key, Secret) no proporcionadas para una solicitud privada. Asegúrate de que el usuario haya configurado sus claves.");
         }
-
+        
+        // El memo pasado a generateSign es el *desencriptado*
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
+        // Solo incluir el header X-BM-MEMO si el memo desencriptado NO es null o cadena vacía
+        if (apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
+            // Asegurarse de que el header no esté presente si el memo no se usa
             delete requestConfig.headers['X-BM-MEMO'];
         }
     }
@@ -123,7 +152,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            // Corrected: Removed 'new' duplicate
             throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
@@ -132,15 +160,12 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
             console.error('Error Status:', error.response.status);
             console.error('Error Headers:', error.response.headers);
-            // Corrected: Removed 'new' duplicate
             throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
         } else if (error.request) {
             console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
-            // Corrected: Removed 'new' duplicate
             throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
         } else {
             console.error('Error Message:', error.message);
-            // Corrected: Removed 'new' duplicate
             throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
         }
     }
@@ -226,9 +251,6 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        // BitMart's open orders endpoint doesn't return a 'status' field typically.
-        // For consistency in the frontend, you might want to add one here if your frontend strictly expects it.
-        // However, the `updateOrderElement` in main.js now handles the absence of 'status' for 'opened' tab.
         return { orders: orders };
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
@@ -278,6 +300,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
     try {
         const serverTime = await getSystemTime();
+        // Asegúrate de que authCredentials contiene el API Memo encriptado para que makeRequest lo desencripte
         const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden colocada con éxito:`, response.data);
@@ -381,7 +404,8 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
     }
 
     try {
-        await getBalance({ apiKey, secretKey, apiMemo });
+        // Pasa el apiMemo encriptado aquí, makeRequest se encarga de desencriptarlo
+        await getBalance({ apiKey, secretKey, apiMemo }); 
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
