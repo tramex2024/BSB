@@ -707,20 +707,18 @@ async function toggleBotState() {
             const newBotState = response.botState.state;
             isRunning = (newBotState === 'RUNNING');
 
-            botStateDisplay.textContent = newBotState;
-            botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
-            startBtn.textContent = isRunning ? 'STOP' : 'START';
-            resetBtn.disabled = isRunning;
-            stopAtCycleEndCheckbox.disabled = isRunning;
-
             cycleDisplay.textContent = response.botState.cycle || 0;
             profitDisplay.textContent = (response.botState.profit || 0).toFixed(2);
             cycleProfitDisplay.textContent = (response.botState.cycleProfit || 0).toFixed(2);
 
-            console.log(`Bot state updated: ${newBotState}`);
-            displayLogMessage(`Bot state changed to: ${newBotState}. Message: ${response.message}`, 'success');
-            actualizarCalculos();
-        } else {
+            if (botStateDisplay) {
+                botStateDisplay.textContent = newBotState;
+                botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
+            }
+            if (startBtn) startBtn.textContent = isRunning ? 'STOP' : 'START';
+            if (resetBtn) resetBtn.disabled = isRunning;
+            if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = isRunning;
+        } else { // <-- MISSING '}' WAS HERE
             throw new Error(response.message || 'Failed to toggle bot state.');
         }
     } catch (error) {
