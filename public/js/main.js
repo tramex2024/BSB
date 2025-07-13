@@ -443,24 +443,32 @@ async function fetchOrders(tab) {
 
     if (!isLoggedIn) {
         orderListDiv.innerHTML = `<p class="text-gray-400">Please login to view order history.</p>`;
-        currentDisplayedOrders.clear(); // Clear the map if not logged in
+        currentDisplayedOrders.clear(); // Clear the map immediately if not logged in
         displayLogMessage("Please login to view order history.", "info");
         return;
     }
 
-    // Always clear the displayed orders map if the tab is changing
-    // or if we are refreshing the current tab and don't want to rely on incremental updates
-    // For a full refresh, it's safer to clear the map AND the DOM first.
+    // Determine if we need to show a loading message and clear existing content.
+    // This logic ensures we clear the DOM *and* the map at the appropriate times.
+    const shouldShowLoading = (currentTab !== tab) || (currentDisplayedOrders.size === 0 && orderListDiv.innerHTML.trim() === '');
+
+    // Always clear the currentDisplayedOrders map if the tab is changing
+    // or if we are starting a fresh load for the current tab.
+    // This is crucial to prevent referencing detached nodes.
     if (currentTab !== tab) {
-        orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
         currentDisplayedOrders.clear(); // Clear the map when switching tabs
-        displayLogMessage(`Loading ${tab} orders...`, "info");
-    } else if (currentDisplayedOrders.size === 0) {
-        // If it's the same tab but currently empty, show loading
+        // Only clear innerHTML if changing tabs, or if it's explicitly empty.
+        // We defer clearing for initial load if there might be existing content.
         orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
-        displayLogMessage(`Loading ${tab} orders...`, "info");
+    } else if (currentDisplayedOrders.size === 0 && orderListDiv.innerHTML.trim() === '') {
+        // If it's the same tab but currently empty, show loading.
+        // We already cleared currentDisplayedOrders in previous conditions or it's genuinely empty.
+        orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
     }
-    // Set currentTab after potential clearing and before fetching orders
+    // If we're simply refreshing the *same* tab with existing orders,
+    // we don't clear innerHTML here. displayOrders will handle incremental updates.
+
+    // Update currentTab here, right after setting loading message and before fetching orders
     currentTab = tab;
 
     let orders = []; // Always initialize as an array
@@ -488,7 +496,7 @@ async function fetchOrders(tab) {
         orders = []; // Crucial: Set orders to an empty array on error
     }
 
-    // Pass the potentially new orders to displayOrders
+    // Now, pass the (potentially empty) orders array to displayOrders
     displayOrders(orders, tab);
 }
 
