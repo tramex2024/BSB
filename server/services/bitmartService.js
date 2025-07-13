@@ -1,7 +1,6 @@
 // server/services/bitmartService.js
 const axios = require('axios');
 const crypto = require('crypto');
-// No necesitamos importar 'decrypt' aquí, ya que la desencriptación la hace el middleware ahora.
 
 const BASE_URL = 'https://api-cloud.bitmart.com'; // BitMart API base URL
 
@@ -11,7 +10,7 @@ const BASE_URL = 'https://api-cloud.bitmart.com'; // BitMart API base URL
  * @returns {string} String de parámetros ordenados y combinados.
  */
 const sortAndCombineParams = (params) => {
-    // Si no hay params, devuelve una cadena vacía para evitar errores
+    // If no params, return an empty string to avoid errors
     if (!params || Object.keys(params).length === 0) {
         return '';
     }
@@ -29,7 +28,7 @@ const createQueryString = (params) => {
         return '';
     }
     const queryString = Object.keys(params)
-        .sort() // Importante: ordenar para consistencia en la firma si BitMart lo requiere
+        .sort() // Important: sort for consistency in signature if BitMart requires it
         .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
         .join('&');
     return queryString;
@@ -45,7 +44,7 @@ const createQueryString = (params) => {
  * @returns {string} La firma SHA256.
  */
 const generateSign = (timestamp, memo, requestBodyOrQueryString, secretKey) => {
-    // Si memo es nulo, undefined o una cadena vacía, se usa una cadena vacía para el hashing.
+    // If memo is null, undefined or an empty string, use an empty string for hashing.
     const memoToHash = memo || '';
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
@@ -55,7 +54,7 @@ const generateSign = (timestamp, memo, requestBodyOrQueryString, secretKey) => {
     // Concatenate the parts for hashing
     const messageToHash = `${timestamp}#${memoToHash}#${requestBodyOrQueryString}`;
     console.log(`[SIGN_DEBUG] Message to Hash: '${messageToHash}' (Length: ${messageToHash.length})`);
-    // OJO: NO loguear la clave secreta completa. Solo una parte para depuración si es estrictamente necesario.
+    // WARNING: Do NOT log the full secret key. Only a partial for debugging if strictly necessary.
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${secretKey.substring(0, 5)}...${secretKey.substring(secretKey.length - 5)} (Length: ${secretKey.length})`);
 
     const signature = crypto.createHmac('sha256', secretKey)
@@ -73,7 +72,7 @@ const getBitMartServerTime = async () => {
     console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
         const response = await axios.get(`${BASE_URL}/system/time`);
-        const serverTime = response.data.data.server_time.toString(); // Asegurarse de que sea un string
+        const serverTime = response.data.data.server_time.toString(); // Ensure it's a string
         console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
         return serverTime;
     } catch (error) {
@@ -244,7 +243,7 @@ const getTicker = async (symbol) => {
 
 /**
  * Fetches candlestick (kline) data for a specific symbol and interval.
- * Endpoint: GET /market/kline
+ * Endpoint: GET /spot/v1/klines (TEMPORARY PATH)
  * @param {string} symbol - The trading symbol (e.g., 'BTC_USDT').
  * @param {string} interval - The candlestick interval (e.g., '1m', '5m', '1h', '1d').
  * @param {number} [size=300] - The number of data points to return. Max 300.
@@ -274,7 +273,7 @@ const getKlines = async (symbol, interval, size = 300) => {
     try {
         const responseData = await makeRequest({
             method: 'GET',
-            path: '/market/kline', // <--- CHANGED PATH TO /market/kline, based on common working endpoints
+            path: '/spot/v1/klines', // <--- CHANGED PATH TO /spot/v1/klines (Temporary)
             params: {
                 symbol: symbol,
                 step: bitmartStep,
@@ -282,7 +281,7 @@ const getKlines = async (symbol, interval, size = 300) => {
             }
         });
 
-        // The structure for /market/kline might be slightly different.
+        // The structure for /spot/v1/klines might be slightly different.
         // It typically returns an array directly under `data.klines` or `data.candles`.
         // Let's assume it's `data.klines` and handle both `candles` and `klines`.
         const klinesData = responseData?.data?.klines || responseData?.data?.candles;
