@@ -437,46 +437,37 @@ async function fetchHistoryOrdersData(tab) {
     }
 }
 
+// --- In your fetchOrders function (approx. line 490) ---
 async function fetchOrders(tab) {
     const orderListDiv = document.getElementById('order-list');
     if (!orderListDiv) return;
 
     if (!isLoggedIn) {
         orderListDiv.innerHTML = `<p class="text-gray-400">Please login to view order history.</p>`;
-        currentDisplayedOrders.clear(); // Clear the map immediately if not logged in
+        currentDisplayedOrders.clear(); // Ensure map is cleared if not logged in
         displayLogMessage("Please login to view order history.", "info");
         return;
     }
 
-    // Determine if we need to show a loading message and clear existing content.
-    // This logic ensures we clear the DOM *and* the map at the appropriate times.
-    const shouldShowLoading = (currentTab !== tab) || (currentDisplayedOrders.size === 0 && orderListDiv.innerHTML.trim() === '');
+    // Determine if we need to completely refresh the display (e.g., tab change or initial load with no orders)
+    const shouldFullRefresh = (currentTab !== tab) || (currentDisplayedOrders.size === 0 && orderListDiv.children.length === 0);
 
-    // Always clear the currentDisplayedOrders map if the tab is changing
-    // or if we are starting a fresh load for the current tab.
-    // This is crucial to prevent referencing detached nodes.
-    if (currentTab !== tab) {
-        currentDisplayedOrders.clear(); // Clear the map when switching tabs
-        // Only clear innerHTML if changing tabs, or if it's explicitly empty.
-        // We defer clearing for initial load if there might be existing content.
+    if (shouldFullRefresh) {
+        // Clear the DOM content and the tracking map before fetching new data
         orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
-    } else if (currentDisplayedOrders.size === 0 && orderListDiv.innerHTML.trim() === '') {
-        // If it's the same tab but currently empty, show loading.
-        // We already cleared currentDisplayedOrders in previous conditions or it's genuinely empty.
-        orderListDiv.innerHTML = '<p class="text-gray-400">Loading orders...</p>';
+        currentDisplayedOrders.clear(); // CRUCIAL: Clear the map BEFORE `innerHTML` wipes the DOM
+        displayLogMessage(`Loading ${tab} orders...`, "info");
     }
-    // If we're simply refreshing the *same* tab with existing orders,
-    // we don't clear innerHTML here. displayOrders will handle incremental updates.
 
-    // Update currentTab here, right after setting loading message and before fetching orders
+    // Always update currentTab at the start of the fetching process
     currentTab = tab;
 
-    let orders = []; // Always initialize as an array
+    let orders = [];
 
     try {
         if (tab === 'opened') {
-            const fetchedOrders = await fetchOpenOrdersData();
-            orders = Array.isArray(fetchedOrders) ? fetchedOrders : [];
+            const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
+            orders = (response && Array.isArray(response.orders)) ? response.orders : []; // Correctly access nested orders
         } else {
             const historyOrdersRaw = await fetchHistoryOrdersData(tab);
             const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
@@ -493,12 +484,94 @@ async function fetchOrders(tab) {
         console.error(`Failed to fetch orders for tab ${tab}:`, error);
         orderListDiv.innerHTML = `<p class="text-red-400">Failed to load orders for this tab. Please check console for details.</p>`;
         displayLogMessage(`Failed to load orders for "${tab}" tab.`, "error");
-        orders = []; // Crucial: Set orders to an empty array on error
+        orders = [];
     }
 
-    // Now, pass the (potentially empty) orders array to displayOrders
+    // Now, display the (potentially empty) orders array
     displayOrders(orders, tab);
 }
+
+// --- In your displayOrders function (approx. line 270) ---
+function displayOrders(newOrders, tab) {
+    const orderListDiv = document.getElementById('order-list');
+    if (!orderListDiv) return;
+
+    if (!Array.isArray(newOrders)) {
+        console.error("displayOrders received non-array data:", newOrders);
+        orderListDiv.innerHTML = `<p class="text-red-400">Error: Failed to display orders. Data format incorrect.</p>`;
+        currentDisplayedOrders.clear();
+        displayLogMessage("Error: Failed to display orders. Invalid data format.", "error");
+        return;
+    }
+
+    const incomingOrderIds = new Set(newOrders.map(order => order.orderId));
+    const ordersToRemove = [];
+
+    // Identify orders that are currently displayed but not in the newOrders list
+    currentDisplayedOrders.forEach((orderElement, orderId) => {
+        if (!incomingOrderIds.has(orderId)) {
+            // Check if the element is actually still a child of orderListDiv before attempting to remove
+            if (orderElement.parentNode === orderListDiv) {
+                ordersToRemove.push(orderElement);
+            } else {
+                // Log or handle cases where the element is already detached (shouldn't happen with correct logic)
+                console.warn(`Element with ID ${orderId} was in map but not a child of orderListDiv. Auto-removing from map.`);
+            }
+        }
+    });
+
+    // Remove the elements from the DOM and the map
+    ordersToRemove.forEach(orderElement => {
+        orderListDiv.removeChild(orderElement); // This is where your error occurs
+        currentDisplayedOrders.delete(orderElement.dataset.orderId);
+    });
+
+    // Add or update new orders
+    newOrders.forEach(order => {
+        let orderElement = document.getElementById(`order-${order.orderId}`);
+        if (orderElement) {
+            updateOrderElement(orderElement, order);
+        } else {
+            orderElement = createOrderElement(order);
+            updateOrderElement(orderElement, order);
+            orderListDiv.appendChild(orderElement);
+        }
+        currentDisplayedOrders.set(order.orderId, orderElement);
+    });
+
+    // Final status message adjustments
+    if (newOrders.length === 0) {
+        // Only set innerHTML if it's not already showing this message
+        if (!orderListDiv.innerHTML.includes('No orders found')) {
+            orderListDiv.innerHTML = `<p class="text-gray-400">No orders found for the "${tab}" tab.</p>`;
+        }
+        displayLogMessage(`No orders found for the "${tab}" tab.`, "info");
+    } else {
+        // Clear any "Loading" or "No orders" message if actual orders are now present
+        if (orderListDiv.innerHTML.includes('Loading orders') || orderListDiv.innerHTML.includes('No orders found')) {
+            orderListDiv.innerHTML = ''; // Clear only if specific messages are present
+        }
+        displayLogMessage(`Successfully loaded ${newOrders.length} ${tab} orders.`, "success");
+    }
+}
+
+// --- In your DOMContentLoaded listener (approx. line 825) ---
+document.addEventListener('DOMContentLoaded', () => {
+    // ... other initializations ...
+
+    // Set up intervals after initial load sequence
+    setInterval(getBalances, 10000);
+    setInterval(cargarPrecioEnVivo, 2000); // Changed to 2 seconds, 200ms is very frequent
+    setInterval(checkConnection, 10000);
+    setInterval(() => fetchOrders(currentTab), 15000); // This will periodically refresh
+
+    // Initial load: Ensure setActiveTab is called ONCE to kick off the order fetching
+    if (document.getElementById('tab-opened')) {
+        setActiveTab('tab-opened');
+    }
+
+    // ... rest of your event listeners ...
+});
 
 // --- Otras Funciones del Bot ---
 
