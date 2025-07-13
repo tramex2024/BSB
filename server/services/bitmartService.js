@@ -222,7 +222,6 @@ const getTicker = async (symbol) => {
             // No authCredentials needed for public endpoints
         });
 
-        // --- INICIO DE CORRECCIÓN ---
         // BitMart's public ticker endpoint returns an array of tickers nested inside a 'data' object.
         // We need to access responseData.data.tickers to get the array.
         if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.tickers) && responseData.data.tickers.length > 0) {
@@ -241,7 +240,6 @@ const getTicker = async (symbol) => {
             console.error(`❌ Error fetching ticker for ${symbol}: ${errorMessage}. Raw response: ${JSON.stringify(responseData)}`);
             throw new Error(`Error fetching ticker for ${symbol}: ${errorMessage}`);
         }
-        // --- FIN DE CORRECCIÓN ---
 
     } catch (error) {
         // This catch block handles network errors or errors thrown by makeRequest
@@ -252,15 +250,31 @@ const getTicker = async (symbol) => {
 
 // Exportar las funciones de servicio de BitMart
 module.exports = {
+    // --- INICIO DE CORRECCIÓN PARA getBalance ---
     getBalance: async (authCredentials) => {
         console.log('\n--- Obteniendo Balance de la Cuenta ---');
-        return makeRequest({
-            method: 'GET',
-            path: '/account/v1/wallet',
-            authCredentials,
-            params: { recvWindow: 10000 }
-        });
+        try {
+            const responseData = await makeRequest({
+                method: 'GET',
+                path: '/account/v1/wallet',
+                authCredentials,
+                params: { recvWindow: 10000 }
+            });
+
+            if (responseData && responseData.code === 1000 && responseData.data && Array.isArray(responseData.data.wallet)) {
+                console.log(`✅ Balance de la cuenta obtenido. Cantidad de activos: ${responseData.data.wallet.length}`);
+                return responseData.data.wallet; // <--- Return only the 'wallet' array
+            } else {
+                const errorMessage = responseData.message || 'No wallet data or unexpected response structure.';
+                console.error(`❌ Error fetching balance: ${errorMessage}. Raw response: ${JSON.stringify(responseData)}`);
+                throw new Error(`Error fetching balance: ${errorMessage}`);
+            }
+        } catch (error) {
+            console.error('Error in getBalance:', error.message);
+            throw error;
+        }
     },
+    // --- FIN DE CORRECCIÓN PARA getBalance ---
 
     getOpenOrders: async (authCredentials, symbol) => {
         console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol} ---`);
