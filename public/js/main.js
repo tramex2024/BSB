@@ -718,9 +718,9 @@ async function toggleBotState() {
             if (startBtn) startBtn.textContent = isRunning ? 'STOP' : 'START';
             if (resetBtn) resetBtn.disabled = isRunning;
             if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = isRunning;
-        } else { // <-- MISSING '}' WAS HERE
+        } else { // <-- ¡Aquí es donde faltaba la llave de cierre!
             throw new Error(response.message || 'Failed to toggle bot state.');
-        }
+        } // <-- ESTA LLAVE DE CIERRE FALTABA AQUÍ
     } catch (error) {
         console.error('Error toggling bot state:', error);
         alert(`Error: ${error.message}`);
