@@ -35,7 +35,7 @@ const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 const botStateDisplay = document.getElementById('bot-state');
 const cycleDisplay = document.getElementById('cycle');
 const profitDisplay = document.getElementById('profit');
-const cycleProfitDisplay = document = document.getElementById('cycleprofit');
+const cycleProfitDisplay = document.getElementById('cycleprofit');
 const startBtn = document.getElementById('start-btn');
 const resetBtn = document.getElementById('reset-btn');
 
@@ -347,8 +347,6 @@ async function getBalances() {
     }
     try {
         const walletData = await fetchFromBackend('/api/user/bitmart/balance');
-        // Your backend returns an array directly, e.g., [{"currency": "USDT", ...}]
-        // No need for walletData.wallet as it was for a different API structure.
         if (walletData && Array.isArray(walletData)) {
             const usdt = walletData.find(w => w.currency === "USDT");
             const balance = usdt ? parseFloat(usdt.available).toFixed(2) : '0.00';
@@ -380,19 +378,18 @@ async function fetchOpenOrdersData() {
     }
     try {
         const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-        // *** Your current code correctly accesses response.orders.orders, which is great! ***
-        // Ensure response is valid and contains the nested orders array
+        // *** CAMBIO CLAVE AQUÍ: Accede a response.orders.orders ***
         if (!response || !response.orders || !Array.isArray(response.orders.orders)) {
             console.warn("fetchOpenOrdersData: Backend response was null/undefined or missing 'orders.orders'.");
             displayLogMessage("No open orders found or unexpected response.", "info");
-            return []; // Return an empty array to prevent further errors
+            return [];
         }
         const openOrders = response.orders.orders; // Accede al array anidado
         return openOrders;
     } catch (error) {
         console.error("Error fetching open orders data:", error);
         displayLogMessage(`Error fetching open orders: ${error.message}`, "error");
-        return []; // Always return an array on error
+        return [];
     }
 }
 
@@ -414,17 +411,14 @@ async function fetchHistoryOrdersData(tab) {
             limit: 200 // BitMart V4 historical orders default limit is 200
         }).toString();
 
-        const response = await fetchFromBackend(`/api/user/bitmart/history-orders?${queryParams}`);
-        // Your backend returns an array directly, e.g., [{"orderId": "...", "state": "filled"}, ...]
-        // The logs indicated /account/v1/wallet (GET) and /spot/v4/query/open-orders (POST) for balance and open orders.
-        // For history, it's /spot/v4/query/history-orders. The previous assumption of `response.orders` might be incorrect for `history-orders`.
-        // Let's assume the /api/user/history-orders endpoint directly returns an array of orders.
-        if (!response || !Array.isArray(response)) {
-            console.warn("fetchHistoryOrdersData: Backend response was null/undefined or not an array for history.");
+        const response = await fetchFromBackend(`/api/user/history-orders?${queryParams}`);
+        // Ensure response is valid before accessing .orders
+        if (!response || !response.orders) {
+            console.warn("fetchHistoryOrdersData: Backend response was null/undefined or missing 'orders'.");
             displayLogMessage("No historical orders found or unexpected response.", "info");
             return [];
         }
-        return response || []; // Assuming the backend directly returns an array
+        return response.orders || [];
     } catch (error) {
         console.error("Error fetching historical orders data:", error);
         displayLogMessage(`Error fetching historical orders: ${error.message}`, "error");
@@ -457,7 +451,6 @@ async function fetchOrders(tab) {
             // Ensure fetchedOrders is an array before assigning
             orders = Array.isArray(fetchedOrders) ? fetchedOrders : [];
         } else {
-            // For historical orders, we expect the backend to return an array directly
             const historyOrdersRaw = await fetchHistoryOrdersData(tab);
             // Ensure historyOrdersRaw is an array before processing
             const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
@@ -547,9 +540,10 @@ function calcularORQ(purchase, increment, balance) {
         // Calcular el porcentaje de incremento para esta orden
         // La fórmula es: porcentaje base * (número de orden actual - 1)
         // Ejemplo: 100% para la 2da orden (n=1), 200% para la 3ra (n=2), etc.
+        const effectiveIncrementPercentage = increment * n;
         // Tu ejemplo usa el índice de la orden -1 para el multiplicador: 2da orden (índice 1) usa 100% * 1; 3ra orden (índice 2) usa 100% * 2.
         // Por eso, 'n' es el multiplicador para 'increment'.
-        const effectiveIncrementPercentage = increment * n;
+
         const incrementAmount = currentOrderSize * (effectiveIncrementPercentage / 100);
         const nextOrderSize = currentOrderSize + incrementAmount;
 
@@ -793,8 +787,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBotConfigAndState();
 
     // Inicializar los cálculos y el estado de conexión del bot (si los elementos existen)
-    // These calls should ideally be conditional on isLoggedIn after initial load,
-    // but the functions themselves already handle the `isLoggedIn` check.
     if (document.getElementById('balance')) getBalances();
     if (document.getElementById('price')) cargarPrecioEnVivo();
     if (document.getElementById('status-dot')) checkConnection();
@@ -894,7 +886,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         displayLogMessage('Login successful!', 'success');
                         setTimeout(async () => {
                             toggleAuthModal(false);
-                            // IMPORTANT: Re-fetch all data after successful login
                             await loadBotConfigAndState();
                             await getBalances();
                             await fetchOrders(currentTab);
@@ -964,9 +955,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     connectionIndicator.classList.add('bg-green-500');
                     connectionText.textContent = 'Connected';
                     secretKeyInput.value = ''; // CORRECCIÓN: Limpiar la clave secreta después de un guardado exitoso
-                    // IMPORTANT: Re-fetch data after successful API key save
-                    await getBalances();
-                    await fetchOrders(currentTab);
+                    getBalances();
+                    fetchOrders(currentTab);
                     displayLogMessage('BitMart API keys validated and saved. Connected!', 'success');
                 } else {
                     const errorMessage = response.message || 'Failed to validate or save API keys.';
