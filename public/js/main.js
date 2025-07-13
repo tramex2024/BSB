@@ -346,11 +346,12 @@ async function getBalances() {
         return;
     }
     try {
-        const walletData = await fetchFromBackend('/api/user/bitmart/balance');
-        // Your backend returns an array directly, e.g., [{"currency": "USDT", ...}]
-        // No need for walletData.wallet as it was for a different API structure.
-        if (walletData && Array.isArray(walletData)) {
-            const usdt = walletData.find(w => w.currency === "USDT");
+        const response = await fetchFromBackend('/api/user/bitmart/balance'); // Renamed to 'response' for clarity
+
+        // --- Start of essential change ---
+        if (response && response.data && Array.isArray(response.data.wallet)) {
+            // Access the 'wallet' array nested inside 'data'
+            const usdt = response.data.wallet.find(w => w.currency === "USDT");
             const balance = usdt ? parseFloat(usdt.available).toFixed(2) : '0.00';
             if (document.getElementById('balance')) {
                 document.getElementById('balance').textContent = balance;
@@ -361,9 +362,11 @@ async function getBalances() {
             if (document.getElementById('balance')) {
                 document.getElementById('balance').textContent = 'Error fetching balances.';
             }
-            console.error('getBalances: Respuesta inesperada del backend:', walletData);
-            displayLogMessage('Error fetching balances: Unexpected response.', 'error');
+            console.error('getBalances: Unexpected backend response structure:', response);
+            displayLogMessage('Error fetching balances: Unexpected data structure.', 'error');
         }
+        // --- End of essential change ---
+
     } catch (error) {
         console.error('Error al cargar balances:', error);
         if (document.getElementById('balance')) {
