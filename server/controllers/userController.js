@@ -1,4 +1,4 @@
-// backend/controllers/userController.js
+// server/controllers/userController.js
 
 const User = require('../models/User'); // Asegúrate de que la ruta a tu modelo User sea correcta
 const BotState = require('../models/BotState'); // ¡IMPORTANTE: Importar el modelo BotState!
@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken'); // Para verificar el token JWT
 
 // IMPORTANTE: Unificar la lógica de encriptación
 // Importar directamente las funciones de encriptación/desencriptación SEGURAS desde utils
-const { encrypt, decrypt } = require('../utils/encryption'); 
+const { encrypt } = require('../utils/encryption'); // Solo necesitamos encrypt aquí para guardar las claves
 
 const bitmartService = require('../services/bitmartService'); // Tu servicio para interactuar con BitMart
 
@@ -55,8 +55,6 @@ exports.saveBitmartApiKeys = async (req, res) => {
         // Usar las funciones de encriptación importadas de utils/encryption.js
         user.bitmartApiKey = encrypt(apiKey);
         user.bitmartSecretKeyEncrypted = encrypt(secretKey); 
-        // El memo puede ser una cadena vacía si no se proporciona, y se encripta como tal.
-        // La lógica en bitmartService.js ya maneja memo === '' como "no memo".
         user.bitmartApiMemo = encrypt(memo || ''); 
 
         user.bitmartApiValidated = false;
@@ -76,28 +74,11 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
 // --- Controlador para obtener el balance de BitMart ---
 exports.getBitmartBalance = async (req, res) => {
-    const userId = req.user.id;
+    // Usar las credenciales desencriptadas de req.bitmartCreds (poblado por bitmartAuthMiddleware)
+    const authCredentials = req.bitmartCreds; 
 
     try {
-        const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-            console.warn(`[BALANCE] User ${userId} tried to fetch balance but has no API keys.`);
-            return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
-        }
-
-        // Estas ya no necesitan desencriptarse aquí, se pasan ENCRIPTADAS a bitmartService.makeRequest
-        // y este se encarga de desencriptarlas internamente usando utils/encryption.js
-        const authCredentials = {
-            apiKey: user.bitmartApiKey, // Pasar encriptado
-            secretKey: user.bitmartSecretKeyEncrypted, // Pasar encriptado
-            apiMemo: user.bitmartApiMemo // Pasar encriptado (puede ser undefined o null si el usuario nunca guardó uno)
-        };
-
-        // --- LOS NUEVOS LOGS DE DESENCRIPTACIÓN AHORA ESTÁN EN bitmartService.js ---
-        // Aquí no se desencripta nada, solo se prepara el objeto authCredentials con las claves ENCRIPTADAS
-        // para que makeRequest las desencripte y loguee.
-        
-        const balances = await bitmartService.getBalance(authCredentials);
+        const balances = await bitmartService.getBalance(authCredentials); // Pasar credenciales desencriptadas
         res.status(200).json(balances);
 
     } catch (error) {
@@ -112,24 +93,13 @@ exports.getBitmartBalance = async (req, res) => {
 
 // --- Controlador para obtener órdenes abiertas de BitMart ---
 exports.getBitmartOpenOrders = async (req, res) => {
-    const userId = req.user.id;
     const { symbol } = req.query;
 
+    // Usar las credenciales desencriptadas de req.bitmartCreds
+    const authCredentials = req.bitmartCreds; 
+
     try {
-        const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) { 
-            console.warn(`[OPEN ORDERS] User ${userId} tried to fetch open orders but has no API keys.`);
-            return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
-        }
-
-        // Pasar las credenciales ENCRIPTADAS
-        const authCredentials = {
-            apiKey: user.bitmartApiKey,
-            secretKey: user.bitmartSecretKeyEncrypted,
-            apiMemo: user.bitmartApiMemo
-        };
-
-        const openOrders = await bitmartService.getOpenOrders(authCredentials, symbol);
+        const openOrders = await bitmartService.getOpenOrders(authCredentials, symbol); 
         res.status(200).json({ success: true, orders: openOrders }); 
 
     } catch (error) {
@@ -143,22 +113,12 @@ exports.getBitmartOpenOrders = async (req, res) => {
 
 // --- Controlador para obtener el historial de órdenes (Ajustado para el frontend) ---
 exports.getHistoryOrders = async (req, res) => { 
-    const userId = req.user.id;
     const { symbol, orderMode, startTime, endTime, limit } = req.query;
 
+    // Usar las credenciales desencriptadas de req.bitmartCreds
+    const authCredentials = req.bitmartCreds; 
+
     try {
-        const user = await User.findById(userId);
-        if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-            return res.status(400).json({ message: 'BitMart API keys not configured for this user.' });
-        }
-
-        // Pasar las credenciales ENCRIPTADAS
-        const authCredentials = {
-            apiKey: user.bitmartApiKey,
-            secretKey: user.bitmartSecretKeyEncrypted,
-            apiMemo: user.bitmartApiMemo
-        };
-
         const historyParams = {
             symbol,
             orderMode,
@@ -264,9 +224,3 @@ exports.toggleBotState = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error internal server when trying to change bot state.' });
     }
 };
-
-// --- Exportaciones Adicionales ---
-// Ya no es necesario exportar encrypt y decrypt desde aquí, 
-// ya que deben ser importadas directamente desde utils/encryption por otros módulos.
-// module.exports.encrypt = encrypt;
-// module.exports.decrypt = decrypt;
