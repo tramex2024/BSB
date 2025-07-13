@@ -224,10 +224,10 @@ module.exports = {
                 body: { symbol }
             });
 
-            // Assuming BitMart V4 open orders also return within a 'data' object
-            if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
-                console.log(`✅ Órdenes abiertas V4 obtenidas. Cantidad: ${responseData.data.orders.length}`);
-                return responseData.data.orders; // <--- EXTRACT THE ARRAY HERE
+            // CORRECTION: The array of orders is directly in responseData.data
+            if (responseData && Array.isArray(responseData.data)) { // <-- CHANGE THIS LINE
+                console.log(`✅ Órdenes abiertas V4 obtenidas. Cantidad: ${responseData.data.length}`);
+                return responseData.data; // <-- RETURN responseData.data directly
             } else {
                 console.warn("⚠️ BitMart API did not return an array of orders for open orders or unexpected structure.");
                 console.warn("Raw response data:", responseData);
@@ -245,22 +245,30 @@ module.exports = {
             const responseData = await makeRequest({
                 method: 'POST', // V4 usa POST para historial de órdenes
                 path: '/spot/v4/query/history-orders',
-                authCredentials, // Ahora contiene las claves desencriptadas
+                authCredentials,
                 body: historyParams // Pasa todos los parámetros relevantes como cuerpo
             });
 
-            // Check if responseData exists and contains a 'data' property, and if 'data.orders' is an array
-            if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
-                console.log(`✅ Historial de órdenes V4 obtenido. Cantidad: ${responseData.data.orders.length}`);
-                return responseData.data.orders; // <--- EXTRACT THE ARRAY HERE
-            } else {
+            // Based on your history orders structure, this part needs to be confirmed too.
+            // If it's also directly in `data` like open orders, then the same correction applies.
+            // If history returns it in `data.orders`, then the original code was correct for history.
+            // Let's assume for now it's similar to open orders based on this new log:
+            if (responseData && Array.isArray(responseData.data)) { // <-- Potentially change this if not already done
+                console.log(`✅ Historial de órdenes V4 obtenido. Cantidad: ${responseData.data.length}`);
+                return responseData.data; // <-- Return responseData.data directly
+            } else if (responseData && responseData.data && Array.isArray(responseData.data.orders)) {
+                // Keep this fallback in case history orders are still nested under 'orders'
+                console.log(`✅ Historial de órdenes V4 obtenido (anidado). Cantidad: ${responseData.data.orders.length}`);
+                return responseData.data.orders;
+            }
+            else {
                 console.warn("⚠️ BitMart API did not return an array of orders for history or unexpected structure.");
                 console.warn("Raw response data:", responseData);
                 return []; // Return an empty array if the expected data is not found
             }
         } catch (error) {
             console.error('Error in getHistoryOrdersV4:', error.message);
-            throw error; // Re-throw to be handled by the controller
+            throw error;
         }
     }
 };
