@@ -51,7 +51,6 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     return hmac.toString(CryptoJS.enc.Hex);
 }
 
-// FUNCION makeRequest CORREGIDA (solo la línea de generateSign)
 async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
     const timestamp = timestampOverride || Date.now().toString();
     const url = `${BASE_URL}${path}`;
@@ -66,7 +65,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
 
-    const apiMemoForRequestAndSign = apiMemo;
+    const apiMemoForRequestAndSign = apiMemo; // This is the memo passed to generateSign and X-BM-MEMO header
 
     const dataForRequest = { ...paramsOrData }; // Make a shallow copy to avoid modifying original paramsOrData
 
@@ -91,7 +90,14 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
         }
 
-        // FIX CLAVE: Se pasan 'method' y 'path' a generateSign
+        // NUEVOS LOGS: Imprime los valores exactos de las credenciales de la API antes de la firma
+        console.log(`[API_CRED_DEBUG] API Key (used for request): '${apiKey ? apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5) : 'N/A'}' (Length: ${apiKey ? apiKey.length : 0})`);
+        console.log(`[API_CRED_DEBUG] Secret Key (used for signing): '${secretKey ? secretKey.substring(0, 5) + '...' + secretKey.substring(secretKey.length - 5) : 'N/A'}' (Length: ${secretKey ? secretKey.length : 0})`);
+        console.log(`[API_CRED_DEBUG] API Memo (used for request & signing): '${apiMemoForRequestAndSign}' (Type: ${typeof apiMemoForRequestAndSign}, Length: ${apiMemoForRequestAndSign ? apiMemoForRequestAndSign.length : 0})`);
+        // Log the exact characters of the memo for inspection
+        console.log(`[API_CRED_DEBUG] API Memo (raw characters): [${apiMemoForRequestAndSign.split('').map(c => `U+${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join(', ')}]`);
+
+
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
         requestConfig.headers['X-BM-KEY'] = apiKey;
