@@ -64,10 +64,13 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     };
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
+    const apiMemoForRequestAndSign = apiMemo;
 
-    const apiMemoForRequestAndSign = apiMemo; // This is the memo passed to generateSign and X-BM-MEMO header
+    const dataForRequest = { ...paramsOrData };
 
-    const dataForRequest = { ...paramsOrData }; // Make a shallow copy to avoid modifying original paramsOrData
+    // Determine if it's a V4 API endpoint based on the path
+    // BitMart V4 API paths usually contain '/v4/'
+    const isV4Endpoint = path.includes('/v4/');
 
     if (isPrivate) {
         requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
@@ -80,8 +83,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
-        requestConfig.data = dataForRequest; // This is the actual data sent in the request body
-        bodyForSign = JSON.stringify(sortObjectKeys(dataForRequest)); // CRÍTICO: Asegura que el body para la firma tenga las claves ordenadas
+        requestConfig.data = dataForRequest;
+        bodyForSign = JSON.stringify(sortObjectKeys(dataForRequest));
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -90,13 +93,11 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
         }
 
-        // NUEVOS LOGS: Imprime los valores exactos de las credenciales de la API antes de la firma
         console.log(`[API_CRED_DEBUG] API Key (used for request): '${apiKey ? apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5) : 'N/A'}' (Length: ${apiKey ? apiKey.length : 0})`);
         console.log(`[API_CRED_DEBUG] Secret Key (used for signing): '${secretKey ? secretKey.substring(0, 5) + '...' + secretKey.substring(secretKey.length - 5) : 'N/A'}' (Length: ${secretKey ? secretKey.length : 0})`);
         console.log(`[API_CRED_DEBUG] API Memo (used for request & signing): '${apiMemoForRequestAndSign}' (Type: ${typeof apiMemoForRequestAndSign}, Length: ${apiMemoForRequestAndSign ? apiMemoForRequestAndSign.length : 0})`);
-        // Log the exact characters of the memo for inspection
         console.log(`[API_CRED_DEBUG] API Memo (raw characters): [${apiMemoForRequestAndSign.split('').map(c => `U+${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join(', ')}]`);
-
+        console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`); // New log for clarity
 
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
@@ -104,9 +105,11 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        if (apiMemoForRequestAndSign) {
+        // **FIX CLAVE:** Conditionally include X-BM-MEMO based on API version
+        if (apiMemoForRequestAndSign && !isV4Endpoint) { // Only include if memo exists AND it's NOT a V4 endpoint
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
+            // For V4 endpoints, or if memo is empty, ensure the header is NOT present.
             delete requestConfig.headers['X-BM-MEMO'];
         }
     }
@@ -115,7 +118,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`URL: ${url}`);
     if (method === 'POST') {
         console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
-        console.log('Body para Firma (JSON stringificado, ordenado):', bodyForSign); // Indicate it's sorted
+        console.log('Body para Firma (JSON stringificado, ordenado):', bodyForSign);
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
     }
