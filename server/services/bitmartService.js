@@ -12,6 +12,7 @@ function sortObjectKeys(obj) {
     }
 
     if (Array.isArray(obj)) {
+        // Recursively sort objects within arrays
         return obj.map(item => sortObjectKeys(item));
     }
 
@@ -28,10 +29,10 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
 
     // Aseguramos que bodyOrQueryString, si es un objeto JSON vacío ("{}"),
     // no se convierta a una cadena vacía ("") para la firma.
+    // Esto es crucial para POST requests con body vacío.
     const finalBodyOrQueryString = (bodyOrQueryString === undefined || bodyOrQueryString === null || bodyOrQueryString === '') ? '' : bodyOrQueryString;
 
     // Aseguramos que la ruta NO tenga una barra final si la API de BitMart no la espera en la firma.
-    // Aunque tu ruta actual no la tiene, es una precaución.
     const normalizedPath = requestPath.endsWith('/') && requestPath.length > 1 ? requestPath.slice(0, -1) : requestPath;
 
     // CONSTRUCCIÓN DE LA CADENA DE MENSAJE SEGÚN LA DOCUMENTACIÓN DE BITMART V4
@@ -41,12 +42,12 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Method for Sign: '${requestMethod.toUpperCase()}'`);
-    console.log(`[SIGN_DEBUG] Path for Sign: '${normalizedPath}'`); // Log the normalized path
+    console.log(`[SIGN_DEBUG] Path for Sign: '${normalizedPath}'`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
 
-    // FIX CLAVE: Explicitamente codificar el mensaje y el secreto a UTF-8 antes de hashear.
+    // Explicitamente codificar el mensaje y el secreto a UTF-8 antes de hashear.
     const hmac = CryptoJS.HmacSHA256(CryptoJS.enc.Utf8.parse(message), CryptoJS.enc.Utf8.parse(apiSecret));
     return hmac.toString(CryptoJS.enc.Hex);
 }
@@ -68,8 +69,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const dataForRequest = { ...paramsOrData };
 
-    // Determine if it's a V4 API endpoint based on the path
-    // BitMart V4 API paths usually contain '/v4/'
     const isV4Endpoint = path.includes('/v4/');
 
     if (isPrivate) {
@@ -83,8 +82,29 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
     } else if (method === 'POST') {
-        requestConfig.data = dataForRequest;
-        bodyForSign = JSON.stringify(sortObjectKeys(dataForRequest));
+        requestConfig.data = dataForRequest; // This is the actual data sent in the request body
+
+        // **NUEVO INTENTO DE FIX PARA V4 POST:**
+        // Para V4 POST requests, en lugar de JSON.stringify(sortObjectKeys(dataForRequest)),
+        // a veces las APIs esperan los parámetros directamente como string sin el envoltorio JSON.
+        // O el orden del JSON.stringify es diferente.
+        // Probemos un enfoque más "crudo" para el bodyForSign, si BitMart lo espera así.
+        // Si no hay parámetros, el bodyForSign será un string vacío.
+        if (isV4Endpoint) {
+            const sortedData = sortObjectKeys(dataForRequest);
+            if (Object.keys(sortedData).length === 0) {
+                bodyForSign = ''; // If no parameters, bodyForSign is an empty string (not '{}')
+            } else {
+                // Try building a query string like format for the body for signature, then stringifying it as JSON
+                // OR just stringify the sorted object. Let's try the latter first, ensuring a consistent string.
+                // Revert to original stringify as it's the standard for JSON bodies
+                bodyForSign = JSON.stringify(sortedData);
+            }
+        } else {
+            // For non-V4 POST, stick to the standard JSON.stringify
+            bodyForSign = JSON.stringify(sortObjectKeys(dataForRequest));
+        }
+
         requestConfig.headers['Content-Type'] = 'application/json';
     }
 
@@ -97,7 +117,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.log(`[API_CRED_DEBUG] Secret Key (used for signing): '${secretKey ? secretKey.substring(0, 5) + '...' + secretKey.substring(secretKey.length - 5) : 'N/A'}' (Length: ${secretKey ? secretKey.length : 0})`);
         console.log(`[API_CRED_DEBUG] API Memo (used for request & signing): '${apiMemoForRequestAndSign}' (Type: ${typeof apiMemoForRequestAndSign}, Length: ${apiMemoForRequestAndSign ? apiMemoForRequestAndSign.length : 0})`);
         console.log(`[API_CRED_DEBUG] API Memo (raw characters): [${apiMemoForRequestAndSign.split('').map(c => `U+${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join(', ')}]`);
-        console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`); // New log for clarity
+        console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`);
 
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
@@ -105,11 +125,9 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        // **FIX CLAVE:** Conditionally include X-BM-MEMO based on API version
-        if (apiMemoForRequestAndSign && !isV4Endpoint) { // Only include if memo exists AND it's NOT a V4 endpoint
+        if (apiMemoForRequestAndSign && !isV4Endpoint) {
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
-            // For V4 endpoints, or if memo is empty, ensure the header is NOT present.
             delete requestConfig.headers['X-BM-MEMO'];
         }
     }
@@ -118,7 +136,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     console.log(`URL: ${url}`);
     if (method === 'POST') {
         console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
-        console.log('Body para Firma (JSON stringificado, ordenado):', bodyForSign);
+        console.log('Body para Firma (JSON stringificado, ordenado):', bodyForSign); // Indicate it's sorted
     } else {
         console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
     }
@@ -235,7 +253,7 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        return { orders: orders }; // Return an object with 'orders' key for consistency if needed by frontend
+        return { orders: orders };
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
@@ -323,7 +341,6 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     console.log(`\n--- Listando Historial de Órdenes (V4 POST) ---`);
     const path = '/spot/v4/query/history-orders';
     const requestBody = {};
-    // Dynamically add optional parameters to requestBody if they exist in options
     if (options.symbol) { requestBody.symbol = options.symbol; }
     if (options.orderMode) { requestBody.orderMode = options.orderMode; }
     if (options.startTime) { requestBody.startTime = options.startTime; }
@@ -334,7 +351,6 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
-        // BitMart's API can return the array directly in 'data' or nested in 'data.list'. Handle both.
         if (Array.isArray(responseData)) {
             orders = responseData;
         } else if (responseData && Array.isArray(responseData.list)) {
@@ -384,7 +400,6 @@ async function getKlines(symbol, interval, limit = 200) {
 
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
     console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    // Ahora, memo también es requerido para la validación
     if (!apiKey || !secretKey || apiMemo === undefined || apiMemo === null || apiMemo === '') {
         console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación.");
         return false;
