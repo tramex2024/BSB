@@ -23,24 +23,30 @@ function sortObjectKeys(obj) {
     return sortedObj;
 }
 
-// FUNCION generateSign CORREGIDA
 function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
 
+    // Aseguramos que bodyOrQueryString, si es un objeto JSON vacío ("{}"),
+    // no se convierta a una cadena vacía ("") para la firma.
     const finalBodyOrQueryString = (bodyOrQueryString === undefined || bodyOrQueryString === null || bodyOrQueryString === '') ? '' : bodyOrQueryString;
 
-    const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + requestPath + '#' + finalBodyOrQueryString;
+    // Aseguramos que la ruta NO tenga una barra final si la API de BitMart no la espera en la firma.
+    // Aunque tu ruta actual no la tiene, es una precaución.
+    const normalizedPath = requestPath.endsWith('/') && requestPath.length > 1 ? requestPath.slice(0, -1) : requestPath;
+
+    // CONSTRUCCIÓN DE LA CADENA DE MENSAJE SEGÚN LA DOCUMENTACIÓN DE BITMART V4
+    // Formato esperado: timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
+    const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Method for Sign: '${requestMethod.toUpperCase()}'`);
-    console.log(`[SIGN_DEBUG] Path for Sign: '${requestPath}'`);
+    console.log(`[SIGN_DEBUG] Path for Sign: '${normalizedPath}'`); // Log the normalized path
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
 
-    // --- ESTA ES LA LÍNEA CLAVE DEL CAMBIO ---
-    // Explicitly encode the message and secret to UTF-8 before hashing
+    // FIX CLAVE: Explicitamente codificar el mensaje y el secreto a UTF-8 antes de hashear.
     const hmac = CryptoJS.HmacSHA256(CryptoJS.enc.Utf8.parse(message), CryptoJS.enc.Utf8.parse(apiSecret));
     return hmac.toString(CryptoJS.enc.Hex);
 }
