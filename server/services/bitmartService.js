@@ -27,12 +27,8 @@ function sortObjectKeys(obj) {
 function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
 
-    // FIX CLAVE: Aseguramos que bodyOrQueryString, si es un objeto JSON vacío ("{}"),
-    // no se convierta a una cadena vacía ("") para la firma.
     const finalBodyOrQueryString = (bodyOrQueryString === undefined || bodyOrQueryString === null || bodyOrQueryString === '') ? '' : bodyOrQueryString;
 
-    // CONSTRUCCIÓN DE LA CADENA DE MENSAJE SEGÚN LA DOCUMENTACIÓN DE BITMART V4
-    // Formato esperado: timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
     const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + requestPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
@@ -43,7 +39,10 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
     console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
 
-    return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
+    // --- ESTA ES LA LÍNEA CLAVE DEL CAMBIO ---
+    // Explicitly encode the message and secret to UTF-8 before hashing
+    const hmac = CryptoJS.HmacSHA256(CryptoJS.enc.Utf8.parse(message), CryptoJS.enc.Utf8.parse(apiSecret));
+    return hmac.toString(CryptoJS.enc.Hex);
 }
 
 // FUNCION makeRequest CORREGIDA (solo la línea de generateSign)
