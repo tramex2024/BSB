@@ -107,9 +107,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     if (method === 'GET') {
         // For GET, params go into the query string and are part of the signature
         if (isPrivate) {
-            // recvWindow might not be needed for V1 /account/v1/wallet if it's handled automatically
-            // by BitMart or not strictly required for the signature.
-            // However, including it here matches current behavior.
             dataForRequest.recvWindow = 10000; 
         }
         requestConfig.params = sortObjectKeys(dataForRequest);
@@ -158,12 +155,13 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        // Conditionally include X-BM-MEMO based on API version.
-        // BitMart V4 API does NOT use X-BM-MEMO in headers for signature validation.
-        if (apiMemoForRequestAndSign && !isV4Endpoint) {
+        // *** LA ÚNICA LÍNEA MODIFICADA A CONTINUACIÓN ***
+        // Siempre incluir X-BM-MEMO si el memo está definido (no es una cadena vacía)
+        // BitMart parece requerir el X-BM-MEMO en la cabecera para V4 si la clave tiene un memo.
+        if (apiMemoForRequestAndSign !== '') { // Verifica si el memo es una cadena no vacía
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
         } else {
-            // For V4 endpoints, or if memo is empty, ensure the header is NOT present.
+            // Si el memo es una cadena vacía, asegúrate de que el encabezado no esté presente.
             delete requestConfig.headers['X-BM-MEMO'];
         }
     }
@@ -351,7 +349,7 @@ async function getOpenOrders(authCredentials, symbol) {
         } else if (responseData && Array.isArray(responseData.list)) {
             orders = responseData.list;
         } else {
-            console.warn('ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
+            console.warn(ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
         }
         if (orders.length > 0) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
