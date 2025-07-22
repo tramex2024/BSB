@@ -37,9 +37,10 @@ function sortObjectKeys(obj) {
  * @param {string} requestPath - The API endpoint path.
  * @param {string} bodyOrQueryString - Stringified request body (for POST) or query string (for GET).
  * @param {string} apiSecret - The API secret key.
+ * @param {boolean} isV4Endpoint - Indicates if the current endpoint is a V4 endpoint.
  * @returns {string} The generated HMAC SHA256 signature in hexadecimal format.
  */
-function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret, isV4Endpoint = false) { // Agrega isV4Endpoint aquí
+function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret, isV4Endpoint) {
     // Ensure memo is a string. If null/undefined, treat as empty string for hashing.
     const memoForHash = (memo === null || memo === undefined || typeof memo !== 'string') ? '' : memo;
 
@@ -50,20 +51,11 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     // Normalize path to remove trailing slash if present, for consistency with signature rules.
     const normalizedPath = requestPath.endsWith('/') && requestPath.length > 1 ? requestPath.slice(0, -1) : requestPath;
 
-    // Construct the message string according to BitMart V4 signature rules:
-    // timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
-    // El memo solo se incluye en la firma si es un endpoint V4.
-
-let message;
-if (isV4Endpoint) {
-    // Para V4, si hay memo, es 'timestamp#memo#...'. Si no hay memo, es 'timestamp##...'
-    const memoSegment = (memoForHash !== '') ? memoForHash : ''; // No añadir '#' si memo está vacío
-    message = timestamp + '#' + memoSegment + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
-} else {
-    // Para V1/V2, el memo no se incluye en la cadena de firma, incluso si la clave lo tiene.
-    // BitMart automáticamente lo maneja basado en el X-BM-MEMO header (o su ausencia).
-    message = timestamp + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
-}
+    let message;
+    // La cadena de firma SIEMPRE incluye el memo si la API Key lo tiene configurado,
+    // independientemente de la versión del endpoint (V1, V2, V4).
+    // La diferencia entre versiones está en si se envía el header X-BM-MEMO.
+    message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo}, Type: ${typeof memo})`);
@@ -117,7 +109,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     if (method === 'GET') {
         // For GET, params go into the query string and are part of the signature
         if (isPrivate) {
-            dataForRequest.recvWindow = 10000; 
+            dataForRequest.recvWindow = 10000;
         }
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
@@ -125,7 +117,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         // For POST, data goes into the request body
         requestConfig.data = dataForRequest;
 
-        // Special handling for bodyForSign for V4 POST requests
+        // Special handling for bodyForSign for POST requests
         const sortedData = sortObjectKeys(dataForRequest);
         if (Object.keys(sortedData).length === 0) {
             // If the request body is an empty object, the string for signature should be '{}'
@@ -146,7 +138,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
              API Key presente: ${!!apiKey}, Secret Key presente: ${!!secretKey},
              API Memo es string: ${typeof apiMemoForRequestAndSign === 'string'}.
              Asegúrate de que el usuario haya configurado todas sus claves correctamente.`);
-            throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
+            throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el user haya configurado todas sus claves correctamente.");
         }
 
         // Logs to verify API credentials and memo just before signature generation
@@ -158,28 +150,25 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`);
 
         // Generate the signature
-        // Pasa isV4Endpoint a la función generateSign
-const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey, isV4Endpoint);
+        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey, isV4Endpoint);
 
         // Set required headers for authenticated requests
         requestConfig.headers['X-BM-KEY'] = apiKey;
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        // Determina si el X-BM-MEMO debe incluirse en los headers de la solicitud.
-// BitMart lo requiere para los endpoints V4, pero no para V1/V2.
-// Sin embargo, el memo SÍ debe estar en la cadena de firma si la clave lo tiene.
-if (isV4Endpoint) { // Solo si es un endpoint V4
-    if (apiMemoForRequestAndSign !== '') {
-        requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
-    } else {
-        // Si es V4 y no hay memo configurado, asegúrate de que no haya X-BM-MEMO
-        delete requestConfig.headers['X-BM-MEMO'];
-    }
-} else { // Para V1/V2 (donde isV4Endpoint es false)
-    // Asegúrate de que el encabezado X-BM-MEMO NO esté presente.
-    delete requestConfig.headers['X-BM-MEMO'];
-}
+        // *** NUEVOS CONSOLE.LOG PARA DEPURACIÓN ***
+        console.log(`[DEBUG_HEADER] Path: ${path}, isV4Endpoint: ${isV4Endpoint}, apiMemoForRequestAndSign: '${apiMemoForRequestAndSign}'`);
+
+        // El encabezado X-BM-MEMO solo se envía para endpoints V4 Y si el memo está definido.
+        // Para V1/V2, el encabezado X-BM-MEMO NO debe enviarse, incluso si la API Key tiene un memo.
+        if (isV4Endpoint && apiMemoForRequestAndSign !== '') {
+            requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
+            console.log('[DEBUG_HEADER] X-BM-MEMO ADDED (V4 and memo present).');
+        } else {
+            delete requestConfig.headers['X-BM-MEMO'];
+            console.log('[DEBUG_HEADER] X-BM-MEMO DELETED or not added (V1/V2 or no memo).');
+        }
     }
 
     // Comprehensive logs before sending the request
@@ -318,7 +307,7 @@ async function getKlines(symbol, interval, limit = 200) {
 // --- Private Endpoints ---
 
 /**
- * Gets the user's wallet balance. (V1 Endpoint - uses X-BM-MEMO)
+ * Gets the user's wallet balance.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @returns {Promise<object>} Wallet balance data.
  */
@@ -327,7 +316,7 @@ async function getBalance(authCredentials) {
     try {
         // Always fetch server time for private requests to ensure timestamp is fresh
         const serverTime = await getSystemTime();
-        // This is a V1 endpoint, so X-BM-MEMO header will be included automatically
+        // This is a V1 endpoint.
         const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data && response.data.wallet) {
             console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
@@ -344,7 +333,7 @@ async function getBalance(authCredentials) {
 }
 
 /**
- * Retrieves a list of current open orders for a user. (V4 Endpoint - does NOT use X-BM-MEMO in header)
+ * Retrieves a list of current open orders for a user.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @param {string} [symbol] - Optional: Filter by trading pair symbol (e.g., "BTC_USDT").
  * @returns {Promise<object>} An object containing an array of open orders.
@@ -356,7 +345,7 @@ async function getOpenOrders(authCredentials, symbol) {
     if (symbol) { requestBody.symbol = symbol; } // Add symbol if provided
     try {
         const serverTime = await getSystemTime();
-        // This is a V4 endpoint, so X-BM-MEMO header will be explicitly excluded
+        // This is a V4 endpoint.
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
@@ -407,7 +396,7 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
 }
 
 /**
- * Places a new order (limit or market). (V2 Endpoint - uses X-BM-MEMO)
+ * Places a new order (limit or market).
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @param {string} symbol - The trading pair symbol (e.g., "BTC_USDT").
  * @param {'buy'|'sell'} side - Order side.
@@ -440,7 +429,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
     try {
         const serverTime = await getSystemTime();
-        // This is a V2 endpoint, so X-BM-MEMO header will be included automatically
+        // This is a V2 endpoint.
         const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden colocada con éxito:`, response.data);
@@ -456,7 +445,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
 }
 
 /**
- * Cancels a specific open order. (V2 Endpoint - uses X-BM-MEMO)
+ * Cancels a specific open order.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @param {string} symbol - The trading pair symbol.
  * @param {string} order_id - The ID of the order to cancel.
@@ -467,7 +456,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
     const requestBody = { symbol: symbol, order_id: order_id };
     try {
         const serverTime = await getSystemTime();
-        // This is a V2 endpoint, so X-BM-MEMO header will be included automatically
+        // This is a V2 endpoint.
         const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden ${order_id} cancelada con éxito.`);
@@ -483,7 +472,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
 }
 
 /**
- * Retrieves a user's historical orders. (V4 Endpoint - does NOT use X-BM-MEMO in header)
+ * Retrieves a user's historical orders.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @param {object} options - Optional filters: symbol, orderMode, startTime, endTime, limit.
  * @returns {Promise<Array<object>>} An array of historical orders.
@@ -499,7 +488,7 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     if (options.limit) { requestBody.limit = options.limit; }
     try {
         const serverTime = await getSystemTime();
-        // This is a V4 endpoint, so X-BM-MEMO header will be explicitly excluded
+        // This is a V4 endpoint.
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
@@ -541,7 +530,7 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
     }
 
     try {
-        // Use getBalance (V1 endpoint) for validation as it's known to work
+        // Use getBalance (V1 endpoint) for validation
         await getBalance({ apiKey, secretKey, apiMemo: memoForValidation });
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
