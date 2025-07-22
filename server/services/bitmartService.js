@@ -54,7 +54,16 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     // timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
     // El memo solo se incluye en la firma si es un endpoint V4.
 
-const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
+let message;
+if (isV4Endpoint) {
+    // Para V4, si hay memo, es 'timestamp#memo#...'. Si no hay memo, es 'timestamp##...'
+    const memoSegment = (memoForHash !== '') ? memoForHash : ''; // No añadir '#' si memo está vacío
+    message = timestamp + '#' + memoSegment + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
+} else {
+    // Para V1/V2, el memo no se incluye en la cadena de firma, incluso si la clave lo tiene.
+    // BitMart automáticamente lo maneja basado en el X-BM-MEMO header (o su ausencia).
+    message = timestamp + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
+}
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo}, Type: ${typeof memo})`);
