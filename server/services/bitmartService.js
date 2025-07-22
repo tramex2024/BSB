@@ -54,9 +54,7 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     // timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
     // El memo solo se incluye en la firma si es un endpoint V4.
 
-// Para V2/V3, el memo no forma parte de la cadena de firma.
-const memoPart = isV4Endpoint ? `#${memoForHash}` : '';
-const message = timestamp + memoPart + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
+const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo}, Type: ${typeof memo})`);
@@ -100,8 +98,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const dataForRequest = { ...paramsOrData }; // Shallow copy to avoid modifying original
 
-    // Determine if it's a V4 API endpoint based on the path
-    const isV4Endpoint = path.includes('/v4/');
+    const isV4Endpoint = path.includes('/v4/'); // Solo detecta V4 explícitamente
 
     if (isPrivate) {
         // X-BM-RECVWINDOW is typically used for private endpoints
@@ -160,15 +157,13 @@ const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bod
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        // *** LA ÚNICA LÍNEA MODIFICADA A CONTINUACIÓN ***
-        // Siempre incluir X-BM-MEMO si el memo está definido (no es una cadena vacía)
-        // BitMart parece requerir el X-BM-MEMO en la cabecera para V4 si la clave tiene un memo.
-        if (apiMemoForRequestAndSign !== '') { // Verifica si el memo es una cadena no vacía
-            requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
-        } else {
-            // Si el memo es una cadena vacía, asegúrate de que el encabezado no esté presente.
-            delete requestConfig.headers['X-BM-MEMO'];
-        }
+        // El encabezado X-BM-MEMO solo se envía para endpoints V4 si el memo está definido.
+if (isV4Endpoint && apiMemoForRequestAndSign !== '') {
+    requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
+} else {
+    // Para V2/V3 o si no hay memo, asegúrate de que el encabezado NO esté presente.
+    delete requestConfig.headers['X-BM-MEMO'];
+}
     }
 
     // Comprehensive logs before sending the request
