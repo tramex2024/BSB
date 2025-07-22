@@ -157,11 +157,18 @@ const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bod
         requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
         requestConfig.headers['X-BM-SIGN'] = sign;
 
-        // El encabezado X-BM-MEMO solo se envía para endpoints V4 si el memo está definido.
-if (isV4Endpoint && apiMemoForRequestAndSign !== '') {
-    requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
-} else {
-    // Para V2/V3 o si no hay memo, asegúrate de que el encabezado NO esté presente.
+        // Determina si el X-BM-MEMO debe incluirse en los headers de la solicitud.
+// BitMart lo requiere para los endpoints V4, pero no para V1/V2.
+// Sin embargo, el memo SÍ debe estar en la cadena de firma si la clave lo tiene.
+if (isV4Endpoint) { // Solo si es un endpoint V4
+    if (apiMemoForRequestAndSign !== '') {
+        requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
+    } else {
+        // Si es V4 y no hay memo configurado, asegúrate de que no haya X-BM-MEMO
+        delete requestConfig.headers['X-BM-MEMO'];
+    }
+} else { // Para V1/V2 (donde isV4Endpoint es false)
+    // Asegúrate de que el encabezado X-BM-MEMO NO esté presente.
     delete requestConfig.headers['X-BM-MEMO'];
 }
     }
