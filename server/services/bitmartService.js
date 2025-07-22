@@ -39,7 +39,7 @@ function sortObjectKeys(obj) {
  * @param {string} apiSecret - The API secret key.
  * @returns {string} The generated HMAC SHA256 signature in hexadecimal format.
  */
-function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
+function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret, isV4Endpoint = false) { // Agrega isV4Endpoint aquí
     // Ensure memo is a string. If null/undefined, treat as empty string for hashing.
     const memoForHash = (memo === null || memo === undefined || typeof memo !== 'string') ? '' : memo;
 
@@ -52,7 +52,11 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
 
     // Construct the message string according to BitMart V4 signature rules:
     // timestamp + '#' + memo + '#' + request_method + '#' + request_path + '#' + body_or_query_string
-    const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
+    // El memo solo se incluye en la firma si es un endpoint V4.
+
+// Para V2/V3, el memo no forma parte de la cadena de firma.
+const memoPart = isV4Endpoint ? `#${memoForHash}` : '';
+const message = timestamp + memoPart + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo}, Type: ${typeof memo})`);
@@ -148,7 +152,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`);
 
         // Generate the signature
-        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
+        // Pasa isV4Endpoint a la función generateSign
+const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey, isV4Endpoint);
 
         // Set required headers for authenticated requests
         requestConfig.headers['X-BM-KEY'] = apiKey;
