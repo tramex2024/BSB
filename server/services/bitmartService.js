@@ -349,7 +349,7 @@ async function getOpenOrders(authCredentials, symbol) {
         } else if (responseData && Array.isArray(responseData.list)) {
             orders = responseData.list;
         } else {
-            console.warn(ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
+            console.warn('ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
         }
         if (orders.length > 0) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
