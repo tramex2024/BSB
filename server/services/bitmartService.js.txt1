@@ -40,8 +40,7 @@ function sortObjectKeys(obj) {
  * @returns {string} The generated HMAC SHA256 signature in hexadecimal format.
  */
 function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
-    // Ensure memo is a string. If null/undefined, treat as empty string for hashing.
-    const memoForHash = (memo === null || memo === undefined || typeof memo !== 'string') ? '' : memo;
+    const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
 
     // Ensure bodyOrQueryString is an empty string if it's undefined, null, or empty,
     // aligning with BitMart's signature expectation for empty bodies/queries.
@@ -55,7 +54,7 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
-    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo}, Type: ${typeof memo})`);
+    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
     console.log(`[SIGN_DEBUG] Method for Sign: '${requestMethod.toUpperCase()}'`);
     console.log(`[SIGN_DEBUG] Path for Sign: '${normalizedPath}'`);
     console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
@@ -91,8 +90,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     };
 
     const { apiKey, secretKey, apiMemo } = authCredentials;
-    // Ensure apiMemoForRequestAndSign is a string, even if it's an empty one.
-    const apiMemoForRequestAndSign = (apiMemo === null || apiMemo === undefined || typeof apiMemo !== 'string') ? '' : apiMemo;
+    const apiMemoForRequestAndSign = apiMemo; // Memo used for X-BM-MEMO header and signature
 
     const dataForRequest = { ...paramsOrData }; // Shallow copy to avoid modifying original
 
@@ -107,10 +105,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     if (method === 'GET') {
         // For GET, params go into the query string and are part of the signature
         if (isPrivate) {
-            // recvWindow might not be needed for V1 /account/v1/wallet if it's handled automatically
-            // by BitMart or not strictly required for the signature.
-            // However, including it here matches current behavior.
-            dataForRequest.recvWindow = 10000; 
+            dataForRequest.recvWindow = 10000;
         }
         requestConfig.params = sortObjectKeys(dataForRequest);
         bodyForSign = querystring.stringify(requestConfig.params);
@@ -133,12 +128,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
     }
 
     if (isPrivate) {
-        // More robust check for credentials, including ensuring apiMemo is a string.
-        if (!apiKey || !secretKey || typeof apiMemoForRequestAndSign !== 'string') {
-            console.error(`ERROR: Credenciales de BitMart API incompletas o inválidas para la autenticación.
-             API Key presente: ${!!apiKey}, Secret Key presente: ${!!secretKey},
-             API Memo es string: ${typeof apiMemoForRequestAndSign === 'string'}.
-             Asegúrate de que el usuario haya configurado todas sus claves correctamente.`);
+        if (!apiKey || !secretKey || apiMemo === undefined || apiMemo === null || apiMemo === '') {
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el usuario haya configurado todas sus claves correctamente.");
         }
 
@@ -146,7 +136,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.log(`[API_CRED_DEBUG] API Key (used for request): '${apiKey ? apiKey.substring(0, 5) + '...' + apiKey.substring(apiKey.length - 5) : 'N/A'}' (Length: ${apiKey ? apiKey.length : 0})`);
         console.log(`[API_CRED_DEBUG] Secret Key (used for signing): '${secretKey ? secretKey.substring(0, 5) + '...' + secretKey.substring(secretKey.length - 5) : 'N/A'}' (Length: ${secretKey ? secretKey.length : 0})`);
         console.log(`[API_CRED_DEBUG] API Memo (used for request & signing): '${apiMemoForRequestAndSign}' (Type: ${typeof apiMemoForRequestAndSign}, Length: ${apiMemoForRequestAndSign ? apiMemoForRequestAndSign.length : 0})`);
-        // Added more detailed raw character log for memo
         console.log(`[API_CRED_DEBUG] API Memo (raw characters): [${apiMemoForRequestAndSign.split('').map(c => `U+${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join(', ')}]`);
         console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`);
 
@@ -188,10 +177,6 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
         // Check BitMart's specific success code (1000)
         if (response.data && response.data.code === 1000) {
-            // Debugging log for successful balance retrieval structure
-            if (path === '/account/v1/wallet') {
-                console.log('DEBUG: BitMart wallet raw response.data:', JSON.stringify(response.data, null, 2));
-            }
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
@@ -518,17 +503,14 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
  */
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
     console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    // Ensure apiMemo is a string for validation
-    const memoForValidation = (apiMemo === null || apiMemo === undefined || typeof apiMemo !== 'string') ? '' : apiMemo;
-
-    if (!apiKey || !secretKey || typeof memoForValidation !== 'string') {
-        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados o no son válidos (ej. Memo no es un string) para validación.");
+    if (!apiKey || !secretKey || apiMemo === undefined || apiMemo === null || apiMemo === '') {
+        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación.");
         return false;
     }
 
     try {
         // Use getBalance (V1 endpoint) for validation as it's known to work
-        await getBalance({ apiKey, secretKey, apiMemo: memoForValidation });
+        await getBalance({ apiKey, secretKey, apiMemo });
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
