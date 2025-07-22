@@ -341,12 +341,12 @@ async function getBalances() {
         return;
     }
     try {
-        const response = await fetchFromBackend('/api/user/bitmart/balance');
+        const response = await fetchFromBackend('/api/user/bitmart/balance'); // Renamed to 'response' for clarity
 
-        // --- Start of essential change for getBalances ---
-        // Expecting an array directly from the backend, as per your logs.
-        if (Array.isArray(response)) {
-            const usdt = response.find(w => w.currency === "USDT");
+        // --- Start of essential change ---
+        if (response && response.data && Array.isArray(response.data.wallet)) {
+            // Access the 'wallet' array nested inside 'data'
+            const usdt = response.data.wallet.find(w => w.currency === "USDT");
             const balance = usdt ? parseFloat(usdt.available).toFixed(2) : '0.00';
             if (document.getElementById('balance')) {
                 document.getElementById('balance').textContent = balance;
@@ -360,7 +360,7 @@ async function getBalances() {
             console.error('getBalances: Unexpected backend response structure:', response);
             displayLogMessage('Error fetching balances: Unexpected data structure.', 'error');
         }
-        // --- End of essential change for getBalances ---
+        // --- End of essential change ---
 
     } catch (error) {
         console.error('Error al cargar balances:', error);
@@ -377,13 +377,11 @@ async function fetchOpenOrdersData() {
         return [];
     }
     try {
-        const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
+        const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`); 
 
-        // --- The fix for open orders ---
-        // Backend's raw response from BitMart has `data.orders`, but your backend appears to simplify this.
-        // Assuming your backend sends an object like `{ orders: [...] }` as per previous context
-        // If your backend directly sends an array for open-orders as well, then remove `.orders`
-        if (response && Array.isArray(response.orders)) {
+        // --- THE FIX IS HERE ---
+        // Check if response is an object and if it has an 'orders' property that is an array
+        if (response && typeof response === 'object' && Array.isArray(response.orders)) { 
             const openOrdersData = response.orders; // <--- Access the 'orders' array
             displayOrders(openOrdersData, 'opened');
             if (openOrdersData.length === 0) {
@@ -469,9 +467,7 @@ async function fetchOrders(tab) {
     try {
         if (tab === 'opened') {
             const response = await fetchFromBackend(`/api/user/bitmart/open-orders?symbol=${TRADE_SYMBOL}`);
-            // Assuming open-orders also returns an array of orders directly or an object with an 'orders' array.
-            // Based on the first set of logs, `response.orders` was being accessed, so keeping that.
-            orders = (response && Array.isArray(response.orders)) ? response.orders : [];
+            orders = (response && Array.isArray(response.orders)) ? response.orders : []; // Correctly access nested orders
         } else {
             const historyOrdersRaw = await fetchHistoryOrdersData(tab);
             const historyOrders = Array.isArray(historyOrdersRaw) ? historyOrdersRaw : [];
@@ -804,9 +800,9 @@ async function toggleBotState() {
             if (startBtn) startBtn.textContent = isRunning ? 'STOP' : 'START';
             if (resetBtn) resetBtn.disabled = isRunning;
             if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = isRunning;
-        } else {
+        } else { // <-- ¡Aquí es donde faltaba la llave de cierre!
             throw new Error(response.message || 'Failed to toggle bot state.');
-        }
+        } // <-- ESTA LLAVE DE CIERRE FALTABA AQUÍ
     } catch (error) {
         console.error('Error toggling bot state:', error);
         alert(`Error: ${error.message}`);
@@ -897,7 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Configurar intervalos de actualización
     setInterval(getBalances, 10000);
-    setInterval(cargarPrecioEnVivo, 2000); // Changed to 2 seconds, 200ms is very frequent
+    setInterval(cargarPrecioEnVivo, 200);
     setInterval(checkConnection, 10000);
     setInterval(() => fetchOrders(currentTab), 15000);
 
