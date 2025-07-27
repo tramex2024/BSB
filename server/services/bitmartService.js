@@ -245,7 +245,7 @@ exports.placeOrder = async (authCredentials, symbol, side, type, amount, price) 
 exports.getOpenOrders = async (authCredentials, symbol) => {
     console.log(`\n--- Obteniendo Órdenes Abiertas para ${symbol || 'todos los símbolos'} ---`);
     const queryParams = symbol ? { symbol } : {}; // Si se especifica un símbolo, se añade a los parámetros
-    const response = await makeRequest(authCredentials, 'GET', '/spot/v3/orders', queryParams);
+    const response = await makeRequest(authCredentials, 'GET', '/spot/v4/query-order-daily', queryParams);
 
     if (response.data && response.data.orders) {
         console.log('✅ Órdenes abiertas obtenidas con éxito.');
