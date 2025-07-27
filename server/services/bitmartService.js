@@ -245,7 +245,8 @@ exports.placeOrder = async (authCredentials, symbol, side, type, amount, price) 
 exports.getOpenOrders = async (authCredentials, symbol) => {
     console.log(`\n--- Obteniendo Órdenes Abiertas para ${symbol || 'todos los símbolos'} ---`);
     const queryParams = symbol ? { symbol } : {}; // Si se especifica un símbolo, se añade a los parámetros
-    const response = await makeRequest(authCredentials, 'GET', '/spot/v4/query-order-daily', queryParams);
+    const response = await makeRequest(authCredentials, 'GET', '/spot/v4/user-open-orders', queryParams);
+// ...
 
     if (response.data && response.data.orders) {
         console.log('✅ Órdenes abiertas obtenidas con éxito.');
@@ -260,7 +261,7 @@ exports.getHistoryOrdersV4 = async (authCredentials, { symbol, orderMode, startT
     console.log(`\n--- Obteniendo Historial de Órdenes para ${symbol || 'todos los símbolos'} ---`);
 
     // BitMart V4 endpoints are like /spot/v4/history-orders or /account/v4/xxx
-    const path = '/spot/v4/query-user-order-history'; // Ruta correcta para historial de órdenes V4
+    const path = '/spot/v4/query-user-order-history';
 
     const queryParams = {
         symbol, // Obligatorio para BitMart, incluso si el bot lo maneja
