@@ -23,8 +23,8 @@ function sortObjectKeys(obj) {
 async function generateSignature(secretKey, method, requestPath, timestamp, memo, queryString) {
     // En BitMart V2, el queryString para POST requests es el body JSON stringificado y ordenado
     const message = `${timestamp}#${memo}#${method}#${requestPath}#${queryString}`;
-    console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
-    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${secretKey.substring(0, 5)}...${secretKey.substring(secretKey.length - 5)} (Length: ${secretKey.length})`);
+   // console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
+   // console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${secretKey.substring(0, 5)}...${secretKey.substring(secretKey.length - 5)} (Length: ${secretKey.length})`);
 
     const hmac = crypto.createHmac('sha256', secretKey);
     hmac.update(message);
@@ -166,7 +166,7 @@ async function makeRequest(authCredentials, method, path, queryParams = {}, requ
 exports.getBalance = async (authCredentials) => {
     console.log('\n--- Obteniendo Balance de la Cuenta ---');
     const response = await makeRequest(authCredentials, 'GET', '/account/v1/wallet');
-    console.log('DEBUG: BitMart wallet raw response.data:', response.data);
+   // console.log('DEBUG: BitMart wallet raw response.data:', response.data);
     return response.data.wallet;
 };
 
