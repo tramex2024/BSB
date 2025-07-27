@@ -37,10 +37,9 @@ function sortObjectKeys(obj) {
  * @param {string} requestPath - The API endpoint path.
  * @param {string} bodyOrQueryString - Stringified request body (for POST) or query string (for GET).
  * @param {string} apiSecret - The API secret key.
- * @param {boolean} isV4Endpoint - Indicates if the current endpoint is a V4 endpoint.
  * @returns {string} The generated HMAC SHA256 signature in hexadecimal format.
  */
-function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret, isV4Endpoint) {
+function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQueryString, apiSecret) {
     // Ensure memo is a string. If null/undefined, treat as empty string for hashing.
     const memoForHash = (memo === null || memo === undefined || typeof memo !== 'string') ? '' : memo;
 
@@ -51,11 +50,7 @@ function generateSign(timestamp, memo, requestMethod, requestPath, bodyOrQuerySt
     // Normalize path to remove trailing slash if present, for consistency with signature rules.
     const normalizedPath = requestPath.endsWith('/') && requestPath.length > 1 ? requestPath.slice(0, -1) : requestPath;
 
-    let message;
-    // La cadena de firma SIEMPRE incluye el memo si la API Key lo tiene configurado,
-    // independientemente de la versión del endpoint (V1, V2, V4).
-    // La diferencia entre versiones está en si se envía el header X-BM-MEMO.
-    message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
+    const message = timestamp + '#' + memoForHash + '#' + requestMethod.toUpperCase() + '#' + normalizedPath + '#' + finalBodyOrQueryString;
 
     console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
     console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo}, Type: ${typeof memo})`);
@@ -99,7 +94,10 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     const dataForRequest = { ...paramsOrData }; // Shallow copy to avoid modifying original
 
-    const isV4Endpoint = path.includes('/v4/'); // Solo detecta V4 explícitamente
+    // Detección de V4 para el encabezado X-BM-SIGN-TYPE y X-BM-MEMO
+    // BitMart usa '2' para la mayoría de los V4, y a veces '1' para V1/V2
+    const isV4Endpoint = path.includes('/v4/'); 
+    requestConfig.headers['X-BM-SIGN-TYPE'] = '2'; // Usar 2 por defecto para la mayoría de las APIs recientes.
 
     if (isPrivate) {
         // X-BM-RECVWINDOW is typically used for private endpoints
@@ -135,9 +133,9 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         // More robust check for credentials, including ensuring apiMemo is a string.
         if (!apiKey || !secretKey || typeof apiMemoForRequestAndSign !== 'string') {
             console.error(`ERROR: Credenciales de BitMart API incompletas o inválidas para la autenticación.
-             API Key presente: ${!!apiKey}, Secret Key presente: ${!!secretKey},
-             API Memo es string: ${typeof apiMemoForRequestAndSign === 'string'}.
-             Asegúrate de que el usuario haya configurado todas sus claves correctamente.`);
+              API Key presente: ${!!apiKey}, Secret Key presente: ${!!secretKey},
+              API Memo es string: ${typeof apiMemoForRequestAndSign === 'string'}.
+              Asegúrate de que el usuario haya configurado todas sus claves correctamente.`);
             throw new Error("Credenciales de BitMart API incompletas (API Key, Secret, o Memo). Asegúrate de que el user haya configurado todas sus claves correctamente.");
         }
 
@@ -150,7 +148,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         console.log(`[API_CRED_DEBUG] Is V4 Endpoint: ${isV4Endpoint}`);
 
         // Generate the signature
-        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey, isV4Endpoint);
+        const sign = generateSign(timestamp, apiMemoForRequestAndSign, method, path, bodyForSign, secretKey);
 
         // Set required headers for authenticated requests
         requestConfig.headers['X-BM-KEY'] = apiKey;
@@ -166,6 +164,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
             console.log('[DEBUG_HEADER] X-BM-MEMO ADDED (V4 and memo present).');
         } else {
+            // Ensure X-BM-MEMO is not sent for V1/V2 endpoints
             delete requestConfig.headers['X-BM-MEMO'];
             console.log('[DEBUG_HEADER] X-BM-MEMO DELETED or not added (V1/V2 or no memo).');
         }
@@ -309,17 +308,17 @@ async function getKlines(symbol, interval, limit = 200) {
 /**
  * Gets the user's wallet balance.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
- * @returns {Promise<object>} Wallet balance data.
+ * @returns {Promise<object[]>} Wallet balance data (array of asset objects).
  */
 async function getBalance(authCredentials) {
     console.log('\n--- Obteniendo Balance de la Cuenta ---');
     try {
-        // Always fetch server time for private requests to ensure timestamp is fresh
-        const serverTime = await getSystemTime();
+        const serverTime = await getSystemTime(); // Always fetch fresh server time
         // This is a V1 endpoint.
         const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data && response.data.wallet) {
-            console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
+            console.log('✅ Balance de la cuenta obtenido con éxito.');
+            // Return only the wallet array for easier consumption
             return response.data.wallet;
         } else {
             console.error('❌ Falló la obtención del balance de la cuenta. Respuesta inesperada:', JSON.stringify(response, null, 2));
@@ -336,7 +335,7 @@ async function getBalance(authCredentials) {
  * Retrieves a list of current open orders for a user.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @param {string} [symbol] - Optional: Filter by trading pair symbol (e.g., "BTC_USDT").
- * @returns {Promise<object>} An object containing an array of open orders.
+ * @returns {Promise<object[]>} An array of open order objects.
  */
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol || 'todos los símbolos'} ---`);
@@ -349,9 +348,9 @@ async function getOpenOrders(authCredentials, symbol) {
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
-        if (Array.isArray(responseData)) {
+        if (Array.isArray(responseData)) { // Some V4 endpoints directly return an array
             orders = responseData;
-        } else if (responseData && Array.isArray(responseData.list)) {
+        } else if (responseData && Array.isArray(responseData.list)) { // Common V4 structure
             orders = responseData.list;
         } else {
             console.warn('ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
@@ -362,7 +361,8 @@ async function getOpenOrders(authCredentials, symbol) {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
-        return { orders: orders };
+        // Return just the array of orders for simplicity
+        return orders;
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
@@ -401,24 +401,31 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
  * @param {string} symbol - The trading pair symbol (e.g., "BTC_USDT").
  * @param {'buy'|'sell'} side - Order side.
  * @param {'limit'|'market'} type - Order type.
- * @param {string} size - The amount of base currency (for limit/market sell) or quote currency (for market buy).
- * @param {string} [price] - The price for limit orders. Required for 'limit' type.
+ * @param {string|number} amount - The quantity. For 'limit' and 'market sell', this is `size` (base currency amount).
+ * For 'market buy', this is `notional` (quote currency amount).
+ * @param {string|number} [price] - The price for limit orders. Required for 'limit' type.
  * @returns {Promise<object>} Order placement confirmation.
  */
-async function placeOrder(authCredentials, symbol, side, type, size, price) {
-    console.log(`[DEBUG_BITMART_SERVICE] placeOrder - symbol: ${symbol}, side: ${side}, type: ${type}, size: ${size}, price: ${price}`);
-    console.log(`\n--- Colocando Orden ${side.toUpperCase()} de ${size} ${symbol} (${type}) ---`);
-    const requestBody = { symbol: symbol, side: side, type: type };
+async function placeOrder(authCredentials, symbol, side, type, amount, price) {
+    console.log(`[DEBUG_BITMART_SERVICE] placeOrder - symbol: ${symbol}, side: ${side}, type: ${type}, amount: ${amount}, price: ${price}`);
+    console.log(`\n--- Colocando Orden ${side.toUpperCase()} de ${amount} ${symbol} (${type}) ---`);
+    const requestBody = { 
+        symbol: symbol, 
+        side: side, 
+        type: type,
+        open_type: 'cash', // Important for cash account orders
+        client_oid: `oid_${Date.now()}` // Unique client order ID
+    };
 
     if (type === 'limit') {
         if (!price) { throw new Error("El precio es requerido para órdenes de tipo 'limit'."); }
-        requestBody.size = size.toString();
-        requestBody.price = price.toString();
+        requestBody.size = String(amount); // Ensure string type for API
+        requestBody.price = String(price); // Ensure string type for API
     } else if (type === 'market') {
         if (side === 'buy') {
-            requestBody.notional = size.toString(); // For market buy, 'size' means quote amount
+            requestBody.notional = String(amount); // For market buy, 'amount' is 'notional' (quote currency)
         } else if (side === 'sell') {
-            requestBody.size = size.toString(); // For market sell, 'size' means base amount
+            requestBody.size = String(amount); // For market sell, 'amount' is 'size' (base currency)
         } else {
             throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
         }
@@ -475,7 +482,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
  * Retrieves a user's historical orders.
  * @param {object} authCredentials - API Key, Secret Key, and Memo.
  * @param {object} options - Optional filters: symbol, orderMode, startTime, endTime, limit.
- * @returns {Promise<Array<object>>} An array of historical orders.
+ * @returns {Promise<object[]>} An array of historical orders.
  */
 async function getHistoryOrdersV4(authCredentials, options = {}) {
     console.log(`\n--- Listando Historial de Órdenes (V4 POST) ---`);
@@ -492,9 +499,9 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
         const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         const responseData = response.data;
         let orders = [];
-        if (Array.isArray(responseData)) {
+        if (Array.isArray(responseData)) { // Some V4 endpoints directly return an array
             orders = responseData;
-        } else if (responseData && Array.isArray(responseData.list)) {
+        } else if (responseData && Array.isArray(responseData.list)) { // Common V4 structure
             orders = responseData.list;
         } else {
             console.warn('ℹ️ getHistoryOrdersV4: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
@@ -505,6 +512,7 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
             console.log('ℹ️ No se encontraron órdenes en el historial con los criterios especificados.');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
         }
+        // Return just the array of orders for simplicity
         return orders;
     } catch (error) {
         console.error('\n❌ Falló la obtención del historial de órdenes V4.');
