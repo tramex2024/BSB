@@ -260,7 +260,7 @@ exports.getHistoryOrdersV4 = async (authCredentials, { symbol, orderMode, startT
     console.log(`\n--- Obteniendo Historial de Órdenes para ${symbol || 'todos los símbolos'} ---`);
 
     // BitMart V4 endpoints are like /spot/v4/history-orders or /account/v4/xxx
-    const path = '/spot/v2/history-orders'; // Corregido a V2 para historial general.
+    const path = '/spot/v4/query-order-history'; // Ruta actualizada para el historial de órdenes V4
 
     const queryParams = {
         symbol, // Obligatorio para BitMart, incluso si el bot lo maneja
