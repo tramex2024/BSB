@@ -244,7 +244,12 @@ exports.placeOrder = async (authCredentials, symbol, side, type, amount, price) 
 
 exports.getOpenOrders = async (authCredentials, symbol) => {
     console.log(`\n--- Obteniendo Órdenes Abiertas para ${symbol || 'todos los símbolos'} ---`);
-    const queryParams = symbol ? { symbol } : {}; // Si se especifica un símbolo, se añade a los parámetros
+    const queryParams = {}; // Sin parámetros iniciales
+if (symbol) { // Añade el símbolo si está presente, pero hazlo opcional para la prueba
+    queryParams.symbol = symbol;
+}
+// O simplemente para probar sin símbolo:
+// const queryParams = {};
     const response = await makeRequest(authCredentials, 'GET', '/spot/v4/user-open-orders', queryParams);
 // ...
 
@@ -263,9 +268,12 @@ exports.getHistoryOrdersV4 = async (authCredentials, { symbol, orderMode, startT
     // BitMart V4 endpoints are like /spot/v4/history-orders or /account/v4/xxx
     const path = '/spot/v4/query-user-order-history';
 
-    const queryParams = {
-        symbol, // Obligatorio para BitMart, incluso si el bot lo maneja
-    };
+    const queryParams = {}; // Iniciar sin parámetros obligatorios para la prueba
+
+if (symbol) queryParams.symbol = symbol; // Si `symbol` se pasa, inclúyelo
+if (startTime) queryParams.start_time = startTime;
+if (endTime) queryParams.end_time = endTime;
+if (limit) queryParams.limit = limit;
 
     // orderMode no es un parámetro directo en BitMart V2 history-orders
     // BitMart V2 (GET /spot/v2/history-orders) ya devuelve todas las órdenes terminadas.
