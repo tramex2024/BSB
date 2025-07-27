@@ -180,7 +180,7 @@ exports.getKlines = async (authCredentials, symbol, interval, startTime, endTime
         to: endTime,
         limit
     };
-    const response = await makeRequest(authCredentials, 'GET', '/spot/v1/candles', queryParams);
+    const response = await makeRequest(authCredentials, 'GET', '/spot/v4/user-open-orders', queryParams);
     // BitMart devuelve un array donde cada elemento es [timestamp, open, high, low, close, volume]
     // Mapear esto a un formato más legible si es necesario, o úsalo directamente.
     // Para este bot, asumimos que el array tal cual es suficiente para el análisis.
@@ -260,7 +260,7 @@ exports.getHistoryOrdersV4 = async (authCredentials, { symbol, orderMode, startT
     console.log(`\n--- Obteniendo Historial de Órdenes para ${symbol || 'todos los símbolos'} ---`);
 
     // BitMart V4 endpoints are like /spot/v4/history-orders or /account/v4/xxx
-    const path = '/spot/v4/query-order-history'; // Ruta actualizada para el historial de órdenes V4
+    const path = '/spot/v4/query-user-order-history'; // Ruta correcta para historial de órdenes V4
 
     const queryParams = {
         symbol, // Obligatorio para BitMart, incluso si el bot lo maneja
