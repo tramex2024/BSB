@@ -1,4 +1,3 @@
-
 // server/services/bitmartService.js (ACTUALIZADO)
 
 const axios = require('axios');
@@ -33,13 +32,21 @@ function sortObjectKeys(obj) {
 
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
-    const finalBodyOrQueryString = bodyOrQueryString || ''; // <- Aquí bodyOrQueryString es el string JSON, p.ej. "{}"
+    const finalBodyOrQueryString = bodyOrQueryString || '';
+
     let message;
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
     } else {
         message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
     }
+
+    console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
+    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
+    console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
+    console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
+    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
+
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
