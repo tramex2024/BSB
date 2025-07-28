@@ -202,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (apiForm) {
         apiForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+	    setupNavTabs();
 
             const apiKey = apiKeyInput.value.trim();
             const secretKey = secretKeyInput.value.trim();

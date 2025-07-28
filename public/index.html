@@ -6,9 +6,45 @@
     <title>BSB - Bitmart Spot Bots</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for order list */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: #374151; /* gray-700 */
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: #6b7280; /* gray-500 */
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af; /* gray-400 */
+            }
+
+        /* Active tab style */
+        /* Asegúrate de que esta clase se aplique a los nav-tab, no a los botones de orden */
+        .header-middle .nav-tab.active {
+            border-bottom: 2px solid white; /* Indicador visual para la pestaña activa en el menú superior */
+        }
+        .nav-tab {
+             /* Estilos base para los tabs, como padding, color, etc. */
+             padding: 10px 15px;
+             text-decoration: none;
+             color: #ccc; /* Color de texto predeterminado */
+             transition: all 0.3s ease;
+         }
+
+        .nav-tab:hover {
+            color: white;
+        }
+        .active-tab { /* Esta clase es para los tabs de Order History, no para el menú principal */
+            border-color: white !important; /* Forces white border for active tab */
+        }
+    </style>
 </head>
-<body class="dark-mode">
-    <header class="fixed-header">
+<body class="dark-mode bg-gray-900 text-white"> <header class="fixed-header">
         <div class="header-left">
             <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
             <span class="app-name">Bitmart Spot Bot</span>
@@ -20,7 +56,7 @@
             <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
         </nav>
         <div class="header-right">
-            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i> 
+            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i>
             <i class="fas fa-globe icon" title="Language"></i>
             <i class="fas fa-users icon" title="Users"></i>
             <i class="fas fa-cog icon" title="Settings"></i>
@@ -33,39 +69,12 @@
         <p id="log-message">Waiting for bot actions...</p>
     </div>
 
-    <main id="main-content" class="content"> 
+    <main id="main-content" class="content">
         <section id="dashboard-section" class="tab-content active">
             <h2>Welcome to your Dashboard!</h2>
         </section>
 
         <section id="autobot-section" class="tab-content">
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-            <title>AUTOBOT Panel</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-                /* Custom scrollbar for order list */
-                .overflow-y-auto::-webkit-scrollbar {
-                    width: 8px;
-                }
-                .overflow-y-auto::-webkit-scrollbar-track {
-                    background: #374151; /* gray-700 */
-                }
-                .overflow-y-auto::-webkit-scrollbar-thumb {
-                    background: #6b7280; /* gray-500 */
-                    border-radius: 4px;
-                }
-                .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-                    background: #9ca3af; /* gray-400 */
-                }
-
-                /* Active tab style */
-                .active-tab {
-                    border-color: white !important; /* Forces white border for active tab */
-                }
-            </style>
-        </head>
-        <body class="bg-gray-900 text-white">
             <div class="flex flex-col md:flex-row h-full md:h-screen">
                 <div class="w-full md:w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
                     <div class="bg-gray-700 p-4 rounded-lg space-y-2">
@@ -162,7 +171,6 @@
                     container_id: "tvchart"
                 });
             </script>
-        </body>
         </section>
 
         <section id="testbot-section" class="tab-content">
