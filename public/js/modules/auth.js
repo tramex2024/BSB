@@ -1,26 +1,91 @@
 // public/js/modules/auth.js
-import { BACKEND_URL, loginLogoutIcon, authModal, authForm, emailInput, tokenInput, authButton, authMessage, logMessageElement } from '../main.js';
-import { updateLoginIcon, toggleAuthModal } from './modals.js'; // Importar de modals.js
 
-// Estado de la aplicación relacionado con la autenticación
+// Importa las constantes globales que necesitas de main.js
+import { BACKEND_URL, logMessageElement, loginLogoutIcon, connectionIndicator, connectionText } from '../main.js';
+
+// Variable global para el estado de login
 export let isLoggedIn = false;
 
 /**
- * Muestra un mensaje en la franja de logs superior.
- * @param {string} message - El mensaje a mostrar.
- * @param {string} type - 'success', 'error', 'info', 'warning' (opcional, para futuros estilos)
+ * Muestra un mensaje en la barra de logs.
+ * @param {string} message El mensaje a mostrar.
+ * @param {string} type El tipo de mensaje (info, success, warning, error).
  */
 export function displayLogMessage(message, type = 'info') {
     if (logMessageElement) {
-        logMessageElement.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        // logMessageElement.className = `log-${type}`; // Descomentar para estilos
-        console.log(`[Log Bar] ${message}`);
+        logMessageElement.textContent = `[Log Bar] ${message}`;
+        logMessageElement.className = `log-bar-message text-${type === 'error' ? 'red' : type === 'warning' ? 'yellow' : type === 'success' ? 'green' : 'gray'}-300`;
+    }
+    console.log(`[Log Bar] ${message}`); // También imprime en consola para depuración
+}
+
+/**
+ * Fetch seguro al backend con manejo de token y errores.
+ * @param {string} endpoint El endpoint de la API (e.g., '/api/user').
+ * @param {Object} options Opciones para fetch (method, headers, body, etc.).
+ * @returns {Promise<Object|null>} La respuesta parseada del backend o null en caso de error.
+ */
+export async function fetchFromBackend(endpoint, options = {}) {
+    const token = localStorage.getItem('authToken');
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers // Permite sobrescribir o añadir otros headers
+    };
+
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+            ...options,
+            headers: headers
+        });
+
+        // ** Importante: Leer el cuerpo de la respuesta solo una vez **
+        // Intentamos leerlo como JSON. Si falla, lo leemos como texto.
+        let responseData = null;
+        try {
+            // Solo intentamos parsear como JSON si el content-type lo indica
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                responseData = await response.json();
+            } else {
+                // Si no es JSON, o si es un error 404/500 con HTML, leerlo como texto
+                responseData = { message: await response.text() };
+            }
+        } catch (jsonError) {
+            // Si hubo un error al parsear como JSON, intentar como texto plano
+            // Esto es lo que causaba el "body stream already read"
+            console.warn(`Could not parse response as JSON for ${endpoint}. Trying as text.`, jsonError);
+            try {
+                responseData = { message: await response.text() };
+            } catch (textError) {
+                console.error(`Error reading response body for ${endpoint}:`, textError);
+                responseData = { error: "Failed to read response body." };
+            }
+        }
+
+        if (!response.ok) {
+            // Maneja respuestas no exitosas (4xx o 5xx)
+            const errorMessage = responseData.message || responseData.error || `HTTP error! Status: ${response.status}`;
+            console.error(`Backend error for ${endpoint}:`, errorMessage, responseData);
+            displayLogMessage(`Backend communication error: ${errorMessage}`, 'error');
+            return null; // Retorna null o un objeto de error estructurado
+        }
+
+        // Si la respuesta es exitosa (response.ok es true)
+        displayLogMessage(`Backend connection: OK.`, 'success');
+        return responseData; // Retorna los datos parseados
+    } catch (error) {
+        console.error(`Error fetching from ${endpoint}:`, error);
+        displayLogMessage(`Network error communicating with backend: ${error.message}`, 'error');
+        return null;
     }
 }
 
 /**
- * Verifica si el usuario está logueado comprobando un token en localStorage.
- * Actualiza la variable `isLoggedIn` y el icono de login.
+ * Verifica el estado de inicio de sesión y actualiza la UI.
  */
 export function checkLoginStatus() {
     const token = localStorage.getItem('authToken');
@@ -29,85 +94,42 @@ export function checkLoginStatus() {
     } else {
         isLoggedIn = false;
     }
-    updateLoginIcon();
+    updateLoginIcon(); // Llama a la función para actualizar el icono
+    displayLogMessage(`User login status: ${isLoggedIn ? 'Logged In' : 'Logged Out'}`, 'info');
 }
 
 /**
- * Maneja el proceso de deslogueo del usuario.
- * Borra el token local y notifica al backend.
+ * Actualiza el icono de login/logout en la UI.
  */
-export async function handleLogout() {
-    console.log('[FRONTEND] Intentando desloguear...');
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/auth/logout`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        const data = await response.json();
-        if (response.ok) {
-            console.log('[FRONTEND] Deslogueo en backend exitoso:', data.message);
-            displayLogMessage('Logout successful!', 'success');
+export function updateLoginIcon() {
+    if (loginLogoutIcon) {
+        if (isLoggedIn) {
+            loginLogoutIcon.classList.remove('fa-sign-in-alt');
+            loginLogoutIcon.classList.add('fa-sign-out-alt');
+            loginLogoutIcon.title = 'Logout';
         } else {
-            console.error('[FRONTEND] Error en deslogueo de backend:', data.message || 'Error desconocido');
-            displayLogMessage(`Logout error: ${data.message || 'Unknown error'}`, 'error');
+            loginLogoutIcon.classList.remove('fa-sign-out-alt');
+            loginLogoutIcon.classList.add('fa-sign-in-alt');
+            loginLogoutIcon.title = 'Login';
         }
-    } catch (error) {
-        console.error('[FRONTEND] Falló la llamada al backend para deslogueo:', error);
-        displayLogMessage('Network error during logout.', 'error');
-    } finally {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userEmail');
-        isLoggedIn = false; // Actualiza el estado global
-        updateLoginIcon();
-        toggleAuthModal(false); // Cierra el modal de auth
-        alert('Has cerrado sesión exitosamente.');
-        window.location.reload(); // Recarga la página para resetear el estado de la UI
     }
 }
 
 /**
- * Helper Function for API Calls (Maneja tokens y rutas dinámicas)
- * @param {string} url - La URL del endpoint del backend (sin la URL base)
- * @param {object} options - Opciones para la llamada fetch
- * @returns {Promise<object|null>} - La respuesta JSON del backend o null en caso de error
+ * Maneja el cierre de sesión del usuario.
  */
-export async function fetchFromBackend(url, options = {}) {
-    try {
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            options.headers = {
-                ...options.headers,
-                'Authorization': `Bearer ${token}`
-            };
-        }
+export function handleLogout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userEmail'); // También remueve el email si lo guardas
+    isLoggedIn = false; // Actualiza el estado de login
+    updateLoginIcon(); // Actualiza el icono
+    displayLogMessage('Logged out successfully.', 'info');
 
-        const res = await fetch(`${BACKEND_URL}${url}`, options);
-
-        if (!res.ok) {
-            let errorDetails = `HTTP error! status: ${res.status}`;
-            try {
-                const errorData = await res.json();
-                errorDetails = errorData.error || errorData.message || JSON.stringify(errorData);
-            } catch (jsonError) {
-                errorDetails = await res.text() || `HTTP error! status: ${res.status} (non-JSON response or empty)`;
-            }
-
-            if (res.status === 401 || res.status === 403) {
-                console.warn("Token inválido o expirado. Iniciando deslogueo automático.");
-                displayLogMessage("Your session has expired or is invalid. Please log in again.", "error");
-                alert("Tu sesión ha expirado o no es válida. Por favor, inicia sesión de nuevo.");
-                handleLogout(); // Llama a la función de deslogueo
-            }
-            throw new Error(errorDetails);
-        }
-        return await res.json();
-    } catch (error) {
-        console.error(`Error fetching from ${url}:`, error);
-        const errorMessage = error instanceof Error ? error.message : String(error || "Unknown error occurred.");
-        if (document.getElementById('order-list')) { // Asume que order-list puede existir
-            document.getElementById('order-list').innerHTML = `<p class="text-red-400">Error: ${errorMessage}</p>`;
-        }
-        displayLogMessage(`Backend communication error: ${errorMessage}`, 'error');
-        return null;
-    }
+    // Aquí podrías añadir lógica para limpiar la UI o redirigir
+    // Por ejemplo, resetear el balance o los datos del bot a valores por defecto
+    if (document.getElementById('balance')) document.getElementById('balance').textContent = 'Login to see';
+    // Otras limpiezas de UI si es necesario
+    if (connectionIndicator) connectionIndicator.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-red-500');
+    if (connectionIndicator) connectionIndicator.classList.add('bg-gray-500');
+    if (connectionText) connectionText.textContent = 'Disconnected';
 }
