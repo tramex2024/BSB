@@ -1,5 +1,5 @@
 // autobotLogic.js
-const bitmartService = require('./bitmartService');
+const bitmartService = require('./services/bitmartService');
 const bitmartIndicatorAnalyzer = require('./bitmart_indicator_analyzer'); // Nombre de archivo corregido a snake_case
 const BotState = require('./models/BotState'); // Asumo que BotState es un modelo de Mongoose
 const { ioInstance } = require('./server'); // Para emitir eventos a través de WebSockets
@@ -245,7 +245,7 @@ async function runBotLogic(botStateObj) {
                     const purchaseAmount = parseFloat(botStateObj.purchase || 0);
 
                     try {
-                        const orderDetails = await bitmartService.placeFirstBuyOrder(bitmartCreds, TRADE_SYMBOL, purchaseAmount, botStateObj.currentPrice);
+               //         const orderDetails = await bitmartService.placeFirstBuyOrder(bitmartCreds, TRADE_SYMBOL, purchaseAmount, botStateObj.currentPrice);
 
                         botStateObj.expectedOpenOrders.push({
                             orderId: orderDetails.orderId,
