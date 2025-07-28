@@ -293,7 +293,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
                                     price: orderDetails.price,
                                     size: orderDetails.size,
                                     side: 'buy',
-                                    type: 'limit', // O market si se usó ese tipo
+                                    type: 'market', // O market si se usó ese tipo
                                     state: 'filled'
                                 };
                                 botStateObj.openOrders = botStateObj.openOrders.filter(o => o.orderId !== orderDetails.orderId); // Ya se filtró, pero para asegurar
@@ -394,16 +394,55 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
                             console.log(`[AUTOBOT][${botStateObj.userId}] Ciclo ${botStateObj.cycle} completado. Ganancia/Pérdida del ciclo: ${botStateObj.cycleProfit.toFixed(2)} USDT. Ganancia total: ${botStateObj.profit.toFixed(2)} USDT.`);
 
+                            // --- MODIFICACIÓN: Lógica de final de ciclo ---
                             if (botStateObj.stopAtCycleEnd) {
                                 console.log(`[AUTOBOT][${botStateObj.userId}] Bandera "Stop on Cycle End" activada. Deteniendo el bot al final del ciclo.`);
-                                await stopBotStrategy(botStateObj, bitmartCreds);
-                                return;
-                            }
+                                await stopBotStrategy(botStateObj, bitmartCreds); // Esto también guardará el estado
+                                return; // Salir de runBotLogic
+                            } else {
+                                console.log(`[AUTOBOT][${botStateObj.userId}] "Stop on Cycle End" es falso. Iniciando nuevo ciclo con primera compra.`);
+                                resetCycleVariables(botStateObj);
+                                botStateObj.cycle++; // Incrementa el número de ciclo
+                                
+                                // Intentar colocar una nueva primera orden de compra a mercado
+                                const purchaseAmount = parseFloat(botStateObj.purchase || 0);
+                                try {
+                                    const newFirstOrder = await bitmartService.placeFirstBuyOrder(bitmartCreds, TRADE_SYMBOL, purchaseAmount, botStateObj.currentPrice);
+                                    
+                                    botStateObj.ppc = newFirstOrder.price;
+                                    botStateObj.cp = newFirstOrder.price * newFirstOrder.size;
+                                    botStateObj.ac = newFirstOrder.size;
+                                    botStateObj.orderCountInCycle = 1;
+                                    botStateObj.lastOrderUSDTAmount = newFirstOrder.price * newFirstOrder.size;
+                                    botStateObj.lastOrder = {
+                                        orderId: newFirstOrder.orderId,
+                                        price: newFirstOrder.price,
+                                        size: newFirstOrder.size,
+                                        side: 'buy',
+                                        type: 'market',
+                                        state: 'filled'
+                                    };
+                                    botStateObj.openOrders = botStateObj.openOrders.filter(o => o.orderId !== newFirstOrder.orderId);
+                                    botStateObj.state = 'BUYING'; // Directamente a BUYING
+                                    console.log(`[AUTOBOT][${botStateObj.userId}] Nueva primera orden de compra completa para el Ciclo ${botStateObj.cycle}. Bot en estado BUYING.`);
 
-                            resetCycleVariables(botStateObj);
-                            botStateObj.cycle++;
-                            botStateObj.state = 'RUNNING';
-                            console.log(`[AUTOBOT][${botStateObj.userId}] Bot listo para el nuevo ciclo en estado RUNNING, esperando próxima señal de COMPRA.`);
+                                } catch (buyError) {
+                                    console.error(`[AUTOBOT][${botStateObj.userId}] Error al intentar colocar la nueva primera orden de compra para el siguiente ciclo:`, buyError.message);
+                                    if (buyError.message.includes("Balance insuficiente") || buyError.message.includes("menor que el mínimo")) {
+                                        botStateObj.state = 'NO_COVERAGE';
+                                        botStateObj.nextCoverageUSDTAmount = purchaseAmount;
+                                        botStateObj.nextCoverageTargetPrice = botStateObj.currentPrice;
+                                        console.warn(`[AUTOBOT][${botStateObj.userId}] Cambiando a NO_COVERAGE al inicio del nuevo ciclo debido a: ${buyError.message}`);
+                                    } else {
+                                        // Si falla la primera compra por otra razón, el bot debe detenerse o requerir intervención
+                                        console.error(`[AUTOBOT][${botStateObj.userId}] Error crítico al iniciar nuevo ciclo. Deteniendo el bot.`);
+                                        await stopBotStrategy(botStateObj, bitmartCreds);
+                                        return;
+                                    }
+                                }
+                            }
+                            // --- FIN MODIFICACIÓN Lógica de final de ciclo ---
+
                         } else if (orderDetails.state === 'open' || orderDetails.state === 'partial_filled') {
                              // Si la orden no se llenó de inmediato, añádela a openOrders para seguimiento
                              botStateObj.openOrders.push({
