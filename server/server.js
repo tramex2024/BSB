@@ -45,8 +45,8 @@ app.get('/ping', (req, res) => {
 });
 
 // Iniciar Socket.IO y pasarle la instancia de IO al autobotLogic
-//autobotLogic.init(io);
-//console.log('[AUTOBOT] Socket.IO instance attached to autobotLogic.');
+autobotLogic.init(io);
+console.log('[AUTOBOT] Socket.IO instance attached to autobotLogic.');
 
 
 const PORT = process.env.PORT || 10000;

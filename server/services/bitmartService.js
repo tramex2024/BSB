@@ -1,429 +1,570 @@
-// server/services/bitmartService.js
+// server/services/bitmartService.js (ACTUALIZADO)
 
 const axios = require('axios');
-const CryptoJS = require('crypto-js'); // Usas CryptoJS, no crypto nativo, lo mantengo.
-const querystring = require('querystring'); // Lo mantengo por si lo usas en otros lugares, aunque URLSearchParams es más moderno
+const CryptoJS = require('crypto-js');
+const querystring = require('querystring');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
-const MIN_USDT_VALUE_FOR_BITMART = 5.00; // Valor mínimo de USDT para una operación en BitMart
 
-// Helper para generar la firma (authentication signature)
-// Asegúrate de que CryptoJS.HmacSHA256 y .stringify sean correctos para tu uso.
-function createSignature(memo, secret, timestamp, body) {
-    const message = timestamp + '#' + memo + '#' + body;
-    const hash = CryptoJS.HmacSHA256(message, secret).toString(CryptoJS.enc.Hex);
-    return hash;
+const DEFAULT_V4_POST_MEMO = 'GainBot';
+
+function sortObjectKeys(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return obj;
+    }
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => sortObjectKeys(item));
+    }
+
+    const sortedKeys = Object.keys(obj).sort();
+    const sortedObj = {};
+    for (const key of sortedKeys) {
+        sortedObj[key] = sortObjectKeys(obj[key]);
+    }
+    return sortedObj;
 }
 
-/**
- * Obtiene el tiempo actual del servidor de BitMart.
- * Necesario para la firma de las solicitudes API.
- */
-async function getSystemTime() {
-    try {
-        const response = await axios.get(`${BASE_URL}/spot/v1/time`);
-        if (response.data && response.data.code === 1000) {
-            return response.data.data.server_time;
-        } else {
-            throw new Error(`Error al obtener tiempo del servidor: ${response.data ? JSON.stringify(response.data) : 'Respuesta vacía'}`);
-        }
-    } catch (error) {
-        console.error('Error en getSystemTime:', error.message);
-        throw error;
+function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
+    const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
+    const finalBodyOrQueryString = bodyOrQueryString || '';
+
+    let message;
+    if (memoForHash === '') {
+        message = timestamp + '#' + finalBodyOrQueryString;
+    } else {
+        message = timestamp + '#' + memoForHash + '#' + finalBodyOrQueryString;
     }
+
+    console.log(`[SIGN_DEBUG] Timestamp: '${timestamp}'`);
+    console.log(`[SIGN_DEBUG] Memo used for hash: '${memoForHash}' (Original memo value: ${memo})`);
+    console.log(`[SIGN_DEBUG] Body/Query String for Sign: '${finalBodyOrQueryString}' (Length: ${finalBodyOrQueryString.length})`);
+    console.log(`[SIGN_DEBUG] Message to Hash: '${message}' (Length: ${message.length})`);
+    console.log(`[SIGN_DEBUG] API Secret (partial for hash): ${apiSecret.substring(0,5)}...${apiSecret.substring(apiSecret.length - 5)} (Length: ${apiSecret.length})`);
+
+    return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
-/**
- * Realiza una solicitud autenticada a la API de BitMart.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario (apiKey, apiSecret, apiMemo).
- * @param {string} method - Método HTTP (GET, POST).
- * @param {string} endpoint - Endpoint de la API (ej. '/spot/v1/wallet').
- * @param {Object} [data={}] - Datos para la solicitud (query params para GET, body para POST).
- * @returns {Promise<Object>} - La respuesta de la API.
- */
-async function authenticatedRequest(authCredentials, method, endpoint, data = {}) {
-    // Validar que las credenciales vengan con la función
-    if (!authCredentials || !authCredentials.apiKey || !authCredentials.apiSecret || typeof authCredentials.apiMemo === 'undefined') {
-        throw new Error('Credenciales de BitMart API no proporcionadas o incompletas.');
-    }
-
-    const timestamp = await getSystemTime();
-    let url = `${BASE_URL}${endpoint}`;
-    let body = '';
-    let headers = {};
-
-    if (method === 'POST') {
-        body = JSON.stringify(data);
-        headers['Content-Type'] = 'application/json';
-    } else { // GET
-        const queryString = querystring.stringify(data); // Usando querystring si lo prefieres, o URLSearchParams
-        if (queryString) {
-            url = `${url}?${queryString}`;
-        }
-    }
-
-    const signature = createSignature(authCredentials.apiMemo, authCredentials.apiSecret, timestamp, body);
-
-    headers = {
-        ...headers,
-        'X-BM-KEY': authCredentials.apiKey,
-        'X-BM-TIMESTAMP': timestamp,
-        'X-BM-SIGN': signature,
-        'X-BM-MEMO': authCredentials.apiMemo,
+async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
+    const timestamp = timestampOverride || Date.now().toString();
+    const url = `${BASE_URL}${path}`;
+    let bodyForSign = '';
+    let requestConfig = {
+        headers: {
+            'User-Agent': 'axios/1.9.0',
+            'Accept': 'application/json, text/plain, */*'
+        },
+        timeout: 15000
     };
 
+    const { apiKey, secretKey, apiMemo } = authCredentials;
+
+    let apiMemoForRequestAndSign = apiMemo;
+    if (method === 'POST' && path.includes('/v4/') && (apiMemo === '' || apiMemo === null || apiMemo === undefined)) {
+        apiMemoForRequestAndSign = DEFAULT_V4_POST_MEMO;
+        console.warn(`[API_MEMO_WORKAROUND] Using default memo '${DEFAULT_V4_POST_MEMO}' for V4 POST request '${path}' as user's memo is blank.`);
+    }
+
+    const dataForRequest = { ...paramsOrData };
+
+    if (isPrivate) {
+        requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
+    }
+
+    if (method === 'GET') {
+        if (isPrivate) {
+            dataForRequest.recvWindow = 10000;
+        }
+        requestConfig.params = sortObjectKeys(dataForRequest);
+        bodyForSign = querystring.stringify(requestConfig.params);
+    } else if (method === 'POST') {
+        requestConfig.data = dataForRequest;
+        bodyForSign = JSON.stringify(dataForRequest);
+        requestConfig.headers['Content-Type'] = 'application/json';
+    }
+
+    if (isPrivate) {
+        if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
+            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
+        }
+
+        const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
+
+        requestConfig.headers['X-BM-KEY'] = apiKey;
+        requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
+        requestConfig.headers['X-BM-SIGN'] = sign;
+
+        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
+            requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
+        } else {
+            delete requestConfig.headers['X-BM-MEMO'];
+        }
+    }
+
+    console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
+    console.log(`URL: ${url}`);
+    if (method === 'POST') {
+        console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
+        console.log('Body para Firma (JSON stringificado):', bodyForSign);
+    } else {
+        console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
+    }
+    console.log('Headers enviados:', JSON.stringify(requestConfig.headers, null, 2));
+
     try {
-        const requestConfig = {
+        const response = await axios({
             method: method,
             url: url,
-            headers: headers,
-            data: method === 'POST' ? body : undefined,
-        };
+            ...requestConfig
+        });
 
-        const response = await axios(requestConfig);
-
-        if (response.data.code !== 1000) {
-            throw new Error(`BitMart API Error (${response.data.code}): ${response.data.message}`);
-        }
-        return response.data;
-    } catch (error) {
-        console.error(`Error en authenticatedRequest ${method} ${endpoint}:`, error.response ? error.response.data : error.message);
-        throw error;
-    }
-}
-
-/**
- * Obtiene el precio del ticker de un símbolo.
- * @param {string} symbol - El símbolo del par de trading (ej. 'BTC_USDT').
- */
-async function getTicker(symbol) {
-    // Esta función no necesita autenticación
-    try {
-        const response = await axios.get(`${BASE_URL}/spot/v1/ticker?symbol=${symbol}`);
-        if (response.data && response.data.code === 1000 && response.data.data.tickers && response.data.data.tickers.length > 0) {
-            const ticker = response.data.data.tickers[0];
-            return {
-                symbol: ticker.symbol,
-                last: parseFloat(ticker.last_price),
-            };
+        if (response.data && response.data.code === 1000) {
+            return response.data;
         } else {
-            throw new Error(`No se pudo obtener el ticker para ${symbol}: ${response.data ? JSON.stringify(response.data) : 'Respuesta vacía'}`);
+            console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
+            throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
-        console.error('Error en getTicker:', error.message);
-        throw error;
+        console.error(`\n❌ Falló la solicitud a ${path}.`);
+        if (error.response) {
+            console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
+            console.error('Error Status:', error.response.status);
+            console.error('Error Headers:', error.response.headers);
+            throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
+        } else if (error.request) {
+            console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
+            throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
+        } else {
+            console.error('Error Message:', error.message);
+            throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
+        }
     }
 }
 
-/**
- * Obtiene el balance de todas las monedas.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @returns {Array<Object>} Lista de balances con 'currency' y 'available'.
- */
-async function getBalance(authCredentials) {
+async function getSystemTime() {
+    console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
-        const response = await authenticatedRequest(authCredentials, 'GET', '/spot/v1/wallet');
-        if (response.data && Array.isArray(response.data.wallet_list)) {
-            return response.data.wallet_list.map(w => ({
-                currency: w.currency,
-                available: parseFloat(w.available_amount),
-                total: parseFloat(w.wallet_amount)
-            }));
+        const response = await makeRequest('GET', '/system/time', {}, false);
+        if (response && response.code === 1000 && response.data && response.data.server_time) {
+            const serverTime = response.data.server_time.toString();
+            console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
+            return serverTime;
+        } else {
+            const errorMessage = response.message || response.error_msg || 'Respuesta inesperada';
+            console.error(`❌ Respuesta inesperada al obtener la hora del servidor:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${errorMessage}`);
         }
-        return [];
     } catch (error) {
-        console.error('Error en getBalance:', error.message);
+        console.error(`❌ Error al obtener la hora del servidor de BitMart:`, error.message);
         throw error;
     }
 }
 
-/**
- * Coloca una orden de compra o venta.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @param {string} symbol - Símbolo de trading (ej. 'BTC_USDT').
- * @param {string} side - 'buy' o 'sell'.
- * @param {string} type - 'market' o 'limit'.
- * @param {number} size - Cantidad de la moneda base (ej. BTC) a comprar/vender.
- * @param {number} [price] - Precio para órdenes límite.
- */
-async function placeOrder(authCredentials, symbol, side, type, size, price = undefined) {
-    console.log(`[BITMART_SERVICE] Intentando colocar orden: ${side.toUpperCase()} ${size} ${symbol.split('_')[0]} @ ${type} ${price ? price : ''}`);
+async function getTicker(symbol) {
+    try {
+        const url = `/spot/quotation/v3/ticker`;
+        const params = { symbol: symbol };
+        console.log(`--- Solicitud GET Ticker para ${symbol} ---`);
+        const response = await makeRequest('GET', url, params, false);
+        if (response && response.code === 1000 && response.data) {
+            console.log(`✅ Ticker para ${symbol} obtenido con éxito.`);
+            return response.data;
+        } else {
+            console.error(`❌ Respuesta inesperada del ticker para ${symbol}:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada del ticker de BitMart: ${JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error(`❌ Falló la solicitud a getTicker para ${symbol}.`);
+        throw error;
+    }
+}
 
-    const orderBody = {
-        symbol: symbol,
-        side: side,
-        type: type,
-        size: size.toFixed(8) // Asegura precisión para el tamaño
-    };
+async function getBalance(authCredentials) {
+    console.log('\n--- Obteniendo Balance de la Cuenta ---');
+    try {
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
+        if (response && response.code === 1000 && response.data && response.data.wallet) {
+            console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
+            return response.data.wallet;
+        } else {
+            console.error('❌ Falló la obtención del balance de la cuenta. Respuesta inesperada:', JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada al obtener balance de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
+        }
+    }
+    catch (error) {
+        console.error('\n❌ Error al obtener balance de la cuenta:', error.message);
+        throw error;
+    }
+}
+
+async function getOpenOrders(authCredentials, symbol) {
+    console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol || 'todos los símbolos'} ---`);
+    const path = '/spot/v4/query/open-orders';
+    const requestBody = {};
+    if (symbol) { requestBody.symbol = symbol; }
+    try {
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
+        const responseData = response.data;
+        let orders = [];
+        if (Array.isArray(responseData)) {
+            orders = responseData;
+        } else if (responseData && Array.isArray(responseData.list)) {
+            orders = responseData.list;
+        } else {
+            console.warn('ℹ️ getOpenOrders: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
+        }
+        if (orders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+        } else {
+            console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
+            console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
+        }
+        return { orders: orders };
+    } catch (error) {
+        console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
+        throw error;
+    }
+}
+
+
+async function getOrderDetail(authCredentials, symbol, orderId) {
+    console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
+    const requestBody = { symbol: symbol, orderId: orderId };
+    try {
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials, serverTime);
+        if (response && response.code === 1000 && response.data) {
+            console.log(`✅ Detalle de orden ${orderId} obtenido con éxito.`);
+            return response.data;
+        } else {
+            console.error(`❌ Falló la obtención del detalle de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada al obtener detalle de orden de BitMart: ${JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error('\n❌ Error al obtener el detalle de la orden:', error.message);
+        throw error;
+    }
+}
+
+async function placeOrder(authCredentials, symbol, side, type, size, price) {
+    console.log(`[DEBUG_BITMART_SERVICE] placeOrder - symbol: ${symbol}, side: ${side}, type: ${type}, size: ${size}`);
+    console.log(`\n--- Colocando Orden ${side.toUpperCase()} de ${size} ${symbol} (${type}) ---`);
+    const requestBody = { symbol: symbol, side: side, type: type };
 
     if (type === 'limit') {
-        if (!price || price <= 0) {
-            throw new Error('El precio es requerido y debe ser positivo para una orden LIMIT.');
-        }
-        orderBody.price = price.toFixed(2); // Asegura precisión para el precio
-    } else if (type === 'market' && side === 'buy') {
-        // Para órdenes de mercado de compra, BitMart a veces requiere 'notional' (USDT amount) en lugar de 'size' (BTC amount)
-        // O dependiendo de la API, puede ser por size también. Para simplificar, asumiremos size en BTC.
-        // Si el purchase es en USDT, la conversión a 'size' debe hacerse ANTES de llamar a esta función.
-    }
-
-    try {
-        const response = await authenticatedRequest(authCredentials, 'POST', '/spot/v2/submit-order', orderBody);
-        if (response.data && response.data.order_id) {
-            console.log(`[BITMART_SERVICE] Orden ${response.data.order_id} de ${side.toUpperCase()} tipo ${type.toUpperCase()} colocada con éxito.`);
-            return {
-                orderId: response.data.order_id,
-                price: price || (await getTicker(symbol)).last, // Si es MARKET, usamos el precio actual (aproximado)
-                size: parseFloat(size),
-                side: side,
-                type: type,
-                state: 'filled' // En la simulación, asumimos que se llena. En real, sería 'new' o 'pending'
-            };
+        if (!price) { throw new Error("El precio es requerido para órdenes de tipo 'limit'."); }
+        requestBody.size = size.toString();
+        requestBody.price = price.toString();
+    } else if (type === 'market') {
+        if (side === 'buy') {
+            requestBody.notional = size.toString();
+        } else if (side === 'sell') {
+            requestBody.size = size.toString();
         } else {
-            throw new Error(`No se recibió order_id al colocar orden: ${JSON.stringify(response.data)}`);
+            throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
+        }
+    } else { throw new Error(`Tipo de orden no soportado: ${type}`); }
+
+    console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
+    try {
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
+        if (response && response.code === 1000 && response.data) {
+            console.log(`✅ Orden colocada con éxito:`, response.data);
+            return response.data;
+        } else {
+            console.error(`❌ Falló la colocación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada al colocar orden de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
         }
     } catch (error) {
-        console.error(`Error al colocar orden ${side} ${type}:`, error.message);
+        console.error('\n❌ Error al colocar la orden:', error.message);
         throw error;
     }
 }
 
+async function cancelOrder(authCredentials, symbol, order_id) {
+    console.log(`\n--- Cancando Orden ${order_id} para ${symbol} ---`);
+    const requestBody = { symbol: symbol, order_id: order_id };
+    try {
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials, serverTime);
+        if (response && response.code === 1000 && response.data) {
+            console.log(`✅ Orden ${order_id} cancelada con éxito.`);
+            return response.data;
+        } else {
+            console.error(`❌ Falló la cancelación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada al cancelar orden de BitMart: ${response.data.message || response.data.error_msg || JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error('\n❌ Error al cancelar la orden:', error.message);
+        throw error;
+    }
+}
+
+async function getHistoryOrdersV4(authCredentials, options = {}) {
+    console.log(`\n--- Listando Historial de Órdenes (V4 POST) ---`);
+    const path = '/spot/v4/query/history-orders';
+    const requestBody = {};
+    if (options.symbol) { requestBody.symbol = options.symbol; }
+    if (options.orderMode) { requestBody.orderMode = options.orderMode; }
+    if (options.startTime) { requestBody.startTime = options.startTime; }
+    if (options.endTime) { requestBody.endTime = options.endTime; }
+    if (options.limit) { requestBody.limit = options.limit; }
+    try {
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
+        const responseData = response.data;
+        let orders = [];
+        if (Array.isArray(responseData)) {
+            orders = responseData;
+        } else if (responseData && Array.isArray(responseData.list)) {
+            orders = responseData.list;
+        } else {
+            console.warn('ℹ️ getHistoryOrdersV4: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
+        }
+        if (orders.length > 0) {
+            console.log(`✅ ¡Historial de Órdenes obtenido! Se encontraron ${orders.length} órdenes.`);
+        } else {
+            console.log('ℹ️ No se encontraron órdenes en el historial con los criterios especificados.');
+            console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
+        }
+        return orders;
+    } catch (error) {
+        console.error('\n❌ Falló la obtención del historial de órdenes V4.');
+        throw error;
+    }
+}
+
+async function getKlines(symbol, interval, limit = 200) {
+    console.log(`\n--- Solicitud GET Klines (Candlesticks) para ${symbol}, intervalo ${interval}, ${limit} velas ---`);
+    const path = `/spot/quotation/v3/klines`;
+    const params = { symbol: symbol, step: interval, size: limit };
+    try {
+        const response = await makeRequest('GET', path, params, false);
+        if (response && response.code === 1000 && response.data) {
+            console.log(`✅ Klines (Candlesticks) para ${symbol} obtenidos con éxito.`);
+            const candles = response.data.map(c => ({
+                timestamp: parseInt(c[0]),
+                open: parseFloat(c[1]),
+                high: parseFloat(c[2]),
+                low: parseFloat(c[3]),
+                close: parseFloat(c[4]),
+                volume: parseFloat(c[5])
+            }));
+            return candles;
+        } else {
+            console.error(`❌ Respuesta inesperada de klines (candlesticks) para ${symbol}:`, JSON.stringify(response, null, 2));
+            throw new Error(`Respuesta inesperada de Klines (Candlesticks) de BitMart: ${JSON.stringify(response)}`);
+        }
+    } catch (error) {
+        console.error(`❌ Falló la solicitud a getKlines para ${symbol}.`);
+        throw error;
+    }
+}
+
+async function validateApiKeys(apiKey, secretKey, apiMemo) {
+    console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
+    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
+        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
+        return false;
+    }
+
+    try {
+        await getBalance({ apiKey, secretKey, apiMemo });
+        console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
+        return true;
+    } catch (error) {
+        console.error('❌ Falló la validación de credenciales API de BitMart:', error.message);
+        return false;
+    }
+}
+
+// --- Funciones de Orquestación de Órdenes (Moviendo desde autobotLogic.js) ---
+
+// Define TRADE_SYMBOL y MIN_USDT_VALUE_FOR_BITMART aquí también si son constantes de BitMart
+// Sino, se pasarán como parámetros a estas funciones. Para este ejemplo, las dejo constantes.
+const TRADE_SYMBOL = 'BTC_USDT'; // Define el símbolo para las operaciones del bot
+const MIN_USDT_VALUE_FOR_BITMART = 5; // Valor mínimo de USDT para una orden en BitMart
+
+
 /**
- * Coloca la primera orden de compra (siempre de mercado para el `purchase` en USDT).
- * Esta función asume que `purchaseAmountUsdt` es el valor en USDT.
+ * Intenta cancelar todas las órdenes abiertas para un símbolo y credenciales dados.
+ * @param {Object} bitmartCreds - Credenciales de BitMart del usuario (apiKey, secretKey, apiMemo).
+ * @param {string} symbol - Símbolo de trading (ej. 'BTC_USDT').
+ */
+async function cancelAllOpenOrders(bitmartCreds, symbol) {
+    console.log(`[BITMART_SERVICE] Intentando cancelar órdenes abiertas para ${symbol}...`);
+    try {
+        const openOrders = await getOpenOrders(bitmartCreds, symbol);
+        if (openOrders && openOrders.orders && openOrders.orders.length > 0) {
+            for (const order of openOrders.orders) {
+                console.log(`[BITMART_SERVICE] Cancelando orden: ${order.order_id}`);
+                await cancelOrder(bitmartCreds, symbol, order.order_id);
+                console.log(`[BITMART_SERVICE] Orden ${order.order_id} cancelada.`);
+            }
+            console.log(`[BITMART_SERVICE] Todas las ${openOrders.orders.length} órdenes abiertas para ${symbol} han sido canceladas.`);
+        } else {
+            console.log('[BITMART_SERVICE] No se encontraron órdenes abiertas para cancelar.');
+        }
+    } catch (error) {
+        console.error('[BITMART_SERVICE] Error al cancelar órdenes abiertas:', error.message);
+        throw error; // Propagate the error for autobotLogic to handle
+    }
+}
+
+/**
+ * Coloca la primera orden de compra (Market) para iniciar un ciclo.
  * @param {Object} authCredentials - Credenciales de BitMart del usuario.
  * @param {string} symbol - Símbolo de trading.
- * @param {number} purchaseAmountUsdt - Cantidad de USDT a gastar en la primera compra.
- * @param {number} currentPrice - Precio actual para calcular el size en BTC.
- * @returns {Object} Detalles de la orden.
+ * @param {number} purchaseAmountUsdt - Cantidad de USDT a comprar.
+ * @param {number} currentPrice - Precio actual para cálculos de validación.
+ * @returns {Object} Detalles de la orden ejecutada.
  * @throws {Error} Si no hay suficiente balance o la orden falla.
  */
 async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt, currentPrice) {
-    console.log(`[BITMART_SERVICE] Colocando primera orden de COMPRA (Market) de ${purchaseAmountUsdt.toFixed(2)} USDT...`);
+    console.log(`[BITMART_SERVICE] Colocando la primera orden de compra (Market)...`);
     const side = 'buy';
     const type = 'market';
 
+    const balanceInfo = await getBalance(authCredentials);
+    const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
+    const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
+
     if (purchaseAmountUsdt < MIN_USDT_VALUE_FOR_BITMART) {
-        throw new Error(`El monto de compra (${purchaseAmountUsdt.toFixed(2)} USDT) es menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART} USDT).`);
+        throw new Error(`El valor de la orden (${purchaseAmountUsdt.toFixed(2)} USDT) es menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART} USDT). Ajusta tu PURCHASE.`);
     }
 
-    const sizeInBaseCurrency = (purchaseAmountUsdt / currentPrice).toFixed(8); // Calcular tamaño en BTC
+    if (availableUSDT < purchaseAmountUsdt) {
+        throw new Error(`Balance insuficiente para la primera orden. Necesario: ${purchaseAmountUsdt.toFixed(2)} USDT, Disponible: ${availableUSDT.toFixed(2)} USDT.`);
+    }
 
-    try {
-        const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeInBaseCurrency);
-        console.log(`[BITMART_SERVICE] Primera orden de compra (Market) completada. ID: ${orderResult.orderId}`);
-        return orderResult;
-    } catch (error) {
-        console.error('\n❌ Error al colocar la primera orden de compra:', error.message);
-        throw error;
+    if (currentPrice === undefined || currentPrice === null || currentPrice === 0) {
+        throw new Error(`Precio actual no disponible o es cero para la primera orden.`);
+    }
+
+    // Call the generic placeOrder function from bitmartService
+    const orderResult = await placeOrder(authCredentials, symbol, side, type, purchaseAmountUsdt.toString());
+
+    if (orderResult && orderResult.order_id) {
+        // Wait for a short period to allow order to process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
+
+        if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
+            console.log(`[BITMART_SERVICE] Primera orden de compra (Market) completada: ${JSON.stringify(filledOrder)}`);
+            return {
+                orderId: filledOrder.order_id,
+                price: parseFloat(filledOrder.price || 0),
+                size: parseFloat(filledOrder.filled_size || 0),
+                side: 'buy',
+                type: 'market',
+                state: 'filled'
+            };
+        } else {
+            throw new Error(`La primera orden ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
+        }
+    } else {
+        throw new Error(`Error al colocar la primera orden: No se recibió order_id o la respuesta es inválida.`);
     }
 }
 
 /**
  * Coloca una orden de compra de cobertura (Limit).
- * Ahora se coloca inmediatamente cuando se entra en BUYING.
  * @param {Object} authCredentials - Credenciales de BitMart del usuario.
  * @param {string} symbol - Símbolo de trading.
- * @param {number} amountToBuyUsdt - Cantidad de USDT a gastar en la cobertura.
+ * @param {number} nextUSDTAmount - Cantidad de USDT para la orden de cobertura.
  * @param {number} targetPrice - Precio objetivo para la orden de cobertura.
- * @returns {Object} Detalles de la orden colocada (no necesariamente ejecutada).
- * @throws {Error} Si no hay suficiente balance o la orden falla al ser enviada.
+ * @returns {Object} Detalles de la orden ejecutada.
+ * @throws {Error} Si no hay suficiente balance o la orden falla.
  */
-async function placeCoverageBuyOrder(authCredentials, symbol, amountToBuyUsdt, targetPrice) {
-    console.log(`[BITMART_SERVICE] Colocando orden de compra de COBERTURA (Limit) de ${amountToBuyUsdt.toFixed(2)} USDT a ${targetPrice.toFixed(2)}...`);
+async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, targetPrice) {
+    console.log(`[BITMART_SERVICE] Colocando orden de compra de COBERTURA (Limit)...`);
     const side = 'buy';
     const type = 'limit';
 
-    const sizeInBaseCurrency = (amountToBuyUsdt / targetPrice).toFixed(8);
+    const balanceInfo = await getBalance(authCredentials);
+    const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
+    const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
 
-    if (amountToBuyUsdt < MIN_USDT_VALUE_FOR_BITMART) {
-        throw new Error(`El valor de la orden (${amountToBuyUsdt.toFixed(2)} USDT) es menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART} USDT).`);
+    if (availableUSDT < nextUSDTAmount || nextUSdtAmount < MIN_USDT_VALUE_FOR_BITMART) {
+        throw new Error(`Balance insuficiente (${availableUSDT.toFixed(2)} USDT) o monto de orden (${nextUSDTAmount.toFixed(2)} USDT) es menor al mínimo para orden de cobertura.`);
     }
 
-    try {
-        const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeInBaseCurrency, targetPrice);
+    if (targetPrice === undefined || targetPrice === null || targetPrice === 0) {
+        throw new Error(`Precio objetivo de cobertura no disponible o es cero.`);
+    }
 
-        if (orderResult && orderResult.orderId) {
-            console.log(`[BITMART_SERVICE] Orden de cobertura (Limit) colocada con éxito. ID: ${orderResult.orderId}`);
-            orderResult.state = 'new';
-            return orderResult;
+    // Call the generic placeOrder function
+    const orderResult = await placeOrder(authCredentials, symbol, side, type, nextUSDTAmount.toFixed(2), targetPrice.toFixed(2));
+
+    if (orderResult && orderResult.order_id) {
+        // Wait for a short period to allow order to process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
+
+        if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
+            console.log(`[BITMART_SERVICE] Orden de cobertura (Limit) completada: ${JSON.stringify(filledOrder)}`);
+            return {
+                orderId: filledOrder.order_id,
+                price: parseFloat(filledOrder.price || 0),
+                size: parseFloat(filledOrder.filled_size || 0),
+                side: 'buy',
+                type: 'limit',
+                state: 'filled'
+            };
         } else {
-            throw new Error(`Error al colocar orden de cobertura: No se recibió order_id o la respuesta es inválida.`);
+            throw new Error(`La orden de cobertura ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
         }
-    } catch (error) {
-        console.error('\n❌ Error al colocar la orden de cobertura:', error.message);
-        throw error;
+    } else {
+        throw new Error(`Error al colocar orden de cobertura: No se recibió order_id o la respuesta es inválida.`);
     }
 }
 
 /**
- * Coloca una orden de venta (Limit) para cerrar un ciclo.
+ * Coloca una orden de venta (Market) para cerrar un ciclo.
  * @param {Object} authCredentials - Credenciales de BitMart del usuario.
  * @param {string} symbol - Símbolo de trading.
  * @param {number} sizeBTC - Cantidad de BTC a vender.
- * @param {number} targetPrice - Precio objetivo para la orden de venta (PV).
- * @returns {Object} Detalles de la orden colocada (no necesariamente ejecutada).
+ * @returns {Object} Detalles de la orden ejecutada.
  * @throws {Error} Si no hay activo para vender o la orden falla.
  */
-async function placeSellOrder(authCredentials, symbol, sizeBTC, targetPrice) {
-    console.log(`[BITMART_SERVICE] Colocando orden de VENTA (Limit) de ${sizeBTC.toFixed(8)} BTC a ${targetPrice.toFixed(2)}...`);
+async function placeSellOrder(authCredentials, symbol, sizeBTC) {
+    console.log(`[BITMART_SERVICE] Colocando orden de VENTA (Market)...`);
     const side = 'sell';
-    const type = 'limit';
+    const type = 'market';
 
     if (sizeBTC <= 0) {
         throw new Error(`No hay activo para vender (AC = 0).`);
     }
-    if (targetPrice <= 0) {
-        throw new Error(`Precio objetivo de venta inválido para orden límite.`);
-    }
 
-    try {
-        await cancelAllOpenOrders(authCredentials, symbol, 'buy'); // Solo cancela órdenes de compra
+    // Call the generic placeOrder function
+    const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeBTC.toFixed(8));
 
-        const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeBTC, targetPrice);
+    if (orderResult && orderResult.order_id) {
+        // Cancel all pending buy orders before selling (important for strategy)
+        await cancelAllOpenOrders(authCredentials, symbol);
 
-        if (orderResult && orderResult.orderId) {
-            console.log(`[BITMART_SERVICE] Orden de venta (Limit) colocada con éxito. ID: ${orderResult.orderId}`);
-            orderResult.state = 'new';
-            return orderResult;
-        } else {
-            throw new Error(`Error al colocar la orden de venta: No se recibió order_id o la respuesta es inválida.`);
-        }
-    } catch (error) {
-        console.error(`Error al colocar orden ${side} ${type}:`, error.message);
-        throw error;
-    }
-}
+        // Wait for a short period to allow order to process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
 
-/**
- * Obtiene las órdenes abiertas de un usuario para un símbolo específico.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @param {string} symbol - Símbolo de trading (ej. 'BTC_USDT').
- * @returns {Object} Un objeto que contiene una lista de órdenes abiertas.
- */
-async function getOpenOrders(authCredentials, symbol) {
-    try {
-        const response = await authenticatedRequest(authCredentials, 'GET', '/spot/v1/open-orders', { symbol });
-        if (response.data && Array.isArray(response.data.current_page)) {
-            const openOrders = response.data.current_page.map(order => ({
-                order_id: order.order_id,
-                symbol: order.symbol,
-                side: order.side,
-                type: order.type,
-                price: parseFloat(order.price),
-                size: parseFloat(order.size),
-                filled_size: parseFloat(order.filled_size),
-                state: order.state
-            }));
-            return { orders: openOrders };
-        }
-        return { orders: [] };
-    } catch (error) {
-        if (error.message && error.message.includes('500040')) {
-            console.log('[BITMART_SERVICE] No hay órdenes abiertas.');
-            return { orders: [] };
-        }
-        console.error('Error al obtener órdenes abiertas:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Obtiene el detalle de una orden específica.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} orderId - ID de la orden.
- * @returns {Object} Detalles de la orden.
- */
-async function getOrderDetail(authCredentials, symbol, orderId) {
-    try {
-        const response = await authenticatedRequest(authCredentials, 'GET', '/spot/v1/order_detail', { symbol, order_id: orderId });
-        if (response.data && response.data.order) {
-            const order = response.data.order;
+        if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
+            console.log(`[BITMART_SERVICE] Orden de venta (Market) completada: ${JSON.stringify(filledOrder)}`);
             return {
-                order_id: order.order_id,
-                symbol: order.symbol,
-                side: order.side,
-                type: order.type,
-                price: parseFloat(order.price),
-                size: parseFloat(order.size),
-                filled_size: parseFloat(order.filled_size),
-                state: order.state
+                orderId: filledOrder.order_id,
+                price: parseFloat(filledOrder.price || 0),
+                size: parseFloat(filledOrder.filled_size || 0),
+                side: 'sell',
+                type: 'market',
+                state: 'filled'
             };
-        }
-        throw new Error(`Detalle de orden no encontrado para ID ${orderId}`);
-    } catch (error) {
-        console.error(`Error al obtener detalle de orden ${orderId}:`, error.message);
-        if (error.message && error.message.includes('500040')) {
-             console.log(`[BITMART_SERVICE] Orden ${orderId} ya no existe o no se encontró.`);
-             return { order_id: orderId, state: 'not_found' };
-        }
-        throw error;
-    }
-}
-
-/**
- * Cancela todas las órdenes abiertas para un símbolo.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} [side] - Opcional. 'buy' o 'sell' para cancelar solo órdenes de un lado.
- */
-async function cancelAllOpenOrders(authCredentials, symbol, side = null) {
-    console.log(`[BITMART_SERVICE] Cancelando todas las órdenes abiertas para ${symbol}${side ? ` (lado: ${side})` : ''}...`);
-    try {
-        if (side) {
-            const openOrdersResponse = await getOpenOrders(authCredentials, symbol);
-            const ordersToCancel = openOrdersResponse.orders.filter(order => order.side === side);
-            if (ordersToCancel.length > 0) {
-                console.log(`[BITMART_SERVICE] Encontradas ${ordersToCancel.length} órdenes ${side} para cancelar.`);
-                for (const order of ordersToCancel) {
-                    try {
-                        await cancelOrder(authCredentials, symbol, order.order_id);
-                        console.log(`[BITMART_SERVICE] Orden ${order.order_id} cancelada.`);
-                    } catch (cancelError) {
-                        console.warn(`[BITMART_SERVICE] Falló la cancelación de la orden ${order.order_id}: ${cancelError.message}`);
-                    }
-                }
-            } else {
-                console.log(`[BITMART_SERVICE] No se encontraron órdenes abiertas de ${side} para ${symbol}.`);
-            }
         } else {
-            const response = await authenticatedRequest(authCredentials, 'POST', '/spot/v1/cancel_orders', { symbol: symbol });
-            if (response.data && response.data.succeed_count) {
-                console.log(`[BITMART_SERVICE] Se cancelaron ${response.data.succeed_count} órdenes.`);
-            } else {
-                console.log('[BITMART_SERVICE] Ninguna orden fue cancelada o respuesta inesperada.');
-            }
+            throw new Error(`La orden de venta ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
         }
-        return true;
-    } catch (error) {
-        if (error.message && error.message.includes('No orders')) {
-            console.log('[BITMART_SERVICE] No hay órdenes abiertas para cancelar.');
-            return true;
-        }
-        console.error('Error al cancelar todas las órdenes:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Cancela una orden específica.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} orderId - ID de la orden a cancelar.
- */
-async function cancelOrder(authCredentials, symbol, orderId) {
-    try {
-        const response = await authenticatedRequest(authCredentials, 'POST', '/spot/v1/cancel_order', { symbol, order_id: orderId });
-        if (response.data && response.data.succeed) {
-            console.log(`[BITMART_SERVICE] Orden ${orderId} cancelada con éxito.`);
-            return true;
-        } else {
-            throw new Error(`Falló la cancelación de la orden ${orderId}: ${JSON.stringify(response.data)}`);
-        }
-    } catch (error) {
-        console.error(`Error al cancelar orden ${orderId}:`, error.message);
-        throw error;
+    } else {
+        throw new Error(`Error al colocar la orden de venta: No se recibió order_id o la respuesta es inválida.`);
     }
 }
 
@@ -431,12 +572,17 @@ async function cancelOrder(authCredentials, symbol, orderId) {
 module.exports = {
     getTicker,
     getBalance,
+    getOpenOrders,
+    getOrderDetail,
+    placeOrder, // mantener la función genérica si otras partes la usan directamente
+    cancelOrder, // mantener la función genérica si otras partes la usan directamente
+    getHistoryOrdersV4,
+    getKlines,
+    validateApiKeys,
+    getSystemTime,
+    // Exportar las nuevas funciones de orquestación de órdenes
+    cancelAllOpenOrders,
     placeFirstBuyOrder,
     placeCoverageBuyOrder,
     placeSellOrder,
-    getOpenOrders,
-    getOrderDetail,
-    cancelAllOpenOrders,
-    cancelOrder,
-    MIN_USDT_VALUE_FOR_BITMART
 };
