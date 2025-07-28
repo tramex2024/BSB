@@ -173,7 +173,7 @@ async function runBotLogic(botStateObj, bitmartCreds) {
 
                         try {
                             // Llama a la nueva función centralizada en bitmartService
-                            //const orderDetails = await bitmartService.placeFirstBuyOrder(bitmartCreds, TRADE_SYMBOL, purchaseAmount, botStateObj.currentPrice);
+                            const orderDetails = await bitmartService.placeFirstBuyOrder(bitmartCreds, TRADE_SYMBOL, purchaseAmount, botStateObj.currentPrice);
 
                             botStateObj.ppc = orderDetails.price;
                             botStateObj.cp = orderDetails.price * orderDetails.size; // cp es el costo total en USDT
