@@ -8,6 +8,11 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 
 const DEFAULT_V4_POST_MEMO = 'GainBot';
 
+// Constantes para los reintentos
+const MAX_RETRIES = 5; // Número máximo de reintentos
+const INITIAL_RETRY_DELAY_MS = 500; // Retraso inicial en milisegundos
+const RETRY_ERROR_CODES = [30000]; // Código de error de BitMart para 'Not found' (404)
+
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) {
         return obj;
@@ -122,6 +127,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
+            // Asegúrate de incluir el código de error en el mensaje para el manejo de reintentos
             throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
         }
     } catch (error) {
@@ -130,7 +136,8 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
             console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
             console.error('Error Status:', error.response.status);
             console.error('Error Headers:', error.response.headers);
-            throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status})`);
+            // Incluir el código de error para el manejo de reintentos
+            throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status}) (Code: ${error.response.data?.code || 'N/A'})`);
         } else if (error.request) {
             console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
             throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
@@ -228,10 +235,24 @@ async function getOpenOrders(authCredentials, symbol) {
     }
 }
 
-
-async function getOrderDetail(authCredentials, symbol, orderId) {
+/**
+ * Obtiene el detalle de una orden con lógica de reintentos para manejar "Not Found".
+ * @param {Object} authCredentials - Credenciales de BitMart del usuario.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} orderId - ID de la orden.
+ * @param {number} retries - Número actual de reintentos (interno).
+ * @param {number} delay - Retraso actual en ms (interno).
+ * @returns {Object} Detalles de la orden.
+ * @throws {Error} Si la orden no se encuentra después de los reintentos o hay otro error.
+ */
+async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
     const requestBody = { symbol: symbol, orderId: orderId };
+
+    if (retries >= MAX_RETRIES) {
+        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}. La orden no se encontró o sigue pendiente.`);
+    }
+
     try {
         const serverTime = await getSystemTime();
         const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials, serverTime);
@@ -243,8 +264,20 @@ async function getOrderDetail(authCredentials, symbol, orderId) {
             throw new Error(`Respuesta inesperada al obtener detalle de orden de BitMart: ${JSON.stringify(response)}`);
         }
     } catch (error) {
-        console.error('\n❌ Error al obtener el detalle de la orden:', error.message);
-        throw error;
+        // Verificar si el error es el de "Not found" (código 30000)
+        const errorMessage = error.message;
+        const isNotFound = RETRY_ERROR_CODES.some(code => errorMessage.includes(`Code: ${code}`));
+        const isNotFoundStatus = errorMessage.includes(`Status: 404`);
+
+        if ((isNotFound || isNotFoundStatus) && retries < MAX_RETRIES) {
+            console.warn(`[RETRY] Orden ${orderId} no encontrada aún (Error: ${errorMessage}). Reintento ${retries + 1}/${MAX_RETRIES} en ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return getOrderDetail(authCredentials, symbol, orderId, retries + 1, delay * 1.5); // Incrementa el retraso
+        } else {
+            // Si no es el error de reintento o se excedieron los reintentos, lanzar el error
+            console.error('\n❌ Error al obtener el detalle de la orden (sin reintentos o max retries alcanzado):', errorMessage);
+            throw error;
+        }
     }
 }
 
@@ -448,9 +481,8 @@ async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt, c
     const orderResult = await placeOrder(authCredentials, symbol, side, type, purchaseAmountUsdt.toString());
 
     if (orderResult && orderResult.order_id) {
-        // Wait for a short period to allow order to process
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
+        // No necesitamos un retraso fijo aquí, la lógica de reintentos en getOrderDetail lo manejará.
+        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id); // Se llama con los valores por defecto de retries/delay
 
         if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
             console.log(`[BITMART_SERVICE] Primera orden de compra (Market) completada: ${JSON.stringify(filledOrder)}`);
@@ -488,7 +520,7 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
     const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
     const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
 
-    if (availableUSDT < nextUSDTAmount || nextUSdtAmount < MIN_USDT_VALUE_FOR_BITMART) {
+    if (availableUSDT < nextUSDTAmount || nextUSDTAmount < MIN_USDT_VALUE_FOR_BITMART) {
         throw new Error(`Balance insuficiente (${availableUSDT.toFixed(2)} USDT) o monto de orden (${nextUSDTAmount.toFixed(2)} USDT) es menor al mínimo para orden de cobertura.`);
     }
 
@@ -500,9 +532,8 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
     const orderResult = await placeOrder(authCredentials, symbol, side, type, nextUSDTAmount.toFixed(2), targetPrice.toFixed(2));
 
     if (orderResult && orderResult.order_id) {
-        // Wait for a short period to allow order to process
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
+        // No necesitamos un retraso fijo aquí, la lógica de reintentos en getOrderDetail lo manejará.
+        const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id); // Se llama con los valores por defecto de retries/delay
 
         if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
             console.log(`[BITMART_SERVICE] Orden de cobertura (Limit) completada: ${JSON.stringify(filledOrder)}`);
@@ -514,6 +545,19 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
                 type: 'limit',
                 state: 'filled'
             };
+        } else if (filledOrder && (filledOrder.state === 'open' || filledOrder.state === 'partial_filled')) {
+             // Si la orden está abierta o parcialmente llena, la devolvemos como tal.
+             // Esto es crucial para las órdenes LIMIT que no se llenan instantáneamente.
+            console.log(`[BITMART_SERVICE] Orden de cobertura (Limit) ${orderResult.order_id} está ${filledOrder.state}.`);
+            return {
+                orderId: filledOrder.order_id,
+                price: parseFloat(filledOrder.price || 0),
+                size: parseFloat(filledOrder.size || 0), // Aquí es el size total de la orden
+                filledSize: parseFloat(filledOrder.filled_size || 0), // Cuánto se ha llenado
+                side: 'buy',
+                type: 'limit',
+                state: filledOrder.state
+            };
         } else {
             throw new Error(`La orden de cobertura ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
         }
@@ -523,42 +567,57 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
 }
 
 /**
- * Coloca una orden de venta (Market) para cerrar un ciclo.
+ * Coloca una orden de venta (Market o Limit) para cerrar un ciclo.
  * @param {Object} authCredentials - Credenciales de BitMart del usuario.
  * @param {string} symbol - Símbolo de trading.
  * @param {number} sizeBTC - Cantidad de BTC a vender.
+ * @param {number} [price=null] - Precio límite para la orden (opcional, si es limit order).
  * @returns {Object} Detalles de la orden ejecutada.
  * @throws {Error} Si no hay activo para vender o la orden falla.
  */
-async function placeSellOrder(authCredentials, symbol, sizeBTC) {
-    console.log(`[BITMART_SERVICE] Colocando orden de VENTA (Market)...`);
+async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
+    console.log(`[BITMART_SERVICE] Colocando orden de VENTA ${price ? '(Limit)' : '(Market)'}...`);
     const side = 'sell';
-    const type = 'market';
+    const type = price ? 'limit' : 'market';
 
     if (sizeBTC <= 0) {
         throw new Error(`No hay activo para vender (AC = 0).`);
     }
 
     // Call the generic placeOrder function
-    const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeBTC.toFixed(8));
+    const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeBTC.toFixed(8), price ? price.toFixed(2) : undefined);
 
     if (orderResult && orderResult.order_id) {
         // Cancel all pending buy orders before selling (important for strategy)
-        await cancelAllOpenOrders(authCredentials, symbol);
+        // Ya esto se maneja en autobotLogic.js para las órdenes de compra.
+        // Pero para órdenes de venta, si es una limit, no deberíamos cancelar si no se llena.
+        // La lógica de cancelar aquí solo tiene sentido si la venta es market.
+        // Como la orden de venta final es LIMIT, esta cancelación no es necesaria inmediatamente
+        // y se haría al detener el bot o al reanudar un ciclo si la orden no se llena.
 
-        // Wait for a short period to allow order to process
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Usamos la función de reintentos para obtener el detalle de la orden
         const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
 
         if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
-            console.log(`[BITMART_SERVICE] Orden de venta (Market) completada: ${JSON.stringify(filledOrder)}`);
+            console.log(`[BITMART_SERVICE] Orden de venta ${type} completada: ${JSON.stringify(filledOrder)}`);
             return {
                 orderId: filledOrder.order_id,
                 price: parseFloat(filledOrder.price || 0),
                 size: parseFloat(filledOrder.filled_size || 0),
                 side: 'sell',
-                type: 'market',
+                type: type,
                 state: 'filled'
+            };
+        } else if (filledOrder && (filledOrder.state === 'open' || filledOrder.state === 'partial_filled')) {
+            console.log(`[BITMART_SERVICE] Orden de venta ${orderResult.order_id} está ${filledOrder.state}.`);
+            return {
+                orderId: filledOrder.order_id,
+                price: parseFloat(filledOrder.price || 0),
+                size: parseFloat(filledOrder.size || 0), // Total size of the order
+                filledSize: parseFloat(filledOrder.filled_size || 0), // How much has been filled
+                side: 'sell',
+                type: type,
+                state: filledOrder.state
             };
         } else {
             throw new Error(`La orden de venta ${orderResult.order_id} no se ha completado todavía o falló. Estado: ${filledOrder ? filledOrder.state : 'Desconocido'}`);
@@ -566,6 +625,13 @@ async function placeSellOrder(authCredentials, symbol, sizeBTC) {
     } else {
         throw new Error(`Error al colocar la orden de venta: No se recibió order_id o la respuesta es inválida.`);
     }
+}
+
+// Nueva función placeLimitSellOrder para mayor claridad en el autobotLogic
+async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
+    console.log(`[BITMART_SERVICE] Colocando orden de VENTA LÍMITE...`);
+    // Reutiliza placeSellOrder, pero asegura que el tipo sea 'limit' y el precio esté presente
+    return await placeSellOrder(authCredentials, symbol, sizeBTC, price);
 }
 
 
@@ -585,4 +651,5 @@ module.exports = {
     placeFirstBuyOrder,
     placeCoverageBuyOrder,
     placeSellOrder,
+    placeLimitSellOrder, // Exportar la nueva función de venta límite
 };
