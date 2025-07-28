@@ -1,6 +1,6 @@
 // public/js/modules/calculations.js
-// Importar solo las constantes de DOM y funciones que realmente se necesitan para los cálculos
-import { purchaseInput, incrementInput, decrementInput, ultimoCoverageValido } from '../main.js';
+// Importa solo los elementos DOM que son inputs o displays, y las funciones que necesitas para CALCULAR
+import { purchaseInput, incrementInput, decrementInput, triggerInput } from '../main.js';
 
 export function calcularORQ(purchase, increment, balance) {
     let totalSpent = 0;
@@ -31,7 +31,7 @@ export function calcularORQ(purchase, increment, balance) {
 }
 
 export function calcularCoverage(orq, initialPrice, decrement) {
-    if (orq === 0) {
+    if (orq === 0 || initialPrice === 0) { // Añadimos chequeo para initialPrice === 0
         return 0;
     }
 
@@ -51,28 +51,27 @@ export function calcularCoverage(orq, initialPrice, decrement) {
 }
 
 export function actualizarCalculos() {
-    if (!purchaseInput || !incrementInput || !decrementInput || !document.getElementById("price") || !document.getElementById("balance") || !document.getElementById("orq") || !document.getElementById("coverage")) {
-        console.warn("Faltan elementos DOM para actualizar cálculos.");
-        return;
-    }
-
-    const purchase = parseFloat(purchaseInput.value) || 0;
-    const increment = parseFloat(incrementInput.value) || 100;
-    const decrement = parseFloat(decrementInput.value) || 1;
-    const priceText = document.getElementById("price").textContent;
-    const price = parseFloat(priceText.replace(' USDT', '')) || 0;
-    const balanceText = document.getElementById("balance").textContent;
+    // Asegúrate de que los elementos existan antes de intentar acceder a .value o .textContent
+    const purchase = parseFloat(purchaseInput?.value) || 0;
+    const increment = parseFloat(incrementInput?.value) || 100;
+    const decrement = parseFloat(decrementInput?.value) || 1;
+    const priceText = document.getElementById("price")?.textContent;
+    const price = parseFloat(priceText?.replace(' USDT', '')) || 0;
+    const balanceText = document.getElementById("balance")?.textContent;
     const balance = balanceText === 'Login to see' ? 0 : parseFloat(balanceText) || 0;
 
     const orq = calcularORQ(purchase, increment, balance);
     const coverage = calcularCoverage(orq, price, decrement);
 
-    document.getElementById("orq").textContent = orq;
-    document.getElementById("coverage").textContent = coverage.toFixed(2);
-    // Necesitas una forma de actualizar ultimoCoverageValido en main.js si es un estado global
-    // O hacer que este módulo lo exporte y main.js lo actualice.
-    // Por ahora, asumiremos que se exporta o se pasa.
-    // main.js debería tener: export let ultimoCoverageValido = 0.00;
-    // Y aquí: ultimoCoverageValido = coverage; // Si importas el 'let'
-    // O puedes hacer que esta función retorne el valor y el llamador lo asigne.
+    // Actualiza directamente los elementos del DOM en este módulo
+    if (document.getElementById("orq")) {
+        document.getElementById("orq").textContent = orq;
+    }
+    if (document.getElementById("coverage")) {
+        document.getElementById("coverage").textContent = coverage.toFixed(2);
+    }
+
+    // Esta función ya no necesita retornar 'coverage' si su único propósito es actualizar el DOM
+    // Si otros módulos necesitan el valor de 'coverage', entonces sí deberías retornarlo.
+    // Por ahora, asumiremos que no lo necesitan directamente fuera de este display.
 }

@@ -1,93 +1,148 @@
 // public/js/main.js
 
+// --- Importaciones de Módulos ---
+// Importa las funciones y variables necesarias de tus módulos.
+// Las rutas son relativas al archivo main.js.
 import { fetchFromBackend, displayLogMessage, isLoggedIn, checkLoginStatus, handleLogout } from './modules/auth.js';
 import { toggleAuthModal, toggleApiModal, updateLoginIcon } from './modules/modals.js';
 import { getBalances } from './modules/balance.js';
-import { fetchOrders, setActiveTab, displayOrders, createOrderElement, updateOrderElement, currentDisplayedOrders } from './modules/orders.js'; // currentDisplayedOrders también se exporta e importa
+import { fetchOrders, setActiveTab, displayOrders, createOrderElement, updateOrderElement } from './modules/orders.js';
 import { cargarPrecioEnVivo, checkConnection } from './modules/network.js';
-import { actualizarCalculos, calcularORQ, calcularCoverage } from './modules/calculations.js';
+import { actualizarCalculos } from './modules/calculations.js'; // Solo importamos la función, no la variable
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 
 // --- Constantes Globales (se mantienen aquí porque son usadas en varios módulos) ---
+// Estas se exportan para que otros módulos puedan importarlas si las necesitan.
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL = 'BTC_USDT';
 
-// --- Elementos del DOM (Importantes para el inicio o compartidos entre módulos) ---
-// Declara estas variables como 'let' si necesitas asignarlas después del DOMContentLoaded
-// o pasarlas como argumentos a funciones que las necesiten.
-// Para elementos que se acceden globalmente, puedes mantenerlos aquí o hacer que los módulos los obtengan.
-// Por simplicidad en un proyecto pequeño-mediano, tenerlos aquí y pasarlos puede ser práctico.
-export const authModal = document.getElementById('auth-modal');
-export const authForm = document.getElementById('auth-form');
-export const emailInput = document.getElementById('email');
-export const tokenInput = document.getElementById('token');
-export const authButton = document.getElementById('auth-button');
-export const authMessage = document.getElementById('auth-message');
-export const loginLogoutIcon = document.getElementById('login-logout-icon');
-export const apiKeyIcon = document.getElementById('api-key-icon');
+// --- Elementos del DOM (Exportados para que otros módulos puedan acceder a ellos directamente) ---
+// Definimos una variable `let` para cada elemento del DOM que necesitamos acceder globalmente.
+// Estos se inicializan a `null` y se asignan dentro de `DOMContentLoaded`
+// para asegurar que el DOM esté completamente cargado antes de intentar acceder a ellos.
+// Así, otros módulos pueden importarlos directamente.
 
-export const apiModal = document.getElementById('api-modal');
-export const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
-export const apiKeyInput = document.getElementById('api-key');
-export const secretKeyInput = document.getElementById('secret-key');
-export const apiMemoInput = document.getElementById('api-memo');
-export const apiStatusMessage = document.getElementById('api-status-message');
-export const connectionIndicator = document.getElementById('connection-indicator');
-export const connectionText = document.getElementById('connection-text');
-export const apiForm = document.getElementById('api-form');
+// Elementos de Autenticación/Modal
+export let authModal = null;
+export let authForm = null;
+export let emailInput = null;
+export let tokenInput = null;
+export let authButton = null;
+export let authMessage = null;
+export let loginLogoutIcon = null;
 
-export const logMessageElement = document.getElementById('log-message');
+// Elementos de Configuración de API/Modal
+export let apiKeyIcon = null;
+export let apiModal = null;
+export let closeApiModalButton = null;
+export let apiKeyInput = null;
+export let secretKeyInput = null;
+export let apiMemoInput = null;
+export let apiStatusMessage = null;
+export let connectionIndicator = null;
+export let connectionText = null;
+export let apiForm = null;
 
-export const purchaseInput = document.getElementById("purchase");
-export const incrementInput = document.getElementById("increment");
-export const decrementInput = document.getElementById("decrement");
-export const triggerInput = document.getElementById("trigger");
-export const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
-export const botStateDisplay = document.getElementById('bot-state');
-export const cycleDisplay = document.getElementById('cycle');
-export const profitDisplay = document.getElementById('profit');
-export const cycleProfitDisplay = document.getElementById('cycleprofit');
-export const startBtn = document.getElementById('start-btn');
-export const resetBtn = document.getElementById('reset-btn');
+// Elemento de Log Message
+export let logMessageElement = null;
 
-// --- Estado de la Aplicación (Exportar si se modifican en otros módulos) ---
-export let currentTab = 'opened'; // Exportar si setActiveTab lo modifica
-// currentDisplayedOrders se maneja en el módulo de órdenes, y es un Map, por lo que su referencia se puede pasar.
+// Elementos del Bot (Inputs y Displays)
+export let purchaseInput = null;
+export let incrementInput = null;
+export let decrementInput = null;
+export let triggerInput = null;
+export let stopAtCycleEndCheckbox = null;
+export let botStateDisplay = null;
+export let cycleDisplay = null;
+export let profitDisplay = null;
+export let cycleProfitDisplay = null;
+export let startBtn = null;
+export let resetBtn = null;
 
-// Exportar displayLogMessage si se usa en otros módulos
-export { displayLogMessage }; // Ya está en auth.js, pero para que sea accesible fácilmente.
-
-// --- Event Listeners del DOMContentLoaded (punto de entrada principal) ---
+// --- Event Listener Principal para el DOM ---
+// Todo el código que interactúa con el DOM debe estar dentro de este listener,
+// para asegurar que los elementos HTML ya existen.
 document.addEventListener('DOMContentLoaded', () => {
-    // Inicializar la verificación del estado de login al cargar la página
-    checkLoginStatus();
+    // --- Asignación de Elementos del DOM ---
+    // Asignamos las variables exportadas a sus respectivos elementos del DOM.
+    // Esto es crucial para que los módulos importen referencias válidas.
+    authModal = document.getElementById('auth-modal');
+    authForm = document.getElementById('auth-form');
+    emailInput = document.getElementById('email');
+    tokenInput = document.getElementById('token');
+    authButton = document.getElementById('auth-button');
+    authMessage = document.getElementById('auth-message');
+    loginLogoutIcon = document.getElementById('login-logout-icon');
 
-    // Setup de los tabs principales de navegación
+    apiKeyIcon = document.getElementById('api-key-icon');
+    apiModal = document.getElementById('api-modal');
+    // closeApiModalButton debe ser asignado después de que apiModal exista
+    closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
+    apiKeyInput = document.getElementById('api-key');
+    secretKeyInput = document.getElementById('secret-key');
+    apiMemoInput = document.getElementById('api-memo');
+    apiStatusMessage = document.getElementById('api-status-message');
+    connectionIndicator = document.getElementById('connection-indicator');
+    connectionText = document.getElementById('connection-text');
+    apiForm = document.getElementById('api-form');
+
+    logMessageElement = document.getElementById('log-message');
+
+    purchaseInput = document.getElementById("purchase");
+    incrementInput = document.getElementById("increment");
+    decrementInput = document.getElementById("decrement");
+    triggerInput = document.getElementById("trigger");
+    stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
+    botStateDisplay = document.getElementById('bot-state');
+    cycleDisplay = document.getElementById('cycle');
+    profitDisplay = document.getElementById('profit');
+    cycleProfitDisplay = document.getElementById('cycleprofit');
+    startBtn = document.getElementById('start-btn');
+    resetBtn = document.getElementById('reset-btn');
+
+    // --- Inicializaciones ---
+    // Inicia las funciones principales de tu aplicación.
+
+    // 1. Configura la navegación de las pestañas principales (Dashboard, Autobot, etc.)
     setupNavTabs();
 
-    // Cargar la configuración y estado del bot si el usuario está logueado
+    // 2. Verifica el estado de login al cargar la página.
+    checkLoginStatus();
+
+    // 3. Carga la configuración y estado del bot si el usuario está logueado.
     loadBotConfigAndState();
 
-    // Inicializar los cálculos y el estado de conexión del bot (si los elementos existen)
-    if (document.getElementById('balance')) getBalances();
-    if (document.getElementById('price')) cargarPrecioEnVivo();
+    // 4. Obtiene balances, precio en vivo y chequea la conexión (si los elementos existen).
+    // Es importante llamar a `actualizarCalculos` después de obtener estos datos,
+    // ya que `actualizarCalculos` depende de ellos.
+    if (document.getElementById('balance')) getBalances(); // getBalances llama a actualizarCalculos
+    if (document.getElementById('price')) cargarPrecioEnVivo(); // cargarPrecioEnVivo llama a actualizarCalculos
     if (document.getElementById('status-dot')) checkConnection();
+
+    // 5. Establece la pestaña de órdenes activa por defecto (normalmente 'opened').
+    // Esto disparará la carga inicial de órdenes.
     if (document.getElementById('tab-opened')) {
-        setActiveTab('tab-opened'); // Esto internamente llama a fetchOrders
+        // 'opened' es el data-tab del botón #tab-opened
+        setActiveTab('tab-opened');
     }
 
-    // Configurar intervalos de actualización
-    setInterval(getBalances, 10000);
-    setInterval(cargarPrecioEnVivo, 2000);
-    setInterval(checkConnection, 10000);
-    setInterval(() => fetchOrders(currentTab), 15000);
+    // --- Configuración de Intervalos de Actualización ---
+    // Actualizaciones periódicas para mantener la UI al día.
+    setInterval(getBalances, 10000); // Actualiza balances cada 10 segundos
+    setInterval(cargarPrecioEnVivo, 2000); // Actualiza precio cada 2 segundos
+    setInterval(checkConnection, 10000); // Chequea conexión cada 10 segundos
+    // currentTab es manejado por el módulo orders, por eso se pasa como argumento
+    setInterval(() => fetchOrders(document.querySelector('.autobot-tabs button.active-tab')?.id || 'tab-opened'), 15000); // Actualiza órdenes cada 15 segundos
 
-    // Event listeners para los botones del bot
+    // --- Event Listeners ---
+    // Configura los oyentes de eventos para las interacciones del usuario.
+
+    // Botones del bot
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
 
-    // Event listeners para las pestañas de órdenes
+    // Pestañas de órdenes (Opened, Filled, Cancelled, All)
     const tabOpened = document.getElementById('tab-opened');
     const tabFilled = document.getElementById('tab-filled');
     const tabCancelled = document.getElementById('tab-cancelled');
@@ -98,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tabCancelled) tabCancelled.addEventListener('click', () => setActiveTab('tab-cancelled'));
     if (tabAll) tabAll.addEventListener('click', () => setActiveTab('tab-all'));
 
-    // Event listeners para los inputs de cálculos del bot
+
+    // Inputs de cálculos del bot (llaman a actualizarCalculos en cada cambio)
     if (purchaseInput) purchaseInput.addEventListener('input', actualizarCalculos);
     if (incrementInput) incrementInput.addEventListener('input', actualizarCalculos);
     if (decrementInput) decrementInput.addEventListener('input', actualizarCalculos);
@@ -107,10 +163,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Lógica para el modal de Autenticación (Login/Registro) ---
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
-            if (isLoggedIn) { // isLoggedIn ahora es un import
-                handleLogout();
+            // isLoggedIn ahora es una variable importada del módulo auth.js
+            if (isLoggedIn) {
+                handleLogout(); // Llama a la función de logout del módulo auth.js
             } else {
-                toggleAuthModal(true);
+                toggleAuthModal(true); // Abre el modal de auth del módulo modals.js
             }
         });
     }
@@ -130,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let data;
 
                 if (tokenInput.style.display === 'none') {
+                    // Si el campo de token está oculto, significa que estamos solicitando un token.
                     response = await fetch(`${BACKEND_URL}/api/auth/request-token`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -140,9 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (response.ok) {
                         authMessage.textContent = data.message;
                         authMessage.style.color = 'green';
-                        emailInput.disabled = true;
-                        tokenInput.style.display = 'block';
-                        authButton.textContent = 'Verify';
+                        emailInput.disabled = true; // Deshabilita el email para que el usuario ingrese el token
+                        tokenInput.style.display = 'block'; // Muestra el campo de token
+                        authButton.textContent = 'Verify'; // Cambia el texto del botón
                         displayLogMessage(`Verification token sent to ${email}.`, 'success');
                     } else {
                         authMessage.textContent = data.error || 'Server error. Please try again later.';
@@ -150,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         displayLogMessage(`Token request failed: ${data.error || 'Unknown error'}.`, 'error');
                     }
                 } else {
+                    // Si el campo de token está visible, significa que estamos verificando el token.
                     response = await fetch(`${BACKEND_URL}/api/auth/verify-token`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -160,16 +219,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (response.ok) {
                         localStorage.setItem('authToken', data.token);
                         localStorage.setItem('userEmail', email);
-                        isLoggedIn = true; // Actualiza el estado importado
-                        updateLoginIcon();
+                        // No necesitamos asignar a isLoggedIn aquí, ya que checkLoginStatus() y handleLogout()
+                        // en auth.js son los que realmente gestionan el estado y updateLoginIcon()
+                        // ya lo maneja basándose en localStorage.
+                        updateLoginIcon(); // Actualiza el icono de login/logout
                         authMessage.textContent = data.message;
                         authMessage.style.color = 'green';
                         displayLogMessage('Login successful!', 'success');
                         setTimeout(async () => {
-                            toggleAuthModal(false);
+                            toggleAuthModal(false); // Cierra el modal
+                            // Recarga los datos del bot y balances después de un login exitoso
                             await loadBotConfigAndState();
                             await getBalances();
-                            await fetchOrders(currentTab);
+                            await fetchOrders(document.querySelector('.autobot-tabs button.active-tab')?.id || 'tab-opened');
                         }, 1500);
                     } else {
                         authMessage.textContent = data.error || 'Invalid token or email.';
@@ -192,17 +254,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isLoggedIn) {
                 alert("Please login first to configure API keys.");
                 displayLogMessage("Login required to configure API keys.", "warning");
-                toggleAuthModal(true);
+                toggleAuthModal(true); // Abre el modal de login si no está logueado
                 return;
             }
-            toggleApiModal(true);
+            toggleApiModal(true); // Abre el modal de API del módulo modals.js
         });
     }
 
     if (apiForm) {
         apiForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-	    setupNavTabs();
 
             const apiKey = apiKeyInput.value.trim();
             const secretKey = secretKeyInput.value.trim();
@@ -217,12 +278,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             apiStatusMessage.textContent = 'Validating API keys...';
             apiStatusMessage.style.color = 'yellow';
-            connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
-            connectionIndicator.classList.add('bg-yellow-500');
-            connectionText.textContent = 'Connecting...';
+            if (connectionIndicator) {
+                connectionIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
+                connectionIndicator.classList.add('bg-yellow-500');
+            }
+            if (connectionText) {
+                connectionText.textContent = 'Connecting...';
+            }
             displayLogMessage('Validating BitMart API keys...', 'info');
 
             try {
+                // Usa fetchFromBackend del módulo auth.js para enviar las claves al backend.
                 const response = await fetchFromBackend('/api/user/save-api-keys', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -232,29 +298,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response && response.connected) {
                     apiStatusMessage.textContent = response.message || 'API keys validated and saved!';
                     apiStatusMessage.style.color = 'green';
-                    connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
-                    connectionIndicator.classList.add('bg-green-500');
-                    connectionText.textContent = 'Connected';
-                    secretKeyInput.value = '';
-                    await getBalances();
-                    await fetchOrders(currentTab);
+                    if (connectionIndicator) {
+                        connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
+                        connectionIndicator.classList.add('bg-green-500');
+                    }
+                    if (connectionText) {
+                        connectionText.textContent = 'Connected';
+                    }
+                    secretKeyInput.value = ''; // Limpia el campo de la clave secreta por seguridad
+                    await getBalances(); // Recarga balances después de conectar la API
+                    await fetchOrders(document.querySelector('.autobot-tabs button.active-tab')?.id || 'tab-opened'); // Recarga órdenes
                     displayLogMessage('BitMart API keys validated and saved. Connected!', 'success');
                 } else {
-                    const errorMessage = response.message || 'Failed to validate or save API keys.';
+                    const errorMessage = response?.message || 'Failed to validate or save API keys.';
                     apiStatusMessage.textContent = errorMessage;
                     apiStatusMessage.style.color = 'red';
-                    connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
-                    connectionIndicator.classList.add('bg-red-500');
-                    connectionText.textContent = 'Disconnected';
+                    if (connectionIndicator) {
+                        connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
+                        connectionIndicator.classList.add('bg-red-500');
+                    }
+                    if (connectionText) {
+                        connectionText.textContent = 'Disconnected';
+                    }
                     displayLogMessage(`BitMart API connection failed: ${errorMessage}`, 'error');
                 }
             } catch (error) {
                 console.error('Error submitting API keys:', error);
                 apiStatusMessage.textContent = `Error: ${error.message}`;
                 apiStatusMessage.style.color = 'red';
-                connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
-                connectionIndicator.classList.add('bg-red-500');
-                connectionText.textContent = 'Disconnected';
+                if (connectionIndicator) {
+                    connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
+                    connectionIndicator.classList.add('bg-red-500');
+                }
+                if (connectionText) {
+                    connectionText.textContent = 'Disconnected';
+                }
                 displayLogMessage(`Error submitting API keys: ${error.message}`, 'error');
             }
         });
@@ -262,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (closeApiModalButton) {
         closeApiModalButton.addEventListener('click', () => {
-            toggleApiModal(false);
+            toggleApiModal(false); // Cierra el modal de API
             displayLogMessage('API configuration modal closed.', 'info');
         });
     }
