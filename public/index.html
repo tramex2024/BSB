@@ -24,8 +24,7 @@
             background: #9ca3af; /* gray-400 */
             }
 
-        /* Active tab style */
-        /* Asegúrate de que esta clase se aplique a los nav-tab, no a los botones de orden */
+        /* Active tab style for main navigation (DASHBOARD, TESTBOT, etc.) */
         .header-middle .nav-tab.active {
             border-bottom: 2px solid white; /* Indicador visual para la pestaña activa en el menú superior */
         }
@@ -40,12 +39,15 @@
         .nav-tab:hover {
             color: white;
         }
-        .active-tab { /* Esta clase es para los tabs de Order History, no para el menú principal */
+
+        /* Active tab style for order history tabs (Opened, Filled, Cancelled, All) */
+        .autobot-tabs button.active-tab { /* Esta clase es para los tabs de Order History */
             border-color: white !important; /* Forces white border for active tab */
         }
     </style>
 </head>
-<body class="dark-mode bg-gray-900 text-white"> <header class="fixed-header">
+<body class="dark-mode bg-gray-900 text-white">
+    <header class="fixed-header">
         <div class="header-left">
             <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
             <span class="app-name">Bitmart Spot Bot</span>
@@ -142,7 +144,7 @@
                     <div id="tvchart" class="bg-gray-800 rounded p-2 h-[300px] md:h-[400px]"></div>
                     <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
                         <h3 class="text-lg font-semibold mb-2">Order History</h3>
-                        <div class="flex border-b border-gray-600 mb-4">
+                        <div class="flex border-b border-gray-600 mb-4 autobot-tabs">
                             <button id="tab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
                             <button id="tab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
                             <button id="tab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
