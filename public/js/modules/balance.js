@@ -1,37 +1,27 @@
-// public/js/modules/balance.js
-import { isLoggedIn, fetchFromBackend, displayLogMessage } from './auth.js'; // Importa isLoggedIn y fetchFromBackend
-import { actualizarCalculos } from './calculations.js'; // Necesita actualizarCalculos
+// modules/balance.js
+import { displayLogMessage } from './auth.js'; // O el nuevo módulo de logs
 
-export async function getBalances() {
-    if (!isLoggedIn) {
-        if (document.getElementById('balance')) {
-            document.getElementById('balance').textContent = 'Login to see';
-        }
-        return;
-    }
-    try {
-        const response = await fetchFromBackend('/api/user/bitmart/balance');
+// Esta función ahora recibe los balances directamente
+export function getBalances(balanceData) {
+    const balanceElement = document.getElementById('balance'); // Asegúrate de que este elemento existe
+    if (!balanceElement) return;
 
-        if (Array.isArray(response)) {
-            const usdt = response.find(w => w.currency === "USDT");
-            const balance = usdt ? parseFloat(usdt.available).toFixed(2) : '0.00';
-            if (document.getElementById('balance')) {
-                document.getElementById('balance').textContent = balance;
-                actualizarCalculos();
-            }
-            displayLogMessage(`USDT Balance: ${balance}`, 'info');
-        } else {
-            if (document.getElementById('balance')) {
-                document.getElementById('balance').textContent = 'Error fetching balances.';
-            }
-            console.error('getBalances: Unexpected backend response structure:', response);
-            displayLogMessage('Error fetching balances: Unexpected data structure.', 'error');
+    // Limpiar contenido anterior
+    balanceElement.innerHTML = '';
+
+    if (balanceData && balanceData.length > 0) {
+        // Aquí adaptas cómo muestras los balances. Ejemplo:
+        const usdtBalance = balanceData.find(b => b.currency === 'USDT');
+        if (usdtBalance) {
+            balanceElement.innerHTML += `<p>USDT: ${parseFloat(usdtBalance.available).toFixed(2)}</p>`;
         }
-    } catch (error) {
-        console.error('Error al cargar balances:', error);
-        if (document.getElementById('balance')) {
-            document.getElementById('balance').textContent = 'Error';
+        const btcBalance = balanceData.find(b => b.currency === 'BTC');
+        if (btcBalance) {
+            balanceElement.innerHTML += `<p>BTC: ${parseFloat(btcBalance.available).toFixed(5)}</p>`;
         }
-        displayLogMessage(`Error loading balances: ${error.message}`, 'error');
+        // Añade más monedas si quieres
+    } else {
+        balanceElement.textContent = 'No balance data available or API not connected.';
     }
+    // displayLogMessage('Balances updated.', 'info'); // Opcional
 }
