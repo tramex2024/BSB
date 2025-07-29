@@ -1,22 +1,49 @@
 // server/models/Order.js
-
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Referencia al usuario
-    orderId: { type: String, required: true, unique: true }, // ID único de la orden de BitMart
-    symbol: { type: String, required: true }, // BTC_USDT
-    side: { type: String, required: true, enum: ['Buy', 'Sell'] }, // Buy o Sell
-    notional: { type: Number, required: true }, // Cantidad en USDT (valor total)
-    price: { type: Number, required: true }, // Precio de la orden
-    status: { type: String, required: true, enum: ['Open', 'Filled', 'Canceled', 'Partially Filled', 'Partially Canceled'] }, // Estado de la orden
-    orderTime: { type: Date, default: Date.now }, // Timestamp de la orden
-    // Puedes añadir más campos según necesites, como fee, actualAmount, etc.
-});
+    orderId: {
+        type: String,
+        required: true,
+        unique: true,
+        index: true
+    },
+    symbol: {
+        type: String,
+        required: true
+    },
+    side: { // 'buy' or 'sell'
+        type: String,
+        required: true
+    },
+    type: { // 'limit' or 'market'
+        type: String,
+        required: true
+    },
+    size: { // Quantity of base currency for sell, or base currency for limit buy. For market buy, this is notional.
+        type: Number,
+        required: true
+    },
+    notional: { // USDT amount for market buy, or value of the order
+        type: Number
+    },
+    price: { // Price for limit orders or average filled price for market orders
+        type: Number
+    },
+    filledSize: {
+        type: Number,
+        default: 0
+    },
+    status: { // 'Open', 'Filled', 'Canceled', 'Partially Filled', 'Partially Canceled'
+        type: String,
+        required: true
+    },
+    orderTime: {
+        type: Date,
+        required: true
+    },
+    // Removido userId temporalmente para simplificar la prueba inicial
+}, { timestamps: true }); // Mongoose adds createdAt and updatedAt
 
-// Índice para búsquedas rápidas por usuario y orderId
-orderSchema.index({ userId: 1, orderId: 1 });
-
-const Order = mongoose.model('Order', orderSchema);
-
-module.exports = Order;
+module.exports = mongoose.model('Order', orderSchema);
+// El comentario original estaba aquí y causaba el problema.

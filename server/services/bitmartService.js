@@ -1,9 +1,9 @@
-// server/services/bitmartService.js (MODIFIED)
+// server/services/bitmartService.js (SIMPLIFICADO - SIN LÓGICA DE USUARIOS NI DB)
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
-const Order = require('../models/Order'); // ¡NUEVO! Importar el modelo de Order
+require('dotenv').config(); // Asegúrate de cargar las variables de entorno aquí también
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
@@ -33,7 +33,7 @@ function sortObjectKeys(obj) {
 
 function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     const memoForHash = (memo === null || memo === undefined) ? '' : String(memo);
-    const finalBodyOrQueryString = bodyOrQueryString || ''; // <- Aquí bodyOrQueryString es el string JSON, p.ej. "{}"
+    const finalBodyOrQueryString = bodyOrQueryString || '';
     let message;
     if (memoForHash === '') {
         message = timestamp + '#' + finalBodyOrQueryString;
@@ -83,7 +83,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
 
     if (isPrivate) {
         if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
-            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada. Asegúrate de que el user haya configurado sus claves.");
+            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada.");
         }
 
         const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
@@ -117,6 +117,7 @@ async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, au
         });
 
         if (response.data && response.data.code === 1000) {
+            console.log(`✅ Respuesta exitosa de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
             return response.data;
         } else {
             console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
@@ -183,7 +184,10 @@ async function getBalance(authCredentials) {
         const serverTime = await getSystemTime();
         const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data && response.data.wallet) {
-            console.log('✅ Balance de la cuenta obtenido con éxito.', response.data.wallet);
+            console.log('✅ Balance de la cuenta obtenido con éxito.');
+            response.data.wallet.forEach(balance => {
+                console.log(`   - ${balance.currency}: Disponible ${balance.available}, Congelado ${balance.frozen}`);
+            });
             return response.data.wallet;
         } else {
             console.error('❌ Falló la obtención del balance de la cuenta. Respuesta inesperada:', JSON.stringify(response, null, 2));
@@ -215,8 +219,7 @@ async function getOpenOrders(authCredentials, symbol) {
         }
         if (orders.length > 0) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-            // Opcional: Podrías actualizar el estado de estas órdenes en la DB aquí si lo deseas,
-            // pero getOrderDetail ya maneja el estado de órdenes específicas.
+            orders.forEach(order => console.log(`   - Order ID: ${order.order_id}, Símbolo: ${order.symbol}, Lado: ${order.side}, Tipo: ${order.type}, Estado: ${order.state}`));
         } else {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
@@ -229,63 +232,12 @@ async function getOpenOrders(authCredentials, symbol) {
 }
 
 /**
- * Función auxiliar para guardar o actualizar una orden en la base de datos.
- * @param {Object} orderDetails - Detalles de la orden del BitMart API.
- * @param {string} userId - El _id del usuario al que pertenece la orden.
- * @param {string} symbol - El símbolo de la orden (ej. 'BTC_USDT').
- */
-async function saveOrUpdateOrder(orderDetails, userId, symbol) {
-    try {
-        if (!userId) {
-            console.error("ERROR: No userId provided to saveOrUpdateOrder. Order will not be saved.");
-            return;
-        }
-
-        if (!orderDetails || !orderDetails.order_id) {
-            console.error("ERROR: Invalid orderDetails or missing order_id for saving/updating order.");
-            return;
-        }
-
-        // Mapea los estados de BitMart a un formato uniforme si es necesario
-        // BitMart uses 'open', 'filled', 'canceled', 'partially_filled'
-        // Nuestro modelo usa 'Open', 'Filled', 'Canceled', 'Partially Filled', 'Partially Canceled'
-        let mappedStatus = orderDetails.state; // Usa 'state' de BitMart directamente
-        if (orderDetails.state === 'fully_filled') mappedStatus = 'filled';
-        else if (orderDetails.state === 'partial_filled') mappedStatus = 'partially_filled';
-
-
-        // Buscar si la orden ya existe por orderId y userId
-        const existingOrder = await Order.findOneAndUpdate(
-            { orderId: orderDetails.order_id, userId: userId },
-            {
-                // Solo actualiza los campos que cambian
-                symbol: symbol, // Asegura que el símbolo esté presente
-                side: orderDetails.side,
-                type: orderDetails.type, // 'limit' o 'market'
-                size: parseFloat(orderDetails.size || 0), // Cantidad total de la orden
-                filledSize: parseFloat(orderDetails.filled_size || 0), // Cantidad llenada
-                notional: parseFloat(orderDetails.notional || 0), // Valor USDT (para market buy)
-                price: parseFloat(orderDetails.price || 0), // Precio de ejecución o límite
-                status: mappedStatus.charAt(0).toUpperCase() + mappedStatus.slice(1).replace('_', ' '), // Capitaliza y reemplaza guiones bajos
-                orderTime: new Date(parseInt(orderDetails.create_time)), // O 'last_update_time' si es más relevante para actualizaciones
-                // Agrega más campos si tu modelo Order.js los tiene y los quieres actualizar
-            },
-            { new: true, upsert: true, setDefaultsOnInsert: true } // 'new' devuelve el documento actualizado, 'upsert' crea si no existe
-        );
-        console.log(`✅ Order ${existingOrder.orderId} (Status: ${existingOrder.status}) saved/updated in DB for user ${userId}.`);
-    } catch (error) {
-        console.error('❌ Error saving or updating order in DB:', error.message);
-    }
-}
-
-
-/**
- * Obtiene el detalle de una orden con lógica de reintentos para manejar "Not Found".
+ * Obtiene el detalle de una orden con lógica de reintentos para manejar "Not found".
  * @param {Object} authCredentials - Credenciales de BitMart del usuario.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
- * @param {number} [retries=0] - Número actual de reintentos (interno).
- * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso actual en ms (interno).
+ * @param {number} retries - Número actual de reintentos (interno).
+ * @param {number} delay - Retraso actual en ms (interno).
  * @returns {Object} Detalles de la orden.
  * @throws {Error} Si la orden no se encuentra después de los reintentos o hay otro error.
  */
@@ -301,9 +253,8 @@ async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, del
         const serverTime = await getSystemTime();
         const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
-            console.log(`✅ Detalle de orden ${orderId} obtenido con éxito.`);
-            // ¡NUEVO! Guardar/actualizar la orden en la DB
-            await saveOrUpdateOrder(response.data, authCredentials.userId, symbol); // userId debe venir en authCredentials
+            console.log(`✅ Detalle de orden ${orderId} obtenido con éxito:`);
+            console.log(`   - Order ID: ${response.data.order_id}, Símbolo: ${response.data.symbol}, Lado: ${response.data.side}, Tipo: ${response.data.type}, Estado: ${response.data.state}`);
             return response.data;
         } else {
             console.error(`❌ Falló la obtención del detalle de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
@@ -350,21 +301,6 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
         const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden colocada con éxito:`, response.data);
-
-            // ¡NUEVO! Guardar la orden inicial en la DB después de colocarla
-            const initialOrderDetails = {
-                order_id: response.data.order_id,
-                symbol: symbol,
-                side: side,
-                type: type,
-                size: requestBody.size ? parseFloat(requestBody.size) : null, // Tamaño que se envió en la solicitud
-                notional: requestBody.notional ? parseFloat(requestBody.notional) : null, // Nocional que se envió en la solicitud
-                price: requestBody.price ? parseFloat(requestBody.price) : null, // Precio límite si es una orden limit
-                state: 'open', // Por defecto, una orden recién colocada está abierta
-                create_time: serverTime // Usar el timestamp del servidor
-            };
-            await saveOrUpdateOrder(initialOrderDetails, authCredentials.userId, symbol); // userId debe venir en authCredentials
-
             return response.data;
         } else {
             console.error(`❌ Falló la colocación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
@@ -384,8 +320,6 @@ async function cancelOrder(authCredentials, symbol, order_id) {
         const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials, serverTime);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden ${order_id} cancelada con éxito.`);
-            // ¡NUEVO! Actualizar el estado de la orden a 'Canceled' en la DB
-            await saveOrUpdateOrder({ order_id: order_id, state: 'canceled', create_time: serverTime, side: null, type: null, size: null, price: null }, authCredentials.userId, symbol);
             return response.data;
         } else {
             console.error(`❌ Falló la cancelación de la orden. Respuesta inesperada:`, JSON.stringify(response, null, 2));
@@ -418,16 +352,9 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
         } else {
             console.warn('ℹ️ getHistoryOrdersV4: La API respondió exitosamente, pero el formato de las órdenes es inesperado.', JSON.stringify(responseData, null, 2));
         }
-
-        // ¡NUEVO! Guardar/actualizar órdenes del historial en la DB
-        for (const order of orders) {
-            // Asegúrate de que 'create_time' esté presente en los datos de la orden
-            const orderWithTime = { ...order, create_time: order.create_time || serverTime };
-            await saveOrUpdateOrder(orderWithTime, authCredentials.userId, order.symbol);
-        }
-
         if (orders.length > 0) {
             console.log(`✅ ¡Historial de Órdenes obtenido! Se encontraron ${orders.length} órdenes.`);
+            orders.forEach(order => console.log(`   - Order ID: ${order.order_id}, Símbolo: ${order.symbol}, Lado: ${order.side}, Tipo: ${order.type}, Estado: ${order.state}`));
         } else {
             console.log('ℹ️ No se encontraron órdenes en el historial con los criterios especificados.');
             console.log("DEBUG: Respuesta completa si no se encuentran órdenes:", JSON.stringify(responseData, null, 2));
@@ -473,13 +400,11 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
         return false;
     }
 
-    // Temporal dummy userId for validation. In a real scenario, this would come from the logged-in user.
-    // For `validateApiKeys`, we're just checking if the keys work with BitMart, not specifically linking to a user in DB yet.
-    // The `userId` is critical for `saveOrUpdateOrder`.
-    const tempAuthCredentials = { apiKey, secretKey, apiMemo, userId: 'tempValidationUser' }; // Dummy ID for this context
+    // Usamos las credenciales directamente, sin userId
+    const authCredentials = { apiKey, secretKey, apiMemo };
 
     try {
-        await getBalance(tempAuthCredentials);
+        await getBalance(authCredentials);
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
@@ -488,16 +413,12 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
     }
 }
 
-// --- Funciones de Orquestación de Órdenes (Moviendo desde autobotLogic.js) ---
+// --- Funciones de Orquestación de Órdenes (Simplificadas) ---
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
-/**
- * Intenta cancelar todas las órdenes abiertas para un símbolo y credenciales dados.
- * @param {Object} bitmartCreds - Credenciales de BitMart del usuario (apiKey, secretKey, apiMemo, userId).
- * @param {string} symbol - Símbolo de trading (ej. 'BTC_USDT').
- */
+
 async function cancelAllOpenOrders(bitmartCreds, symbol) {
     console.log(`[BITMART_SERVICE] Intentando cancelar órdenes abiertas para ${symbol}...`);
     try {
@@ -514,19 +435,10 @@ async function cancelAllOpenOrders(bitmartCreds, symbol) {
         }
     } catch (error) {
         console.error('[BITMART_SERVICE] Error al cancelar órdenes abiertas:', error.message);
-        throw error; // Propagate the error for autobotLogic to handle
+        throw error;
     }
 }
 
-/**
- * Coloca la primera orden de compra (Market) para iniciar un ciclo.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario (incluyendo userId).
- * @param {string} symbol - Símbolo de trading.
- * @param {number} purchaseAmountUsdt - Cantidad de USDT a comprar.
- * @param {number} currentPrice - Precio actual para cálculos de validación.
- * @returns {Object} Detalles de la orden ejecutada.
- * @throws {Error} Si no hay suficiente balance o la orden falla.
- */
 async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt, currentPrice) {
     console.log(`[BITMART_SERVICE] Colocando la primera orden de compra (Market)...`);
     const side = 'buy';
@@ -551,12 +463,10 @@ async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt, c
     const orderResult = await placeOrder(authCredentials, symbol, side, type, purchaseAmountUsdt.toString());
 
     if (orderResult && orderResult.order_id) {
-        // Obtenemos el detalle final para asegurar el estado y lo guardamos/actualizamos
         const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
 
         if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
             console.log(`[BITMART_SERVICE] Primera orden de compra (Market) completada: ${JSON.stringify(filledOrder)}`);
-            // saveOrUpdateOrder ya se llamó dentro de getOrderDetail.
             return {
                 orderId: filledOrder.order_id,
                 price: parseFloat(filledOrder.price || 0),
@@ -573,15 +483,6 @@ async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt, c
     }
 }
 
-/**
- * Coloca una orden de compra de cobertura (Limit).
- * @param {Object} authCredentials - Credenciales de BitMart del usuario (incluyendo userId).
- * @param {string} symbol - Símbolo de trading.
- * @param {number} nextUSDTAmount - Cantidad de USDT para la orden de cobertura.
- * @param {number} targetPrice - Precio objetivo para la orden de cobertura.
- * @returns {Object} Detalles de la orden ejecutada.
- * @throws {Error} Si no hay suficiente balance o la orden falla.
- */
 async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, targetPrice) {
     console.log(`[BITMART_SERVICE] Colocando orden de compra de COBERTURA (Limit)...`);
     const side = 'buy';
@@ -602,12 +503,10 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
     const orderResult = await placeOrder(authCredentials, symbol, side, type, nextUSDTAmount.toFixed(2), targetPrice.toFixed(2));
 
     if (orderResult && orderResult.order_id) {
-        // Obtenemos el detalle final para asegurar el estado y lo guardamos/actualizamos
         const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
 
         if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
             console.log(`[BITMART_SERVICE] Orden de cobertura (Limit) completada: ${JSON.stringify(filledOrder)}`);
-            // saveOrUpdateOrder ya se llamó dentro de getOrderDetail.
             return {
                 orderId: filledOrder.order_id,
                 price: parseFloat(filledOrder.price || 0),
@@ -618,7 +517,6 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
             };
         } else if (filledOrder && (filledOrder.state === 'open' || filledOrder.state === 'partial_filled')) {
             console.log(`[BITMART_SERVICE] Orden de cobertura (Limit) ${orderResult.order_id} está ${filledOrder.state}.`);
-            // saveOrUpdateOrder ya se llamó dentro de getOrderDetail.
             return {
                 orderId: filledOrder.order_id,
                 price: parseFloat(filledOrder.price || 0),
@@ -636,15 +534,6 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
     }
 }
 
-/**
- * Coloca una orden de venta (Market o Limit) para cerrar un ciclo.
- * @param {Object} authCredentials - Credenciales de BitMart del usuario (incluyendo userId).
- * @param {string} symbol - Símbolo de trading.
- * @param {number} sizeBTC - Cantidad de BTC a vender.
- * @param {number} [price=null] - Precio límite para la orden (opcional, si es limit order).
- * @returns {Object} Detalles de la orden ejecutada.
- * @throws {Error} Si no hay activo para vender o la orden falla.
- */
 async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
     console.log(`[BITMART_SERVICE] Colocando orden de VENTA ${price ? '(Limit)' : '(Market)'}...`);
     const side = 'sell';
@@ -657,12 +546,10 @@ async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
     const orderResult = await placeOrder(authCredentials, symbol, side, type, sizeBTC.toFixed(8), price ? price.toFixed(2) : undefined);
 
     if (orderResult && orderResult.order_id) {
-        // Obtenemos el detalle final para asegurar el estado y lo guardamos/actualizamos
         const filledOrder = await getOrderDetail(authCredentials, symbol, orderResult.order_id);
 
         if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
             console.log(`[BITMART_SERVICE] Orden de venta ${type} completada: ${JSON.stringify(filledOrder)}`);
-            // saveOrUpdateOrder ya se llamó dentro de getOrderDetail.
             return {
                 orderId: filledOrder.order_id,
                 price: parseFloat(filledOrder.price || 0),
@@ -673,7 +560,6 @@ async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
             };
         } else if (filledOrder && (filledOrder.state === 'open' || filledOrder.state === 'partial_filled')) {
             console.log(`[BITMART_SERVICE] Orden de venta ${orderResult.order_id} está ${filledOrder.state}.`);
-            // saveOrUpdateOrder ya se llamó dentro de getOrderDetail.
             return {
                 orderId: filledOrder.order_id,
                 price: parseFloat(filledOrder.price || 0),
@@ -691,7 +577,6 @@ async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
     }
 }
 
-// Nueva función placeLimitSellOrder para mayor claridad en el autobotLogic
 async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
     console.log(`[BITMART_SERVICE] Colocando orden de VENTA LÍMITE...`);
     return await placeSellOrder(authCredentials, symbol, sizeBTC, price);
