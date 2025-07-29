@@ -1,6 +1,8 @@
 // public/js/modules/auth.js
 
 // Importa las constantes globales que necesitas de main.js
+// Asegúrate de que `logMessageElement`, `loginLogoutIcon`, etc., se exporten correctamente desde main.js
+// (aunque para el error actual, esto no es lo relevante)
 import { BACKEND_URL, logMessageElement, loginLogoutIcon, connectionIndicator, connectionText } from '../main.js';
 
 // Variable global para el estado de login
@@ -32,6 +34,7 @@ export async function fetchFromBackend(endpoint, options = {}) {
         ...options.headers // Permite sobrescribir o añadir otros headers
     };
 
+    // Esto es CRUCIAL: Añadir el token al encabezado Authorization
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
@@ -42,21 +45,15 @@ export async function fetchFromBackend(endpoint, options = {}) {
             headers: headers
         });
 
-        // ** Importante: Leer el cuerpo de la respuesta solo una vez **
-        // Intentamos leerlo como JSON. Si falla, lo leemos como texto.
         let responseData = null;
         try {
-            // Solo intentamos parsear como JSON si el content-type lo indica
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
                 responseData = await response.json();
             } else {
-                // Si no es JSON, o si es un error 404/500 con HTML, leerlo como texto
                 responseData = { message: await response.text() };
             }
         } catch (jsonError) {
-            // Si hubo un error al parsear como JSON, intentar como texto plano
-            // Esto es lo que causaba el "body stream already read"
             console.warn(`Could not parse response as JSON for ${endpoint}. Trying as text.`, jsonError);
             try {
                 responseData = { message: await response.text() };
@@ -68,13 +65,21 @@ export async function fetchFromBackend(endpoint, options = {}) {
 
         if (!response.ok) {
             // Maneja respuestas no exitosas (4xx o 5xx)
+            // Si el backend devuelve un mensaje, úsalo. Si no, usa el estado HTTP.
             const errorMessage = responseData.message || responseData.error || `HTTP error! Status: ${response.status}`;
             console.error(`Backend error for ${endpoint}:`, errorMessage, responseData);
             displayLogMessage(`Backend communication error: ${errorMessage}`, 'error');
-            return null; // Retorna null o un objeto de error estructurado
+
+            // Si el error es específicamente de autenticación (401 Unauthorized),
+            // podríamos forzar un logout o pedir al usuario que inicie sesión de nuevo.
+            if (response.status === 401) {
+                displayLogMessage('Authentication required. Please log in.', 'warning');
+                // Opcional: handleLogout(); // Podrías llamar a esto para limpiar la sesión.
+            }
+
+            return null; // Retorna null en caso de error
         }
 
-        // Si la respuesta es exitosa (response.ok es true)
         displayLogMessage(`Backend connection: OK.`, 'success');
         return responseData; // Retorna los datos parseados
     } catch (error) {
