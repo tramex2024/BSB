@@ -10,6 +10,7 @@ require('dotenv').config(); // Cargar variables de entorno desde .env si es loca
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const ordersRoutes = require('./routes/ordersRoutes'); // ¡NUEVO! Importar las rutas de órdenes
 const autobotLogic = require('./autobotLogic'); // Importar la lógica del autobot
 
 const app = express();
@@ -36,11 +37,10 @@ mongoose.connect(process.env.MONGODB_URI)
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes); // Añadir rutas de usuario para la API de BitMart y el bot
+app.use('/api/orders', ordersRoutes); // ¡NUEVO! Usar las rutas de órdenes
 
 // Ruta de prueba para verificar la conexión del backend
 app.get('/ping', (req, res) => {
-    // CAMBIO MÍNIMO PARA FORZAR DESPLIEGUE - Puedes quitar este comentario después de que funcione.
-    // console.log("Ping successful!");
     res.status(200).json({ status: 'ok', message: 'Backend is live!' });
 });
 
