@@ -1,178 +1,70 @@
 // public/js/modules/orders.js
-import { fetchFromBackend, displayLogMessage } from './auth.js';
-import { TRADE_SYMBOL } from '../main.js'; // Asegúrate de importar TRADE_SYMBOL si lo necesitas
+import { displayLogMessage } from './auth.js';
+import { fetchFromBackend } from './api.js'; // Importación corregida
+import { TRADE_SYMBOL } from '../main.js';
 
-// Referencia al contenedor de la lista de órdenes
-export let orderListContainer = null;
-// Variable para mantener un registro de la pestaña de órdenes activa
-let currentActiveOrderTabId = 'tab-opened'; // Estado inicial: 'tab-opened'
+let activeTab = 'tab-opened'; // Estado inicial de la pestaña activa
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Asegúrate de que el contenedor de la lista de órdenes esté asignado aquí
-    orderListContainer = document.getElementById('order-list');
-    // Los listeners de los botones de las pestañas de órdenes están en main.js
-    // por lo que no es necesario asignarlos aquí.
-});
-
-/**
- * Establece la pestaña de órdenes activa y actualiza la UI.
- * @param {string} tabId El ID del botón de la pestaña clicado (e.g., 'tab-opened', 'tab-filled').
- */
 export function setActiveTab(tabId) {
-    // Selecciona todos los botones que están dentro del div con la clase 'autobot-tabs'
-    const orderTabButtons = document.querySelectorAll('.autobot-tabs button');
-
-    // Remueve la clase 'active-tab' de todos los botones
-    orderTabButtons.forEach(button => {
-        button.classList.remove('active-tab');
+    activeTab = tabId;
+    const tabButtons = document.querySelectorAll('.autobot-tabs button');
+    tabButtons.forEach(button => {
+        if (button.id === tabId) {
+            button.classList.add('active-tab');
+        } else {
+            button.classList.remove('active-tab');
+        }
     });
+}
 
-    // Agrega la clase 'active-tab' al botón de la pestaña seleccionada
-    const clickedTabButton = document.getElementById(tabId);
-    if (clickedTabButton) {
-        clickedTabButton.classList.add('active-tab');
-        currentActiveOrderTabId = tabId; // Actualiza la variable de estado
-        displayLogMessage(`Viewing ${tabId.replace('tab-', '')} orders.`, 'info');
-        fetchOrders(tabId); // Llama a fetchOrders con la pestaña activa
-    } else {
-        displayLogMessage(`Error: Tab button with ID '${tabId}' not found.`, 'error');
+export async function fetchOrders(tabId = activeTab) {
+    displayLogMessage(`Fetching ${tabId.replace('tab-', '')} orders for ${TRADE_SYMBOL}...`, 'info');
+    const orderList = document.getElementById('order-list');
+    if (!orderList) return;
+
+    try {
+        const data = await fetchFromBackend(`/orders/${tabId.replace('tab-', '')}`);
+        if (data.success) {
+            displayOrders(data.orders, tabId.replace('tab-', ''));
+            displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');
+        } else {
+            displayLogMessage(`Failed to fetch orders: ${data.message || 'Unknown error'}`, 'error');
+            orderList.innerHTML = `<p class="text-red-500">Failed to load orders: ${data.message}</p>`;
+        }
+    } catch (error) {
+        orderList.innerHTML = `<p class="text-red-500">Could not fetch orders.</p>`;
     }
 }
 
-/**
- * Obtiene y muestra las órdenes del backend según la pestaña activa.
- * @param {string} tabId La pestaña activa para filtrar las órdenes (e.g., 'tab-opened', 'tab-filled').
- */
-export async function fetchOrders(tabId) {
-    if (!orderListContainer) {
-        displayLogMessage('Order list container not found.', 'error');
+export function displayOrders(orders, type) {
+    const orderList = document.getElementById('order-list');
+    if (!orderList) return;
+
+    if (orders.length === 0) {
+        orderList.innerHTML = `<p class="text-gray-400">No ${type} orders found.</p>`;
         return;
     }
 
-    orderListContainer.innerHTML = '<p class="text-gray-400">Loading orders...</p>'; // Mostrar mensaje de carga
-    displayLogMessage(`Loading ${tabId.replace('tab-', '')} orders...`, 'info');
-
-    let endpoint = `/api/orders`; // Endpoint base para todas las órdenes
-
-    try {
-        const response = await fetchFromBackend(endpoint, {
-            method: 'GET'
-        });
-
-        if (response && response.orders) {
-            let filteredOrders = response.orders;
-
-            // Filtra las órdenes basadas en la pestaña activa
-            if (tabId === 'tab-opened') {
-                // Asume que 'Open' y 'Partially Filled' son estados de órdenes abiertas.
-                filteredOrders = response.orders.filter(order => order.status === 'Open' || order.status === 'Partially Filled');
-            } else if (tabId === 'tab-filled') {
-                // Asume que 'Filled' es el estado de una orden completada.
-                filteredOrders = response.orders.filter(order => order.status === 'Filled');
-            } else if (tabId === 'tab-cancelled') {
-                // Asume que 'Canceled' y 'Partially Canceled' son estados de órdenes canceladas.
-                filteredOrders = response.orders.filter(order => order.status === 'Canceled' || order.status === 'Partially Canceled');
-            }
-            // Si tabId es 'tab-all', no se filtra, se muestran todas las órdenes (filteredOrders ya tiene todas las órdenes).
-
-            if (filteredOrders.length === 0) {
-                orderListContainer.innerHTML = `<p class="text-gray-400">No orders found for the "${tabId.replace('tab-', '')}" tab.</p>`;
-                displayLogMessage(`No orders found for the "${tabId.replace('tab-', '')}" tab.`, 'info');
-                return;
-            }
-
-            // Limpia el contenedor antes de añadir las nuevas órdenes
-            orderListContainer.innerHTML = '';
-            displayOrders(filteredOrders); // Muestra las órdenes filtradas
-            displayLogMessage(`Successfully loaded ${filteredOrders.length} ${tabId.replace('tab-', '')} orders.`, 'success');
-
-        } else {
-            orderListContainer.innerHTML = '<p class="text-red-400">Failed to load orders.</p>';
-            displayLogMessage('Failed to load orders from backend.', 'error');
-        }
-    } catch (error) {
-        console.error('Error fetching orders:', error);
-        orderListContainer.innerHTML = `<p class="text-red-400">Error loading orders: ${error.message}</p>`;
-        displayLogMessage(`Error fetching orders: ${error.message}`, 'error');
-    }
+    orderList.innerHTML = orders.map(order => createOrderElement(order)).join('');
 }
 
-/**
- * Muestra una lista de órdenes en el contenedor.
- * @param {Array<Object>} orders Un array de objetos de orden.
- */
-export function displayOrders(orders) {
-    if (!orderListContainer) return; // Asegúrate de que el contenedor existe
-
-    orders.forEach(order => {
-        const orderElement = createOrderElement(order);
-        orderListContainer.appendChild(orderElement);
-    });
-}
-
-/**
- * Crea un elemento DOM para una orden individual.
- * @param {Object} order Objeto de la orden.
- * @returns {HTMLElement} El elemento div que representa la orden.
- */
 export function createOrderElement(order) {
-    const orderDiv = document.createElement('div');
-    orderDiv.className = 'bg-gray-700 p-3 rounded-lg flex justify-between items-center text-sm';
-    orderDiv.id = `order-${order.orderId}`; // Asigna un ID único a cada orden para futuras actualizaciones
-
-    // Asegúrate de que order.side y order.status tienen los valores esperados del backend.
-    // Si tu backend usa 'BUY'/'SELL' en lugar de 'Buy'/'Sell', ajústalo aquí.
-    const typeClass = order.side === 'Buy' ? 'text-green-400' : 'text-red-400';
-    const statusClass = order.status === 'Filled' ? 'text-green-300' :
-                        order.status === 'Canceled' || order.status === 'Partially Canceled' ? 'text-red-300' : 'text-yellow-300'; // 'Open' y 'Partially Filled' serán amarillos
-
-    orderDiv.innerHTML = `
-        <div>
-            <div class="${typeClass}">${order.side} ${order.symbol.replace('_', '/')}</div>
-            <div class="text-gray-300">${new Date(order.orderTime).toLocaleString()}</div>
+    const orderTypeClass = order.side === 'buy' ? 'text-green-400' : 'text-red-400';
+    return `
+        <div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center text-sm">
+            <div>
+                <span class="font-bold ${orderTypeClass}">${order.side.toUpperCase()} ${order.symbol}</span>
+                <p class="text-gray-400">Price: $${parseFloat(order.price).toFixed(2)} | Qty: ${parseFloat(order.amount).toFixed(4)}</p>
+                <p class="text-gray-400">Status: ${order.status}</p>
+            </div>
+            <div class="text-right">
+                <p class="text-gray-400">${new Date(order.timestamp).toLocaleString()}</p>
+                <p class="text-xs text-gray-500">ID: ${order.orderId}</p>
+            </div>
         </div>
-        <div>
-            <div>Amount: ${parseFloat(order.notional).toFixed(2)} USDT</div>
-            <div>Price: ${parseFloat(order.price).toFixed(2)}</div>
-        </div>
-        <div class="${statusClass}">${order.status}</div>
     `;
-    return orderDiv;
 }
 
-/**
- * Actualiza un elemento de orden existente en el DOM.
- * @param {Object} updatedOrder El objeto de la orden actualizada.
- */
-export function updateOrderElement(updatedOrder) {
-    const existingOrderElement = document.getElementById(`order-${updatedOrder.orderId}`);
-    if (existingOrderElement) {
-        // Actualiza el contenido HTML del elemento existente
-        const typeClass = updatedOrder.side === 'Buy' ? 'text-green-400' : 'text-red-400';
-        const statusClass = updatedOrder.status === 'Filled' ? 'text-green-300' :
-                            updatedOrder.status === 'Canceled' || updatedOrder.status === 'Partially Canceled' ? 'text-red-300' : 'text-yellow-300';
-
-        existingOrderElement.innerHTML = `
-            <div>
-                <div class="${typeClass}">${updatedOrder.side} ${updatedOrder.symbol.replace('_', '/')}</div>
-                <div class="text-gray-300">${new Date(updatedOrder.orderTime).toLocaleString()}</div>
-            </div>
-            <div>
-                <div>Amount: ${parseFloat(updatedOrder.notional).toFixed(2)} USDT</div>
-                <div>Price: ${parseFloat(updatedOrder.price).toFixed(2)}</div>
-            </div>
-            <div class="${statusClass}">${updatedOrder.status}</div>
-        `;
-        displayLogMessage(`Order ${updatedOrder.orderId} updated to status: ${updatedOrder.status}`, 'info');
-
-        // Después de actualizar, re-filtrar y re-mostrar para asegurar que la orden esté en la pestaña correcta.
-        // Esto es crucial para que una orden 'Open' que se convierte en 'Filled' desaparezca de 'Opened' y aparezca en 'Filled'.
-        fetchOrders(currentActiveOrderTabId);
-
-    } else {
-        // Si la orden no existe, puede que sea nueva o que estemos en una pestaña diferente.
-        // Forzamos un fetch completo para la pestaña actual para asegurar consistencia.
-        displayLogMessage(`Order ${updatedOrder.orderId} not found, re-fetching current tab.`, 'info');
-        fetchOrders(currentActiveOrderTabId);
-    }
+export function updateOrderElement(order) {
+    // La lógica de actualización de órdenes iría aquí si fuera necesario
 }

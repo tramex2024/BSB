@@ -5,12 +5,11 @@ import { fetchOrders, setActiveTab, displayOrders } from './orders.js';
 import { cargarPrecioEnVivo } from './network.js';
 import { actualizarCalculos } from './calculations.js';
 import { toggleBotState, resetBot } from './bot.js';
+import { fetchFromBackend } from './api.js'; // Importar el nuevo módulo de API
 
-// Importa las variables globales que se necesitan
 import { BACKEND_URL, TRADE_SYMBOL } from '../main.js';
 
 // --- Variables y Elementos del DOM del Autobot ---
-// Declaradas aquí porque solo se usan en esta lógica
 let bitmartIntervalId = null;
 let priceIntervalId = null;
 let connectionIndicator = null;
@@ -28,13 +27,9 @@ let cycleProfitDisplay = null;
 let startBtn = null;
 let resetBtn = null;
 
-/**
- * Función que inicializa la vista Autobot.
- */
 function initializeAutobotView() {
     displayLogMessage('Initializing Autobot view...', 'info');
 
-    // Asignación de elementos del DOM específicos de la vista Autobot
     connectionIndicator = document.getElementById('status-dot');
     connectionText = document.getElementById('status-text');
     purchaseInput = document.getElementById("purchase");
@@ -84,18 +79,12 @@ function initializeAutobotView() {
     if (triggerInput) triggerInput.addEventListener('input', actualizarCalculos);
 }
 
-/**
- * Limpia la vista Autobot.
- */
 function clearAutobotView() {
     displayLogMessage('Clearing Autobot view...', 'info');
     if (bitmartIntervalId) clearInterval(bitmartIntervalId);
     if (priceIntervalId) clearInterval(priceIntervalId);
 }
 
-/**
- * Función principal para configurar la navegación.
- */
 export function setupNavTabs() {
     const navTabs = document.querySelectorAll('.nav-tab');
     const mainContent = document.getElementById('main-content');
@@ -143,9 +132,6 @@ export function setupNavTabs() {
     }
 }
 
-/**
- * Función central para obtener datos de BitMart.
- */
 async function checkBitMartConnectionAndData() {
     displayLogMessage('Checking BitMart connection and fetching data...', 'info');
     
@@ -158,8 +144,7 @@ async function checkBitMartConnectionAndData() {
     }
 
     try {
-        const response = await fetch(`${BACKEND_URL}/bitmart-data`);
-        const data = await response.json();
+        const data = await fetchFromBackend('/bitmart-data');
 
         if (data.connected) {
             displayLogMessage('Connected to BitMart. Data fetched successfully.', 'success');
@@ -172,7 +157,7 @@ async function checkBitMartConnectionAndData() {
             }
 
             getBalances(data.balance);
-
+            
             const currentTab = document.querySelector('.autobot-tabs button.active-tab')?.id;
             if (currentTab === 'tab-opened') {
                 displayOrders(data.openOrders, 'opened');
@@ -195,14 +180,7 @@ async function checkBitMartConnectionAndData() {
             }
         }
     } catch (error) {
-        console.error('Network error fetching BitMart data:', error);
-        displayLogMessage(`Network error: ${error.message}. Could not reach backend.`, 'error');
-        if (connectionIndicator) {
-            connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
-            connectionIndicator.classList.add('bg-red-500');
-        }
-        if (connectionText) {
-            connectionText.textContent = 'Disconnected';
-        }
+        // El error ya se maneja en fetchFromBackend, así que aquí no hacemos nada más que registrarlo si es necesario.
+        console.error('Failed to fetch BitMart data:', error);
     }
 }
