@@ -1,4 +1,4 @@
-// public/js/modules/api.js
+// public/js/modules/api.js (CORREGIDO)
 import { displayLogMessage } from './auth.js';
 import { BACKEND_URL } from '../main.js';
 

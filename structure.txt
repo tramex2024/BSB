@@ -3,6 +3,8 @@ BSB/			    # Bitmart Spot Bots
 │   ├── index.html
 │   ├── css/
 │   │   └── style.css
+│   ├── src/
+│   │   └── input.css
 │   ├── js/
 │   │   ├── main.js
 │   │   ├── modules/
@@ -13,7 +15,7 @@ BSB/			    # Bitmart Spot Bots
 │   │   	 └── bot.js
 │   │   	 └── network.js
 │   │   	 └── balance.js
-│   │   	 └── modals.js
+│   │   	 └── api.js
 │   └── images/
 │       └── bsb-logo.png
 ├── server/                # Backend files - Deployed on Render
@@ -39,6 +41,9 @@ BSB/			    # Bitmart Spot Bots
 │   │   └── cryptoUtils.js
 │   ├── seeders/
 │   │   └── seed.js
+│   ├── render.yaml
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
 │   ├── package.json
 │   ├── bitmart_entry_point.json
 │   └── README.md
