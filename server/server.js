@@ -1,13 +1,10 @@
-// server.js (VERSION SIN USUARIOS NI AUTENTICACION)
+// server.js (VERSION CON ENDPOINTS DE BACKEND PARA EL FRONTEND)
 
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const bitmartService = require('./services/bitmartService');
-// Ya no necesitamos el modelo Order aquí si no lo vamos a usar directamente en esta ruta,
-// pero lo mantengo por si lo necesitas para el autobotLogic.js en el futuro.
-// Si no lo vas a usar en este archivo para este objetivo, puedes quitar la línea.
 const Order = require('./models/Order');
 
 dotenv.config();
@@ -16,7 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors()); // CORS abierto para desarrollo, considera restringir en producción
+app.use(cors());
 app.use(express.json());
 
 // Conexión a MongoDB
@@ -33,65 +30,81 @@ const connectDB = async () => {
 // Conectarse a la DB al iniciar el servidor
 connectDB();
 
-// Ruta de prueba principal para obtener datos de BitMart
-// NOTA: Esta ruta ahora usa las API keys configuradas DIRECTAMENTE en el servidor (variables de entorno de Render)
+// Credenciales de BitMart, obtenidas una sola vez.
+const bitmartCredentials = {
+    apiKey: process.env.BITMART_API_KEY,
+    secretKey: process.env.BITMART_SECRET_KEY,
+    apiMemo: process.env.BITMART_API_MEMO || ''
+};
+
+// --- Nuevos Endpoints para el Frontend ---
+
+// 1. Obtener precio en vivo (ticker)
+app.get('/ticker/:symbol', async (req, res) => {
+    try {
+        const symbol = req.params.symbol;
+        const ticker = await bitmartService.getTicker(symbol);
+        // La API de BitMart v3 devuelve un array, por lo que tomamos el primer elemento.
+        // Asumiendo que el formato es `data: [{ last: "..." }]`
+        if (ticker && ticker.data && ticker.data.length > 0) {
+            res.status(200).json(ticker.data[0]);
+        } else {
+            res.status(404).json({ message: 'Ticker not found', success: false });
+        }
+    } catch (error) {
+        console.error('Error fetching ticker:', error.message);
+        res.status(500).json({ message: 'Internal server error', success: false });
+    }
+});
+
+// 2. Obtener órdenes abiertas
+app.get('/orders/opened', async (req, res) => {
+    try {
+        const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
+        res.status(200).json(openOrders);
+    } catch (error) {
+        console.error('Error fetching open orders:', error.message);
+        res.status(500).json({ message: 'Internal server error', success: false });
+    }
+});
+
+// 3. Endpoint principal de datos consolidados (ya lo tenías, lo mantendremos)
 app.get('/bitmart-data', async (req, res) => {
     try {
-        // Credenciales de BitMart obtenidas directamente del archivo .env (en local)
-        // o de las variables de entorno de Render (en producción)
-        const authCredentials = {
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO || ''
-        };
+        const isValid = await bitmartService.validateApiKeys(
+            bitmartCredentials.apiKey,
+            bitmartCredentials.secretKey,
+            bitmartCredentials.apiMemo
+        );
 
-        // PASO 1: Validar claves API
-        console.log('\n--- Paso 1: Validando claves API ---');
-        const isValid = await bitmartService.validateApiKeys(authCredentials.apiKey, authCredentials.secretKey, authCredentials.apiMemo);
         if (!isValid) {
-            // Si las claves no son válidas, respondemos con un error
-            return res.status(401).json({ message: 'BitMart API keys are not valid. Check server environment variables.', connected: false });
+            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
         }
-        console.log('Claves API validadas con éxito. CONECTADO.');
 
-        // PASO 2: Obtener Balance
-        console.log('\n--- Paso 2: Obteniendo Balance ---');
-        const balance = await bitmartService.getBalance(authCredentials);
-        console.log('Balance obtenido:', balance);
+        const balance = await bitmartService.getBalance(bitmartCredentials);
+        const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
+        const ticker = await bitmartService.getTicker('BTC_USDT');
 
-        // PASO 3: Obtener Órdenes Abiertas
-        console.log('\n--- Paso 3: Obteniendo Órdenes Abiertas (BTC_USDT) ---');
-        const openOrders = await bitmartService.getOpenOrders(authCredentials, 'BTC_USDT'); // Ajusta el símbolo si es necesario
-        console.log('Órdenes Abiertas:', openOrders.orders);
-
-        // PASO 4: Obtener Precio en Vivo (Ticker)
-        console.log('\n--- Paso 4: Obteniendo Ticker (BMX_USDT) ---'); // O el símbolo que te interese
-        const ticker = await bitmartService.getTicker('BMX_USDT'); // Cambiado a BMX_USDT para que sea diferente al de órdenes
-        console.log('Ticker obtenido:', ticker);
-
-        // Respuesta consolidada al frontend
         res.status(200).json({
-            message: 'BitMart data retrieved successfully. Backend is connected.',
-            connected: true, // Indica que el backend pudo conectar a BitMart
+            message: 'BitMart data retrieved successfully.',
+            connected: true,
             balance: balance,
             openOrders: openOrders.orders,
-            ticker: ticker,
-            // Aquí puedes añadir más datos que quieras exponer al frontend
+            // Asumiendo que el formato de ticker es `data: [{ last: "..." }]`
+            ticker: ticker && ticker.data && ticker.data.length > 0 ? ticker.data[0] : null,
         });
 
     } catch (error) {
         console.error('Error in /bitmart-data endpoint:', error.message);
-        // Si hay un error, el backend no pudo conectar o las claves no son válidas
         res.status(500).json({
             message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
-            connected: false, // Indica fallo de conexión
+            connected: false,
             error: error.message
         });
     }
 });
 
-
-// Ruta principal para verificar que el servidor está funcionando
+// Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
     res.send('Backend is running!');
 });
