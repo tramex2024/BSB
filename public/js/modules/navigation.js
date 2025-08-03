@@ -1,15 +1,15 @@
 // public/js/modules/navigation.js
+
 import { displayLogMessage } from './auth.js';
 import { getBalances } from './balance.js';
 import { fetchOrders, setActiveTab, displayOrders } from './orders.js';
 import { cargarPrecioEnVivo } from './network.js';
 import { actualizarCalculos } from './calculations.js';
 import { toggleBotState, resetBot } from './bot.js';
-import { fetchFromBackend } from './api.js'; // Importar el nuevo módulo de API
+import { fetchFromBackend } from './api.js';
 
 import { BACKEND_URL, TRADE_SYMBOL } from '../main.js';
 
-// --- Variables y Elementos del DOM del Autobot ---
 let bitmartIntervalId = null;
 let priceIntervalId = null;
 let connectionIndicator = null;
@@ -50,14 +50,15 @@ function initializeAutobotView() {
     const tabOpened = document.getElementById('tab-opened');
     if (tabOpened) {
         setActiveTab('tab-opened');
-        fetchOrders('tab-opened');
+        // Aquí no llamamos a fetchOrders directamente, ya que checkBitMartConnectionAndData lo hará.
     }
 
     if (bitmartIntervalId) clearInterval(bitmartIntervalId);
     if (priceIntervalId) clearInterval(priceIntervalId);
 
     bitmartIntervalId = setInterval(checkBitMartConnectionAndData, 10000);
-    priceIntervalId = setInterval(cargarPrecioEnVivo, 2000);
+    // Ya no es necesario un intervalo separado para el precio, lo obtenemos con /bitmart-data
+    // priceIntervalId = setInterval(cargarPrecioEnVivo, 2000);
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
@@ -68,7 +69,8 @@ function initializeAutobotView() {
         if (tab) {
             tab.addEventListener('click', () => {
                 setActiveTab(id);
-                fetchOrders(id);
+                // Aquí podrías llamar a una función para refrescar solo las órdenes
+                // pero por ahora, mantendremos la lógica centralizada en checkBitMartConnectionAndData
             });
         }
     });
@@ -103,6 +105,9 @@ export function setupNavTabs() {
             mainContent.innerHTML = htmlContent;
             displayLogMessage(`Switched to ${tabName} tab.`, 'info');
 
+            const newUrl = window.location.origin + window.location.pathname + `?#${tabName}`;
+            window.history.pushState({ path: newUrl }, '', newUrl);
+
             if (tabName === 'autobot') {
                 initializeAutobotView();
             }
@@ -129,6 +134,13 @@ export function setupNavTabs() {
     if (initialActiveTab) {
         const initialTabName = initialActiveTab.dataset.tab;
         loadContent(initialTabName);
+    } else {
+        const defaultTab = 'dashboard';
+        const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
+        if (defaultTabElement) {
+            defaultTabElement.classList.add('active');
+            loadContent(defaultTab);
+        }
     }
 }
 
@@ -144,6 +156,7 @@ async function checkBitMartConnectionAndData() {
     }
 
     try {
+        // Hacemos una única llamada al endpoint /bitmart-data de tu servidor
         const data = await fetchFromBackend('/bitmart-data');
 
         if (data.connected) {
@@ -156,10 +169,11 @@ async function checkBitMartConnectionAndData() {
                 connectionText.textContent = 'Connected';
             }
 
+            // Usamos los datos consolidados para actualizar las diferentes partes del UI
             getBalances(data.balance);
             
             const currentTab = document.querySelector('.autobot-tabs button.active-tab')?.id;
-            if (currentTab === 'tab-opened') {
+            if (currentTab === 'tab-opened' && data.openOrders) {
                 displayOrders(data.openOrders, 'opened');
             }
 
@@ -180,7 +194,14 @@ async function checkBitMartConnectionAndData() {
             }
         }
     } catch (error) {
-        // El error ya se maneja en fetchFromBackend, así que aquí no hacemos nada más que registrarlo si es necesario.
         console.error('Failed to fetch BitMart data:', error);
+        displayLogMessage(`Network error: ${error.message}. Could not reach backend.`, 'error');
+        if (connectionIndicator) {
+            connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
+            connectionIndicator.classList.add('bg-red-500');
+        }
+        if (connectionText) {
+            connectionText.textContent = 'Disconnected';
+        }
     }
 }
