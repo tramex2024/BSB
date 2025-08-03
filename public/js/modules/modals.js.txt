@@ -1,0 +1,2 @@
+// Este módulo ya no es necesario ya que los modales fueron eliminados.
+// Lo mantenemos para evitar errores de importación.
