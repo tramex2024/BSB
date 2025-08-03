@@ -93,7 +93,7 @@
 
     </div>
     <div class="w-full md:w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
-
+        
         <div id="tvchart" class="bg-gray-800 rounded p-2 h-[500px] flex-grow"></div>
 
         <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
@@ -112,6 +112,7 @@
     </div>
 </div>
 
+<script src="https://s3.tradingview.com/tv.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         new TradingView.widget({

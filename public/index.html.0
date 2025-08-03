@@ -23,26 +23,27 @@
         }
         .overflow-y-auto::-webkit-scrollbar-thumb:hover {
             background: #9ca3af; /* gray-400 */
-        }
+            }
 
         /* Active tab style for main navigation (DASHBOARD, TESTBOT, etc.) */
         .header-middle .nav-tab.active {
-            border-bottom: 2px solid white;
+            border-bottom: 2px solid white; /* Indicador visual para la pestaña activa en el menú superior */
         }
         .nav-tab {
-            padding: 10px 15px;
-            text-decoration: none;
-            color: #ccc;
-            transition: all 0.3s ease;
-        }
+             /* Estilos base para los tabs, como padding, color, etc. */
+             padding: 10px 15px;
+             text-decoration: none;
+             color: #ccc; /* Color de texto predeterminado */
+             transition: all 0.3s ease;
+         }
 
         .nav-tab:hover {
             color: white;
         }
 
         /* Active tab style for order history tabs (Opened, Filled, Cancelled, All) */
-        .autobot-tabs button.active-tab {
-            border-color: white !important;
+        .autobot-tabs button.active-tab { /* Esta clase es para los tabs de Order History */
+            border-color: white !important; /* Forces white border for active tab */
         }
         .tab-content {
             display: none;
@@ -116,7 +117,6 @@
         </div>
     </div>
 
-    <script src="https://s3.tradingview.com/tv.js"></script>
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>
