@@ -27,8 +27,40 @@ let cycleProfitDisplay = null;
 let startBtn = null;
 let resetBtn = null;
 
+// Nueva función para inicializar el gráfico de TradingView
+function initializeTradingViewChart() {
+    // Si el gráfico ya se ha inicializado, no hagas nada
+    if (window.tvWidget) {
+        return;
+    }
+
+    // Busca el contenedor del gráfico
+    const chartContainer = document.getElementById('tvchart');
+    if (chartContainer) {
+        new TradingView.widget({
+            autosize: true,
+            symbol: "BINANCE:BTCUSDT",
+            interval: "1",
+            timezone: "Etc/UTC",
+            theme: "dark",
+            style: "1",
+            locale: "en",
+            toolbar_bg: "#f1f3f6",
+            enable_publishing: false,
+            allow_symbol_change: true,
+            container_id: "tvchart"
+        });
+        // Marca el widget como inicializado
+        window.tvWidget = true;
+    }
+}
+
+
 function initializeAutobotView() {
     displayLogMessage('Initializing Autobot view...', 'info');
+
+    // Inicializa el gráfico de TradingView cuando se carga la vista de Autobot
+    initializeTradingViewChart();
 
     connectionIndicator = document.getElementById('status-dot');
     connectionText = document.getElementById('status-text');
@@ -83,6 +115,9 @@ function clearAutobotView() {
     // Limpiar el contenido de main-content para que no se superponga
     const mainContent = document.getElementById('main-content');
     if (mainContent) mainContent.innerHTML = '';
+
+    // Cuando se borra la vista, también se debe limpiar el widget de TradingView
+    window.tvWidget = null;
 }
 
 export function setupNavTabs() {
