@@ -55,12 +55,36 @@ function initializeTradingViewChart() {
     }
 }
 
+// Nueva función para obtener y mostrar el precio en tiempo real
+async function fetchAndDisplayBitMartPrice() {
+    try {
+        const response = await fetch(`https://api-cloud.bitmart.com/spot/v1/ticker?symbol=${TRADE_SYMBOL}`);
+        const data = await response.json();
+        
+        if (data && data.code === 1000 && data.data && data.data[0] && data.data[0].last_price) {
+            cargarPrecioEnVivo(data.data[0].last_price);
+        } else {
+            displayLogMessage('Failed to fetch real-time price from BitMart API.', 'error');
+            cargarPrecioEnVivo(null); // Pasa null para que se muestre N/A
+        }
+    } catch (error) {
+        console.error('Error fetching real-time price:', error);
+        displayLogMessage('Network error fetching real-time price.', 'error');
+        cargarPrecioEnVivo(null); // Pasa null para que se muestre N/A
+    }
+}
+
 
 function initializeAutobotView() {
     displayLogMessage('Initializing Autobot view...', 'info');
 
     // Inicializa el gráfico de TradingView cuando se carga la vista de Autobot
     initializeTradingViewChart();
+
+    // Inicia la carga del precio en tiempo real y el intervalo
+    if (priceIntervalId) clearInterval(priceIntervalId);
+    fetchAndDisplayBitMartPrice(); // Carga el precio al instante
+    priceIntervalId = setInterval(fetchAndDisplayBitMartPrice, 2000); // Actualiza cada 2 segundos
 
     connectionIndicator = document.getElementById('status-dot');
     connectionText = document.getElementById('status-text');
@@ -210,9 +234,7 @@ async function checkBitMartConnectionAndData() {
                 displayOrders(data.openOrders, 'opened');
             }
 
-            if (data.ticker && data.ticker.last) {
-                cargarPrecioEnVivo(data.ticker.last);
-            }
+            // La lógica del precio en vivo se ha movido a otra función
             
             actualizarCalculos();
 
