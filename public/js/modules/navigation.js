@@ -50,7 +50,7 @@ function initializeTradingViewChart() {
             allow_symbol_change: true,
             container_id: "tvchart"
         });
-        // Marca el widget como inicializado
+        // Marca el widget como inicializado para evitar duplicados
         window.tvWidget = true;
     }
 }
