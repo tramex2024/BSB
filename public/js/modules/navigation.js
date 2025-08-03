@@ -27,14 +27,11 @@ let cycleProfitDisplay = null;
 let startBtn = null;
 let resetBtn = null;
 
-// Nueva función para inicializar el gráfico de TradingView
+// Función para inicializar el gráfico de TradingView
 function initializeTradingViewChart() {
-    // Si el gráfico ya se ha inicializado, no hagas nada
     if (window.tvWidget) {
         return;
     }
-
-    // Busca el contenedor del gráfico
     const chartContainer = document.getElementById('tvchart');
     if (chartContainer) {
         new TradingView.widget({
@@ -50,41 +47,14 @@ function initializeTradingViewChart() {
             allow_symbol_change: true,
             container_id: "tvchart"
         });
-        // Marca el widget como inicializado para evitar duplicados
         window.tvWidget = true;
     }
 }
 
-// Nueva función para obtener y mostrar el precio en tiempo real
-async function fetchAndDisplayBitMartPrice() {
-    try {
-        const response = await fetch(`https://api-cloud.bitmart.com/spot/v1/ticker?symbol=${TRADE_SYMBOL}`);
-        const data = await response.json();
-        
-        if (data && data.code === 1000 && data.data && data.data[0] && data.data[0].last_price) {
-            cargarPrecioEnVivo(data.data[0].last_price);
-        } else {
-            displayLogMessage('Failed to fetch real-time price from BitMart API.', 'error');
-            cargarPrecioEnVivo(null); // Pasa null para que se muestre N/A
-        }
-    } catch (error) {
-        console.error('Error fetching real-time price:', error);
-        displayLogMessage('Network error fetching real-time price.', 'error');
-        cargarPrecioEnVivo(null); // Pasa null para que se muestre N/A
-    }
-}
-
-
 function initializeAutobotView() {
     displayLogMessage('Initializing Autobot view...', 'info');
 
-    // Inicializa el gráfico de TradingView cuando se carga la vista de Autobot
     initializeTradingViewChart();
-
-    // Inicia la carga del precio en tiempo real y el intervalo
-    if (priceIntervalId) clearInterval(priceIntervalId);
-    fetchAndDisplayBitMartPrice(); // Carga el precio al instante
-    priceIntervalId = setInterval(fetchAndDisplayBitMartPrice, 2000); // Actualiza cada 2 segundos
 
     connectionIndicator = document.getElementById('status-dot');
     connectionText = document.getElementById('status-text');
@@ -107,7 +77,6 @@ function initializeAutobotView() {
         bitmartIntervalId = setInterval(checkBitMartConnectionAndData, 10000);
     }
     
-    // Si los elementos existen, se añaden los eventos
     const tabOpened = document.getElementById('tab-opened');
     if (tabOpened) {
         setActiveTab('tab-opened');
@@ -136,11 +105,8 @@ function clearAutobotView() {
     displayLogMessage('Clearing Autobot view...', 'info');
     if (bitmartIntervalId) clearInterval(bitmartIntervalId);
     if (priceIntervalId) clearInterval(priceIntervalId);
-    // Limpiar el contenido de main-content para que no se superponga
     const mainContent = document.getElementById('main-content');
     if (mainContent) mainContent.innerHTML = '';
-
-    // Cuando se borra la vista, también se debe limpiar el widget de TradingView
     window.tvWidget = null;
 }
 
@@ -150,9 +116,7 @@ export function setupNavTabs() {
     
     async function loadContent(tabName) {
         try {
-            // Limpiamos la vista anterior antes de cargar la nueva
             clearAutobotView();
-
             const response = await fetch(`/html/${tabName}.html`);
             if (!response.ok) {
                 throw new Error(`Failed to load ${tabName}.html (Status: ${response.status})`);
@@ -160,12 +124,9 @@ export function setupNavTabs() {
             const htmlContent = await response.text();
             mainContent.innerHTML = htmlContent;
             displayLogMessage(`Switched to ${tabName} tab.`, 'info');
-
             const newUrl = window.location.origin + window.location.pathname + `?#${tabName}`;
             window.history.pushState({ path: newUrl }, '', newUrl);
 
-            // Una vez que el contenido se ha cargado, inicializamos los scripts.
-            // Es crucial que esto se haga DESPUÉS de que el HTML esté en el DOM.
             if (tabName === 'autobot') {
                 initializeAutobotView();
             }
@@ -188,7 +149,7 @@ export function setupNavTabs() {
         });
     });
 
-    const initialTabName = window.location.hash.slice(2) || 'autobot'; // Valor por defecto
+    const initialTabName = window.location.hash.slice(2) || 'autobot';
     const initialActiveTab = document.querySelector(`.nav-tab[data-tab="${initialTabName}"]`);
     if (initialActiveTab) {
         initialActiveTab.classList.add('active');
@@ -234,7 +195,11 @@ async function checkBitMartConnectionAndData() {
                 displayOrders(data.openOrders, 'opened');
             }
 
-            // La lógica del precio en vivo se ha movido a otra función
+            if (data.ticker && data.ticker.last) {
+                cargarPrecioEnVivo(data.ticker.last);
+            } else {
+                cargarPrecioEnVivo(null);
+            }
             
             actualizarCalculos();
 
