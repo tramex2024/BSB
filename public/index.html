@@ -44,6 +44,13 @@
         .autobot-tabs button.active-tab { /* Esta clase es para los tabs de Order History */
             border-color: white !important; /* Forces white border for active tab */
         }
+        /* New styles to manage content visibility */
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body class="dark-mode bg-gray-900 text-white">
@@ -53,10 +60,10 @@
             <span class="app-name">Bitmart Spot Bot</span>
         </div>
         <nav class="header-middle">
-            <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
-            <a href="#testbot" class="nav-tab" data-tab="testbot">TESTBOT</a>
-            <a href="#autobot" class="nav-tab" data-tab="autobot">AUTOBOT</a>
-            <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
+            <a href="#dashboard-section" class="nav-tab active" data-tab="dashboard-section">DASHBOARD</a>
+            <a href="#testbot-section" class="nav-tab" data-tab="testbot-section">TESTBOT</a>
+            <a href="#autobot-section" class="nav-tab" data-tab="autobot-section">AUTOBOT</a>
+            <a href="#aibot-section" class="nav-tab" data-tab="aibot-section">AIBOT</a>
         </nav>
         <div class="header-right">
             <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i>
@@ -64,7 +71,8 @@
             <i class="fas fa-users icon" title="Users"></i>
             <i class="fas fa-cog icon" title="Settings"></i>
             <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
-            <i class="fas fa-key icon" id="api-key-icon" title="API"></i> <i class="fas fa-envelope icon" title="Contact"></i>
+            <i class="fas fa-key icon" id="api-key-icon" title="API"></i>
+            <i class="fas fa-envelope icon" title="Contact"></i>
         </div>
     </header>
 
@@ -84,17 +92,15 @@
                         <div class="flex justify-between text-sm">
                             <div id="connection-status" class="flex items-center space-x-2">
                                 <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-			<div class="flex justify-between items-center">
-                            <h2 class="text-lg font-bold">AUTOBOT</h2>
-                            <div><strong>Profit:</strong> <span id="profit" class="text-green-400">0.00</span></div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <h2 class="text-lg font-bold">AUTOBOT</h2>
+                                <div><strong>Profit:</strong> <span id="profit" class="text-green-400">0.00</span></div>
+                            </div>
                         </div>
-                     /*   <div class="flex justify-between text-sm">
-                            <div id="connection-status" class="flex items-center space-x-2">
-                                <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-                                <span id="status-text">Disconnected</span>		
-                            </div>		*/
+                        <div class="flex justify-between text-sm">
                             <div><strong>LState:</strong> <span id="bot-lstate" class="text-yellow-400">STOPPED</span></div>
-			    <div><strong>SState:</strong> <span id="bot-sstate" class="text-yellow-400">STOPPED</span></div>
+                            <div><strong>SState:</strong> <span id="bot-sstate" class="text-yellow-400">STOPPED</span></div>
                         </div>
                     </div>
 

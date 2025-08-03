@@ -8,7 +8,7 @@ export function setupNavTabs() {
     navTabs.forEach(tab => {
         tab.addEventListener('click', function(event) {
             event.preventDefault(); // Evita el comportamiento predeterminado del enlace (cambiar la URL)
-            const targetId = this.dataset.tab + '-section'; // Obtiene el ID de la sección a mostrar
+            const targetId = this.getAttribute('data-tab'); // Obtiene el valor del atributo data-tab
 
             // Elimina la clase 'active' de todos los tabs de navegación
             navTabs.forEach(t => t.classList.remove('active'));
@@ -18,20 +18,19 @@ export function setupNavTabs() {
             // Oculta todas las secciones de contenido y muestra solo la deseada
             tabContents.forEach(content => {
                 if (content.id === targetId) {
-                    content.classList.add('active'); // O tu clase para mostrar
+                    content.classList.add('active'); // Muestra el contenido
                 } else {
-                    content.classList.remove('active'); // O tu clase para ocultar
+                    content.classList.remove('active'); // Oculta los demás
                 }
             });
-            displayLogMessage(`Switched to ${this.dataset.tab} tab.`, 'info');
+            displayLogMessage(`Switched to ${targetId} tab.`, 'info');
         });
     });
 
     // Opcional: Establecer el tab activo inicialmente al cargar la página
-    // Esto asegura que la pestaña correcta se muestre al cargar.
     const initialActiveTab = document.querySelector('.nav-tab.active');
     if (initialActiveTab) {
-        const initialTargetId = initialActiveTab.dataset.tab + '-section';
+        const initialTargetId = initialActiveTab.getAttribute('data-tab');
         tabContents.forEach(content => {
             if (content.id === initialTargetId) {
                 content.classList.add('active');
