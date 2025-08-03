@@ -32,7 +32,7 @@ function initializeAutobotView() {
 
     connectionIndicator = document.getElementById('status-dot');
     connectionText = document.getElementById('status-text');
-    purchaseInput = document.getElementById("purchase-usdt");
+    purchaseInput = document.getElementById("purchase");
     incrementInput = document.getElementById("increment");
     decrementInput = document.getElementById("decrement");
     triggerInput = document.getElementById("trigger");
@@ -45,17 +45,20 @@ function initializeAutobotView() {
     startBtn = document.getElementById('start-btn');
     resetBtn = document.getElementById('reset-btn');
 
-    if (connectionIndicator) {
-        checkBitMartConnectionAndData();
-        if (bitmartIntervalId) clearInterval(bitmartIntervalId);
-        bitmartIntervalId = setInterval(checkBitMartConnectionAndData, 10000);
-    }
-    
-    // Si los elementos existen, se añaden los eventos
+    if (connectionIndicator) checkBitMartConnectionAndData();
+
     const tabOpened = document.getElementById('tab-opened');
     if (tabOpened) {
         setActiveTab('tab-opened');
+        // Aquí no llamamos a fetchOrders directamente, ya que checkBitMartConnectionAndData lo hará.
     }
+
+    if (bitmartIntervalId) clearInterval(bitmartIntervalId);
+    if (priceIntervalId) clearInterval(priceIntervalId);
+
+    bitmartIntervalId = setInterval(checkBitMartConnectionAndData, 10000);
+    // Ya no es necesario un intervalo separado para el precio, lo obtenemos con /bitmart-data
+    // priceIntervalId = setInterval(cargarPrecioEnVivo, 2000);
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
@@ -66,6 +69,8 @@ function initializeAutobotView() {
         if (tab) {
             tab.addEventListener('click', () => {
                 setActiveTab(id);
+                // Aquí podrías llamar a una función para refrescar solo las órdenes
+                // pero por ahora, mantendremos la lógica centralizada en checkBitMartConnectionAndData
             });
         }
     });
@@ -80,9 +85,6 @@ function clearAutobotView() {
     displayLogMessage('Clearing Autobot view...', 'info');
     if (bitmartIntervalId) clearInterval(bitmartIntervalId);
     if (priceIntervalId) clearInterval(priceIntervalId);
-    // Limpiar el contenido de main-content para que no se superponga
-    const mainContent = document.getElementById('main-content');
-    if (mainContent) mainContent.innerHTML = '';
 }
 
 export function setupNavTabs() {
@@ -91,12 +93,13 @@ export function setupNavTabs() {
     
     async function loadContent(tabName) {
         try {
-            // Limpiamos la vista anterior antes de cargar la nueva
-            clearAutobotView();
+            if (tabName !== 'autobot') {
+                clearAutobotView();
+            }
 
             const response = await fetch(`/html/${tabName}.html`);
             if (!response.ok) {
-                throw new Error(`Failed to load ${tabName}.html (Status: ${response.status})`);
+                throw new Error(`Failed to load ${tabName}.html`);
             }
             const htmlContent = await response.text();
             mainContent.innerHTML = htmlContent;
@@ -105,14 +108,12 @@ export function setupNavTabs() {
             const newUrl = window.location.origin + window.location.pathname + `?#${tabName}`;
             window.history.pushState({ path: newUrl }, '', newUrl);
 
-            // Una vez que el contenido se ha cargado, inicializamos los scripts.
-            // Es crucial que esto se haga DESPUÉS de que el HTML esté en el DOM.
             if (tabName === 'autobot') {
                 initializeAutobotView();
             }
         } catch (error) {
             console.error('Error loading content:', error);
-            mainContent.innerHTML = `<p class="text-red-500 text-center">Error loading page content. Please try again.</p>`;
+            mainContent.innerHTML = `<p class="text-red-500">Error loading page content. Please try again.</p>`;
             displayLogMessage(`Error loading content for ${tabName}.`, 'error');
         }
     }
@@ -129,13 +130,12 @@ export function setupNavTabs() {
         });
     });
 
-    const initialTabName = window.location.hash.slice(2) || 'autobot'; // Valor por defecto
-    const initialActiveTab = document.querySelector(`.nav-tab[data-tab="${initialTabName}"]`);
+    const initialActiveTab = document.querySelector('.nav-tab.active');
     if (initialActiveTab) {
-        initialActiveTab.classList.add('active');
+        const initialTabName = initialActiveTab.dataset.tab;
         loadContent(initialTabName);
     } else {
-        const defaultTab = 'autobot';
+        const defaultTab = 'dashboard';
         const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
         if (defaultTabElement) {
             defaultTabElement.classList.add('active');
@@ -156,6 +156,7 @@ async function checkBitMartConnectionAndData() {
     }
 
     try {
+        // Hacemos una única llamada al endpoint /bitmart-data de tu servidor
         const data = await fetchFromBackend('/bitmart-data');
 
         if (data.connected) {
@@ -168,6 +169,7 @@ async function checkBitMartConnectionAndData() {
                 connectionText.textContent = 'Connected';
             }
 
+            // Usamos los datos consolidados para actualizar las diferentes partes del UI
             getBalances(data.balance);
             
             const currentTab = document.querySelector('.autobot-tabs button.active-tab')?.id;
