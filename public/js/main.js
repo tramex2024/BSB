@@ -1,7 +1,6 @@
 // public/js/main.js
 import { setupNavTabs } from './modules/navigation.js';
 import { displayLogMessage } from './modules/auth.js';
-import { initializeAutobotView, clearAutobotView } from './modules/navigation.js'; // Importar desde navigation.js
 
 // --- Constantes Globales ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -15,3 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     logMessageElement = document.getElementById('log-message');
     setupNavTabs();
 });
+
+// Nota: A partir de aquí, las funciones y variables específicas de las vistas
+// (como las del Autobot) serán manejadas dentro del archivo navigation.js o en módulos
+// específicos para cada vista, pero no en main.js.
