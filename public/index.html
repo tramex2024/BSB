@@ -81,16 +81,20 @@
             <div class="flex flex-col md:flex-row h-full md:h-screen">
                 <div class="w-full md:w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
                     <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-                        <div class="flex justify-between items-center">
-                            <h2 class="text-lg font-bold">AUTOBOT</h2>
-                            <div><strong>Profit:</strong> <span id="profit" class="text-green-400">0.00</span></div>
-                        </div>
                         <div class="flex justify-between text-sm">
                             <div id="connection-status" class="flex items-center space-x-2">
                                 <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-                                <span id="status-text">Disconnected</span>
-                            </div>
-                            <div><strong>State:</strong> <span id="bot-state" class="text-yellow-400">STOPPED</span></div>
+			<div class="flex justify-between items-center">
+                            <h2 class="text-lg font-bold">AUTOBOT</h2>
+                            <div><strong>Profit:</strong> <span id="profit" class="text-green-400">0.00</span></div>
+                        </div>
+                     /*   <div class="flex justify-between text-sm">
+                            <div id="connection-status" class="flex items-center space-x-2">
+                                <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                                <span id="status-text">Disconnected</span>		
+                            </div>		*/
+                            <div><strong>LState:</strong> <span id="bot-lstate" class="text-yellow-400">STOPPED</span></div>
+			    <div><strong>SState:</strong> <span id="bot-sstate" class="text-yellow-400">STOPPED</span></div>
                         </div>
                     </div>
 
