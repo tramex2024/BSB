@@ -47,7 +47,7 @@ function initializeAutobotView() {
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    startPriceUpdates(TRADE_SYMBOL, 'price', 3000); // Actualiza cada 3 segundos
+    startPriceUpdates(TRADE_SYMBOL, 'price', 200); // Actualiza cada 3 segundos
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
@@ -67,6 +67,12 @@ function initializeAutobotView() {
 
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
+
+    // -------------------------------------------------------------
+    // ¡LA SOLUCIÓN ESTÁ AQUÍ!
+    // Llama a la función para inicializar los balances SOLO cuando la vista del Autobot se carga.
+    // -------------------------------------------------------------
+    actualizarBalancesEstrategia();
 }
 
 function initializeTab(tabName) {
@@ -135,5 +141,4 @@ document.addEventListener('DOMContentLoaded', () => {
     if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
     if (closeApiModalButton) closeApiModalButton.addEventListener('click', () => toggleApiModal(false));
     if (apiModal) apiModal.addEventListener('click', (e) => { if (e.target === apiModal) toggleApiModal(false); });
-    actualizarBalancesEstrategia();
 });
