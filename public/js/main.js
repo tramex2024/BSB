@@ -2,7 +2,7 @@
 
 import { toggleAuthModal, handleLogout, handleAuthFormSubmit, displayLogMessage } from './modules/auth.js';
 import { getBalances } from './modules/balance.js';
-import { initializeChart } from './modules/chart.js'; // Importar la función initializeChart
+import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
 import { actualizarCalculos } from './modules/calculations.js';
@@ -10,6 +10,7 @@ import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.j
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
+import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
 
 // --- Constantes globales ---
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -45,7 +46,6 @@ function initializeAutobotView() {
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    // Inicia la actualización del precio de BTC en tiempo real
     startPriceUpdates(TRADE_SYMBOL, 'price', 3000); // Actualiza cada 3 segundos
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
@@ -69,8 +69,12 @@ function initializeAutobotView() {
 }
 
 function initializeTab(tabName) {
+    // Detiene todos los intervalos activos
     Object.values(intervals).forEach(clearInterval);
-    stopPriceUpdates(); // <-- Detiene la actualización de precios al cambiar de pestaña
+    intervals = {}; // Limpia el objeto de intervalos
+    
+    // Detiene la actualización de precios
+    stopPriceUpdates();
 
     if (tabName === 'autobot') {
         initializeAutobotView();
