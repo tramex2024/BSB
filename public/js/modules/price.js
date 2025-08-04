@@ -1,23 +1,26 @@
 // public/js/modules/price.js
 
-const BITMART_API_URL = 'https://api-cloud.bitmart.com/spot/v1/ticker';
+// Usamos la URL del backend que ya existe para obtener el ticker
+const BACKEND_PRICE_URL = 'https://bsb-ppex.onrender.com/ticker';
 let priceInterval = null;
 
 /**
- * Función para obtener el precio de un par de trading de la API de BitMart
+ * Función para obtener el precio de un par de trading a través de tu backend
  * y actualizar el elemento HTML correspondiente.
  * @param {string} symbol - El par de trading, por ejemplo 'BTC_USDT'.
  * @param {string} elementId - El ID del elemento HTML donde se mostrará el precio.
  */
 async function fetchAndDisplayPrice(symbol, elementId) {
     try {
-        const response = await fetch(`${BITMART_API_URL}?symbol=${symbol}`);
+        // Hacemos la llamada al endpoint de tu backend, pasando el símbolo
+        const response = await fetch(`${BACKEND_PRICE_URL}/${symbol}`);
         if (!response.ok) {
-            throw new Error(`Failed to fetch price for ${symbol}: ${response.statusText}`);
+            throw new Error(`Failed to fetch price from backend: ${response.statusText}`);
         }
         const data = await response.json();
         
-        const price = data.data.tickers[0].last_price;
+        // El endpoint de tu backend devuelve un objeto con la propiedad 'last'
+        const price = data.last;
         const priceElement = document.getElementById(elementId);
         
         if (priceElement) {
@@ -25,7 +28,12 @@ async function fetchAndDisplayPrice(symbol, elementId) {
         }
 
     } catch (error) {
-        console.error("Error al obtener el precio de BitMart:", error);
+        console.error("Error al obtener el precio:", error);
+        // Opcional: mostrar un mensaje de error en la UI
+        const priceElement = document.getElementById(elementId);
+        if (priceElement) {
+            priceElement.textContent = '---';
+        }
     }
 }
 
