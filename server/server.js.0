@@ -104,26 +104,6 @@ app.get('/bitmart-data', async (req, res) => {
     }
 });
 
-// --- NUEVO ENDPOINT PARA EL ESTADO DEL BOT ---
-// Este endpoint es el que faltaba y causaba el error 404.
-// Devuelve una configuración de ejemplo por defecto.
-app.get('/api/user/bot-config-and-state', (req, res) => {
-    // Aquí es donde iría tu lógica para leer el estado y la configuración
-    // del bot. Por ahora, devolvemos un estado y una configuración por defecto.
-    const botState = {
-        state: 'STOPPED', // Puede ser 'RUNNING' o 'STOPPED'
-        purchase: 5.00,
-        increment: 100,
-        decrement: 1.0,
-        trigger: 1.5,
-        stopAtCycleEnd: false,
-        cycle: 0,
-        profit: 0.00,
-        cycleProfit: 0.00,
-    };
-    res.status(200).json(botState);
-});
-
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
     res.send('Backend is running!');
