@@ -1,7 +1,6 @@
 // public/js/modules/calculations.js
 
 // Función para actualizar todos los cálculos del Autobot
-// Esto incluye LBalance, SBalance, LCoverage, LNorder, SCoverage y SNorder
 export function actualizarCalculosAutobot() {
     // Obtener las referencias de todos los inputs y displays del DOM
     const amountUSDTInput = document.getElementById('amount-usdt');
@@ -10,22 +9,28 @@ export function actualizarCalculosAutobot() {
     const purchaseBTCInput = document.getElementById("purchase-btc");
     const incrementInput = document.getElementById("increment");
     const decrementInput = document.getElementById("decrement");
+    const triggerInput = document.getElementById("trigger"); // Nuevo input
     const priceElement = document.getElementById('price');
     
     // Displays para los balances
     const lbalanceDisplay = document.getElementById('lbalance');
     const sbalanceDisplay = document.getElementById('sbalance');
 
-    // Displays para los nuevos cálculos
+    // Displays para los cálculos de cobertura
     const lcoverageDisplay = document.getElementById('lcoverage');
     const lnorderDisplay = document.getElementById('lnorder');
     const scoverageDisplay = document.getElementById('scoverage');
     const snorderDisplay = document.getElementById('snorder');
 
+    // Displays para los nuevos cálculos de precio objetivo
+    const ltpriceDisplay = document.getElementById('ltprice');
+    const stpriceDisplay = document.getElementById('stprice');
+
     // Verificar que todos los elementos existan
     if (!amountUSDTInput || !amountBTCInput || !purchaseUSDTInput || !purchaseBTCInput ||
-        !incrementInput || !decrementInput || !priceElement || !lbalanceDisplay || 
-        !sbalanceDisplay || !lcoverageDisplay || !lnorderDisplay || !scoverageDisplay || !snorderDisplay) {
+        !incrementInput || !decrementInput || !triggerInput || !priceElement || 
+        !lbalanceDisplay || !sbalanceDisplay || !lcoverageDisplay || !lnorderDisplay || 
+        !scoverageDisplay || !snorderDisplay || !ltpriceDisplay || !stpriceDisplay) {
         console.warn("Advertencia: No se encontraron todos los elementos necesarios para los cálculos. La función no se ejecutará.");
         return;
     }
@@ -37,11 +42,12 @@ export function actualizarCalculosAutobot() {
     const purchaseBTC = parseFloat(purchaseBTCInput.value) || 0;
     const increment = parseFloat(incrementInput.value) || 0;
     const decrement = parseFloat(decrementInput.value) || 0;
+    const trigger = parseFloat(triggerInput.value) || 0; // Nuevo valor de input
     const currentPrice = parseFloat(priceElement.textContent) || 0;
 
     // Verificar si los valores numéricos son válidos
     if (isNaN(amountUSDT) || isNaN(amountBTC) || isNaN(purchaseUSDT) || isNaN(purchaseBTC) ||
-        isNaN(increment) || isNaN(decrement) || isNaN(currentPrice) || currentPrice === 0) {
+        isNaN(increment) || isNaN(decrement) || isNaN(trigger) || isNaN(currentPrice) || currentPrice === 0) {
         console.warn("Advertencia: Uno o más valores de entrada no son números válidos. No se pueden realizar los cálculos.");
         return;
     }
@@ -54,19 +60,14 @@ export function actualizarCalculosAutobot() {
     let longOrderCount = 0;
     let nextPurchaseAmount = purchaseUSDT;
 
-    // El loop se ejecuta mientras el balance sea suficiente para la siguiente orden
     while (lbalance >= nextPurchaseAmount && nextPurchaseAmount > 0) {
         lbalance -= nextPurchaseAmount;
         longOrderCount++;
 
-        // La segunda orden es la primera que se calcula
         const orderIndex = longOrderCount;
-        
-        // El precio de la siguiente orden se calcula con el decremento incremental
         const priceDropPercentage = (decrement * orderIndex) / 100;
         longCoveragePrice = longCoveragePrice * (1 - priceDropPercentage);
         
-        // El monto de la siguiente orden se calcula con el incremento porcentual
         const nextIncrementAmount = nextPurchaseAmount * (increment / 100);
         nextPurchaseAmount += nextIncrementAmount;
     }
@@ -79,21 +80,23 @@ export function actualizarCalculosAutobot() {
     let shortOrderCount = 0;
     let nextSellAmount = purchaseBTC;
 
-    // El loop se ejecuta mientras el balance sea suficiente para la siguiente orden
     while (sbalance >= nextSellAmount && nextSellAmount > 0) {
         sbalance -= nextSellAmount;
         shortOrderCount++;
 
         const orderIndex = shortOrderCount;
-
-        // El precio de la siguiente orden se calcula con el incremento incremental
         const priceIncreasePercentage = (decrement * orderIndex) / 100;
         shortCoveragePrice = shortCoveragePrice * (1 + priceIncreasePercentage);
 
-        // El monto de la siguiente orden se calcula con el incremento porcentual
         const nextIncrementAmount = nextSellAmount * (increment / 100);
         nextSellAmount += nextIncrementAmount;
     }
+
+    // -------------------------------------------------------------
+    // CÁLCULOS DE PRECIO OBJETIVO (LTPrice y STPrice)
+    // -------------------------------------------------------------
+    const ltprice = currentPrice * (1 + trigger / 100);
+    const stprice = currentPrice * (1 - trigger / 100);
 
     // -------------------------------------------------------------
     // ACTUALIZAR LOS DISPLAYS EN EL DOM
@@ -106,11 +109,13 @@ export function actualizarCalculosAutobot() {
 
     scoverageDisplay.textContent = shortCoveragePrice.toFixed(2);
     snorderDisplay.textContent = shortOrderCount;
+
+    ltpriceDisplay.textContent = ltprice.toFixed(2);
+    stpriceDisplay.textContent = stprice.toFixed(2);
 }
 
 
-// La función `actualizarBalancesEstrategia` ya no es necesaria con esta nueva lógica consolidada
-// pero la dejamos aquí para evitar errores si aún se está importando en main.js
+// Mantener esta función por compatibilidad, aunque ya no se utilice.
 export function actualizarBalancesEstrategia() {
     console.warn("La función actualizarBalancesEstrategia() está obsoleta. Se ha consolidado en actualizarCalculosAutobot().");
 }
