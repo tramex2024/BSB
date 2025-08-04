@@ -1,13 +1,14 @@
 // public/js/main.js
 
-import { toggleAuthModal, handleLogout, handleAuthFormSubmit } from './modules/auth.js';
+import { toggleAuthModal, handleLogout, handleAuthFormSubmit, displayLogMessage } from './modules/auth.js';
 import { getBalances } from './modules/balance.js';
-import { cargarPrecioEnVivo, checkBitMartConnectionAndData } from './modules/network.js';
+import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
 import { actualizarCalculos } from './modules/calculations.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
-import { handleApiFormSubmit } from './modules/api.js';
+import { handleApiFormSubmit } from './modules/api.js'; // Importación corregida
+import { toggleApiModal } from './modules/auth.js'; // Importación de la función para el modal
 
 // --- Constantes globales ---
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -23,7 +24,6 @@ let intervals = {};
 // --- Funciones de inicialización de la vista ---
 function initializeDashboardView() {
     getBalances();
-    cargarPrecioEnVivo();
     checkBitMartConnectionAndData();
 }
 
@@ -75,13 +75,16 @@ function initializeTab(tabName) {
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Configurar la navegación principal con un callback para la inicialización
     setupNavTabs(initializeTab);
 
-    // Event listeners para el modal de autenticación
+    const logMessageElement = document.getElementById('log-message');
+    const loginLogoutIcon = document.getElementById('login-logout-icon');
+    const apiKeyIcon = document.getElementById('api-key-icon');
     const authModal = document.getElementById('auth-modal');
     const authForm = document.getElementById('auth-form');
-    const loginLogoutIcon = document.getElementById('login-logout-icon');
+    const apiModal = document.getElementById('api-modal');
+    const apiForm = document.getElementById('api-form');
+    const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
@@ -102,16 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (authModal) authModal.addEventListener('click', (e) => { if (e.target === authModal) toggleAuthModal(false); });
 
-    // Event listeners para el modal de API
-    const apiKeyIcon = document.getElementById('api-key-icon');
-    const apiModal = document.getElementById('api-modal');
-    const apiForm = document.getElementById('api-form');
-    const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
-    
     if (apiKeyIcon) {
         apiKeyIcon.addEventListener('click', () => {
             if (!localStorage.getItem('authToken')) {
                 alert("Please login first to configure API keys.");
+                displayLogMessage("Login required to configure API keys.", "warning", logMessageElement);
                 toggleAuthModal(true);
                 return;
             }
@@ -122,5 +120,4 @@ document.addEventListener('DOMContentLoaded', () => {
     if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
     if (closeApiModalButton) closeApiModalButton.addEventListener('click', () => toggleApiModal(false));
     if (apiModal) apiModal.addEventListener('click', (e) => { if (e.target === apiModal) toggleApiModal(false); });
-
 });
