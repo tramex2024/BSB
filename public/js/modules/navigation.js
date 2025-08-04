@@ -1,60 +1,57 @@
 // public/js/modules/navigation.js
-const mainContentDiv = document.getElementById('main-content');
-let activeTab = null;
 
-async function loadContent(tabName, onContentLoad) {
-    if (!mainContentDiv) {
-        console.error("Error: Elemento 'main-content' no encontrado.");
-        return;
-    }
+import { displayLogMessage } from './auth.js';
 
-    try {
-        const response = await fetch(`/${tabName}.html`);
-        if (!response.ok) {
-            throw new Error(`Failed to load ${tabName}.html`);
-        }
-        const content = await response.text();
-        mainContentDiv.innerHTML = content;
-        
-        if (onContentLoad && typeof onContentLoad === 'function') {
-            onContentLoad(tabName);
-        }
-
-    } catch (error) {
-        console.error('Error loading content:', error);
-        mainContentDiv.innerHTML = `<div class="p-4 text-center text-red-500">Error: No se pudo cargar el contenido de la página.</div>`;
-    }
-}
-
-function setActiveTab(tabElement) {
-    if (activeTab) {
-        activeTab.classList.remove('active-tab');
-    }
-    tabElement.classList.add('active-tab');
-    activeTab = tabElement;
-}
-
-export function setupNavTabs(onContentLoad) {
-    const navTabs = document.querySelectorAll('#nav-tabs .nav-tab');
+export function setupNavTabs(callback) {
+    const navTabs = document.querySelectorAll('.nav-tab');
+    const mainContent = document.getElementById('main-content');
     
-    if (!navTabs || navTabs.length === 0) {
-        console.error("No se encontraron tabs de navegación. Asegúrate de que el ID 'nav-tabs' y la clase 'nav-tab' existan.");
-        return;
+    async function loadContent(tabName) {
+        try {
+            const response = await fetch(`/${tabName}.html`);
+            if (!response.ok) {
+                throw new Error(`Failed to load ${tabName}.html`);
+            }
+            const htmlContent = await response.text();
+            mainContent.innerHTML = htmlContent;
+            displayLogMessage(`Switched to ${tabName} tab.`, 'info');
+
+            const newUrl = window.location.origin + window.location.pathname + `?#${tabName}`;
+            window.history.pushState({ path: newUrl }, '', newUrl);
+
+            // Se ejecuta un callback después de cargar el contenido
+            if (callback) {
+                callback(tabName);
+            }
+        } catch (error) {
+            console.error('Error loading content:', error);
+            mainContent.innerHTML = `<p class="text-red-500">Error loading page content. Please try again.</p>`;
+            displayLogMessage(`Error loading content for ${tabName}.`, 'error');
+        }
     }
 
     navTabs.forEach(tab => {
-        tab.addEventListener('click', (event) => {
+        tab.addEventListener('click', function(event) {
             event.preventDefault();
-            const tabName = tab.dataset.tab;
-            setActiveTab(tab);
-            loadContent(tabName, onContentLoad);
+            const tabName = this.dataset.tab;
+
+            navTabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            
+            loadContent(tabName);
         });
     });
 
-    // Cargar la vista por defecto al inicio
-    const defaultTab = document.querySelector('#nav-tabs .nav-tab[data-tab="dashboard"]');
-    if (defaultTab) {
-        setActiveTab(defaultTab);
-        loadContent('dashboard', onContentLoad);
+    // Cargar la pestaña inicial
+    const initialActiveTab = document.querySelector('.nav-tab.active');
+    if (initialActiveTab) {
+        loadContent(initialActiveTab.dataset.tab);
+    } else {
+        const defaultTab = 'dashboard';
+        const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
+        if (defaultTabElement) {
+            defaultTabElement.classList.add('active');
+            loadContent(defaultTab);
+        }
     }
 }
