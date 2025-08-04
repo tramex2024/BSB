@@ -5,7 +5,7 @@ import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
-//import { actualizarBalancesEstrategia, actualizarCalculosAutobot } from './modules/calculations.js'; // <-- CORRECCIÓN AQUÍ
+import { actualizarBalancesEstrategia, actualizarCalculosAutobot } from './modules/calculations.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
