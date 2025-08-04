@@ -43,8 +43,10 @@ function initializeAutobotView() {
     actualizarCalculos();
     checkBitMartConnectionAndData();
     
-    // Esta línea inicializa el gráfico en la pestaña del Autobot
-    initializeChart('tvchart', `BITMART:${TRADE_SYMBOL}`); 
+    initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    
+    // Inicia la actualización del precio de BTC en tiempo real
+    startPriceUpdates(TRADE_SYMBOL, 'price', 3000); // Actualiza cada 3 segundos
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
@@ -68,6 +70,7 @@ function initializeAutobotView() {
 
 function initializeTab(tabName) {
     Object.values(intervals).forEach(clearInterval);
+    stopPriceUpdates(); // <-- Detiene la actualización de precios al cambiar de pestaña
 
     if (tabName === 'autobot') {
         initializeAutobotView();
