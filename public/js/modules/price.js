@@ -44,7 +44,7 @@ async function fetchAndDisplayPrice(symbol, elementId) {
  * @param {number} intervalMs - El intervalo de actualización en milisegundos.
  * @returns {number} El ID del intervalo creado.
  */
-export function startPriceUpdates(symbol, elementId, intervalMs = 5000) {
+export function startPriceUpdates(symbol, elementId, intervalMs = 200) {
     // Si ya hay un intervalo activo, lo detenemos primero
     if (priceInterval) {
         clearInterval(priceInterval);
