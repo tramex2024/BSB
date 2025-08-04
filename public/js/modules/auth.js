@@ -1,8 +1,8 @@
 // public/js/modules/auth.js
 
-import { logMessageElement } from '../main.js';
+import { fetchFromBackend } from './api.js';
 
-export function displayLogMessage(message, type) {
+export function displayLogMessage(message, type, logMessageElement) {
     if (logMessageElement) {
         logMessageElement.textContent = message;
         logMessageElement.className = 'log-bar';
@@ -11,3 +11,5 @@ export function displayLogMessage(message, type) {
         }
     }
 }
+
+// ... otras funciones de autenticación

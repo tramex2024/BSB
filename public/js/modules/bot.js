@@ -1,103 +1,122 @@
 // public/js/modules/bot.js
 
-// Importaciones corregidas, solo importamos lo que necesitamos
 import { displayLogMessage } from './auth.js';
 import { fetchFromBackend } from './api.js';
 import { TRADE_SYMBOL } from '../main.js';
 
-let botState = { lstate: 'STOPPED', sstate: 'STOPPED' };
-let botConfig = {};
+let isRunning = false;
 
 // Las funciones para interactuar con los botones y el estado del bot
-export function toggleBotState() {
+export async function toggleBotState() {
     const startBtn = document.getElementById('start-btn');
-    if (!startBtn) return;
+    if (!startBtn) {
+        displayLogMessage("Error: Missing start button.", 'error');
+        return;
+    }
 
-    if (botState.lstate === 'STOPPED' && botState.sstate === 'STOPPED') {
-        startBot();
-        startBtn.textContent = 'STOP';
-        startBtn.classList.remove('bg-green-600');
-        startBtn.classList.add('bg-red-600');
-    } else {
-        stopBot();
-        startBtn.textContent = 'START';
-        startBtn.classList.remove('bg-red-600');
-        startBtn.classList.add('bg-green-600');
+    const action = isRunning ? 'stop' : 'start';
+    displayLogMessage(`Sending request to ${action} bot...`, 'info');
+
+    try {
+        const botState = await fetchBotState(action);
+        if (botState) {
+            updateUIBasedOnBotState(botState);
+            displayLogMessage(`Bot state updated to: ${botState.state}`, 'success');
+        }
+    } catch (error) {
+        displayLogMessage(`Error toggling bot state: ${error.message}`, 'error');
+        console.error('Error toggling bot state:', error);
     }
 }
 
-async function startBot() {
-    // Obtener los elementos del DOM en el momento de la ejecución
+async function fetchBotState(action) {
+    // Obtener los elementos del DOM para la configuración del bot
     const purchaseInput = document.getElementById("purchase");
     const incrementInput = document.getElementById("increment");
     const decrementInput = document.getElementById("decrement");
     const triggerInput = document.getElementById("trigger");
+    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 
-    if (!purchaseInput || !incrementInput || !decrementInput || !triggerInput) {
-        displayLogMessage("Error: Missing bot configuration elements.", 'error');
-        return;
-    }
-
-    botConfig = {
+    const params = {
         symbol: TRADE_SYMBOL,
-        purchase: parseFloat(purchaseInput.value),
-        increment: parseFloat(incrementInput.value),
-        decrement: parseFloat(decrementInput.value),
-        trigger: parseFloat(triggerInput.value)
+        purchase: purchaseInput ? parseFloat(purchaseInput.value) : 0,
+        increment: incrementInput ? parseFloat(incrementInput.value) : 0,
+        decrement: decrementInput ? parseFloat(decrementInput.value) : 0,
+        trigger: triggerInput ? parseFloat(triggerInput.value) : 0,
+        stopAtCycleEnd: stopAtCycleEndCheckbox ? stopAtCycleEndCheckbox.checked : false,
     };
 
-    try {
-        const response = await fetchFromBackend('/start-bot', 'POST', botConfig);
-        if (response.success) {
-            botState = { lstate: 'STARTED', sstate: 'STARTED' };
-            displayBotState();
-            displayLogMessage("Bot started successfully!", 'success');
-        } else {
-            displayLogMessage(`Error starting bot: ${response.message}`, 'error');
-        }
-    } catch (error) {
-        // El error ya se maneja en fetchFromBackend
-    }
+    const endpoint = `/api/user/toggle-bot?action=${action}`; // Usamos un endpoint más genérico
+    const response = await fetchFromBackend(endpoint, 'POST', { params });
+    return response.botState;
 }
 
-async function stopBot() {
+export function updateUIBasedOnBotState(botData) {
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const botStateDisplay = document.getElementById('bot-state');
+    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
+    const cycleDisplay = document.getElementById('cycle');
+    const profitDisplay = document.getElementById('profit');
+    const cycleProfitDisplay = document.getElementById('cycleprofit');
+
+    isRunning = (botData.state === 'RUNNING');
+
+    if (startBtn) startBtn.textContent = isRunning ? 'STOP' : 'START';
+    if (startBtn) startBtn.className = isRunning ? 'bg-red-600' : 'bg-green-600';
+    if (resetBtn) resetBtn.disabled = isRunning;
+    if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = isRunning;
+    if (botStateDisplay) {
+        botStateDisplay.textContent = botData.state;
+        botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
+    }
+    if (cycleDisplay) cycleDisplay.textContent = botData.cycle || 0;
+    if (profitDisplay) profitDisplay.textContent = (botData.profit || 0).toFixed(2);
+    if (cycleProfitDisplay) cycleProfitDisplay.textContent = (botData.cycleProfit || 0).toFixed(2);
+}
+
+export async function loadBotConfigAndState() {
+    displayLogMessage('Cargando configuración y estado del bot...', 'info');
+
     try {
-        const response = await fetchFromBackend('/stop-bot', 'POST', { symbol: TRADE_SYMBOL });
-        if (response.success) {
-            botState = { lstate: 'STOPPED', sstate: 'STOPPED' };
-            displayBotState();
-            displayLogMessage("Bot stopped successfully!", 'success');
+        const botData = await fetchFromBackend('/api/user/bot-config-and-state');
+        if (botData) {
+            const purchaseInput = document.getElementById("purchase");
+            const incrementInput = document.getElementById("increment");
+            const decrementInput = document.getElementById("decrement");
+            const triggerInput = document.getElementById("trigger");
+            const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
+
+            if (purchaseInput) purchaseInput.value = botData.purchase || 5.00;
+            if (incrementInput) incrementInput.value = botData.increment || 100;
+            if (decrementInput) decrementInput.value = botData.decrement || 1.0;
+            if (triggerInput) triggerInput.value = botData.trigger || 1.5;
+            if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = botData.stopAtCycleEnd || false;
+            
+            updateUIBasedOnBotState(botData);
+            displayLogMessage(`Bot configuration loaded. State: ${botData.state}.`, 'success');
         } else {
-            displayLogMessage(`Error stopping bot: ${response.message}`, 'error');
+            displayLogMessage('Failed to load bot configuration. Using default UI values.', 'warning');
         }
     } catch (error) {
-        // El error ya se maneja en fetchFromBackend
+        displayLogMessage(`Error loading bot config: ${error.message}`, 'error');
     }
 }
 
 export async function resetBot() {
-    const resetBtn = document.getElementById('reset-btn');
-    if (!resetBtn) return;
+    const purchaseInput = document.getElementById("purchase");
+    const incrementInput = document.getElementById("increment");
+    const decrementInput = document.getElementById("decrement");
+    const triggerInput = document.getElementById("trigger");
+    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
+    
+    if (purchaseInput) purchaseInput.value = 5.00;
+    if (incrementInput) incrementInput.value = 100;
+    if (decrementInput) decrementInput.value = 1.0;
+    if (triggerInput) triggerInput.value = 1.5;
+    if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = false;
 
-    try {
-        const response = await fetchFromBackend('/reset-bot', 'POST', { symbol: TRADE_SYMBOL });
-        if (response.success) {
-            botState = { lstate: 'STOPPED', sstate: 'STOPPED' };
-            displayBotState();
-            displayLogMessage("Bot reset successfully!", 'success');
-        } else {
-            displayLogMessage(`Error resetting bot: ${response.message}`, 'error');
-        }
-    } catch (error) {
-        // El error ya se maneja en fetchFromBackend
-    }
-}
-
-export function displayBotState() {
-    // Obtener los elementos del DOM en el momento de la ejecución
-    const botLongStateDisplay = document.getElementById('bot-lstate');
-    const botShortStateDisplay = document.getElementById('bot-sstate');
-
-    if (botLongStateDisplay) botLongStateDisplay.textContent = botState.lstate;
-    if (botShortStateDisplay) botShortStateDisplay.textContent = botState.sstate;
+    // Lógica para actualizar los cálculos y el estado
+    // ...
+    displayLogMessage('Bot parameters reset to default values.', 'info');
 }

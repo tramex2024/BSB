@@ -6,11 +6,12 @@ export function actualizarCalculos() {
     const incrementInput = document.getElementById("increment");
     const decrementInput = document.getElementById("decrement");
     const triggerInput = document.getElementById("trigger");
+    const priceElement = document.getElementById('price');
+    const orqElement = document.getElementById('orq');
+    const coverageElement = document.getElementById('coverage');
 
-    // Asegurarse de que los elementos existan antes de usarlos
-    if (!purchaseInput || !incrementInput || !decrementInput || !triggerInput) {
-        // Podríamos loguear un mensaje si los elementos no están disponibles.
-        // Por ahora, simplemente salimos de la función.
+    // Salir si faltan elementos
+    if (!purchaseInput || !incrementInput || !decrementInput || !triggerInput || !priceElement) {
         return;
     }
 
@@ -18,14 +19,14 @@ export function actualizarCalculos() {
     const increment = parseFloat(incrementInput.value);
     const decrement = parseFloat(decrementInput.value);
     const trigger = parseFloat(triggerInput.value);
+    const currentPrice = parseFloat(priceElement.textContent);
 
-    // Aquí iría tu lógica de cálculo si la tienes. Por ahora, es un ejemplo.
-    const price = document.getElementById('price');
-    if (price) {
-        const currentPrice = parseFloat(price.textContent);
-        if (!isNaN(currentPrice)) {
-            const nextBuyPrice = currentPrice * (1 - decrement / 100);
-            // console.log("Next buy price:", nextBuyPrice);
-        }
+    // Realizar cálculos solo si los valores son números válidos
+    if (!isNaN(purchase) && !isNaN(increment) && !isNaN(decrement) && !isNaN(trigger) && !isNaN(currentPrice)) {
+        const orq = purchase * (increment / 100) / 100;
+        const coverage = (currentPrice / (currentPrice * (1 - decrement / 100)) - 1) * 100;
+
+        if (orqElement) orqElement.textContent = orq.toFixed(2);
+        if (coverageElement) coverageElement.textContent = coverage.toFixed(2);
     }
 }

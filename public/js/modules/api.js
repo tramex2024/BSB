@@ -1,5 +1,5 @@
-// public/js/modules/api.js (CORREGIDO)
-import { displayLogMessage } from './auth.js';
+// public/js/modules/api.js
+
 import { BACKEND_URL } from '../main.js';
 
 /**
@@ -17,6 +17,11 @@ export async function fetchFromBackend(endpoint, method = 'GET', body = null) {
         },
     };
 
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        options.headers['Authorization'] = `Bearer ${token}`;
+    }
+
     if (body) {
         options.body = JSON.stringify(body);
     }
@@ -29,7 +34,6 @@ export async function fetchFromBackend(endpoint, method = 'GET', body = null) {
         }
         return await response.json();
     } catch (error) {
-        displayLogMessage(`API call failed: ${error.message}`, 'error');
         console.error('API call error:', error);
         throw error;
     }

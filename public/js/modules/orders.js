@@ -1,31 +1,32 @@
 // public/js/modules/orders.js
+
 import { displayLogMessage } from './auth.js';
-import { fetchFromBackend } from './api.js'; // Importación corregida
+import { fetchFromBackend } from './api.js';
 import { TRADE_SYMBOL } from '../main.js';
 
-let activeTab = 'tab-opened'; // Estado inicial de la pestaña activa
-
 export function setActiveTab(tabId) {
-    activeTab = tabId;
-    const tabButtons = document.querySelectorAll('.autobot-tabs button');
-    tabButtons.forEach(button => {
-        if (button.id === tabId) {
-            button.classList.add('active-tab');
-        } else {
-            button.classList.remove('active-tab');
-        }
+    // La lógica de la interfaz de usuario para las pestañas de órdenes
+    document.querySelectorAll('#autobot-section .border-b-2').forEach(button => {
+        button.classList.remove('active-tab', 'border-white');
+        button.classList.add('border-transparent');
     });
+    const activeButton = document.getElementById(tabId);
+    if (activeButton) {
+        activeButton.classList.add('active-tab', 'border-white');
+        activeButton.classList.remove('border-transparent');
+    }
 }
 
-export async function fetchOrders(tabId = activeTab) {
-    displayLogMessage(`Fetching ${tabId.replace('tab-', '')} orders for ${TRADE_SYMBOL}...`, 'info');
+export async function fetchOrders(tabId) {
+    const cleanedTabId = tabId.replace('tab-', '');
+    displayLogMessage(`Fetching ${cleanedTabId} orders for ${TRADE_SYMBOL}...`, 'info');
     const orderList = document.getElementById('order-list');
     if (!orderList) return;
 
     try {
-        const data = await fetchFromBackend(`/orders/${tabId.replace('tab-', '')}`);
+        const data = await fetchFromBackend(`/orders/${cleanedTabId}`);
         if (data.success) {
-            displayOrders(data.orders, tabId.replace('tab-', ''));
+            displayOrders(data.orders, cleanedTabId);
             displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');
         } else {
             displayLogMessage(`Failed to fetch orders: ${data.message || 'Unknown error'}`, 'error');
@@ -63,8 +64,4 @@ export function createOrderElement(order) {
             </div>
         </div>
     `;
-}
-
-export function updateOrderElement(order) {
-    // La lógica de actualización de órdenes iría aquí si fuera necesario
 }
