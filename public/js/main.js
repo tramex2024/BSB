@@ -5,8 +5,7 @@ import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
-import { actualizarBalancesEstrategia } from './modules/calculations.js';
-import { actualizarCalculos } from './modules/calculations.js';
+import { actualizarBalancesEstrategia, actualizarCalculosAutobot } from './modules/calculations.js'; // <-- CORRECCIÓN AQUÍ
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
@@ -42,20 +41,21 @@ function initializeAutobotView() {
     const orderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
 
     loadBotConfigAndState();
-    actualizarCalculos();
+    actualizarCalculosAutobot(); // <-- CORRECCIÓN AQUÍ
     checkBitMartConnectionAndData();
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    startPriceUpdates(TRADE_SYMBOL, 'price', 200); // Actualiza cada 3 segundos
+    startPriceUpdates(TRADE_SYMBOL, 'price', 3000); // Actualiza cada 3 segundos
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
     
-    if (purchaseInput) purchaseInput.addEventListener('input', actualizarCalculos);
-    if (incrementInput) incrementInput.addEventListener('input', actualizarCalculos);
-    if (decrementInput) decrementInput.addEventListener('input', actualizarCalculos);
-    if (triggerInput) triggerInput.addEventListener('input', actualizarCalculos);
+    // Aquí también debes corregir el event listener
+    if (purchaseInput) purchaseInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
+    if (incrementInput) incrementInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
+    if (decrementInput) decrementInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
+    if (triggerInput) triggerInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
 
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -68,10 +68,6 @@ function initializeAutobotView() {
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
 
-    // -------------------------------------------------------------
-    // ¡LA SOLUCIÓN ESTÁ AQUÍ!
-    // Llama a la función para inicializar los balances SOLO cuando la vista del Autobot se carga.
-    // -------------------------------------------------------------
     actualizarBalancesEstrategia();
 }
 
