@@ -51,7 +51,7 @@ function initializeAutobotView() {
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    startPriceUpdates(TRADE_SYMBOL, 'price', 3000); // Actualiza cada 3 segundos
+    startPriceUpdates(TRADE_SYMBOL, 'price', 250); // Actualiza cada 3 segundos
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
