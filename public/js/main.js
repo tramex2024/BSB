@@ -5,6 +5,7 @@ import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
+import { actualizarBalancesEstrategia } from './modules/calculations.js';
 import { actualizarCalculos } from './modules/calculations.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
@@ -134,4 +135,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
     if (closeApiModalButton) closeApiModalButton.addEventListener('click', () => toggleApiModal(false));
     if (apiModal) apiModal.addEventListener('click', (e) => { if (e.target === apiModal) toggleApiModal(false); });
+    actualizarBalancesEstrategia();
 });
