@@ -5,7 +5,7 @@ import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
-import { actualizarBalancesEstrategia, actualizarCalculosAutobot } from './modules/calculations.js'; // <-- CORRECCIÓN AQUÍ
+//import { actualizarBalancesEstrategia, actualizarCalculosAutobot } from './modules/calculations.js'; // <-- CORRECCIÓN AQUÍ
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
@@ -32,7 +32,12 @@ function initializeDashboardView() {
 
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
-    const purchaseInput = document.getElementById("purchase");
+    
+    // Obtener referencias a todos los inputs y botones
+    const amountUSDTInput = document.getElementById('amount-usdt');
+    const amountBTCInput = document.getElementById('amount-btc');
+    const purchaseUSDTInput = document.getElementById("purchase-usdt");
+    const purchaseBTCInput = document.getElementById("purchase-btc");
     const incrementInput = document.getElementById("increment");
     const decrementInput = document.getElementById("decrement");
     const triggerInput = document.getElementById("trigger");
@@ -41,7 +46,7 @@ function initializeAutobotView() {
     const orderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
 
     loadBotConfigAndState();
-    actualizarCalculosAutobot(); // <-- CORRECCIÓN AQUÍ
+    actualizarCalculosAutobot(); // Llamada inicial para renderizar todos los valores
     checkBitMartConnectionAndData();
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
@@ -51,11 +56,15 @@ function initializeAutobotView() {
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
     
-    // Aquí también debes corregir el event listener
-    if (purchaseInput) purchaseInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
-    if (incrementInput) incrementInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
-    if (decrementInput) decrementInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
-    if (triggerInput) triggerInput.addEventListener('input', actualizarCalculosAutobot); // <-- CORRECCIÓN AQUÍ
+    // --- Escuchadores de eventos para los nuevos cálculos ---
+    // Cada vez que se modifica un input, se ejecuta la función de cálculos completa.
+    if (amountUSDTInput) amountUSDTInput.addEventListener('input', actualizarCalculosAutobot);
+    if (amountBTCInput) amountBTCInput.addEventListener('input', actualizarCalculosAutobot);
+    if (purchaseUSDTInput) purchaseUSDTInput.addEventListener('input', actualizarCalculosAutobot);
+    if (purchaseBTCInput) purchaseBTCInput.addEventListener('input', actualizarCalculosAutobot);
+    if (incrementInput) incrementInput.addEventListener('input', actualizarCalculosAutobot);
+    if (decrementInput) decrementInput.addEventListener('input', actualizarCalculosAutobot);
+    if (triggerInput) triggerInput.addEventListener('input', actualizarCalculosAutobot);
 
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
