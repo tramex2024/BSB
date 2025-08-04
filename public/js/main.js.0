@@ -2,14 +2,13 @@
 
 import { toggleAuthModal, handleLogout, handleAuthFormSubmit, displayLogMessage } from './modules/auth.js';
 import { getBalances } from './modules/balance.js';
-import { initializeChart } from './modules/chart.js'; // Importar la función initializeChart
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
 import { actualizarCalculos } from './modules/calculations.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
-import { handleApiFormSubmit } from './modules/api.js';
-import { toggleApiModal } from './modules/auth.js';
+import { handleApiFormSubmit } from './modules/api.js'; // Importación corregida
+import { toggleApiModal } from './modules/auth.js'; // Importación de la función para el modal
 
 // --- Constantes globales ---
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -24,13 +23,11 @@ let intervals = {};
 
 // --- Funciones de inicialización de la vista ---
 function initializeDashboardView() {
-    console.log("Inicializando vista del Dashboard...");
     getBalances();
     checkBitMartConnectionAndData();
 }
 
 function initializeAutobotView() {
-    console.log("Inicializando vista del Autobot...");
     const purchaseInput = document.getElementById("purchase");
     const incrementInput = document.getElementById("increment");
     const decrementInput = document.getElementById("decrement");
@@ -42,9 +39,6 @@ function initializeAutobotView() {
     loadBotConfigAndState();
     actualizarCalculos();
     checkBitMartConnectionAndData();
-    
-    // Esta línea inicializa el gráfico en la pestaña del Autobot
-    initializeChart('tvchart', `BITMART:${TRADE_SYMBOL}`); 
 
     if (startBtn) startBtn.addEventListener('click', toggleBotState);
     if (resetBtn) resetBtn.addEventListener('click', resetBot);
@@ -81,7 +75,6 @@ function initializeTab(tabName) {
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Pasar la función de inicialización de vista como callback
     setupNavTabs(initializeTab);
 
     const logMessageElement = document.getElementById('log-message');

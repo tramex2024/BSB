@@ -1,19 +1,30 @@
 // public/js/modules/chart.js
 
-// Asumimos que la biblioteca de TradingView ya está cargada en el HTML
-let widget = null;
+let tradingViewWidget = null;
 
-export function initializeChart(container, symbol) {
-    if (widget) {
-        // Si ya existe un widget, no hacemos nada o lo destruimos y creamos uno nuevo.
-        // Para este caso, solo verificamos su existencia.
-        console.log("El widget de TradingView ya está inicializado.");
+/**
+ * Inicializa el widget de TradingView.
+ * @param {string} containerId - El ID del elemento HTML donde se montará el widget.
+ * @param {string} symbol - El par de trading. Por ejemplo: 'BITMART:BTCUSDT'.
+ */
+export function initializeChart(containerId, symbol) {
+    // Si ya existe un widget, evitamos crearlo de nuevo.
+    if (tradingViewWidget) {
+        console.warn("TradingView widget ya inicializado.");
         return;
     }
 
     console.log(`Inicializando gráfico de TradingView para el símbolo: ${symbol}`);
-    widget = new TradingView.widget({
-        "container_id": container.id,
+    
+    // Verificamos si el contenedor existe
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error(`Error: No se encontró el contenedor con el ID '${containerId}'. El gráfico no se puede inicializar.`);
+        return;
+    }
+
+    tradingViewWidget = new TradingView.widget({
+        "container_id": containerId,
         "autosize": true,
         "symbol": symbol,
         "interval": "60",
@@ -25,20 +36,10 @@ export function initializeChart(container, symbol) {
         "enable_publishing": false,
         "allow_symbol_change": true,
         "support_host": "https://www.tradingview.com",
-        "library_path": "/charting_library/",
+        "library_path": "/charting_library/", // Asegúrate de que esta ruta sea correcta
         "disabled_features": [
             "header_saveload",
             "study_templates"
         ]
     });
-}
-
-// Puedes añadir una función para actualizar los datos si es necesario
-export function updateChartData(newData) {
-    // Lógica para actualizar el gráfico si ya está inicializado
-    if (widget) {
-        console.log("Actualizando datos del gráfico. (Esta función puede ser más compleja).");
-        // Por ejemplo, para cambiar el símbolo:
-        // widget.chart().setSymbol(newData.symbol);
-    }
 }
