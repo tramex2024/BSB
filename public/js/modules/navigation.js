@@ -1,6 +1,5 @@
 // public/js/modules/navigation.js
 const mainContentDiv = document.getElementById('main-content');
-const navTabs = document.querySelectorAll('#nav-tabs .nav-tab');
 let activeTab = null;
 
 async function loadContent(tabName, onContentLoad) {
@@ -36,8 +35,10 @@ function setActiveTab(tabElement) {
 }
 
 export function setupNavTabs(onContentLoad) {
+    const navTabs = document.querySelectorAll('#nav-tabs .nav-tab');
+    
     if (!navTabs || navTabs.length === 0) {
-        console.error("No se encontraron tabs de navegación.");
+        console.error("No se encontraron tabs de navegación. Asegúrate de que el ID 'nav-tabs' y la clase 'nav-tab' existan.");
         return;
     }
 
