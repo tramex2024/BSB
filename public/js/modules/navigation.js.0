@@ -97,8 +97,7 @@ export function setupNavTabs() {
                 clearAutobotView();
             }
 
-            // CORRECCIÓN: La ruta del fetch ahora es a la raíz de 'public'
-            const response = await fetch(`/${tabName}.html`);
+            const response = await fetch(`/html/${tabName}.html`);
             if (!response.ok) {
                 throw new Error(`Failed to load ${tabName}.html`);
             }
