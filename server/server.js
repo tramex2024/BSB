@@ -1,10 +1,10 @@
-// server.js (VERSION CON ENDPOINTS DE BACKEND PARA EL FRONTEND)
+// server.js
 
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const bitmartService = require('./services/bitmartService');
+const bitmartService = require('./services/bitmartService'); // Revisa que esta ruta sea correcta
 const Order = require('./models/Order');
 
 dotenv.config();
@@ -12,10 +12,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-// Configuración de CORS para permitir solo tu dominio de Vercel
+// Middleware de CORS
 const corsOptions = {
-  origin: 'https://bsb-lime.vercel.app'
+    origin: 'https://bsb-lime.vercel.app'
 };
 app.use(cors(corsOptions));
 
@@ -28,11 +27,11 @@ const connectDB = async () => {
         console.log('MongoDB Connected...');
     } catch (err) {
         console.error('MongoDB connection error:', err.message);
-        process.exit(1);
+        // Cierra el proceso si no se puede conectar a la DB
+        process.exit(1); 
     }
 };
 
-// Conectarse a la DB al iniciar el servidor
 connectDB();
 
 // Credenciales de BitMart, obtenidas una sola vez.
@@ -49,10 +48,11 @@ app.get('/ticker/:symbol', async (req, res) => {
     try {
         const symbol = req.params.symbol;
         const ticker = await bitmartService.getTicker(symbol);
-        // La API de BitMart v3 devuelve un array, por lo que tomamos el primer elemento.
-        // Asumiendo que el formato es `data: [{ last: "..." }]`
-        if (ticker && ticker.data && ticker.data.length > 0) {
-            res.status(200).json(ticker.data[0]);
+
+        // La API de BitMart v3 devuelve un objeto con un array 'tickers' dentro de 'data'.
+        if (ticker && ticker.tickers && ticker.tickers.length > 0) {
+            // Devolvemos el primer elemento del array de tickers, que contiene la información que necesita el frontend.
+            res.status(200).json(ticker.tickers[0]);
         } else {
             res.status(404).json({ message: 'Ticker not found', success: false });
         }
@@ -73,7 +73,7 @@ app.get('/orders/opened', async (req, res) => {
     }
 });
 
-// 3. Endpoint principal de datos consolidados (ya lo tenías, lo mantendremos)
+// 3. Endpoint principal de datos consolidados
 app.get('/bitmart-data', async (req, res) => {
     try {
         const isValid = await bitmartService.validateApiKeys(
@@ -89,14 +89,13 @@ app.get('/bitmart-data', async (req, res) => {
         const balance = await bitmartService.getBalance(bitmartCredentials);
         const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
         const ticker = await bitmartService.getTicker('BTC_USDT');
-
+        
         res.status(200).json({
             message: 'BitMart data retrieved successfully.',
             connected: true,
             balance: balance,
             openOrders: openOrders.orders,
-            // Asumiendo que el formato de ticker es `data: [{ last: "..." }]`
-            ticker: ticker && ticker.data && ticker.data.length > 0 ? ticker.data[0] : null,
+            ticker: ticker && ticker.data && ticker.data.tickers && ticker.data.tickers.length > 0 ? ticker.data.tickers[0] : null,
         });
 
     } catch (error) {
@@ -111,12 +110,9 @@ app.get('/bitmart-data', async (req, res) => {
 
 // --- NUEVO ENDPOINT PARA EL ESTADO DEL BOT ---
 // Este endpoint es el que faltaba y causaba el error 404.
-// Devuelve una configuración de ejemplo por defecto.
 app.get('/api/user/bot-config-and-state', (req, res) => {
-    // Aquí es donde iría tu lógica para leer el estado y la configuración
-    // del bot. Por ahora, devolvemos un estado y una configuración por defecto.
     const botState = {
-        state: 'STOPPED', // Puede ser 'RUNNING' o 'STOPPED'
+        state: 'STOPPED', 
         purchase: 5.00,
         increment: 100,
         decrement: 1.0,
