@@ -8,6 +8,9 @@ export function setupNavTabs(callback) {
     
     async function loadContent(tabName) {
         try {
+            // Limpiar el contenido actual antes de cargar el nuevo para evitar conflictos
+            mainContent.innerHTML = '';
+            
             const response = await fetch(`/${tabName}.html`);
             if (!response.ok) {
                 throw new Error(`Failed to load ${tabName}.html`);
@@ -47,7 +50,7 @@ export function setupNavTabs(callback) {
     if (initialActiveTab) {
         loadContent(initialActiveTab.dataset.tab);
     } else {
-        const defaultTab = 'dashboard';
+        const defaultTab = 'autobot'; // Cambiamos el default a 'autobot' para tu caso
         const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
         if (defaultTabElement) {
             defaultTabElement.classList.add('active');
