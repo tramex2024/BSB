@@ -47,14 +47,15 @@ const bitmartCredentials = {
 app.get('/ticker/:symbol', async (req, res) => {
     try {
         const symbol = req.params.symbol;
-        const ticker = await bitmartService.getTicker(symbol);
+        const tickerData = await bitmartService.getTicker(symbol);
 
-        // La API de BitMart v3 devuelve un objeto con un array 'tickers' dentro de 'data'.
-        if (ticker && ticker.tickers && ticker.tickers.length > 0) {
-            // Devolvemos el primer elemento del array de tickers, que contiene la información que necesita el frontend.
-            res.status(200).json(ticker.tickers[0]);
+        // Tu servicio ya retorna el objeto 'data' directamente, sin anidamiento.
+        // Verificamos que el objeto no esté vacío y contenga la propiedad 'last'
+        if (tickerData && tickerData.last) {
+            // El frontend espera un objeto con la propiedad 'last'
+            res.status(200).json({ last: tickerData.last });
         } else {
-            res.status(404).json({ message: 'Ticker not found', success: false });
+            res.status(404).json({ message: 'Ticker not found or invalid data', success: false });
         }
     } catch (error) {
         console.error('Error fetching ticker:', error.message);
