@@ -2,13 +2,14 @@
 
 import { toggleAuthModal, handleLogout, handleAuthFormSubmit, displayLogMessage } from './modules/auth.js';
 import { getBalances } from './modules/balance.js';
+import { initializeChart, updateChartData } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
 import { actualizarCalculos } from './modules/calculations.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
-import { handleApiFormSubmit } from './modules/api.js'; // Importación corregida
-import { toggleApiModal } from './modules/auth.js'; // Importación de la función para el modal
+import { handleApiFormSubmit } from './modules/api.js';
+import { toggleApiModal } from './modules/auth.js';
 
 // --- Constantes globales ---
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -23,8 +24,17 @@ let intervals = {};
 
 // --- Funciones de inicialización de la vista ---
 function initializeDashboardView() {
+    console.log("Inicializando vista del Dashboard...");
     getBalances();
     checkBitMartConnectionAndData();
+    
+    const chartContainer = document.getElementById('tv-chart');
+    if (chartContainer) {
+        initializeChart(chartContainer, TRADE_SYMBOL);
+        // Aquí podrías agregar más lógica si necesitas actualizar el gráfico de inmediato.
+    } else {
+        console.error("No se encontró el contenedor del gráfico de TradingView. Asegúrate de que el div con id 'tv-chart' exista en dashboard.html.");
+    }
 }
 
 function initializeAutobotView() {
@@ -70,6 +80,7 @@ function initializeTab(tabName) {
     } else if (tabName === 'dashboard') {
         initializeDashboardView();
         intervals.dashboard = setInterval(checkBitMartConnectionAndData, 10000);
+        // Aquí también podríamos añadir un intervalo para actualizar el gráfico, si es necesario.
     }
 }
 
