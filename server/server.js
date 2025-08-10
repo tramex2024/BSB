@@ -4,9 +4,11 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const bitmartService = require('./services/bitmartService'); // Revisa que esta ruta sea correcta
+const bitmartService = require('./services/bitmartService');
 const Order = require('./models/Order');
-const { startAutobot } = require('./autobotLogic.js');
+
+// --- CORRECCIÓN AQUÍ: Importamos el objeto completo, no una función específica
+const autobotStrategy = require('./autobotLogic.js');
 
 dotenv.config();
 
@@ -18,7 +20,6 @@ const corsOptions = {
     origin: 'https://bsb-lime.vercel.app'
 };
 app.use(cors(corsOptions));
-
 app.use(express.json());
 
 // Conexión a MongoDB
@@ -28,14 +29,13 @@ const connectDB = async () => {
         console.log('MongoDB Connected...');
     } catch (err) {
         console.error('MongoDB connection error:', err.message);
-        // Cierra el proceso si no se puede conectar a la DB
-        process.exit(1); 
+        process.exit(1);
     }
 };
 
 connectDB();
 
-// Credenciales de BitMart, obtenidas una sola vez.
+// Credenciales de BitMart
 const bitmartCredentials = {
     apiKey: process.env.BITMART_API_KEY,
     secretKey: process.env.BITMART_SECRET_KEY,
@@ -49,11 +49,7 @@ app.get('/ticker/:symbol', async (req, res) => {
     try {
         const symbol = req.params.symbol;
         const tickerData = await bitmartService.getTicker(symbol);
-
-        // Tu servicio ya retorna el objeto 'data' directamente, sin anidamiento.
-        // Verificamos que el objeto no esté vacío y contenga la propiedad 'last'
         if (tickerData && tickerData.last) {
-            // El frontend espera un objeto con la propiedad 'last'
             res.status(200).json({ last: tickerData.last });
         } else {
             res.status(404).json({ message: 'Ticker not found or invalid data', success: false });
@@ -83,15 +79,12 @@ app.get('/bitmart-data', async (req, res) => {
             bitmartCredentials.secretKey,
             bitmartCredentials.apiMemo
         );
-
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
         }
-
         const balance = await bitmartService.getBalance(bitmartCredentials);
         const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
         const ticker = await bitmartService.getTicker('BTC_USDT');
-        
         res.status(200).json({
             message: 'BitMart data retrieved successfully.',
             connected: true,
@@ -99,7 +92,6 @@ app.get('/bitmart-data', async (req, res) => {
             openOrders: openOrders.orders,
             ticker: ticker && ticker.data && ticker.data.tickers && ticker.data.tickers.length > 0 ? ticker.data.tickers[0] : null,
         });
-
     } catch (error) {
         console.error('Error in /bitmart-data endpoint:', error.message);
         res.status(500).json({
@@ -111,10 +103,9 @@ app.get('/bitmart-data', async (req, res) => {
 });
 
 // --- NUEVO ENDPOINT PARA EL ESTADO DEL BOT ---
-// Este endpoint es el que faltaba y causaba el error 404.
 app.get('/api/user/bot-config-and-state', (req, res) => {
     const botState = {
-        state: 'STOPPED', 
+        state: 'STOPPED',
         purchase: 5.00,
         increment: 100,
         decrement: 1.0,
@@ -130,9 +121,8 @@ app.get('/api/user/bot-config-and-state', (req, res) => {
 // 4. Nuevo Endpoint para obtener balances de la cuenta
 app.get('/api/user/balances', async (req, res) => {
     try {
-        // La función correcta es 'getBalance' (singular)
-        const balances = await bitmartService.getBalance(bitmartCredentials); 
-        if (balances) { // La función ahora retorna un array directamente si tiene éxito
+        const balances = await bitmartService.getBalance(bitmartCredentials);
+        if (balances) {
             res.status(200).json({ success: true, wallet: balances });
         } else {
             res.status(404).json({ message: 'Balances not found or invalid data.', success: false });
@@ -146,11 +136,9 @@ app.get('/api/user/balances', async (req, res) => {
 // Nueva ruta para iniciar el Autobot
 app.post('/api/autobot/start', (req, res) => {
     try {
-        // Llama a la función principal de tu estrategia.
-        // Aquí asumimos que autobotLogic.js exporta una función 'start'
+        // --- CORRECCIÓN AQUÍ: Ahora se llama correctamente a la función start
         autobotStrategy.start();
-        
-        // Responde al cliente que la estrategia se ha iniciado
+
         res.json({ success: true, message: 'Autobot strategy started.' });
     } catch (error) {
         console.error('Failed to start Autobot strategy:', error);
