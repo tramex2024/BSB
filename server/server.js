@@ -6,7 +6,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const bitmartService = require('./services/bitmartService'); // Revisa que esta ruta sea correcta
 const Order = require('./models/Order');
-const { startAutobot } = require('../server/autobotLogic.js');
+const { startAutobot } = require('./autobotLogic.js');
 
 dotenv.config();
 
@@ -130,8 +130,10 @@ app.get('/api/user/bot-config-and-state', (req, res) => {
 // Nueva ruta para iniciar el Autobot
 app.post('/api/autobot/start', (req, res) => {
     try {
-        // Llama a la función principal de tu estrategia
-        startAutobot();
+        // Llama a la función principal de tu estrategia.
+        // Aquí asumimos que autobotLogic.js exporta una función 'start'
+        autobotStrategy.start();
+        
         // Responde al cliente que la estrategia se ha iniciado
         res.json({ success: true, message: 'Autobot strategy started.' });
     } catch (error) {
