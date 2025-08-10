@@ -5,14 +5,16 @@ import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
-import { actualizarBalancesEstrategia, actualizarCalculosTestbot } from './modules/tecalculations.js';
-import { actualizarBalancesEstrategia, actualizarCalculosAutobot } from './modules/aucalculations.js';
-import { actualizarBalancesEstrategia, actualizarCalculosAibot } from './modules/aicalculations.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
 import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
+
+// --- Importaciones de cálculos consolidadas ---
+import { actualizarCalculosTestbot } from './modules/tecalculations.js';
+import { actualizarCalculosAutobot } from './modules/aucalculations.js';
+import { actualizarCalculosAibot } from './modules/aicalculations.js';
 
 // --- Constantes globales ---
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -53,22 +55,22 @@ function initializeTestbotView() {
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 3 segundos
+    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 2.5 segundos
 
-    if (testartBtn) startBtn.addEventListener('click', toggleBotState);
-    if (teresetBtn) resetBtn.addEventListener('click', resetBot);
+    // --- CORRECCIONES EN LAS REFERENCIAS DE LOS BOTONES Y EVENT LISTENERS ---
+    if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
+    if (teresetBtn) teresetBtn.addEventListener('click', resetBot);
     
     // --- Escuchadores de eventos para los nuevos cálculos ---
-    // Cada vez que se modifica un input, se ejecuta la función de cálculos completa.
-    if (teamountUSDTInput) amountUSDTInput.addEventListener('input', actualizarCalculosTestbot);
-    if (teamountBTCInput) amountBTCInput.addEventListener('input', actualizarCalculosTestbot);
-    if (tepurchaseUSDTInput) purchaseUSDTInput.addEventListener('input', actualizarCalculosTestbot);
-    if (tepurchaseBTCInput) purchaseBTCInput.addEventListener('input', actualizarCalculosTestbot);
-    if (teincrementInput) incrementInput.addEventListener('input', actualizarCalculosTestbot);
-    if (tedecrementInput) decrementInput.addEventListener('input', actualizarCalculosTestbot);
-    if (tetriggerInput) triggerInput.addEventListener('input', actualizarCalculosTestbot);
+    if (teamountUSDTInput) teamountUSDTInput.addEventListener('input', actualizarCalculosTestbot);
+    if (teamountBTCInput) teamountBTCInput.addEventListener('input', actualizarCalculosTestbot);
+    if (tepurchaseUSDTInput) tepurchaseUSDTInput.addEventListener('input', actualizarCalculosTestbot);
+    if (tepurchaseBTCInput) tepurchaseBTCInput.addEventListener('input', actualizarCalculosTestbot);
+    if (teincrementInput) teincrementInput.addEventListener('input', actualizarCalculosTestbot);
+    if (tedecrementInput) tedecrementInput.addEventListener('input', actualizarCalculosTestbot);
+    if (tetriggerInput) tetriggerInput.addEventListener('input', actualizarCalculosTestbot);
 
-    orderTabs.forEach(tab => {
+    teorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
@@ -78,8 +80,6 @@ function initializeTestbotView() {
 
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
-
-    actualizarBalancesEstrategia();
 }
 
 
@@ -104,22 +104,22 @@ function initializeAutobotView() {
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 3 segundos
+    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 2.5 segundos
 
-    if (austartBtn) startBtn.addEventListener('click', toggleBotState);
-    if (auresetBtn) resetBtn.addEventListener('click', resetBot);
+    // --- CORRECCIONES EN LAS REFERENCIAS DE LOS BOTONES Y EVENT LISTENERS ---
+    if (austartBtn) austartBtn.addEventListener('click', toggleBotState);
+    if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
     // --- Escuchadores de eventos para los nuevos cálculos ---
-    // Cada vez que se modifica un input, se ejecuta la función de cálculos completa.
-    if (auamountUSDTInput) amountUSDTInput.addEventListener('input', actualizarCalculosAutobot);
-    if (auamountBTCInput) amountBTCInput.addEventListener('input', actualizarCalculosAutobot);
-    if (aupurchaseUSDTInput) purchaseUSDTInput.addEventListener('input', actualizarCalculosAutobot);
-    if (aupurchaseBTCInput) purchaseBTCInput.addEventListener('input', actualizarCalculosAutobot);
-    if (auincrementInput) incrementInput.addEventListener('input', actualizarCalculosAutobot);
-    if (audecrementInput) decrementInput.addEventListener('input', actualizarCalculosAutobot);
-    if (autriggerInput) triggerInput.addEventListener('input', actualizarCalculosAutobot);
+    if (auamountUSDTInput) auamountUSDTInput.addEventListener('input', actualizarCalculosAutobot);
+    if (auamountBTCInput) auamountBTCInput.addEventListener('input', actualizarCalculosAutobot);
+    if (aupurchaseUSDTInput) aupurchaseUSDTInput.addEventListener('input', actualizarCalculosAutobot);
+    if (aupurchaseBTCInput) aupurchaseBTCInput.addEventListener('input', actualizarCalculosAutobot);
+    if (auincrementInput) auincrementInput.addEventListener('input', actualizarCalculosAutobot);
+    if (audecrementInput) audecrementInput.addEventListener('input', actualizarCalculosAutobot);
+    if (autriggerInput) autriggerInput.addEventListener('input', actualizarCalculosAutobot);
 
-    orderTabs.forEach(tab => {
+    auorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
@@ -129,8 +129,6 @@ function initializeAutobotView() {
 
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
-
-    actualizarBalancesEstrategia();
 }
 
 function initializeAibotView() {
@@ -154,22 +152,22 @@ function initializeAibotView() {
     
     initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
     
-    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 3 segundos
+    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 2.5 segundos
 
-    if (testartBtn) startBtn.addEventListener('click', toggleBotState);
-    if (teresetBtn) resetBtn.addEventListener('click', resetBot);
+    // --- CORRECCIONES EN LAS REFERENCIAS DE LOS BOTONES Y EVENT LISTENERS ---
+    if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
+    if (airesetBtn) airesetBtn.addEventListener('click', resetBot);
     
     // --- Escuchadores de eventos para los nuevos cálculos ---
-    // Cada vez que se modifica un input, se ejecuta la función de cálculos completa.
-    if (aiamountUSDTInput) amountUSDTInput.addEventListener('input', actualizarCalculosAibot);
-    if (aiamountBTCInput) amountBTCInput.addEventListener('input', actualizarCalculosAibot);
-    if (aipurchaseUSDTInput) purchaseUSDTInput.addEventListener('input', actualizarCalculosAibot);
-    if (aipurchaseBTCInput) purchaseBTCInput.addEventListener('input', actualizarCalculosAibot);
-    if (aiincrementInput) incrementInput.addEventListener('input', actualizarCalculosAibot);
-    if (aidecrementInput) decrementInput.addEventListener('input', actualizarCalculosAibot);
-    if (aitriggerInput) triggerInput.addEventListener('input', actualizarCalculosAibot);
+    if (aiamountUSDTInput) aiamountUSDTInput.addEventListener('input', actualizarCalculosAibot);
+    if (aiamountBTCInput) aiamountBTCInput.addEventListener('input', actualizarCalculosAibot);
+    if (aipurchaseUSDTInput) aipurchaseUSDTInput.addEventListener('input', actualizarCalculosAibot);
+    if (aipurchaseBTCInput) aipurchaseBTCInput.addEventListener('input', actualizarCalculosAibot);
+    if (aiincrementInput) aiincrementInput.addEventListener('input', actualizarCalculosAibot);
+    if (aidecrementInput) aidecrementInput.addEventListener('input', actualizarCalculosAibot);
+    if (aitriggerInput) aitriggerInput.addEventListener('input', actualizarCalculosAibot);
 
-    orderTabs.forEach(tab => {
+    aiorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
@@ -179,8 +177,6 @@ function initializeAibotView() {
 
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
-
-    actualizarBalancesEstrategia();
 }
 
 function initializeTab(tabName) {
