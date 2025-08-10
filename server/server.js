@@ -130,11 +130,12 @@ app.get('/api/user/bot-config-and-state', (req, res) => {
 // 4. Nuevo Endpoint para obtener balances de la cuenta
 app.get('/api/user/balances', async (req, res) => {
     try {
-        const balances = await bitmartService.getBalances(bitmartCredentials);
-        if (balances && balances.data && balances.data.wallet) {
-            res.status(200).json({ success: true, wallet: balances.data.wallet });
+        // La función correcta es 'getBalance' (singular)
+        const balances = await bitmartService.getBalance(bitmartCredentials); 
+        if (balances) { // La función ahora retorna un array directamente si tiene éxito
+            res.status(200).json({ success: true, wallet: balances });
         } else {
-            res.status(404).json({ message: 'Balances not found or invalid data.' });
+            res.status(404).json({ message: 'Balances not found or invalid data.', success: false });
         }
     } catch (error) {
         console.error('Error fetching balances:', error.message);
