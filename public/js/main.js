@@ -56,7 +56,7 @@ function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: El gráfico del Testbot se crea aquí
+    // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('te-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
 
@@ -150,7 +150,7 @@ function initializeAutobotView() {
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: El gráfico del Autobot se crea aquí
+    // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 
 
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
@@ -199,7 +199,7 @@ function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: El gráfico del Aibot se crea aquí
+    // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('ai-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
 
@@ -235,21 +235,13 @@ function initializeTab(tabName) {
     // Detiene la actualización de precios
     stopPriceUpdates();
 
-    // Detiene el gráfico actual si existe
+    // Destruye el gráfico actual si existe para que no interfiera con la nueva pestaña
     if (currentChart) {
         currentChart.remove();
         currentChart = null;
     }
     
-    // Oculta todas las secciones
-    document.querySelectorAll('main > div').forEach(section => section.style.display = 'none');
-
-    // Muestra la sección correcta
-    const section = document.getElementById(`content-${tabName}`);
-    if (section) {
-        section.style.display = 'flex';
-    }
-
+    // Llama a la función de inicialización específica para la pestaña
     if (tabName === 'autobot') {
         initializeAutobotView();
         intervals.autobot = setInterval(getBalances, 10000);
@@ -264,6 +256,9 @@ function initializeTab(tabName) {
         initializeAibotView();
         intervals.aibot = setInterval(getBalances, 10000);
     }
+    
+    // A diferencia de la versión anterior, no manipulamos directamente el DOM aquí.
+    // Dejamos que 'setupNavTabs' se encargue de mostrar y ocultar las secciones.
 }
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
