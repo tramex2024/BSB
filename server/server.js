@@ -6,7 +6,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const bitmartService = require('./services/bitmartService'); // Revisa que esta ruta sea correcta
 const Order = require('./models/Order');
-const { startAutobot } = require('./server/autobot.js');
+const { startAutobot } = require('./server/autobotLogic.js');
 
 dotenv.config();
 
