@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const bitmartService = require('./services/bitmartService');
 const Order = require('./models/Order');
+const Autobot = require('./models/Autobot');
 
 // --- CORRECCIÓN AQUÍ: Importamos el objeto completo, no una función específica
 const autobotStrategy = require('./autobotLogic.js');
@@ -102,20 +103,25 @@ app.get('/bitmart-data', async (req, res) => {
     }
 });
 
-// --- NUEVO ENDPOINT PARA EL ESTADO DEL BOT ---
-app.get('/api/user/bot-config-and-state', (req, res) => {
-    const botState = {
-        state: 'STOPPED',
-        purchase: 5.00,
-        increment: 100,
-        decrement: 1.0,
-        trigger: 1.5,
-        stopAtCycleEnd: false,
-        cycle: 0,
-        profit: 0.00,
-        cycleProfit: 0.00,
-    };
-    res.status(200).json(botState);
+// Nuevo Endpoint para el estado del bot
+app.get('/api/user/bot-config-and-state', async (req, res) => {
+    try {
+        const autobotConfig = await Autobot.findOne({});
+        if (autobotConfig) {
+            // Devuelve el estado real de la base de datos
+            res.status(200).json({
+                lstate: autobotConfig.lstate,
+                sstate: autobotConfig.sstate,
+                // Puedes agregar más configuraciones aquí si las necesitas en el frontend
+            });
+        } else {
+            // Si no se encuentra, devuelve un estado por defecto (detenido)
+            res.status(200).json({ lstate: 'STOPPED', sstate: 'STOPPED' });
+        }
+    } catch (error) {
+        console.error('Error fetching bot state from DB:', error);
+        res.status(500).json({ message: 'Internal server error', success: false });
+    }
 });
 
 // 4. Nuevo Endpoint para obtener balances de la cuenta

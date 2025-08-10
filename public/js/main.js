@@ -10,6 +10,7 @@ import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
 import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
+import { checkBotStatus } from './modules/bot.js'; // Importa la nueva función
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
@@ -149,6 +150,7 @@ function initializeAutobotView() {
     loadBotConfigAndState();
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
+    checkBotStatus(); // Llama a la función para verificar el estado del bot
     
     // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 

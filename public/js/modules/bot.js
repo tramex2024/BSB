@@ -103,6 +103,35 @@ export async function loadBotConfigAndState() {
     }
 }
 
+export async function checkBotStatus() {
+    const austartBtn = document.getElementById('austart-btn');
+    if (!austartBtn) return;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/user/bot-config-and-state`);
+        const data = await response.json();
+
+        if (response.ok) {
+            // Si al menos una de las estrategias está corriendo, el botón debe ser "STOP"
+            if (data.lstate === 'RUNNING' || data.sstate === 'RUNNING') {
+                austartBtn.textContent = 'STOP';
+                austartBtn.classList.remove('bg-green-600');
+                austartBtn.classList.add('bg-red-600');
+            } else {
+                austartBtn.textContent = 'START';
+                austartBtn.classList.remove('bg-red-600');
+                austartBtn.classList.add('bg-green-600');
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching bot status:', error);
+        // Si hay un error, dejamos el botón en el estado por defecto (START)
+        austartBtn.textContent = 'START';
+        austartBtn.classList.remove('bg-red-600');
+        austartBtn.classList.add('bg-green-600');
+    }
+}
+
 export async function resetBot() {
     const purchaseInput = document.getElementById("purchase");
     const incrementInput = document.getElementById("increment");
