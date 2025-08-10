@@ -1,27 +1,46 @@
 // public/js/modules/balance.js
 
-import { displayLogMessage } from './auth.js';
+import { BACKEND_URL } from '../main.js';
 
-// Esta función ahora recibe los balances directamente
-export function getBalances(balanceData) {
-    const balanceElement = document.getElementById('balance');
-    const logMessageElement = document.getElementById('log-message');
-    if (!balanceElement) return;
+let intervals = {}; // Asegúrate de que esta variable esté definida en el ámbito global del módulo
 
-    balanceElement.innerHTML = '';
-
-    if (balanceData && balanceData.length > 0) {
-        const usdtBalance = balanceData.find(b => b.currency === 'USDT');
-        if (usdtBalance) {
-            balanceElement.innerHTML += `<p>USDT: ${parseFloat(usdtBalance.available).toFixed(2)}</p>`;
+async function getBalances() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/user/balances`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+        });
+        if (!response.ok) {
+            throw new Error('Failed to fetch balances.');
         }
-        const btcBalance = balanceData.find(b => b.currency === 'BTC');
-        if (btcBalance) {
-            balanceElement.innerHTML += `<p>BTC: ${parseFloat(btcBalance.available).toFixed(5)}</p>`;
-        }
-        displayLogMessage('Balances updated.', 'info', logMessageElement);
-    } else {
-        balanceElement.textContent = 'No balance data available or API not connected.';
-        displayLogMessage('No balance data received.', 'warning', logMessageElement);
+        const data = await response.json();
+        
+        // Actualizar el balance en cada bot
+        updateBotBalances(data);
+
+    } catch (error) {
+        console.error('Error getting balances:', error);
     }
 }
+
+function updateBotBalances(data) {
+    if (!data || !data.wallet) return;
+
+    const usdtBalance = data.wallet.find(w => w.currency === 'USDT');
+    const btcBalance = data.wallet.find(w => w.currency === 'BTC');
+
+    // Update for Testbot
+    document.getElementById('telbalance').textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
+    document.getElementById('tesbalance').textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
+    
+    // Update for Autobot
+    document.getElementById('aulbalance').textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
+    document.getElementById('ausbalance').textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
+
+    // Update for Aibot
+    document.getElementById('ailbalance').textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
+    document.getElementById('aisbalance').textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
+}
+
+export { getBalances };
