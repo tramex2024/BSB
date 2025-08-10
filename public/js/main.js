@@ -50,14 +50,13 @@ function initializeTestbotView() {
     const teorderTabs = document.querySelectorAll('#testbot-section [id^="tab-"]');
 
     loadBotConfigAndState();
-    actualizarCalculosTestbot(); // Llamada inicial para renderizar todos los valores
+    actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
-    
-    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 2.5 segundos
+    // --- CORRECCIÓN: Usar el ID del gráfico y el precio específicos del Testbot ---
+    initializeChart('te-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
 
-    // --- CORRECCIONES EN LAS REFERENCIAS DE LOS BOTONES Y EVENT LISTENERS ---
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
     if (teresetBtn) teresetBtn.addEventListener('click', resetBot);
     
@@ -99,14 +98,13 @@ function initializeAutobotView() {
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
 
     loadBotConfigAndState();
-    actualizarCalculosAutobot(); // Llamada inicial para renderizar todos los valores
+    actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
-    
-    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 2.5 segundos
+    // --- CORRECCIÓN: Usar el ID del gráfico y el precio específicos del Autobot ---
+    initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
 
-    // --- CORRECCIONES EN LAS REFERENCIAS DE LOS BOTONES Y EVENT LISTENERS ---
     if (austartBtn) austartBtn.addEventListener('click', toggleBotState);
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
@@ -147,14 +145,13 @@ function initializeAibotView() {
     const aiorderTabs = document.querySelectorAll('#aibot-section [id^="tab-"]');
 
     loadBotConfigAndState();
-    actualizarCalculosAibot(); // Llamada inicial para renderizar todos los valores
+    actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    initializeChart('tvchart', `BINANCE:${TRADE_SYMBOL}`);
-    
-    startPriceUpdates(TRADE_SYMBOL, 'price', 2500); // Actualiza cada 2.5 segundos
+    // --- CORRECCIÓN: Usar el ID del gráfico y el precio específicos del Aibot ---
+    initializeChart('ai-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
 
-    // --- CORRECCIONES EN LAS REFERENCIAS DE LOS BOTONES Y EVENT LISTENERS ---
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
     if (airesetBtn) airesetBtn.addEventListener('click', resetBot);
     
@@ -202,6 +199,7 @@ function initializeTab(tabName) {
         intervals.aibot = setInterval(checkBitMartConnectionAndData, 10000);
     }
 }
+// --- Event Listeners del DOMContentLoaded ...
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
