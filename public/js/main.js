@@ -20,6 +20,8 @@ import { actualizarCalculosAibot } from './modules/aicalculations.js';
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT';
 
+let currentChart = null; // Variable global para almacenar la instancia del gráfico
+
 // Exportar constantes para que otros módulos las puedan usar si es necesario
 export { BACKEND_URL, TRADE_SYMBOL };
 
@@ -149,7 +151,10 @@ function initializeAutobotView() {
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    // --- CORRECCIÓN: Llama a initializeChart y guarda la instancia en una variable global
+    // Asume que 'currentChart' es una variable global definida en tu main.js
+    currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 
+
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
 
     // --- CORRECCIÓN: El botón START ahora llama a la nueva función
@@ -176,6 +181,7 @@ function initializeAutobotView() {
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
 }
+
 function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");
     
@@ -223,8 +229,6 @@ function initializeAibotView() {
     fetchOrders('opened');
 }
 
-let currentChart = null; // Variable global para almacenar la instancia del gráfico
-
 function initializeTab(tabName) {
     // Detiene todos los intervalos activos
     Object.values(intervals).forEach(clearInterval);
@@ -241,19 +245,19 @@ function initializeTab(tabName) {
 
     if (tabName === 'autobot') {
         initializeAutobotView();
-        intervals.autobot = setInterval(getBalances, 10000); // Llamar a getBalances aquí
+        intervals.autobot = setInterval(getBalances, 10000);
         intervals.orders = setInterval(() => fetchOrders(currentTab), 15000);
     } else if (tabName === 'dashboard') {
         initializeDashboardView();
-        intervals.dashboard = setInterval(getBalances, 10000); // Llamar a getBalances aquí
+        intervals.dashboard = setInterval(getBalances, 10000);
     } else if (tabName === 'testbot') {
         initializeTestbotView();
-        intervals.testbot = setInterval(getBalances, 10000); // Llamar a getBalances aquí
+        intervals.testbot = setInterval(getBalances, 10000);
     } else if (tabName === 'aibot') {
         initializeAibotView();
-        intervals.aibot = setInterval(getBalances, 10000); // Llamar a getBalances aquí
+        intervals.aibot = setInterval(getBalances, 10000);
     }
-}// --- Event Listeners del DOMContentLoaded ...
+}
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
