@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const bitmartService = require('./services/bitmartService'); // Revisa que esta ruta sea correcta
 const Order = require('./models/Order');
+const { startAutobot } = require('./server/autobot.js');
 
 dotenv.config();
 
@@ -124,6 +125,19 @@ app.get('/api/user/bot-config-and-state', (req, res) => {
         cycleProfit: 0.00,
     };
     res.status(200).json(botState);
+});
+
+// Nueva ruta para iniciar el Autobot
+app.post('/api/autobot/start', (req, res) => {
+    try {
+        // Llama a la función principal de tu estrategia
+        startAutobot();
+        // Responde al cliente que la estrategia se ha iniciado
+        res.json({ success: true, message: 'Autobot strategy started.' });
+    } catch (error) {
+        console.error('Failed to start Autobot strategy:', error);
+        res.status(500).json({ success: false, message: 'Failed to start Autobot strategy.' });
+    }
 });
 
 // Ruta de prueba principal para verificar que el servidor está funcionando

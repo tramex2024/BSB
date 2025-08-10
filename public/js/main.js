@@ -82,10 +82,58 @@ function initializeTestbotView() {
 }
 
 
+// --- Funciones de inicialización de la vista ---
+
+function startAutobotStrategy() {
+    console.log("Iniciando estrategia del Autobot...");
+    const startBtn = document.getElementById('austart-btn');
+    const resetBtn = document.getElementById('aureset-btn');
+
+    if (startBtn) {
+        startBtn.disabled = true; // Deshabilita el botón START
+        startBtn.textContent = 'Starting...';
+    }
+
+    fetch(`${BACKEND_URL}/api/autobot/start`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(error => { throw new Error(error.message); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log(data.message);
+        displayLogMessage(data.message, 'success');
+        if (startBtn) {
+            startBtn.textContent = 'STOP';
+            startBtn.classList.remove('bg-green-600');
+            startBtn.classList.add('bg-red-600');
+            startBtn.disabled = false;
+        }
+        if (resetBtn) resetBtn.disabled = true;
+    })
+    .catch(error => {
+        console.error('Error al iniciar Autobot:', error);
+        displayLogMessage(`Error: ${error.message}`, 'error');
+        if (startBtn) {
+            startBtn.textContent = 'START';
+            startBtn.classList.remove('bg-red-600');
+            startBtn.classList.add('bg-green-600');
+            startBtn.disabled = false;
+        }
+        if (resetBtn) resetBtn.disabled = false;
+    });
+}
+
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
-    // Obtener referencias a todos los inputs y botones
     const auamountUSDTInput = document.getElementById('auamount-usdt');
     const auamountBTCInput = document.getElementById('auamount-btc');
     const aupurchaseUSDTInput = document.getElementById("aupurchase-usdt");
@@ -101,11 +149,11 @@ function initializeAutobotView() {
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: Usar el ID del gráfico y el precio específicos del Autobot ---
     initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
 
-    if (austartBtn) austartBtn.addEventListener('click', toggleBotState);
+    // --- CORRECCIÓN: El botón START ahora llama a la nueva función
+    if (austartBtn) austartBtn.addEventListener('click', startAutobotStrategy);
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
     // --- Escuchadores de eventos para los nuevos cálculos ---
@@ -128,7 +176,6 @@ function initializeAutobotView() {
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
 }
-
 function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");
     
