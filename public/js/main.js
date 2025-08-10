@@ -20,7 +20,8 @@ import { actualizarCalculosAibot } from './modules/aicalculations.js';
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT';
 
-let currentChart = null; // Variable global para almacenar la instancia del gráfico
+// Variable global para almacenar la instancia del gráfico activo
+let currentChart = null;
 
 // Exportar constantes para que otros módulos las puedan usar si es necesario
 export { BACKEND_URL, TRADE_SYMBOL };
@@ -55,8 +56,8 @@ function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: Usar el ID del gráfico y el precio específicos del Testbot ---
-    initializeChart('te-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    // --- CORRECCIÓN: El gráfico del Testbot se crea aquí
+    currentChart = initializeChart('te-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
@@ -83,8 +84,6 @@ function initializeTestbotView() {
     fetchOrders('opened');
 }
 
-
-// --- Funciones de inicialización de la vista ---
 
 function startAutobotStrategy() {
     console.log("Iniciando estrategia del Autobot...");
@@ -151,8 +150,7 @@ function initializeAutobotView() {
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: Llama a initializeChart y guarda la instancia en una variable global
-    // Asume que 'currentChart' es una variable global definida en tu main.js
+    // --- CORRECCIÓN: El gráfico del Autobot se crea aquí
     currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 
 
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
@@ -201,8 +199,8 @@ function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    // --- CORRECCIÓN: Usar el ID del gráfico y el precio específicos del Aibot ---
-    initializeChart('ai-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    // --- CORRECCIÓN: El gráfico del Aibot se crea aquí
+    currentChart = initializeChart('ai-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
@@ -232,7 +230,7 @@ function initializeAibotView() {
 function initializeTab(tabName) {
     // Detiene todos los intervalos activos
     Object.values(intervals).forEach(clearInterval);
-    intervals = {}; // Limpia el objeto de intervalos
+    intervals = {};
     
     // Detiene la actualización de precios
     stopPriceUpdates();
@@ -241,6 +239,15 @@ function initializeTab(tabName) {
     if (currentChart) {
         currentChart.remove();
         currentChart = null;
+    }
+    
+    // Oculta todas las secciones
+    document.querySelectorAll('main > div').forEach(section => section.style.display = 'none');
+
+    // Muestra la sección correcta
+    const section = document.getElementById(`content-${tabName}`);
+    if (section) {
+        section.style.display = 'flex';
     }
 
     if (tabName === 'autobot') {
