@@ -50,7 +50,7 @@ export function setupNavTabs(callback) {
     if (initialActiveTab) {
         loadContent(initialActiveTab.dataset.tab);
     } else {
-        const defaultTab = 'autobot'; // Cambiamos el default a 'autobot'
+        const defaultTab = 'dashboard'; 
         const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
         if (defaultTabElement) {
             defaultTabElement.classList.add('active');
