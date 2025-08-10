@@ -15,7 +15,6 @@ async function getBalances() {
         const data = await response.json();
         
         if (data.success && data.wallet) {
-            // Actualizar el balance en cada bot con los datos de la billetera
             updateBotBalances(data.wallet);
         } else {
             console.error('API response does not contain wallet data:', data.message);
@@ -32,18 +31,19 @@ function updateBotBalances(walletData) {
     const usdtBalance = walletData.find(w => w.currency === 'USDT');
     const btcBalance = walletData.find(w => w.currency === 'BTC');
 
+    const usdtValue = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
+    const btcValue = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
+    
     // Muestra el balance en el panel de cada bot
     const bots = ['te', 'au', 'ai'];
     bots.forEach(prefix => {
-        const lBalanceEl = document.getElementById(`${prefix}lbalance`);
-        const sBalanceEl = document.getElementById(`${prefix}sbalance`);
+        const totalBalanceEl = document.getElementById(`${prefix}balance`);
         
-        if (lBalanceEl) {
-            lBalanceEl.textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
+        if (totalBalanceEl) {
+            totalBalanceEl.textContent = `USDT: ${usdtValue} | BTC: ${btcValue}`;
         }
-        if (sBalanceEl) {
-            sBalanceEl.textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
-        }
+        // Los balances LBalance y SBalance no se tocan,
+        // ya que dependen de la lógica de la estrategia.
     });
 }
 
