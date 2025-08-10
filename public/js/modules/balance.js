@@ -2,8 +2,6 @@
 
 import { BACKEND_URL } from '../main.js';
 
-let intervals = {}; // Asegúrate de que esta variable esté definida en el ámbito global del módulo
-
 async function getBalances() {
     try {
         const response = await fetch(`${BACKEND_URL}/api/user/balances`, {
@@ -16,31 +14,37 @@ async function getBalances() {
         }
         const data = await response.json();
         
-        // Actualizar el balance en cada bot
-        updateBotBalances(data);
+        if (data.success && data.wallet) {
+            // Actualizar el balance en cada bot con los datos de la billetera
+            updateBotBalances(data.wallet);
+        } else {
+            console.error('API response does not contain wallet data:', data.message);
+        }
 
     } catch (error) {
         console.error('Error getting balances:', error);
     }
 }
 
-function updateBotBalances(data) {
-    if (!data || !data.wallet) return;
+function updateBotBalances(walletData) {
+    if (!walletData) return;
 
-    const usdtBalance = data.wallet.find(w => w.currency === 'USDT');
-    const btcBalance = data.wallet.find(w => w.currency === 'BTC');
+    const usdtBalance = walletData.find(w => w.currency === 'USDT');
+    const btcBalance = walletData.find(w => w.currency === 'BTC');
 
-    // Update for Testbot
-    document.getElementById('telbalance').textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
-    document.getElementById('tesbalance').textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
-    
-    // Update for Autobot
-    document.getElementById('aulbalance').textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
-    document.getElementById('ausbalance').textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
-
-    // Update for Aibot
-    document.getElementById('ailbalance').textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
-    document.getElementById('aisbalance').textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
+    // Muestra el balance en el panel de cada bot
+    const bots = ['te', 'au', 'ai'];
+    bots.forEach(prefix => {
+        const lBalanceEl = document.getElementById(`${prefix}lbalance`);
+        const sBalanceEl = document.getElementById(`${prefix}sbalance`);
+        
+        if (lBalanceEl) {
+            lBalanceEl.textContent = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
+        }
+        if (sBalanceEl) {
+            sBalanceEl.textContent = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
+        }
+    });
 }
 
 export { getBalances };

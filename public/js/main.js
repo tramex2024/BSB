@@ -223,6 +223,8 @@ function initializeAibotView() {
     fetchOrders('opened');
 }
 
+let currentChart = null; // Variable global para almacenar la instancia del gráfico
+
 function initializeTab(tabName) {
     // Detiene todos los intervalos activos
     Object.values(intervals).forEach(clearInterval);
@@ -231,22 +233,27 @@ function initializeTab(tabName) {
     // Detiene la actualización de precios
     stopPriceUpdates();
 
+    // Detiene el gráfico actual si existe
+    if (currentChart) {
+        currentChart.remove();
+        currentChart = null;
+    }
+
     if (tabName === 'autobot') {
         initializeAutobotView();
-        intervals.autobot = setInterval(checkBitMartConnectionAndData, 10000);
+        intervals.autobot = setInterval(getBalances, 10000); // Llamar a getBalances aquí
         intervals.orders = setInterval(() => fetchOrders(currentTab), 15000);
     } else if (tabName === 'dashboard') {
         initializeDashboardView();
-        intervals.dashboard = setInterval(checkBitMartConnectionAndData, 10000);
+        intervals.dashboard = setInterval(getBalances, 10000); // Llamar a getBalances aquí
     } else if (tabName === 'testbot') {
         initializeTestbotView();
-        intervals.testbot = setInterval(checkBitMartConnectionAndData, 10000);
+        intervals.testbot = setInterval(getBalances, 10000); // Llamar a getBalances aquí
     } else if (tabName === 'aibot') {
         initializeAibotView();
-        intervals.aibot = setInterval(checkBitMartConnectionAndData, 10000);
+        intervals.aibot = setInterval(getBalances, 10000); // Llamar a getBalances aquí
     }
-}
-// --- Event Listeners del DOMContentLoaded ...
+}// --- Event Listeners del DOMContentLoaded ...
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
