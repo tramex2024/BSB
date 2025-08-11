@@ -224,6 +224,38 @@ document.addEventListener('DOMContentLoaded', () => {
         displayLogMessage(log.message, log.type, logMessageElement);
     });
 
+    socket.on('bot-state-update', (state) => {
+    console.log("Estado del bot recibido:", state);
+
+    // Usa los IDs de tu HTML
+    const lStateElement = document.getElementById('aubot-lstate');
+    const sStateElement = document.getElementById('aubot-sstate');
+    
+    // Actualizar el LState
+    if (lStateElement) {
+        lStateElement.textContent = state.lstate;
+        if (state.lstate === 'RUNNING') {
+            lStateElement.classList.remove('text-red-400');
+            lStateElement.classList.add('text-green-400');
+        } else {
+            lStateElement.classList.remove('text-green-400');
+            lStateElement.classList.add('text-red-400');
+        }
+    }
+    
+    // Actualizar el SState
+    if (sStateElement) {
+        sStateElement.textContent = state.sstate;
+        if (state.sstate === 'RUNNING') {
+            sStateElement.classList.remove('text-red-400');
+            sStateElement.classList.add('text-green-400');
+        } else {
+            sStateElement.classList.remove('text-green-400');
+            sStateElement.classList.add('text-red-400');
+        }
+    }
+});
+
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
             if (localStorage.getItem('authToken')) {

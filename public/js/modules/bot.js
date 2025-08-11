@@ -134,3 +134,29 @@ export async function resetBot() {
 
     displayLogMessage('Bot parameters reset to default values.', 'info');
 }
+
+export function checkBotStatus() {
+    fetchFromBackend('/autobot/status')
+        .then(data => {
+            if (data.status) {
+                // Aquí es donde necesitamos emitir el evento de Socket.IO
+                // para actualizar la UI, ya que este es el punto de entrada
+                // que se ejecuta cuando se carga la página.
+                
+                // Nota: Asumiendo que `socket` está disponible en este módulo.
+                // Si no, puedes pasar `socket` como argumento a esta función.
+                // Para simplificar, lo haremos como si `socket` fuera global.
+                
+                // Emitir un evento de estado para actualizar el frontend
+                if (window.socket) { // Si `socket` es una variable global
+                    window.socket.emit('bot-state-update', {
+                        lstate: data.status.lstate,
+                        sstate: data.status.sstate
+                    });
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error checking bot status:', error);
+        });
+}

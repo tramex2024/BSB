@@ -87,28 +87,26 @@ async function botMainLoop() {
         // Paso 3: Actuar según la señal recibida
         switch (signal.action) {
             case 'BUY':
-                log(`Señal de COMPRA detectada: ${signal.reason}`, 'info');
-                // Colocar una orden limit de compra al precio fijo
-                // Nota: Los valores de `size` son fijos por ahora.
-                const buyOrder = await bitmartService.placeOrder(
-                    'buy',
-                    SYMBOL,
-                    PURCHASE_USDT_AMOUNT, // tamaño de orden en USDT
-                    BUY_PRICE // precio fijo de $100,000.00
-                );
+    log(`Señal de COMPRA detectada: ${signal.reason}`, 'info');
+    const buyOrder = await bitmartService.placeOrder(
+        // **CORRECCIÓN:** Asegúrate de que los parámetros se pasan en el orden correcto
+        SYMBOL, // symbol
+        'buy',  // side
+        PURCHASE_USDT_AMOUNT, // size
+        BUY_PRICE // price
+    );
                 log(`Orden de compra colocada. ID de la orden: ${buyOrder?.data?.orderId || 'N/A'}`, 'success');
                 break;
 
             case 'SELL':
-                log(`Señal de VENTA detectada: ${signal.reason}`, 'info');
-                // Colocar una orden limit de venta al precio fijo
-                // Nota: Los valores de `size` son fijos por ahora.
-                const sellOrder = await bitmartService.placeOrder(
-                    'sell',
-                    SYMBOL,
-                    PURCHASE_BTC_AMOUNT, // tamaño de orden en BTC
-                    SELL_PRICE // precio fijo de $150,000.00
-                );
+    log(`Señal de VENTA detectada: ${signal.reason}`, 'info');
+    const sellOrder = await bitmartService.placeOrder(
+        // **CORRECCIÓN:** Asegúrate de que los parámetros se pasan en el orden correcto
+        SYMBOL, // symbol
+        'sell', // side
+        PURCHASE_BTC_AMOUNT, // size
+        SELL_PRICE // price
+    );
                 log(`Orden de venta colocada. ID de la orden: ${sellOrder?.data?.orderId || 'N/A'}`, 'success');
                 break;
 
