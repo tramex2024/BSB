@@ -1,10 +1,22 @@
 // autobotLogic.js
 
 const Autobot = require('./models/Autobot');
-const bitmartService = require('./services/bitmartService'); // Asegúrate de que este servicio exista y funcione
+const bitmartService = require('./services/bitmartService');
+const analyzer = require('./bitmart_indicator_analyzer'); // Importamos el analizador
 
 let io;
-let intervalId; // Para almacenar el ID del intervalo y poder detenerlo
+let intervalId; // Para almacenar el ID del intervalo del ciclo del bot
+let botIsRunning = false;
+let currentLState = 'STOPPED';
+let currentSState = 'STOPPED';
+
+// --- CONFIGURACIÓN DE LA ESTRATEGIA (AJUSTABLE) ---
+// Estos valores deberían venir de la base de datos o de inputs en el frontend en un futuro.
+const SYMBOL = 'BTC_USDT';
+const BUY_PRICE = 100000.00;
+const SELL_PRICE = 150000.00;
+const PURCHASE_USDT_AMOUNT = 10; // Cantidad de USDT a comprar
+const PURCHASE_BTC_AMOUNT = 0.0001; // Cantidad de BTC a vender
 
 /**
  * Establece la instancia de Socket.IO para emitir logs al frontend.
@@ -26,92 +38,130 @@ function log(message, type = 'info') {
     console.log(`[BOT LOG]: ${message}`);
 }
 
-// Lógica principal del bot que se ejecuta en un ciclo
+/**
+ * Actualiza el estado del bot en la DB y en el frontend.
+ * @param {string} lState - Estado para el Long.
+ * @param {string} sState - Estado para el Short.
+ */
+async function updateBotState(lState, sState) {
+    try {
+        currentLState = lState;
+        currentSState = sState;
+
+        const autobot = await Autobot.findOne({});
+        if (autobot) {
+            autobot.lstate = lState;
+            autobot.sstate = sState;
+            await autobot.save();
+        }
+
+        // Emitir el estado actualizado al frontend
+        if (io) {
+            io.emit('bot-state-update', { lstate: currentLState, sstate: currentSState });
+        }
+    } catch (error) {
+        log(`Error al actualizar el estado del bot: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Lógica principal del bot que se ejecuta en un ciclo.
+ */
 async function botMainLoop() {
+    if (!botIsRunning) return;
     try {
         log("Ejecutando el ciclo principal del bot...", 'info');
 
-        // 1. Obtener datos del mercado (ejemplo: el precio actual de BTC)
-        const ticker = await bitmartService.getTicker('BTC_USDT');
-        if (ticker && ticker.last) {
-            const currentPrice = parseFloat(ticker.last).toFixed(2);
-            log(`Precio actual de BTC_USDT: $${currentPrice}`, 'info');
+        // Paso 1: Obtener el precio actual para el analizador
+        const ticker = await bitmartService.getTicker(SYMBOL);
+        if (!ticker || !ticker.last) {
+            log("No se pudo obtener el precio actual del ticker de BitMart.", 'error');
+            return;
+        }
+        const currentPrice = parseFloat(ticker.last);
+        log(`Precio actual de ${SYMBOL}: $${currentPrice.toFixed(2)}`, 'info');
 
-            // 2. Aquí iría tu lógica de trading
-            // Por ejemplo:
-            // if (currentPrice > 65000) {
-            //     log("El precio es alto, considerando una venta...", 'info');
-            //     // Lógica para colocar una orden de venta
-            // } else if (currentPrice < 60000) {
-            //     log("El precio es bajo, considerando una compra...", 'info');
-            //     // Lógica para colocar una orden de compra
-            // }
+        // Paso 2: Ejecutar el analizador para obtener una señal
+        const signal = await analyzer.runAnalysis(currentPrice);
 
-        } else {
-            log("No se pudo obtener el precio del ticker de BitMart.", 'error');
+        // Paso 3: Actuar según la señal recibida
+        switch (signal.action) {
+            case 'BUY':
+                log(`Señal de COMPRA detectada: ${signal.reason}`, 'info');
+                // Colocar una orden limit de compra al precio fijo
+                // Nota: Los valores de `size` son fijos por ahora.
+                const buyOrder = await bitmartService.placeOrder(
+                    'buy',
+                    SYMBOL,
+                    PURCHASE_USDT_AMOUNT, // tamaño de orden en USDT
+                    BUY_PRICE // precio fijo de $100,000.00
+                );
+                log(`Orden de compra colocada. ID de la orden: ${buyOrder?.data?.orderId || 'N/A'}`, 'success');
+                break;
+
+            case 'SELL':
+                log(`Señal de VENTA detectada: ${signal.reason}`, 'info');
+                // Colocar una orden limit de venta al precio fijo
+                // Nota: Los valores de `size` son fijos por ahora.
+                const sellOrder = await bitmartService.placeOrder(
+                    'sell',
+                    SYMBOL,
+                    PURCHASE_BTC_AMOUNT, // tamaño de orden en BTC
+                    SELL_PRICE // precio fijo de $150,000.00
+                );
+                log(`Orden de venta colocada. ID de la orden: ${sellOrder?.data?.orderId || 'N/A'}`, 'success');
+                break;
+
+            case 'HOLD':
+            default:
+                log(`Señal de ESPERA detectada. Razón: ${signal.reason}`, 'info');
+                // No se realiza ninguna acción de trading
+                break;
         }
 
     } catch (error) {
-        log(`Error inesperado en el ciclo del bot: ${error.message}`, 'error');
+        log(`Error en el ciclo del bot: ${error.message}`, 'error');
     }
 }
 
 /**
  * Inicia la estrategia del Autobot.
- * @param {object} config - La configuración para iniciar el bot.
  */
-async function start(config) {
-    try {
-        log("Iniciando la estrategia del bot...", 'info');
-
-        let autobot = await Autobot.findOne({});
-        if (!autobot) {
-            autobot = new Autobot({ lstate: 'RUNNING', sstate: 'RUNNING' });
-        } else {
-            autobot.lstate = 'RUNNING';
-            autobot.sstate = 'RUNNING';
-        }
-        await autobot.save();
-
-        log("Estado del bot guardado en la base de datos.", 'info');
-        log("El bot ha iniciado correctamente.", 'success');
-        
-        // **CORRECCIÓN CLAVE:** Iniciar un ciclo que se repita cada 5 segundos
-        intervalId = setInterval(botMainLoop, 5000);
-
-    } catch (error) {
-        log(`Error al iniciar el bot: ${error.message}`, 'error');
-        throw error;
-    }
+async function start() {
+    if (botIsRunning) return log('El bot ya está en ejecución.', 'warning');
+    
+    botIsRunning = true;
+    await updateBotState('RUNNING', 'RUNNING');
+    log("El bot ha iniciado correctamente.", 'success');
+    
+    // Iniciar un ciclo que se repita cada 5 segundos
+    intervalId = setInterval(botMainLoop, 5000);
 }
 
 /**
  * Detiene la estrategia del Autobot.
  */
 async function stop() {
-    try {
-        log("Deteniendo la estrategia del bot...", 'info');
-        
-        // **CORRECCIÓN CLAVE:** Detener el ciclo del bot
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-
-        const autobot = await Autobot.findOne({});
-        if (autobot) {
-            autobot.lstate = 'STOPPED';
-            autobot.sstate = 'STOPPED';
-            await autobot.save();
-        }
-
-        log("Estado del bot guardado en la base de datos.", 'info');
-        log("El bot se ha detenido.", 'success');
-
-    } catch (error) {
-        log(`Error al detener el bot: ${error.message}`, 'error');
-        throw error;
+    if (!botIsRunning) return log('El bot ya está detenido.', 'warning');
+    
+    // Detener el ciclo del bot
+    if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
     }
+
+    // Cancelar todas las órdenes abiertas
+    try {
+        log("Cancelando todas las órdenes abiertas...", 'info');
+        const ordersCancelled = await bitmartService.cancelAllOrders(SYMBOL);
+        log(`Se cancelaron ${ordersCancelled?.length || 0} órdenes abiertas.`, 'success');
+    } catch (error) {
+        log(`Error al cancelar órdenes: ${error.message}`, 'error');
+    }
+
+    botIsRunning = false;
+    await updateBotState('STOPPED', 'STOPPED');
+    log("El bot se ha detenido.", 'success');
 }
 
 module.exports = {
