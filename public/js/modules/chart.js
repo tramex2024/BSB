@@ -1,19 +1,19 @@
 // public/js/modules/chart.js
 
-import TradingView from 'https://unpkg.com/@tradingview/widget@1.0.0/dist/bundle.js';
-
-// Variable para la instancia del gráfico
-let tvChart = null;
+// public/js/modules/chart.js
 
 export function initializeChart(containerId, symbol) {
-    // Si ya existe un gráfico, lo eliminamos primero para evitar conflictos
-    if (tvChart) {
-        tvChart.remove();
-        tvChart = null;
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error(`Contenedor del gráfico con ID "${containerId}" no encontrado.`);
+        return;
     }
 
-    // Inicializa el nuevo gráfico
-    tvChart = new TradingView.Widget({
+    // Limpia el contenedor antes de añadir un nuevo gráfico
+    container.innerHTML = '';
+
+    // Crea el nuevo widget de TradingView en el contenedor
+    new TradingView.widget({
         "container_id": containerId,
         "symbol": symbol,
         "interval": "60",
@@ -29,13 +29,7 @@ export function initializeChart(containerId, symbol) {
         "hotlist": false,
         "calendar": false,
         "support_host": "https://www.tradingview.com",
-        "charts_storage_url": "https://s3.tradingview.com/charts_storage/staging/",
-        "charts_storage_api_version": "1.1",
-        "client_id": "tradingview.com",
-        "user_id": "tradingview.com",
-        "study_templates": "Ichimoku Cloud"
     });
 
     console.log("Gráfico de TradingView inicializado para el símbolo:", symbol);
-    return tvChart;
 }
