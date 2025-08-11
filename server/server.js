@@ -7,6 +7,9 @@ const cors = require('cors');
 const bitmartService = require('./services/bitmartService');
 const Order = require('./models/Order');
 const Autobot = require('./models/Autobot');
+const http = require('http');
+const { Server } = require("socket.io");
+const autobotStrategy = require('./autobotLogic.js');
 
 // --- CORRECCIÓN AQUÍ: Importamos el objeto completo, no una función específica
 const autobotStrategy = require('./autobotLogic.js');
@@ -15,6 +18,13 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 // Middleware de CORS
 const corsOptions = {
@@ -35,6 +45,14 @@ const connectDB = async () => {
 };
 
 connectDB();
+
+// Conexión de Socket.IO
+io.on('connection', (socket) => {
+    console.log('a user connected');
+    socket.on('disconnect', () => {
+        console.log('user disconnected');
+    });
+});
 
 // Credenciales de BitMart
 const bitmartCredentials = {
@@ -167,6 +185,9 @@ app.post('/api/autobot/stop', async (req, res) => {
 app.get('/', (req, res) => {
     res.send('Backend is running!');
 });
+
+// Haz que `io` esté disponible en la lógica del bot
+autobotStrategy.setIo(io);
 
 // Iniciar el servidor
 app.listen(PORT, () => {

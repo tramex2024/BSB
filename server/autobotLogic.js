@@ -1,103 +1,97 @@
 // autobotLogic.js
 
-const Autobot = require('./models/Autobot'); // Importa el modelo de MongoDB
-const bitmartService = require('./services/bitmartService'); // Asegúrate de que esta ruta sea correcta
+const Autobot = require('./models/Autobot');
 
-// Credenciales de BitMart
-const bitmartCredentials = {
-    apiKey: process.env.BITMART_API_KEY,
-    secretKey: process.env.BITMART_SECRET_KEY,
-    apiMemo: process.env.BITMART_API_MEMO || ''
-};
+let io;
 
-// Función de logging, simulando un envío al frontend
-function log(message) {
-    // Aquí podrías agregar la lógica para enviar el mensaje a tu frontend
-    // a través de WebSockets o guardarlo en una colección de logs de MongoDB.
-    // Por ahora, solo lo mostrará en la consola.
-    console.log(`[AUTOBOT LOG]: ${message}`);
+/**
+ * Establece la instancia de Socket.IO para emitir logs al frontend.
+ * @param {object} socketIo - La instancia de Socket.IO.
+ */
+function setIo(socketIo) {
+    io = socketIo;
 }
 
-// --- Ciclo de vida principal del Autobot ---
-async function start() {
-    log("Autobot strategy has started on the backend!");
+/**
+ * Emite un log al frontend a través de Socket.IO.
+ * @param {string} message - El mensaje del log.
+ * @param {string} type - El tipo de mensaje ('info', 'success', 'error', etc.).
+ */
+function log(message, type = 'info') {
+    if (io) {
+        io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
+    }
+    console.log(`[BOT LOG]: ${message}`);
+}
 
+/**
+ * Inicia la estrategia del Autobot.
+ * @param {object} config - La configuración para iniciar el bot.
+ */
+async function start(config) {
     try {
-        // 1. Verify BitMart API keys
-        const isValid = await bitmartService.validateApiKeys(
-            bitmartCredentials.apiKey,
-            bitmartCredentials.secretKey,
-            bitmartCredentials.apiMemo
-        );
+        log("Iniciando la estrategia del bot...");
 
-        if (!isValid) {
-            log('Error: BitMart API keys are not valid. Stopping the bot.');
-            await stop();
-            return;
-        }
-        
-        log("API keys validated successfully. Connection to BitMart established.");
-
-        // 2. Load and update bot configuration from MongoDB
-        let autobotConfig = await Autobot.findOne({});
-        if (!autobotConfig) {
-            log('No bot configuration found, creating a new one...');
-            autobotConfig = new Autobot({
+        let autobot = await Autobot.findOne({});
+        if (!autobot) {
+            // Crea un nuevo bot si no existe
+            autobot = new Autobot({
                 lstate: 'RUNNING',
                 sstate: 'RUNNING',
-                longConfig: { purchase: 5, increment: 100, trigger: 1.5 },
-                shortConfig: { purchase: 5, increment: 100, trigger: 1.5 }
+                // ... otras configuraciones por defecto
             });
-            await autobotConfig.save();
         } else {
-            autobotConfig.lstate = 'RUNNING';
-            autobotConfig.sstate = 'RUNNING';
-            await autobotConfig.save();
+            // Actualiza el estado del bot existente
+            autobot.lstate = 'RUNNING';
+            autobot.sstate = 'RUNNING';
         }
+        await autobot.save();
 
-        log(`Autobot state updated in DB: Long state: ${autobotConfig.lstate}, Short state: ${autobotConfig.sstate}`);
+        log("Estado del bot guardado en la base de datos.");
+        log("El bot ha iniciado correctamente.", 'success');
         
-        // 3. Start the trading loop
-        runTradingLoop(autobotConfig);
+        // Aquí iría la lógica principal de tu bot, como:
+        // - Conexión con el exchange (BitMart).
+        // - Lectura de los precios del mercado.
+        // - Ejecución de las órdenes de compra/venta.
+        // - Emisión de logs para cada acción importante.
 
     } catch (error) {
-        log(`Error starting the Autobot: ${error.message}`);
-        await stop();
+        log(`Error al iniciar el bot: ${error.message}`, 'error');
+        throw error;
     }
 }
 
-// Función para detener el bot y actualizar su estado en la DB
+/**
+ * Detiene la estrategia del Autobot.
+ */
 async function stop() {
-    log('Stopping the bot...');
     try {
-        const autobotConfig = await Autobot.findOne({});
-        if (autobotConfig) {
-            autobotConfig.lstate = 'STOPPED';
-            autobotConfig.sstate = 'STOPPED';
-            await autobotConfig.save();
-            log('Autobot state updated to STOPPED in the DB.');
+        log("Deteniendo la estrategia del bot...");
+
+        const autobot = await Autobot.findOne({});
+        if (autobot) {
+            autobot.lstate = 'STOPPED';
+            autobot.sstate = 'STOPPED';
+            await autobot.save();
         }
+
+        log("Estado del bot guardado en la base de datos.");
+        log("El bot se ha detenido.", 'success');
+
+        // Aquí iría la lógica para detener cualquier proceso en curso, como:
+        // - Cerrar conexiones.
+        // - Guardar el estado actual.
+        // - Cancelar órdenes pendientes.
+        
     } catch (error) {
-        log(`Error stopping the bot and saving to DB: ${error.message}`);
+        log(`Error al detener el bot: ${error.message}`, 'error');
+        throw error;
     }
 }
 
-// Función para el bucle de trading. Aquí se procesarán las señales.
-function runTradingLoop(autobotConfig) {
-    log('Trading loop initiated. Waiting for signals...');
-
-    // Simularemos la espera de señales con un temporizador.
-    const signalInterval = setInterval(() => {
-        log(`Bot is running... waiting for signals (Long and Short).`);
-    }, 30000); // Se ejecuta cada 30 segundos
-
-    module.exports.intervalId = signalInterval;
-}
-
-// Exporta las funciones para que puedan ser llamadas desde server.js
 module.exports = {
+    setIo,
     start,
     stop,
-    // La función 'log' también se exporta para su uso futuro
-    log,
 };

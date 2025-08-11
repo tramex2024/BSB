@@ -10,6 +10,7 @@ import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
 import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
+import { displayLogMessage } from './modules/auth.js';
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
@@ -259,6 +260,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiForm = document.getElementById('api-form');
     const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
+// Conexión a Socket.IO
+    const socket = io();
+    socket.on('bot-log', (log) => {
+        displayLogMessage(log.message, log.type, logMessageElement);
+    });
+
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
             if (localStorage.getItem('authToken')) {
