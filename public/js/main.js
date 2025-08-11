@@ -18,7 +18,7 @@ import { actualizarCalculosAutobot } from './modules/aucalculations.js';
 import { actualizarCalculosAibot } from './modules/aicalculations.js';
 
 // --- Constantes globales ---
-const BACKEND_URL = 'https://bsb-ppex.onrender.com';
+export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 const TRADE_SYMBOL = 'BTC_USDT';
 
 // Variable global para almacenar la instancia del gráfico activo

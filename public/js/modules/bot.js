@@ -3,6 +3,7 @@
 import { displayLogMessage } from './auth.js';
 import { fetchFromBackend } from './api.js';
 import { TRADE_SYMBOL } from '../main.js';
+import { BACKEND_URL } from '../main.js'; // Importa la URL del backend
 
 let isRunning = false;
 
