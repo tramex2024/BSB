@@ -2,7 +2,7 @@
 
 import { displayLogMessage } from './auth.js';
 import { fetchFromBackend } from './api.js';
-import { TRADE_SYMBOL } from '../main.js';
+import { TRADE_SYMBOL_TV } from '../main.js';
 
 export function setActiveTab(tabId) {
     // La lógica de la interfaz de usuario para las pestañas de órdenes
