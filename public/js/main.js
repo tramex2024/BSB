@@ -10,24 +10,19 @@ import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
 import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
-import { checkBotStatus } from './modules/bot.js'; // Importa la nueva función
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
 import { actualizarCalculosAutobot } from './modules/aucalculations.js';
 import { actualizarCalculosAibot } from './modules/aicalculations.js';
 
-// --- Constantes globales ---
+// --- Constantes globales (Ajuste aquí) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
-const TRADE_SYMBOL = 'BTC_USDT';
+export const TRADE_SYMBOL = 'BTC_USDT';
 
-// Variable global para almacenar la instancia del gráfico activo
-let currentChart = null;
+let currentChart = null; // Variable global para almacenar la instancia del gráfico
 
-// Exportar constantes para que otros módulos las puedan usar si es necesario
-//export { BACKEND_URL, TRADE_SYMBOL };
-
-// --- Variables de estado locales ---
+// Variables de estado locales
 let currentTab = 'opened';
 let intervals = {};
 
@@ -57,14 +52,12 @@ function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('te-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
     if (teresetBtn) teresetBtn.addEventListener('click', resetBot);
     
-    // --- Escuchadores de eventos para los nuevos cálculos ---
     if (teamountUSDTInput) teamountUSDTInput.addEventListener('input', actualizarCalculosTestbot);
     if (teamountBTCInput) teamountBTCInput.addEventListener('input', actualizarCalculosTestbot);
     if (tepurchaseUSDTInput) tepurchaseUSDTInput.addEventListener('input', actualizarCalculosTestbot);
@@ -85,14 +78,13 @@ function initializeTestbotView() {
     fetchOrders('opened');
 }
 
-
 function startAutobotStrategy() {
     console.log("Iniciando estrategia del Autobot...");
     const startBtn = document.getElementById('austart-btn');
     const resetBtn = document.getElementById('aureset-btn');
 
     if (startBtn) {
-        startBtn.disabled = true; // Deshabilita el botón START
+        startBtn.disabled = true;
         startBtn.textContent = 'Starting...';
     }
 
@@ -150,18 +142,13 @@ function initializeAutobotView() {
     loadBotConfigAndState();
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
-    checkBotStatus(); // Llama a la función para verificar el estado del bot
     
-    // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 
-
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
 
-    // --- CORRECCIÓN: El botón START ahora llama a la nueva función
     if (austartBtn) austartBtn.addEventListener('click', startAutobotStrategy);
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
-    // --- Escuchadores de eventos para los nuevos cálculos ---
     if (auamountUSDTInput) auamountUSDTInput.addEventListener('input', actualizarCalculosAutobot);
     if (auamountBTCInput) auamountBTCInput.addEventListener('input', actualizarCalculosAutobot);
     if (aupurchaseUSDTInput) aupurchaseUSDTInput.addEventListener('input', actualizarCalculosAutobot);
@@ -185,7 +172,6 @@ function initializeAutobotView() {
 function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");
     
-    // Obtener referencias a todos los inputs y botones
     const aiamountUSDTInput = document.getElementById('aiamount-usdt');
     const aiamountBTCInput = document.getElementById('aiamount-btc');
     const aipurchaseUSDTInput = document.getElementById("aipurchase-usdt");
@@ -201,14 +187,12 @@ function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    // --- Solución: El gráfico se inicializa aquí ---
     currentChart = initializeChart('ai-tvchart', `BINANCE:${TRADE_SYMBOL}`);
     startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
     if (airesetBtn) airesetBtn.addEventListener('click', resetBot);
     
-    // --- Escuchadores de eventos para los nuevos cálculos ---
     if (aiamountUSDTInput) aiamountUSDTInput.addEventListener('input', actualizarCalculosAibot);
     if (aiamountBTCInput) aiamountBTCInput.addEventListener('input', actualizarCalculosAibot);
     if (aipurchaseUSDTInput) aipurchaseUSDTInput.addEventListener('input', actualizarCalculosAibot);
@@ -230,20 +214,16 @@ function initializeAibotView() {
 }
 
 function initializeTab(tabName) {
-    // Detiene todos los intervalos activos
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
     
-    // Detiene la actualización de precios
     stopPriceUpdates();
 
-    // Destruye el gráfico actual si existe para que no interfiera con la nueva pestaña
     if (currentChart) {
         currentChart.remove();
         currentChart = null;
     }
     
-    // Llama a la función de inicialización específica para la pestaña
     if (tabName === 'autobot') {
         initializeAutobotView();
         intervals.autobot = setInterval(getBalances, 10000);
@@ -258,14 +238,10 @@ function initializeTab(tabName) {
         initializeAibotView();
         intervals.aibot = setInterval(getBalances, 10000);
     }
-    
-    // A diferencia de la versión anterior, no manipulamos directamente el DOM aquí.
-    // Dejamos que 'setupNavTabs' se encargue de mostrar y ocultar las secciones.
 }
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Pasar la función de inicialización de vista como callback
     setupNavTabs(initializeTab);
 
     const logMessageElement = document.getElementById('log-message');
