@@ -10,7 +10,7 @@ import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
 import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
-import { displayLogMessage } from './modules/auth.js';
+//import { displayLogMessage } from './modules/auth.js';
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
