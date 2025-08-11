@@ -1,5 +1,3 @@
-// server.js
-
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -16,14 +14,17 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
+
+// **CORRECCIÓN CLAVE:** Configuración de Socket.IO para que se vincule al servidor HTTP
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "*", // Permite la conexión desde cualquier origen (tu frontend en Vercel)
         methods: ["GET", "POST"]
-    }
+    },
+    path: '/socket.io' // Esto asegura que la ruta coincida con la del cliente
 });
 
-// Middleware de CORS
+// Middleware de CORS para Express (diferente a la de Socket.IO)
 const corsOptions = {
     origin: 'https://bsb-lime.vercel.app'
 };
@@ -45,9 +46,9 @@ connectDB();
 
 // Conexión de Socket.IO
 io.on('connection', (socket) => {
-    console.log('a user connected');
+    console.log(`User connected with ID: ${socket.id}`);
     socket.on('disconnect', () => {
-        console.log('user disconnected');
+        console.log(`User disconnected with ID: ${socket.id}`);
     });
 });
 
@@ -123,14 +124,11 @@ app.get('/api/user/bot-config-and-state', async (req, res) => {
     try {
         const autobotConfig = await Autobot.findOne({});
         if (autobotConfig) {
-            // Devuelve el estado real de la base de datos
             res.status(200).json({
                 lstate: autobotConfig.lstate,
                 sstate: autobotConfig.sstate,
-                // Puedes agregar más configuraciones aquí si las necesitas en el frontend
             });
         } else {
-            // Si no se encuentra, devuelve un estado por defecto (detenido)
             res.status(200).json({ lstate: 'STOPPED', sstate: 'STOPPED' });
         }
     } catch (error) {
@@ -155,11 +153,9 @@ app.get('/api/user/balances', async (req, res) => {
 });
 
 // Nueva ruta para iniciar el Autobot
-app.post('/api/autobot/start', (req, res) => {
+app.post('/api/autobot/start', async (req, res) => {
     try {
-        // --- CORRECCIÓN AQUÍ: Ahora se llama correctamente a la función start
-        autobotStrategy.start();
-
+        await autobotStrategy.start();
         res.json({ success: true, message: 'Autobot strategy started.' });
     } catch (error) {
         console.error('Failed to start Autobot strategy:', error);
@@ -170,7 +166,7 @@ app.post('/api/autobot/start', (req, res) => {
 // Nueva ruta para detener el Autobot
 app.post('/api/autobot/stop', async (req, res) => {
     try {
-        await autobotStrategy.stop(); // Llama a la función stop del bot
+        await autobotStrategy.stop();
         res.json({ success: true, message: 'Autobot strategy stopped.' });
     } catch (error) {
         console.error('Failed to stop Autobot strategy:', error);
@@ -183,10 +179,10 @@ app.get('/', (req, res) => {
     res.send('Backend is running!');
 });
 
-// Haz que `io` esté disponible en la lógica del bot
+// **CORRECCIÓN CLAVE:** Enlazar la instancia de `io` a la estrategia del bot
 autobotStrategy.setIo(io);
 
-// Iniciar el servidor
-app.listen(PORT, () => {
+// Iniciar el servidor con `server.listen`
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
