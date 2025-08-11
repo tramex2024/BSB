@@ -392,3 +392,14 @@ body.lite-mode .log-bar {
     color: #333;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
 }
+/* --- ESTILOS PARA LOS CONTENEDORES DE GRÁFICOS --- */
+/* Aseguramos que los divs del gráfico tengan una altura para que TradingView sepa dónde renderizar */
+#te-tvchart,
+#au-tvchart,
+#ai-tvchart {
+    width: 100%;
+    height: 500px; /* Puedes ajustar esta altura según tus preferencias */
+    background-color: var(--dark-header-bg); /* Un color de fondo para que no se vea vacío */
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
