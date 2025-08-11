@@ -1,6 +1,6 @@
 // public/js/modules/chart.js
 
-import { TradingView } from 'tradingview-widget';
+import TradingView from 'https://unpkg.com/@tradingview/widget@1.0.0/dist/bundle.js';
 
 // Variable para la instancia del gráfico
 let tvChart = null;
@@ -13,7 +13,7 @@ export function initializeChart(containerId, symbol) {
     }
 
     // Inicializa el nuevo gráfico
-    tvChart = new TradingView.widget({
+    tvChart = new TradingView.Widget({
         "container_id": containerId,
         "symbol": symbol,
         "interval": "60",
