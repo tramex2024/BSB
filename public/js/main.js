@@ -25,7 +25,7 @@ const TRADE_SYMBOL = 'BTC_USDT';
 let currentChart = null;
 
 // Exportar constantes para que otros módulos las puedan usar si es necesario
-export { BACKEND_URL, TRADE_SYMBOL };
+//export { BACKEND_URL, TRADE_SYMBOL };
 
 // --- Variables de estado locales ---
 let currentTab = 'opened';
