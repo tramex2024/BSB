@@ -13,7 +13,7 @@ export function initializeChart(containerId, symbol) {
     // Crea el nuevo widget de TradingView en el contenedor
     new TradingView.widget({
         "container_id": containerId,
-        "symbol": `BINANCE:${symbol}`, // Usamos el prefijo de Binance por defecto, es el más compatible
+        "symbol": `BINANCE:${BTCUSDT}`, // Usamos el prefijo de Binance por defecto, es el más compatible
         "interval": "60",
         "timezone": "Etc/UTC",
         "theme": "dark",
