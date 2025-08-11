@@ -11,9 +11,6 @@ const http = require('http');
 const { Server } = require("socket.io");
 const autobotStrategy = require('./autobotLogic.js');
 
-// --- CORRECCIÓN AQUÍ: Importamos el objeto completo, no una función específica
-const autobotStrategy = require('./autobotLogic.js');
-
 dotenv.config();
 
 const app = express();
