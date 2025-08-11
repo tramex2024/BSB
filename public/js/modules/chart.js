@@ -1,6 +1,6 @@
 // public/js/modules/chart.js
 
-export function initializeChart(containerId, symbol) {
+export function initializeChart(containerId, TRADE_SYMBOL_TV) {
     const container = document.getElementById(containerId);
     if (!container) {
         console.error(`Contenedor del gráfico con ID "${containerId}" no encontrado.`);
@@ -13,7 +13,7 @@ export function initializeChart(containerId, symbol) {
     // Crea el nuevo widget de TradingView en el contenedor
     new TradingView.widget({
         "container_id": containerId,
-        "symbol": `BINANCE:${symbol}`, // Usamos el prefijo de Binance por defecto, es el más compatible
+        "symbol": `BINANCE:${TRADE_SYMBOL_TV}`, // Usamos el prefijo de Binance por defecto, es el más compatible
         "interval": "60",
         "timezone": "Etc/UTC",
         "theme": "dark",
@@ -29,5 +29,5 @@ export function initializeChart(containerId, symbol) {
         "support_host": "https://www.tradingview.com",
     });
 
-    console.log("Gráfico de TradingView inicializado para el símbolo:", symbol);
+    console.log("Gráfico de TradingView inicializado para el símbolo:", TRADE_SYMBOL_TV);
 }

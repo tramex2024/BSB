@@ -18,7 +18,10 @@ import { actualizarCalculosAibot } from './modules/aicalculations.js';
 
 // --- Constantes globales ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
-export const TRADE_SYMBOL = 'BTC_USDT';
+
+// Nueva constante para el símbolo de TradingView
+export const TRADE_SYMBOL_TV = 'BTCUSDT';
+export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
 let currentChart = null; // Variable global para almacenar la instancia del gráfico
 
@@ -52,8 +55,8 @@ function initializeTestbotView() {
     checkBitMartConnectionAndData();
     
     // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'te-tvchart'
-    currentChart = initializeChart('te-tvchart', TRADE_SYMBOL);
-    startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
+    currentChart = initializeChart('te-tvchart', TRADE_SYMBOL_TV);
+    startPriceUpdates(TRADE_SYMBOL_BITMART, 'teprice', 2500);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
     if (teresetBtn) teresetBtn.addEventListener('click', resetBot);
@@ -97,8 +100,8 @@ function initializeAutobotView() {
     checkBitMartConnectionAndData();
     
     // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'au-tvchart'
-    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL); 
-    startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
+    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV); 
+    startPriceUpdates(TRADE_SYMBOL_BITMART, 'auprice', 2500);
 
     // CORRECCIÓN: El botón llama a la función general toggleBotState
     if (austartBtn) austartBtn.addEventListener('click', () => toggleBotState('autobot'));
@@ -146,8 +149,8 @@ function initializeAibotView() {
     checkBitMartConnectionAndData();
     
     // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'ai-tvchart'
-    currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL);
-    startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
+    currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL_TV);
+    startPriceUpdates(TRADE_SYMBOL_BITMART, 'aiprice', 2500);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
     if (airesetBtn) airesetBtn.addEventListener('click', resetBot);
@@ -214,7 +217,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
     // CORRECCIÓN: Conexión a Socket.IO usando la URL del backend
-    const socket = io(BACKEND_URL);
+    const socket = io(BACKEND_URL, {
+    path: '/socket.io'
+});
     socket.on('bot-log', (log) => {
         displayLogMessage(log.message, log.type, logMessageElement);
     });
