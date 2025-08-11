@@ -7,74 +7,55 @@ import { BACKEND_URL } from '../main.js'; // Importa la URL del backend
 
 let isRunning = false;
 
-// Las funciones para interactuar con los botones y el estado del bot
+// --- Nueva función para interactuar con el botón START/STOP
 export async function toggleBotState() {
-    const startBtn = document.getElementById('start-btn');
-    if (!startBtn) {
-        displayLogMessage("Error: Missing start button.", 'error');
-        return;
-    }
+    const austartBtn = document.getElementById('austart-btn');
+    if (!austartBtn) return;
+    
+    // Almacenamos el estado actual del botón antes de cambiarlo
+    const currentState = austartBtn.textContent;
+    const isStarting = currentState === 'START';
+    const endpoint = isStarting ? '/api/autobot/start' : '/api/autobot/stop';
 
-    const action = isRunning ? 'stop' : 'start';
-    displayLogMessage(`Sending request to ${action} bot...`, 'info');
+    austartBtn.textContent = isStarting ? 'Starting...' : 'Stopping...';
+    austartBtn.disabled = true;
 
     try {
-        const botState = await fetchBotState(action);
-        if (botState) {
-            updateUIBasedOnBotState(botState);
-            displayLogMessage(`Bot state updated to: ${botState.state}`, 'success');
+        // Hacemos la llamada al backend con el endpoint correcto
+        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to toggle bot state.');
         }
+
+        const data = await response.json();
+        displayLogMessage(data.message, 'success');
+        
+        // ¡Corrección clave! Después de la respuesta exitosa,
+        // esperamos que la función checkBotStatus actualice el botón correctamente
+        // ya que el estado se ha guardado en el backend.
+        
     } catch (error) {
-        displayLogMessage(`Error toggling bot state: ${error.message}`, 'error');
         console.error('Error toggling bot state:', error);
+        displayLogMessage(`Error: ${error.message}`, 'error');
+        
+        // En caso de error, restauramos el botón a su estado original
+        austartBtn.textContent = currentState;
+    } finally {
+        austartBtn.disabled = false;
+        // Llamamos a esta función para asegurar que el estado visual se sincronice con el backend
+        checkBotStatus();
     }
 }
 
-async function fetchBotState(action) {
-    // Obtener los elementos del DOM para la configuración del bot
-    const purchaseInput = document.getElementById("purchase");
-    const incrementInput = document.getElementById("increment");
-    const decrementInput = document.getElementById("decrement");
-    const triggerInput = document.getElementById("trigger");
-    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
-
-    const params = {
-        symbol: TRADE_SYMBOL,
-        purchase: purchaseInput ? parseFloat(purchaseInput.value) : 0,
-        increment: incrementInput ? parseFloat(incrementInput.value) : 0,
-        decrement: decrementInput ? parseFloat(decrementInput.value) : 0,
-        trigger: triggerInput ? parseFloat(triggerInput.value) : 0,
-        stopAtCycleEnd: stopAtCycleEndCheckbox ? stopAtCycleEndCheckbox.checked : false,
-    };
-
-    const endpoint = `/api/user/toggle-bot?action=${action}`; // Usamos un endpoint más genérico
-    const response = await fetchFromBackend(endpoint, 'POST', { params });
-    return response.botState;
-}
-
-export function updateUIBasedOnBotState(botData) {
-    const startBtn = document.getElementById('start-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    const botStateDisplay = document.getElementById('bot-state');
-    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
-    const cycleDisplay = document.getElementById('cycle');
-    const profitDisplay = document.getElementById('profit');
-    const cycleProfitDisplay = document.getElementById('cycleprofit');
-
-    isRunning = (botData.state === 'RUNNING');
-
-    if (startBtn) startBtn.textContent = isRunning ? 'STOP' : 'START';
-    if (startBtn) startBtn.className = isRunning ? 'bg-red-600' : 'bg-green-600';
-    if (resetBtn) resetBtn.disabled = isRunning;
-    if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.disabled = isRunning;
-    if (botStateDisplay) {
-        botStateDisplay.textContent = botData.state;
-        botStateDisplay.className = isRunning ? 'text-green-400' : 'text-yellow-400';
-    }
-    if (cycleDisplay) cycleDisplay.textContent = botData.cycle || 0;
-    if (profitDisplay) profitDisplay.textContent = (botData.profit || 0).toFixed(2);
-    if (cycleProfitDisplay) cycleProfitDisplay.textContent = (botData.cycleProfit || 0).toFixed(2);
-}
+// --- Las otras funciones de gestión del bot ---
 
 export async function loadBotConfigAndState() {
     displayLogMessage('Cargando configuración y estado del bot...', 'info');
@@ -82,20 +63,21 @@ export async function loadBotConfigAndState() {
     try {
         const botData = await fetchFromBackend('/api/user/bot-config-and-state');
         if (botData) {
-            const purchaseInput = document.getElementById("purchase");
-            const incrementInput = document.getElementById("increment");
-            const decrementInput = document.getElementById("decrement");
-            const triggerInput = document.getElementById("trigger");
+            const purchaseInput = document.getElementById("aupurchase-usdt"); // Asumo que es el input correcto para autobot
+            const incrementInput = document.getElementById("auincrement");
+            const decrementInput = document.getElementById("audecrement");
+            const triggerInput = document.getElementById("autrigger");
             const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 
+            // Asumiendo que el backend te devuelve la configuración
             if (purchaseInput) purchaseInput.value = botData.purchase || 5.00;
             if (incrementInput) incrementInput.value = botData.increment || 100;
             if (decrementInput) decrementInput.value = botData.decrement || 1.0;
             if (triggerInput) triggerInput.value = botData.trigger || 1.5;
             if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = botData.stopAtCycleEnd || false;
             
-            updateUIBasedOnBotState(botData);
-            displayLogMessage(`Bot configuration loaded. State: ${botData.state}.`, 'success');
+            // La función `checkBotStatus` se encargará de actualizar el estado del botón
+            displayLogMessage(`Bot configuration loaded.`, 'success');
         } else {
             displayLogMessage('Failed to load bot configuration. Using default UI values.', 'warning');
         }
@@ -103,6 +85,7 @@ export async function loadBotConfigAndState() {
         displayLogMessage(`Error loading bot config: ${error.message}`, 'error');
     }
 }
+
 
 export async function checkBotStatus() {
     const austartBtn = document.getElementById('austart-btn');
@@ -114,7 +97,7 @@ export async function checkBotStatus() {
             throw new Error('Failed to fetch bot status');
         }
         const data = await response.json();
-
+        
         // Si al menos una de las estrategias está corriendo, el botón debe ser "STOP"
         if (data.lstate === 'RUNNING' || data.sstate === 'RUNNING') {
             austartBtn.textContent = 'STOP';
@@ -134,47 +117,13 @@ export async function checkBotStatus() {
     }
 }
 
-export async function toggleBotState(botType) {
-    const austartBtn = document.getElementById('austart-btn');
-    if (!austartBtn) return;
-    
-    const currentState = austartBtn.textContent;
-    const isStarting = currentState === 'START';
-    const endpoint = isStarting ? '/api/autobot/start' : '/api/autobot/stop';
-
-    austartBtn.textContent = isStarting ? 'Starting...' : 'Stopping...';
-    austartBtn.disabled = true;
-
-    try {
-        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to toggle bot state.');
-        }
-
-        const data = await response.json();
-        console.log(data.message);
-        // La función checkBotStatus() se encargará de actualizar el botón.
-    } catch (error) {
-        console.error('Error toggling bot state:', error);
-        // En caso de error, restauramos el botón a su estado original
-        austartBtn.textContent = currentState;
-    } finally {
-        austartBtn.disabled = false;
-    }
-}
-
 export async function resetBot() {
-    const purchaseInput = document.getElementById("purchase");
-    const incrementInput = document.getElementById("increment");
-    const decrementInput = document.getElementById("decrement");
-    const triggerInput = document.getElementById("trigger");
+    // Aquí puedes agregar la lógica para enviar una solicitud de "reset" al backend
+    // por ahora, solo reseteamos los valores del UI
+    const purchaseInput = document.getElementById("aupurchase-usdt");
+    const incrementInput = document.getElementById("auincrement");
+    const decrementInput = document.getElementById("audecrement");
+    const triggerInput = document.getElementById("autrigger");
     const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
     
     if (purchaseInput) purchaseInput.value = 5.00;
@@ -183,7 +132,5 @@ export async function resetBot() {
     if (triggerInput) triggerInput.value = 1.5;
     if (stopAtCycleEndCheckbox) stopAtCycleEndCheckbox.checked = false;
 
-    // Lógica para actualizar los cálculos y el estado
-    // ...
     displayLogMessage('Bot parameters reset to default values.', 'info');
 }
