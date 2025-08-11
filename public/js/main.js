@@ -10,7 +10,6 @@ import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
 import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
-//import { displayLogMessage } from './modules/auth.js';
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
@@ -37,7 +36,6 @@ function initializeDashboardView() {
 function initializeTestbotView() {
     console.log("Inicializando vista del Testbot...");
     
-    // Obtener referencias a todos los inputs y botones
     const teamountUSDTInput = document.getElementById('teamount-usdt');
     const teamountBTCInput = document.getElementById('teamount-btc');
     const tepurchaseUSDTInput = document.getElementById("tepurchase-usdt");
@@ -53,8 +51,8 @@ function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    // Después
-    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL);
+    // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'te-tvchart'
+    currentChart = initializeChart('te-tvchart', TRADE_SYMBOL);
     startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
@@ -80,53 +78,6 @@ function initializeTestbotView() {
     fetchOrders('opened');
 }
 
-function startAutobotStrategy() {
-    console.log("Iniciando estrategia del Autobot...");
-    const startBtn = document.getElementById('austart-btn');
-    const resetBtn = document.getElementById('aureset-btn');
-
-    if (startBtn) {
-        startBtn.disabled = true;
-        startBtn.textContent = 'Starting...';
-    }
-
-    fetch(`${BACKEND_URL}/api/autobot/start`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(error => { throw new Error(error.message); });
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log(data.message);
-        displayLogMessage(data.message, 'success');
-        if (startBtn) {
-            startBtn.textContent = 'STOP';
-            startBtn.classList.remove('bg-green-600');
-            startBtn.classList.add('bg-red-600');
-            startBtn.disabled = false;
-        }
-        if (resetBtn) resetBtn.disabled = true;
-    })
-    .catch(error => {
-        console.error('Error al iniciar Autobot:', error);
-        displayLogMessage(`Error: ${error.message}`, 'error');
-        if (startBtn) {
-            startBtn.textContent = 'START';
-            startBtn.classList.remove('bg-red-600');
-            startBtn.classList.add('bg-green-600');
-            startBtn.disabled = false;
-        }
-        if (resetBtn) resetBtn.disabled = false;
-    });
-}
-
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
@@ -145,9 +96,11 @@ function initializeAutobotView() {
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 
+    // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'au-tvchart'
+    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL); 
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
 
+    // CORRECCIÓN: El botón llama a la función general toggleBotState
     if (austartBtn) austartBtn.addEventListener('click', () => toggleBotState('autobot'));
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
@@ -170,9 +123,8 @@ function initializeAutobotView() {
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
     
-    // Verificamos el estado del bot al iniciar y en un intervalo
     checkBotStatus();
-    intervals.botStatus = setInterval(checkBotStatus, 5000); // Actualiza el estado cada 5 segundos
+    intervals.botStatus = setInterval(checkBotStatus, 5000);
 }
 
 function initializeAibotView() {
@@ -193,8 +145,8 @@ function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    // Después
-    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL);
+    // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'ai-tvchart'
+    currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL);
     startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
@@ -226,7 +178,8 @@ function initializeTab(tabName) {
     
     stopPriceUpdates();
 
-    if (currentChart) {
+    // La lógica de eliminación de `currentChart` se mantiene
+    if (currentChart && typeof currentChart.remove === 'function') {
         currentChart.remove();
         currentChart = null;
     }
@@ -260,8 +213,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiForm = document.getElementById('api-form');
     const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
-// Conexión a Socket.IO
-    const socket = io();
+    // CORRECCIÓN: Conexión a Socket.IO usando la URL del backend
+    const socket = io(BACKEND_URL);
     socket.on('bot-log', (log) => {
         displayLogMessage(log.message, log.type, logMessageElement);
     });
