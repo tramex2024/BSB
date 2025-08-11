@@ -19,7 +19,7 @@ export function setActiveTab(tabId) {
 
 export async function fetchOrders(tabId) {
     const cleanedTabId = tabId.replace('tab-', '');
-    displayLogMessage(`Fetching ${cleanedTabId} orders for ${TRADE_SYMBOL}...`, 'info');
+    displayLogMessage(`Fetching ${cleanedTabId} orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     const orderList = document.getElementById('order-list');
     if (!orderList) return;
 
