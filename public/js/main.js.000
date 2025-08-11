@@ -5,7 +5,7 @@ import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/orders.js';
-import { loadBotConfigAndState, toggleBotState, resetBot, checkBotStatus } from './modules/bot.js';
+import { loadBotConfigAndState, toggleBotState, resetBot } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
@@ -16,7 +16,7 @@ import { actualizarCalculosTestbot } from './modules/tecalculations.js';
 import { actualizarCalculosAutobot } from './modules/aucalculations.js';
 import { actualizarCalculosAibot } from './modules/aicalculations.js';
 
-// --- Constantes globales ---
+// --- Constantes globales (Ajuste aquí) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL = 'BTC_USDT';
 
@@ -167,10 +167,6 @@ function initializeAutobotView() {
 
     setOrdersActiveTab('tab-opened');
     fetchOrders('opened');
-    
-    // Verificamos el estado del bot al iniciar y en un intervalo
-    checkBotStatus();
-    intervals.botStatus = setInterval(checkBotStatus, 5000); // Actualiza el estado cada 5 segundos
 }
 
 function initializeAibotView() {

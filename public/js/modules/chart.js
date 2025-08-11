@@ -1,30 +1,21 @@
 // public/js/modules/chart.js
 
-let tradingViewWidget = null;
+import { TradingView } from 'tradingview-widget';
 
-/**
- * Inicializa el widget de TradingView.
- * @param {string} containerId - El ID del elemento HTML donde se montará el widget.
- * @param {string} symbol - El par de trading. Por ejemplo: 'BITMART:BTC_USDT'.
- */
+// Variable para la instancia del gráfico
+let tvChart = null;
+
 export function initializeChart(containerId, symbol) {
-    if (tradingViewWidget) {
-        console.warn("TradingView widget ya inicializado.");
-        return;
+    // Si ya existe un gráfico, lo eliminamos primero para evitar conflictos
+    if (tvChart) {
+        tvChart.remove();
+        tvChart = null;
     }
 
-    console.log(`Inicializando gráfico de TradingView para el símbolo: ${symbol}`);
-    
-    const container = document.getElementById(containerId);
-    if (!container) {
-        console.error(`Error: No se encontró el contenedor con el ID '${containerId}'. El gráfico no se puede inicializar.`);
-        return;
-    }
-
-    tradingViewWidget = new TradingView.widget({
+    // Inicializa el nuevo gráfico
+    tvChart = new TradingView.widget({
         "container_id": containerId,
-        "autosize": true,
-        "symbol": "BINANCE:BTCUSDT", // <-- Aquí está el cambio
+        "symbol": symbol,
         "interval": "60",
         "timezone": "Etc/UTC",
         "theme": "dark",
@@ -32,12 +23,19 @@ export function initializeChart(containerId, symbol) {
         "locale": "es",
         "toolbar_bg": "#f1f3f6",
         "enable_publishing": false,
+        "withdateranges": true,
+        "hide_side_toolbar": false,
         "allow_symbol_change": true,
+        "hotlist": false,
+        "calendar": false,
         "support_host": "https://www.tradingview.com",
-        "library_path": "/charting_library/",
-        "disabled_features": [
-            "header_saveload",
-            "study_templates"
-        ]
+        "charts_storage_url": "https://s3.tradingview.com/charts_storage/staging/",
+        "charts_storage_api_version": "1.1",
+        "client_id": "tradingview.com",
+        "user_id": "tradingview.com",
+        "study_templates": "Ichimoku Cloud"
     });
+
+    console.log("Gráfico de TradingView inicializado para el símbolo:", symbol);
+    return tvChart;
 }

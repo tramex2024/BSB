@@ -110,23 +110,24 @@ export async function checkBotStatus() {
 
     try {
         const response = await fetch(`${BACKEND_URL}/api/user/bot-config-and-state`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch bot status');
+        }
         const data = await response.json();
 
-        if (response.ok) {
-            // Si al menos una de las estrategias está corriendo, el botón debe ser "STOP"
-            if (data.lstate === 'RUNNING' || data.sstate === 'RUNNING') {
-                austartBtn.textContent = 'STOP';
-                austartBtn.classList.remove('bg-green-600');
-                austartBtn.classList.add('bg-red-600');
-            } else {
-                austartBtn.textContent = 'START';
-                austartBtn.classList.remove('bg-red-600');
-                austartBtn.classList.add('bg-green-600');
-            }
+        // Si al menos una de las estrategias está corriendo, el botón debe ser "STOP"
+        if (data.lstate === 'RUNNING' || data.sstate === 'RUNNING') {
+            austartBtn.textContent = 'STOP';
+            austartBtn.classList.remove('bg-green-600');
+            austartBtn.classList.add('bg-red-600');
+        } else {
+            austartBtn.textContent = 'START';
+            austartBtn.classList.remove('bg-red-600');
+            austartBtn.classList.add('bg-green-600');
         }
     } catch (error) {
         console.error('Error fetching bot status:', error);
-        // Si hay un error, dejamos el botón en el estado por defecto (START)
+        // En caso de error, el botón vuelve a START por seguridad
         austartBtn.textContent = 'START';
         austartBtn.classList.remove('bg-red-600');
         austartBtn.classList.add('bg-green-600');
