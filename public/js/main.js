@@ -52,7 +52,8 @@ function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('te-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    // Después
+    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL);
     startPriceUpdates(TRADE_SYMBOL, 'teprice', 2500);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
@@ -146,7 +147,7 @@ function initializeAutobotView() {
     currentChart = initializeChart('au-tvchart', `BINANCE:${TRADE_SYMBOL}`); 
     startPriceUpdates(TRADE_SYMBOL, 'auprice', 2500);
 
-    if (austartBtn) austartBtn.addEventListener('click', startAutobotStrategy);
+    if (austartBtn) austartBtn.addEventListener('click', () => toggleBotState('autobot'));
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
     if (auamountUSDTInput) auamountUSDTInput.addEventListener('input', actualizarCalculosAutobot);
@@ -191,7 +192,8 @@ function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('ai-tvchart', `BINANCE:${TRADE_SYMBOL}`);
+    // Después
+    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL);
     startPriceUpdates(TRADE_SYMBOL, 'aiprice', 2500);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);

@@ -99,5 +99,5 @@ module.exports = {
     start,
     stop,
     // La función 'log' también se exporta para su uso futuro
-    log
+    log,
 };

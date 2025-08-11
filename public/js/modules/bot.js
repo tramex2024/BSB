@@ -134,6 +134,42 @@ export async function checkBotStatus() {
     }
 }
 
+export async function toggleBotState(botType) {
+    const austartBtn = document.getElementById('austart-btn');
+    if (!austartBtn) return;
+    
+    const currentState = austartBtn.textContent;
+    const isStarting = currentState === 'START';
+    const endpoint = isStarting ? '/api/autobot/start' : '/api/autobot/stop';
+
+    austartBtn.textContent = isStarting ? 'Starting...' : 'Stopping...';
+    austartBtn.disabled = true;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to toggle bot state.');
+        }
+
+        const data = await response.json();
+        console.log(data.message);
+        // La función checkBotStatus() se encargará de actualizar el botón.
+    } catch (error) {
+        console.error('Error toggling bot state:', error);
+        // En caso de error, restauramos el botón a su estado original
+        austartBtn.textContent = currentState;
+    } finally {
+        austartBtn.disabled = false;
+    }
+}
+
 export async function resetBot() {
     const purchaseInput = document.getElementById("purchase");
     const incrementInput = document.getElementById("increment");

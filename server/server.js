@@ -152,6 +152,17 @@ app.post('/api/autobot/start', (req, res) => {
     }
 });
 
+// Nueva ruta para detener el Autobot
+app.post('/api/autobot/stop', async (req, res) => {
+    try {
+        await autobotStrategy.stop(); // Llama a la función stop del bot
+        res.json({ success: true, message: 'Autobot strategy stopped.' });
+    } catch (error) {
+        console.error('Failed to stop Autobot strategy:', error);
+        res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
+    }
+});
+
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
     res.send('Backend is running!');
