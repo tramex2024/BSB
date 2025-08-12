@@ -15,23 +15,20 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// **CORRECCIÓN CLAVE:** Configuración de Socket.IO para que se vincule al servidor HTTP
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permite la conexión desde cualquier origen (tu frontend en Vercel)
+        origin: "*",
         methods: ["GET", "POST"]
     },
-    path: '/socket.io' // Esto asegura que la ruta coincida con la del cliente
+    path: '/socket.io'
 });
 
-// Middleware de CORS para Express (diferente a la de Socket.IO)
 const corsOptions = {
     origin: 'https://bsb-lime.vercel.app'
 };
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Conexión a MongoDB
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI);
@@ -44,7 +41,6 @@ const connectDB = async () => {
 
 connectDB();
 
-// Conexión de Socket.IO
 io.on('connection', (socket) => {
     console.log(`User connected with ID: ${socket.id}`);
     socket.on('disconnect', () => {
@@ -52,7 +48,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// Credenciales de BitMart
 const bitmartCredentials = {
     apiKey: process.env.BITMART_API_KEY,
     secretKey: process.env.BITMART_SECRET_KEY,
@@ -152,10 +147,14 @@ app.get('/api/user/balances', async (req, res) => {
     }
 });
 
-// Nueva ruta para iniciar el Autobot
+// --- NUEVO ENDPOINT PARA INICIAR EL AUTOBOT CON LA CONFIGURACIÓN DEL FRONTEND ---
 app.post('/api/autobot/start', async (req, res) => {
     try {
-        await autobotStrategy.start();
+        const botConfig = req.body; // Captura la configuración enviada desde el frontend
+        
+        // Llama a la función 'start' con la configuración y las credenciales
+        await autobotStrategy.start(botConfig, bitmartCredentials);
+
         res.json({ success: true, message: 'Autobot strategy started.' });
     } catch (error) {
         console.error('Failed to start Autobot strategy:', error);
@@ -163,7 +162,7 @@ app.post('/api/autobot/start', async (req, res) => {
     }
 });
 
-// Nueva ruta para detener el Autobot
+// Ruta para detener el Autobot (sin cambios)
 app.post('/api/autobot/stop', async (req, res) => {
     try {
         await autobotStrategy.stop();
@@ -179,10 +178,8 @@ app.get('/', (req, res) => {
     res.send('Backend is running!');
 });
 
-// **CORRECCIÓN CLAVE:** Enlazar la instancia de `io` a la estrategia del bot
 autobotStrategy.setIo(io);
 
-// Iniciar el servidor con `server.listen`
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

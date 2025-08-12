@@ -54,7 +54,6 @@ function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'te-tvchart'
     currentChart = initializeChart('te-tvchart', TRADE_SYMBOL_TV);
     startPriceUpdates(TRADE_SYMBOL_BITMART, 'teprice', 2500);
 
@@ -84,8 +83,8 @@ function initializeTestbotView() {
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
+    // --- NUEVO: Leer los inputs para capturar la configuración ---
     const auamountUSDTInput = document.getElementById('auamount-usdt');
-    const auamountBTCInput = document.getElementById('auamount-btc');
     const aupurchaseUSDTInput = document.getElementById("aupurchase-usdt");
     const aupurchaseBTCInput = document.getElementById("aupurchase-btc");
     const auincrementInput = document.getElementById("auincrement");
@@ -94,21 +93,38 @@ function initializeAutobotView() {
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
+    // --- FIN DEL CÓDIGO NUEVO ---
 
     loadBotConfigAndState();
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
-    // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'au-tvchart'
     currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV); 
     startPriceUpdates(TRADE_SYMBOL_BITMART, 'auprice', 2500);
 
-    // CORRECCIÓN: El botón llama a la función general toggleBotState
-    if (austartBtn) austartBtn.addEventListener('click', () => toggleBotState('autobot'));
+    // --- CÓDIGO MODIFICADO ---
+    // Ahora el botón llama a una función que lee los inputs
+    if (austartBtn) {
+        austartBtn.addEventListener('click', () => {
+            // Recolectar la configuración desde los inputs
+            const config = {
+                purchaseUsdtAmount: parseFloat(aupurchaseUSDTInput.value),
+                purchaseBtcAmount: parseFloat(aupurchaseBTCInput.value),
+                // Aquí puedes agregar otros inputs si los necesitas
+                symbol: TRADE_SYMBOL_BITMART,
+                interval: 5000 // Puedes hacerlo dinámico si quieres
+            };
+            
+            // Llamar a la función que inicia el bot y pasarle la configuración
+            // La función toggleBotState debe saber manejar este objeto
+            toggleBotState('autobot', config);
+        });
+    }
+    // --- FIN DEL CÓDIGO MODIFICADO ---
+
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
     if (auamountUSDTInput) auamountUSDTInput.addEventListener('input', actualizarCalculosAutobot);
-    if (auamountBTCInput) auamountBTCInput.addEventListener('input', actualizarCalculosAutobot);
     if (aupurchaseUSDTInput) aupurchaseUSDTInput.addEventListener('input', actualizarCalculosAutobot);
     if (aupurchaseBTCInput) aupurchaseBTCInput.addEventListener('input', actualizarCalculosAutobot);
     if (auincrementInput) auincrementInput.addEventListener('input', actualizarCalculosAutobot);
@@ -148,7 +164,6 @@ function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    // CORRECCIÓN: Inicializa el gráfico en el contenedor correcto 'ai-tvchart'
     currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL_TV);
     startPriceUpdates(TRADE_SYMBOL_BITMART, 'aiprice', 2500);
 
@@ -181,7 +196,6 @@ function initializeTab(tabName) {
     
     stopPriceUpdates();
 
-    // La lógica de eliminación de `currentChart` se mantiene
     if (currentChart && typeof currentChart.remove === 'function') {
         currentChart.remove();
         currentChart = null;
@@ -216,7 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiForm = document.getElementById('api-form');
     const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
-    // CORRECCIÓN: Conexión a Socket.IO usando la URL del backend
     const socket = io(BACKEND_URL, {
     path: '/socket.io'
 });
@@ -227,11 +240,9 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('bot-state-update', (state) => {
     console.log("Estado del bot recibido:", state);
 
-    // Usa los IDs de tu HTML
     const lStateElement = document.getElementById('aubot-lstate');
     const sStateElement = document.getElementById('aubot-sstate');
     
-    // Actualizar el LState
     if (lStateElement) {
         lStateElement.textContent = state.lstate;
         if (state.lstate === 'RUNNING') {
@@ -243,7 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Actualizar el SState
     if (sStateElement) {
         sStateElement.textContent = state.sstate;
         if (state.sstate === 'RUNNING') {
