@@ -7,8 +7,9 @@ import { BACKEND_URL } from '../main.js';
 
 let isRunning = false;
 
-// --- Nueva función para interactuar con el botón START/STOP
-export async function toggleBotState() {
+// --- Función actualizada para interactuar con el botón START/STOP
+// Ahora recibe la configuración como un argumento
+export async function toggleBotState(botType, config = {}) {
     const austartBtn = document.getElementById('austart-btn');
     if (!austartBtn) return;
     
@@ -25,30 +26,12 @@ export async function toggleBotState() {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            }
+            },
         };
 
-        // --- CÓDIGO NUEVO: Construcción del objeto de configuración
+        // --- CÓDIGO NUEVO ---
+        // Si el bot se está iniciando, adjunta la configuración al cuerpo de la petición
         if (isStarting) {
-            const config = {
-                long: {
-                    balanceUsdt: parseFloat(document.getElementById('auamount-usdt').value) || 0,
-                    purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value) || 0,
-                    increment: parseFloat(document.getElementById('auincrement').value) || 0,
-                    decrement: parseFloat(document.getElementById('audecrement').value) || 0,
-                    trigger: parseFloat(document.getElementById('autrigger').value) || 0,
-                },
-                short: {
-                    balanceBtc: parseFloat(document.getElementById('auamount-btc').value) || 0,
-                    purchaseBtc: parseFloat(document.getElementById('aupurchase-btc').value) || 0,
-                    increment: parseFloat(document.getElementById('auincrement').value) || 0,
-                    decrement: parseFloat(document.getElementById('audecrement').value) || 0,
-                    trigger: parseFloat(document.getElementById('autrigger').value) || 0,
-                },
-                options: {
-                    stopAtCycleEnd: document.getElementById('au-stop-at-cycle-end').checked
-                }
-            };
             fetchOptions.body = JSON.stringify(config);
         }
         // --- FIN DEL CÓDIGO NUEVO ---
@@ -74,7 +57,7 @@ export async function toggleBotState() {
     }
 }
 
-// --- El resto de las funciones (sin cambios) ---
+// --- Las otras funciones de gestión del bot (sin cambios) ---
 
 export async function loadBotConfigAndState() {
     displayLogMessage('Cargando configuración y estado del bot...', 'info');
@@ -86,7 +69,7 @@ export async function loadBotConfigAndState() {
             const incrementInput = document.getElementById("auincrement");
             const decrementInput = document.getElementById("audecrement");
             const triggerInput = document.getElementById("autrigger");
-            const stopAtCycleEndCheckbox = document.getElementById('au-stop-at-cycle-end');
+            const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
 
             if (purchaseInput) purchaseInput.value = botData.purchase || 5.00;
             if (incrementInput) incrementInput.value = botData.increment || 100;
@@ -139,7 +122,7 @@ export async function resetBot() {
     const incrementInput = document.getElementById("auincrement");
     const decrementInput = document.getElementById("audecrement");
     const triggerInput = document.getElementById("autrigger");
-    const stopAtCycleEndCheckbox = document.getElementById('au-stop-at-cycle-end');
+    const stopAtCycleEndCheckbox = document.getElementById('stop-at-cycle-end');
     
     if (purchaseInput) purchaseInput.value = 5.00;
     if (incrementInput) incrementInput.value = 100;

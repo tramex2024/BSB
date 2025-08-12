@@ -2,7 +2,8 @@
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-const analyzer = require('./bitmart_indicator_analyzer');
+const { runLongStrategy, setDependencies: setLongDeps } = require('./longStrategy');
+const { runShortStrategy, setDependencies: setShortDeps } = require('./shortStrategy');
 
 let io;
 let intervalId;
@@ -10,24 +11,16 @@ let botIsRunning = false;
 let currentLState = 'STOPPED';
 let currentSState = 'STOPPED';
 
-// --- NUEVAS VARIABLES DE CONFIGURACIÓN Y ESTADO ---
-let activeBotOrders = []; // Almacena las IDs de las órdenes que coloca el bot
-let botConfiguration; // Almacena la configuración de la estrategia (montos, etc.)
-let AUTH_CREDS = {}; // Guarda las credenciales de autenticación
+let activeBotOrders = [];
+let botConfiguration = {};
+let AUTH_CREDS = {};
 
-/**
- * Establece la instancia de Socket.IO para emitir logs al frontend.
- * @param {object} socketIo - La instancia de Socket.IO.
- */
+const TRADE_SYMBOL = 'BTC_USDT';
+
 function setIo(socketIo) {
     io = socketIo;
 }
 
-/**
- * Emite un log al frontend a través de Socket.IO.
- * @param {string} message - El mensaje del log.
- * @param {string} type - El tipo de mensaje ('info', 'success', 'error', etc.).
- */
 function log(message, type = 'info') {
     if (io) {
         io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
@@ -35,11 +28,6 @@ function log(message, type = 'info') {
     console.log(`[BOT LOG]: ${message}`);
 }
 
-/**
- * Actualiza el estado del bot en la DB y en el frontend.
- * @param {string} lState - Estado para el Long.
- * @param {string} sState - Estado para el Short.
- */
 async function updateBotState(lState, sState) {
     try {
         currentLState = lState;
@@ -60,108 +48,105 @@ async function updateBotState(lState, sState) {
     }
 }
 
-/**
- * Lógica principal del bot que se ejecuta en un ciclo.
- */
 async function botMainLoop() {
     if (!botIsRunning) return;
-    try {
-        log("Ejecutando el ciclo principal del bot...", 'info');
 
-        const SYMBOL = botConfiguration.symbol;
-        
+    try {
+        const SYMBOL = botConfiguration.symbol || TRADE_SYMBOL;
+        const autobotState = await Autobot.findOne({});
+        if (!autobotState) {
+            log('No se encontró el estado del bot en la base de datos. Deteniendo...', 'error');
+            return stop();
+        }
+
         const ticker = await bitmartService.getTicker(SYMBOL);
         if (!ticker || !ticker.last) {
-            log("No se pudo obtener el precio actual del ticker de BitMart.", 'error');
+            log(`No se pudo obtener el precio de ${SYMBOL}. Reintentando en el próximo ciclo.`, 'error');
             return;
         }
         const currentPrice = parseFloat(ticker.last);
         log(`Precio actual de ${SYMBOL}: $${currentPrice.toFixed(2)}`, 'info');
 
-        const signal = await analyzer.runAnalysis(currentPrice);
+        const balanceInfo = await bitmartService.getBalance(AUTH_CREDS);
+        const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
+        const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
+        const btcBalance = balanceInfo.find(b => b.currency === 'BTC');
+        const availableBTC = btcBalance ? parseFloat(btcBalance.available || 0) : 0;
 
-        switch (signal.action) {
-            case 'BUY':
-                log(`Señal de COMPRA detectada: ${signal.reason}`, 'info');
-                try {
-                    const buyOrder = await bitmartService.placeOrder(
-                        AUTH_CREDS,
-                        SYMBOL,
-                        'buy',
-                        'market', 
-                        botConfiguration.purchaseUsdtAmount 
-                    );
-                    if (buyOrder && buyOrder.order_id) {
-                        activeBotOrders.push(buyOrder.order_id);
-                        log(`Orden de compra colocada. ID de la orden: ${buyOrder.order_id}`, 'success');
-                    } else {
-                        log('Error: La respuesta de la orden de compra no contiene un ID.', 'error');
-                    }
-                } catch (error) {
-                    log(`Error al colocar la orden de compra: ${error.message}`, 'error');
-                }
-                break;
-
-            case 'SELL':
-                log(`Señal de VENTA detectada: ${signal.reason}`, 'info');
-                try {
-                    const sellOrder = await bitmartService.placeOrder(
-                        AUTH_CREDS,
-                        SYMBOL,
-                        'sell',
-                        'market', 
-                        botConfiguration.purchaseBtcAmount
-                    );
-                    if (sellOrder && sellOrder.order_id) {
-                        activeBotOrders.push(sellOrder.order_id);
-                        log(`Orden de venta colocada. ID de la orden: ${sellOrder.order_id}`, 'success');
-                    } else {
-                        log('Error: La respuesta de la orden de venta no contiene un ID.', 'error');
-                    }
-                } catch (error) {
-                    log(`Error al colocar la orden de venta: ${error.message}`, 'error');
-                }
-                break;
-
-            case 'HOLD':
-            default:
-                log(`Señal de ESPERA detectada. Razón: ${signal.reason}`, 'info');
-                break;
+        if (io) {
+            io.emit('balanceUpdate', { usdt: availableUSDT, btc: availableBTC });
         }
+
+        // --- Lógica de la estrategia Long ---
+        await runLongStrategy(autobotState, currentPrice, availableUSDT, availableBTC);
+        
+        // --- CÓDIGO MODIFICADO: Lógica de la estrategia Short ---
+        await runShortStrategy(autobotState, currentPrice, availableUSDT, availableBTC);
+        // --- FIN DEL CÓDIGO MODIFICADO ---
 
     } catch (error) {
         log(`Error en el ciclo del bot: ${error.message}`, 'error');
     }
 }
 
-/**
- * Inicia la estrategia del Autobot con una configuración específica.
- * @param {object} config - Objeto de configuración del bot.
- * @param {object} authCreds - Objeto con las credenciales de la API de BitMart.
- */
 async function start(config, authCreds) {
     if (botIsRunning) return log('El bot ya está en ejecución.', 'warning');
     
-    // Asignar la configuración y las credenciales al estado global
     botConfiguration = config;
     AUTH_CREDS = authCreds;
     
-    // Validación básica de la configuración
+    const SYMBOL = botConfiguration.symbol || TRADE_SYMBOL;
+    
     if (!botConfiguration || !AUTH_CREDS) {
         log('Error: Falta configuración o credenciales para iniciar el bot.', 'error');
         return;
     }
 
+    try {
+        let autobot = await Autobot.findOne({});
+        if (!autobot) {
+            autobot = new Autobot({
+                userId: 'default_user',
+                lstate: 'RUNNING',
+                sstate: 'RUNNING',
+                config: botConfiguration,
+                lStateData: {
+                    ppc: 0,
+                    ac: 0,
+                    orderCountInCycle: 0,
+                    lastOrder: null,
+                    pm: 0,
+                    pc: 0,
+                    pv: 0
+                },
+                sStateData: {
+                    ppv: 0,
+                    av: 0,
+                    orderCountInCycle: 0,
+                    lastOrder: null
+                }
+            });
+        } else {
+            autobot.lstate = 'RUNNING';
+            autobot.sstate = 'RUNNING';
+            autobot.config = botConfiguration;
+        }
+        await autobot.save();
+    } catch (dbError) {
+        log(`Error al guardar la configuración inicial en la DB: ${dbError.message}`, 'error');
+        return;
+    }
+
     botIsRunning = true;
     await updateBotState('RUNNING', 'RUNNING');
-    log("El bot ha iniciado correctamente.", 'success');
+    log(`El bot ha iniciado correctamente para el símbolo ${SYMBOL}.`, 'success');
     
+    setLongDeps(botConfiguration, AUTH_CREDS, activeBotOrders);
+    setShortDeps(botConfiguration, AUTH_CREDS, activeBotOrders);
+
     intervalId = setInterval(botMainLoop, botConfiguration.interval || 5000);
 }
 
-/**
- * Detiene la estrategia del Autobot.
- */
 async function stop() {
     if (!botIsRunning) return log('El bot ya está detenido.', 'warning');
     
@@ -177,12 +162,9 @@ async function stop() {
                 await bitmartService.cancelOrder(AUTH_CREDS, botConfiguration.symbol, orderId);
                 log(`Orden ${orderId} cancelada.`, 'success');
             }
-        } else {
-            log('No se encontraron órdenes activas del bot para cancelar.', 'info');
         }
         
         activeBotOrders = [];
-
     } catch (error) {
         log(`Error al cancelar órdenes: ${error.message}`, 'error');
     }
@@ -196,4 +178,6 @@ module.exports = {
     setIo,
     start,
     stop,
+    log,
+    updateBotState
 };

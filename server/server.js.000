@@ -114,8 +114,7 @@ app.get('/bitmart-data', async (req, res) => {
     }
 });
 
-// --- CÓDIGO MODIFICADO ---
-// Nuevo Endpoint para el estado y configuración del bot
+// Nuevo Endpoint para el estado del bot
 app.get('/api/user/bot-config-and-state', async (req, res) => {
     try {
         const autobotConfig = await Autobot.findOne({});
@@ -123,12 +122,6 @@ app.get('/api/user/bot-config-and-state', async (req, res) => {
             res.status(200).json({
                 lstate: autobotConfig.lstate,
                 sstate: autobotConfig.sstate,
-                // Agregamos los nuevos campos para que el frontend los pueda precargar
-                purchase: autobotConfig.long.purchaseUsdt,
-                increment: autobotConfig.long.increment,
-                decrement: autobotConfig.long.decrement,
-                trigger: autobotConfig.long.trigger,
-                stopAtCycleEnd: autobotConfig.options.stopAtCycleEnd
             });
         } else {
             res.status(200).json({ lstate: 'STOPPED', sstate: 'STOPPED' });
@@ -138,7 +131,6 @@ app.get('/api/user/bot-config-and-state', async (req, res) => {
         res.status(500).json({ message: 'Internal server error', success: false });
     }
 });
-// --- FIN DEL CÓDIGO MODIFICADO ---
 
 // 4. Nuevo Endpoint para obtener balances de la cuenta
 app.get('/api/user/balances', async (req, res) => {
@@ -155,18 +147,13 @@ app.get('/api/user/balances', async (req, res) => {
     }
 });
 
-// --- CÓDIGO MODIFICADO ---
-// Nuevo Endpoint para iniciar el Autobot con la configuración del frontend
+// --- NUEVO ENDPOINT PARA INICIAR EL AUTOBOT CON LA CONFIGURACIÓN DEL FRONTEND ---
 app.post('/api/autobot/start', async (req, res) => {
     try {
-        const newConfig = req.body; // Captura la configuración enviada desde el frontend
+        const botConfig = req.body; // Captura la configuración enviada desde el frontend
         
-        // **Actualizar la configuración en la base de datos**
-        // Si no existe, crea una nueva entrada; de lo contrario, actualiza la existente.
-        await Autobot.findOneAndUpdate({}, newConfig, { upsert: true, new: true });
-
         // Llama a la función 'start' con la configuración y las credenciales
-        await autobotStrategy.start(newConfig, bitmartCredentials);
+        await autobotStrategy.start(botConfig, bitmartCredentials);
 
         res.json({ success: true, message: 'Autobot strategy started.' });
     } catch (error) {
@@ -174,7 +161,6 @@ app.post('/api/autobot/start', async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to start Autobot strategy.' });
     }
 });
-// --- FIN DEL CÓDIGO MODIFICADO ---
 
 // Ruta para detener el Autobot (sin cambios)
 app.post('/api/autobot/stop', async (req, res) => {
