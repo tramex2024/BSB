@@ -266,35 +266,34 @@ app.post('/api/autobot/stop', async (req, res) => {
 // CAMBIO AQUÍ: Ahora obtiene el precio Y el balance antes de emitir
 setInterval(async () => {
     try {
-        const balanceResponse = await getBalance();
-        const tickerResponse = await getTicker();
+    const balanceResponse = await getBalance();
+    const tickerResponse = await getTicker();
 
-        // 1. Logs para depurar las respuestas de la API
-        console.log('Respuesta de la API de Balance:', balanceResponse);
-        console.log('Respuesta de la API de Ticker:', tickerResponse);
+    // 1. Logs para depurar las respuestas de la API
+    console.log('Respuesta de la API de Balance:', balanceResponse);
+    console.log('Respuesta de la API de Ticker:', tickerResponse);
 
-        // 2. Extrayendo los datos de forma segura
-        const usdtBalance = balanceResponse.data.wallet.find(b => b.currency === 'USDT');
-        const btcBalance = balanceResponse.data.wallet.find(b => b.currency === 'BTC');
-        const btcPrice = tickerResponse.data.last;
+    // 2. Extrayendo los datos de forma segura
+    const usdtBalance = balanceResponse.data.wallet.find(b => b.currency === 'USDT');
+    const btcBalance = balanceResponse.data.wallet.find(b => b.currency === 'BTC');
+    const btcPrice = tickerResponse.data.last;
 
-        // 3. Logs para verificar las variables finales
-        console.log('Balance de USDT:', usdtBalance);
-        console.log('Balance de BTC:', btcBalance);
-        console.log('Precio de BTC:', btcPrice);
-        
-        // 4. Enviando los datos al frontend
-        io.emit('marketData', {
-            price: btcPrice,
-            usdt: usdtBalance ? usdtBalance.available : 'N/A',
-            btc: btcBalance ? btcBalance.available : 'N/A'
-        });
-        
-    } catch (error) {
-        // 5. En caso de error, lo imprimimos en la consola del servidor
-        console.error('Error al procesar y enviar datos de mercado:', error);
-    }
-}, 500);
+    // 3. Logs para verificar las variables finales
+    console.log('Balance de USDT:', usdtBalance);
+    console.log('Balance de BTC:', btcBalance);
+    console.log('Precio de BTC:', btcPrice);
+    
+    // 4. Enviando los datos al frontend
+    io.emit('marketData', {
+        price: btcPrice,
+        usdt: usdtBalance ? usdtBalance.available : 'N/A',
+        btc: btcBalance ? btcBalance.available : 'N/A'
+    });
+    
+} catch (error) {
+    // 5. En caso de error, lo imprimimos en la consola del servidor
+    console.error('Error al procesar y enviar datos de mercado:', error);
+}
 
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
