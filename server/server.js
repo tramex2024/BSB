@@ -272,6 +272,12 @@ setInterval(async () => {
         if (tickerData && tickerData.data && tickerData.data.last && balanceData) {
             const usdtBalance = balanceData.find(b => b.currency === 'USDT');
             const btcBalance = balanceData.find(b => b.currency === 'BTC');
+		
+	    console.log('Datos de mercado enviados:', {
+    		price: btcPrice,
+    		usdt: usdtBalance ? usdtBalance.available : 'N/A',
+    		btc: btcBalance ? btcBalance.available : 'N/A'
+	    });
 
             io.emit('marketData', {
                 price: tickerData.data.last,
@@ -283,8 +289,6 @@ setInterval(async () => {
         console.error('Error in Socket.IO price/balance update:', error.message);
     }
 }, 500); // Emite el precio y el balance cada 0.5 segundos (500 ms)
-
-console.log('Datos de mercado enviados:', dataToSend);
 
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
