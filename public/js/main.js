@@ -9,7 +9,6 @@ import { loadBotConfigAndState, toggleBotState, resetBot, checkBotStatus } from 
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
 import { toggleApiModal } from './modules/auth.js';
-import { startPriceUpdates, stopPriceUpdates } from './modules/price.js';
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
@@ -24,9 +23,7 @@ export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
 let currentChart = null; // Variable global para almacenar la instancia del gráfico
-
-// Variables de estado locales
-let currentTab = 'opened';
+let currentTab = 'dashboard';
 let intervals = {};
 
 // --- Funciones de inicialización de la vista ---
@@ -55,7 +52,6 @@ function initializeTestbotView() {
     checkBitMartConnectionAndData();
     
     currentChart = initializeChart('te-tvchart', TRADE_SYMBOL_TV);
-    startPriceUpdates(TRADE_SYMBOL_BITMART, 'teprice', 2500);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
     if (teresetBtn) teresetBtn.addEventListener('click', resetBot);
@@ -83,7 +79,6 @@ function initializeTestbotView() {
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
-    // --- NUEVO: Leer los inputs para capturar la configuración ---
     const auamountUSDTInput = document.getElementById('auamount-usdt');
     const aupurchaseUSDTInput = document.getElementById("aupurchase-usdt");
     const aupurchaseBTCInput = document.getElementById("aupurchase-btc");
@@ -93,34 +88,25 @@ function initializeAutobotView() {
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    // --- FIN DEL CÓDIGO NUEVO ---
 
     loadBotConfigAndState();
     actualizarCalculosAutobot();
     checkBitMartConnectionAndData();
     
     currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV); 
-    startPriceUpdates(TRADE_SYMBOL_BITMART, 'auprice', 2500);
 
-    // --- CÓDIGO MODIFICADO ---
-    // Ahora el botón llama a una función que lee los inputs
     if (austartBtn) {
         austartBtn.addEventListener('click', () => {
-            // Recolectar la configuración desde los inputs
             const config = {
                 purchaseUsdtAmount: parseFloat(aupurchaseUSDTInput.value),
                 purchaseBtcAmount: parseFloat(aupurchaseBTCInput.value),
-                // Aquí puedes agregar otros inputs si los necesitas
                 symbol: TRADE_SYMBOL_BITMART,
-                interval: 5000 // Puedes hacerlo dinámico si quieres
+                interval: 5000
             };
             
-            // Llamar a la función que inicia el bot y pasarle la configuración
-            // La función toggleBotState debe saber manejar este objeto
             toggleBotState('autobot', config);
         });
     }
-    // --- FIN DEL CÓDIGO MODIFICADO ---
 
     if (auresetBtn) auresetBtn.addEventListener('click', resetBot);
     
@@ -165,7 +151,6 @@ function initializeAibotView() {
     checkBitMartConnectionAndData();
     
     currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL_TV);
-    startPriceUpdates(TRADE_SYMBOL_BITMART, 'aiprice', 2500);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
     if (airesetBtn) airesetBtn.addEventListener('click', resetBot);
@@ -194,8 +179,6 @@ function initializeTab(tabName) {
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
     
-    stopPriceUpdates();
-
     if (currentChart && typeof currentChart.remove === 'function') {
         currentChart.remove();
         currentChart = null;
@@ -231,72 +214,60 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
     const socket = io(BACKEND_URL, {
-    path: '/socket.io'
-});
-    socket.on('bot-log', (log) => {
-        displayLogMessage(log.message, log.type, logMessageElement);
+        path: '/socket.io'
     });
 
-    socket.on('bot-state-update', (state) => {
-    console.log("Estado del bot recibido:", state);
-
-    const lStateElement = document.getElementById('aubot-lstate');
-    const sStateElement = document.getElementById('aubot-sstate');
-    
-    if (lStateElement) {
-        lStateElement.textContent = state.lstate;
-        if (state.lstate === 'RUNNING') {
-            lStateElement.classList.remove('text-red-400');
-            lStateElement.classList.add('text-green-400');
-        } else {
-            lStateElement.classList.remove('text-green-400');
-            lStateElement.classList.add('text-red-400');
-        }
-    }
-    
-    if (sStateElement) {
-        sStateElement.textContent = state.sstate;
-        if (state.sstate === 'RUNNING') {
-            sStateElement.classList.remove('text-red-400');
-            sStateElement.classList.add('text-green-400');
-        } else {
-            sStateElement.classList.remove('text-green-400');
-            sStateElement.classList.add('text-red-400');
-        }
-    }
-});
-
-socket.on('marketData', (data) => {
+    // --- CÓDIGO ACTUALIZADO PARA RECIBIR DATOS DE MERCADO ---
+    socket.on('marketData', (data) => {
         console.log("Datos de mercado recibidos:", data);
+        const priceElements = document.querySelectorAll('[id$="price"]');
+        priceElements.forEach(el => {
+            if (el.id !== 'dashboard-price' && el.id !== 'teprice' && el.id !== 'auprice' && el.id !== 'aiprice') {
+                return; // Ignora otros elementos que puedan terminar en 'price'
+            }
+            el.textContent = `$${data.price}`;
+        });
         
-        // Asumiendo que tus elementos de precio tienen los IDs 'teprice' y 'auprice'
-        const tePriceElement = document.getElementById('teprice');
-        const auPriceElement = document.getElementById('auprice');
-        const aiPriceElement = document.getElementById('aiprice');
-        const dashboardPriceElement = document.getElementById('dashboard-price');
-
-        if (tePriceElement) {
-            tePriceElement.textContent = `$${data.price}`;
-        }
-        if (auPriceElement) {
-            auPriceElement.textContent = `$${data.price}`;
-        }
-        if (aiPriceElement) {
-            aiPriceElement.textContent = `$${data.price}`;
-        }
-        if (dashboardPriceElement) {
-            dashboardPriceElement.textContent = `$${data.price}`;
-        }
-        
-        // También puedes usar data.usdt y data.btc para actualizar los balances en tiempo real
         const usdtBalanceElement = document.getElementById('usdt-balance');
         const btcBalanceElement = document.getElementById('btc-balance');
-        
         if (usdtBalanceElement) {
             usdtBalanceElement.textContent = data.usdt;
         }
         if (btcBalanceElement) {
             btcBalanceElement.textContent = data.btc;
+        }
+    });
+
+    socket.on('bot-log', (log) => {
+        displayLogMessage(log.message, log.type, logMessageElement);
+    });
+
+    socket.on('bot-state-update', (state) => {
+        console.log("Estado del bot recibido:", state);
+
+        const lStateElement = document.getElementById('aubot-lstate');
+        const sStateElement = document.getElementById('aubot-sstate');
+        
+        if (lStateElement) {
+            lStateElement.textContent = state.lstate;
+            if (state.lstate === 'RUNNING') {
+                lStateElement.classList.remove('text-red-400');
+                lStateElement.classList.add('text-green-400');
+            } else {
+                lStateElement.classList.remove('text-green-400');
+                lStateElement.classList.add('text-red-400');
+            }
+        }
+        
+        if (sStateElement) {
+            sStateElement.textContent = state.sstate;
+            if (state.sstate === 'RUNNING') {
+                sStateElement.classList.remove('text-red-400');
+                sStateElement.classList.add('text-green-400');
+            } else {
+                sStateElement.classList.remove('text-green-400');
+                sStateElement.classList.add('text-red-400');
+            }
         }
     });
 
