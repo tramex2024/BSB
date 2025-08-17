@@ -18,15 +18,21 @@ export function setActiveTab(tabId) {
 }
 
 export async function fetchOrders(tabId) {
-    const cleanedTabId = tabId.replace('tab-', '');
-    displayLogMessage(`Fetching ${cleanedTabId} orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
+    let orderStatus = tabId.replace('tab-', '');
+    
+    // CAMBIO CRUCIAL: Manejar el caso de la pestaña 'dashboard'
+    if (orderStatus === 'dashboard') {
+        orderStatus = 'opened'; // O puedes usar 'all' si lo prefieres
+    }
+
+    displayLogMessage(`Fetching ${orderStatus} orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     const orderList = document.getElementById('order-list');
     if (!orderList) return;
 
     try {
-        const data = await fetchFromBackend(`/api/orders/${cleanedTabId}`);
+        const data = await fetchFromBackend(`/api/orders/${orderStatus}`);
         if (data.success) {
-            displayOrders(data.orders, cleanedTabId);
+            displayOrders(data.orders, orderStatus);
             displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');
         } else {
             displayLogMessage(`Failed to fetch orders: ${data.message || 'Unknown error'}`, 'error');
