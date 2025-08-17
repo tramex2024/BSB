@@ -219,50 +219,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- CÓDIGO ACTUALIZADO PARA RECIBIR DATOS DE MERCADO ---
     socket.on('marketData', (data) => {
-        // Log para verificar si los datos se reciben
-        console.log("¡Datos de mercado recibidos del backend!", data);
-        
-        // Use a more robust selector to update the price in all relevant tabs
-        const priceElements = document.querySelectorAll('.price-display');
+    // Log para verificar si los datos se reciben
+    console.log("¡Datos de mercado recibidos del backend!", data);
 
-        priceElements.forEach(el => {
-            el.textContent = `$${parseFloat(data.price).toFixed(2)}`;
-        });
-        
-        const usdtBalanceElement = document.getElementById('usdt-balance');
-        const btcBalanceElement = document.getElementById('btc-balance');
-        if (usdtBalanceElement) {
-            usdtBalanceElement.textContent = data.usdt;
-        }
-        if (btcBalanceElement) {
-            btcBalanceElement.textContent = data.btc;
-        }
-        
-        // --- Actualizar balances en Autobot (si los elementos existen) ---
-        const auBalanceElement = document.getElementById('aubalance');
-        if (auBalanceElement && data.usdt) {
-            auBalanceElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-
-        // --- Actualizar balances en Testbot (si los elementos existen) ---
-        const teBalanceUSDTElement = document.getElementById('teamount-usdt');
-        const teBalanceBTCElement = document.getElementById('teamount-btc');
-        if (teBalanceUSDTElement && data.usdt) {
-            teBalanceUSDTElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-        if (teBalanceBTCElement && data.btc) {
-            teBalanceBTCElement.textContent = parseFloat(data.btc).toFixed(8);
-        }
-
-        // Llamar a la función de cálculos una vez que se recibe el precio
-        if (currentTab === 'autobot') {
-            actualizarCalculosAutobot();
-        } else if (currentTab === 'testbot') {
-            actualizarCalculosTestbot();
-        } else if (currentTab === 'aibot') {
-            actualizarCalculosAibot();
-        }
+    // --- Actualizar precio en todas las pestañas ---
+    const priceElements = document.querySelectorAll('.price-display');
+    priceElements.forEach(el => {
+        el.textContent = data.price ? `$${parseFloat(data.price).toFixed(2)}` : 'N/A';
     });
+
+    // --- Actualizar balances en el Dashboard (si el elemento existe) ---
+    const usdtDashboardElement = document.getElementById('usdt-balance');
+    const btcDashboardElement = document.getElementById('btc-balance');
+    if (usdtDashboardElement && data.usdt) {
+        usdtDashboardElement.textContent = parseFloat(data.usdt).toFixed(8);
+    }
+    if (btcDashboardElement && data.btc) {
+        btcDashboardElement.textContent = parseFloat(data.btc).toFixed(8);
+    }
+
+    // --- Actualizar balances en Autobot (si los elementos existen) ---
+    const auBalanceElement = document.getElementById('aubalance');
+    if (auBalanceElement && data.usdt) {
+        auBalanceElement.textContent = parseFloat(data.usdt).toFixed(8);
+    }
+
+    // --- Actualizar balances en Testbot (si los elementos existen) ---
+    const teBalanceUSDTElement = document.getElementById('teamount-usdt');
+    const teBalanceBTCElement = document.getElementById('teamount-btc');
+    if (teBalanceUSDTElement && data.usdt) {
+        teBalanceUSDTElement.textContent = parseFloat(data.usdt).toFixed(8);
+    }
+    if (teBalanceBTCElement && data.btc) {
+        teBalanceBTCElement.textContent = parseFloat(data.btc).toFixed(8);
+    }
+
+    // Llamar a la función de cálculos una vez que se recibe el precio
+    if (currentTab === 'autobot') {
+        actualizarCalculosAutobot();
+    } else if (currentTab === 'testbot') {
+        actualizarCalculosTestbot();
+    } else if (currentTab === 'aibot') {
+        actualizarCalculosAibot();
+    }
+});
 
     socket.on('bot-log', (log) => {
         displayLogMessage(log.message, log.type, logMessageElement);
