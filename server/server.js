@@ -180,7 +180,7 @@ app.get('/bitmart-data', async (req, res) => {
             connected: true,
             balance: balance,
             openOrders: openOrders.orders,
-            ticker: ticker && ticker.data && ticker.data.tickers && ticker.data.tickers.length > 0 ? ticker.data.tickers[0] : null,
+            ticker: ticker && ticker.data ? ticker.data : null,
         });
     } catch (error) {
         console.error('Error in /bitmart-data endpoint:', error.message);
