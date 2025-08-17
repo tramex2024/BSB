@@ -1,5 +1,3 @@
-// autobotLogic.js
-
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
@@ -22,7 +20,7 @@ function log(message, type = 'info') {
     console.log(`[BOT LOG]: ${message}`);
 }
 
-async function botMainLoop() {
+async function botCycle() {
     try {
         let botState = await Autobot.findOne({});
         if (!botState) {
@@ -96,7 +94,7 @@ async function start() {
     botIsRunning = true;
     log("El bot se ha iniciado.", 'success');
     
-    intervalId = setInterval(botMainLoop, 5000); // Se ejecuta cada 5 segundos
+    intervalId = setInterval(botCycle, 5000); // Se ejecuta cada 5 segundos
 }
 
 async function stop() {
@@ -119,4 +117,6 @@ module.exports = {
     start,
     stop,
     log,
+    // La función botCycle es necesaria para el setInterval
+    botCycle, 
 };

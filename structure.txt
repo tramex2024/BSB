@@ -23,6 +23,8 @@ BSB/			    # Bitmart Spot Bots
 │   ├── autobotLogic.js
 │   ├── bitmart_indicator_analyzer.js
 │   ├── models/
+│   │   └── Order.js
+│   │   └── Autobot.js
 │   │   └── User.js
 │   │   └── BotState.js
 │   ├── middleware/
