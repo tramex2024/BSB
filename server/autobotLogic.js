@@ -60,11 +60,11 @@ async function botMainLoop() {
         }
 
         const ticker = await bitmartService.getTicker(SYMBOL);
-        if (!ticker || !ticker.last) {
+        if (!ticker || !ticker.data || !ticker.data.last) {
             log(`No se pudo obtener el precio de ${SYMBOL}. Reintentando en el próximo ciclo.`, 'error');
             return;
         }
-        const currentPrice = parseFloat(ticker.last);
+        const currentPrice = parseFloat(ticker.data.last);
         log(`Precio actual de ${SYMBOL}: $${currentPrice.toFixed(2)}`, 'info');
 
         const balanceInfo = await bitmartService.getBalance(AUTH_CREDS);
