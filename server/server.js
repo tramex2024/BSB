@@ -57,88 +57,89 @@ const bitmartCredentials = {
 };
 
 // **Inicio de la nueva función del ciclo del bot**
-async function botCycle() {
-    try {
-        let botState = await Autobot.findOne({});
+//async function botCycle() {
+//    try {
+//        let botState = await Autobot.findOne({});
         
         // Si no hay estado en la base de datos, crea uno con valores por defecto
-        if (!botState) {
-            autobotLogic.log('Estado del bot no encontrado. Creando nuevo documento...', 'warning');
-            const newBot = new Autobot({
-                lstate: 'STOPPED',
-                sstate: 'STOPPED',
-                lStateData: { ppc: 0, ac: 0, orderCountInCycle: 0, lastOrder: null },
-                sStateData: { ppv: 0, av: 0, orderCountInCycle: 0, lastOrder: null },
-                config: {
-                    symbol: "BTC_USDT",
-                    long: {
-                        enabled: false,
-                        purchaseUsdt: 5.00,
-                        price_var: 0.1,
-                        size_var: 5.0,
-                        trigger: 0.2,
-                        maxOrders: 5
-                    },
-                    short: {
-                        enabled: false,
-                        sellBtc: 0.00004,
-                        price_var: 0.1,
-                        size_var: 5.0,
-                        trigger: 0.2,
-                        maxOrders: 5
-                    },
-                    stopAtCycle: false
-                }
-            });
-            await newBot.save();
-            botState = newBot; // Asignar el nuevo estado
-            autobotLogic.log('Nuevo estado del bot creado. El bot está inactivo.', 'success');
-        }
+//        if (!botState) {
+//            autobotLogic.log('Estado del bot no encontrado. Creando nuevo documento...', 'warning');
+//            const newBot = new Autobot({
+//                lstate: 'STOPPED',
+//                sstate: 'STOPPED',
+//                lStateData: { ppc: 0, ac: 0, orderCountInCycle: 0, lastOrder: null },
+//                sStateData: { ppv: 0, av: 0, orderCountInCycle: 0, lastOrder: null },
+//                config: {
+//                    symbol: "BTC_USDT",
+//                    long: {
+//                        enabled: false,
+//                        purchaseUsdt: 5.00,
+//                        price_var: 0.1,
+//                        size_var: 5.0,
+//                        trigger: 0.2,
+//                        maxOrders: 5
+//                    },
+//                    short: {
+//                        enabled: false,
+//                        sellBtc: 0.00004,
+//                        price_var: 0.1,
+//                        size_var: 5.0,
+//                        trigger: 0.2,
+//                        maxOrders: 5
+//                    },
+//                    stopAtCycle: false
+//                }
+//            });
+//            await newBot.save();
+//            botState = newBot; // Asignar el nuevo estado
+//            autobotLogic.log('Nuevo estado del bot creado. El bot está inactivo.', 'success');
+//        }
 
         // Asegurarse de que la configuración esté completa antes de continuar
-        if (!botState.config || !botState.config.long || !botState.config.short) {
-            autobotLogic.log('Configuración del bot incompleta. No se puede ejecutar el ciclo.', 'error');
-            return;
-        }
-
-        // Pasar dependencias a las estrategias
-        setLongDependencies(botState.config, bitmartCredentials, []);
-        setShortDependencies(botState.config, bitmartCredentials, []);
+//        if (!botState.config || !botState.config.long || !botState.config.short) {
+//            autobotLogic.log('Configuración del bot incompleta. No se puede ejecutar el ciclo.', 'error');
+//            return;
+//        }
+  
+      // Pasar dependencias a las estrategias
+//        setLongDependencies(botState.config, bitmartCredentials, []);
+//        setShortDependencies(botState.config, bitmartCredentials, []);
 
         // Obtener datos del mercado y de la cuenta
-        const balances = await bitmartService.getAccountBalances(bitmartCredentials);
-        const ticker = await bitmartService.getTicker(botState.config.symbol);
+//        const balances = await bitmartService.getAccountBalances(bitmartCredentials);
+//        const ticker = await bitmartService.getTicker(botState.config.symbol);
 
-        if (!balances || !ticker || !ticker.data || !ticker.data.last) {
-            autobotLogic.log('No se pudo obtener información de mercado o de la cuenta.', 'error');
-            return;
-        }
+//        if (!balances || !ticker || !ticker.data || !ticker.data.last) {
+//            autobotLogic.log('No se pudo obtener información de mercado o de la cuenta.', 'error');
+//            return;
+//        }
 
-        const currentPrice = parseFloat(ticker.data.last);
-        const availableUSDT = parseFloat(balances.USDT.available);
-        const availableBTC = parseFloat(balances.BTC.available);
+//        const currentPrice = parseFloat(ticker.data.last);
+//        const availableUSDT = parseFloat(balances.USDT.available);
+//        const availableBTC = parseFloat(balances.BTC.available);
 
         // Emitir datos al frontend a través de Socket.io
-        io.emit('marketData', {
-            price: currentPrice.toFixed(2),
-            usdt: availableUSDT.toFixed(2),
-            btc: availableBTC.toFixed(8),
-            lstate: botState.lstate,
-            sstate: botState.sstate
-        });
+//        io.emit('marketData', {
+//            price: currentPrice.toFixed(2),
+//            usdt: availableUSDT.toFixed(2),
+//            btc: availableBTC.toFixed(8),
+//            lstate: botState.lstate,
+//            sstate: botState.sstate
+//        });
 
         // Ejecutar las estrategias si están habilitadas en la configuración
-        if (botState.config.long.enabled) {
-            await runLongStrategy(botState, currentPrice, availableUSDT, availableBTC);
-        }
-        if (botState.config.short.enabled) {
-            await runShortStrategy(botState, currentPrice, availableUSDT, availableBTC);
-        }
+//        if (botState.config.long.enabled) {
+//            await runLongStrategy(botState, currentPrice, availableUSDT, availableBTC);
+//        }
+//        if (botState.config.short.enabled) {
+//            await runShortStrategy(botState, currentPrice, availableUSDT, availableBTC);
+//        }
 
-    } catch (error) {
-        autobotLogic.log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
-    }
-}
+//    } catch (error) {
+//        autobotLogic.log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
+//    }
+//}
+
 // Iniciar el ciclo del bot cada 10 segundos
 setInterval(botCycle, 10000);
 // **Fin de la nueva función del ciclo del bot**
