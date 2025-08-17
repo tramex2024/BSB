@@ -93,7 +93,7 @@ function initializeAutobotView() {
     // NOTA: Se elimina la llamada a actualizarCalculosAutobot() aquí
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV); 
 
     if (austartBtn) {
         austartBtn.addEventListener('click', () => {
@@ -238,22 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btcBalanceElement.textContent = data.btc;
         }
         
-        // --- Actualizar balances en Autobot (si los elementos existen) ---
-        const auBalanceElement = document.getElementById('aubalance');
-        if (auBalanceElement && data.usdt) {
-            auBalanceElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-
-        // --- Actualizar balances en Testbot (si los elementos existen) ---
-        const teBalanceUSDTElement = document.getElementById('teamount-usdt');
-        const teBalanceBTCElement = document.getElementById('teamount-btc');
-        if (teBalanceUSDTElement && data.usdt) {
-            teBalanceUSDTElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-        if (teBalanceBTCElement && data.btc) {
-            teBalanceBTCElement.textContent = parseFloat(data.btc).toFixed(8);
-        }
-
         // Llamar a la función de cálculos una vez que se recibe el precio
         if (currentTab === 'autobot') {
             actualizarCalculosAutobot();
