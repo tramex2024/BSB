@@ -266,6 +266,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+socket.on('marketData', (data) => {
+        console.log("Datos de mercado recibidos:", data);
+        
+        // Asumiendo que tus elementos de precio tienen los IDs 'teprice' y 'auprice'
+        const tePriceElement = document.getElementById('teprice');
+        const auPriceElement = document.getElementById('auprice');
+        const aiPriceElement = document.getElementById('aiprice');
+        const dashboardPriceElement = document.getElementById('dashboard-price');
+
+        if (tePriceElement) {
+            tePriceElement.textContent = `$${data.price}`;
+        }
+        if (auPriceElement) {
+            auPriceElement.textContent = `$${data.price}`;
+        }
+        if (aiPriceElement) {
+            aiPriceElement.textContent = `$${data.price}`;
+        }
+        if (dashboardPriceElement) {
+            dashboardPriceElement.textContent = `$${data.price}`;
+        }
+        
+        // También puedes usar data.usdt y data.btc para actualizar los balances en tiempo real
+        const usdtBalanceElement = document.getElementById('usdt-balance');
+        const btcBalanceElement = document.getElementById('btc-balance');
+        
+        if (usdtBalanceElement) {
+            usdtBalanceElement.textContent = data.usdt;
+        }
+        if (btcBalanceElement) {
+            btcBalanceElement.textContent = data.btc;
+        }
+    });
+
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
             if (localStorage.getItem('authToken')) {
