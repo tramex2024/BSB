@@ -220,12 +220,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CÓDIGO ACTUALIZADO PARA RECIBIR DATOS DE MERCADO ---
     socket.on('marketData', (data) => {
         console.log("Datos de mercado recibidos:", data);
-        const priceElements = document.querySelectorAll('[id$="price"]');
+        
+        // Use a more robust selector to update the price in all relevant tabs
+        const priceElements = document.querySelectorAll('.price-display');
+
         priceElements.forEach(el => {
-            if (el.id !== 'dashboard-price' && el.id !== 'teprice' && el.id !== 'auprice' && el.id !== 'aiprice') {
-                return; // Ignora otros elementos que puedan terminar en 'price'
-            }
-            el.textContent = `$${data.price}`;
+            el.textContent = `$${parseFloat(data.price).toFixed(2)}`;
         });
         
         const usdtBalanceElement = document.getElementById('usdt-balance');
