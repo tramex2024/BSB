@@ -9,6 +9,7 @@ import { displayOrders } from './orders.js';
  * Actualiza el precio en vivo en el elemento del DOM.
  * @param {string | number} price - El precio actual a mostrar.
  */
+// This function is no longer needed since main.js handles price updates via Socket.IO
 export function cargarPrecioEnVivo(price) {
     const priceElement = document.getElementById('price');
     if (!priceElement) {
@@ -40,7 +41,6 @@ export async function checkBitMartConnectionAndData() {
     }
 
     try {
-        // CAMBIO CRUCIAL: Se añade el prefijo /api a la ruta
         const data = await fetchFromBackend('/api/bitmart-data');
 
         if (data.connected) {
@@ -59,10 +59,11 @@ export async function checkBitMartConnectionAndData() {
             if (currentTab === 'tab-opened' && data.openOrders) {
                 displayOrders(data.openOrders, 'opened');
             }
-
-            if (data.ticker && data.ticker.last) {
-                cargarPrecioEnVivo(data.ticker.last);
-            }
+            
+            // REMOVE THIS BLOCK: The price is now handled by Socket.IO in main.js
+            // if (data.ticker && data.ticker.last) {
+            //     cargarPrecioEnVivo(data.ticker.last);
+            // }
 
         } else {
             displayLogMessage(`Failed to connect to BitMart: ${data.message || 'Unknown error'}`, 'error');
