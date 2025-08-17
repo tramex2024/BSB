@@ -11,7 +11,7 @@ const autobotLogic = require('./autobotLogic.js');
 const { runLongStrategy, setDependencies: setLongDependencies } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDependencies } = require('./src/shortStrategy');
 const jwt = require('jsonwebtoken');
-const axios = require('axios'); // Asegúrate de que axios esté instalado
+const axios = require('axios');
 
 dotenv.config();
 
@@ -21,7 +21,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permite cualquier origen por ahora para pruebas
+        origin: "*", 
         methods: ["GET", "POST"]
     },
     path: '/socket.io'
@@ -59,18 +59,14 @@ const bitmartCredentials = {
 };
 
 // --- ÚNICO INTERVALO PARA OBTENER Y EMITIR EL PRECIO ---
-// Esta es la parte CRÍTICA. He consolidado la lógica aquí.
 setInterval(async () => {
     try {
-        // Usa tu servicio de Bitmart para obtener el ticker
-        const tickerData = await bitmartService.getTicker('BTC_USDT');
+        const response = await bitmartService.getTicker('BTC_USDT');
         
-        // Verifica si los datos son válidos
-        if (tickerData && tickerData.data && tickerData.data.last) {
-            const price = tickerData.data.last;
+        if (response && response.data && response.data.last) {
+            const price = response.data.last;
             console.log(`Backend: Precio de BTC obtenido: ${price}`);
             
-            // Emite el precio a todos los clientes conectados
             io.emit('marketData', {
                 price: price,
                 symbol: 'BTC_USDT'
@@ -82,16 +78,14 @@ setInterval(async () => {
     } catch (error) {
         console.error('Backend: Error en el ciclo de actualización del precio:', error.message);
     }
-}, 500); // Emite el precio cada 0.5 segundos (500 ms)
+}, 500);
 
 // --- RUTAS DE LA API ---
 
-// 1. Obtener precio en vivo (ticker)
 app.get('/api/ticker/:symbol', async (req, res) => {
     try {
         const symbol = req.params.symbol;
         const tickerData = await bitmartService.getTicker(symbol);
-        // Corrige el acceso a la propiedad 'last'
         if (tickerData && tickerData.data && tickerData.data.last) {
             const lastPrice = tickerData.data.last;
             res.status(200).json({ last: lastPrice });
@@ -104,7 +98,6 @@ app.get('/api/ticker/:symbol', async (req, res) => {
     }
 });
 
-// 2. Nuevo endpoint para obtener órdenes por status
 app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
     
@@ -133,7 +126,6 @@ app.get('/api/orders/:status', async (req, res) => {
     }
 });
 
-// 3. Endpoint principal de datos consolidados
 app.get('/api/bitmart-data', async (req, res) => {
     try {
         const isValid = await bitmartService.validateApiKeys(
@@ -147,7 +139,6 @@ app.get('/api/bitmart-data', async (req, res) => {
         const balance = await bitmartService.getBalance(bitmartCredentials);
         const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
         const ticker = await bitmartService.getTicker('BTC_USDT');
-        // Corrige el acceso a la propiedad 'last'
         res.status(200).json({
             message: 'BitMart data retrieved successfully.',
             connected: true,
@@ -165,7 +156,6 @@ app.get('/api/bitmart-data', async (req, res) => {
     }
 });
 
-// Nuevo Endpoint para el estado y configuración del bot
 app.get('/api/user/bot-config-and-state', async (req, res) => {
     try {
         const autobotConfig = await Autobot.findOne({});
@@ -200,7 +190,6 @@ app.get('/api/user/bot-config-and-state', async (req, res) => {
     }
 });
 
-// 4. Nuevo Endpoint para obtener balances de la cuenta
 app.get('/api/user/balances', async (req, res) => {
     try {
         const balances = await bitmartService.getBalance(bitmartCredentials);
@@ -215,7 +204,6 @@ app.get('/api/user/balances', async (req, res) => {
     }
 });
 
-// Nuevo Endpoint para iniciar el Autobot con la configuración del frontend
 app.post('/api/autobot/start', async (req, res) => {
     try {
         const { strategy, stopAtCycle, ...config } = req.body;
@@ -266,7 +254,6 @@ app.post('/api/autobot/start', async (req, res) => {
     }
 });
 
-// Ruta para detener el Autobot
 app.post('/api/autobot/stop', async (req, res) => {
     try {
         const botState = await Autobot.findOne({});
@@ -287,7 +274,6 @@ app.post('/api/autobot/stop', async (req, res) => {
     }
 });
 
-// Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
     res.send('Backend is running!');
 });
