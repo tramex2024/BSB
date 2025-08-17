@@ -57,6 +57,43 @@ const bitmartCredentials = {
     apiMemo: process.env.BITMART_API_MEMO || ''
 };
 
+const WebSocket = require('ws');
+
+const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
+
+function setupWebSocket() {
+    const ws = new WebSocket(bitmartWsUrl);
+
+    ws.onopen = function() {
+        console.log("Conectado a la API de WebSocket de BitMart.");
+
+        // Suscríbete al canal del ticker para BTC_USDT
+        const subscribeMessage = {
+            "op": "subscribe",
+            "args": ["spot/ticker:BTC_USDT"]
+        };
+        ws.send(JSON.stringify(subscribeMessage));
+    };
+
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        console.log("Datos de WebSocket recibidos:", data);
+    };
+
+    ws.onclose = function() {
+        console.log("Conexión de WebSocket a BitMart cerrada. Reconectando...");
+        setTimeout(setupWebSocket, 5000); // Intenta reconectar en 5 segundos
+    };
+
+    ws.onerror = function(err) {
+        console.error("Error en la conexión de WebSocket:", err);
+        ws.close();
+    };
+}
+
+// Inicia la conexión
+setupWebSocket();
+
 setInterval(autobotLogic.botCycle, 10000);
 
 // --- RUTAS DE LA API ACTUALIZADAS CON EL PREFIJO '/api' ---
@@ -262,39 +299,6 @@ app.post('/api/autobot/stop', async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
     }
 });
-
-// CAMBIO AQUÍ: Ahora obtiene el precio Y el balance antes de emitir
-setInterval(async () => {
-    try {
-        const balanceResponse = await bitmartService.getBalance(bitmartCredentials);
-        const tickerResponse = await bitmartService.getTicker('BTC_USDT');
-
-        // Logs para depurar las respuestas de la API
-        console.log('Respuesta de la API de Balance:', balanceResponse);
-        console.log('Respuesta de la API de Ticker:', tickerResponse);
-
-        // Extrayendo los datos de forma segura (CORREGIDO)
-        const usdtBalance = balanceResponse.find(b => b.currency === 'USDT');
-        const btcBalance = balanceResponse.find(b => b.currency === 'BTC');
-        const btcPrice = tickerResponse.data.last;
-
-        // Logs para verificar las variables finales
-        console.log('Balance de USDT:', usdtBalance);
-        console.log('Balance de BTC:', btcBalance);
-        console.log('Precio de BTC:', btcPrice);
-        
-        // Enviando los datos al frontend
-        io.emit('marketData', {
-            price: btcPrice,
-            usdt: usdtBalance ? usdtBalance.available : 'N/A',
-            btc: btcBalance ? btcBalance.available : 'N/A'
-        });
-        
-    } catch (error) {
-        // En caso de error, lo imprimimos en la consola del servidor
-        console.error('Error al procesar y enviar datos de mercado:', error);
-    }
-}, 5000);
 
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
