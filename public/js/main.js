@@ -219,7 +219,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- CÓDIGO ACTUALIZADO PARA RECIBIR DATOS DE MERCADO ---
     socket.on('marketData', (data) => {
-        console.log("Datos de mercado recibidos:", data);
+        // Log para verificar si los datos se reciben
+        console.log("¡Datos de mercado recibidos del backend!", data);
         
         // Use a more robust selector to update the price in all relevant tabs
         const priceElements = document.querySelectorAll('.price-display');
