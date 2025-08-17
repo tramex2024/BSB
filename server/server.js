@@ -284,6 +284,8 @@ setInterval(async () => {
     }
 }, 500); // Emite el precio y el balance cada 0.5 segundos (500 ms)
 
+console.log('Datos de mercado enviados:', dataToSend);
+
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
     res.send('Backend is running!');
