@@ -90,7 +90,7 @@ function initializeAutobotView() {
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
 
     loadBotConfigAndState();
-    actualizarCalculosAutobot();
+    // NOTA: Se elimina la llamada a actualizarCalculosAutobot() aquí
     checkBitMartConnectionAndData();
     
     currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV); 
@@ -236,6 +236,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (btcBalanceElement) {
             btcBalanceElement.textContent = data.btc;
+        }
+        
+        // Llamar a la función de cálculos una vez que se recibe el precio
+        if (currentTab === 'autobot') {
+            actualizarCalculosAutobot();
+        } else if (currentTab === 'testbot') {
+            actualizarCalculosTestbot();
+        } else if (currentTab === 'aibot') {
+            actualizarCalculosAibot();
         }
     });
 
