@@ -24,7 +24,7 @@ export async function fetchOrders(tabId) {
     if (!orderList) return;
 
     try {
-        const data = await fetchFromBackend(`/orders/${cleanedTabId}`);
+        const data = await fetchFromBackend(`/api/orders/${cleanedTabId}`);
         if (data.success) {
             displayOrders(data.orders, cleanedTabId);
             displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');

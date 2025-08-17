@@ -35,7 +35,7 @@ export function actualizarCalculosAutobot() {
         return;
     }
 
-    // Convertir valores de los inputs a números
+    // Convertir valores de los inputs a números y manejar casos no numéricos
     const auamountUSDT = parseFloat(auamountUSDTInput.value) || 0;
     const auamountBTC = parseFloat(auamountBTCInput.value) || 0;
     const aupurchaseUSDT = parseFloat(aupurchaseUSDTInput.value) || 0;

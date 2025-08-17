@@ -40,7 +40,8 @@ export async function checkBitMartConnectionAndData() {
     }
 
     try {
-        const data = await fetchFromBackend('/bitmart-data');
+        // CAMBIO CRUCIAL: Se añade el prefijo /api a la ruta
+        const data = await fetchFromBackend('/api/bitmart-data');
 
         if (data.connected) {
             displayLogMessage('Connected to BitMart. Data fetched successfully.', 'success');
