@@ -52,5 +52,8 @@ router.get('/bot-config-and-state', userController.getBotConfigAndState);
 // del usuario y pasárselas a autobotLogic.toggleBotState.
 router.post('/toggle-bot', bitmartAuthMiddleware, userController.toggleBotState);
 
+// --- NUEVA RUTA para obtener el precio de un ticker ---
+// Esta ruta no necesita 'bitmartAuthMiddleware' porque es una API pública.
+router.get('/bitmart/ticker', userController.getTickerPrice);
 
 module.exports = router;

@@ -7,7 +7,7 @@ const Order = require('./models/Order');
 const Autobot = require('./models/Autobot');
 const http = require('http');
 const { Server } = require("socket.io");
-const autobotLogic = require('./autobotLogic.js'); 
+const autobotLogic = require('./autobotLogic.js');
 const { runLongStrategy, setDependencies: setLongDependencies } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDependencies } = require('./src/shortStrategy');
 const jwt = require('jsonwebtoken');
@@ -263,19 +263,26 @@ app.post('/api/autobot/stop', async (req, res) => {
     }
 });
 
+// CAMBIO AQUÍ: Ahora obtiene el precio Y el balance antes de emitir
 setInterval(async () => {
-    try {
-        const tickerData = await bitmartService.getTicker('BTC_USDT');
-        if (tickerData && tickerData.data && tickerData.data.last) {
-            io.emit('marketData', {
-                price: tickerData.data.last,
-                symbol: 'BTC_USDT'
-            });
-        }
-    } catch (error) {
-        console.error('Error in Socket.IO price update:', error.message);
-    }
-}, 500); // Emite el precio cada 0.5 segundos (500 ms)
+    try {
+        const tickerData = await bitmartService.getTicker('BTC_USDT');
+        const balanceData = await bitmartService.getBalance(bitmartCredentials);
+
+        if (tickerData && tickerData.data && tickerData.data.last && balanceData) {
+            const usdtBalance = balanceData.find(b => b.currency === 'USDT');
+            const btcBalance = balanceData.find(b => b.currency === 'BTC');
+
+            io.emit('marketData', {
+                price: tickerData.data.last,
+                usdt: usdtBalance ? usdtBalance.available : 'N/A',
+                btc: btcBalance ? btcBalance.available : 'N/A'
+            });
+        }
+    } catch (error) {
+        console.error('Error in Socket.IO price/balance update:', error.message);
+    }
+}, 500); // Emite el precio y el balance cada 0.5 segundos (500 ms)
 
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {

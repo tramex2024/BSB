@@ -10,12 +10,15 @@ BSB/			    # Bitmart Spot Bots
 │   │   ├── modules/
 │   │   	 └── auth.js
 │   │   	 └── orders.js
-│   │   	 └── calculations.js
+│   │   	 └── aucalculations.js
+│   │   	 └── tecalculations.js
+│   │   	 └── aicalculations.js
 │   │   	 └── navigation.js
 │   │   	 └── bot.js
 │   │   	 └── network.js
 │   │   	 └── balance.js
 │   │   	 └── api.js
+│   │   	 └── chart.js
 │   └── images/
 │       └── bsb-logo.png
 ├── server/                # Backend files - Deployed on Render

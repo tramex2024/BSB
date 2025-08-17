@@ -189,3 +189,30 @@ exports.toggleBotState = async (req, res) => {
         res.status(500).json({ success: false, message: error.message || 'Error internal server when trying to change bot state.' });
     }
 };
+
+// --- Controlador para obtener el precio de un ticker (ej. BTC_USDT) ---
+exports.getTickerPrice = async (req, res) => {
+    // El símbolo se pasa como parámetro en la URL, ej: /api/user/bitmart/ticker?symbol=BTC_USDT
+    const { symbol } = req.query; 
+
+    // Verificamos que se haya pasado un símbolo
+    if (!symbol) {
+        return res.status(400).json({ message: 'El parámetro "symbol" es requerido.' });
+    }
+
+    try {
+        // Llamamos a la función getTicker de bitmartService con el símbolo proporcionado.
+        const tickerData = await bitmartService.getTicker(symbol);
+        
+        // Devolvemos solo el precio, si existe.
+        if (tickerData && tickerData.last_price) {
+            const lastPrice = parseFloat(tickerData.last_price);
+            res.status(200).json({ price: lastPrice });
+        } else {
+            res.status(404).json({ message: 'Datos del ticker no encontrados.' });
+        }
+    } catch (error) {
+        console.error(`Error fetching ticker data for ${symbol}:`, error.message);
+        res.status(500).json({ message: 'Error fetching ticker data from BitMart.', error: error.message });
+    }
+};
