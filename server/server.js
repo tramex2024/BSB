@@ -273,9 +273,9 @@ setInterval(async () => {
         console.log('Respuesta de la API de Balance:', balanceResponse);
         console.log('Respuesta de la API de Ticker:', tickerResponse);
 
-        // Extrayendo los datos de forma segura
-        const usdtBalance = balanceResponse.data.wallet.find(b => b.currency === 'USDT');
-        const btcBalance = balanceResponse.data.wallet.find(b => b.currency === 'BTC');
+        // Extrayendo los datos de forma segura (CORREGIDO)
+        const usdtBalance = balanceResponse.find(b => b.currency === 'USDT');
+        const btcBalance = balanceResponse.find(b => b.currency === 'BTC');
         const btcPrice = tickerResponse.data.last;
 
         // Logs para verificar las variables finales
