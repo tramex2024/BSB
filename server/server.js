@@ -12,6 +12,9 @@ const { runLongStrategy, setDependencies: setLongDependencies } = require('./src
 const { runShortStrategy, setDependencies: setShortDependencies } = require('./src/shortStrategy');
 const jwt = require('jsonwebtoken');
 
+const WebSocket = require('ws');
+const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
+
 dotenv.config();
 
 const app = express();
@@ -57,12 +60,9 @@ const bitmartCredentials = {
     apiMemo: process.env.BITMART_API_MEMO || ''
 };
 
-const WebSocket = require('ws');
-
-const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
-
-function setupWebSocket() {
+function setupWebSocket(io) {
     const ws = new WebSocket(bitmartWsUrl);
+    let btcPrice = 'N/A';
 
     ws.onopen = function() {
         console.log("Conectado a la API de WebSocket de BitMart.");
@@ -76,13 +76,24 @@ function setupWebSocket() {
     };
 
     ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        console.log("Datos de WebSocket recibidos:", data);
+        try {
+            const data = JSON.parse(event.data);
+
+            // Extrae el precio si el mensaje es un ticker de BTC
+            if (data && data.data && data.data.length > 0 && data.data[0].symbol === 'BTC_USDT') {
+                btcPrice = data.data[0].last_price;
+
+                // Envía el precio al frontend a través de Socket.IO
+                io.emit('marketData', { price: btcPrice });
+            }
+        } catch (error) {
+            console.error("Error al procesar el mensaje de WebSocket:", error);
+        }
     };
 
     ws.onclose = function() {
         console.log("Conexión de WebSocket a BitMart cerrada. Reconectando...");
-        setTimeout(setupWebSocket, 5000); // Intenta reconectar en 5 segundos
+        setTimeout(() => setupWebSocket(io), 5000); // Intenta reconectar en 5 segundos
     };
 
     ws.onerror = function(err) {
@@ -92,7 +103,7 @@ function setupWebSocket() {
 }
 
 // Inicia la conexión
-setupWebSocket();
+setupWebSocket(io);
 
 setInterval(autobotLogic.botCycle, 10000);
 
