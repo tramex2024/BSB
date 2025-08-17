@@ -586,6 +586,7 @@ async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
 module.exports = {
     getTicker,
     getBalance,
+    getAccountBalances: getBalance,
     getOpenOrders,
     getOrderDetail,
     placeOrder,
