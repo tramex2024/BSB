@@ -2,8 +2,8 @@
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-const { runLongStrategy, setDependencies: setLongDeps } = require('./longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./shortStrategy');
+const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
 
 let io;
 let intervalId;
