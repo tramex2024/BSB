@@ -263,6 +263,20 @@ app.post('/api/autobot/stop', async (req, res) => {
     }
 });
 
+setInterval(async () => {
+    try {
+        const tickerData = await bitmartService.getTicker('BTC_USDT');
+        if (tickerData && tickerData.data && tickerData.data.last) {
+            io.emit('marketData', {
+                price: tickerData.data.last,
+                symbol: 'BTC_USDT'
+            });
+        }
+    } catch (error) {
+        console.error('Error in Socket.IO price update:', error.message);
+    }
+}, 500); // Emite el precio cada 0.5 segundos (500 ms)
+
 // Ruta de prueba principal para verificar que el servidor está funcionando
 app.get('/', (req, res) => {
     res.send('Backend is running!');
