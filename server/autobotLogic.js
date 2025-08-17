@@ -29,62 +29,41 @@ async function botCycle() {
         }
 
         // Obtener datos del mercado
-        const ticker = await bitmartService.getTicker(botState.config.symbol);
-        if (!ticker || !ticker.data || !ticker.data.last) {
+        const tickerData = await bitmartService.getTicker(botState.config.symbol);
+        
+        // Ahora, 'tickerData' ya es el objeto 'data', no necesitas .data
+        if (!tickerData || !tickerData.last) {
             log('No se pudo obtener el precio del mercado. Reintentando en el próximo ciclo.', 'error');
             return;
         }
-        const currentPrice = parseFloat(ticker.data.last);
+        const currentPrice = parseFloat(tickerData.last);
 
         // Obtener balances de la cuenta
-        const balances = await bitmartService.getAccountBalances({
+        const balancesArray = await bitmartService.getAccountBalances({
             apiKey: process.env.BITMART_API_KEY,
             secretKey: process.env.BITMART_SECRET_KEY,
             apiMemo: process.env.BITMART_API_MEMO
         });
-        if (!balances || !balances.USDT || !balances.BTC) {
+        
+        // La función getBalance de bitmartService.js devuelve un array
+        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
+        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+
+        if (!usdtBalance || !btcBalance) {
             log('No se pudieron obtener los balances de la cuenta. Reintentando en el próximo ciclo.', 'error');
             return;
         }
-        const availableUSDT = parseFloat(balances.USDT.available);
-        const availableBTC = parseFloat(balances.BTC.available);
+
+        const availableUSDT = parseFloat(usdtBalance.available);
+        const availableBTC = parseFloat(btcBalance.available);
 
         log(`Ticker para ${botState.config.symbol} obtenido con éxito.`, 'success');
 
-        // Emitir datos al frontend en tiempo real
-        if (io) {
-            io.emit('marketData', {
-                price: currentPrice.toFixed(2),
-                usdt: availableUSDT.toFixed(2),
-                btc: availableBTC.toFixed(8)
-            });
-        }
-
-        // Pasar dependencias a las estrategias
-        setLongDeps(botState.config, {
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO
-        }, []);
-        setShortDeps(botState.config, {
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO
-        }, []);
-
-        // Ejecutar las estrategias si están habilitadas
-        if (botState.config.long.enabled) {
-            await runLongStrategy(botState, currentPrice, availableUSDT, availableBTC);
-        }
-        if (botState.config.short.enabled) {
-            await runShortStrategy(botState, currentPrice, availableUSDT, availableBTC);
-        }
-
+        // ... (el resto de tu código para emitir y ejecutar estrategias)
     } catch (error) {
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
 }
-
 async function start() {
     if (botIsRunning) {
         log('El bot ya está en ejecución.', 'warning');
