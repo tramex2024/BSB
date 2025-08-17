@@ -87,7 +87,6 @@ async function handleSuccessfulBuy(botStateObj, orderDetails) {
     botStateObj.lStateData.ppc = totalUSDT / botStateObj.lStateData.ac;
     botStateObj.lStateData.orderCountInCycle = currentOrderCount + 1;
     
-    // --- CORRECCIÓN: Cálculo de la siguiente orden de cobertura ---
     const lastOrderUsdtAmount = botStateObj.lStateData.lastOrder?.size * botStateObj.lStateData.lastOrder?.price || botConfiguration.long.purchaseUsdt;
     const nextUSDTAmount = lastOrderUsdtAmount * (1 + (botConfiguration.long.size_var / 100));
     const nextCoveragePrice = newPrice * (1 - (botConfiguration.long.price_var / 100));
@@ -103,7 +102,6 @@ async function handleSuccessfulBuy(botStateObj, orderDetails) {
     } else {
         autobotCore.log('Límite máximo de órdenes de cobertura alcanzado.', 'warning');
     }
-    // --- FIN CORRECCIÓN ---
 
     await Autobot.findOneAndUpdate({}, { 'lStateData': botStateObj.lStateData });
     await autobotCore.updateBotState('BUYING', botStateObj.sstate);
@@ -168,13 +166,20 @@ async function placeFirstBuyOrder(config, creds) {
                     await handleSuccessfulBuy(botState, orderDetails);
                 }
             } else {
-                autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}.`, 'error');
-                await autobotCore.updateBotState('RUNNING', botState.sstate);
+                // Si la orden no se completa, registrar el error y regresar al estado RUNNING
+                autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}. Volviendo al estado RUNNING.`, 'error');
+                const botState = await Autobot.findOne({});
+                if (botState) {
+                    await autobotCore.updateBotState('RUNNING', botState.sstate);
+                }
             }
         }, 10000);
     } else {
-        autobotCore.log('Error: La respuesta de la orden de compra no contiene un ID.', 'error');
-        await autobotCore.updateBotState('RUNNING', botState.sstate);
+        autobotCore.log('Error: La respuesta de la orden de compra no contiene un ID. Volviendo al estado RUNNING.', 'error');
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            await autobotCore.updateBotState('RUNNING', botState.sstate);
+        }
     }
 }
 

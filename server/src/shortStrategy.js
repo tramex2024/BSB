@@ -43,13 +43,20 @@ async function placeFirstSellOrder(config, creds, sellAmount) {
                     await handleSuccessfulSell(botState, orderDetails);
                 }
             } else {
-                autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}.`, 'error');
-                await autobotCore.updateBotState(botState.lstate, 'RUNNING');
+                // Si la orden no se completa, registrar el error y regresar al estado RUNNING
+                autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}. Volviendo al estado RUNNING.`, 'error');
+                const botState = await Autobot.findOne({});
+                if (botState) {
+                    await autobotCore.updateBotState(botState.lstate, 'RUNNING');
+                }
             }
         }, 10000);
     } else {
-        autobotCore.log('Error: La respuesta de la orden de venta no contiene un ID.', 'error');
-        await autobotCore.updateBotState(botState.lstate, 'RUNNING');
+        autobotCore.log('Error: La respuesta de la orden de venta no contiene un ID. Volviendo al estado RUNNING.', 'error');
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            await autobotCore.updateBotState(botState.lstate, 'RUNNING');
+        }
     }
 }
 
@@ -81,7 +88,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails) {
     botStateObj.sStateData.ppv = totalUSDT / botStateObj.sStateData.av;
     botStateObj.sStateData.orderCountInCycle = currentOrderCount + 1;
     
-    // --- CORRECCIÓN: Cálculo de la siguiente orden de cobertura ---
     const lastOrderBtcAmount = botStateObj.sStateData.lastOrder?.size || botConfiguration.short.sellBtc;
     const nextBTCAmount = lastOrderBtcAmount * (1 + (botConfiguration.short.size_var / 100));
     const nextCoveragePrice = newPrice * (1 + (botConfiguration.short.price_var / 100));
@@ -97,7 +103,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails) {
     } else {
         autobotCore.log('Límite máximo de órdenes de cobertura alcanzado.', 'warning');
     }
-    // --- FIN CORRECCIÓN ---
 
     await Autobot.findOneAndUpdate({}, { 'sStateData': botStateObj.sStateData });
     await autobotCore.updateBotState(botStateObj.lstate, 'SELLING');
