@@ -1,9 +1,9 @@
 // shortStrategy.js
 
-const { placeOrder, getOrderDetails } = require('./services/bitmartService');
-const autobotCore = require('./autobotLogic');
-const analyzer = require('./bitmart_indicator_analyzer');
-const Autobot = require('./models/Autobot');
+const { placeOrder, getOrderDetails } = require('../services/bitmartService');
+const autobotCore = require('../autobotLogic');
+const analyzer = require('../bitmart_indicator_analyzer');
+const Autobot = require('../models/Autobot');
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
