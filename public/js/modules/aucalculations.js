@@ -10,7 +10,7 @@ export function actualizarCalculosAutobot() {
     const auincrementInput = document.getElementById("auincrement");
     const audecrementInput = document.getElementById("audecrement");
     const autriggerInput = document.getElementById("autrigger"); // Nuevo input
-    const aupriceElement = document.getElementById('auprice');
+    const aupriceElement = document.getElementById('price');
     
     // Displays para los balances
     const aulbalanceDisplay = document.getElementById('aulbalance');
