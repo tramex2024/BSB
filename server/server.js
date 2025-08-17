@@ -245,43 +245,56 @@ app.get('/api/user/balances', async (req, res) => {
 
 // Nuevo Endpoint para iniciar el Autobot con la configuración del frontend
 app.post('/api/autobot/start', async (req, res) => {
-    try {
-        const { strategy, stopAtCycle, ...config } = req.body;
-        let botState = await Autobot.findOne({});
-        if (!botState) {
-            botState = new Autobot({}); // Asegurarse de que el objeto existe
-        }
+    try {
+        const { strategy, stopAtCycle, ...config } = req.body;
+        let botState = await Autobot.findOne({});
 
-        botState.config = botState.config || {};
-        botState.config.long = botState.config.long || {};
-        botState.config.short = botState.config.short || {};
-        
-        // Actualizar solo los campos que vienen del front
-        botState.config.long = { ...botState.config.long, ...config.long };
-        botState.config.short = { ...botState.config.short, ...config.short };
+        // Si no existe, crea un objeto de estado completo para evitar errores
+        if (!botState) {
+            botState = new Autobot({
+                lstate: 'STOPPED',
+                sstate: 'STOPPED',
+                lStateData: {},
+                sStateData: {},
+                config: {
+                    long: { enabled: false },
+                    short: { enabled: false },
+                    stopAtCycle: false
+                }
+            });
+        }
+        
+        // Asegura que los objetos de configuración existen antes de usarlos
+        botState.config = botState.config || {};
+        botState.config.long = botState.config.long || {};
+        botState.config.short = botState.config.short || {};
+        
+        // Actualizar la configuración con los datos del frontend
+        botState.config.long = { ...botState.config.long, ...config.long };
+        botState.config.short = { ...botState.config.short, ...config.short };
 
-        if (strategy === 'long') {
-            botState.config.long.enabled = true;
-            botState.config.short.enabled = false;
-            botState.lstate = 'RUNNING';
-            botState.sstate = 'STOPPED';
-        } else if (strategy === 'short') {
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = true;
-            botState.sstate = 'RUNNING';
-            botState.lstate = 'STOPPED';
-        }
+        if (strategy === 'long') {
+            botState.config.long.enabled = true;
+            botState.config.short.enabled = false;
+            botState.lstate = 'RUNNING';
+            botState.sstate = 'STOPPED';
+        } else if (strategy === 'short') {
+            botState.config.long.enabled = false;
+            botState.config.short.enabled = true;
+            botState.sstate = 'RUNNING';
+            botState.lstate = 'STOPPED';
+        }
 
-        botState.config.stopAtCycle = stopAtCycle;
-        
-        await botState.save();
+        botState.config.stopAtCycle = stopAtCycle;
+        
+        await botState.save();
 
-        autobotLogic.log(`Estrategia Autobot ${strategy} activada.`, 'success');
-        res.json({ success: true, message: 'Autobot strategy started.' });
-    } catch (error) {
-        console.error('Failed to start Autobot strategy:', error);
-        res.status(500).json({ success: false, message: 'Failed to start Autobot strategy.' });
-    }
+        autobotLogic.log(`Estrategia Autobot ${strategy} activada.`, 'success');
+        res.json({ success: true, message: 'Autobot strategy started.' });
+    } catch (error) {
+        console.error('Failed to start Autobot strategy:', error);
+        res.status(500).json({ success: false, message: 'Failed to start Autobot strategy.' });
+    }
 });
 
 // Ruta para detener el Autobot
