@@ -1,5 +1,4 @@
 // Archivo: src/server/services/bitmartSpot.js
-// Archivo refactorizado en total son 3
 
 const { makeRequest } = require('./bitmartClient');
 
@@ -35,15 +34,28 @@ async function getBalance(authCredentials) {
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas (V4 POST) para ${symbol || 'todos los símbolos'}...`);
     const requestBody = symbol ? { symbol } : {};
-    const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', {}, requestBody);
-    const orders = response.data.list || [];
-    if (orders.length > 0) {
-        console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-        orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
-    } else {
-        console.log('ℹ️ No se encontraron órdenes abiertas.');
+    
+    try {
+        const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', {}, requestBody);
+        
+        let orders = [];
+        if (Array.isArray(response.data.data)) {
+            orders = response.data.data;
+        } else if (response.data.data && Array.isArray(response.data.data.list)) {
+            orders = response.data.data.list;
+        }
+
+        if (orders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+            orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+        } else {
+            console.log('ℹ️ No se encontraron órdenes abiertas.');
+        }
+        return { orders };
+    } catch (error) {
+        console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
+        throw error;
     }
-    return { orders };
 }
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
@@ -105,15 +117,29 @@ async function cancelOrder(authCredentials, symbol, order_id) {
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log(`${LOG_PREFIX} Listando historial de órdenes (V4 POST)...`);
     const path = '/spot/v4/query/history-orders';
-    const response = await makeRequest(authCredentials, 'POST', path, {}, options);
-    const orders = response.data.list || [];
-    if (orders.length > 0) {
-        console.log(`✅ Historial de Órdenes obtenido. Se encontraron ${orders.length} órdenes.`);
-        orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
-    } else {
-        console.log('ℹ️ No se encontraron órdenes en el historial.');
+    const requestBody = { ...options }; // Copiamos las opciones al cuerpo de la solicitud
+    
+    try {
+        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
+        
+        let orders = [];
+        if (Array.isArray(response.data.data)) {
+            orders = response.data.data;
+        } else if (response.data.data && Array.isArray(response.data.data.list)) {
+            orders = response.data.data.list;
+        }
+
+        if (orders.length > 0) {
+            console.log(`✅ Historial de Órdenes obtenido. Se encontraron ${orders.length} órdenes.`);
+            orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+        } else {
+            console.log('ℹ️ No se encontraron órdenes en el historial.');
+        }
+        return orders;
+    } catch (error) {
+        console.error('\n❌ Falló la obtención del historial de órdenes V4.');
+        throw error;
     }
-    return orders;
 }
 
 async function getKlines(symbol, interval, limit = 200) {
