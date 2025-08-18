@@ -1,19 +1,16 @@
-// server/services/bitmartService.js (SIMPLIFICADO - SIN LÓGICA DE USUARIOS NI DB)
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
-require('dotenv').config(); // Asegúrate de cargar las variables de entorno aquí también
+require('dotenv').config();
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 const API_URL = 'https://api-cloud.bitmart.com';
-
 const DEFAULT_V4_POST_MEMO = 'GainBot';
 
 // Constantes para los reintentos
-const MAX_RETRIES = 5; // Número máximo de reintentos
-const INITIAL_RETRY_DELAY_MS = 500; // Retraso inicial en milisegundos
-const RETRY_ERROR_CODES = [30000]; // Código de error de BitMart para 'Not found' (404)
+const MAX_RETRIES = 5;
+const INITIAL_RETRY_DELAY_MS = 500;
+const RETRY_ERROR_CODES = [30000];
 
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) {
@@ -44,6 +41,7 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
+// **Función makeRequest CORREGIDA**
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
@@ -61,9 +59,19 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
 
     if (isPrivate) {
         const timestamp = Date.now().toString();
-        const memo = credentials.memo || "GainBot";
-        const signString = `${timestamp}#${memo}#${crypto.SHA256(requestBodyString).toString()}`;
-        const signature = crypto.HmacSHA256(signString, credentials.secretKey).toString();
+        const memo = credentials.memo || DEFAULT_V4_POST_MEMO;
+        
+        let signString;
+        if (isV4 && method === 'POST') {
+            const sortedBodyString = JSON.stringify(sortObjectKeys(body));
+            signString = `${timestamp}#${memo}#${CryptoJS.SHA256(sortedBodyString).toString()}`;
+        } else {
+            const sortedParams = sortObjectKeys(params);
+            const queryString = querystring.stringify(sortedParams);
+            signString = `${timestamp}#${memo}#${queryString}`;
+        }
+        
+        const signature = CryptoJS.HmacSHA256(signString, credentials.secretKey).toString();
         
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
@@ -90,6 +98,8 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         throw error;
     }
 }
+
+// **Funciones CORREGIDAS**
 async function getSystemTime() {
     try {
         const response = await makeRequest(null, 'GET', '/system/time');
@@ -114,8 +124,7 @@ async function getTicker(symbol) {
 async function getBalance(authCredentials) {
     console.log('\n--- Obteniendo Balance de la Cuenta ---');
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('GET', '/account/v1/wallet', {}, true, authCredentials, serverTime);
+        const response = await makeRequest(authCredentials, 'GET', '/account/v1/wallet');
         if (response && response.code === 1000 && response.data && response.data.wallet) {
             console.log('✅ Balance de la cuenta obtenido con éxito.');
             response.data.wallet.forEach(balance => {
@@ -139,8 +148,7 @@ async function getOpenOrders(authCredentials, symbol) {
     const requestBody = {};
     if (symbol) { requestBody.symbol = symbol; }
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -164,27 +172,16 @@ async function getOpenOrders(authCredentials, symbol) {
     }
 }
 
-/**
- * Obtiene el detalle de una orden con lógica de reintentos para manejar "Not found".
- * @param {Object} authCredentials - Credenciales de BitMart del usuario.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} orderId - ID de la orden.
- * @param {number} retries - Número actual de reintentos (interno).
- * @param {number} delay - Retraso actual en ms (interno).
- * @returns {Object} Detalles de la orden.
- * @throws {Error} Si la orden no se encuentra después de los reintentos o hay otro error.
- */
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
     const requestBody = { symbol: symbol, orderId: orderId };
-
+    
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}. La orden no se encontró o sigue pendiente.`);
     }
 
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/order-detail', {}, requestBody);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Detalle de orden ${orderId} obtenido con éxito:`);
             console.log(`   - Order ID: ${response.data.order_id}, Símbolo: ${response.data.symbol}, Lado: ${response.data.side}, Tipo: ${response.data.type}, Estado: ${response.data.state}`);
@@ -230,8 +227,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
 
     console.log('DEBUG: requestBody antes de makeRequest:', requestBody);
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', '/spot/v2/submit_order', requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest(authCredentials, 'POST', '/spot/v2/submit_order', {}, requestBody);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden colocada con éxito:`, response.data);
             return response.data;
@@ -249,8 +245,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
     console.log(`\n--- Cancando Orden ${order_id} para ${symbol} ---`);
     const requestBody = { symbol: symbol, order_id: order_id };
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', '/spot/v2/cancel-order', requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest(authCredentials, 'POST', '/spot/v2/cancel-order', {}, requestBody);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Orden ${order_id} cancelada con éxito.`);
             return response.data;
@@ -274,8 +269,7 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
     if (options.endTime) { requestBody.endTime = options.endTime; }
     if (options.limit) { requestBody.limit = options.limit; }
     try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
+        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
         const responseData = response.data;
         let orders = [];
         if (Array.isArray(responseData)) {
@@ -304,7 +298,7 @@ async function getKlines(symbol, interval, limit = 200) {
     const path = `/spot/quotation/v3/klines`;
     const params = { symbol: symbol, step: interval, size: limit };
     try {
-        const response = await makeRequest('GET', path, params, false);
+        const response = await makeRequest(null, 'GET', path, params);
         if (response && response.code === 1000 && response.data) {
             console.log(`✅ Klines (Candlesticks) para ${symbol} obtenidos con éxito.`);
             const candles = response.data.map(c => ({
@@ -332,10 +326,7 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
         console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación (uno es null/undefined).");
         return false;
     }
-
-    // Usamos las credenciales directamente, sin userId
     const authCredentials = { apiKey, secretKey, apiMemo };
-
     try {
         await getBalance(authCredentials);
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
@@ -347,10 +338,8 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
 }
 
 // --- Funciones de Orquestación de Órdenes (Simplificadas) ---
-
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5;
-
 
 async function cancelAllOpenOrders(bitmartCreds, symbol) {
     console.log(`[BITMART_SERVICE] Intentando cancelar órdenes abiertas para ${symbol}...`);
@@ -514,7 +503,6 @@ async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
     console.log(`[BITMART_SERVICE] Colocando orden de VENTA LÍMITE...`);
     return await placeSellOrder(authCredentials, symbol, sizeBTC, price);
 }
-
 
 module.exports = {
     getTicker,
