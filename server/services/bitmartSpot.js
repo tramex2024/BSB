@@ -1,4 +1,5 @@
 // Archivo: src/server/services/bitmartSpot.js
+// Archivo refactorizado en total son 3
 
 const { makeRequest } = require('./bitmartClient');
 
