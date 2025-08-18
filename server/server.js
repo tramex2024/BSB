@@ -105,7 +105,18 @@ function setupWebSocket(io) {
 // Inicia la conexión
 setupWebSocket(io);
 
-setInterval(autobotLogic.botCycle, 10000);
+// Lógica para iniciar el ciclo del bot de manera segura
+(async function startBotCycle() {
+    try {
+        console.log('[BOT LOG]: Iniciando ciclo del bot.');
+        await autobotLogic.botCycle();
+    } catch (error) {
+        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
+    } finally {
+        // Llama al siguiente ciclo después de 10 segundos
+        setTimeout(startBotCycle, 10000);
+    }
+})();
 
 // --- RUTAS DE LA API ACTUALIZADAS CON EL PREFIJO '/api' ---
 

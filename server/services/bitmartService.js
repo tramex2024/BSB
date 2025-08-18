@@ -43,9 +43,9 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 
 // **Función makeRequest CORREGIDA**
 // La función makeRequest está CORREGIDA
+// La función makeRequest está CORREGIDA
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
-    const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
 
     const url = `${API_URL}${endpoint}`;
     const headers = {
@@ -54,17 +54,9 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
     };
 
     let requestBodyString = '';
-    let urlParamsString = '';
-
     if (method.toUpperCase() === 'POST' && body && Object.keys(body).length > 0) {
-        // Para POST, el cuerpo es JSON
-        const sortedBody = sortObjectKeys(body);
-        requestBodyString = JSON.stringify(sortedBody);
+        requestBodyString = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
-    } else if (method.toUpperCase() === 'GET' && params && Object.keys(params).length > 0) {
-        // Para GET, los parámetros van en la URL y en la firma
-        const sortedParams = sortObjectKeys(params);
-        urlParamsString = querystring.stringify(sortedParams);
     }
 
     if (isPrivate) {
@@ -72,14 +64,12 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         const memo = credentials.memo || "GainBot";
         let messageToSign;
         
-        // **Lógica de firma corregida para V4 POST y GET**
-        if (isV4 && method.toUpperCase() === 'POST') {
-            // V4 POST Signature: timestamp#memo#SHA256(JSON string del body ordenado)
-            const bodyHash = CryptoJS.SHA256(requestBodyString).toString(CryptoJS.enc.Hex);
-            messageToSign = `${timestamp}#${memo}#${bodyHash}`;
+        if (method.toUpperCase() === 'POST') {
+            messageToSign = `${timestamp}#${memo}#${requestBodyString}`;
         } else {
-            // Resto de Endpoints: timestamp#memo#query string
-            messageToSign = `${timestamp}#${memo}#${urlParamsString}`;
+            const sortedParams = sortObjectKeys(params);
+            const queryString = querystring.stringify(sortedParams);
+            messageToSign = `${timestamp}#${memo}#${queryString}`;
         }
         
         const signature = CryptoJS.HmacSHA256(messageToSign, credentials.secretKey).toString(CryptoJS.enc.Hex);
@@ -108,7 +98,6 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         throw error;
     }
 }
-
 // **Funciones CORREGIDAS**
 async function getSystemTime() {
     try {
