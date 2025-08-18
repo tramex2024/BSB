@@ -46,11 +46,11 @@ export function actualizarCalculosAibot() {
     const aicurrentPrice = parseFloat(aipriceElement.textContent) || 0;
 
     // Verificar si los valores numéricos son válidos
-    if (isNaN(aiamountUSDT) || isNaN(aiamountBTC) || isNaN(aipurchaseUSDT) || isNaN(aipurchaseBTC) ||
-        isNaN(aiincrement) || isNaN(aidecrement) || isNaN(aitrigger) || isNaN(aicurrentPrice) || aicurrentPrice === 0) {
-        console.warn("Advertencia: Uno o más valores de entrada no son números válidos. No se pueden realizar los cálculos.");
-        return;
-    }
+    //if (isNaN(aiamountUSDT) || isNaN(aiamountBTC) || isNaN(aipurchaseUSDT) || isNaN(aipurchaseBTC) ||
+    //    isNaN(aiincrement) || isNaN(aidecrement) || isNaN(aitrigger) || isNaN(aicurrentPrice) || aicurrentPrice === 0) {
+    //    console.warn("Advertencia: Uno o más valores de entrada no son números válidos. No se pueden realizar los cálculos.");
+    //    return;
+    //}
 
     // -------------------------------------------------------------
     // CÁLCULOS PARA LA ESTRATEGIA LONG
