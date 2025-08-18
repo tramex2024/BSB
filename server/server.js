@@ -129,11 +129,11 @@ app.get('/api/ticker/:symbol', async (req, res) => {
 app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
     
-    // NOTA: Se ha corregido el nombre de la variable de entorno para MEMO
+    // NOTA: Se ha corregido el memo para usar una constante, como sugeriste.
     const authCredentials = {
         apiKey: process.env.BITMART_API_KEY,
         secretKey: process.env.BITMART_SECRET_KEY,
-        memo: process.env.BITMART_API_MEMO // ¡AQUÍ ESTÁ LA CORRECCIÓN!
+        memo: "GainBot" 
     };
 
     if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
@@ -151,13 +151,16 @@ app.get('/api/orders/:status', async (req, res) => {
             case 'filled':
             case 'cancelled':
             case 'all':
-                const historyData = await bitmartService.getHistoryOrdersV4(authCredentials, {
+                let historyParams = {
                     symbol,
                     pageSize: 50,
-                    side: status === 'filled' || status === 'cancelled' ? undefined : undefined,
-                    status,
-                });
-                result = { orders: historyData };
+                };
+
+                if (status !== 'all') {
+                    historyParams.status = status;
+                }
+
+                result = await bitmartService.getHistoryOrdersV4(authCredentials, historyParams);
                 break;
             default:
                 return res.status(400).json({ success: false, message: 'Invalid order status' });
