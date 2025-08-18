@@ -21,6 +21,7 @@ function sortObjectKeys(obj) {
 }
 
 function generateSignature(timestamp, memo, bodyOrQueryString, apiSecret) {
+    // La firma SIEMPRE debe incluir el body o el queryString, incluso si están vacíos
     const message = `${timestamp}#${memo || ''}#${bodyOrQueryString || ''}`;
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
@@ -29,10 +30,16 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const headers = { 'User-Agent': USER_AGENT };
     let requestData;
+    let signatureBody;
 
     if (method.toUpperCase() === 'POST' && Object.keys(body).length > 0) {
         requestData = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
+        signatureBody = requestData; // El body para la firma es la cadena JSON
+    } else if (method.toUpperCase() === 'GET' && Object.keys(params).length > 0) {
+        signatureBody = querystring.stringify(sortObjectKeys(params)); // El body para la firma es el query string ordenado
+    } else {
+        signatureBody = ''; // Si no hay body ni params, el body de la firma es una cadena vacía
     }
 
     if (isPrivate) {
@@ -41,7 +48,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         const signature = generateSignature(
             timestamp,
             memo,
-            requestData || querystring.stringify(sortObjectKeys(params)),
+            signatureBody,
             credentials.secretKey
         );
         headers['X-BM-KEY'] = credentials.apiKey;
