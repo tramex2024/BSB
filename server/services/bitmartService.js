@@ -87,10 +87,9 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         return response.data;
     } catch (error) {
         console.error(`Error en la solicitud a ${url}:`, error.message);
-        throw error;response.data;
+        throw error;
     }
 }
-
 async function getSystemTime() {
     try {
         const response = await makeRequest(null, 'GET', '/system/time');
