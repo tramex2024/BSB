@@ -42,11 +42,8 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 }
 
 // **Función makeRequest CORREGIDA**
-// La función makeRequest está CORREGIDA
-// La función makeRequest está CORREGIDA
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
-
     const url = `${API_URL}${endpoint}`;
     const headers = {
         'User-Agent': 'axios/1.9.0',
@@ -159,6 +156,7 @@ async function getOpenOrders(authCredentials, symbol) {
         }
         if (orders.length > 0) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+            // Corregido: Usa order.order_id y order.state para el log
             orders.forEach(order => console.log(`   - Order ID: ${order.order_id}, Símbolo: ${order.symbol}, Lado: ${order.side}, Tipo: ${order.type}, Estado: ${order.state}`));
         } else {
             console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
@@ -173,7 +171,7 @@ async function getOpenOrders(authCredentials, symbol) {
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
-    const requestBody = { symbol: symbol, order_id: orderId }; // Usar 'order_id'
+    const requestBody = { symbol: symbol, order_id: orderId };
     
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}. La orden no se encontró o sigue pendiente.`);
@@ -280,6 +278,7 @@ async function getHistoryOrdersV4(authCredentials, options = {}) {
         }
         if (orders.length > 0) {
             console.log(`✅ ¡Historial de Órdenes obtenido! Se encontraron ${orders.length} órdenes.`);
+            // Corregido: Usa order.order_id y order.state para el log
             orders.forEach(order => console.log(`   - Order ID: ${order.order_id}, Símbolo: ${order.symbol}, Lado: ${order.side}, Tipo: ${order.type}, Estado: ${order.state}`));
         } else {
             console.log('ℹ️ No se encontraron órdenes en el historial con los criterios especificados.');
