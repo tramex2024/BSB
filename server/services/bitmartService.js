@@ -44,9 +44,8 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 }
 
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
-    // Si se proporcionan credenciales, la solicitud es privada
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
-    const isV4 = endpoint.includes('/v4/');
+    const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
 
     const headers = {
         'User-Agent': 'axios/1.9.0',
@@ -59,13 +58,9 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         headers['Content-Type'] = 'application/json';
     }
 
-    // Si la solicitud es privada, prepara los encabezados de autenticación
     if (isPrivate) {
         const timestamp = Date.now().toString();
-        
-        // Use the memo from credentials, default to a sensible value if not provided
         const memo = credentials.memo || "GainBot";
-        
         const signString = `${timestamp}#${memo}#${crypto.SHA256(requestBodyString).toString()}`;
         const signature = crypto.HmacSHA256(signString, credentials.secretKey).toString();
         
@@ -74,18 +69,16 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         headers['X-BM-TIMESTAMP'] = timestamp;
     }
 
-    // Configuración de la solicitud
     const requestOptions = {
         method,
         headers,
-        params
+        params,
     };
 
     if (method === 'POST') {
         requestOptions.data = body;
     }
     
-    // Si la solicitud es GET y tiene parámetros, construir la URL con ellos
     const url = `${API_URL}${endpoint}`;
 
     try {
@@ -93,43 +86,27 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         return response.data;
     } catch (error) {
         console.error(`Error en la solicitud a ${url}:`, error.message);
-        throw error;
+        throw error;response.data;
     }
 }
+
 async function getSystemTime() {
-    console.log('\n--- Obteniendo Hora del Servidor BitMart (Público) ---');
     try {
-        const response = await makeRequest('GET', '/system/time', {}, false);
-        if (response && response.code === 1000 && response.data && response.data.server_time) {
-            const serverTime = response.data.server_time.toString();
-            console.log(`✅ Hora del servidor BitMart obtenida: ${serverTime} (${new Date(parseInt(serverTime)).toISOString()})`);
-            return serverTime;
-        } else {
-            const errorMessage = response.message || response.error_msg || 'Respuesta inesperada';
-            console.error(`❌ Respuesta inesperada al obtener la hora del servidor:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada de BitMart al obtener hora del servidor: ${errorMessage}`);
-        }
+        const response = await makeRequest(null, 'GET', '/system/time');
+        return response.data.server_time;
     } catch (error) {
-        console.error(`❌ Error al obtener la hora del servidor de BitMart:`, error.message);
+        console.error('Error al obtener la hora del servidor de BitMart:', error.message);
         throw error;
     }
 }
 
 async function getTicker(symbol) {
     try {
-        const url = `/spot/quotation/v3/ticker`;
-        const params = { symbol: symbol };
-        console.log(`--- Solicitud GET Ticker para ${symbol} ---`);
-        const response = await makeRequest('GET', url, params, false);
-        if (response && response.code === 1000 && response.data) {
-            console.log(`✅ Ticker para ${symbol} obtenido con éxito.`);
-            return response.data;
-        } else {
-            console.error(`❌ Respuesta inesperada del ticker para ${symbol}:`, JSON.stringify(response, null, 2));
-            throw new Error(`Respuesta inesperada del ticker de BitMart: ${JSON.stringify(response)}`);
-        }
+        const endpoint = `/spot/v1/ticker`;
+        const response = await makeRequest(null, 'GET', endpoint, { symbol });
+        return response.data.tickers.find(t => t.symbol === symbol);
     } catch (error) {
-        console.error(`❌ Falló la solicitud a getTicker para ${symbol}.`);
+        console.error(`Falló la solicitud a getTicker para ${symbol}.`);
         throw error;
     }
 }
