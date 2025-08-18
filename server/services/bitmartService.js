@@ -43,100 +43,54 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
-async function makeRequest(method, path, paramsOrData = {}, isPrivate = true, authCredentials = {}, timestampOverride) {
-    const timestamp = timestampOverride || Date.now().toString();
-    const url = `${BASE_URL}${path}`;
-    let bodyForSign = '';
-    let requestConfig = {
-        headers: {
-            'User-Agent': 'axios/1.9.0',
-            'Accept': 'application/json, text/plain, */*'
-        },
-        timeout: 15000
+async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
+    // Si se proporcionan credenciales, la solicitud es privada
+    const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
+    const isV4 = endpoint.includes('/v4/');
+
+    // Log de depuración para V4
+    if (isPrivate && isV4) {
+        if (!credentials.memo) {
+            console.log("[API_MEMO_WORKAROUND] Using default memo 'GainBot' for V4 POST request as user's memo is blank.");
+            credentials.memo = "GainBot";
+        }
+    }
+
+    const headers = {
+        'User-Agent': 'axios/1.9.0',
+        'Accept': 'application/json, text/plain, */*'
+    };
+    
+    // Si la solicitud es privada, prepara los encabezados de autenticación
+    if (isPrivate) {
+        const timestamp = Date.now().toString();
+        const signString = `${timestamp}#${credentials.memo}#${crypto.SHA256(requestBodyString).toString()}`;
+        const signature = crypto.HmacSHA256(signString, credentials.secretKey).toString();
+        
+        headers['X-BM-KEY'] = credentials.apiKey;
+        headers['X-BM-SIGN'] = signature;
+        headers['X-BM-TIMESTAMP'] = timestamp;
+    }
+
+    // Configuración de la solicitud
+    const requestOptions = {
+        method,
+        headers,
+        params
     };
 
-    const { apiKey, secretKey, apiMemo } = authCredentials;
-
-    let apiMemoForRequestAndSign = apiMemo;
-    if (method === 'POST' && path.includes('/v4/') && (apiMemo === '' || apiMemo === null || apiMemo === undefined)) {
-        apiMemoForRequestAndSign = DEFAULT_V4_POST_MEMO;
-        console.warn(`[API_MEMO_WORKAROUND] Using default memo '${DEFAULT_V4_POST_MEMO}' for V4 POST request '${path}' as user's memo is blank.`);
-    }
-
-    const dataForRequest = { ...paramsOrData };
-
-    if (isPrivate) {
-        requestConfig.headers['X-BM-RECVWINDOW'] = 10000;
-    }
-
-    if (method === 'GET') {
-        if (isPrivate) {
-            dataForRequest.recvWindow = 10000;
-        }
-        requestConfig.params = sortObjectKeys(dataForRequest);
-        bodyForSign = querystring.stringify(requestConfig.params);
-    } else if (method === 'POST') {
-        requestConfig.data = dataForRequest;
-        bodyForSign = JSON.stringify(dataForRequest);
-        requestConfig.headers['Content-Type'] = 'application/json';
-    }
-
-    if (isPrivate) {
-        if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
-            throw new Error("Credenciales de BitMart API (API Key, Secret, Memo) no proporcionadas para una solicitud privada.");
-        }
-
-        const sign = generateSign(timestamp, apiMemoForRequestAndSign, bodyForSign, secretKey);
-
-        requestConfig.headers['X-BM-KEY'] = apiKey;
-        requestConfig.headers['X-BM-TIMESTAMP'] = timestamp;
-        requestConfig.headers['X-BM-SIGN'] = sign;
-
-        if (apiMemoForRequestAndSign !== undefined && apiMemoForRequestAndSign !== null && apiMemoForRequestAndSign !== '') {
-            requestConfig.headers['X-BM-MEMO'] = apiMemoForRequestAndSign;
-        } else {
-            delete requestConfig.headers['X-BM-MEMO'];
-        }
-    }
-
-    console.log(`\n--- Realizando solicitud ${method} a ${path} ---`);
-    console.log(`URL: ${url}`);
     if (method === 'POST') {
-        console.log('Body enviado (para solicitud):', JSON.stringify(requestConfig.data));
-        console.log('Body para Firma (JSON stringificado):', bodyForSign);
-    } else {
-        console.log('Query Params (para solicitud y firma, ordenados):', JSON.stringify(requestConfig.params));
+        requestOptions.data = body;
     }
-    console.log('Headers enviados:', JSON.stringify(requestConfig.headers, null, 2));
+
+    const url = `${API_URL}${endpoint}`;
 
     try {
-        const response = await axios({
-            method: method,
-            url: url,
-            ...requestConfig
-        });
-
-        if (response.data && response.data.code === 1000) {
-            console.log(`✅ Respuesta exitosa de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            return response.data;
-        } else {
-            console.error(`❌ Error en la respuesta de la API de BitMart para ${path}:`, JSON.stringify(response.data, null, 2));
-            throw new Error(`Error de BitMart API: ${response.data.message || response.data.error_msg || 'Respuesta inesperada'} (Code: ${response.data.code || 'N/A'})`);
-        }
+        const response = await axios(url, requestOptions);
+        return response.data;
     } catch (error) {
-        console.error(`\n❌ Falló la solicitud a ${path}.`);
-        if (error.response) {
-            console.error('Error Data:', JSON.stringify(error.response.data, null, 2));
-            console.error('Error Status:', error.response.status);
-            console.error('Error Headers:', error.response.headers);
-            throw new Error(`Error de la API de BitMart: ${JSON.stringify(error.response.data)} (Status: ${error.response.status}) (Code: ${error.response.data?.code || 'N/A'})`);
-        } else if (error.request) {
-            console.error('Error Request: No se recibió respuesta. ¿Problema de red o firewall?');
-            throw new Error('No se recibió respuesta de BitMart API. Posible problema de red, firewall o la API no está disponible.');
-        } else {
-            console.error('Error Message:', error.message);
-            throw new Error(`Error desconocido al procesar la solicitud: ${error.message}`);
-        }
+        console.error(`Error en la solicitud a ${url}:`, error.message);
+        throw error;
     }
 }
 
