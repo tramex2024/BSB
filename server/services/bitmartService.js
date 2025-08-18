@@ -173,7 +173,7 @@ async function getOpenOrders(authCredentials, symbol) {
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`\n--- Obteniendo Detalle de Orden ${orderId} para ${symbol} (V4 POST) ---`);
-    const requestBody = { symbol: symbol, orderId: orderId };
+    const requestBody = { symbol: symbol, order_id: orderId }; // Usar 'order_id'
     
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}. La orden no se encontró o sigue pendiente.`);
