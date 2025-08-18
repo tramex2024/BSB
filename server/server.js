@@ -21,6 +21,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
+const testBitmart = require('./test_bitmart.js');
+
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -117,8 +119,35 @@ setupWebSocket(io);
     }
 })();
 
-// --- RUTAS DE LA API ACTUALIZADAS CON EL PREFIJO '/api' ---
+// Lógica para iniciar el ciclo del bot de manera segura
+// El ciclo se ejecutará cada 10 segundos, si el bot está activado.
+(async function startBotCycle() {
+    try {
+        // Ejecuta la prueba de API cada 5 minutos
+        if (process.env.NODE_ENV === 'production') {
+            setInterval(async () => {
+                console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
+                try {
+                    await testBitmart.runTest();
+                    console.log('--- Prueba de API finalizada ---');
+                } catch (error) {
+                    console.error('--- Error al ejecutar la prueba de API de BitMart ---', error);
+                }
+            }, 300000); // 300000 milisegundos = 5 minutos
+        }
 
+        const botState = await Autobot.findOne({});
+        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
+            await autobotLogic.botCycle(currentMarketPrice);
+        }
+    } catch (error) {
+        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
+    } finally {
+        setTimeout(startBotCycle, 10000);
+    }
+})();
+
+// --- RUTAS DE LA API ACTUALIZADAS CON EL PREFIJO '/api' ---
 // 1. Obtener precio en vivo (ticker) - Ahora usa la variable global del WebSocket
 app.get('/api/ticker/:symbol', (req, res) => {
     if (currentMarketPrice !== 'N/A') {
