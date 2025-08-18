@@ -127,31 +127,56 @@ app.get('/api/ticker/:symbol', async (req, res) => {
 
 // 2. Nuevo endpoint para obtener órdenes por status (reemplaza /orders/opened)
 app.get('/api/orders/:status', async (req, res) => {
-    const { status } = req.params;
-    
-    const getBitMartOrders = async (orderStatus) => {
-        switch(orderStatus) {
-            case 'opened':
-                return await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
-            case 'filled':
-            case 'cancelled':
-            case 'all':
-                return await bitmartService.getHistoryOrders(bitmartCredentials, 'BTC_USDT', 50, orderStatus);
-            default:
-                return { success: false, message: 'Invalid order status' };
-        }
-    };
+    const { status } = req.params;
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).json({ success: false, message: 'Authorization token is required.' });
+    }
+    const token = authHeader.split(' ')[1];
 
-    try {
-        const result = await getBitMartOrders(status);
-        if (result.success === false) {
-            return res.status(400).json(result);
-        }
-        res.status(200).json({ success: true, orders: result.orders || result });
-    } catch (error) {
-        console.error(`Error fetching ${status} orders:`, error.message);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-    }
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const { apiKey, secretKey, memo } = decoded;
+
+        if (!apiKey || !secretKey || !memo) {
+            return res.status(400).json({ success: false, message: 'API keys are not configured.' });
+        }
+
+        const authCredentials = {
+            apiKey,
+            secretKey,
+            memo,
+        };
+
+        let result;
+        const symbol = 'BTC_USDT';
+
+        switch (status) {
+            case 'opened':
+                result = await bitmartService.getOpenOrders(authCredentials, symbol);
+                break;
+            case 'filled':
+            case 'cancelled':
+            case 'all':
+                // Nota: La API de BitMart devuelve un objeto con una propiedad 'list'
+                const historyData = await bitmartService.getHistoryOrdersV4(authCredentials, {
+                    symbol,
+                    pageSize: 50,
+                    side: status === 'filled' || status === 'cancelled' ? undefined : undefined,
+                    status,
+                });
+                result = { orders: historyData }; // Aseguramos que la respuesta tenga el formato esperado
+                break;
+            default:
+                return res.status(400).json({ success: false, message: 'Invalid order status' });
+        }
+
+        res.status(200).json(result);
+        
+    } catch (error) {
+        console.error('Error in /api/orders/:status:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
 });
 
 // 3. Endpoint principal de datos consolidados
