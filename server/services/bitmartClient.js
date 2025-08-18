@@ -33,13 +33,17 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     let signatureBody;
 
     if (method.toUpperCase() === 'POST' && Object.keys(body).length > 0) {
+        // Para POST, el body de la firma debe ser el JSON string del cuerpo.
         requestData = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
-        signatureBody = requestData; // El body para la firma es la cadena JSON
+        signatureBody = requestData;
     } else if (method.toUpperCase() === 'GET' && Object.keys(params).length > 0) {
-        signatureBody = querystring.stringify(sortObjectKeys(params)); // El body para la firma es el query string ordenado
+        // Para GET, el body de la firma debe ser el query string ordenado.
+        const sortedParams = sortObjectKeys(params);
+        signatureBody = querystring.stringify(sortedParams);
     } else {
-        signatureBody = ''; // Si no hay body ni params, el body de la firma es una cadena vacía
+        // Si no hay body ni params, el body de la firma es una cadena vacía.
+        signatureBody = '';
     }
 
     if (isPrivate) {
