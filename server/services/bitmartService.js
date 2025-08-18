@@ -42,59 +42,60 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 }
 
 // **Función makeRequest CORREGIDA**
-// La función makeRequest está CORREGIDA
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
-
+    
+    let url = `${API_URL}${endpoint}`;
+    let requestBodyString = '';
+    
+    if (body && Object.keys(body).length > 0) {
+        requestBodyString = JSON.stringify(body);
+    }
+    
+    // Preparar encabezados
     const headers = {
         'User-Agent': 'axios/1.9.0',
         'Accept': 'application/json, text/plain, */*'
     };
-
-    let requestBodyString = '';
-    if (body && Object.keys(body).length > 0) {
-        requestBodyString = JSON.stringify(body);
-        headers['Content-Type'] = 'application/json';
-    }
-
+    
     if (isPrivate) {
         const timestamp = Date.now().toString();
         const memo = credentials.memo || "GainBot";
-        let signString;
+        let messageToSign;
         
-        // **Lógica de firma corregida**
-        if (isV4 && method.toUpperCase() === 'POST') {
+        if (method.toUpperCase() === 'POST') {
             const sortedBody = sortObjectKeys(body);
             const sortedBodyString = JSON.stringify(sortedBody);
-            signString = `${timestamp}#${memo}#${CryptoJS.SHA256(sortedBodyString).toString(CryptoJS.enc.Hex)}`;
+            messageToSign = `${timestamp}#${memo}#${CryptoJS.SHA256(sortedBodyString).toString()}`;
         } else {
             const sortedParams = sortObjectKeys(params);
             const queryString = querystring.stringify(sortedParams);
-            signString = `${timestamp}#${memo}#${queryString}`;
+            messageToSign = `${timestamp}#${memo}#${queryString}`;
         }
         
-        const signature = CryptoJS.HmacSHA256(signString, credentials.secretKey).toString(CryptoJS.enc.Hex);
+        const signature = CryptoJS.HmacSHA256(messageToSign, credentials.secretKey).toString(CryptoJS.enc.Hex);
         
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
         headers['X-BM-TIMESTAMP'] = timestamp;
+        headers['X-BM-MEMO'] = memo;
+        headers['Content-Type'] = 'application/json';
     }
 
     const requestOptions = {
         method,
         headers,
+        url,
         params,
     };
 
     if (method.toUpperCase() === 'POST') {
-        requestOptions.data = body;
+        requestOptions.data = requestBodyString;
     }
-    
-    const url = `${API_URL}${endpoint}`;
 
     try {
-        const response = await axios(url, requestOptions);
+        const response = await axios(requestOptions);
         return response.data;
     } catch (error) {
         console.error(`Error en la solicitud a ${url}:`, error.message);
