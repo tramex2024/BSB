@@ -4,11 +4,8 @@ const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStr
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
 
 let io;
-let intervalId;
 let botIsRunning = false;
 
-// Esta función es solo para iniciar la comunicación con Socket.io.
-// El ciclo del bot se inicia desde el endpoint del servidor.
 function setIo(socketIo) {
     io = socketIo;
 }
@@ -20,32 +17,28 @@ function log(message, type = 'info') {
     console.log(`[BOT LOG]: ${message}`);
 }
 
-async function botCycle() {
+async function botCycle(currentPrice) {
     try {
         let botState = await Autobot.findOne({});
         if (!botState) {
             log('Estado del bot no encontrado. Deteniendo el ciclo...', 'error');
-            return stop();
+            return;
         }
 
-        // Obtener datos del mercado
-        const tickerData = await bitmartService.getTicker(botState.config.symbol);
-        
-        // Ahora, 'tickerData' ya es el objeto 'data', no necesitas .data
-        if (!tickerData || !tickerData.last) {
+        // Usa el precio del WebSocket que se pasa como argumento
+        if (currentPrice === 'N/A') {
             log('No se pudo obtener el precio del mercado. Reintentando en el próximo ciclo.', 'error');
             return;
         }
-        const currentPrice = parseFloat(tickerData.last);
 
-        // Obtener balances de la cuenta
+        log(`Ticker para ${botState.config.symbol} obtenido con éxito. Precio: ${currentPrice}`, 'success');
+
         const balancesArray = await bitmartService.getAccountBalances({
             apiKey: process.env.BITMART_API_KEY,
             secretKey: process.env.BITMART_SECRET_KEY,
             apiMemo: process.env.BITMART_API_MEMO
         });
         
-        // La función getBalance de bitmartService.js devuelve un array
         const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
         const btcBalance = balancesArray.find(b => b.currency === 'BTC');
 
@@ -57,38 +50,51 @@ async function botCycle() {
         const availableUSDT = parseFloat(usdtBalance.available);
         const availableBTC = parseFloat(btcBalance.available);
 
-        log(`Ticker para ${botState.config.symbol} obtenido con éxito.`, 'success');
+        io.emit('wallet-balances', {
+            USDT: { available: availableUSDT, frozen: parseFloat(usdtBalance.frozen) },
+            BTC: { available: availableBTC, frozen: parseFloat(btcBalance.frozen) }
+        });
 
-        // ... (el resto de tu código para emitir y ejecutar estrategias)
+        // Configura las dependencias para las estrategias
+        const dependencies = {
+            log,
+            io,
+            bitmartService,
+            Autobot,
+            currentPrice,
+            availableUSDT,
+            availableBTC,
+            botState,
+            bitmartCredentials: {
+                apiKey: process.env.BITMART_API_KEY,
+                secretKey: process.env.BITMART_SECRET_KEY,
+                memo: process.env.BITMART_API_MEMO
+            }
+        };
+
+        setLongDeps(dependencies);
+        setShortDeps(dependencies);
+
+        // Ejecuta la estrategia si está activa
+        if (botState.lstate === 'RUNNING') {
+            await runLongStrategy();
+        } else if (botState.sstate === 'RUNNING') {
+            await runShortStrategy();
+        }
+        
     } catch (error) {
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
 }
+
+// Ahora, las funciones start y stop no controlan el bucle, sino el estado del bot.
+// El bucle se maneja en server.js
 async function start() {
-    if (botIsRunning) {
-        log('El bot ya está en ejecución.', 'warning');
-        return;
-    }
-    
-    botIsRunning = true;
-    log("El bot se ha iniciado.", 'success');
-    
-    intervalId = setInterval(botCycle, 5000); // Se ejecuta cada 5 segundos
+    log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
 }
 
 async function stop() {
-    if (!botIsRunning) {
-        log('El bot ya está detenido.', 'warning');
-        return;
-    }
-
-    if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-    }
-
-    botIsRunning = false;
-    log("El bot se ha detenido.", 'success');
+    log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
 }
 
 module.exports = {
@@ -96,6 +102,5 @@ module.exports = {
     start,
     stop,
     log,
-    // La función botCycle es necesaria para el setInterval
-    botCycle, 
+    botCycle,
 };
