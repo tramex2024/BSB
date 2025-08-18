@@ -153,15 +153,21 @@ app.get('/api/orders/:status', async (req, res) => {
             case 'filled':
             case 'cancelled':
             case 'all':
+                // Calcula el rango de tiempo de los últimos 30 días
+                const now = Date.now();
+                const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+
                 let historyParams = {
                     symbol,
                     pageSize: 50,
+                    startTime: thirtyDaysAgo, // Añadimos el inicio del rango
+                    endTime: now, // Añadimos el fin del rango
                 };
 
                 if (status !== 'all') {
                     historyParams.status = status;
                 }
-
+                
                 result = await bitmartService.getHistoryOrders(authCredentials, historyParams);
                 break;
             default:
