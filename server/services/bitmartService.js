@@ -6,6 +6,7 @@ const querystring = require('querystring');
 require('dotenv').config(); // Asegúrate de cargar las variables de entorno aquí también
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
+const API_URL = 'https://api-cloud.bitmart.com';
 
 const DEFAULT_V4_POST_MEMO = 'GainBot';
 
