@@ -129,12 +129,11 @@ app.get('/api/ticker/:symbol', async (req, res) => {
 app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
     
-    // NOTA: Se ha eliminado el requisito de autenticación por solicitud del usuario.
-    // Esto significa que las órdenes serán accesibles sin iniciar sesión.
+    // NOTA: Se ha corregido el nombre de la variable de entorno para MEMO
     const authCredentials = {
         apiKey: process.env.BITMART_API_KEY,
         secretKey: process.env.BITMART_SECRET_KEY,
-        memo: process.env.BITMART_MEMO
+        memo: process.env.BITMART_API_MEMO // ¡AQUÍ ESTÁ LA CORRECCIÓN!
     };
 
     if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
