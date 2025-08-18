@@ -10,7 +10,6 @@ const USER_AGENT = 'GainBot-CustomClient';
 const RETRY_ERROR_CODES = [30000];
 
 function generateSignature(timestamp, memo, bodyOrQueryString, apiSecret) {
-    // La firma SIEMPRE debe incluir el body o el queryString, incluso si están vacíos
     const message = `${timestamp}#${memo || ''}#${bodyOrQueryString || ''}`;
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
@@ -20,19 +19,17 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     const headers = { 'User-Agent': USER_AGENT };
     let signatureBody = '';
 
-    // Determinar el cuerpo de la firma según el método HTTP
-    if (method.toUpperCase() === 'POST') {
-        if (Object.keys(body).length > 0) {
-            signatureBody = JSON.stringify(body);
-        }
+    if (method.toUpperCase() === 'POST' && Object.keys(body).length > 0) {
+        signatureBody = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
-    } else if (method.toUpperCase() === 'GET' && Object.keys(params).length > 0) {
+    } else if (method.toUpperCase() === 'GET') {
         const sortedParams = Object.keys(params).sort().reduce((acc, key) => {
             acc[key] = params[key];
             return acc;
         }, {});
         signatureBody = querystring.stringify(sortedParams);
     }
+    // Si es POST con body vacío, signatureBody ya es una cadena vacía (''). Esto es lo que necesitamos.
 
     if (isPrivate) {
         const timestamp = Date.now().toString();
@@ -65,13 +62,11 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         return response.data;
     } catch (error) {
         const message = error.response?.data?.message || error.message;
-        const code = error.response?.data?.code;
         const finalMessage = `Falló la solicitud a BitMart en ${endpoint}: ${message}`;
 
         console.error(`Error en la solicitud a ${endpoint}:`, finalMessage);
 
         const customError = new Error(finalMessage);
-        customError.isRetryable = RETRY_ERROR_CODES.includes(code);
         
         throw customError;
     }
