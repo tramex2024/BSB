@@ -18,22 +18,20 @@ function generateSignature(timestamp, memo, bodyOrQueryString, apiSecret) {
 const makeRequest = async (credentials, method, endpoint, params = {}, body = {}) => {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const headers = { 'User-Agent': USER_AGENT };
-    let signatureBody;
+    let signatureBody = '';
 
     // Determinar el cuerpo de la firma según el método HTTP
-    if (method.toUpperCase() === 'POST' && Object.keys(body).length > 0) {
-        // Para POST, el body de la firma debe ser el JSON string del cuerpo SIN FORMATO.
-        signatureBody = JSON.stringify(body);
+    if (method.toUpperCase() === 'POST') {
+        if (Object.keys(body).length > 0) {
+            signatureBody = JSON.stringify(body);
+        }
         headers['Content-Type'] = 'application/json';
     } else if (method.toUpperCase() === 'GET' && Object.keys(params).length > 0) {
-        // Para GET, el body de la firma debe ser el query string ordenado.
         const sortedParams = Object.keys(params).sort().reduce((acc, key) => {
             acc[key] = params[key];
             return acc;
         }, {});
         signatureBody = querystring.stringify(sortedParams);
-    } else {
-        signatureBody = '';
     }
 
     if (isPrivate) {
