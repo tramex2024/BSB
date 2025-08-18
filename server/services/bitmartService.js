@@ -42,6 +42,7 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 }
 
 // **Función makeRequest CORREGIDA**
+// La función makeRequest está CORREGIDA
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
@@ -59,19 +60,21 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
 
     if (isPrivate) {
         const timestamp = Date.now().toString();
-        const memo = credentials.memo || DEFAULT_V4_POST_MEMO;
-        
+        const memo = credentials.memo || "GainBot";
         let signString;
-        if (isV4 && method === 'POST') {
-            const sortedBodyString = JSON.stringify(sortObjectKeys(body));
-            signString = `${timestamp}#${memo}#${CryptoJS.SHA256(sortedBodyString).toString()}`;
+        
+        // **Lógica de firma corregida**
+        if (isV4 && method.toUpperCase() === 'POST') {
+            const sortedBody = sortObjectKeys(body);
+            const sortedBodyString = JSON.stringify(sortedBody);
+            signString = `${timestamp}#${memo}#${CryptoJS.SHA256(sortedBodyString).toString(CryptoJS.enc.Hex)}`;
         } else {
             const sortedParams = sortObjectKeys(params);
             const queryString = querystring.stringify(sortedParams);
             signString = `${timestamp}#${memo}#${queryString}`;
         }
         
-        const signature = CryptoJS.HmacSHA256(signString, credentials.secretKey).toString();
+        const signature = CryptoJS.HmacSHA256(signString, credentials.secretKey).toString(CryptoJS.enc.Hex);
         
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
@@ -84,7 +87,7 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         params,
     };
 
-    if (method === 'POST') {
+    if (method.toUpperCase() === 'POST') {
         requestOptions.data = body;
     }
     
