@@ -42,6 +42,7 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 }
 
 // **Función makeRequest CORREGIDA**
+// La función makeRequest está CORREGIDA
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
@@ -71,9 +72,11 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         const memo = credentials.memo || "GainBot";
         let messageToSign;
         
+        // **Lógica de firma corregida para V4 POST y GET**
         if (isV4 && method.toUpperCase() === 'POST') {
             // V4 POST Signature: timestamp#memo#SHA256(JSON string del body ordenado)
-            messageToSign = `${timestamp}#${memo}#${CryptoJS.SHA256(requestBodyString).toString(CryptoJS.enc.Hex)}`;
+            const bodyHash = CryptoJS.SHA256(requestBodyString).toString(CryptoJS.enc.Hex);
+            messageToSign = `${timestamp}#${memo}#${bodyHash}`;
         } else {
             // Resto de Endpoints: timestamp#memo#query string
             messageToSign = `${timestamp}#${memo}#${urlParamsString}`;
