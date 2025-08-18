@@ -128,26 +128,20 @@ app.get('/api/ticker/:symbol', async (req, res) => {
 // 2. Nuevo endpoint para obtener órdenes por status (reemplaza /orders/opened)
 app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        return res.status(401).json({ success: false, message: 'Authorization token is required.' });
+    
+    // NOTA: Se ha eliminado el requisito de autenticación por solicitud del usuario.
+    // Esto significa que las órdenes serán accesibles sin iniciar sesión.
+    const authCredentials = {
+        apiKey: process.env.BITMART_API_KEY,
+        secretKey: process.env.BITMART_SECRET_KEY,
+        memo: process.env.BITMART_MEMO
+    };
+
+    if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
+        return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
     }
-    const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const { apiKey, secretKey, memo } = decoded;
-
-        if (!apiKey || !secretKey || !memo) {
-            return res.status(400).json({ success: false, message: 'API keys are not configured.' });
-        }
-
-        const authCredentials = {
-            apiKey,
-            secretKey,
-            memo,
-        };
-
         let result;
         const symbol = 'BTC_USDT';
 
@@ -158,14 +152,13 @@ app.get('/api/orders/:status', async (req, res) => {
             case 'filled':
             case 'cancelled':
             case 'all':
-                // Nota: La API de BitMart devuelve un objeto con una propiedad 'list'
                 const historyData = await bitmartService.getHistoryOrdersV4(authCredentials, {
                     symbol,
                     pageSize: 50,
                     side: status === 'filled' || status === 'cancelled' ? undefined : undefined,
                     status,
                 });
-                result = { orders: historyData }; // Aseguramos que la respuesta tenga el formato esperado
+                result = { orders: historyData };
                 break;
             default:
                 return res.status(400).json({ success: false, message: 'Invalid order status' });
