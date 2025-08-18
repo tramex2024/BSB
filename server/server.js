@@ -162,7 +162,7 @@ app.get('/api/orders/:status', async (req, res) => {
                     historyParams.status = status;
                 }
 
-                result = await bitmartService.getHistoryOrdersV4(authCredentials, historyParams);
+                result = await bitmartService.getHistoryOrders(authCredentials, historyParams);
                 break;
             default:
                 return res.status(400).json({ success: false, message: 'Invalid order status' });
