@@ -45,33 +45,38 @@ function generateSign(timestamp, memo, bodyOrQueryString, apiSecret) {
 async function makeRequest(credentials, method, endpoint, params = {}, body = {}) {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const isV4 = typeof endpoint === 'string' && endpoint.includes('/v4/');
-    
-    let url = `${API_URL}${endpoint}`;
-    let requestBodyString = '';
-    
-    if (body && Object.keys(body).length > 0) {
-        requestBodyString = JSON.stringify(body);
-    }
-    
-    // Preparar encabezados
+
+    const url = `${API_URL}${endpoint}`;
     const headers = {
         'User-Agent': 'axios/1.9.0',
-        'Accept': 'application/json, text/plain, */*'
+        'Accept': 'application/json, text/plain, */*',
     };
-    
+
+    let requestBodyString = '';
+    let urlParamsString = '';
+
+    if (method.toUpperCase() === 'POST' && body && Object.keys(body).length > 0) {
+        // Para POST, el cuerpo es JSON
+        const sortedBody = sortObjectKeys(body);
+        requestBodyString = JSON.stringify(sortedBody);
+        headers['Content-Type'] = 'application/json';
+    } else if (method.toUpperCase() === 'GET' && params && Object.keys(params).length > 0) {
+        // Para GET, los parámetros van en la URL y en la firma
+        const sortedParams = sortObjectKeys(params);
+        urlParamsString = querystring.stringify(sortedParams);
+    }
+
     if (isPrivate) {
         const timestamp = Date.now().toString();
         const memo = credentials.memo || "GainBot";
         let messageToSign;
         
-        if (method.toUpperCase() === 'POST') {
-            const sortedBody = sortObjectKeys(body);
-            const sortedBodyString = JSON.stringify(sortedBody);
-            messageToSign = `${timestamp}#${memo}#${CryptoJS.SHA256(sortedBodyString).toString()}`;
+        if (isV4 && method.toUpperCase() === 'POST') {
+            // V4 POST Signature: timestamp#memo#SHA256(JSON string del body ordenado)
+            messageToSign = `${timestamp}#${memo}#${CryptoJS.SHA256(requestBodyString).toString(CryptoJS.enc.Hex)}`;
         } else {
-            const sortedParams = sortObjectKeys(params);
-            const queryString = querystring.stringify(sortedParams);
-            messageToSign = `${timestamp}#${memo}#${queryString}`;
+            // Resto de Endpoints: timestamp#memo#query string
+            messageToSign = `${timestamp}#${memo}#${urlParamsString}`;
         }
         
         const signature = CryptoJS.HmacSHA256(messageToSign, credentials.secretKey).toString(CryptoJS.enc.Hex);
@@ -79,20 +84,18 @@ async function makeRequest(credentials, method, endpoint, params = {}, body = {}
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
         headers['X-BM-TIMESTAMP'] = timestamp;
-        headers['X-BM-MEMO'] = memo;
-        headers['Content-Type'] = 'application/json';
+        if (memo) {
+             headers['X-BM-MEMO'] = memo;
+        }
     }
 
     const requestOptions = {
         method,
-        headers,
         url,
-        params,
+        headers,
+        data: requestBodyString,
+        params: params
     };
-
-    if (method.toUpperCase() === 'POST') {
-        requestOptions.data = requestBodyString;
-    }
 
     try {
         const response = await axios(requestOptions);
