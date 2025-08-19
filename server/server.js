@@ -107,28 +107,30 @@ setupWebSocket(io);
 // El ciclo se ejecutará cada 10 segundos, si el bot está activado.
 (async function startBotCycle() {
     try {
-        // Solo ejecuta el ciclo si el bot está activo y el precio está disponible
-        const botState = await Autobot.findOne({});
-        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
-            await autobotLogic.botCycle(currentMarketPrice);
-        }
-    } catch (error) {
-        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
-    } finally {
-        setTimeout(startBotCycle, 10000);
-    }
-})();
-
-// Lógica para iniciar el ciclo del bot de manera segura
-// El ciclo se ejecutará cada 10 segundos, si el bot está activado.
-(async function startBotCycle() {
-    try {
         // Ejecuta la prueba de API cada 5 minutos
         if (process.env.NODE_ENV === 'production') {
             setInterval(async () => {
+                const authCredentials = {
+                    apiKey: process.env.BITMART_API_KEY,
+                    secretKey: process.env.BITMART_SECRET_KEY,
+                    memo: process.env.BITMART_API_MEMO || "GainBot"
+                };
+
+                // Añadimos un log para verificar que las claves se leen correctamente
+                console.log('--- Verificando credenciales de la API ---');
+                console.log(`Clave API: ${authCredentials.apiKey ? '✅ Leída' : '❌ No leída'}`);
+                console.log(`Clave Secreta: ${authCredentials.secretKey ? '✅ Leída' : '❌ No leída'}`);
+                console.log(`Memo: ${authCredentials.memo}`);
+                console.log('--- Fin de la verificación de credenciales ---');
+
+                if (!authCredentials.apiKey || !authCredentials.secretKey) {
+                    console.error("ERROR: Las claves API no están configuradas en las variables de entorno de Render.");
+                    return;
+                }
+
                 console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
                 try {
-                    await testBitmart.runTest();
+                    await testBitmart.runTest(authCredentials);
                     console.log('--- Prueba de API finalizada ---');
                 } catch (error) {
                     console.error('--- Error al ejecutar la prueba de API de BitMart ---', error);
