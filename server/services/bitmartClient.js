@@ -35,7 +35,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
 
     if (isPrivate) {
         const timestamp = Date.now().toString();
-        const memo = credentials.memo || '';
+        const memo = process.env.BITMART_API_MEMO || ''; // Obtenido del .env
         const signature = generateSignature(
             timestamp,
             memo,
