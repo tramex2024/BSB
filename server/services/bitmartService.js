@@ -13,7 +13,7 @@ async function getOpenOrders(authCredentials, symbol) {
     try {
         const body = { symbol: symbol };
         const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', null, body);
-
+        
         if (response.code === 1000) {
             const orders = response.data.list || [];
             if (orders.length === 0) {
@@ -36,7 +36,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
     console.log('[BITMART_SPOT_SERVICE] Listando historial de órdenes (V4 POST)...');
     try {
         const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/history-orders', null, options);
-
+        
         if (response.code === 1000) {
             const orders = response.data.list || [];
             if (orders.length === 0) {
