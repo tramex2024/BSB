@@ -60,7 +60,6 @@ async function getHistoryOrdersV4(options = {}) {
   }
 }
 
-// Esta función se encarga de recibir las claves y pasarlas a las funciones internas
 async function runTest(credentials) {
   if (!credentials || !credentials.apiKey || !credentials.secretKey) {
     console.error("ERROR: Las credenciales API no se pasaron a la función de prueba.");
@@ -70,6 +69,14 @@ async function runTest(credentials) {
   API_KEY = credentials.apiKey;
   API_SECRET = credentials.secretKey;
   API_MEMO = credentials.memo || "GainBot";
+
+  // --- NUEVO BLOQUE DE CÓDIGO DE VERIFICACIÓN ---
+  console.log("--- Verificando credenciales antes de la firma ---");
+  console.log(`API Key: ${API_KEY ? '✅ Leída' : '❌ No leída'}`);
+  console.log(`Secret Key: ${API_SECRET ? '✅ Leída' : '❌ No leída'}`);
+  console.log(`API Memo: ${API_MEMO ? '✅ Leído' : '❌ No leído'}`);
+  console.log("--- Fin de la verificación ---");
+  // --- FIN DEL NUEVO BLOQUE ---
 
   console.log("Iniciando prueba de historial de órdenes...");
   const now = Date.now();
