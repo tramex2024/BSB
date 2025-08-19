@@ -1,3 +1,5 @@
+// Archivo: bsb/server/services/bitmartClient.js
+
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
@@ -17,9 +19,14 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     const headers = { 'User-Agent': USER_AGENT };
     let signatureBody = '';
 
-    if (method.toUpperCase() === 'POST' && Object.keys(body).length > 0) {
-        signatureBody = JSON.stringify(body);
-        headers['Content-Type'] = 'application/json';
+    if (method.toUpperCase() === 'POST') {
+        if (Object.keys(body).length > 0) {
+            signatureBody = JSON.stringify(body);
+            headers['Content-Type'] = 'application/json';
+        } else {
+            signatureBody = '';
+            headers['Content-Type'] = 'application/json';
+        }
     } else if (method.toUpperCase() === 'GET') {
         const sortedParams = Object.keys(params).sort().reduce((acc, key) => {
             acc[key] = params[key];
