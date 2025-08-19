@@ -3,6 +3,66 @@
 const spotService = require('./bitmartSpot');
 const { getBalance: getAccountBalances } = require('./bitmartSpot');
 
+// Nuevas funciones para integrar la lógica de ordenes v4
+const bitmartClient = require('./bitmartClient');
+const MIN_USDT_VALUE_FOR_BITMART = 5;
+
+// =========================================================================
+// Funciones de V4
+// =========================================================================
+
+async function getOpenOrders(authCredentials, symbol) {
+    console.log('[BITMART_SPOT_SERVICE] Obteniendo órdenes abiertas (V4 POST) para ' + symbol + '...');
+    try {
+        const body = { symbol: symbol };
+        const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', null, body);
+        
+        if (response.code === 1000) {
+            const orders = response.data.list || [];
+            if (orders.length === 0) {
+                console.log('ℹ️ No se encontraron órdenes abiertas.');
+                return [];
+            }
+            console.log(`✅ Órdenes abiertas obtenidas con éxito. Se encontraron ${orders.length} órdenes.`);
+            return orders;
+        } else {
+            console.error('❌ Falló la obtención de órdenes abiertas V4.');
+            throw new Error(response.message || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('❌ Falló la obtención de órdenes abiertas V4.', error.message);
+        throw error;
+    }
+}
+
+async function getHistoryOrders(authCredentials, options = {}) {
+    console.log('[BITMART_SPOT_SERVICE] Listando historial de órdenes (V4 POST)...');
+    try {
+        const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/history-orders', null, options);
+        
+        if (response.code === 1000) {
+            const orders = response.data.list || [];
+            if (orders.length === 0) {
+                console.log('ℹ️ No se encontraron órdenes en el historial.');
+                return [];
+            }
+            console.log(`✅ Historial de órdenes obtenido con éxito. Se encontraron ${orders.length} órdenes.`);
+            return orders;
+        } else {
+            console.error('❌ Falló la obtención del historial de órdenes V4.');
+            throw new Error(response.message || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('❌ Falló la obtención del historial de órdenes V4.', error.message);
+        throw error;
+    }
+}
+
+
+// =========================================================================
+// Funciones Existentes
+// =========================================================================
+
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
     console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
     if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
@@ -23,7 +83,7 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
 async function cancelAllOpenOrders(bitmartCreds, symbol) {
     console.log(`[ORCHESTRATOR] Intentando cancelar órdenes abiertas para ${symbol}...`);
     try {
-        const { orders } = await spotService.getOpenOrders(bitmartCreds, symbol);
+        const orders = await getOpenOrders(bitmartCreds, symbol);
         if (orders.length > 0) {
             for (const order of orders) {
                 console.log(`[ORCHESTRATOR] Cancelando orden: ${order.order_id}`);
@@ -49,8 +109,8 @@ async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt) {
     const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
     const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
 
-    if (purchaseAmountUsdt < spotService.MIN_USDT_VALUE_FOR_BITMART) {
-        throw new Error(`El valor de la orden (${purchaseAmountUsdt.toFixed(2)} USDT) es menor que el mínimo de BitMart (${spotService.MIN_USDT_VALUE_FOR_BITMART} USDT).`);
+    if (purchaseAmountUsdt < MIN_USDT_VALUE_FOR_BITMART) {
+        throw new Error(`El valor de la orden (${purchaseAmountUsdt.toFixed(2)} USDT) es menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART} USDT).`);
     }
 
     if (availableUSDT < purchaseAmountUsdt) {
@@ -84,7 +144,7 @@ async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, ta
     const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
     const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
 
-    if (availableUSDT < nextUSDTAmount || nextUSDTAmount < spotService.MIN_USDT_VALUE_FOR_BITMART) {
+    if (availableUSDT < nextUSDTAmount || nextUSDTAmount < MIN_USDT_VALUE_FOR_BITMART) {
         throw new Error(`Balance insuficiente (${availableUSDT.toFixed(2)} USDT) o monto de orden (${nextUSDTAmount.toFixed(2)} USDT) es menor al mínimo para orden de cobertura.`);
     }
 
@@ -161,6 +221,7 @@ async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
 
 module.exports = {
     ...spotService,
+    MIN_USDT_VALUE_FOR_BITMART,
     getAccountBalances,
     validateApiKeys,
     cancelAllOpenOrders,
@@ -168,4 +229,6 @@ module.exports = {
     placeCoverageBuyOrder,
     placeSellOrder,
     placeLimitSellOrder,
+    getOpenOrders, // Incluir la nueva función de órdenes abiertas
+    getHistoryOrders, // Incluir la nueva función de historial
 };
