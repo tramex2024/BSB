@@ -9,6 +9,7 @@ let API_KEY, API_SECRET, API_MEMO;
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
 function generateSign(timestamp, body) {
+  // Los logs de verificación se añaden antes de esta línea para ver los valores
   const message = timestamp + '#' + API_MEMO + '#' + body;
   return CryptoJS.HmacSHA256(message, API_SECRET).toString(CryptoJS.enc.Hex);
 }
