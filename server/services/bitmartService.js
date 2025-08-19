@@ -15,7 +15,9 @@ async function getOpenOrders(authCredentials, symbol) {
         const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', null, body);
         
         if (response.code === 1000) {
-            const orders = response.data.list || [];
+            // *** LÓGICA DE EXTRACCIÓN CORREGIDA ***
+            const orders = Array.isArray(response.data.data) ? response.data.data : [];
+
             if (orders.length === 0) {
                 console.log('ℹ️ No se encontraron órdenes abiertas.');
                 return [];
