@@ -1,10 +1,7 @@
-// Archivo: src/server/services/bitmartService.js
-
 const spotService = require('./bitmartSpot');
 const { getBalance: getAccountBalances } = require('./bitmartSpot');
-const bitmartClient = require('./bitmartClient'); // Se ha agregado este require
+const bitmartClient = require('./bitmartClient');
 
-// Definir el valor mínimo, que estaba en bitmartSpot
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
 // =========================================================================
