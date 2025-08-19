@@ -1,5 +1,3 @@
-// Archivo: bsb/server/services/bitmartClient.js
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
@@ -71,7 +69,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         console.error(`Error en la solicitud a ${endpoint}:`, finalMessage);
 
         const customError = new Error(finalMessage);
-        
+
         throw customError;
     }
 };
