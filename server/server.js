@@ -113,8 +113,8 @@ setupWebSocket(io);
             setInterval(async () => {
                 const authCredentials = {
                     apiKey: process.env.BITMART_API_KEY,
-                    secretKey: process.env.BITMART_SECRET_KEY,
-                    memo: process.env.BITMART_API_MEMO || "GainBot"
+                    secretKey: process.env.BITMART_SECRET_KEY,		    
+                    memo: process.env.BITMART_API_MEMO //|| "GainBot"
                 };
 
                 // Añadimos un log para verificar que las claves se leen correctamente
@@ -167,7 +167,7 @@ app.get('/api/orders/:status', async (req, res) => {
     const authCredentials = {
         apiKey: process.env.BITMART_API_KEY,
         secretKey: process.env.BITMART_SECRET_KEY,
-        memo: process.env.BITMART_API_MEMO || "GainBot"
+        memo: process.env.BITMART_API_MEMO //|| "GainBot"
     };
 
     if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
