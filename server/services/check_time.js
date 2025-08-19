@@ -1,4 +1,5 @@
 // Archivo: check_time.js
+
 const axios = require('axios');
 const API_URL = 'https://api-cloud.bitmart.com';
 
@@ -6,12 +7,12 @@ async function checkTimeSync() {
     console.log("--- Verificando la sincronización del reloj con el servidor de BitMart ---");
     try {
         const response = await axios.get(`${API_URL}/system/time`);
-        
+
         if (response.data && response.data.code === 1000) {
             const bitmartServerTime = parseInt(response.data.data.server_time);
             const localTime = Date.now();
             const timeDifference = Math.abs(localTime - bitmartServerTime);
-            
+
             console.log(`Hora del servidor de BitMart: ${bitmartServerTime} ms`);
             console.log(`Hora local del servidor:     ${localTime} ms`);
             console.log(`Diferencia horaria: ${timeDifference} ms`);
@@ -29,4 +30,5 @@ async function checkTimeSync() {
     }
 }
 
-checkTimeSync();
+// Exporta la función para que pueda ser llamada
+module.exports = checkTimeSync;
