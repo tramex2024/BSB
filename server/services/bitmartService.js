@@ -2,13 +2,13 @@
 
 const spotService = require('./bitmartSpot');
 const { getBalance: getAccountBalances } = require('./bitmartSpot');
+const bitmartClient = require('./bitmartClient'); // Se ha agregado este require
 
-// Nuevas funciones para integrar la lógica de ordenes v4
-const bitmartClient = require('./bitmartClient');
+// Definir el valor mínimo, que estaba en bitmartSpot
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
 // =========================================================================
-// Funciones de V4
+// Funciones de V4 corregidas
 // =========================================================================
 
 async function getOpenOrders(authCredentials, symbol) {
@@ -58,9 +58,8 @@ async function getHistoryOrders(authCredentials, options = {}) {
     }
 }
 
-
 // =========================================================================
-// Funciones Existentes
+// Funciones Existentes y originales
 // =========================================================================
 
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
@@ -212,7 +211,7 @@ async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
             type: type,
             state: filledOrder.state
         };
-    }
+    };
 }
 
 async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
@@ -229,6 +228,6 @@ module.exports = {
     placeCoverageBuyOrder,
     placeSellOrder,
     placeLimitSellOrder,
-    getOpenOrders, // Incluir la nueva función de órdenes abiertas
-    getHistoryOrders, // Incluir la nueva función de historial
+    getOpenOrders,
+    getHistoryOrders,
 };

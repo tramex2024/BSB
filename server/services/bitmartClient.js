@@ -66,7 +66,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         console.error(`Error en la solicitud a ${endpoint}:`, finalMessage);
 
         const customError = new Error(finalMessage);
-        
+
         throw customError;
     }
 };
