@@ -8,33 +8,42 @@ const MIN_USDT_VALUE_FOR_BITMART = 5;
 // Funciones de V4 corregidas
 // =========================================================================
 
+// This is the updated getOpenOrders function
 async function getOpenOrders(authCredentials, symbol) {
-    console.log('[BITMART_SPOT_SERVICE] Obteniendo órdenes abiertas (V4 POST) para ' + symbol + '...');
+    console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol || 'todos los símbolos'} ---`);
+    const path = '/spot/v4/query/open-orders';
+    const requestBody = {};
+    if (symbol) { requestBody.symbol = symbol; }
     try {
-        const body = { symbol: symbol };
-        const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', null, body);
+        const serverTime = await getSystemTime();
+        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
         
-        // --- LOG DE RESPUESTA PARA ASEGURARNOS ---
-        console.log('--- Respuesta completa de la API para Open Orders ---');
-        console.log(JSON.stringify(response.data, null, 2));
-        console.log('--- Fin de la respuesta ---');
-        // --- FIN DEL LOG ---
-
-        if (response.code === 1000) {
-            const orders = Array.isArray(response.data.data) ? response.data.data : [];
-
-            if (orders.length === 0) {
-                console.log('ℹ️ No se encontraron órdenes abiertas.');
-                return [];
-            }
-            console.log(`✅ Órdenes abiertas obtenidas con éxito. Se encontraron ${orders.length} órdenes.`);
-            return orders;
-        } else {
-            console.error('❌ Falló la obtención de órdenes abiertas V4.');
-            throw new Error(response.message || 'Unknown error');
+        // --- CORRECTED LOGIC START ---
+        // The API returns the order list directly in the 'data' field.
+        // Let's get the data from the response.
+        const responseData = response.data;
+        let orders = [];
+        
+        // Check if the response data is an array, which it is.
+        if (Array.isArray(responseData)) {
+             orders = responseData;
         }
+        
+        // Now, log the correct message based on the found orders.
+        if (orders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+        } else {
+            console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
+        }
+        
+        // Log the raw data for debugging purposes.
+        console.log("--- Respuesta completa de la API para Open Orders ---");
+        console.log(JSON.stringify(responseData, null, 2));
+        console.log("--- Fin de la respuesta ---");
+
+        return { orders: orders };
     } catch (error) {
-        console.error('❌ Falló la obtención de órdenes abiertas V4.', error.message);
+        console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
     }
 }
