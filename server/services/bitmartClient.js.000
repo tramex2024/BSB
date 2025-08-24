@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const API_URL = 'https://api-cloud.bitmart.com';
 const USER_AGENT = 'GainBot-CustomClient';
-//const RETRY_ERROR_CODES = [30000];
+const RETRY_ERROR_CODES = [30000];
 
 function generateSignature(timestamp, memo, bodyOrQueryString, apiSecret) {
     const message = `${timestamp}#${memo || ''}#${bodyOrQueryString || ''}`;
@@ -35,7 +35,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
 
     if (isPrivate) {
         const timestamp = Date.now().toString();
-        const memo = credentials.memo || '';
+        const memo = process.env.BITMART_API_MEMO || ''; // Obtenido del .env
         const signature = generateSignature(
             timestamp,
             memo,

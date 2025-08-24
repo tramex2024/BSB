@@ -1,5 +1,3 @@
-// Archivo: test_open_orders.js
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 require('dotenv').config();
@@ -12,19 +10,12 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 
 function generateSign(timestamp, body) {
   const message = `${timestamp}#${API_MEMO}#${body}`;
-  //console.log(`[DEBUG_SIGN] Cadena a firmar (Open Orders): "${message}"`);
   return CryptoJS.HmacSHA256(message, API_SECRET).toString(CryptoJS.enc.Hex);
 }
 
 async function getOpenOrdersV4(options = {}) {
-  //console.log(`\n--- Iniciando prueba de Órdenes Abiertas (V4 POST) ---`);
+  console.log(`\n--- Iniciando prueba de Órdenes Abiertas (V4 POST) ---`);
   
-  //console.log("--- Verificando credenciales ---");
-  //console.log(`API Key: ${API_KEY ? '✅ Leída' : '❌ No leída'}`);
-  //console.log(`Secret Key: ${API_SECRET ? '✅ Leída' : '❌ No leída'}`);
-  //console.log(`API Memo: ${API_MEMO ? '✅ Leído' : '❌ No leído'}`);
-  //console.log("--- Fin de la verificación ---");
-
   if (!API_KEY || !API_SECRET || !API_MEMO) {
     console.error("ERROR: Las credenciales API no se cargaron desde .env.");
     return;
@@ -52,20 +43,13 @@ async function getOpenOrdersV4(options = {}) {
 
   try {
     const response = await axios.post(url, requestBody, { headers });
-
-    // *** NUEVA LÍNEA PARA DEPURACIÓN ***
-    console.log('\n--- Respuesta completa de la API ---');
-    console.log(JSON.stringify(response.data, null, 2));
-    console.log('--- Fin de la respuesta ---');
-    // **********************************
-
+    
     if (response.data.code === 1000) {
-      const orders = response.data.data && Array.isArray(response.data.data.list) ? response.data.data.list : [];
+      const orders = Array.isArray(response.data.data) ? response.data.data : [];
 
       if (orders.length > 0) {
         console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-        orders.slice(0, 5).forEach((order, index) => {
-          console.log(`\n--- Orden Abierta ${index + 1} ---`);
+        orders.forEach((order) => {
           console.log(JSON.stringify(order, null, 2));
         });
       } else {
@@ -86,12 +70,3 @@ async function getOpenOrdersV4(options = {}) {
     throw error;
   }
 }
-
-// --- Ejecución de la prueba ---
-(async () => {
-  try {
-    await getOpenOrdersV4({ symbol: 'BTC_USDT' });
-  } catch (error) {
-    // El error ya se maneja
-  }
-})();
