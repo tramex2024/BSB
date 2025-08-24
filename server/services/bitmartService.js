@@ -14,9 +14,13 @@ async function getOpenOrders(authCredentials, symbol) {
         const body = { symbol: symbol };
         const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', null, body);
         
+        // --- LOG DE RESPUESTA PARA ASEGURARNOS ---
+        console.log('--- Respuesta completa de la API para Open Orders ---');
+        console.log(JSON.stringify(response.data, null, 2));
+        console.log('--- Fin de la respuesta ---');
+        // --- FIN DEL LOG ---
+
         if (response.code === 1000) {
-            // LÓGICA DE EXTRACCIÓN DE DATOS CORREGIDA
-            // La API de BitMart puede devolver la lista de órdenes directamente en response.data.data
             const orders = Array.isArray(response.data.data) ? response.data.data : [];
 
             if (orders.length === 0) {
