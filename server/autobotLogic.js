@@ -1,3 +1,5 @@
+// Archivo: BSB/server/autobotLogic.js
+
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');

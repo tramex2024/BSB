@@ -30,7 +30,9 @@ export async function fetchOrders(tabId) {
     if (!orderList) return;
 
     try {
-        const data = await fetchFromBackend(`/api/orders/${orderStatus}`);
+        // CORRECCIÓN: Usar el nuevo endpoint del backend
+        const data = await fetchFromBackend(`/api/open-orders?symbol=${TRADE_SYMBOL_BITMART}`);
+        
         if (data.success) {
             displayOrders(data.orders, orderStatus);
             displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');
@@ -56,16 +58,21 @@ export function displayOrders(orders, type) {
 }
 
 export function createOrderElement(order) {
+    // La API de BitMart V4 devuelve 'orderId', 'side', 'symbol', 'price', etc.
     const orderTypeClass = order.side === 'buy' ? 'text-green-400' : 'text-red-400';
+    
+    // Asegúrate de que los campos del objeto 'order' coincidan con los de la respuesta de BitMart V4
+    const amount = order.size || order.notional / order.priceAvg; // La API V4 devuelve 'size'
+    
     return `
         <div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center text-sm">
             <div>
                 <span class="font-bold ${orderTypeClass}">${order.side.toUpperCase()} ${order.symbol}</span>
-                <p class="text-gray-400">Price: $${parseFloat(order.price).toFixed(2)} | Qty: ${parseFloat(order.amount).toFixed(4)}</p>
-                <p class="text-gray-400">Status: ${order.status}</p>
+                <p class="text-gray-400">Price: $${parseFloat(order.price).toFixed(2)} | Qty: ${parseFloat(amount).toFixed(4)}</p>
+                <p class="text-gray-400">Status: ${order.state}</p>
             </div>
             <div class="text-right">
-                <p class="text-gray-400">${new Date(order.timestamp).toLocaleString()}</p>
+                <p class="text-gray-400">${new Date(order.createTime).toLocaleString()}</p>
                 <p class="text-xs text-gray-500">ID: ${order.orderId}</p>
             </div>
         </div>
