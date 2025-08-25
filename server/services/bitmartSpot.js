@@ -37,7 +37,8 @@ async function getBalance(authCredentials) {
 }
 
 // =================================================================================
-// FUNCIÓN CORREGIDA: getOpenOrders() - Asegurando la llamada V4 correcta.
+// FUNCIÓN CORREGIDA FINAL: getOpenOrders()
+// Reconstruida para coincidir exactamente con el script de prueba funcional.
 // =================================================================================
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
@@ -47,7 +48,8 @@ async function getOpenOrders(authCredentials, symbol) {
     try {
         const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
         
-        // La API V4 devuelve los datos en el campo 'data' y este es un array.
+        // La API V4 devuelve los datos en el campo 'data', que es un array.
+        // Nos aseguramos de acceder a response.data.data tal como en tu script de prueba.
         const orders = response.data && Array.isArray(response.data.data) ? response.data.data : [];
 
         if (orders.length > 0) {
@@ -78,7 +80,7 @@ async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, del
     }
     try {
         const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/order-detail', {}, requestBody);
-        const order = response.data;
+        const order = response.data.data;
         console.log(`✅ Detalle de orden ${orderId} obtenido con éxito:`);
         console.log(`   - Order ID: ${order.order_id}, Símbolo: ${order.symbol}, Lado: ${order.side}, Tipo: ${order.type}, Estado: ${order.state}`);
         return order;
