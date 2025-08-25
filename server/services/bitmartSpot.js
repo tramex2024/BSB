@@ -59,6 +59,7 @@ async function getOpenOrders(authCredentials, symbol) {
         throw error;
     }
 }
+
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`${LOG_PREFIX} Obteniendo detalle de orden ${orderId} para ${symbol} (V4 POST)...`);
     const requestBody = { symbol, order_id: orderId };
