@@ -37,7 +37,7 @@ async function getBalance(authCredentials) {
 }
 
 // =================================================================================
-// FUNCIÓN MODIFICADA: getOpenOrders() - Lógica de prueba con llamada directa.
+// FUNCIÓN CORREGIDA: getOpenOrders() - Asegurando la llamada V4 correcta.
 // =================================================================================
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
@@ -46,7 +46,9 @@ async function getOpenOrders(authCredentials, symbol) {
 
     try {
         const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
-        const orders = Array.isArray(response.data.data) ? response.data.data : [];
+        
+        // La API V4 devuelve los datos en el campo 'data' y este es un array.
+        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : [];
 
         if (orders.length > 0) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
@@ -64,9 +66,8 @@ async function getOpenOrders(authCredentials, symbol) {
         throw error;
     }
 }
-
 // =================================================================================
-// FIN de la función modificada
+// FIN de la función corregida
 // =================================================================================
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
