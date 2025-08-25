@@ -18,29 +18,35 @@ export function setActiveTab(tabId) {
 }
 
 export async function fetchOrders(tabId) {
-    let orderStatus = tabId.replace('tab-', '');
-    
-    // CAMBIO CRUCIAL: Manejar el caso de la pestaña 'dashboard'
-    if (orderStatus === 'dashboard') {
-        orderStatus = 'opened'; // O puedes usar 'all' si lo prefieres
-    }
-
-    displayLogMessage(`Fetching ${orderStatus} orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
+    let endpoint = '';
     const orderList = document.getElementById('order-list');
     if (!orderList) return;
 
+    // Lógica para determinar el endpoint basado en la pestaña activa
+    if (tabId === 'opened') {
+        endpoint = `/api/open-orders?symbol=${TRADE_SYMBOL_BITMART}`;
+        displayLogMessage(`Fetching open orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
+    } else if (tabId === 'history') {
+        endpoint = `/api/history-orders?symbol=${TRADE_SYMBOL_BITMART}`;
+        displayLogMessage(`Fetching history orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
+    } else {
+        // En caso de una pestaña no reconocida, por ejemplo, en la vista del dashboard
+        endpoint = `/api/open-orders?symbol=${TRADE_SYMBOL_BITMART}`;
+        displayLogMessage(`Fetching default orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
+    }
+
     try {
-        // CORRECCIÓN: Usar el nuevo endpoint del backend
-        const data = await fetchFromBackend(`/api/open-orders?symbol=${TRADE_SYMBOL_BITMART}`);
+        const data = await fetchFromBackend(endpoint);
         
         if (data.success) {
-            displayOrders(data.orders, orderStatus);
+            displayOrders(data.orders, tabId);
             displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');
         } else {
             displayLogMessage(`Failed to fetch orders: ${data.message || 'Unknown error'}`, 'error');
             orderList.innerHTML = `<p class="text-red-500">Failed to load orders: ${data.message}</p>`;
         }
     } catch (error) {
+        displayLogMessage('Could not fetch orders. Network error or API issue.', 'error');
         orderList.innerHTML = `<p class="text-red-500">Could not fetch orders.</p>`;
     }
 }
@@ -58,11 +64,10 @@ export function displayOrders(orders, type) {
 }
 
 export function createOrderElement(order) {
-    // La API de BitMart V4 devuelve 'orderId', 'side', 'symbol', 'price', etc.
     const orderTypeClass = order.side === 'buy' ? 'text-green-400' : 'text-red-400';
     
     // Asegúrate de que los campos del objeto 'order' coincidan con los de la respuesta de BitMart V4
-    const amount = order.size || order.notional / order.priceAvg; // La API V4 devuelve 'size'
+    const amount = order.size || order.notional / order.priceAvg;
     
     return `
         <div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center text-sm">
