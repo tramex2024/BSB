@@ -1,4 +1,4 @@
-// Archivo: src/server/services/bitmartSpot.js
+// Archivo: bsb/server/services/bitmartSpot.js
 
 const { makeRequest } = require('./bitmartClient');
 
@@ -46,13 +46,11 @@ async function getOpenOrders(authCredentials, symbol) {
             orders = response.data.data.list;
         }
 
-        // Filtramos las órdenes históricas para encontrar solo las abiertas o parcialmente llenadas
-        const openOrders = orders.filter(o => 
-            o.state === 'new' || o.state === 'partially_filled'
-        );
+        // Filtramos las órdenes históricas para encontrar solo las que están activas.
+        const openStates = ['new', 'partially_filled', 'partially_canceled'];
+        const openOrders = orders.filter(o => openStates.includes(o.state));
 
-        // Si se proporcionó un símbolo, ya se hizo el filtro en la petición,
-        // pero lo mantenemos por si la API cambia su comportamiento.
+        // Filtramos por símbolo si se proporcionó uno.
         let finalOrders = openOrders;
         if (symbol) {
              finalOrders = openOrders.filter(o => o.symbol === symbol);
