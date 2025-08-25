@@ -7,11 +7,19 @@ require('dotenv').config();
 
 const API_URL = 'https://api-cloud.bitmart.com';
 const USER_AGENT = 'GainBot-CustomClient';
+//const RETRY_ERROR_CODES = [30000];
 
+/**
+ * Genera la firma HMAC SHA256 para la solicitud a la API de BitMart.
+ * @param {string} timestamp - Timestamp de la solicitud.
+ * @param {string} memo - El API Memo.
+ * @param {string} bodyForSign - Cuerpo de la solicitud JSON stringificado o cadena de consulta.
+ * @param {string} apiSecret - El API Secret.
+ * @returns {string} - La firma generada.
+ */
 function generateSignature(timestamp, memo, bodyForSign, apiSecret) {
     // La firma v4 de BitMart es estricta: timestamp#memo#body
-    // El 'body' debe ser una cadena JSON, incluso si está vacía.
-    const message = `${timestamp}#${memo || ''}#${bodyForSign}`;
+    const message = `${timestamp}#${memo || ''}#${bodyForSign || ''}`;
     return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
 }
 
@@ -26,6 +34,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         signatureBody = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
     } else if (method.toUpperCase() === 'GET') {
+        // Para GET, el cuerpo de la firma es la cadena de consulta ordenada.
         const sortedParams = Object.keys(params).sort().reduce((acc, key) => {
             acc[key] = params[key];
             return acc;
