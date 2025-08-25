@@ -62,11 +62,9 @@ io.on('connection', (socket) => {
     });
 });
 
-const bitmartCredentials = {
-    apiKey: process.env.BITMART_API_KEY,
-    secretKey: process.env.BITMART_SECRET_KEY,
-    apiMemo: process.env.BITMART_API_MEMO || ''
-};
+const BITMART_API_KEY = process.env.BITMART_API_KEY;
+const BITMART_SECRET_KEY = process.env.BITMART_SECRET_KEY;
+const BITMART_API_MEMO = process.env.BITMART_API_MEMO || "GainBot"; // Declaramos el MEMO como constante
 
 function setupWebSocket(io) {
     const ws = new WebSocket(bitmartWsUrl);
@@ -114,9 +112,9 @@ setupWebSocket(io);
         if (process.env.NODE_ENV === 'production') {
             setInterval(async () => {
                 const authCredentials = {
-                    apiKey: process.env.BITMART_API_KEY,
-                    secretKey: process.env.BITMART_SECRET_KEY,		    
-                    memo: process.env.BITMART_API_MEMO || "GainBot"
+                    apiKey: BITMART_API_KEY,
+                    secretKey: BITMART_SECRET_KEY,
+                    memo: BITMART_API_MEMO
                 };
 
                 // Añadimos un log para verificar que las claves se leen correctamente
@@ -126,7 +124,7 @@ setupWebSocket(io);
                 console.log(`Memo: ${authCredentials.memo}`);
                 console.log('--- Fin de la verificación de credenciales ---');
 
-                if (!authCredentials.apiKey || !authCredentials.secretKey) {
+                if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
                     console.error("ERROR: Las claves API no están configuradas en las variables de entorno de Render.");
                     return;
                 }
@@ -167,9 +165,9 @@ app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
     
     const authCredentials = {
-        apiKey: process.env.BITMART_API_KEY,
-        secretKey: process.env.BITMART_SECRET_KEY,
-        memo: process.env.BITMART_API_MEMO //|| "GainBot"
+        apiKey: BITMART_API_KEY,
+        secretKey: BITMART_SECRET_KEY,
+        memo: BITMART_API_MEMO
     };
 
     if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
@@ -220,9 +218,9 @@ app.get('/api/orders/:status', async (req, res) => {
 app.get('/api/bitmart-data', async (req, res) => {
     try {
         const isValid = await bitmartService.validateApiKeys(
-            bitmartCredentials.apiKey,
-            bitmartCredentials.secretKey,
-            bitmartCredentials.apiMemo
+            BITMART_API_KEY,
+            BITMART_SECRET_KEY,
+            BITMART_API_MEMO
         );
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
