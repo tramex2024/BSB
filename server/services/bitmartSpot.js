@@ -32,14 +32,12 @@ async function getBalance(authCredentials) {
 }
 
 async function getOpenOrders(authCredentials, symbol) {
-    // La API de BitMart V4 puede tener un problema con el filtrado por símbolo.
-    // Para asegurar que obtenemos todas las órdenes, no pasaremos el símbolo en el cuerpo.
-    // En su lugar, obtendremos todas las órdenes y filtraremos localmente si se proporciona un símbolo.
-    console.log(`\n[BITMART_SPOT_SERVICE] Obteniendo todas las órdenes abiertas de la cuenta (V4 POST)...`);
-    const requestBody = {}; // Cuerpo de solicitud vacío para obtener todas las órdenes.
+    console.log(`\n[BITMART_SPOT_SERVICE] Obteniendo órdenes abiertas a través del historial (V4 POST)...`);
+    const path = '/spot/v4/query/history-orders';
+    const requestBody = symbol ? { symbol } : {}; // Filtramos por símbolo si se proporciona
 
     try {
-        const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', {}, requestBody);
+        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
         
         let orders = [];
         if (Array.isArray(response.data.data)) {
@@ -48,19 +46,25 @@ async function getOpenOrders(authCredentials, symbol) {
             orders = response.data.data.list;
         }
 
-        // Si se proporcionó un símbolo, filtramos las órdenes localmente.
+        // Filtramos las órdenes históricas para encontrar solo las abiertas o parcialmente llenadas
+        const openOrders = orders.filter(o => 
+            o.state === 'new' || o.state === 'partially_filled'
+        );
+
+        // Si se proporcionó un símbolo, ya se hizo el filtro en la petición,
+        // pero lo mantenemos por si la API cambia su comportamiento.
+        let finalOrders = openOrders;
         if (symbol) {
-            orders = orders.filter(order => order.symbol === symbol);
-            console.log(`✅ Filtrado por símbolo ${symbol}. Se encontraron ${orders.length} órdenes.`);
+             finalOrders = openOrders.filter(o => o.symbol === symbol);
         }
 
-        if (orders.length > 0) {
-            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes en total.`);
-            orders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+        if (finalOrders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${finalOrders.length} órdenes.`);
+            finalOrders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
         } else {
             console.log('ℹ️ No se encontraron órdenes abiertas para los criterios especificados.');
         }
-        return { orders };
+        return { orders: finalOrders };
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
