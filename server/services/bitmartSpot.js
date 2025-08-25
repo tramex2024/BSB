@@ -32,9 +32,12 @@ async function getBalance(authCredentials) {
 }
 
 async function getOpenOrders(authCredentials, symbol) {
-    console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas (V4 POST) para ${symbol || 'todos los símbolos'}...`);
-    const requestBody = symbol ? { symbol } : {};
-    
+    // La API de BitMart V4 puede tener un problema con el filtrado por símbolo.
+    // Para asegurar que obtenemos todas las órdenes, no pasaremos el símbolo en el cuerpo.
+    // En su lugar, obtendremos todas las órdenes y filtraremos localmente si se proporciona un símbolo.
+    console.log(`\n[BITMART_SPOT_SERVICE] Obteniendo todas las órdenes abiertas de la cuenta (V4 POST)...`);
+    const requestBody = {}; // Cuerpo de solicitud vacío para obtener todas las órdenes.
+
     try {
         const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', {}, requestBody);
         
@@ -45,11 +48,17 @@ async function getOpenOrders(authCredentials, symbol) {
             orders = response.data.data.list;
         }
 
+        // Si se proporcionó un símbolo, filtramos las órdenes localmente.
+        if (symbol) {
+            orders = orders.filter(order => order.symbol === symbol);
+            console.log(`✅ Filtrado por símbolo ${symbol}. Se encontraron ${orders.length} órdenes.`);
+        }
+
         if (orders.length > 0) {
-            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-            orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes en total.`);
+            orders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
         } else {
-            console.log('ℹ️ No se encontraron órdenes abiertas.');
+            console.log('ℹ️ No se encontraron órdenes abiertas para los criterios especificados.');
         }
         return { orders };
     } catch (error) {
