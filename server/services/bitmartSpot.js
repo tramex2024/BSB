@@ -5,7 +5,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const hmacsha256 = require('crypto-js/hmac-sha256');
 const Base64 = require('crypto-js/enc-base64');
-const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
+//const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
 
 const { makeRequest } = require('./bitmartClient');
 
