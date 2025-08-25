@@ -40,51 +40,23 @@ async function getBalance(authCredentials) {
 // FUNCIÓN MODIFICADA: getOpenOrders() - Lógica de prueba con llamada directa.
 // =================================================================================
 async function getOpenOrders(authCredentials, symbol) {
-    console.log(`\n${LOG_PREFIX} DEBUG: Probando la llamada con la lógica del script de prueba para ${symbol || 'todos los símbolos'}...`);
-
-    const { apiKey, secretKey, apiMemo } = authCredentials;
-    
-    const timestamp = Date.now().toString();
-    const path = '/spot/v4/query/open-orders';
-    const url = `https://api-cloud.bitmart.com${path}`;
-    
-    const requestBody = symbol ? { symbol } : {};
-    const bodyForSign = JSON.stringify(requestBody);
-    
-    const signatureString = `${timestamp}#${apiMemo}#${bodyForSign}`;
-    const hmac = hmacsha256(signatureString, secretKey);
-    const sign = Base64.stringify(hmac);
-
-    const headers = {
-        'Content-Type': 'application/json',
-        'X-BM-KEY': apiKey,
-        'X-BM-TIMESTAMP': timestamp,
-        'X-BM-SIGN': sign,
-        'X-BM-MEMO': apiMemo,
+    console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
+    const endpoint = '/spot/v4/query/open-orders';
+    const requestBody = {
+        symbol: symbol
     };
-
     try {
-        const response = await axios.post(url, requestBody, { headers });
+        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
+        const orders = response.data.list;
 
-        let orders = [];
-        if (response.data.message === 'success' || response.data.code === 1000) {
-            if (Array.isArray(response.data.data)) {
-                orders = response.data.data;
-            } else if (response.data.data && Array.isArray(response.data.data.list)) {
-                orders = response.data.data.list;
-            }
-
-            if (orders.length > 0) {
-                console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-                orders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
-            } else {
-                console.log('ℹ️ No se encontraron órdenes abiertas.');
-            }
-            return { orders };
-        } else {
-            console.error('❌ Error en la API:', response.data);
-            throw new Error(response.data.message || 'Unknown error');
+        if (!orders || orders.length === 0) {
+            console.log('ℹ️ No se encontraron órdenes abiertas.');
+            return { orders: [] };
         }
+
+        console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+        return { orders };
+
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas.');
         if (error.response) {
@@ -93,6 +65,7 @@ async function getOpenOrders(authCredentials, symbol) {
         throw error;
     }
 }
+
 // =================================================================================
 // FIN de la función modificada
 // =================================================================================
