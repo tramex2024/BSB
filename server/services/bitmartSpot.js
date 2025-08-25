@@ -32,12 +32,13 @@ async function getBalance(authCredentials) {
 }
 
 async function getOpenOrders(authCredentials, symbol) {
-    console.log(`\n[BITMART_SPOT_SERVICE] Obteniendo órdenes abiertas a través del historial (V4 POST)...`);
-    const path = '/spot/v4/query/history-orders';
-    const requestBody = symbol ? { symbol } : {}; // Filtramos por símbolo si se proporciona
-
+    console.log(`\n[BITMART_SPOT_SERVICE] Obteniendo órdenes abiertas (V4 POST) para ${symbol || 'todos los símbolos'}...`);
+    
+    // Si se proporciona un símbolo, lo incluimos en el cuerpo de la solicitud.
+    const requestBody = symbol ? { symbol } : {};
+    
     try {
-        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
+        const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', {}, requestBody);
         
         let orders = [];
         if (Array.isArray(response.data.data)) {
@@ -46,29 +47,18 @@ async function getOpenOrders(authCredentials, symbol) {
             orders = response.data.data.list;
         }
 
-        // Filtramos las órdenes históricas para encontrar solo las que están activas.
-        const openStates = ['new', 'partially_filled', 'partially_canceled'];
-        const openOrders = orders.filter(o => openStates.includes(o.state));
-
-        // Filtramos por símbolo si se proporcionó uno.
-        let finalOrders = openOrders;
-        if (symbol) {
-             finalOrders = openOrders.filter(o => o.symbol === symbol);
-        }
-
-        if (finalOrders.length > 0) {
-            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${finalOrders.length} órdenes.`);
-            finalOrders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+        if (orders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+            orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
         } else {
-            console.log('ℹ️ No se encontraron órdenes abiertas para los criterios especificados.');
+            console.log('ℹ️ No se encontraron órdenes abiertas.');
         }
-        return { orders: finalOrders };
+        return { orders };
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
         throw error;
     }
 }
-
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`${LOG_PREFIX} Obteniendo detalle de orden ${orderId} para ${symbol} (V4 POST)...`);
     const requestBody = { symbol, order_id: orderId };
