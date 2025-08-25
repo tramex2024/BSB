@@ -35,6 +35,10 @@ BSB/			    # Bitmart Spot Bots
 │   │   └── authMiddleware.js
 │   ├── services/
 │   │   └── bitmartService.js
+│   │   └── bitmartClient.js
+│   │   └── bitmartSpot.js
+│   │   └── check_time.js
+│   │   └── test_sign.js
 │   ├── routes/
 │   │   └── authRoutes.js
 │   │   └── userRoutes.js 

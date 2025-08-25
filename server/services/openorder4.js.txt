@@ -1,7 +1,7 @@
 // TEST OPEN ORDERS v4
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
-require('dotenv').config(); // <-- Esto carga las variables de entorno del archivo .env
+require('dotenv').config(); 
 
 // ===========================================================================
 // *** Las claves se cargan desde el archivo .env por seguridad ***

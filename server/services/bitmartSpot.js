@@ -1,4 +1,4 @@
-// Archivo: bsb/server/services/bitmartSpot.js
+// Archivo: BSB/server/services/bitmartSpot.js
 
 // Importaciones necesarias:
 const axios = require('axios');
@@ -42,20 +42,19 @@ async function getBalance(authCredentials) {
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
     const endpoint = '/spot/v4/query/open-orders';
-    const requestBody = {
-        symbol: symbol
-    };
+    const requestBody = { symbol };
+
     try {
         const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
-        const orders = response.data.list;
+        const orders = Array.isArray(response.data.data) ? response.data.data : [];
 
-        if (!orders || orders.length === 0) {
+        if (orders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+            return { orders };
+        } else {
             console.log('ℹ️ No se encontraron órdenes abiertas.');
             return { orders: [] };
         }
-
-        console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-        return { orders };
 
     } catch (error) {
         console.error('\n❌ Falló la obtención de órdenes abiertas.');
