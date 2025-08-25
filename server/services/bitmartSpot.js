@@ -5,8 +5,6 @@ const axios = require('axios');
 const crypto = require('crypto');
 const hmacsha256 = require('crypto-js/hmac-sha256');
 const Base64 = require('crypto-js/enc-base64');
-//const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
-
 const { makeRequest } = require('./bitmartClient');
 
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
@@ -38,69 +36,73 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
+// =================================================================================
+// FUNCIÓN MODIFICADA: getOpenOrders() - Lógica de prueba con llamada directa.
+// =================================================================================
 async function getOpenOrders(authCredentials, symbol) {
-  console.log(`\n${LOG_PREFIX} DEBUG: Probando la llamada con la lógica del script de prueba para ${symbol || 'todos los símbolos'}...`);
+    console.log(`\n${LOG_PREFIX} DEBUG: Probando la llamada con la lógica del script de prueba para ${symbol || 'todos los símbolos'}...`);
 
-  const { apiKey, secretKey, apiMemo } = authCredentials;
-  
-  const timestamp = Date.now().toString();
-  const path = '/spot/v4/query/open-orders';
-  const url = `https://api-cloud.bitmart.com${path}`;
-  
-  const requestBody = symbol ? { symbol } : {};
-  const bodyForSign = JSON.stringify(requestBody);
-  
-  const signatureString = `${timestamp}#${apiMemo}#${bodyForSign}`;
-  const hmac = hmacsha256(signatureString, secretKey);
-  const sign = Base64.stringify(hmac);
+    const { apiKey, secretKey, apiMemo } = authCredentials;
+    
+    const timestamp = Date.now().toString();
+    const path = '/spot/v4/query/open-orders';
+    const url = `https://api-cloud.bitmart.com${path}`;
+    
+    const requestBody = symbol ? { symbol } : {};
+    const bodyForSign = JSON.stringify(requestBody);
+    
+    const signatureString = `${timestamp}#${apiMemo}#${bodyForSign}`;
+    const hmac = hmacsha256(signatureString, secretKey);
+    const sign = Base64.stringify(hmac);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-BM-KEY': apiKey,
-    'X-BM-TIMESTAMP': timestamp,
-    'X-BM-SIGN': sign,
-    'X-BM-MEMO': apiMemo,
-  };
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-BM-KEY': apiKey,
+        'X-BM-TIMESTAMP': timestamp,
+        'X-BM-SIGN': sign,
+        'X-BM-MEMO': apiMemo,
+    };
 
-  try {
-    const response = await axios.post(url, requestBody, { headers });
+    try {
+        const response = await axios.post(url, requestBody, { headers });
 
-    let orders = [];
-    if (response.data.message === 'success' || response.data.code === 1000) {
-      if (Array.isArray(response.data.data)) {
-        orders = response.data.data;
-      } else if (response.data.data && Array.isArray(response.data.data.list)) {
-        orders = response.data.data.list;
-      }
+        let orders = [];
+        if (response.data.message === 'success' || response.data.code === 1000) {
+            if (Array.isArray(response.data.data)) {
+                orders = response.data.data;
+            } else if (response.data.data && Array.isArray(response.data.data.list)) {
+                orders = response.data.data.list;
+            }
 
-      if (orders.length > 0) {
-        console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-        orders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
-      } else {
-        console.log('ℹ️ No se encontraron órdenes abiertas.');
-      }
-      return { orders };
-    } else {
-      console.error('❌ Error en la API:', response.data);
-      throw new Error(response.data.message || 'Unknown error');
+            if (orders.length > 0) {
+                console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+                orders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+            } else {
+                console.log('ℹ️ No se encontraron órdenes abiertas.');
+            }
+            return { orders };
+        } else {
+            console.error('❌ Error en la API:', response.data);
+            throw new Error(response.data.message || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('\n❌ Falló la obtención de órdenes abiertas.');
+        if (error.response) {
+            console.error('Error Data:', error.response.data);
+        }
+        throw error;
     }
-  } catch (error) {
-    console.error('\n❌ Falló la obtención de órdenes abiertas.');
-    if (error.response) {
-      console.error('Error Data:', error.response.data);
-    }
-    throw error;
-  }
 }
+// =================================================================================
+// FIN de la función modificada
+// =================================================================================
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`${LOG_PREFIX} Obteniendo detalle de orden ${orderId} para ${symbol} (V4 POST)...`);
     const requestBody = { symbol, order_id: orderId };
-
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
     }
-
     try {
         const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/order-detail', {}, requestBody);
         const order = response.data;
@@ -122,7 +124,6 @@ async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, del
 async function placeOrder(authCredentials, symbol, side, type, size, price) {
     console.log(`${LOG_PREFIX} Colocando orden de ${side.toUpperCase()} de ${size} ${symbol} (${type})...`);
     const requestBody = { symbol, side, type };
-
     if (type === 'limit') {
         if (!price) throw new Error("El precio es requerido para órdenes 'limit'.");
         Object.assign(requestBody, { size: size.toString(), price: price.toString() });
@@ -133,7 +134,6 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
     } else {
         throw new Error(`Tipo de orden no soportado: ${type}`);
     }
-
     const response = await makeRequest(authCredentials, 'POST', '/spot/v2/submit_order', {}, requestBody);
     const orderId = response.data.order_id;
     if (!orderId) throw new Error('Error al colocar la orden: No se recibió un order_id.');
@@ -152,18 +152,15 @@ async function cancelOrder(authCredentials, symbol, order_id) {
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log(`${LOG_PREFIX} Listando historial de órdenes (V4 POST)...`);
     const path = '/spot/v4/query/history-orders';
-    const requestBody = { ...options }; // Copiamos las opciones al cuerpo de la solicitud
-    
+    const requestBody = { ...options };
     try {
         const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
-        
         let orders = [];
         if (Array.isArray(response.data.data)) {
             orders = response.data.data;
         } else if (response.data.data && Array.isArray(response.data.data.list)) {
             orders = response.data.data.list;
         }
-
         if (orders.length > 0) {
             console.log(`✅ Historial de Órdenes obtenido. Se encontraron ${orders.length} órdenes.`);
             orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
