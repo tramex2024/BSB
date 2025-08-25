@@ -108,7 +108,7 @@ setupWebSocket(io);
 // El ciclo se ejecutará cada 10 segundos, si el bot está activado.
 (async function startBotCycle() {
     try {
-        // Ejecuta la prueba de API cada 5 minutos
+        // Ejecuta la prueba de API cada 1 minuto.
         if (process.env.NODE_ENV === 'production') {
             setInterval(async () => {
                 const authCredentials = {
@@ -136,7 +136,7 @@ setupWebSocket(io);
                 } catch (error) {
                     console.error('--- Error al ejecutar la prueba de API de BitMart ---', error);
                 }
-            }, 300000); // 300000 milisegundos = 5 minutos
+            }, 60000); // 60000 milisegundos = 1 minutos  // 300000 milisegundos = 5 minutos
         }
 
         const botState = await Autobot.findOne({});

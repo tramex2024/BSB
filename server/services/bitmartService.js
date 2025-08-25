@@ -10,9 +10,6 @@ const MIN_USDT_VALUE_FOR_BITMART = 5;
 // Funciones de V4 corregidas
 // =========================================================================
 
-// **ESTA FUNCIÓN DUPLICADA HA SIDO ELIMINADA. Ahora se llama a través de spotService.**
-// async function getOpenOrders(...) { ... }
-
 // También debes asegurarte de que getHistoryOrders llame al servicio correcto.
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log('[BITMART_SPOT_SERVICE] Listando historial de órdenes (V4 POST)...');
