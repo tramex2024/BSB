@@ -62,9 +62,19 @@ io.on('connection', (socket) => {
     });
 });
 
+// ==========================================================
+// CREDENCIALES DE LA API DE BITMART - CORRECTAS
+// ==========================================================
 const BITMART_API_KEY = process.env.BITMART_API_KEY;
 const BITMART_SECRET_KEY = process.env.BITMART_SECRET_KEY;
-const BITMART_API_MEMO = process.env.BITMART_API_MEMO || "GainBot"; // Declaramos el MEMO como constante
+const BITMART_API_MEMO = process.env.BITMART_API_MEMO || "GainBot";
+
+const bitmartCredentials = {
+    apiKey: BITMART_API_KEY,
+    secretKey: BITMART_SECRET_KEY,
+    memo: BITMART_API_MEMO
+};
+// ==========================================================
 
 function setupWebSocket(io) {
     const ws = new WebSocket(bitmartWsUrl);
@@ -164,13 +174,8 @@ app.get('/api/ticker/:symbol', (req, res) => {
 app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
     
-    const authCredentials = {
-        apiKey: BITMART_API_KEY,
-        secretKey: BITMART_SECRET_KEY,
-        memo: BITMART_API_MEMO
-    };
-
-    if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
+    // Usamos el objeto de credenciales ya definido.
+    if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
         return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
     }
 
@@ -180,7 +185,7 @@ app.get('/api/orders/:status', async (req, res) => {
 
         switch (status) {
             case 'opened':
-                result = await bitmartService.getOpenOrders(authCredentials, symbol);
+                result = await bitmartService.getOpenOrders(bitmartCredentials, symbol);
                 break;
             case 'filled':
             case 'cancelled':
@@ -200,7 +205,7 @@ app.get('/api/orders/:status', async (req, res) => {
                     historyParams.status = status;
                 }
                 
-                result = await bitmartService.getHistoryOrders(authCredentials, historyParams);
+                result = await bitmartService.getHistoryOrders(bitmartCredentials, historyParams);
                 break;
             default:
                 return res.status(400).json({ success: false, message: 'Invalid order status' });
@@ -218,9 +223,9 @@ app.get('/api/orders/:status', async (req, res) => {
 app.get('/api/bitmart-data', async (req, res) => {
     try {
         const isValid = await bitmartService.validateApiKeys(
-            BITMART_API_KEY,
-            BITMART_SECRET_KEY,
-            BITMART_API_MEMO
+            bitmartCredentials.apiKey,
+            bitmartCredentials.secretKey,
+            bitmartCredentials.memo
         );
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
