@@ -7,20 +7,19 @@ require('dotenv').config();
 
 const API_URL = 'https://api-cloud.bitmart.com';
 const USER_AGENT = 'GainBot-CustomClient';
-//const RETRY_ERROR_CODES = [30000];
 
 /**
  * Genera la firma HMAC SHA256 para la solicitud a la API de BitMart.
  * @param {string} timestamp - Timestamp de la solicitud.
- * @param {string} memo - El API Memo.
  * @param {string} bodyForSign - Cuerpo de la solicitud JSON stringificado o cadena de consulta.
- * @param {string} apiSecret - El API Secret.
+ * @param {object} credentials - Objeto con apiKey, secretKey y memo.
  * @returns {string} - La firma generada.
  */
-function generateSignature(timestamp, memo, bodyForSign, apiSecret) {
-    // La firma v4 de BitMart es estricta: timestamp#memo#body
-    const message = `${timestamp}#${memo || ''}#${bodyForSign || ''}`;
-    return CryptoJS.HmacSHA256(message, apiSecret).toString(CryptoJS.enc.Hex);
+function generateSignature(timestamp, bodyForSign, credentials) {
+    // La firma V4 es estricta: timestamp#memo#body
+    const memo = credentials.memo || '';
+    const message = `${timestamp}#${memo}#${bodyForSign}`;
+    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 
 const makeRequest = async (credentials, method, endpoint, params = {}, body = {}) => {
@@ -29,8 +28,7 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     let signatureBody = '';
 
     if (method.toUpperCase() === 'POST') {
-        // Para POST, el cuerpo de la firma es el JSON stringificado,
-        // incluso si el objeto 'body' es vacío.
+        // Para POST, el cuerpo de la firma es el JSON stringificado.
         signatureBody = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
     } else if (method.toUpperCase() === 'GET') {
@@ -44,17 +42,15 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     
     if (isPrivate) {
         const timestamp = Date.now().toString();
-        const memo = credentials.memo || '';
         const signature = generateSignature(
             timestamp,
-            memo,
             signatureBody,
-            credentials.secretKey
+            credentials
         );
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
         headers['X-BM-TIMESTAMP'] = timestamp;
-        headers['X-BM-MEMO'] = memo;
+        headers['X-BM-MEMO'] = credentials.memo || '';
     }
 
     try {
