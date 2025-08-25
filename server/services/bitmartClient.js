@@ -49,24 +49,32 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         headers['X-BM-MEMO'] = credentials.memo || '';
     }
     try {
-        const response = await axios({
-            method,
-            url: `${API_URL}${endpoint}`,
-            headers,
-            data: body,
-            params,
-        });
-        if (response.data.code !== 1000) {
-            throw new Error(`API Error ${response.data.code}: ${response.data.message || 'Unknown error'}`);
-        }
-        return response.data;
-    } catch (error) {
-        const message = error.response?.data?.message || error.message;
-        const finalMessage = `Falló la solicitud a BitMart en ${endpoint}: ${message}`;
-        console.error(`Error en la solicitud a ${endpoint}:`, finalMessage);
-        const customError = new Error(finalMessage);
-        throw customError;
-    }
+        const config = {
+            method,
+            url: `${API_URL}${endpoint}`,
+            headers,
+        };
+
+        // Condicional para manejar los datos según el método HTTP
+        if (method.toUpperCase() === 'POST') {
+            config.data = body;
+        } else if (method.toUpperCase() === 'GET') {
+            config.params = params;
+        }
+
+        const response = await axios(config);
+
+        if (response.data.code !== 1000) {
+            throw new Error(`API Error ${response.data.code}: ${response.data.message || 'Unknown error'}`);
+        }
+        return response.data;
+    } catch (error) {
+        const message = error.response?.data?.message || error.message;
+        const finalMessage = `Falló la solicitud a BitMart en ${endpoint}: ${message}`;
+        console.error(`Error en la solicitud a ${endpoint}:`, finalMessage);
+        const customError = new Error(finalMessage);
+        throw customError;
+    }
 };
 
 module.exports = {
