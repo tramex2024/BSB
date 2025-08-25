@@ -1,6 +1,8 @@
+// Archivo: BSB/server/services/bitmartService.js (ACTUALIZADO)
+
 const spotService = require('./bitmartSpot');
 const { getBalance: getAccountBalances } = require('./bitmartSpot');
-const bitmartClient = require('./bitmartClient');
+const bitmartClient = require('./bitmartClient'); // Aunque no se usa en el código que compartiste, es buena práctica mantenerlo si se necesita.
 
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
@@ -8,63 +10,16 @@ const MIN_USDT_VALUE_FOR_BITMART = 5;
 // Funciones de V4 corregidas
 // =========================================================================
 
-// This is the updated getOpenOrders function
-async function getOpenOrders(authCredentials, symbol) {
-    console.log(`\n--- Obteniendo Órdenes Abiertas (V4 POST) para ${symbol || 'todos los símbolos'} ---`);
-    const path = '/spot/v4/query/open-orders';
-    const requestBody = {};
-    if (symbol) { requestBody.symbol = symbol; }
-    try {
-        const serverTime = await getSystemTime();
-        const response = await makeRequest('POST', path, requestBody, true, authCredentials, serverTime);
-        
-        // --- CORRECTED LOGIC START ---
-        // The API returns the order list directly in the 'data' field.
-        // Let's get the data from the response.
-        const responseData = response.data;
-        let orders = [];
-        
-        // Check if the response data is an array, which it is.
-        if (Array.isArray(responseData)) {
-             orders = responseData;
-        }
-        
-        // Now, log the correct message based on the found orders.
-        if (orders.length > 0) {
-            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-        } else {
-            console.log('ℹ️ No se encontraron órdenes abiertas con los criterios especificados (o no tienes órdenes abiertas actualmente).');
-        }
-        
-        // Log the raw data for debugging purposes.
-        console.log("--- Respuesta completa de la API para Open Orders ---");
-        console.log(JSON.stringify(responseData, null, 2));
-        console.log("--- Fin de la respuesta ---");
+// **ESTA FUNCIÓN DUPLICADA HA SIDO ELIMINADA. Ahora se llama a través de spotService.**
+// async function getOpenOrders(...) { ... }
 
-        return { orders: orders };
-    } catch (error) {
-        console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
-        throw error;
-    }
-}
-
+// También debes asegurarte de que getHistoryOrders llame al servicio correcto.
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log('[BITMART_SPOT_SERVICE] Listando historial de órdenes (V4 POST)...');
     try {
-        const response = await bitmartClient.makeRequest(authCredentials, 'POST', '/spot/v4/query/history-orders', null, options);
-        
-        if (response.code === 1000) {
-            const orders = response.data.list || [];
-            if (orders.length === 0) {
-                console.log('ℹ️ No se encontraron órdenes en el historial.');
-                return [];
-            }
-            console.log(`✅ Historial de órdenes obtenido con éxito. Se encontraron ${orders.length} órdenes.`);
-            return orders;
-        } else {
-            console.error('❌ Falló la obtención del historial de órdenes V4.');
-            throw new Error(response.message || 'Unknown error');
-        }
+        // La llamada a makeRequest debe ser a través de bitmartClient si existe, o en su defecto a spotService
+        const response = await spotService.getHistoryOrders(authCredentials, options);
+        return response; // La función de spotService ya maneja el log y el retorno.
     } catch (error) {
         console.error('❌ Falló la obtención del historial de órdenes V4.', error.message);
         throw error;
@@ -95,12 +50,13 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
 async function cancelAllOpenOrders(bitmartCreds, symbol) {
     console.log(`[ORCHESTRATOR] Intentando cancelar órdenes abiertas para ${symbol}...`);
     try {
-        const orders = await getOpenOrders(bitmartCreds, symbol);
+        // AHORA LLAMAMOS A LA FUNCIÓN DESDE SPOT SERVICE
+        const { orders } = await spotService.getOpenOrders(bitmartCreds, symbol);
         if (orders.length > 0) {
             for (const order of orders) {
-                console.log(`[ORCHESTRATOR] Cancelando orden: ${order.order_id}`);
-                await spotService.cancelOrder(bitmartCreds, symbol, order.order_id);
-                console.log(`[ORCHESTRATOR] Orden ${order.order_id} cancelada.`);
+                console.log(`[ORCHESTRATOR] Cancelando orden: ${order.orderId}`);
+                await spotService.cancelOrder(bitmartCreds, symbol, order.orderId); // CORREGIDO: Usar orderId
+                console.log(`[ORCHESTRATOR] Orden ${order.orderId} cancelada.`);
             }
             console.log(`[ORCHESTRATOR] Todas las ${orders.length} órdenes abiertas para ${symbol} han sido canceladas.`);
         } else {
@@ -241,6 +197,8 @@ module.exports = {
     placeCoverageBuyOrder,
     placeSellOrder,
     placeLimitSellOrder,
-    getOpenOrders,
-    getHistoryOrders,
+    // Elimina la línea 'getOpenOrders' de la exportación de bitmartService,
+    // ya que ya está incluida a través de '...spotService'
+    // getOpenOrders,
+    getHistoryOrders, // Esta se puede dejar aquí si tiene lógica extra, pero es mejor llamarla directamente de spotService
 };
