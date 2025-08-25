@@ -102,7 +102,7 @@ setInterval(async () => {
   } catch (error) {
     console.error('Error al obtener el ticker del mercado:', error.message);
   }
-}, 5000); // Se ejecuta cada 5 segundos
+}, 15000); // Cambiado a 15 segundos para evitar el error 429
 
 // Ciclo para el bot
 const BOT_CYCLE_INTERVAL = process.env.BOT_CYCLE_INTERVAL || 15000;
