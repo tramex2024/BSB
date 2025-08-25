@@ -1,5 +1,12 @@
 // Archivo: bsb/server/services/bitmartSpot.js
 
+// Importaciones necesarias:
+const axios = require('axios');
+const crypto = require('crypto');
+const hmacsha256 = require('crypto-js/hmac-sha256');
+const Base64 = require('crypto-js/enc-base64');
+const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
+
 const { makeRequest } = require('./bitmartClient');
 
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
@@ -32,32 +39,58 @@ async function getBalance(authCredentials) {
 }
 
 async function getOpenOrders(authCredentials, symbol) {
-    console.log(`\n[BITMART_SPOT_SERVICE] Obteniendo órdenes abiertas (V4 POST) para ${symbol || 'todos los símbolos'}...`);
-    
-    // Si se proporciona un símbolo, lo incluimos en el cuerpo de la solicitud.
-    const requestBody = symbol ? { symbol } : {};
-    
-    try {
-        const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/open-orders', {}, requestBody);
-        
-        let orders = [];
-        if (Array.isArray(response.data.data)) {
-            orders = response.data.data;
-        } else if (response.data.data && Array.isArray(response.data.data.list)) {
-            orders = response.data.data.list;
-        }
+  console.log(`\n${LOG_PREFIX} DEBUG: Probando la llamada con la lógica del script de prueba para ${symbol || 'todos los símbolos'}...`);
 
-        if (orders.length > 0) {
-            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
-            orders.forEach(o => console.log(`   - Order ID: ${o.order_id}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
-        } else {
-            console.log('ℹ️ No se encontraron órdenes abiertas.');
-        }
-        return { orders };
-    } catch (error) {
-        console.error('\n❌ Falló la obtención de órdenes abiertas V4.');
-        throw error;
+  const { apiKey, secretKey, apiMemo } = authCredentials;
+  
+  const timestamp = Date.now().toString();
+  const path = '/spot/v4/query/open-orders';
+  const url = `https://api-cloud.bitmart.com${path}`;
+  
+  const requestBody = symbol ? { symbol } : {};
+  const bodyForSign = JSON.stringify(requestBody);
+  
+  const signatureString = `${timestamp}#${apiMemo}#${bodyForSign}`;
+  const hmac = hmacsha256(signatureString, secretKey);
+  const sign = Base64.stringify(hmac);
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-BM-KEY': apiKey,
+    'X-BM-TIMESTAMP': timestamp,
+    'X-BM-SIGN': sign,
+    'X-BM-MEMO': apiMemo,
+  };
+
+  try {
+    const response = await axios.post(url, requestBody, { headers });
+
+    let orders = [];
+    if (response.data.message === 'success' || response.data.code === 1000) {
+      if (Array.isArray(response.data.data)) {
+        orders = response.data.data;
+      } else if (response.data.data && Array.isArray(response.data.data.list)) {
+        orders = response.data.data.list;
+      }
+
+      if (orders.length > 0) {
+        console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
+        orders.forEach(o => console.log(`   - Order ID: ${o.orderId}, Símbolo: ${o.symbol}, Lado: ${o.side}, Tipo: ${o.type}, Estado: ${o.state}`));
+      } else {
+        console.log('ℹ️ No se encontraron órdenes abiertas.');
+      }
+      return { orders };
+    } else {
+      console.error('❌ Error en la API:', response.data);
+      throw new Error(response.data.message || 'Unknown error');
     }
+  } catch (error) {
+    console.error('\n❌ Falló la obtención de órdenes abiertas.');
+    if (error.response) {
+      console.error('Error Data:', error.response.data);
+    }
+    throw error;
+  }
 }
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
