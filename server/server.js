@@ -149,7 +149,7 @@ setupWebSocket(io);
                  //       endTime: now,
                  //       pageSize: 50 // Parámetro corregido de 'limit' a 'pageSize'
                  //   });
-			const historyOrders = await getHistoryOrders({
+			const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
     orderMode: 'spot',
     limit: 100
 });
