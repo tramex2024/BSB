@@ -8,8 +8,8 @@ const API_URL = 'https://api-cloud.bitmart.com';
 const USER_AGENT = 'GainBot-CustomClient';
 
 function generateSignature(timestamp, bodyForSign, credentials) {
-    // La API de BitMart V4 para el historial de órdenes no usa el memo en la firma
-    const message = `${timestamp}#${bodyForSign}`;
+    const memo = credentials.memo || '';
+    const message = `${timestamp}#${memo}#${bodyForSign}`;
     return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 
