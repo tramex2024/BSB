@@ -39,11 +39,11 @@ async function getOpenOrders(authCredentials, symbol) {
     try {
         const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
         
-	// --- AGREGA ESTA LÍNEA ---
         console.log('DEBUG: Respuesta completa de la API:', JSON.stringify(response));
-        // ------------------------
 
-        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : [];
+        // --- ESTA ES LA LÍNEA CORREGIDA ---
+        // La API v4 de open-orders devuelve los datos en el campo 'data'.
+        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
 
         if (orders.length > 0) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${orders.length} órdenes.`);
