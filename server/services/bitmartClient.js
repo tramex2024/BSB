@@ -34,11 +34,11 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     if (isPrivate) {
         const timestamp = Date.now().toString();
         const signature = generateSignature(
-            timestamp,
-            signatureBody,
-            credentials,
-            includeMemoInSignature
-        );
+    timestamp,
+    signatureBody,
+    credentials,
+    includeMemoInSignature
+);
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
         headers['X-BM-TIMESTAMP'] = timestamp;
