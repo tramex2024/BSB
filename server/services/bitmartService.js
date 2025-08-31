@@ -193,9 +193,6 @@ module.exports = {
     placeFirstBuyOrder,
     placeCoverageBuyOrder,
     placeSellOrder,
-    placeLimitSellOrder,
-    // Elimina la línea 'getOpenOrders' de la exportación de bitmartService,
-    // ya que ya está incluida a través de '...spotService'
-    // getOpenOrders,
-    getHistoryOrders, // Esta se puede dejar aquí si tiene lógica extra, pero es mejor llamarla directamente de spotService
+    placeLimitSellOrder,    
+    //getHistoryOrders, // Esta se puede dejar aquí si tiene lógica extra, pero es mejor llamarla directamente de spotService
 };
