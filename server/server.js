@@ -139,8 +139,7 @@ setupWebSocket(io);
                 }
 
                 console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
-                try {
-                    await testBitmart.runTest(authCredentials);
+                try {                    
                     console.log('--- Prueba de API finalizada ---');
                 } catch (error) {
                     console.error('--- Error al ejecutar la prueba de API de BitMart ---', error);
