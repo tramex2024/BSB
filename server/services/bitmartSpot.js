@@ -36,10 +36,10 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
-function generateSign(timestamp, body, credentials) {
-    const message = timestamp + '#' + credentials.memo + '#' + body;
-    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
-}
+//function generateSign(timestamp, body, credentials) {
+//    const message = timestamp + '#' + credentials.memo + '#' + body;
+//    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
+//}
 
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log(`\n--- Paso Final 4: Listando Historial de Órdenes (V4 POST) ---`);
