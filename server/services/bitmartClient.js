@@ -17,7 +17,7 @@ function generateSignature(timestamp, bodyForSign, credentials, includeMemo = fa
     return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 
-const makeRequest = async (credentials, method, endpoint, params = {}, body = {}) => {
+const makeRequest = async (credentials, method, endpoint, params = {}, body = {}, includeMemoInSignature = false) => {
     const isPrivate = credentials && credentials.apiKey && credentials.secretKey;
     const headers = { 'User-Agent': USER_AGENT };
     let signatureBody = '';
@@ -36,7 +36,8 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
         const signature = generateSignature(
             timestamp,
             signatureBody,
-            credentials
+            credentials,
+            includeMemoInSignature
         );
         headers['X-BM-KEY'] = credentials.apiKey;
         headers['X-BM-SIGN'] = signature;
