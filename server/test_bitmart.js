@@ -2,7 +2,7 @@
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
-const bitmartService = require('./bitmartService'); // Importamos el servicio para usar las funciones
+const bitmartService = require('./services/bitmartService'); // Importamos el servicio para usar las funciones
 
 // Las claves se pasarán como argumento a runTest
 let API_KEY, API_SECRET, API_MEMO;
