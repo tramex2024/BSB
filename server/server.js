@@ -23,7 +23,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-const testBitmart = require('./test_bitmart.js');
 const checkTimeSync = require('./services/check_time');
 
 const io = new Server(server, {
