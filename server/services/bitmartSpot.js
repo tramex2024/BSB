@@ -29,12 +29,12 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
-function generateSign(timestamp, body) {
-    const message = timestamp + '#' + API_MEMO + '#' + body;
-    return CryptoJS.HmacSHA256(message, API_SECRET).toString(CryptoJS.enc.Hex);
+function generateSign(timestamp, body, credentials) {
+    const message = timestamp + '#' + credentials.memo + '#' + body;
+    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 
-async function getHistoryOrders(options = {}) {
+async function getHistoryOrders(authCredentials, options = {}) {
     console.log(`\n--- Paso Final 4: Listando Historial de Órdenes (V4 POST) ---`);
     const timestamp = Date.now().toString();
     const path = '/spot/v4/query/history-orders';
@@ -47,11 +47,14 @@ async function getHistoryOrders(options = {}) {
     if (options.limit) { requestBody.limit = options.limit; }
 
     const bodyForSign = JSON.stringify(requestBody);
-    const sign = generateSign(timestamp, bodyForSign);
+    
+    // Aquí es donde cambiamos la forma en que se llama a la firma
+    const sign = generateSign(timestamp, bodyForSign, authCredentials);
+    
     const url = `${BASE_URL}${path}`;
     const headers = {
         'Content-Type': 'application/json',
-        'X-BM-KEY': API_KEY,
+        'X-BM-KEY': authCredentials.apiKey,
         'X-BM-TIMESTAMP': timestamp,
         'X-BM-SIGN': sign,
     };
