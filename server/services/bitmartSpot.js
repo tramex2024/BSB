@@ -31,6 +31,33 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
+async function getHistoryOrders(authCredentials, options = {}) {
+    console.log(`[BITMART_SPOT_SERVICE] Listando historial de órdenes (V4 POST)...`);
+    const endpoint = '/spot/v4/query/history-orders';
+    const requestBody = { recvWindow: 5000, ...options };
+
+    try {
+        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
+        
+        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data.data && Array.isArray(response.data.data.list) ? response.data.data.list : []);
+
+        if (orders.length > 0) {
+            console.log(`✅ Historial de órdenes obtenido. Se encontraron ${orders.length} órdenes.`);
+            return orders;
+        } else {
+            console.log('ℹ️ No se encontraron órdenes en el historial.');
+            return [];
+        }
+
+    } catch (error) {
+        console.error('❌ Falló la obtención del historial de órdenes V4.');
+        if (error.response) {
+            console.error('Error Data:', error.response.data);
+        }
+        throw error;
+    }
+}
+
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
     const endpoint = '/spot/v4/query/open-orders';
