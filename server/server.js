@@ -201,15 +201,16 @@ app.get('/api/orders/:status', async (req, res) => {
             case 'filled':
             case 'cancelled':
             case 'all':
-                const now = Date.now();
-                const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
-
-                let historyParams = {
-                    symbol,
-                    pageSize: 50,
-                    startTime: thirtyDaysAgo,
-                    endTime: now,
-                };
+                // Prueba de Historial de Órdenes (Buscando en los últimos 180 días)
+const now = Date.now();
+const oneHundredEightyDaysAgo = now - (180 * 24 * 60 * 60 * 1000);
+const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+    symbol: 'BTC_USDT',
+    orderMode: 'spot',
+    startTime: oneHundredEightyDaysAgo,
+    endTime: now,
+    pageSize: 50
+});
 
                 if (status !== 'all') {
                     historyParams.status = status;

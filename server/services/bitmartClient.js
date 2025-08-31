@@ -7,9 +7,13 @@ require('dotenv').config();
 const API_URL = 'https://api-cloud.bitmart.com';
 const USER_AGENT = 'GainBot-CustomClient';
 
-function generateSignature(timestamp, bodyForSign, credentials) {
-    const memo = credentials.memo || '';
-    const message = `${timestamp}#${memo}#${bodyForSign}`;
+function generateSignature(timestamp, bodyForSign, credentials, includeMemo = false) {
+    let message;
+    if (includeMemo) {
+        message = `${timestamp}#${credentials.memo}#${bodyForSign}`;
+    } else {
+        message = `${timestamp}#${bodyForSign}`;
+    }
     return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 

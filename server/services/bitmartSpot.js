@@ -34,7 +34,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
     const path = '/spot/v4/query/history-orders';
     const requestBody = { ...options };
     try {
-        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody);
+        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody, false);
         let orders = [];
         if (Array.isArray(response.data.data)) {
             orders = response.data.data;
@@ -60,7 +60,7 @@ async function getOpenOrders(authCredentials, symbol) {
     const requestBody = { symbol };
 
     try {
-        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
+        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody, true);
         const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
 
         if (orders.length > 0) {
