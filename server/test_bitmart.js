@@ -68,7 +68,8 @@ async function getOpenOrdersTest(credentials) {
             console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${openOrdersResult.orders.length} órdenes.`);
             openOrdersResult.orders.forEach((order, index) => {
                 console.log(`--- Orden Abierta ${index + 1} ---`);
-                console.log(`  ID: ${order.order_id}`);
+                // --- CAMBIO CLAVE: Usa 'order.orderId' en lugar de 'order.order_id' ---
+                console.log(`  ID: ${order.orderId}`);
                 console.log(`  Símbolo: ${order.symbol}`);
                 console.log(`  Estado: ${order.state}`);
                 console.log(`  Lado: ${order.side}`);
