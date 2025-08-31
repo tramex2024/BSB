@@ -39,6 +39,10 @@ async function getOpenOrders(authCredentials, symbol) {
     try {
         const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
         
+	// --- AGREGA ESTA LÍNEA ---
+        console.log('DEBUG: Respuesta completa de la API:', JSON.stringify(response));
+        // ------------------------
+
         const orders = response.data && Array.isArray(response.data.data) ? response.data.data : [];
 
         if (orders.length > 0) {
