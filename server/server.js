@@ -128,39 +128,40 @@ setupWebSocket(io);
                 }
 
                 console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
-                try {
-                    // Prueba de Órdenes Abiertas
-                    const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
-                    if (openOrders.orders.length > 0) {
-                        console.log(`✅ Se encontraron ${openOrders.orders.length} órdenes abiertas.`);
-                    } else {
-                        console.log('ℹ️ No se encontraron órdenes abiertas.');
-                    }
+                // Este bloque de código reemplaza el try...catch actual dentro del setInterval
+try {
+    // Prueba de Órdenes Abiertas
+    console.log('--- Probando API de Órdenes Abiertas ---');
+    const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
+    if (openOrders.orders.length > 0) {
+        console.log(`✅ Se encontraron ${openOrders.orders.length} órdenes abiertas.`);
+    } else {
+        console.log('ℹ️ No se encontraron órdenes abiertas.');
+    }
 
-                    // Prueba de Historial de Órdenes
-                    const now = Date.now();
-                    const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
-                    const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
-                        symbol: 'BTC_USDT',
-                        orderMode: 'spot',
-                        startTime: thirtyDaysAgo,
-                        endTime: now,
-                        limit: 10
-                    });
+    // Prueba de Historial de Órdenes (Rango ampliado y corrección de parámetros)
+    console.log('--- Probando API de Historial de Órdenes ---');
+    const now = Date.now();
+    const ninetyDaysAgo = now - (90 * 24 * 60 * 60 * 1000); // 90 días
+    const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+        symbol: 'BTC_USDT',
+        orderMode: 'spot',
+        startTime: ninetyDaysAgo,
+        endTime: now,
+        pageSize: 50 // Parámetro corregido de 'limit' a 'pageSize'
+    });
 
-                    if (historyOrders.length > 0) {
-                        console.log(`✅ Se encontraron ${historyOrders.length} órdenes históricas.`);
-                    } else {
-                        console.log('ℹ️ No se encontraron órdenes históricas.');
-                    }
+    if (historyOrders.length > 0) {
+        console.log(`✅ Se encontraron ${historyOrders.length} órdenes históricas.`);
+    } else {
+        console.log('ℹ️ No se encontraron órdenes históricas.');
+    }
 
-                    console.log('--- Prueba de API finalizada ---');
+    console.log('--- Prueba de API finalizada ---');
 
-                } catch (error) {
-                    console.error('--- Error al ejecutar la prueba de API de BitMart ---', error.message);
-                }
-            }, 60000); // 60000 milisegundos = 1 minuto
-        }
+} catch (error) {
+    console.error('--- Error al ejecutar la prueba de API de BitMart ---', error.message);
+}
 
         const botState = await Autobot.findOne({});
         if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
