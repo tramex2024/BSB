@@ -1,30 +1,12 @@
-// Archivo: BSB/server/services/bitmartService.js (ACTUALIZADO)
+// Archivo: BSB/server/services/bitmartService.js
 
 const spotService = require('./bitmartSpot');
 const { getBalance: getAccountBalances } = require('./bitmartSpot');
-const bitmartClient = require('./bitmartClient'); // Aunque no se usa en el código que compartiste, es buena práctica mantenerlo si se necesita.
 
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
 // =========================================================================
-// Funciones de V4 corregidas
-// =========================================================================
-
-// También debes asegurarte de que getHistoryOrders llame al servicio correcto.
-async function getHistoryOrders(authCredentials, options = {}) {
-    console.log('[BITMART_SPOT_SERVICE] Listando historial de órdenes (V4 POST)...');
-    try {
-        // La llamada a makeRequest debe ser a través de bitmartClient si existe, o en su defecto a spotService
-        const response = await spotService.getHistoryOrders(authCredentials, options);
-        return response; // La función de spotService ya maneja el log y el retorno.
-    } catch (error) {
-        console.error('❌ Falló la obtención del historial de órdenes V4.', error.message);
-        throw error;
-    }
-}
-
-// =========================================================================
-// Funciones Existentes y originales
+// Funciones del orquestador (Business Logic)
 // =========================================================================
 
 async function validateApiKeys(apiKey, secretKey, apiMemo) {
@@ -47,12 +29,11 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
 async function cancelAllOpenOrders(bitmartCreds, symbol) {
     console.log(`[ORCHESTRATOR] Intentando cancelar órdenes abiertas para ${symbol}...`);
     try {
-        // AHORA LLAMAMOS A LA FUNCIÓN DESDE SPOT SERVICE
         const { orders } = await spotService.getOpenOrders(bitmartCreds, symbol);
         if (orders.length > 0) {
             for (const order of orders) {
                 console.log(`[ORCHESTRATOR] Cancelando orden: ${order.orderId}`);
-                await spotService.cancelOrder(bitmartCreds, symbol, order.orderId); // CORREGIDO: Usar orderId
+                await spotService.cancelOrder(bitmartCreds, symbol, order.orderId);
                 console.log(`[ORCHESTRATOR] Orden ${order.orderId} cancelada.`);
             }
             console.log(`[ORCHESTRATOR] Todas las ${orders.length} órdenes abiertas para ${symbol} han sido canceladas.`);
@@ -193,6 +174,5 @@ module.exports = {
     placeFirstBuyOrder,
     placeCoverageBuyOrder,
     placeSellOrder,
-    placeLimitSellOrder,    
-    //getHistoryOrders, // Esta se puede dejar aquí si tiene lógica extra, pero es mejor llamarla directamente de spotService
+    placeLimitSellOrder,      
 };

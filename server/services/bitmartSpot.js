@@ -1,10 +1,5 @@
 // Archivo: BSB/server/services/bitmartSpot.js
 
-// Importaciones necesarias:
-const axios = require('axios');
-const crypto = require('crypto');
-const hmacsha256 = require('crypto-js/hmac-sha256');
-const Base64 = require('crypto-js/enc-base64');
 const { makeRequest } = require('./bitmartClient');
 
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
@@ -36,10 +31,6 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
-// =================================================================================
-// FUNCIÓN CORREGIDA FINAL: getOpenOrders()
-// Reconstruida para coincidir exactamente con el script de prueba funcional.
-// =================================================================================
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
     const endpoint = '/spot/v4/query/open-orders';
@@ -48,8 +39,6 @@ async function getOpenOrders(authCredentials, symbol) {
     try {
         const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
         
-        // La API V4 devuelve los datos en el campo 'data', que es un array.
-        // Nos aseguramos de acceder a response.data.data tal como en tu script de prueba.
         const orders = response.data && Array.isArray(response.data.data) ? response.data.data : [];
 
         if (orders.length > 0) {
@@ -68,9 +57,6 @@ async function getOpenOrders(authCredentials, symbol) {
         throw error;
     }
 }
-// =================================================================================
-// FIN de la función corregida
-// =================================================================================
 
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     console.log(`${LOG_PREFIX} Obteniendo detalle de orden ${orderId} para ${symbol} (V4 POST)...`);

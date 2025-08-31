@@ -7,25 +7,14 @@ require('dotenv').config();
 const API_URL = 'https://api-cloud.bitmart.com';
 const USER_AGENT = 'GainBot-CustomClient';
 
-/**
- * Genera la firma HMAC SHA256 para la solicitud a la API de BitMart.
- * @param {string} timestamp - Timestamp de la solicitud.
- * @param {string} bodyForSign - Cuerpo de la solicitud JSON stringificado o cadena de consulta.
- * @param {object} credentials - Objeto con apiKey, secretKey y memo.
- * @returns {string} - La firma generada.
- */
 function generateSignature(timestamp, bodyForSign, credentials) {
     const memo = credentials.memo || '';
     let message;
-
-    // Lógica corregida para manejar el memo vacío.
-    // Si el memo es un string vacío, no se incluye en el mensaje para la firma.
     if (memo === '') {
         message = `${timestamp}#${bodyForSign}`;
     } else {
         message = `${timestamp}#${memo}#${bodyForSign}`;
     }
-
     return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 const makeRequest = async (credentials, method, endpoint, params = {}, body = {}) => {
@@ -33,11 +22,9 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
     const headers = { 'User-Agent': USER_AGENT };
     let signatureBody = '';
     if (method.toUpperCase() === 'POST') {
-        // Para POST, el cuerpo de la firma es el JSON stringificado.
         signatureBody = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
     } else if (method.toUpperCase() === 'GET') {
-        // Para GET, el cuerpo de la firma es la cadena de consulta ordenada.
         const sortedParams = Object.keys(params).sort().reduce((acc, key) => {
             acc[key] = params[key];
             return acc;
@@ -63,7 +50,6 @@ const makeRequest = async (credentials, method, endpoint, params = {}, body = {}
             headers,
         };
 
-        // Condicional para manejar los datos según el método HTTP
         if (method.toUpperCase() === 'POST') {
             config.data = body;
         } else if (method.toUpperCase() === 'GET') {
