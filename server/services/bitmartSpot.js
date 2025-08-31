@@ -35,6 +35,11 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
+function generateSign(timestamp, body, credentials) {
+    const message = timestamp + '#' + credentials.memo + '#' + body;
+    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
+}
+
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log(`\n--- Paso Final 4: Listando Historial de Órdenes (V4 POST) ---`);
     const timestamp = Date.now().toString();
@@ -48,7 +53,10 @@ async function getHistoryOrders(authCredentials, options = {}) {
     if (options.limit) { requestBody.limit = options.limit; }
 
     const bodyForSign = JSON.stringify(requestBody);
+    
+    // Aquí es donde cambiamos la forma en que se llama a la firma
     const sign = generateSign(timestamp, bodyForSign, authCredentials);
+    
     const url = `${BASE_URL}${path}`;
     const headers = {
         'Content-Type': 'application/json',
@@ -77,6 +85,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
         throw error;
     }
 }
+
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
     const endpoint = '/spot/v4/query/open-orders';
