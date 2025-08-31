@@ -129,6 +129,8 @@ setupWebSocket(io);
 
                 console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
                 try {
+		    const balance = await bitmartService.getBalance(bitmartCredentials);
+
                     // Prueba de Órdenes Abiertas
                     console.log('--- Probando API de Órdenes Abiertas ---');
                     const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');

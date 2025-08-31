@@ -27,7 +27,8 @@ async function getTicker(symbol) {
 }
 
 async function getBalance(authCredentials) {
-    console.log(`${LOG_PREFIX} Obteniendo balance de la cuenta...`);
+    console.log(`${LOG_PREFIX} Iniciando prueba de getBalance...`); // <-- Agregar esta línea
+    console.log(`${LOG_PREFIX} Obteniendo balance de la cuenta...`);
     const response = await makeRequest(authCredentials, 'GET', '/account/v1/wallet');
     const balances = response.data.wallet;
     console.log('✅ Balance de la cuenta obtenido con éxito.');
