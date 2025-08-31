@@ -34,7 +34,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
     const path = '/spot/v4/query/history-orders';
     const requestBody = { ...options };
     try {
-        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody, false);
+        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody, true);
         let orders = [];
         if (Array.isArray(response.data.data)) {
             orders = response.data.data;
