@@ -2,6 +2,8 @@ const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { makeRequest } = require('./bitmartClient');
 
+const BASE_URL = 'https://api-cloud.bitmart.com';
+
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
