@@ -1,100 +1,76 @@
-// Archivo: test_bitmart.js
+// Archivo: BSB/server/services/test_bitmart.js
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
+const bitmartService = require('./bitmartService'); // Importamos el servicio para usar las funciones
 
-// Las claves serán pasadas como argumento, no se leen aquí
+// Las claves se pasarán como argumento a runTest
 let API_KEY, API_SECRET, API_MEMO;
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
-function generateSign(timestamp, body) {
-  // Los logs de verificación se añaden antes de esta línea para ver los valores
-  const message = timestamp + '#' + API_MEMO + '#' + body;
-  return CryptoJS.HmacSHA256(message, API_SECRET).toString(CryptoJS.enc.Hex);
-}
-
-async function getHistoryOrdersV4(options = {}) {
-  console.log(`\n--- Paso Final 4: Listando Historial de Órdenes (V4 POST) ---`);
-  const timestamp = Date.now().toString();
-  const path = '/spot/v4/query/history-orders';
-  const requestBody = { recvWindow: 5000 };
-
-  if (options.symbol) { requestBody.symbol = options.symbol; }
-  if (options.orderMode) { requestBody.orderMode = options.orderMode; }
-  if (options.startTime) { requestBody.startTime = options.startTime; }
-  if (options.endTime) { requestBody.endTime = options.endTime; }
-  if (options.limit) { requestBody.limit = options.limit; }
-
-  const bodyForSign = JSON.stringify(requestBody);
-  const sign = generateSign(timestamp, bodyForSign);
-  const url = `${BASE_URL}${path}`;
-
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-BM-KEY': API_KEY,
-    'X-BM-TIMESTAMP': timestamp,
-    'X-BM-SIGN': sign,
-  };
-
-  try {
-    const response = await axios.post(url, requestBody, { headers });
-
-    if (response.data.code === 1000) {
-      const orders = Array.isArray(response.data.data) ? response.data.data : (response.data.data && Array.isArray(response.data.data.list) ? response.data.data.list : []);
-
-      if (orders.length > 0) {
-        console.log(`✅ ¡Historial de órdenes obtenido! Se encontraron ${orders.length} órdenes.`);
-        orders.slice(0, 5).forEach((order, index) => console.log(`\n--- Orden Histórica ${index + 1} ---`, JSON.stringify(order, null, 2)));
-        if (orders.length > 5) console.log(`...y ${orders.length - 5} órdenes más.`);
-      } else {
-        console.log('ℹ️ No se encontraron órdenes en el historial.');
-      }
-      return orders;
-    } else {
-      throw new Error(`Error de BitMart API: ${response.data.message} (Code: ${response.data.code})`);
-    }
-  } catch (error) {
-    console.error('\n❌ Falló la obtención del historial de órdenes spot V4.');
-    console.error('Error:', error.response ? error.response.data : error.message);
-    throw error;
-  }
-}
+// He eliminado la función generateSign de aquí, ya que bitmartService y bitmartClient
+// ya manejan la firma de manera más robusta. Usaremos las funciones de tu servicio.
 
 async function runTest(credentials) {
-  if (!credentials || !credentials.apiKey || !credentials.secretKey) {
-    console.error("ERROR: Las credenciales API no se pasaron a la función de prueba.");
-    return;
-  }
+    if (!credentials || !credentials.apiKey || !credentials.secretKey) {
+        console.error("ERROR: Las credenciales API no se pasaron a la función de prueba.");
+        return;
+    }
 
-  API_KEY = credentials.apiKey;
-  API_SECRET = credentials.secretKey;
-  API_MEMO = credentials.memo || "GainBot";
+    API_KEY = credentials.apiKey;
+    API_SECRET = credentials.secretKey;
+    API_MEMO = credentials.memo || "GainBot";
 
-  // --- NUEVO BLOQUE DE CÓDIGO DE VERIFICACIÓN ---
-  console.log("--- Verificando credenciales antes de la firma ---");
-  console.log(`API Key: ${API_KEY ? '✅ Leída' : '❌ No leída'}`);
-  console.log(`Secret Key: ${API_SECRET ? '✅ Leída' : '❌ No leída'}`);
-  console.log(`API Memo: ${API_MEMO ? '✅ Leído' : '❌ No leído'}`);
-  console.log("--- Fin de la verificación ---");
-  // --- FIN DEL NUEVO BLOQUE ---
+    console.log("--- Verificando credenciales antes de la firma ---");
+    console.log(`API Key: ${API_KEY ? '✅ Leída' : '❌ No leída'}`);
+    console.log(`Secret Key: ${API_SECRET ? '✅ Leída' : '❌ No leída'}`);
+    console.log(`API Memo: ${API_MEMO ? '✅ Leído' : '❌ No leído'}`);
+    console.log("--- Fin de la verificación ---");
 
-  console.log("Iniciando prueba de historial de órdenes...");
-  const now = Date.now();
-  const ninetyDaysAgo = now - (90 * 24 * 60 * 60 * 1000);
+    try {
+        console.log("Iniciando prueba de API de BitMart...");
 
-  try {
-    await getHistoryOrdersV4({
-      orderMode: 'spot',
-      startTime: ninetyDaysAgo,
-      endTime: now,
-      limit: 100
-    });
-  } catch (error) {
-    // El error ya se maneja en getHistoryOrdersV4
-  }
+        // --- Paso 1: Obtener balance de la cuenta ---
+        console.log('\n--- Paso 1: Obteniendo Balance de la cuenta ---');
+        await bitmartService.getBalance(credentials);
+
+        // --- Paso 2: Obtener Órdenes Abiertas ---
+        console.log('\n--- Paso 2: Obteniendo Órdenes Abiertas (V4 POST) ---');
+        const openOrdersResult = await bitmartService.getOpenOrders(credentials, 'BTC_USDT');
+        if (openOrdersResult.orders.length > 0) {
+            console.log(`✅ ¡Órdenes Abiertas obtenidas! Se encontraron ${openOrdersResult.orders.length} órdenes.`);
+            openOrdersResult.orders.forEach((order, index) => console.log(`  - Orden ${index + 1}: ID: ${order.order_id}, Símbolo: ${order.symbol}, Estado: ${order.state}`));
+        } else {
+            console.log('ℹ️ No se encontraron órdenes abiertas.');
+        }
+
+        // --- Paso 3: Obtener Historial de Órdenes ---
+        console.log(`\n--- Paso 3: Listando Historial de Órdenes (V4 POST) ---`);
+        const now = Date.now();
+        const ninetyDaysAgo = now - (90 * 24 * 60 * 60 * 1000);
+        const historyOrders = await bitmartService.getHistoryOrders(credentials, {
+            symbol: 'BTC_USDT',
+            orderMode: 'spot',
+            startTime: ninetyDaysAgo,
+            endTime: now,
+            limit: 10
+        });
+
+        if (historyOrders.length > 0) {
+            console.log(`✅ ¡Historial de órdenes obtenido! Se encontraron ${historyOrders.length} órdenes.`);
+            historyOrders.slice(0, 5).forEach((order, index) => console.log(`  - Orden Histórica ${index + 1}: ID: ${order.order_id}, Símbolo: ${order.symbol}, Estado: ${order.state}`));
+            if (historyOrders.length > 5) console.log(`...y ${historyOrders.length - 5} órdenes más.`);
+        } else {
+            console.log('ℹ️ No se encontraron órdenes en el historial.');
+        }
+
+    } catch (error) {
+        console.error('\n❌ Falló la prueba de la API de BitMart.');
+        console.error('Error:', error.message);
+    }
 }
 
 module.exports = {
-  runTest
+    runTest
 };
