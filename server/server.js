@@ -142,13 +142,17 @@ setupWebSocket(io);
                     console.log('--- Probando API de Historial de Órdenes ---');
                     const now = Date.now();
                     const ninetyDaysAgo = now - (90 * 24 * 60 * 60 * 1000); // 90 días
-                    const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
-                        symbol: 'BTC_USDT',
-                        orderMode: 'spot',
-                        startTime: ninetyDaysAgo,
-                        endTime: now,
-                        pageSize: 50 // Parámetro corregido de 'limit' a 'pageSize'
-                    });
+                 //   const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+                 //       symbol: 'BTC_USDT',
+                 //       orderMode: 'spot',
+                 //       startTime: ninetyDaysAgo,
+                 //       endTime: now,
+                 //       pageSize: 50 // Parámetro corregido de 'limit' a 'pageSize'
+                 //   });
+			const historyOrders = await getHistoryOrders({
+    orderMode: 'spot',
+    limit: 100
+});
 
                     if (historyOrders.length > 0) {
                         console.log(`✅ Se encontraron ${historyOrders.length} órdenes históricas.`);
