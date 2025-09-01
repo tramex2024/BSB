@@ -7,12 +7,6 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
 const MIN_USDT_VALUE_FOR_BITMART = 5;
 
-const orderStatusMap = {
-    'filled': 1,
-    'cancelled': 6,
-    'all': 0 // O simplemente no se usa el parámetro de status
-};
-
 // Constantes para los reintentos
 const MAX_RETRIES = 5;
 const INITIAL_RETRY_DELAY_MS = 500;
@@ -40,57 +34,47 @@ function generateSign(timestamp, body, credentials) {
 }
 
 async function getHistoryOrders(authCredentials, options = {}) {
-    const endpoint = '/spot/v4/query/history-orders';
-    const params = {
-        symbol: options.symbol,
-        orderMode: 'spot', // Asumo que siempre es 'spot'
-        startTime: options.startTime,
-        endTime: options.endTime,
-        limit: options.limit
-    };
+    const timestamp = Date.now().toString();
+    const path = '/spot/v4/query/history-orders';
+    const requestBody = { recvWindow: 5000 };
 
-    // Mapea el estado de texto a un código numérico si es necesario
-    if (options.status && options.status !== 'all') {
-        const statusCode = orderStatusMap[options.status];
-        if (statusCode !== undefined) {
-            params.status = statusCode;
-        } else {
-            console.warn(`[getHistoryOrders] Estado de orden no reconocido: ${options.status}`);
-        }
-    }
-    
+    if (options.symbol) { requestBody.symbol = options.symbol; }
+    if (options.orderMode) { requestBody.orderMode = options.orderMode; }
+    if (options.startTime) { requestBody.startTime = options.startTime; }
+    if (options.endTime) { requestBody.endTime = options.endTime; }
+    if (options.limit) { requestBody.limit = options.limit; }
+    if (options.status) { requestBody.status = options.status; }
+
+    const bodyForSign = JSON.stringify(requestBody);
+    const sign = generateSign(timestamp, bodyForSign, authCredentials);
+    const url = `${BASE_URL}${path}`;
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-BM-KEY': authCredentials.apiKey,
+        'X-BM-TIMESTAMP': timestamp,
+        'X-BM-SIGN': sign,
+    };
     try {
-        // Usamos makeRequest con 'GET' y pasamos los parámetros
-        const response = await makeRequest(authCredentials, 'GET', endpoint, params);
-        
-        // La API v4 retorna los datos en response.data.data.list
-        const orders = response.data && response.data.data && Array.isArray(response.data.data.list)
-            ? response.data.data.list
-            : [];
-            
-        return orders;
+        const response = await axios.post(url, requestBody, { headers });
+        if (response.data.code === 1000) {
+            const orders = Array.isArray(response.data.data) ? response.data.data : (response.data.data && Array.isArray(response.data.data.list) ? response.data.data.list : []);
+            return orders;
+        } else {
+            throw new Error(`Error de BitMart API: ${response.data.message} (Code: ${response.data.code})`);
+        }
     } catch (error) {
-        console.error('Error al obtener el historial de órdenes:', error.message);
         throw error;
     }
 }
 
 async function getOpenOrders(authCredentials, symbol) {
     const endpoint = '/spot/v4/query/open-orders';
-    const params = { symbol };
-
+    const requestBody = { symbol };
     try {
-        // La API v4 espera un método 'GET' para open orders
-        const response = await makeRequest(authCredentials, 'GET', endpoint, params);
-        
-        // La API v4 retorna los datos en response.data.data
-        const orders = response.data && Array.isArray(response.data.data)
-            ? response.data.data
-            : [];
-            
+        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody, true);
+        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
         return { orders };
     } catch (error) {
-        console.error('Error al obtener órdenes abiertas:', error.message);
         throw error;
     }
 }
