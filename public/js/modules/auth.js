@@ -40,7 +40,12 @@ export async function handleAuthFormSubmit(event) {
     const token = tokenInput.value;
 
     try {
-        const data = await fetchFromBackend('/login', 'POST', { email, token });
+        // --- CAMBIO AQUÍ: Envía la petición con el método y el body correctos ---
+        const data = await fetchFromBackend('/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, token })
+        });
+        
         if (data.success) {
             localStorage.setItem('authToken', data.token);
             authMessage.textContent = 'Login successful!';
