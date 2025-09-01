@@ -24,29 +24,23 @@ export async function fetchOrders(tabId) {
 
     // Lógica para determinar el endpoint basado en la pestaña activa
     if (tabId === 'opened') {
-        endpoint = `/api/orders/opened?symbol=${TRADE_SYMBOL_BITMART}`;
+        endpoint = `/api/open-orders?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching open orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     } else if (tabId === 'history') {
-        // Corregido: Ahora llama al endpoint de historial que maneja todos los estados
-        endpoint = `/api/orders/all?symbol=${TRADE_SYMBOL_BITMART}`; 
+        endpoint = `/api/history-orders?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching history orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     } else {
         // En caso de una pestaña no reconocida, por ejemplo, en la vista del dashboard
-        endpoint = `/api/orders/opened?symbol=${TRADE_SYMBOL_BITMART}`;
+        endpoint = `/api/open-orders?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching default orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     }
 
     try {
         const data = await fetchFromBackend(endpoint);
         
-        // La respuesta del backend en el endpoint /api/orders/:status es el array directamente
-        if (Array.isArray(data)) {
-            displayOrders(data, tabId);
-            displayLogMessage(`Successfully fetched ${data.length} orders.`, 'success');
-        } else if (data.success) {
-            // Manejar la respuesta del endpoint de /api/bitmart-data, si se usa
-            displayOrders(data.openOrders, tabId);
-            displayLogMessage(`Successfully fetched ${data.openOrders.length} orders.`, 'success');
+        if (data.success) {
+            displayOrders(data.orders, tabId);
+            displayLogMessage(`Successfully fetched ${data.orders.length} orders.`, 'success');
         } else {
             displayLogMessage(`Failed to fetch orders: ${data.message || 'Unknown error'}`, 'error');
             orderList.innerHTML = `<p class="text-red-500">Failed to load orders: ${data.message}</p>`;
@@ -61,7 +55,7 @@ export function displayOrders(orders, type) {
     const orderList = document.getElementById('order-list');
     if (!orderList) return;
 
-    if (!orders || orders.length === 0) {
+    if (orders.length === 0) {
         orderList.innerHTML = `<p class="text-gray-400">No ${type} orders found.</p>`;
         return;
     }
