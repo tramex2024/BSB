@@ -32,41 +32,24 @@ export function toggleApiModal(show) {
 // Lógica para manejar el formulario de autenticación
 export async function handleAuthFormSubmit(event) {
     event.preventDefault();
+
     const emailInput = document.getElementById('email');
     const tokenInput = document.getElementById('token');
     const authMessage = document.getElementById('auth-message');
+    const authButton = document.getElementById('auth-button'); // Obtiene el botón
 
     const email = emailInput.value;
     const token = tokenInput.value;
 
-    // Verificar si el campo de token está vacío
-    if (!token || token.length === 0) {
-        // Si no hay token, asume que el usuario quiere solicitar uno
-        try {
-            const data = await fetchFromBackend('/api/auth/request-token', {
-                method: 'POST',
-                body: JSON.stringify({ email })
-            });
-
-            if (data.success) {
-                authMessage.textContent = 'Token requested! Please check your email.';
-                authMessage.className = 'text-green-500';
-            } else {
-                authMessage.textContent = data.message || 'Failed to request token.';
-                authMessage.className = 'text-red-500';
-            }
-        } catch (error) {
-            authMessage.textContent = `Error requesting token: ${error.message}`;
-            authMessage.className = 'text-red-500';
-        }
-    } else {
-        // Si hay un token, asume que el usuario quiere verificarlo
+    // Se asume que si el campo de token está visible, es porque ya se pidió uno
+    if (tokenInput.style.display !== 'none' && token) {
+        // --- LÓGICA PARA VERIFICAR EL TOKEN ---
         try {
             const data = await fetchFromBackend('/api/auth/verify-token', {
                 method: 'POST',
                 body: JSON.stringify({ email, token })
             });
-            
+
             if (data.success) {
                 localStorage.setItem('authToken', data.token);
                 authMessage.textContent = 'Login successful!';
@@ -78,6 +61,32 @@ export async function handleAuthFormSubmit(event) {
             }
         } catch (error) {
             authMessage.textContent = `Login failed: ${error.message}`;
+            authMessage.className = 'text-red-500';
+        }
+
+    } else {
+        // --- LÓGICA PARA SOLICITAR EL TOKEN ---
+        try {
+            const data = await fetchFromBackend('/api/auth/request-token', {
+                method: 'POST',
+                body: JSON.stringify({ email })
+            });
+
+            if (data.success) {
+                authMessage.textContent = 'Token requested! Please check your email.';
+                authMessage.className = 'text-green-500';
+
+                // Muestra la sección del token y oculta la del email
+                document.getElementById('email-section').style.display = 'none';
+                document.getElementById('token-section').style.display = 'block';
+                authButton.textContent = 'Verify Token';
+
+            } else {
+                authMessage.textContent = data.message || 'Failed to request token.';
+                authMessage.className = 'text-red-500';
+            }
+        } catch (error) {
+            authMessage.textContent = `Error requesting token: ${error.message}`;
             authMessage.className = 'text-red-500';
         }
     }

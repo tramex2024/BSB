@@ -80,14 +80,22 @@
     </div>
 
     <main id="main-content" class="content">
-        </main>
+    </main>
 
     <div id="auth-modal" class="modal">
         <div class="modal-content">
+            <span class="close-button" onclick="document.getElementById('auth-modal').style.display='none';">&times;</span>
             <h3>Sign In / Sign Up</h3>
+            
             <form id="auth-form">
-                <input type="email" id="email" placeholder="Email" required>
-                <input type="text" id="token" placeholder="Token (from email)" style="display: none;">
+                <div id="email-section">
+                    <input type="email" id="email" placeholder="Email" required>
+                </div>
+                
+                <div id="token-section" style="display: none;">
+                    <input type="text" id="token" placeholder="Token (from email)" required>
+                </div>
+                
                 <button type="submit" id="auth-button">Continue</button>
             </form>
             <p id="auth-message"></p>
