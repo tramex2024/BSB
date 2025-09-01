@@ -83,7 +83,7 @@ export async function fetchOrders(orderType, orderListElement) {
     }
 
     try {
-        const response = await fetchFromBackend(`/api/orders?type=${orderType}`);
+        const response = await fetchFromBackend(`/api/${orderType}-orders`);
         
         // --- LOGS AGREGADOS PARA DEPURACIÓN ---
         console.log(`Datos recibidos del backend para órdenes de tipo "${orderType}":`, response);
