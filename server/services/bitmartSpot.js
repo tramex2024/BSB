@@ -2,7 +2,7 @@
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
-const { makeRequest } = require('./bitmartClient');
+const { makeRequest, generateSignForHistory } = require('./bitmartClient');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
@@ -36,11 +36,6 @@ async function getBalance(authCredentials) {
     return balances;
 }
 
-function generateSign(timestamp, body, credentials) {
-    const message = timestamp + '#' + credentials.memo + '#' + body;
-    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
-}
-
 async function getHistoryOrders(authCredentials, options = {}) {
     console.log(`\n--- Paso Final 4: Listando Historial de Órdenes (V4 POST) ---`);
     const timestamp = Date.now().toString();
@@ -57,7 +52,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
     
     // Aquí es donde cambiamos la forma en que se llama a la firma
     const sign = generateSign(timestamp, bodyForSign, authCredentials);
-    
+    const sign = generateSignForHistory(timestamp, bodyForSign, authCredentials);
     const url = `${BASE_URL}${path}`;
     const headers = {
         'Content-Type': 'application/json',
