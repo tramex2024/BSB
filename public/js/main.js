@@ -33,7 +33,6 @@ function initializeDashboardView() {
     checkBitMartConnectionAndData();
 }
 
-// Reemplaza toda la función initializeTestbotView() con este código
 function initializeTestbotView() {
     console.log("Inicializando vista del Testbot...");
     
@@ -78,7 +77,6 @@ function initializeTestbotView() {
     fetchOrders('opened', teOrderList);
 }
 
-// Reemplaza toda la función initializeAutobotView() con este código
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
@@ -135,7 +133,6 @@ function initializeAutobotView() {
     intervals.botStatus = setInterval(checkBotStatus, 5000);
 }
 
-// Reemplaza toda la función initializeAibotView() con este código
 function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");
     
@@ -192,16 +189,21 @@ function initializeTab(tabName) {
     if (tabName === 'autobot') {
         initializeAutobotView();
         intervals.autobot = setInterval(getBalances, 10000);
-        intervals.orders = setInterval(() => fetchOrders(currentTab), 15000);
+        const auOrderList = document.getElementById('au-order-list');
+        intervals.orders = setInterval(() => fetchOrders(currentTab, auOrderList), 15000);
     } else if (tabName === 'dashboard') {
         initializeDashboardView();
         intervals.dashboard = setInterval(getBalances, 10000);
     } else if (tabName === 'testbot') {
         initializeTestbotView();
         intervals.testbot = setInterval(getBalances, 10000);
+        const teOrderList = document.getElementById('te-order-list');
+        intervals.orders = setInterval(() => fetchOrders(currentTab, teOrderList), 15000);
     } else if (tabName === 'aibot') {
         initializeAibotView();
         intervals.aibot = setInterval(getBalances, 10000);
+        const aiOrderList = document.getElementById('ai-order-list');
+        intervals.orders = setInterval(() => fetchOrders(currentTab, aiOrderList), 15000);
     }
 }
 
