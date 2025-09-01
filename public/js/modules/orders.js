@@ -12,12 +12,12 @@ function createOrderHtml(order, orderType) {
     const isBuy = order.side.toLowerCase() === 'buy';
     const sideClass = isBuy ? 'text-green-500' : 'text-red-500';
     const statusText = orderType.charAt(0).toUpperCase() + orderType.slice(1);
-    const date = new Date(order.create_time * 1000).toLocaleString();
-    const orderId = order.order_id;
+    const date = new Date(order.createTime).toLocaleString();
+    const orderId = order.orderId;
     
     // Convertir el precio y la cantidad a números para un formato limpio.
     const price = parseFloat(order.price).toFixed(2);
-    const quantity = parseFloat(order.actual_size || order.size).toFixed(8);
+    const quantity = parseFloat(order.filledSize || order.size).toFixed(8);
     const symbol = order.symbol;
 
     return `
@@ -81,11 +81,31 @@ export async function fetchOrders(orderType, orderListElement) {
     }
 
     try {
-        const response = await fetchFromBackend(`/api/orders?type=${orderType}`);
+        let response;
+        const body = {
+            "symbol": "BTC_USDT",
+            "orderMode": "spot",
+            "limit": 100
+        };
+
+        if (orderType === 'opened') {
+            response = await fetchFromBackend(`/api/open-orders`, {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+        } else {
+            response = await fetchFromBackend(`/api/history-orders`, {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+        }
         
-        if (response.success) {
-            const orders = response.data;
-            displayOrders(orders, orderListElement, orderType);
+        if (response.success && response.data) {
+            let ordersToShow = response.data;
+            if (orderType !== 'all') {
+                ordersToShow = response.data.filter(order => order.state === orderType);
+            }
+            displayOrders(ordersToShow, orderListElement, orderType);
         } else {
             console.error(`Error al obtener órdenes: ${response.message}`);
             displayOrders([], orderListElement, orderType);
