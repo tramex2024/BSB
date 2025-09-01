@@ -55,6 +55,10 @@ async function getBalance() {
  * @returns {Promise<object>} - Un objeto con la lista de órdenes abiertas.
  */
 async function getOpenOrders(symbol) {
+    if (!symbol || typeof symbol !== 'string') {
+        throw new Error(`${LOG_PREFIX} 'symbol' es un parámetro requerido y debe ser una cadena de texto.`);
+    }
+
     const endpoint = '/spot/v4/query/open-orders';
     const requestBody = { symbol };
     try {
@@ -73,6 +77,10 @@ async function getOpenOrders(symbol) {
  * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
  */
 async function getHistoryOrders(options = {}) {
+    if (!options.symbol || typeof options.symbol !== 'string') {
+        throw new Error(`${LOG_PREFIX} 'options.symbol' es un parámetro requerido y debe ser una cadena de texto.`);
+    }
+
     const endpoint = '/spot/v4/query/history-orders';
     const requestBody = {
         symbol: options.symbol,
@@ -112,6 +120,9 @@ async function getHistoryOrders(options = {}) {
  * @returns {Promise<object>} - Detalles de la orden.
  */
 async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
+    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
+        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
+    }
     const requestBody = { symbol, order_id: orderId };
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
