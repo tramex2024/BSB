@@ -60,13 +60,11 @@ function displayOrders(orders, orderListElement, orderType) {
     orderListElement.innerHTML = ''; // Limpiar la lista actual
 
     if (orders && orders.length > 0) {
-        console.log(`Mostrando ${orders.length} órdenes de tipo "${orderType}".`);
         orders.forEach(order => {
             const orderHtml = createOrderHtml(order, orderType);
             orderListElement.innerHTML += orderHtml;
         });
     } else {
-        console.log(`No hay órdenes de tipo "${orderType}" para mostrar.`);
         orderListElement.innerHTML = '<p class="text-gray-500 text-center py-4">No hay órdenes para mostrar.</p>';
     }
 }
@@ -85,10 +83,6 @@ export async function fetchOrders(orderType, orderListElement) {
     try {
         const response = await fetchFromBackend(`/api/orders?type=${orderType}`);
         
-        // --- LOGS AGREGADOS PARA DEPURACIÓN ---
-        console.log(`Datos recibidos del backend para órdenes de tipo "${orderType}":`, response);
-        // --- FIN DE LOGS AGREGADOS ---
-
         if (response.success) {
             const orders = response.data;
             displayOrders(orders, orderListElement, orderType);
