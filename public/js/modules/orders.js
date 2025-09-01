@@ -28,7 +28,7 @@ export async function fetchOrders(tabId) {
         displayLogMessage(`Fetching open orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     } else if (tabId === 'history') {
         // Corregido: Ahora llama al endpoint de historial que maneja todos los estados
-        endpoint = `/api/orders/all?symbol=${TRADE_SYMBOL_BITMART}`; 
+        endpoint = `/api/orders/all?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching history orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     } else {
         // En caso de una pestaña no reconocida, por ejemplo, en la vista del dashboard
@@ -38,22 +38,28 @@ export async function fetchOrders(tabId) {
 
     try {
         const data = await fetchFromBackend(endpoint);
-        
-        // La respuesta del backend en el endpoint /api/orders/:status es el array directamente
+        let orders = [];
+
+        // --- CÓDIGO CORREGIDO ---
         if (Array.isArray(data)) {
-            displayOrders(data, tabId);
-            displayLogMessage(`Successfully fetched ${data.length} orders.`, 'success');
-        } else if (data.success) {
-            // Manejar la respuesta del endpoint de /api/bitmart-data, si se usa
-            displayOrders(data.openOrders, tabId);
-            displayLogMessage(`Successfully fetched ${data.openOrders.length} orders.`, 'success');
+            // Caso 1: El backend devuelve un array directamente
+            orders = data;
+        } else if (data && Array.isArray(data.orders)) {
+            // Caso 2: El backend devuelve un objeto con un array de órdenes
+            orders = data.orders;
         } else {
-            displayLogMessage(`Failed to fetch orders: ${data.message || 'Unknown error'}`, 'error');
-            orderList.innerHTML = `<p class="text-red-500">Failed to load orders: ${data.message}</p>`;
+            // Si el formato no es el esperado, asumimos un array vacío para evitar errores
+            displayLogMessage(`No se encontraron órdenes en la respuesta.`, 'info');
+            orders = [];
         }
+
+        displayOrders(orders, tabId);
+        displayLogMessage(`Se han obtenido ${orders.length} órdenes.`, 'success');
+
     } catch (error) {
-        displayLogMessage('Could not fetch orders. Network error or API issue.', 'error');
-        orderList.innerHTML = `<p class="text-red-500">Could not fetch orders.</p>`;
+        // Esta sección ahora solo se ejecutará si hay un error real de la API o de la red.
+        displayLogMessage(`Error al obtener órdenes: ${error.message}`, 'error');
+        orderList.innerHTML = `<p class="text-red-500">No se pudieron cargar las órdenes. Error: ${error.message}</p>`;
     }
 }
 
