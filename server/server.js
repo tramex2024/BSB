@@ -1,7 +1,5 @@
 // BSB/server/server.js
 
-// BSB/server/server.js
-
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -46,6 +44,9 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use('/api/auth', authRoutes); // <- AÑADE O DESCOMENTA ESTA LÍNEA
+app.use('/api/orders', ordersRoutes); // <- Esto ya lo tienes y funciona
+app.use('/api/users', userRoutes); // <- Descomenta si usas este router
 
 const connectDB = async () => {
     try {

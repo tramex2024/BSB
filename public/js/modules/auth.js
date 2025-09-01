@@ -40,8 +40,7 @@ export async function handleAuthFormSubmit(event) {
     const token = tokenInput.value;
 
     try {
-        // --- CAMBIO AQUÍ: Envía la petición con el método y el body correctos ---
-        const data = await fetchFromBackend('/login', {
+        const data = await fetchFromBackend('/api/auth/verify-token', { // CAMBIAR AQUÍ
             method: 'POST',
             body: JSON.stringify({ email, token })
         });
@@ -51,8 +50,6 @@ export async function handleAuthFormSubmit(event) {
             authMessage.textContent = 'Login successful!';
             authMessage.className = 'text-green-500';
             toggleAuthModal(false);
-            // Llama a una función para actualizar el estado de la UI
-            // Por ejemplo: updateLoginState(true);
         } else {
             authMessage.textContent = data.message || 'Login failed.';
             authMessage.className = 'text-red-500';
