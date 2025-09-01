@@ -1,85 +1,103 @@
 // public/js/modules/orders.js
 
-import { displayLogMessage } from './auth.js';
 import { fetchFromBackend } from './api.js';
-import { TRADE_SYMBOL_BITMART } from '../main.js';
 
-export function setActiveTab(tabId) {
-    document.querySelectorAll('#autobot-section .border-b-2').forEach(button => {
-        button.classList.remove('active-tab', 'border-white');
-        button.classList.add('border-transparent');
-    });
-    const activeButton = document.getElementById(tabId);
-    if (activeButton) {
-        activeButton.classList.add('active-tab', 'border-white');
-        activeButton.classList.remove('border-transparent');
-    }
+/**
+ * Función para crear un elemento HTML para una sola orden.
+ * @param {object} order La orden a renderizar.
+ * @param {string} orderType El tipo de orden ('opened', 'filled', 'cancelled').
+ * @returns {string} El HTML para la orden.
+ */
+function createOrderHtml(order, orderType) {
+    const isBuy = order.side.toLowerCase() === 'buy';
+    const sideClass = isBuy ? 'text-green-500' : 'text-red-500';
+    const statusText = orderType.charAt(0).toUpperCase() + orderType.slice(1);
+    const date = new Date(order.create_time * 1000).toLocaleString();
+    const orderId = order.order_id;
+    
+    // Convertir el precio y la cantidad a números para un formato limpio.
+    const price = parseFloat(order.price).toFixed(2);
+    const quantity = parseFloat(order.actual_size || order.size).toFixed(8);
+    const symbol = order.symbol;
+
+    return `
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center">
+            <div class="flex-1 mb-2 sm:mb-0">
+                <span class="font-semibold text-sm sm:text-base mr-2 ${sideClass}">${order.side.toUpperCase()}</span>
+                <span class="text-xs sm:text-sm text-gray-400">${symbol}</span>
+            </div>
+            <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">
+                <p class="text-gray-400 text-xs sm:text-sm">Precio</p>
+                <span class="text-sm sm:text-base">${price} USDT</span>
+            </div>
+            <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">
+                <p class="text-gray-400 text-xs sm:text-sm">Cantidad</p>
+                <span class="text-sm sm:text-base">${quantity} BTC</span>
+            </div>
+            <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">
+                <p class="text-gray-400 text-xs sm:text-sm">Estado</p>
+                <span class="text-sm sm:text-base">${statusText}</span>
+            </div>
+            <div class="flex-1 text-right sm:text-center text-xs sm:text-sm text-gray-500">
+                ${date}
+            </div>
+        </div>
+    `;
 }
 
-export async function fetchOrders(tabId, orderListElement) {
+/**
+ * Muestra las órdenes en el contenedor del DOM.
+ * @param {Array<object>} orders Las órdenes a mostrar.
+ * @param {HTMLElement} orderListElement El elemento HTML para mostrar la lista.
+ * @param {string} orderType El tipo de orden ('opened', 'filled', 'cancelled').
+ */
+function displayOrders(orders, orderListElement, orderType) {
     if (!orderListElement) {
         console.error("No se proporcionó un elemento de lista de órdenes.");
         return;
     }
 
-    orderListElement.innerHTML = '<p class="text-center text-gray-400">Cargando...</p>';
-    let endpoint = '';
-    
-    switch (tabId) {
-        case 'opened':
-            endpoint = `/api/orders/opened?symbol=${TRADE_SYMBOL_BITMART}`;
-            displayLogMessage(`Fetching open orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
-            break;
-        case 'filled':
-            endpoint = `/api/orders/filled?symbol=${TRADE_SYMBOL_BITMART}`;
-            displayLogMessage(`Fetching filled orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
-            break;
-        case 'cancelled':
-            endpoint = `/api/orders/cancelled?symbol=${TRADE_SYMBOL_BITMART}`;
-            displayLogMessage(`Fetching cancelled orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
-            break;
-        case 'all':
-            endpoint = `/api/orders/all?symbol=${TRADE_SYMBOL_BITMART}`;
-            displayLogMessage(`Fetching all orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
-            break;
-        default:
-            console.warn(`Tab ID desconocido: ${tabId}`);
-            orderListElement.innerHTML = '<p class="text-center text-gray-500">Estado de orden desconocido.</p>';
-            return;
+    orderListElement.innerHTML = ''; // Limpiar la lista actual
+
+    if (orders && orders.length > 0) {
+        console.log(`Mostrando ${orders.length} órdenes de tipo "${orderType}".`);
+        orders.forEach(order => {
+            const orderHtml = createOrderHtml(order, orderType);
+            orderListElement.innerHTML += orderHtml;
+        });
+    } else {
+        console.log(`No hay órdenes de tipo "${orderType}" para mostrar.`);
+        orderListElement.innerHTML = '<p class="text-gray-500 text-center py-4">No hay órdenes para mostrar.</p>';
+    }
+}
+
+/**
+ * Obtiene y muestra las órdenes de un tipo específico desde el backend.
+ * @param {string} orderType El tipo de orden a obtener ('opened', 'filled', 'cancelled', 'all').
+ * @param {HTMLElement} orderListElement El elemento del DOM donde se mostrarán las órdenes.
+ */
+export async function fetchOrders(orderType, orderListElement) {
+    if (!orderListElement) {
+        console.error("fetchOrders: El elemento orderListElement no está definido.");
+        return;
     }
 
     try {
-        const result = await fetchFromBackend(endpoint);
-        let orders = result.orders || [];
+        const response = await fetchFromBackend(`/api/orders?type=${orderType}`);
+        
+        // --- LOGS AGREGADOS PARA DEPURACIÓN ---
+        console.log(`Datos recibidos del backend para órdenes de tipo "${orderType}":`, response);
+        // --- FIN DE LOGS AGREGADOS ---
 
-        orderListElement.innerHTML = '';
-        if (orders.length > 0) {
-            orders.forEach(order => {
-                const li = document.createElement('li');
-                li.className = 'bg-gray-700 p-2 rounded-lg mb-2 flex flex-col md:flex-row justify-between items-start md:items-center text-sm';
-                li.innerHTML = `
-                    <div class="flex-grow">
-                        <p class="font-bold text-gray-100">${order.symbol}</p>
-                        <p class="text-xs text-gray-400">ID: ${order.order_id}</p>
-                    </div>
-                    <div class="mt-2 md:mt-0 md:text-right">
-                        <p class="font-semibold text-${order.side === 'buy' ? 'green' : 'red'}-400">${order.side.toUpperCase()}</p>
-                        <p class="text-gray-300">Tipo: ${order.type.toUpperCase()}</p>
-                        <p class="text-gray-300">Tamaño: ${parseFloat(order.size).toFixed(8)}</p>
-                        <p class="text-gray-300">Precio: ${parseFloat(order.price).toFixed(2)}</p>
-                        <p class="text-gray-300">Estado: ${order.state.toUpperCase()}</p>
-                    </div>
-                `;
-                orderListElement.appendChild(li);
-            });
-            displayLogMessage(`Se han obtenido ${orders.length} órdenes para ${tabId}.`, 'success');
+        if (response.success) {
+            const orders = response.data;
+            displayOrders(orders, orderListElement, orderType);
         } else {
-            orderListElement.innerHTML = `<p class="text-center text-gray-500">No se encontraron órdenes en ${tabId}.</p>`;
-            displayLogMessage(`No se encontraron órdenes para ${tabId}.`, 'info');
+            console.error(`Error al obtener órdenes: ${response.message}`);
+            displayOrders([], orderListElement, orderType);
         }
     } catch (error) {
-        orderListElement.innerHTML = `<p class="text-center text-red-400">Error: ${error.message}</p>`;
-        displayLogMessage(`Error al obtener órdenes: ${error.message}`, 'error');
-        console.error('Error fetching orders:', error);
+        console.error("Error de red al obtener órdenes:", error);
+        displayOrders([], orderListElement, orderType);
     }
 }
