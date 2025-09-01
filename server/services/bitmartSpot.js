@@ -1,8 +1,6 @@
-// BSB/server/services/bitmartSpot.js
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
-const { makeRequest, generateSignForHistory } = require('./bitmartClient');
+const { makeRequest } = require('./bitmartClient');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
@@ -27,13 +25,17 @@ async function getTicker(symbol) {
 }
 
 async function getBalance(authCredentials) {
-    console.log(`${LOG_PREFIX} Iniciando prueba de getBalance...`); // <-- Agregar esta línea
-    console.log(`${LOG_PREFIX} Obteniendo balance de la cuenta...`);
+    console.log(`${LOG_PREFIX} Obteniendo balance de la cuenta...`);
     const response = await makeRequest(authCredentials, 'GET', '/account/v1/wallet');
     const balances = response.data.wallet;
     console.log('✅ Balance de la cuenta obtenido con éxito.');
     balances.forEach(b => console.log(`   - ${b.currency}: Disponible ${b.available}, Congelado ${b.frozen}`));
     return balances;
+}
+
+function generateSign(timestamp, body, credentials) {
+    const message = timestamp + '#' + credentials.memo + '#' + body;
+    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 
 async function getHistoryOrders(authCredentials, options = {}) {
@@ -52,7 +54,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
     
     // Aquí es donde cambiamos la forma en que se llama a la firma
     const sign = generateSign(timestamp, bodyForSign, authCredentials);
-    const sign = generateSignForHistory(timestamp, bodyForSign, authCredentials);
+    
     const url = `${BASE_URL}${path}`;
     const headers = {
         'Content-Type': 'application/json',
@@ -81,6 +83,31 @@ async function getHistoryOrders(authCredentials, options = {}) {
         throw error;
     }
 }
+
+//async function getHistoryOrders(authCredentials, options = {}) {
+//    console.log(`${LOG_PREFIX} Listando historial de órdenes (V4 POST)...`);
+//    const path = '/spot/v4/query/history-orders';
+//    const requestBody = { ...options };
+//    try {
+//        const response = await makeRequest(authCredentials, 'POST', path, {}, requestBody, true);
+//        let orders = [];
+//        if (Array.isArray(response.data.data)) {
+//            orders = response.data.data;
+//        } else if (response.data.data && Array.isArray(response.data.data.list)) {
+//            orders = response.data.data.list;
+//        }
+//        if (orders.length > 0) {
+//            console.log(`✅ Historial de Órdenes obtenido. Se encontraron ${orders.length} órdenes.`);
+//        } else {
+//            console.log('ℹ️ No se encontraron órdenes en el historial.');
+//        }
+//        return orders;
+//    } catch (error) {
+//        console.error('\n❌ Falló la obtención del historial de órdenes V4.');
+//        console.error('Error:', error.response ? error.response.data : error.message);
+//        throw error;
+//    }
+//}
 
 async function getOpenOrders(authCredentials, symbol) {
     console.log(`${LOG_PREFIX} Obteniendo órdenes abiertas para ${symbol}...`);
