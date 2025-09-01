@@ -40,49 +40,37 @@ function generateSign(timestamp, body, credentials) {
 }
 
 async function getHistoryOrders(authCredentials, options = {}) {
-    console.log(`\n--- Paso Final 4: Listando Historial de Órdenes (V4 POST) ---`);
-    const timestamp = Date.now().toString();
-    const path = '/spot/v4/query/history-orders';
-    const requestBody = { recvWindow: 5000 };
+    const timestamp = Date.now().toString();
+    const path = '/spot/v4/query/history-orders';
+    const requestBody = { recvWindow: 5000 };
 
-    if (options.symbol) { requestBody.symbol = options.symbol; }
-    if (options.orderMode) { requestBody.orderMode = options.orderMode; }
-    if (options.startTime) { requestBody.startTime = options.startTime; }
-    if (options.endTime) { requestBody.endTime = options.endTime; }
-    if (options.limit) { requestBody.limit = options.limit; }
+    if (options.symbol) { requestBody.symbol = options.symbol; }
+    if (options.orderMode) { requestBody.orderMode = options.orderMode; }
+    if (options.startTime) { requestBody.startTime = options.startTime; }
+    if (options.endTime) { requestBody.endTime = options.endTime; }
+    if (options.limit) { requestBody.limit = options.limit; }
     if (options.status) { requestBody.status = options.status; }
 
-    const bodyForSign = JSON.stringify(requestBody);
- 
-    // Aquí es donde cambiamos la forma en que se llama a la firma
-    const sign = generateSign(timestamp, bodyForSign, authCredentials); 
-    const url = `${BASE_URL}${path}`;
-    const headers = {
-        'Content-Type': 'application/json',
-        'X-BM-KEY': authCredentials.apiKey,
-        'X-BM-TIMESTAMP': timestamp,
-        'X-BM-SIGN': sign,
-    };
-    try {
-        const response = await axios.post(url, requestBody, { headers });
-        if (response.data.code === 1000) {
-            const orders = Array.isArray(response.data.data) ? response.data.data : (response.data.data && Array.isArray(response.data.data.list) ? response.data.data.list : []);
-            if (orders.length > 0) {
-                console.log(`✅ ¡Historial de órdenes obtenido! Se encontraron ${orders.length} órdenes.`);
-                orders.slice(0, 5).forEach((order, index) => console.log(`\n--- Orden Histórica ${index + 1} ---`, JSON.stringify(order, null, 2)));
-                if (orders.length > 5) console.log(`...y ${orders.length - 5} órdenes más.`);
-            } else {
-                console.log('ℹ️ No se encontraron órdenes en el historial.');
-            }
-            return orders;
-        } else {
-            throw new Error(`Error de BitMart API: ${response.data.message} (Code: ${response.data.code})`);
-        }
-    } catch (error) {
-        console.error('\n❌ Falló la obtención del historial de órdenes spot V4.');
-        console.error('Error:', error.response ? error.response.data : error.message);
-        throw error;
-    }
+    const bodyForSign = JSON.stringify(requestBody);
+    const sign = generateSign(timestamp, bodyForSign, authCredentials);
+    const url = `${BASE_URL}${path}`;
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-BM-KEY': authCredentials.apiKey,
+        'X-BM-TIMESTAMP': timestamp,
+        'X-BM-SIGN': sign,
+    };
+    try {
+        const response = await axios.post(url, requestBody, { headers });
+        if (response.data.code === 1000) {
+            const orders = Array.isArray(response.data.data) ? response.data.data : (response.data.data && Array.isArray(response.data.data.list) ? response.data.data.list : []);
+            return orders;
+        } else {
+            throw new Error(`Error de BitMart API: ${response.data.message} (Code: ${response.data.code})`);
+        }
+    } catch (error) {
+        throw error;
+    }
 }
 
 async function getOpenOrders(authCredentials, symbol) {

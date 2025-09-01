@@ -107,16 +107,74 @@ function setupWebSocket(io) {
 setupWebSocket(io);
 
 (async function startBotCycle() {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
-            await autobotLogic.botCycle(currentMarketPrice);
-        }
-    } catch (error) {
-        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
-    } finally {
-        setTimeout(startBotCycle, 10000);
-    }
+    try {
+        if (process.env.NODE_ENV === 'production') {
+            setInterval(async () => {
+                const authCredentials = {
+                    apiKey: BITMART_API_KEY,
+                    secretKey: BITMART_SECRET_KEY,
+                    memo: BITMART_API_MEMO
+                };
+
+                console.log('--- Verificando credenciales de la API ---');
+                console.log(`Clave API: ${authCredentials.apiKey ? '✅ Leída' : '❌ No leída'}`);
+                console.log(`Clave Secreta: ${authCredentials.secretKey ? '✅ Leída' : '❌ No leída'}`);
+                console.log(`Memo: ${authCredentials.memo}`);
+                console.log('--- Fin de la verificación de credenciales ---');
+
+                if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
+                    console.error("ERROR: Las claves API no están configuradas en las variables de entorno de Render.");
+                    return;
+                }
+
+                console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
+                try {
+		    const balance = await bitmartService.getBalance(bitmartCredentials);
+
+                    // Prueba de Órdenes Abiertas
+                    console.log('--- Probando API de Órdenes Abiertas ---');
+                    const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
+                    if (openOrders.orders.length > 0) {
+                        console.log(`✅ Se encontraron ${openOrders.orders.length} órdenes abiertas.`);
+                    } else {
+                        console.log('ℹ️ No se encontraron órdenes abiertas.');
+                    }
+
+                    // Prueba de Historial de Órdenes (Rango ampliado y corrección de parámetros)
+                    console.log('--- Probando API de Historial de Órdenes ---');
+                    const now = Date.now();
+                    const ninetyDaysAgo = new Date();
+                    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+                    const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+                        orderMode: 'spot',
+                        startTime: ninetyDaysAgo.getTime(),
+                        endTime: now,
+                        limit: 100
+                    });
+
+                    if (historyOrders.length > 0) {
+                        console.log(`✅ Se encontraron ${historyOrders.length} órdenes históricas.`);
+                    } else {
+                        console.log('ℹ️ No se encontraron órdenes históricas.');
+                    }
+
+                    console.log('--- Prueba de API finalizada ---');
+
+                } catch (error) {
+                    console.error('--- Error al ejecutar la prueba de API de BitMart ---', error.message);
+                }
+            }, 60000); // 60000 milisegundos = 1 minuto
+        }
+
+        const botState = await Autobot.findOne({});
+        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
+            await autobotLogic.botCycle(currentMarketPrice);
+        }
+    } catch (error) {
+        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
+    } finally {
+        setTimeout(startBotCycle, 10000);
+    }
 })();
 
 app.get('/api/ticker/:symbol', (req, res) => {
