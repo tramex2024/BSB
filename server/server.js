@@ -128,52 +128,62 @@ app.get('/api/ticker/:symbol', (req, res) => {
 });
 
 app.get('/api/orders/:status', async (req, res) => {
-    const { status } = req.params;
-    
-    if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
-        return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
-    }
+    const { status } = req.params;
+    
+    if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
+        return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
+    }
 
-    try {
-        let result;
-        const symbol = 'BTC_USDT';
+    try {
+        let result;
+        const symbol = 'BTC_USDT';
 
-        switch (status) {
-            case 'opened':
-                result = await bitmartService.getOpenOrders(bitmartCredentials, symbol);
-                break;
-            case 'filled':
-            case 'cancelled':
-            case 'all':
-                // Prueba de Historial de Órdenes (Buscando en los últimos 90 días)
-                const endTime = Date.now();
-                const ninetyDaysAgo = new Date();
-                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                const startTime = ninetyDaysAgo.getTime();
-                
-                const historyParams = {
-                    symbol: 'BTC_USDT',
-                    orderMode: 'spot',
-                    startTime: startTime,
-                    endTime: endTime,
-                    limit: 100 // O el número que prefieras
-                };
-                if (status !== 'all') {
-                    historyParams.status = status;
-                }
-                
-                result = await bitmartService.getHistoryOrders(bitmartCredentials, historyParams);
-                break;
-            default:
-                return res.status(400).json({ success: false, message: 'Invalid order status' });
-        }
+        switch (status) {
+            case 'opened':
+                result = await bitmartService.getOpenOrders(bitmartCredentials, symbol);
+                break;
+            case 'filled':
+            case 'cancelled':
+            case 'all':
+                // Prueba de Historial de Órdenes (Buscando en los últimos 90 días)
+                const endTime = Date.now();
+                const ninetyDaysAgo = new Date();
+                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+                const startTime = ninetyDaysAgo.getTime();
+                
+                const historyParams = {
+                    symbol: 'BTC_USDT',
+                    orderMode: 'spot',
+                    startTime: startTime,
+                    endTime: endTime,
+                    limit: 100 // O el número que prefieras
+                };
+                if (status !== 'all') {
+                    historyParams.status = status;
+                }
+                
+                result = await bitmartService.getHistoryOrders(bitmartCredentials, historyParams);
+                break;
+            default:
+                return res.status(400).json({ success: false, message: 'Invalid order status' });
+        }
 
-        res.status(200).json(result);
-        
-    } catch (error) {
-        console.error('Error in /api/orders/:status:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-    }
+        res.status(200).json(result);
+        
+    } catch (error) {
+        // --- CÓDIGO CORREGIDO PARA MOSTRAR DETALLES DEL ERROR ---
+        console.error('Error al obtener órdenes. Detalles:', error.response ? error.response.data : error.message);
+
+        // Envía un mensaje de error más específico al cliente
+        let errorMessage = 'Error al obtener órdenes. Por favor, revisa tus API Keys.';
+        if (error.response && error.response.data) {
+            errorMessage = error.response.data.message || errorMessage;
+        } else {
+            errorMessage = error.message || errorMessage;
+        }
+        
+        res.status(500).json({ success: false, message: errorMessage });
+    }
 });
 
 app.get('/api/bitmart-data', async (req, res) => {
