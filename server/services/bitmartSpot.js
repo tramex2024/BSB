@@ -1,66 +1,79 @@
 // BSB/server/services/bitmartSpot.js
 
-const axios = require('axios');
-const CryptoJS = require('crypto-js');
 const { makeRequest } = require('./bitmartClient');
-const BASE_URL = 'https://api-cloud.bitmart.com';
+
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
 const MIN_USDT_VALUE_FOR_BITMART = 5;
-
-const orderStatusMap = {
-    'filled': 1,
-    'cancelled': 6,
-    'all': 0 // O simplemente no se usa el parámetro de status
-};
 
 // Constantes para los reintentos
 const MAX_RETRIES = 5;
 const INITIAL_RETRY_DELAY_MS = 500;
 
+const orderStatusMap = {
+    'filled': 1,
+    'cancelled': 6,
+    'all': 0
+};
+
+/**
+ * Obtiene la hora del sistema.
+ * @returns {Promise<number>} - Tiempo del servidor en milisegundos.
+ */
 async function getSystemTime() {
     const response = await makeRequest(null, 'GET', '/system/time');
     return response.data.server_time;
 }
 
+/**
+ * Obtiene el ticker para un símbolo específico.
+ * @param {string} symbol - Símbolo de trading (e.g., 'BTC_USDT').
+ * @returns {Promise<object>} - Datos del ticker.
+ */
 async function getTicker(symbol) {
     const endpoint = `/spot/v1/ticker`;
     const response = await makeRequest(null, 'GET', endpoint, { symbol });
     return response.data.tickers.find(t => t.symbol === symbol);
 }
 
-async function getBalance(authCredentials) {
-    const response = await makeRequest(authCredentials, 'GET', '/account/v1/wallet');
-    const balances = response.data.wallet;
-    return balances;
+/**
+ * Obtiene los balances de la billetera spot.
+ * Utiliza el endpoint v1, ya que el v4 ha demostrado ser problemático en nuestras pruebas.
+ * @returns {Promise<object[]>} - Un arreglo de objetos de balance.
+ */
+async function getBalance() {
+    try {
+        const response = await makeRequest(null, 'GET', '/account/v1/wallet');
+        return response.data.wallet;
+    } catch (error) {
+        throw new Error(`Error al obtener los balances: ${error.message}`);
+    }
 }
 
-function generateSign(timestamp, body, credentials) {
-    const message = timestamp + '#' + credentials.memo + '#' + body;
-    return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
-}
-
-async function getBalance(authCredentials) {
-    // Usamos el endpoint v4 para mayor compatibilidad
-    const endpoint = '/spot/v4/wallet';
-    const response = await makeRequest(authCredentials, 'GET', endpoint);
-    const balances = response.data.wallet;
-    return balances;
-}
-
+/**
+ * Obtiene las órdenes abiertas para un símbolo específico.
+ * @param {object} authCredentials - Credenciales de autenticación.
+ * @param {string} symbol - Símbolo de trading (e.g., 'BTC_USDT').
+ * @returns {Promise<object>} - Un objeto con la lista de órdenes abiertas.
+ */
 async function getOpenOrders(authCredentials, symbol) {
     const endpoint = '/spot/v4/query/open-orders';
     const requestBody = { symbol };
     try {
-        // Usamos POST como tu código original, ya que la solicitud GET falló con 404
-        const response = await makeRequest(authCredentials, 'POST', endpoint, requestBody);
+        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
         const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
         return { orders };
     } catch (error) {
-        console.error('Error al obtener órdenes abiertas:', error.message);
+        console.error(`${LOG_PREFIX} Error al obtener órdenes abiertas:`, error.message);
         throw error;
     }
 }
 
+/**
+ * Obtiene el historial de órdenes para un símbolo y estado.
+ * @param {object} authCredentials - Credenciales de autenticación.
+ * @param {object} options - Opciones de la consulta.
+ * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
+ */
 async function getHistoryOrders(authCredentials, options = {}) {
     const endpoint = '/spot/v4/query/history-orders';
     const requestBody = {
@@ -76,25 +89,31 @@ async function getHistoryOrders(authCredentials, options = {}) {
         if (statusCode !== undefined) {
             requestBody.status = statusCode;
         } else {
-            console.warn(`[getHistoryOrders] Estado de orden no reconocido: ${options.status}`);
+            console.warn(`${LOG_PREFIX} Estado de orden no reconocido: ${options.status}`);
         }
     }
     
     try {
-        // Usamos POST como tu código original, ya que las peticiones GET fallaron
-        const response = await makeRequest(authCredentials, 'POST', endpoint, requestBody);
-        
+        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
         const orders = response.data && response.data.data && Array.isArray(response.data.data.list)
             ? response.data.data.list
             : [];
-            
         return orders;
     } catch (error) {
-        console.error('Error al obtener el historial de órdenes:', error.message);
+        console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
         throw error;
     }
 }
 
+/**
+ * Obtiene los detalles de una orden específica con reintentos.
+ * @param {object} authCredentials - Credenciales de autenticación.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} orderId - ID de la orden.
+ * @param {number} [retries=0] - Número de reintentos.
+ * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
+ * @returns {Promise<object>} - Detalles de la orden.
+ */
 async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     const requestBody = { symbol, order_id: orderId };
     if (retries >= MAX_RETRIES) {
@@ -114,6 +133,16 @@ async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, del
     }
 }
 
+/**
+ * Coloca una nueva orden.
+ * @param {object} authCredentials - Credenciales de autenticación.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} side - 'buy' o 'sell'.
+ * @param {string} type - 'limit' o 'market'.
+ * @param {string} size - Cantidad de la orden.
+ * @param {string} [price] - Precio para órdenes limit.
+ * @returns {Promise<object>} - Respuesta de la API.
+ */
 async function placeOrder(authCredentials, symbol, side, type, size, price) {
     const requestBody = { symbol, side, type };
     if (type === 'limit') {
@@ -132,12 +161,26 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
     return response.data;
 }
 
+/**
+ * Cancela una orden.
+ * @param {object} authCredentials - Credenciales de autenticación.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} order_id - ID de la orden.
+ * @returns {Promise<object>} - Respuesta de la API.
+ */
 async function cancelOrder(authCredentials, symbol, order_id) {
     const requestBody = { symbol, order_id };
     const response = await makeRequest(authCredentials, 'POST', '/spot/v2/cancel-order', {}, requestBody);
     return response.data;
 }
 
+/**
+ * Obtiene los datos de velas (klines).
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} interval - Intervalo de tiempo.
+ * @param {number} limit - Número de velas a obtener.
+ * @returns {Promise<object[]>} - Arreglo de datos de velas.
+ */
 async function getKlines(symbol, interval, limit = 200) {
     const path = `/spot/quotation/v3/klines`;
     const params = { symbol, step: interval, size: limit };
