@@ -39,31 +39,51 @@ function generateSign(timestamp, body, credentials) {
     return CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 }
 
+async function getBalance(authCredentials) {
+    // Usamos el endpoint v4 para mayor compatibilidad
+    const endpoint = '/spot/v4/wallet';
+    const response = await makeRequest(authCredentials, 'GET', endpoint);
+    const balances = response.data.wallet;
+    return balances;
+}
+
+async function getOpenOrders(authCredentials, symbol) {
+    const endpoint = '/spot/v4/query/open-orders';
+    const requestBody = { symbol };
+    try {
+        // Usamos POST como tu código original, ya que la solicitud GET falló con 404
+        const response = await makeRequest(authCredentials, 'POST', endpoint, requestBody);
+        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
+        return { orders };
+    } catch (error) {
+        console.error('Error al obtener órdenes abiertas:', error.message);
+        throw error;
+    }
+}
+
 async function getHistoryOrders(authCredentials, options = {}) {
     const endpoint = '/spot/v4/query/history-orders';
-    const params = {
+    const requestBody = {
         symbol: options.symbol,
-        orderMode: 'spot', // Asumo que siempre es 'spot'
+        orderMode: 'spot',
         startTime: options.startTime,
         endTime: options.endTime,
         limit: options.limit
     };
 
-    // Mapea el estado de texto a un código numérico si es necesario
     if (options.status && options.status !== 'all') {
         const statusCode = orderStatusMap[options.status];
         if (statusCode !== undefined) {
-            params.status = statusCode;
+            requestBody.status = statusCode;
         } else {
             console.warn(`[getHistoryOrders] Estado de orden no reconocido: ${options.status}`);
         }
     }
     
     try {
-        // Usamos makeRequest con 'GET' y pasamos los parámetros
-        const response = await makeRequest(authCredentials, 'GET', endpoint, params);
+        // Usamos POST como tu código original, ya que las peticiones GET fallaron
+        const response = await makeRequest(authCredentials, 'POST', endpoint, requestBody);
         
-        // La API v4 retorna los datos en response.data.data.list
         const orders = response.data && response.data.data && Array.isArray(response.data.data.list)
             ? response.data.data.list
             : [];
@@ -71,26 +91,6 @@ async function getHistoryOrders(authCredentials, options = {}) {
         return orders;
     } catch (error) {
         console.error('Error al obtener el historial de órdenes:', error.message);
-        throw error;
-    }
-}
-
-async function getOpenOrders(authCredentials, symbol) {
-    const endpoint = '/spot/v4/query/open-orders';
-    const params = { symbol };
-
-    try {
-        // La API v4 espera un método 'GET' para open orders
-        const response = await makeRequest(authCredentials, 'GET', endpoint, params);
-        
-        // La API v4 retorna los datos en response.data.data
-        const orders = response.data && Array.isArray(response.data.data)
-            ? response.data.data
-            : [];
-            
-        return { orders };
-    } catch (error) {
-        console.error('Error al obtener órdenes abiertas:', error.message);
         throw error;
     }
 }
