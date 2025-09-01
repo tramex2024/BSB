@@ -65,7 +65,7 @@ function displayOrders(orders, orderListElement, orderType) {
             orderListElement.innerHTML += orderHtml;
         });
     } else {
-        orderListElement.innerHTML = '<p class="text-gray-500 text-center py-4">No hay órdenes para mostrar.</p>';
+        orderListElement.innerHTML = `<p class="text-gray-500 text-center py-4">No hay órdenes de tipo "${orderType}" para mostrar.</p>`;
     }
 }
 
@@ -80,27 +80,13 @@ export async function fetchOrders(orderType, orderListElement) {
         return;
     }
 
-    try {
-        let response;
-        const body = {
-            "symbol": "BTC_USDT",
-            "orderMode": "spot",
-            "limit": 100
-        };
+    console.log(`Intentando obtener órdenes de tipo: ${orderType}`);
 
-        if (orderType === 'opened') {
-            response = await fetchFromBackend(`/api/open-orders`, {
-                method: 'POST',
-                body: JSON.stringify(body)
-            });
-        } else {
-            response = await fetchFromBackend(`/api/history-orders`, {
-                method: 'POST',
-                body: JSON.stringify(body)
-            });
-        }
+    try {
+        const response = await fetchFromBackend(`/api/orders?type=${orderType}`);
         
         if (response.success && response.data) {
+            console.log("Órdenes recibidas desde el backend:", response.data);
             let ordersToShow = response.data;
             if (orderType !== 'all') {
                 ordersToShow = response.data.filter(order => order.state === orderType);
