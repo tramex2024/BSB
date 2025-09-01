@@ -2,22 +2,20 @@
 
 import { BACKEND_URL } from '../main.js';
 
-export async function getBalances() {
+async function getBalances() {
     try {
-        // Corregido: Llamada al endpoint correcto que existe en el backend
-        const response = await fetch(`${BACKEND_URL}/api/bitmart-data`);
-        
+        const response = await fetch(`${BACKEND_URL}/api/user/balances`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+        });
         if (!response.ok) {
-            throw new Error('Failed to fetch BitMart data.');
+            throw new Error('Failed to fetch balances.');
         }
-        
         const data = await response.json();
         
-        // Corregido: La respuesta del backend devuelve los balances en 'data.balance'
-        if (data.connected && data.balance) {
-            updateBotBalances(data.balance);
-            // También se pueden actualizar las órdenes abiertas y el ticker aquí
-            // (Tu main.js ya lo hace con el socket, pero esta es una alternativa)
+        if (data.success && data.wallet) {
+            updateBotBalances(data.wallet);
         } else {
             console.error('API response does not contain wallet data:', data.message);
         }
@@ -44,5 +42,9 @@ function updateBotBalances(walletData) {
         if (totalBalanceEl) {
             totalBalanceEl.textContent = `USDT: ${usdtValue} | BTC: ${btcValue}`;
         }
+        // Los balances LBalance y SBalance no se tocan,
+        // ya que dependen de la lógica de la estrategia.
     });
 }
+
+export { getBalances };
