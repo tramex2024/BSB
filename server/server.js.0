@@ -129,7 +129,7 @@ setupWebSocket(io);
 
                 console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
                 try {
-		    const balance = await bitmartService.getBalance(bitmartCredentials);
+		    const balance = await bitmartService.getBalance(bitmartCredentials);
 
                     // Prueba de Órdenes Abiertas
                     console.log('--- Probando API de Órdenes Abiertas ---');
@@ -143,14 +143,18 @@ setupWebSocket(io);
                     // Prueba de Historial de Órdenes (Rango ampliado y corrección de parámetros)
                     console.log('--- Probando API de Historial de Órdenes ---');
                     const now = Date.now();
-                    const ninetyDaysAgo = new Date();
-                    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                    const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
-                        orderMode: 'spot',
-                        startTime: ninetyDaysAgo.getTime(),
-                        endTime: now,
-                        limit: 100
-                    });
+                    const ninetyDaysAgo = now - (90 * 24 * 60 * 60 * 1000); // 90 días
+                 //   const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+                 //       symbol: 'BTC_USDT',
+                 //       orderMode: 'spot',
+                 //       startTime: ninetyDaysAgo,
+                 //       endTime: now,
+                 //       pageSize: 50 // Parámetro corregido de 'limit' a 'pageSize'
+                 //   });
+			const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+    orderMode: 'spot',
+    limit: 100
+});
 
                     if (historyOrders.length > 0) {
                         console.log(`✅ Se encontraron ${historyOrders.length} órdenes históricas.`);
@@ -187,7 +191,7 @@ app.get('/api/ticker/:symbol', (req, res) => {
 
 app.get('/api/orders/:status', async (req, res) => {
     const { status } = req.params;
-    
+    
     if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
         return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
     }
@@ -203,23 +207,21 @@ app.get('/api/orders/:status', async (req, res) => {
             case 'filled':
             case 'cancelled':
             case 'all':
-                // Prueba de Historial de Órdenes (Buscando en los últimos 90 días)
-                const endTime = Date.now();
-                const ninetyDaysAgo = new Date();
-                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                const startTime = ninetyDaysAgo.getTime();
-                
-                const historyParams = {
-                    symbol: 'BTC_USDT',
-                    orderMode: 'spot',
-                    startTime: startTime,
-                    endTime: endTime,
-                    limit: 100 // O el número que prefieras
-                };
+                // Prueba de Historial de Órdenes (Buscando en los últimos 180 días)
+const now = Date.now();
+const oneHundredEightyDaysAgo = now - (180 * 24 * 60 * 60 * 1000);
+const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
+    symbol: 'BTC_USDT',
+    orderMode: 'spot',
+    startTime: oneHundredEightyDaysAgo,
+    endTime: now,
+    pageSize: 50
+});
+
                 if (status !== 'all') {
                     historyParams.status = status;
                 }
-                
+                
                 result = await bitmartService.getHistoryOrders(bitmartCredentials, historyParams);
                 break;
             default:
@@ -227,7 +229,7 @@ app.get('/api/orders/:status', async (req, res) => {
         }
 
         res.status(200).json(result);
-        
+        
     } catch (error) {
         console.error('Error in /api/orders/:status:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -246,7 +248,7 @@ app.get('/api/bitmart-data', async (req, res) => {
         }
         const balance = await bitmartService.getBalance(bitmartCredentials);
         const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
-        
+        
         const ticker = { data: { last: currentMarketPrice } };
 
         res.status(200).json({
@@ -318,11 +320,11 @@ app.post('/api/autobot/start', async (req, res) => {
                 }
             });
         }
-        
+        
         botState.config = botState.config || {};
         botState.config.long = botState.config.long || {};
         botState.config.short = botState.config.short || {};
-        
+        
         botState.config.long = { ...botState.config.long, ...config.long };
         botState.config.short = { ...botState.config.short, ...config.short };
 
@@ -339,7 +341,7 @@ app.post('/api/autobot/start', async (req, res) => {
         }
 
         botState.config.stopAtCycle = stopAtCycle;
-        
+        
         await botState.save();
 
         autobotLogic.log(`Estrategia Autobot ${strategy} activada.`, 'success');
