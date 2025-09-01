@@ -20,7 +20,7 @@ const orderStatusMap = {
  * @returns {Promise<number>} - Tiempo del servidor en milisegundos.
  */
 async function getSystemTime() {
-    const response = await makeRequest(null, 'GET', '/system/time');
+    const response = await makeRequest('GET', '/system/time');
     return response.data.server_time;
 }
 
@@ -31,7 +31,7 @@ async function getSystemTime() {
  */
 async function getTicker(symbol) {
     const endpoint = `/spot/v1/ticker`;
-    const response = await makeRequest(null, 'GET', endpoint, { symbol });
+    const response = await makeRequest('GET', endpoint, { symbol });
     return response.data.tickers.find(t => t.symbol === symbol);
 }
 
@@ -42,7 +42,7 @@ async function getTicker(symbol) {
  */
 async function getBalance() {
     try {
-        const response = await makeRequest(null, 'GET', '/account/v1/wallet');
+        const response = await makeRequest('GET', '/account/v1/wallet');
         return response.data.wallet;
     } catch (error) {
         throw new Error(`Error al obtener los balances: ${error.message}`);
@@ -51,15 +51,14 @@ async function getBalance() {
 
 /**
  * Obtiene las órdenes abiertas para un símbolo específico.
- * @param {object} authCredentials - Credenciales de autenticación.
  * @param {string} symbol - Símbolo de trading (e.g., 'BTC_USDT').
  * @returns {Promise<object>} - Un objeto con la lista de órdenes abiertas.
  */
-async function getOpenOrders(authCredentials, symbol) {
+async function getOpenOrders(symbol) {
     const endpoint = '/spot/v4/query/open-orders';
     const requestBody = { symbol };
     try {
-        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
+        const response = await makeRequest('POST', endpoint, {}, requestBody);
         const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
         return { orders };
     } catch (error) {
@@ -70,11 +69,10 @@ async function getOpenOrders(authCredentials, symbol) {
 
 /**
  * Obtiene el historial de órdenes para un símbolo y estado.
- * @param {object} authCredentials - Credenciales de autenticación.
  * @param {object} options - Opciones de la consulta.
  * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
  */
-async function getHistoryOrders(authCredentials, options = {}) {
+async function getHistoryOrders(options = {}) {
     const endpoint = '/spot/v4/query/history-orders';
     const requestBody = {
         symbol: options.symbol,
@@ -94,7 +92,7 @@ async function getHistoryOrders(authCredentials, options = {}) {
     }
     
     try {
-        const response = await makeRequest(authCredentials, 'POST', endpoint, {}, requestBody);
+        const response = await makeRequest('POST', endpoint, {}, requestBody);
         const orders = response.data && response.data.data && Array.isArray(response.data.data.list)
             ? response.data.data.list
             : [];
@@ -107,26 +105,25 @@ async function getHistoryOrders(authCredentials, options = {}) {
 
 /**
  * Obtiene los detalles de una orden específica con reintentos.
- * @param {object} authCredentials - Credenciales de autenticación.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
  * @param {number} [retries=0] - Número de reintentos.
  * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
  * @returns {Promise<object>} - Detalles de la orden.
  */
-async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
+async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
     const requestBody = { symbol, order_id: orderId };
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
     }
     try {
-        const response = await makeRequest(authCredentials, 'POST', '/spot/v4/query/order-detail', {}, requestBody);
+        const response = await makeRequest('POST', '/spot/v4/query/order-detail', {}, requestBody);
         const order = response.data.data;
         return order;
     } catch (error) {
         if (error.isRetryable && retries < MAX_RETRIES) {
             await new Promise(resolve => setTimeout(resolve, delay));
-            return getOrderDetail(authCredentials, symbol, orderId, retries + 1, delay * 1.5);
+            return getOrderDetail(symbol, orderId, retries + 1, delay * 1.5);
         } else {
             throw error;
         }
@@ -135,7 +132,6 @@ async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, del
 
 /**
  * Coloca una nueva orden.
- * @param {object} authCredentials - Credenciales de autenticación.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} side - 'buy' o 'sell'.
  * @param {string} type - 'limit' o 'market'.
@@ -143,7 +139,7 @@ async function getOrderDetail(authCredentials, symbol, orderId, retries = 0, del
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-async function placeOrder(authCredentials, symbol, side, type, size, price) {
+async function placeOrder(symbol, side, type, size, price) {
     const requestBody = { symbol, side, type };
     if (type === 'limit') {
         if (!price) throw new Error("El precio es requerido para órdenes 'limit'.");
@@ -155,7 +151,7 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
     } else {
         throw new Error(`Tipo de orden no soportado: ${type}`);
     }
-    const response = await makeRequest(authCredentials, 'POST', '/spot/v2/submit_order', {}, requestBody);
+    const response = await makeRequest('POST', '/spot/v2/submit_order', {}, requestBody);
     const orderId = response.data.order_id;
     if (!orderId) throw new Error('Error al colocar la orden: No se recibió un order_id.');
     return response.data;
@@ -163,14 +159,13 @@ async function placeOrder(authCredentials, symbol, side, type, size, price) {
 
 /**
  * Cancela una orden.
- * @param {object} authCredentials - Credenciales de autenticación.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} order_id - ID de la orden.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-async function cancelOrder(authCredentials, symbol, order_id) {
+async function cancelOrder(symbol, order_id) {
     const requestBody = { symbol, order_id };
-    const response = await makeRequest(authCredentials, 'POST', '/spot/v2/cancel-order', {}, requestBody);
+    const response = await makeRequest('POST', '/spot/v2/cancel-order', {}, requestBody);
     return response.data;
 }
 
@@ -184,7 +179,7 @@ async function cancelOrder(authCredentials, symbol, order_id) {
 async function getKlines(symbol, interval, limit = 200) {
     const path = `/spot/quotation/v3/klines`;
     const params = { symbol, step: interval, size: limit };
-    const response = await makeRequest(null, 'GET', path, params);
+    const response = await makeRequest('GET', path, params);
     return response.data.map(c => ({
         timestamp: parseInt(c[0]),
         open: parseFloat(c[1]),
