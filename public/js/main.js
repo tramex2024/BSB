@@ -47,7 +47,7 @@ function initializeTestbotView() {
     const testartBtn = document.getElementById('testart-btn');
     const teresetBtn = document.getElementById('tereset-btn');
     const teorderTabs = document.querySelectorAll('#testbot-section [id^="tab-"]');
-    const teOrderList = document.getElementById('te-order-list'); // <-- ¡Obtenemos el elemento correcto!
+    const teOrderList = document.getElementById('te-order-list');
 
     loadBotConfigAndState();
     actualizarCalculosTestbot();
@@ -70,12 +70,12 @@ function initializeTestbotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, teOrderList); // <-- Pasamos el elemento a la función
+            fetchOrders(currentTab, teOrderList);
         });
     });
 
     setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', teOrderList); // <-- Pasamos el elemento en la carga inicial
+    fetchOrders('opened', teOrderList);
 }
 
 // Reemplaza toda la función initializeAutobotView() con este código
@@ -91,7 +91,7 @@ function initializeAutobotView() {
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    const auOrderList = document.getElementById('au-order-list'); // <-- ¡Nuevo ID!
+    const auOrderList = document.getElementById('au-order-list');
 
     loadBotConfigAndState();
     checkBitMartConnectionAndData();
@@ -124,12 +124,12 @@ function initializeAutobotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, auOrderList); // <-- Pasamos el elemento a la función
+            fetchOrders(currentTab, auOrderList);
         });
     });
 
     setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', auOrderList); // <-- Pasamos el elemento en la carga inicial
+    fetchOrders('opened', auOrderList);
     
     checkBotStatus();
     intervals.botStatus = setInterval(checkBotStatus, 5000);
@@ -149,7 +149,7 @@ function initializeAibotView() {
     const aistartBtn = document.getElementById('aistart-btn');
     const airesetBtn = document.getElementById('aireset-btn');
     const aiorderTabs = document.querySelectorAll('#aibot-section [id^="tab-"]');
-    const aiOrderList = document.getElementById('ai-order-list'); // <-- ¡Nuevo ID!
+    const aiOrderList = document.getElementById('ai-order-list');
 
     loadBotConfigAndState();
     actualizarCalculosAibot();
@@ -172,12 +172,12 @@ function initializeAibotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, aiOrderList); // <-- Pasamos el elemento a la función
+            fetchOrders(currentTab, aiOrderList);
         });
     });
 
     setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', aiOrderList); // <-- Pasamos el elemento en la carga inicial
+    fetchOrders('opened', aiOrderList);
 }
 
 function initializeTab(tabName) {
