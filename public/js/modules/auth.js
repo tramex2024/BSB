@@ -39,24 +39,47 @@ export async function handleAuthFormSubmit(event) {
     const email = emailInput.value;
     const token = tokenInput.value;
 
-    try {
-        const data = await fetchFromBackend('/api/auth/verify-token', { // CAMBIAR AQUÍ
-            method: 'POST',
-            body: JSON.stringify({ email, token })
-        });
-        
-        if (data.success) {
-            localStorage.setItem('authToken', data.token);
-            authMessage.textContent = 'Login successful!';
-            authMessage.className = 'text-green-500';
-            toggleAuthModal(false);
-        } else {
-            authMessage.textContent = data.message || 'Login failed.';
+    // Verificar si el campo de token está vacío
+    if (!token || token.length === 0) {
+        // Si no hay token, asume que el usuario quiere solicitar uno
+        try {
+            const data = await fetchFromBackend('/api/auth/request-token', {
+                method: 'POST',
+                body: JSON.stringify({ email })
+            });
+
+            if (data.success) {
+                authMessage.textContent = 'Token requested! Please check your email.';
+                authMessage.className = 'text-green-500';
+            } else {
+                authMessage.textContent = data.message || 'Failed to request token.';
+                authMessage.className = 'text-red-500';
+            }
+        } catch (error) {
+            authMessage.textContent = `Error requesting token: ${error.message}`;
             authMessage.className = 'text-red-500';
         }
-    } catch (error) {
-        authMessage.textContent = `Login failed: ${error.message}`;
-        authMessage.className = 'text-red-500';
+    } else {
+        // Si hay un token, asume que el usuario quiere verificarlo
+        try {
+            const data = await fetchFromBackend('/api/auth/verify-token', {
+                method: 'POST',
+                body: JSON.stringify({ email, token })
+            });
+            
+            if (data.success) {
+                localStorage.setItem('authToken', data.token);
+                authMessage.textContent = 'Login successful!';
+                authMessage.className = 'text-green-500';
+                toggleAuthModal(false);
+            } else {
+                authMessage.textContent = data.message || 'Login failed.';
+                authMessage.className = 'text-red-500';
+            }
+        } catch (error) {
+            authMessage.textContent = `Login failed: ${error.message}`;
+            authMessage.className = 'text-red-500';
+        }
     }
 }
 
