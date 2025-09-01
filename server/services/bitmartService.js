@@ -1,23 +1,17 @@
 // Archivo: BSB/server/services/bitmartService.js
 
 const spotService = require('./bitmartSpot');
-const { getBalance: getAccountBalances } = require('./bitmartSpot');
 
-const MIN_USDT_VALUE_FOR_BITMART = 5;
+const LOG_PREFIX = '[BITMART_SERVICE]';
 
-// =========================================================================
-// Funciones del orquestador (Business Logic)
-// =========================================================================
-
-async function validateApiKeys(apiKey, secretKey, apiMemo) {
-    console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-    if (!apiKey || !secretKey || (apiMemo === undefined || apiMemo === null)) {
-        console.error("ERROR: API Key, Secret Key o API Memo no proporcionados para validación.");
-        return false;
-    }
-    const authCredentials = { apiKey, secretKey, memo: apiMemo };
+/**
+ * Valida las credenciales de la API de BitMart.
+ * @returns {Promise<boolean>} - Verdadero si las credenciales son válidas, falso en caso contrario.
+ */
+async function validateApiKeys() {
     try {
-        await spotService.getBalance(authCredentials);
+        console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
+        await spotService.getBalance();
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
@@ -26,153 +20,71 @@ async function validateApiKeys(apiKey, secretKey, apiMemo) {
     }
 }
 
-async function cancelAllOpenOrders(bitmartCreds, symbol) {
-    console.log(`[ORCHESTRATOR] Intentando cancelar órdenes abiertas para ${symbol}...`);
-    try {
-        const { orders } = await spotService.getOpenOrders(bitmartCreds, symbol);
-        if (orders.length > 0) {
-            for (const order of orders) {
-                console.log(`[ORCHESTRATOR] Cancelando orden: ${order.orderId}`);
-                await spotService.cancelOrder(bitmartCreds, symbol, order.orderId);
-                console.log(`[ORCHESTRATOR] Orden ${order.orderId} cancelada.`);
-            }
-            console.log(`[ORCHESTRATOR] Todas las ${orders.length} órdenes abiertas para ${symbol} han sido canceladas.`);
-        } else {
-            console.log('[ORCHESTRATOR] No se encontraron órdenes abiertas para cancelar.');
-        }
-    } catch (error) {
-        console.error('[ORCHESTRATOR] Error al cancelar órdenes abiertas:', error.message);
-        throw error;
-    }
+/**
+ * Obtiene los balances de la billetera.
+ * @returns {Promise<object[]>} - Un arreglo de objetos de balance.
+ */
+async function getBalance() {
+    return await spotService.getBalance();
 }
 
-async function placeFirstBuyOrder(authCredentials, symbol, purchaseAmountUsdt) {
-    console.log(`[ORCHESTRATOR] Colocando la primera orden de compra (Market)...`);
-    const side = 'buy';
-    const type = 'market';
-
-    const balanceInfo = await spotService.getBalance(authCredentials);
-    const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
-    const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
-
-    if (purchaseAmountUsdt < MIN_USDT_VALUE_FOR_BITMART) {
-        throw new Error(`El valor de la orden (${purchaseAmountUsdt.toFixed(2)} USDT) es menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART} USDT).`);
-    }
-
-    if (availableUSDT < purchaseAmountUsdt) {
-        throw new Error(`Balance insuficiente para la primera orden. Necesario: ${purchaseAmountUsdt.toFixed(2)} USDT, Disponible: ${availableUSDT.toFixed(2)} USDT.`);
-    }
-
-    const orderResult = await spotService.placeOrder(authCredentials, symbol, side, type, purchaseAmountUsdt.toString());
-    const filledOrder = await spotService.getOrderDetail(authCredentials, symbol, orderResult.order_id);
-
-    if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
-        console.log(`[ORCHESTRATOR] Primera orden de compra (Market) completada: ${JSON.stringify(filledOrder)}`);
-        return {
-            orderId: filledOrder.order_id,
-            price: parseFloat(filledOrder.price || 0),
-            size: parseFloat(filledOrder.filled_size || 0),
-            side: 'buy',
-            type: 'market',
-            state: 'filled'
-        };
-    } else {
-        throw new Error(`La primera orden ${orderResult.order_id} no se ha completado todavía o falló.`);
-    }
+/**
+ * Obtiene las órdenes abiertas para un símbolo específico.
+ * @param {string} symbol - Símbolo de trading (e.g., 'BTC_USDT').
+ * @returns {Promise<object>} - Un objeto con la lista de órdenes abiertas.
+ */
+async function getOpenOrders(symbol) {
+    return await spotService.getOpenOrders(symbol);
 }
 
-async function placeCoverageBuyOrder(authCredentials, symbol, nextUSDTAmount, targetPrice) {
-    console.log(`[ORCHESTRATOR] Colocando orden de compra de COBERTURA (Limit)...`);
-    const side = 'buy';
-    const type = 'limit';
-
-    const balanceInfo = await spotService.getBalance(authCredentials);
-    const usdtBalance = balanceInfo.find(b => b.currency === 'USDT');
-    const availableUSDT = usdtBalance ? parseFloat(usdtBalance.available || 0) : 0;
-
-    if (availableUSDT < nextUSDTAmount || nextUSDTAmount < MIN_USDT_VALUE_FOR_BITMART) {
-        throw new Error(`Balance insuficiente (${availableUSDT.toFixed(2)} USDT) o monto de orden (${nextUSDTAmount.toFixed(2)} USDT) es menor al mínimo para orden de cobertura.`);
-    }
-
-    if (targetPrice === undefined || targetPrice === null || targetPrice === 0) {
-        throw new Error(`Precio objetivo de cobertura no disponible o es cero.`);
-    }
-
-    const orderResult = await spotService.placeOrder(authCredentials, symbol, side, type, nextUSDTAmount.toFixed(2), targetPrice.toFixed(2));
-    const filledOrder = await spotService.getOrderDetail(authCredentials, symbol, orderResult.order_id);
-
-    if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
-        console.log(`[ORCHESTRATOR] Orden de cobertura (Limit) completada: ${JSON.stringify(filledOrder)}`);
-        return {
-            orderId: filledOrder.order_id,
-            price: parseFloat(filledOrder.price || 0),
-            size: parseFloat(filledOrder.filled_size || 0),
-            side: 'buy',
-            type: 'limit',
-            state: 'filled'
-        };
-    } else {
-        console.log(`[ORCHESTRATOR] Orden de cobertura (Limit) ${orderResult.order_id} está ${filledOrder.state}.`);
-        return {
-            orderId: filledOrder.order_id,
-            price: parseFloat(filledOrder.price || 0),
-            size: parseFloat(filledOrder.size || 0),
-            filledSize: parseFloat(filledOrder.filled_size || 0),
-            side: 'buy',
-            type: 'limit',
-            state: filledOrder.state
-        };
-    }
+/**
+ * Obtiene el historial de órdenes para un símbolo y estado.
+ * @param {object} options - Opciones de la consulta.
+ * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
+ */
+async function getHistoryOrders(options = {}) {
+    return await spotService.getHistoryOrders(options);
 }
 
-async function placeSellOrder(authCredentials, symbol, sizeBTC, price = null) {
-    console.log(`[ORCHESTRATOR] Colocando orden de VENTA ${price ? '(Limit)' : '(Market)'}...`);
-    const side = 'sell';
-    const type = price ? 'limit' : 'market';
-
-    if (sizeBTC <= 0) {
-        throw new Error(`No hay activo para vender (AC = 0).`);
-    }
-
-    const orderResult = await spotService.placeOrder(authCredentials, symbol, side, type, sizeBTC.toFixed(8), price ? price.toFixed(2) : undefined);
-    const filledOrder = await spotService.getOrderDetail(authCredentials, symbol, orderResult.order_id);
-
-    if (filledOrder && (filledOrder.state === 'filled' || filledOrder.state === 'fully_filled')) {
-        console.log(`[ORCHESTRATOR] Orden de venta ${type} completada: ${JSON.stringify(filledOrder)}`);
-        return {
-            orderId: filledOrder.order_id,
-            price: parseFloat(filledOrder.price || 0),
-            size: parseFloat(filledOrder.filled_size || 0),
-            side: 'sell',
-            type: type,
-            state: 'filled'
-        };
-    } else {
-        console.log(`[ORCHESTRATOR] Orden de venta ${orderResult.order_id} está ${filledOrder.state}.`);
-        return {
-            orderId: filledOrder.order_id,
-            price: parseFloat(filledOrder.price || 0),
-            size: parseFloat(filledOrder.size || 0),
-            filledSize: parseFloat(filledOrder.filled_size || 0),
-            side: 'sell',
-            type: type,
-            state: filledOrder.state
-        };
-    };
+/**
+ * Coloca una nueva orden.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} side - 'buy' o 'sell'.
+ * @param {string} type - 'limit' o 'market'.
+ * @param {string} size - Cantidad de la orden.
+ * @param {string} [price] - Precio para órdenes limit.
+ * @returns {Promise<object>} - Respuesta de la API.
+ */
+async function placeOrder(symbol, side, type, size, price) {
+    return await spotService.placeOrder(symbol, side, type, size, price);
 }
 
-async function placeLimitSellOrder(authCredentials, symbol, sizeBTC, price) {
-    return await placeSellOrder(authCredentials, symbol, sizeBTC, price);
+/**
+ * Obtiene los detalles de una orden específica con reintentos.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} orderId - ID de la orden.
+ * @returns {Promise<object>} - Detalles de la orden.
+ */
+async function getOrderDetail(symbol, orderId) {
+    return await spotService.getOrderDetail(symbol, orderId);
+}
+
+/**
+ * Cancela una orden.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} order_id - ID de la orden.
+ * @returns {Promise<object>} - Respuesta de la API.
+ */
+async function cancelOrder(symbol, order_id) {
+    return await spotService.cancelOrder(symbol, order_id);
 }
 
 module.exports = {
-    ...spotService,
-    MIN_USDT_VALUE_FOR_BITMART,
-    getAccountBalances,
     validateApiKeys,
-    cancelAllOpenOrders,
-    placeFirstBuyOrder,
-    placeCoverageBuyOrder,
-    placeSellOrder,
-    placeLimitSellOrder,      
+    getBalance,
+    getOpenOrders,
+    getHistoryOrders,
+    placeOrder,
+    getOrderDetail,
+    cancelOrder,
 };
