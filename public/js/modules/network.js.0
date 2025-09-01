@@ -3,7 +3,26 @@
 import { fetchFromBackend } from './api.js';
 import { displayLogMessage } from './auth.js';
 import { getBalances } from './balance.js';
-// La función displayOrders fue eliminada de orders.js y su lógica se movió a fetchOrders.
+import { displayOrders } from './orders.js';
+
+/**
+ * Actualiza el precio en vivo en el elemento del DOM.
+ * @param {string | number} price - El precio actual a mostrar.
+ */
+// This function is no longer needed since main.js handles price updates via Socket.IO
+export function cargarPrecioEnVivo(price) {
+    const priceElement = document.getElementById('price');
+    if (!priceElement) {
+        return;
+    }
+    
+    if (price !== null && !isNaN(price)) {
+        priceElement.textContent = parseFloat(price).toFixed(2);
+    } else {
+        priceElement.textContent = 'N/A';
+        displayLogMessage('Error: Invalid price data received or failed to fetch.', 'error');
+    }
+}
 
 /**
  * Comprueba la conexión a BitMart y obtiene datos consolidados.
@@ -36,9 +55,14 @@ export async function checkBitMartConnectionAndData() {
 
             getBalances(data.balance);
             
-            // REMOVED: This logic is now handled directly by the tab click handlers in main.js
-            // if (currentTab === 'tab-opened' && data.openOrders) {
-            //     displayOrders(data.openOrders, 'opened');
+            const currentTab = document.querySelector('.autobot-tabs button.active-tab')?.id;
+            if (currentTab === 'tab-opened' && data.openOrders) {
+                displayOrders(data.openOrders, 'opened');
+            }
+            
+            // REMOVE THIS BLOCK: The price is now handled by Socket.IO in main.js
+            // if (data.ticker && data.ticker.last) {
+            //     cargarPrecioEnVivo(data.ticker.last);
             // }
 
         } else {
