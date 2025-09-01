@@ -101,3 +101,17 @@ export async function fetchOrders(orderType, orderListElement) {
         displayOrders([], orderListElement, orderType);
     }
 }
+
+/**
+ * Establece la pestaña de órdenes activa.
+ * @param {string} tabId El ID de la pestaña activa.
+ */
+export function setActiveTab(tabId) {
+    const tabs = document.querySelectorAll('.autobot-tabs button');
+    tabs.forEach(tab => tab.classList.remove('active-tab'));
+    
+    const activeTab = document.getElementById(tabId);
+    if (activeTab) {
+        activeTab.classList.add('active-tab');
+    }
+}
