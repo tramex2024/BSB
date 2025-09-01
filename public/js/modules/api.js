@@ -36,12 +36,19 @@ export async function fetchFromBackend(endpoint, options = {}) {
 
     try {
         const response = await fetch(url, { ...options, headers });
-        const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(`Error ${response.status}: ${data.message || response.statusText}`);
+            let errorText = response.statusText;
+            try {
+                const errorData = await response.json();
+                errorText = errorData.message || errorText;
+            } catch (jsonError) {
+                // Si la respuesta no es JSON, usamos el texto del estado.
+            }
+            throw new Error(`Error ${response.status}: ${errorText}`);
         }
 
+        const data = await response.json();
         return data;
 
     } catch (error) {
@@ -71,6 +78,7 @@ export async function handleApiFormSubmit(event) {
             displayLogMessage('API keys successfully validated and saved.', 'success');
             setConnectionStatus('success');
         } else {
+            // Este caso ahora es manejado por el 'throw new Error' de fetchFromBackend
             throw new Error(response.message || 'Validation failed.');
         }
 
