@@ -1,11 +1,9 @@
 // public/js/modules/orders.js
-
 import { displayLogMessage } from './auth.js';
 import { fetchFromBackend } from './api.js';
 import { TRADE_SYMBOL_BITMART } from '../main.js';
 
 export function setActiveTab(tabId) {
-    // La lógica de la interfaz de usuario para las pestañas de órdenes
     document.querySelectorAll('#autobot-section .border-b-2').forEach(button => {
         button.classList.remove('active-tab', 'border-white');
         button.classList.add('border-transparent');
@@ -17,21 +15,22 @@ export function setActiveTab(tabId) {
     }
 }
 
-export async function fetchOrders(tabId) {
+export async function fetchOrders(tabId, orderListElement) { // <-- ¡Nuevo argumento!
     let endpoint = '';
-    const orderList = document.getElementById('order-list');
-    if (!orderList) return;
+    
+    // Ya no es necesario buscar el elemento aquí, ya lo tenemos.
+    if (!orderListElement) {
+        console.error("No se proporcionó un elemento de lista de órdenes.");
+        return;
+    }
 
-    // Lógica para determinar el endpoint basado en la pestaña activa
     if (tabId === 'opened') {
         endpoint = `/api/orders/opened?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching open orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     } else if (tabId === 'history') {
-        // Corregido: Ahora llama al endpoint de historial que maneja todos los estados
         endpoint = `/api/orders/all?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching history orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     } else {
-        // En caso de una pestaña no reconocida, por ejemplo, en la vista del dashboard
         endpoint = `/api/orders/opened?symbol=${TRADE_SYMBOL_BITMART}`;
         displayLogMessage(`Fetching default orders for ${TRADE_SYMBOL_BITMART}...`, 'info');
     }
@@ -40,45 +39,38 @@ export async function fetchOrders(tabId) {
         const data = await fetchFromBackend(endpoint);
         let orders = [];
 
-        // --- CÓDIGO CORREGIDO ---
         if (Array.isArray(data)) {
-            // Caso 1: El backend devuelve un array directamente
             orders = data;
         } else if (data && Array.isArray(data.orders)) {
-            // Caso 2: El backend devuelve un objeto con un array de órdenes
             orders = data.orders;
         } else {
-            // Si el formato no es el esperado, asumimos un array vacío para evitar errores
             displayLogMessage(`No se encontraron órdenes en la respuesta.`, 'info');
             orders = [];
         }
 
-        displayOrders(orders, tabId);
+        displayOrders(orders, tabId, orderListElement); // <-- Pasa el elemento al renderizado
         displayLogMessage(`Se han obtenido ${orders.length} órdenes.`, 'success');
 
     } catch (error) {
-        // Esta sección ahora solo se ejecutará si hay un error real de la API o de la red.
         displayLogMessage(`Error al obtener órdenes: ${error.message}`, 'error');
-        orderList.innerHTML = `<p class="text-red-500">No se pudieron cargar las órdenes. Error: ${error.message}</p>`;
+        orderListElement.innerHTML = `<p class="text-red-500">No se pudieron cargar las órdenes. Error: ${error.message}</p>`;
     }
 }
 
-export function displayOrders(orders, type) {
-    const orderList = document.getElementById('order-list');
-    if (!orderList) return;
+// Actualiza displayOrders para que también reciba el elemento
+export function displayOrders(orders, type, orderListElement) {
+    if (!orderListElement) return;
 
     if (!orders || orders.length === 0) {
-        orderList.innerHTML = `<p class="text-gray-400">No ${type} orders found.</p>`;
+        orderListElement.innerHTML = `<p class="text-gray-400">No ${type} orders found.</p>`;
         return;
     }
 
-    orderList.innerHTML = orders.map(order => createOrderElement(order)).join('');
+    orderListElement.innerHTML = orders.map(order => createOrderElement(order)).join('');
 }
 
 export function createOrderElement(order) {
     const orderTypeClass = order.side === 'buy' ? 'text-green-400' : 'text-red-400';
-    
-    // Asegúrate de que los campos del objeto 'order' coincidan con los de la respuesta de BitMart V4
     const amount = order.size || order.notional / order.priceAvg;
     
     return `

@@ -33,7 +33,6 @@ function initializeDashboardView() {
     checkBitMartConnectionAndData();
 }
 
-// Reemplaza toda la función initializeTestbotView() con este código
 function initializeTestbotView() {
     console.log("Inicializando vista del Testbot...");
     
@@ -47,7 +46,6 @@ function initializeTestbotView() {
     const testartBtn = document.getElementById('testart-btn');
     const teresetBtn = document.getElementById('tereset-btn');
     const teorderTabs = document.querySelectorAll('#testbot-section [id^="tab-"]');
-    const teOrderList = document.getElementById('te-order-list'); // <-- ¡Obtenemos el elemento correcto!
 
     loadBotConfigAndState();
     actualizarCalculosTestbot();
@@ -70,15 +68,14 @@ function initializeTestbotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, teOrderList); // <-- Pasamos el elemento a la función
+            fetchOrders(currentTab);
         });
     });
 
     setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', teOrderList); // <-- Pasamos el elemento en la carga inicial
+    fetchOrders('opened');
 }
 
-// Reemplaza toda la función initializeAutobotView() con este código
 function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
@@ -91,9 +88,9 @@ function initializeAutobotView() {
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    const auOrderList = document.getElementById('au-order-list'); // <-- ¡Nuevo ID!
 
     loadBotConfigAndState();
+    // NOTA: Se elimina la llamada a actualizarCalculosAutobot() aquí
     checkBitMartConnectionAndData();
     
     currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
@@ -124,18 +121,17 @@ function initializeAutobotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, auOrderList); // <-- Pasamos el elemento a la función
+            fetchOrders(currentTab);
         });
     });
 
     setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', auOrderList); // <-- Pasamos el elemento en la carga inicial
+    fetchOrders('opened');
     
     checkBotStatus();
     intervals.botStatus = setInterval(checkBotStatus, 5000);
 }
 
-// Reemplaza toda la función initializeAibotView() con este código
 function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");
     
@@ -149,7 +145,6 @@ function initializeAibotView() {
     const aistartBtn = document.getElementById('aistart-btn');
     const airesetBtn = document.getElementById('aireset-btn');
     const aiorderTabs = document.querySelectorAll('#aibot-section [id^="tab-"]');
-    const aiOrderList = document.getElementById('ai-order-list'); // <-- ¡Nuevo ID!
 
     loadBotConfigAndState();
     actualizarCalculosAibot();
@@ -172,12 +167,12 @@ function initializeAibotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, aiOrderList); // <-- Pasamos el elemento a la función
+            fetchOrders(currentTab);
         });
     });
 
     setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', aiOrderList); // <-- Pasamos el elemento en la carga inicial
+    fetchOrders('opened');
 }
 
 function initializeTab(tabName) {
