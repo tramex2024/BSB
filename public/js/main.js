@@ -46,7 +46,6 @@ function initializeTestbotView() {
     const testartBtn = document.getElementById('testart-btn');
     const teresetBtn = document.getElementById('tereset-btn');
     const teorderTabs = document.querySelectorAll('#testbot-section [id^="tab-"]');
-    const teOrderList = document.getElementById('te-order-list');
 
     loadBotConfigAndState();
     actualizarCalculosTestbot();
@@ -69,11 +68,13 @@ function initializeTestbotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
+            const teOrderList = document.getElementById('te-order-list');
             fetchOrders(currentTab, teOrderList);
         });
     });
 
     setOrdersActiveTab('tab-opened');
+    const teOrderList = document.getElementById('te-order-list');
     fetchOrders('opened', teOrderList);
 }
 
@@ -89,7 +90,6 @@ function initializeAutobotView() {
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    const auOrderList = document.getElementById('au-order-list');
 
     loadBotConfigAndState();
     checkBitMartConnectionAndData();
@@ -122,11 +122,13 @@ function initializeAutobotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
+            const auOrderList = document.getElementById('au-order-list');
             fetchOrders(currentTab, auOrderList);
         });
     });
 
     setOrdersActiveTab('tab-opened');
+    const auOrderList = document.getElementById('au-order-list');
     fetchOrders('opened', auOrderList);
     
     checkBotStatus();
@@ -146,7 +148,6 @@ function initializeAibotView() {
     const aistartBtn = document.getElementById('aistart-btn');
     const airesetBtn = document.getElementById('aireset-btn');
     const aiorderTabs = document.querySelectorAll('#aibot-section [id^="tab-"]');
-    const aiOrderList = document.getElementById('ai-order-list');
 
     loadBotConfigAndState();
     actualizarCalculosAibot();
@@ -169,11 +170,13 @@ function initializeAibotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
+            const aiOrderList = document.getElementById('ai-order-list');
             fetchOrders(currentTab, aiOrderList);
         });
     });
 
     setOrdersActiveTab('tab-opened');
+    const aiOrderList = document.getElementById('ai-order-list');
     fetchOrders('opened', aiOrderList);
 }
 
@@ -189,21 +192,33 @@ function initializeTab(tabName) {
     if (tabName === 'autobot') {
         initializeAutobotView();
         intervals.autobot = setInterval(getBalances, 10000);
-        const auOrderList = document.getElementById('au-order-list');
-        intervals.orders = setInterval(() => fetchOrders(currentTab, auOrderList), 15000);
+        intervals.orders = setInterval(() => {
+            const auOrderList = document.getElementById('au-order-list');
+            if (auOrderList) {
+                fetchOrders(currentTab, auOrderList);
+            }
+        }, 15000);
     } else if (tabName === 'dashboard') {
         initializeDashboardView();
         intervals.dashboard = setInterval(getBalances, 10000);
     } else if (tabName === 'testbot') {
         initializeTestbotView();
         intervals.testbot = setInterval(getBalances, 10000);
-        const teOrderList = document.getElementById('te-order-list');
-        intervals.orders = setInterval(() => fetchOrders(currentTab, teOrderList), 15000);
+        intervals.orders = setInterval(() => {
+            const teOrderList = document.getElementById('te-order-list');
+            if (teOrderList) {
+                fetchOrders(currentTab, teOrderList);
+            }
+        }, 15000);
     } else if (tabName === 'aibot') {
         initializeAibotView();
         intervals.aibot = setInterval(getBalances, 10000);
-        const aiOrderList = document.getElementById('ai-order-list');
-        intervals.orders = setInterval(() => fetchOrders(currentTab, aiOrderList), 15000);
+        intervals.orders = setInterval(() => {
+            const aiOrderList = document.getElementById('ai-order-list');
+            if (aiOrderList) {
+                fetchOrders(currentTab, aiOrderList);
+            }
+        }, 15000);
     }
 }
 
