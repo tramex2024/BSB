@@ -107,16 +107,16 @@ function setupWebSocket(io) {
 setupWebSocket(io);
 
 (async function startBotCycle() {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
-            await autobotLogic.botCycle(currentMarketPrice);
-        }
-    } catch (error) {
-        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
-    } finally {
-        setTimeout(startBotCycle, 10000);
-    }
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
+            await autobotLogic.botCycle(currentMarketPrice);
+        }
+    } catch (error) {
+        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
+    } finally {
+        setTimeout(startBotCycle, 10000);
+    }
 })();
 
 app.get('/api/ticker/:symbol', (req, res) => {
@@ -128,76 +128,72 @@ app.get('/api/ticker/:symbol', (req, res) => {
 });
 
 app.get('/api/orders/:status', async (req, res) => {
-    const { status } = req.params;
-    
-    if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
-        return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
-    }
+    const { status } = req.params;
+    
+    if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
+        return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
+    }
 
-    try {
-        let result;
-        const symbol = 'BTC_USDT';
+    try {
+        let result;
+        const symbol = 'BTC_USDT';
 
-        switch (status) {
-            case 'opened':
-                result = await bitmartService.getOpenOrders(bitmartCredentials, symbol);
-                break;
-            case 'filled':
-            case 'cancelled':
-            case 'all':
-                // Prueba de Historial de Órdenes (Buscando en los últimos 90 días)
-                const endTime = Date.now();
-                const ninetyDaysAgo = new Date();
-                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                const startTime = ninetyDaysAgo.getTime();
-                
-                const historyParams = {
-                    symbol: 'BTC_USDT',
-                    orderMode: 'spot',
-                    startTime: startTime,
-                    endTime: endTime,
-                    limit: 100 // O el número que prefieras
-                };
-                if (status !== 'all') {
-                    historyParams.status = status;
-                }
-                
-                result = await bitmartService.getHistoryOrders(bitmartCredentials, historyParams);
-                break;
-            default:
-                return res.status(400).json({ success: false, message: 'Invalid order status' });
-        }
+        switch (status) {
+            case 'opened':
+                result = await bitmartService.getOpenOrders(symbol);
+                break;
+            case 'filled':
+            case 'cancelled':
+            case 'all':
+                // Prueba de Historial de Órdenes (Buscando en los últimos 90 días)
+                const endTime = Date.now();
+                const ninetyDaysAgo = new Date();
+                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+                const startTime = ninetyDaysAgo.getTime();
+                
+                const historyParams = {
+                    symbol: 'BTC_USDT',
+                    orderMode: 'spot',
+                    startTime: startTime,
+                    endTime: endTime,
+                    limit: 100 // O el número que prefieras
+                };
+                if (status !== 'all') {
+                    historyParams.status = status;
+                }
+                
+                result = await bitmartService.getHistoryOrders(historyParams);
+                break;
+            default:
+                return res.status(400).json({ success: false, message: 'Invalid order status' });
+        }
 
-        res.status(200).json(result);
-        
-    } catch (error) {
-        // --- CÓDIGO CORREGIDO PARA MOSTRAR DETALLES DEL ERROR ---
-        console.error('Error al obtener órdenes. Detalles:', error.response ? error.response.data : error.message);
+        res.status(200).json(result);
+        
+    } catch (error) {
+        // --- CÓDIGO CORREGIDO PARA MOSTRAR DETALLES DEL ERROR ---
+        console.error('Error al obtener órdenes. Detalles:', error.response ? error.response.data : error.message);
 
-        // Envía un mensaje de error más específico al cliente
-        let errorMessage = 'Error al obtener órdenes. Por favor, revisa tus API Keys.';
-        if (error.response && error.response.data) {
-            errorMessage = error.response.data.message || errorMessage;
-        } else {
-            errorMessage = error.message || errorMessage;
-        }
-        
-        res.status(500).json({ success: false, message: errorMessage });
-    }
+        // Envía un mensaje de error más específico al cliente
+        let errorMessage = 'Error al obtener órdenes. Por favor, revisa tus API Keys.';
+        if (error.response && error.response.data) {
+            errorMessage = error.response.data.message || errorMessage;
+        } else {
+            errorMessage = error.message || errorMessage;
+        }
+        
+        res.status(500).json({ success: false, message: errorMessage });
+    }
 });
 
 app.get('/api/bitmart-data', async (req, res) => {
     try {
-        const isValid = await bitmartService.validateApiKeys(
-            bitmartCredentials.apiKey,
-            bitmartCredentials.secretKey,
-            bitmartCredentials.memo
-        );
+        const isValid = await bitmartService.validateApiKeys();
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
         }
-        const balance = await bitmartService.getBalance(bitmartCredentials);
-        const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
+        const balance = await bitmartService.getBalance();
+        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
         
         const ticker = { data: { last: currentMarketPrice } };
 
