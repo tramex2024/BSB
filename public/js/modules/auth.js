@@ -51,8 +51,10 @@ export async function handleAuthFormSubmit(event) {
                 method: 'POST',
                 body: JSON.stringify({ email })
             });
-
-            if (data.success) {
+            
+            // EL CAMBIO ESTÁ AQUÍ
+            // Aseguramos que la respuesta sea un objeto y tenga la propiedad success
+            if (data && data.success) {
                 authMessage.textContent = 'Token requested! Please check your email.';
                 authMessage.className = 'text-green-500';
 
@@ -62,7 +64,7 @@ export async function handleAuthFormSubmit(event) {
                 authButton.textContent = 'Verify Token';
 
             } else {
-                authMessage.textContent = data.message || 'Failed to request token.';
+                authMessage.textContent = (data && data.message) || 'Failed to request token.';
                 authMessage.className = 'text-red-500';
             }
         } catch (error) {
@@ -77,13 +79,13 @@ export async function handleAuthFormSubmit(event) {
                 body: JSON.stringify({ email, token })
             });
 
-            if (data.success) {
+            if (data && data.success) {
                 localStorage.setItem('authToken', data.token);
                 authMessage.textContent = 'Login successful!';
                 authMessage.className = 'text-green-500';
                 toggleAuthModal(false);
             } else {
-                authMessage.textContent = data.message || 'Login failed.';
+                authMessage.textContent = (data && data.message) || 'Login failed.';
                 authMessage.className = 'text-red-500';
             }
         } catch (error) {
