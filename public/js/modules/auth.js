@@ -36,36 +36,16 @@ export async function handleAuthFormSubmit(event) {
     const emailInput = document.getElementById('email');
     const tokenInput = document.getElementById('token');
     const authMessage = document.getElementById('auth-message');
-    const authButton = document.getElementById('auth-button'); // Obtiene el botón
+    const authButton = document.getElementById('auth-button');
 
     const email = emailInput.value;
     const token = tokenInput.value;
 
-    // Se asume que si el campo de token está visible, es porque ya se pidió uno
-    if (tokenInput.style.display !== 'none' && token) {
-        // --- LÓGICA PARA VERIFICAR EL TOKEN ---
-        try {
-            const data = await fetchFromBackend('/api/auth/verify-token', {
-                method: 'POST',
-                body: JSON.stringify({ email, token })
-            });
-
-            if (data.success) {
-                localStorage.setItem('authToken', data.token);
-                authMessage.textContent = 'Login successful!';
-                authMessage.className = 'text-green-500';
-                toggleAuthModal(false);
-            } else {
-                authMessage.textContent = data.message || 'Login failed.';
-                authMessage.className = 'text-red-500';
-            }
-        } catch (error) {
-            authMessage.textContent = `Login failed: ${error.message}`;
-            authMessage.className = 'text-red-500';
-        }
-
-    } else {
-        // --- LÓGICA PARA SOLICITAR EL TOKEN ---
+    // LÓGICA CORREGIDA:
+    // Si la sección del token no está visible, significa que estamos en el primer paso (solicitar token).
+    // Si está visible, estamos en el segundo paso (verificar token).
+    if (document.getElementById('token-section').style.display === 'none') {
+        // --- LÓGICA PARA SOLICITAR EL TOKEN (Paso 1) ---
         try {
             const data = await fetchFromBackend('/api/auth/request-token', {
                 method: 'POST',
@@ -89,14 +69,32 @@ export async function handleAuthFormSubmit(event) {
             authMessage.textContent = `Error requesting token: ${error.message}`;
             authMessage.className = 'text-red-500';
         }
+    } else {
+        // --- LÓGICA PARA VERIFICAR EL TOKEN (Paso 2) ---
+        try {
+            const data = await fetchFromBackend('/api/auth/verify-token', {
+                method: 'POST',
+                body: JSON.stringify({ email, token })
+            });
+
+            if (data.success) {
+                localStorage.setItem('authToken', data.token);
+                authMessage.textContent = 'Login successful!';
+                authMessage.className = 'text-green-500';
+                toggleAuthModal(false);
+            } else {
+                authMessage.textContent = data.message || 'Login failed.';
+                authMessage.className = 'text-red-500';
+            }
+        } catch (error) {
+            authMessage.textContent = `Login failed: ${error.message}`;
+            authMessage.className = 'text-red-500';
+        }
     }
 }
 
 // Lógica para cerrar sesión
 export function handleLogout() {
     localStorage.removeItem('authToken');
-    // Llama a una función para actualizar el estado de la UI
-    // Por ejemplo: updateLoginState(false);
-    // Vuelve a la página de inicio o recarga para reflejar el cambio
     window.location.reload();
 }
