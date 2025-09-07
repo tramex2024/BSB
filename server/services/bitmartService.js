@@ -42,8 +42,8 @@ async function getOpenOrders(symbol) {
  * @param {object} options - Opciones de la consulta.
  * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
  */
-async function getHistoryOrders(options = {}) {
-    return await spotService.getHistoryOrders(options);
+async function getHistoryOrders(symbol) {
+    return await spotService.getHistoryOrders({ symbol });
 }
 
 /**

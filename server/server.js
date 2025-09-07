@@ -157,7 +157,7 @@ app.get('/api/bitmart-data', async (req, res) => {
         console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
         
         // CORRECCIÓN: Asegúrate de que estás pasando el símbolo aquí.
-        const historyOrders = await bitmartService.getHistoryOrders('BTC_USDT'); // <--- ESTA ES LA LÍNEA QUE DEBES ASEGURARTE DE TENER ASÍ
+        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
         console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
         
         const ticker = { data: { last: currentMarketPrice } };
