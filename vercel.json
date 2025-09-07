@@ -2,14 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "server/server.js",
+      "src": "BSB/server/server.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "BSB/public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/server/server.js"
+      "dest": "/BSB/server/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/BSB/public/index.html"
     }
   ]
 }
