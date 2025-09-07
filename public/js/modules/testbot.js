@@ -6,8 +6,6 @@ import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './bot.js';
 import { actualizarCalculosTestbot } from './tecalculations.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
-//import { TRADE_SYMBOL_TV } from '../main.js';
-//import { intervals } from '../main.js'; 
 
 export function initializeTestbotView() {
     console.log("Inicializando vista del Testbot...");
