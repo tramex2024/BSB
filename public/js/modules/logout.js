@@ -1,7 +1,6 @@
 // public/js/modules/logout.js
 
 import { BACKEND_URL } from '../main.js';
-import { handleLoginState } from './login.js';
 
 /**
  * Helper para hacer llamadas al backend con el token de autenticación.
@@ -43,10 +42,12 @@ async function fetchFromBackend(url, options = {}) {
 export async function handleLogout() {
     console.log('[FRONTEND] Intentando desloguear...');
     try {
+        // Llama al endpoint de logout del backend
         await fetchFromBackend('/api/auth/logout', { method: 'POST' });
     } catch (error) {
         console.error('[FRONTEND] Falló la llamada al backend para deslogueo, pero continuará el proceso local:', error);
     } finally {
+        // Limpia el token y recarga la página
         localStorage.removeItem('authToken');
         localStorage.removeItem('userEmail');
         window.location.reload();
