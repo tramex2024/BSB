@@ -4,7 +4,6 @@ import { toggleAuthModal, setupAuthListeners } from './login.js';
 import { handleLogout } from './logout.js';
 import { toggleApiModal } from './login.js';
 import { handleApiFormSubmit } from './api.js';
-import { updateMainView } from '../main.js';
 
 const loginLogoutIcon = document.getElementById('login-logout-icon');
 const apiKeyIcon = document.getElementById('api-key-icon');
@@ -46,8 +45,9 @@ export function initializeAppEvents() {
     updateLoginIcon();
 
     setupAuthListeners(() => {
+        // Callback después del login
         updateLoginIcon();
-        updateMainView();
+        // La lógica de la vista se maneja en navigation.js
     });
 
     if (loginLogoutIcon) {
@@ -64,8 +64,12 @@ export function initializeAppEvents() {
         confirmLogoutBtn.addEventListener('click', () => {
             handleLogout();
             updateLoginIcon();
-            updateMainView();
             toggleLogoutModal(false);
+            // Redirigir a la vista de "logged out"
+            const navTabs = document.querySelectorAll('.header-middle .nav-tab');
+            navTabs.forEach(tab => tab.style.display = 'none');
+            const loggedOutView = document.getElementById('logged-out-view');
+            if(loggedOutView) loggedOutView.style.display = 'block';
         });
     }
 
@@ -79,8 +83,6 @@ export function initializeAppEvents() {
         apiKeyIcon.addEventListener('click', () => {
             if (!localStorage.getItem('authToken')) {
                 alert("Please login first to configure API keys.");
-                displayLogMessage("Login required to configure API keys.", "warning", logMessageElement);
-                toggleAuthModal(true);
                 return;
             }
             toggleApiModal(true);
