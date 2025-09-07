@@ -1,6 +1,6 @@
 // public/js/main.js
 
-import { toggleAuthModal, handleLogout, handleAuthFormSubmit, toggleApiModal, setupAuthListeners } from './modules/login.js';
+import { toggleAuthModal, handleLogout, handleAuthFormSubmit, displayLogMessage } from './modules/auth.js';
 import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
@@ -8,6 +8,7 @@ import { fetchOrders, setActiveTab as setOrdersActiveTab } from './modules/order
 import { loadBotConfigAndState, toggleBotState, resetBot, checkBotStatus } from './modules/bot.js';
 import { setupNavTabs } from './modules/navigation.js';
 import { handleApiFormSubmit } from './modules/api.js';
+import { toggleApiModal } from './modules/auth.js';
 
 // --- Importaciones de cálculos consolidadas ---
 import { actualizarCalculosTestbot } from './modules/tecalculations.js';
@@ -228,52 +229,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const logMessageElement = document.getElementById('log-message');
     const loginLogoutIcon = document.getElementById('login-logout-icon');
     const apiKeyIcon = document.getElementById('api-key-icon');
+    const authModal = document.getElementById('auth-modal');
+    const authForm = document.getElementById('auth-form');
+    const apiModal = document.getElementById('api-modal');
     const apiForm = document.getElementById('api-form');
+    const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
     
     const socket = io(BACKEND_URL, {
         path: '/socket.io'
     });
 
-    // --- CÓDIGO DE SOCKET.IO ---
+    // --- CÓDIGO ACTUALIZADO PARA RECIBIR DATOS DE MERCADO ---
     socket.on('marketData', (data) => {
-        console.log("¡Datos de mercado recibidos del backend!", data);
+    // Log para verificar si los datos se reciben
+    console.log("¡Datos de mercado recibidos del backend!", data);
 
-        const priceElements = document.querySelectorAll('.price-display');
-        priceElements.forEach(el => {
-            el.textContent = data.price ? `$${parseFloat(data.price).toFixed(2)}` : 'N/A';
-        });
-
-        const usdtDashboardElement = document.getElementById('usdt-balance');
-        const btcDashboardElement = document.getElementById('btc-balance');
-        if (usdtDashboardElement && data.usdt) {
-            usdtDashboardElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-        if (btcDashboardElement && data.btc) {
-            btcDashboardElement.textContent = parseFloat(data.btc).toFixed(8);
-        }
-
-        const auBalanceElement = document.getElementById('aubalance');
-        if (auBalanceElement && data.usdt) {
-            auBalanceElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-
-        const teBalanceUSDTElement = document.getElementById('teamount-usdt');
-        const teBalanceBTCElement = document.getElementById('teamount-btc');
-        if (teBalanceUSDTElement && data.usdt) {
-            teBalanceUSDTElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-        if (teBalanceBTCElement && data.btc) {
-            teBalanceBTCElement.textContent = parseFloat(data.btc).toFixed(8);
-        }
-
-        if (currentTab === 'autobot') {
-            actualizarCalculosAutobot();
-        } else if (currentTab === 'testbot') {
-            actualizarCalculosTestbot();
-        } else if (currentTab === 'aibot') {
-            actualizarCalculosAibot();
-        }
+    // --- Actualizar precio en todas las pestañas ---
+    const priceElements = document.querySelectorAll('.price-display');
+    priceElements.forEach(el => {
+        el.textContent = data.price ? `$${parseFloat(data.price).toFixed(2)}` : 'N/A';
     });
+
+    // --- Actualizar balances en el Dashboard (si el elemento existe) ---
+    const usdtDashboardElement = document.getElementById('usdt-balance');
+    const btcDashboardElement = document.getElementById('btc-balance');
+    if (usdtDashboardElement && data.usdt) {
+        usdtDashboardElement.textContent = parseFloat(data.usdt).toFixed(8);
+    }
+    if (btcDashboardElement && data.btc) {
+        btcDashboardElement.textContent = parseFloat(data.btc).toFixed(8);
+    }
+
+    // --- Actualizar balances en Autobot (si los elementos existen) ---
+    const auBalanceElement = document.getElementById('aubalance');
+    if (auBalanceElement && data.usdt) {
+        auBalanceElement.textContent = parseFloat(data.usdt).toFixed(8);
+    }
+
+    // --- Actualizar balances en Testbot (si los elementos existen) ---
+    const teBalanceUSDTElement = document.getElementById('teamount-usdt');
+    const teBalanceBTCElement = document.getElementById('teamount-btc');
+    if (teBalanceUSDTElement && data.usdt) {
+        teBalanceUSDTElement.textContent = parseFloat(data.usdt).toFixed(8);
+    }
+    if (teBalanceBTCElement && data.btc) {
+        teBalanceBTCElement.textContent = parseFloat(data.btc).toFixed(8);
+    }
+
+    // Llamar a la función de cálculos una vez que se recibe el precio
+    if (currentTab === 'autobot') {
+        actualizarCalculosAutobot();
+    } else if (currentTab === 'testbot') {
+        actualizarCalculosTestbot();
+    } else if (currentTab === 'aibot') {
+        actualizarCalculosAibot();
+    }
+});
 
     socket.on('bot-log', (log) => {
         displayLogMessage(log.message, log.type, logMessageElement);
@@ -281,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('bot-state-update', (state) => {
         console.log("Estado del bot recibido:", state);
+
         const lStateElement = document.getElementById('aubot-lstate');
         const sStateElement = document.getElementById('aubot-sstate');
         
@@ -306,14 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-    
-    // Configura los Event Listeners del formulario de autenticación
-    setupAuthListeners(() => {
-        // Callback para ejecutar después de un login exitoso
-        initializeTab('dashboard'); // Recarga el Dashboard para mostrar los datos
-    });
 
-    // Lógica para el botón de login/logout
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
             if (localStorage.getItem('authToken')) {
@@ -324,7 +329,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Lógica para el botón de API
+    if (authForm) {
+        authForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleAuthFormSubmit(e);
+        });
+    }
+    
+    if (authModal) authModal.addEventListener('click', (e) => { if (e.target === authModal) toggleAuthModal(false); });
+
     if (apiKeyIcon) {
         apiKeyIcon.addEventListener('click', () => {
             if (!localStorage.getItem('authToken')) {
@@ -336,6 +349,8 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleApiModal(true);
         });
     }
-
+    
     if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
+    if (closeApiModalButton) closeApiModalButton.addEventListener('click', () => toggleApiModal(false));
+    if (apiModal) apiModal.addEventListener('click', (e) => { if (e.target === apiModal) toggleApiModal(false); });
 });
