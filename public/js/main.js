@@ -30,10 +30,12 @@ const apiKeyIcon = document.getElementById('api-key-icon');
 const apiForm = document.getElementById('api-form');
 const logMessageElement = document.getElementById('log-message');
 
-// NUEVOS CONSTANTES DEL DOM PARA EL MODAL DE LOGOUT
+// Constantes de los modales
 const logoutModal = document.getElementById('logout-modal');
 const confirmLogoutBtn = document.getElementById('confirm-logout-btn');
 const cancelLogoutBtn = document.getElementById('cancel-logout-btn');
+const loggedOutView = document.getElementById('logged-out-view');
+const loginCtaBtn = document.getElementById('login-cta-btn');
 
 // --- Funciones de inicialización de la vista ---
 function initializeDashboardView() {
@@ -263,12 +265,52 @@ function updateLoginIcon() {
     }
 }
 
-// --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
-document.addEventListener('DOMContentLoaded', () => {
-    updateLoginIcon();
+/**
+ * Muestra u oculta las vistas principales basándose en el estado de autenticación.
+ */
+function updateMainView() {
+    const isLoggedIn = localStorage.getItem('authToken');
+    const navTabs = document.querySelectorAll('.header-middle .nav-tab');
+    const tabContents = document.querySelectorAll('.tab-content');
 
+    if (isLoggedIn) {
+        // Oculta la vista de "no logueado" y muestra la de Dashboard
+        if (loggedOutView) loggedOutView.style.display = 'none';
+        
+        navTabs.forEach(tab => {
+            tab.style.display = 'block';
+        });
+        
+        // Carga la vista de dashboard si no está ya activa
+        if (!document.querySelector('.nav-tab.active')?.dataset.tab === 'dashboard') {
+             const dashboardTab = document.querySelector('.header-middle .nav-tab[data-tab="dashboard"]');
+             if (dashboardTab) {
+                dashboardTab.click();
+             }
+        }
+    } else {
+        // Oculta todas las vistas de los bots y muestra la de "no logueado"
+        tabContents.forEach(content => {
+            content.style.display = 'none';
+        });
+        if (loggedOutView) loggedOutView.style.display = 'block';
+
+        navTabs.forEach(tab => {
+            tab.style.display = 'none';
+        });
+    }
+}
+
+// --- LÓGICA PRINCIPAL AL CARGAR LA PÁGINA ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Configura la interfaz de acuerdo al estado del usuario
+    updateLoginIcon();
+    updateMainView();
+
+    // 2. Configura la navegación entre pestañas
     setupNavTabs(initializeTab);
 
+    // 3. Conecta el socket
     const socket = io(BACKEND_URL, {
         path: '/socket.io'
     });
@@ -347,14 +389,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Configura los Event Listeners del formulario de autenticación
     setupAuthListeners(() => {
         updateLoginIcon();
-        initializeTab('dashboard');
+        updateMainView(); // Llama a la nueva función para mostrar la vista de usuario logueado
     });
 
     // Lógica para el botón de login/logout
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
             if (localStorage.getItem('authToken')) {
-                toggleLogoutModal(true); // <-- Muestra el modal de logout
+                toggleLogoutModal(true);
             } else {
                 toggleAuthModal(true);
             }
@@ -364,14 +406,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // NUEVOS EVENT LISTENERS PARA EL MODAL DE LOGOUT
     if (confirmLogoutBtn) {
         confirmLogoutBtn.addEventListener('click', () => {
-            handleLogout(); // <-- Llama a la función de logout
+            handleLogout();
+            updateLoginIcon();
+            updateMainView();
             toggleLogoutModal(false);
         });
     }
 
     if (cancelLogoutBtn) {
         cancelLogoutBtn.addEventListener('click', () => {
-            toggleLogoutModal(false); // <-- Cierra el modal de logout
+            toggleLogoutModal(false);
         });
     }
 
@@ -388,11 +432,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Lógica para el botón CTA de la vista de no logueado
+    if (loginCtaBtn) {
+        loginCtaBtn.addEventListener('click', () => {
+            toggleAuthModal(true);
+        });
+    }
+
     if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
     
-    // Carga la pestaña inicial al arrancar la aplicación
+    // Carga la pestaña inicial al arrancar la aplicación (solo para usuarios logueados)
     const initialTab = document.querySelector('.header-middle .nav-tab.active');
-    if (initialTab) {
+    if (initialTab && localStorage.getItem('authToken')) {
         initializeTab(initialTab.dataset.tab);
     }
 });

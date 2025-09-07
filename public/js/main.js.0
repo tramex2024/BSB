@@ -1,7 +1,7 @@
 // public/js/main.js
 
 import { toggleAuthModal, handleAuthFormSubmit, toggleApiModal, setupAuthListeners } from './modules/login.js';
-import { handleLogout } from './modules/logout.js'; // <-- Importa la nueva función de logout
+import { handleLogout } from './modules/logout.js';
 import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
@@ -29,6 +29,11 @@ const loginLogoutIcon = document.getElementById('login-logout-icon');
 const apiKeyIcon = document.getElementById('api-key-icon');
 const apiForm = document.getElementById('api-form');
 const logMessageElement = document.getElementById('log-message');
+
+// NUEVOS CONSTANTES DEL DOM PARA EL MODAL DE LOGOUT
+const logoutModal = document.getElementById('logout-modal');
+const confirmLogoutBtn = document.getElementById('confirm-logout-btn');
+const cancelLogoutBtn = document.getElementById('cancel-logout-btn');
 
 // --- Funciones de inicialización de la vista ---
 function initializeDashboardView() {
@@ -227,6 +232,20 @@ function initializeTab(tabName) {
 }
 
 /**
+ * Muestra u oculta el modal de logout.
+ * @param {boolean} show - `true` para mostrar el modal, `false` para ocultarlo.
+ */
+function toggleLogoutModal(show) {
+    if (logoutModal) {
+        if (show) {
+            logoutModal.style.display = 'flex';
+        } else {
+            logoutModal.style.display = 'none';
+        }
+    }
+}
+
+/**
  * Actualiza el icono de login/logout basado en si hay un token de autenticación.
  */
 function updateLoginIcon() {
@@ -246,7 +265,6 @@ function updateLoginIcon() {
 
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Llama a la función al cargar la página para establecer el estado inicial
     updateLoginIcon();
 
     setupNavTabs(initializeTab);
@@ -257,8 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- CÓDIGO DE SOCKET.IO ---
     socket.on('marketData', (data) => {
-        console.log("¡Datos de mercado recibidos del backend!", data);
-
         const priceElements = document.querySelectorAll('.price-display');
         priceElements.forEach(el => {
             el.textContent = data.price ? `$${parseFloat(data.price).toFixed(2)}` : 'N/A';
@@ -330,7 +346,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Configura los Event Listeners del formulario de autenticación
     setupAuthListeners(() => {
-        // Callback para ejecutar después de un login exitoso
         updateLoginIcon();
         initializeTab('dashboard');
     });
@@ -339,10 +354,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
             if (localStorage.getItem('authToken')) {
-                handleLogout();
+                toggleLogoutModal(true); // <-- Muestra el modal de logout
             } else {
                 toggleAuthModal(true);
             }
+        });
+    }
+
+    // NUEVOS EVENT LISTENERS PARA EL MODAL DE LOGOUT
+    if (confirmLogoutBtn) {
+        confirmLogoutBtn.addEventListener('click', () => {
+            handleLogout(); // <-- Llama a la función de logout
+            toggleLogoutModal(false);
+        });
+    }
+
+    if (cancelLogoutBtn) {
+        cancelLogoutBtn.addEventListener('click', () => {
+            toggleLogoutModal(false); // <-- Cierra el modal de logout
         });
     }
 
