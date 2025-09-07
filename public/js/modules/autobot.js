@@ -23,7 +23,8 @@ export function initializeAutobotView() {
     loadBotConfigAndState();
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+    // Asigna el nuevo gráfico a la variable global importada
+    window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
 
     if (austartBtn) {
         austartBtn.addEventListener('click', () => {
