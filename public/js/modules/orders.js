@@ -1,6 +1,10 @@
 // public/js/modules/orders.js
 
+// Importa fetchFromBackend si es necesaria en otros módulos. Si no, puedes eliminarla para limpiar el código.
 import { fetchFromBackend } from './api.js';
+
+// URL base de tu backend en Render
+const RENDER_BACKEND_URL = 'https://bsb-ppex.onrender.com';
 
 /**
  * Función para crear un elemento HTML para una sola orden.
@@ -70,7 +74,6 @@ function displayOrders(orders, orderListElement, orderType) {
 }
 
 export async function fetchOrders(status, orderListElement) {
-    // Primero, verifica que el token de autenticación exista
     const authToken = localStorage.getItem('authToken');
     if (!authToken) {
         console.error('Error al obtener órdenes: Token de autenticación no encontrado.');
@@ -79,23 +82,25 @@ export async function fetchOrders(status, orderListElement) {
     }
 
     try {
-        const response = await fetch(`/api/orders/${status}`, {
+        // La URL ahora es absoluta y apunta a tu backend en Render
+        const response = await fetch(`${RENDER_BACKEND_URL}/api/orders/${status}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
         });
 
-        // Este es el paso crucial que faltaba.
-        // Verificamos si la respuesta del servidor fue exitosa (código 200-299).
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
         }
 
         const orders = await response.json();
+        // Nota: asumiendo que renderOrders está definido en algún lugar
+        // Si no lo está, puedes reemplazar la siguiente línea con:
+        // displayOrders(orders.orders || orders, orderListElement, status);
         renderOrders(orders, orderListElement);
+
     } catch (error) {
-        // Ahora, el 'error' tendrá un valor definido si hay un problema HTTP o de red.
         console.error('Error al obtener órdenes:', error);
         orderListElement.innerHTML = `<p class="text-red-500">Error: Failed to fetch orders. Please try again.</p>`;
     }
