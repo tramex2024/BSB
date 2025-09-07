@@ -1,17 +1,18 @@
 // public/js/modules/login.js
 
 import { BACKEND_URL } from '../main.js';
-import { displayLogMessage } from './auth.js'; // Mantener si la función existe
+import { displayLogMessage } from './auth.js'; // Asumiendo que esta función existe en auth.js
 
-// --- Constantes globales para el DOM ---
+// --- Constantes del DOM (NO MODIFICAR) ---
 const authModal = document.getElementById('auth-modal');
 const authForm = document.getElementById('auth-form');
 const emailInput = document.getElementById('email');
 const tokenInput = document.getElementById('token');
+const emailSection = document.getElementById('email-section');
+const tokenSection = document.getElementById('token-section');
 const authButton = document.getElementById('auth-button');
 const authMessage = document.getElementById('auth-message');
 const apiModal = document.getElementById('api-modal');
-const closeApiModalButton = apiModal ? apiModal.querySelector('.close-button') : null;
 
 /**
  * Helper para hacer llamadas al backend con el token de autenticación.
@@ -48,16 +49,31 @@ async function fetchFromBackend(url, options = {}) {
 
 /**
  * Muestra u oculta el modal de autenticación (login/registro).
+ * Reinicia el formulario al abrir.
  * @param {boolean} show - `true` para mostrar el modal, `false` para ocultarlo.
  */
 export function toggleAuthModal(show) {
     if (authModal) {
         if (show) {
-            authForm.reset();
-            authButton.textContent = 'Continue';
-            if (authMessage) authMessage.textContent = '';
-            if (emailInput) emailInput.disabled = false;
-            if (tokenInput) tokenInput.style.display = 'none';
+            if (authForm) {
+                authForm.reset();
+            }
+            if (authButton) {
+                authButton.textContent = 'Continue';
+            }
+            if (authMessage) {
+                authMessage.textContent = '';
+                authMessage.className = '';
+            }
+            if (emailInput) {
+                emailInput.value = '';
+                emailInput.disabled = false;
+            }
+            if (tokenInput) {
+                tokenInput.value = '';
+            }
+            if (emailSection) emailSection.style.display = 'block';
+            if (tokenSection) tokenSection.style.display = 'none';
             authModal.style.display = 'flex';
         } else {
             authModal.style.display = 'none';
@@ -113,7 +129,8 @@ export async function handleAuthFormSubmit(e, onLoginSuccess) {
         let response;
         let data;
         
-        if (tokenInput.style.display === 'none' || token === '') {
+        // Determina la etapa de login basándose en la visibilidad de la sección del token
+        if (tokenSection.style.display === 'none') {
             response = await fetch(`${BACKEND_URL}/api/auth/request-token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -125,7 +142,7 @@ export async function handleAuthFormSubmit(e, onLoginSuccess) {
                 if (authMessage) authMessage.textContent = data.message;
                 if (authMessage) authMessage.className = 'text-green-500';
                 if (emailInput) emailInput.disabled = true;
-                if (tokenInput) tokenInput.style.display = 'block';
+                if (tokenSection) tokenSection.style.display = 'block';
                 if (authButton) authButton.textContent = 'Verify Token';
             } else {
                 if (authMessage) authMessage.textContent = data.error || 'Server error. Please try again later.';
@@ -162,7 +179,11 @@ export async function handleAuthFormSubmit(e, onLoginSuccess) {
     }
 }
 
-// Inicializa los event listeners para el login modal
+/**
+ * Configura los event listeners para el formulario de autenticación.
+ * Debe ser llamado desde el punto de entrada principal (main.js).
+ * @param {Function} onLoginSuccess Callback a ejecutar después de un login exitoso.
+ */
 export function setupAuthListeners(onLoginSuccess) {
     if (authModal) authModal.addEventListener('click', (e) => { 
         if (e.target === authModal) toggleAuthModal(false); 
