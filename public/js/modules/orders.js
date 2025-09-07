@@ -69,36 +69,35 @@ function displayOrders(orders, orderListElement, orderType) {
     }
 }
 
-/**
- * Obtiene y muestra las órdenes de un tipo específico desde el backend.
- * @param {string} orderType El tipo de orden a obtener ('opened', 'filled', 'cancelled', 'all').
- * @param {HTMLElement} orderListElement El elemento del DOM donde se mostrarán las órdenes.
- */
-export async function fetchOrders(orderType, orderListElement) {
-    if (!orderListElement) {
-        console.error("fetchOrders: El elemento orderListElement no está definido.");
+export async function fetchOrders(status, orderListElement) {
+    // Primero, verifica que el token de autenticación exista
+    const authToken = localStorage.getItem('authToken');
+    if (!authToken) {
+        console.error('Error al obtener órdenes: Token de autenticación no encontrado.');
+        orderListElement.innerHTML = `<p class="text-red-500">Error: Not authenticated. Please log in.</p>`;
         return;
     }
 
-    console.log(`Intentando obtener órdenes de tipo: ${orderType}`);
-
     try {
-        const response = await fetchFromBackend(`/api/orders?type=${orderType}`);
-        
-        if (response.success && response.data) {
-            console.log("Órdenes recibidas desde el backend:", response.data);
-            let ordersToShow = response.data;
-            if (orderType !== 'all') {
-                ordersToShow = response.data.filter(order => order.state === orderType);
+        const response = await fetch(`/api/orders/${status}`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
             }
-            displayOrders(ordersToShow, orderListElement, orderType);
-        } else {
-            console.error(`Error al obtener órdenes: ${response.message}`);
-            displayOrders([], orderListElement, orderType);
+        });
+
+        // Este es el paso crucial que faltaba.
+        // Verificamos si la respuesta del servidor fue exitosa (código 200-299).
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
         }
+
+        const orders = await response.json();
+        renderOrders(orders, orderListElement);
     } catch (error) {
-        console.error("Error de red al obtener órdenes:", error);
-        displayOrders([], orderListElement, orderType);
+        // Ahora, el 'error' tendrá un valor definido si hay un problema HTTP o de red.
+        console.error('Error al obtener órdenes:', error);
+        orderListElement.innerHTML = `<p class="text-red-500">Error: Failed to fetch orders. Please try again.</p>`;
     }
 }
 
