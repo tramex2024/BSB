@@ -10,6 +10,9 @@ import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '
 export function initializeTestbotView() {
     console.log("Inicializando vista del Testbot...");
     
+    // Declara la variable para el alcance del módulo
+    let currentTab = 'opened'; 
+    
     const teamountUSDTInput = document.getElementById('teamount-usdt');
     const teamountBTCInput = document.getElementById('teamount-btc');
     const tepurchaseUSDTInput = document.getElementById("tepurchase-usdt");
@@ -25,7 +28,7 @@ export function initializeTestbotView() {
     actualizarCalculosTestbot();
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('te-tvchart', TRADE_SYMBOL_TV);
+    window.currentChart = initializeChart('te-tvchart', TRADE_SYMBOL_TV);
 
     if (testartBtn) testartBtn.addEventListener('click', toggleBotState);
     if (teresetBtn) teresetBtn.addEventListener('click', resetBot);
@@ -40,6 +43,7 @@ export function initializeTestbotView() {
 
     teorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            // Asigna el valor a la variable declarada
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
             const teOrderList = document.getElementById('te-order-list');
@@ -49,7 +53,7 @@ export function initializeTestbotView() {
 
     setOrdersActiveTab('tab-opened');
     const teOrderList = document.getElementById('te-order-list');
-    fetchOrders('opened', teOrderList);
+    fetchOrders(currentTab, teOrderList);
     intervals.testbot = setInterval(getBalances, 10000);
     intervals.orders = setInterval(() => {
         const teOrderList = document.getElementById('te-order-list');

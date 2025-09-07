@@ -10,6 +10,9 @@ import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '
 export function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
+    // Declara la variable para el alcance del módulo
+    let currentTab = 'opened'; 
+    
     const auamountUSDTInput = document.getElementById('auamount-usdt');
     const aupurchaseUSDTInput = document.getElementById("aupurchase-usdt");
     const aupurchaseBTCInput = document.getElementById("aupurchase-btc");
@@ -23,7 +26,6 @@ export function initializeAutobotView() {
     loadBotConfigAndState();
     checkBitMartConnectionAndData();
     
-    // Asigna el nuevo gráfico a la variable global importada
     window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
 
     if (austartBtn) {
@@ -49,6 +51,7 @@ export function initializeAutobotView() {
 
     auorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            // Asigna el valor a la variable declarada
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
             const auOrderList = document.getElementById('au-order-list');
@@ -58,7 +61,7 @@ export function initializeAutobotView() {
 
     setOrdersActiveTab('tab-opened');
     const auOrderList = document.getElementById('au-order-list');
-    fetchOrders('opened', auOrderList);
+    fetchOrders(currentTab, auOrderList);
     
     checkBotStatus();
     intervals.botStatus = setInterval(checkBotStatus, 5000);

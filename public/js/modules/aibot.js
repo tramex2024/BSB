@@ -10,6 +10,9 @@ import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '
 export function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");
     
+    // Declara la variable para el alcance del módulo
+    let currentTab = 'opened';
+    
     const aiamountUSDTInput = document.getElementById('aiamount-usdt');
     const aiamountBTCInput = document.getElementById('aiamount-btc');
     const aipurchaseUSDTInput = document.getElementById("aipurchase-usdt");
@@ -25,7 +28,7 @@ export function initializeAibotView() {
     actualizarCalculosAibot();
     checkBitMartConnectionAndData();
     
-    currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL_TV);
+    window.currentChart = initializeChart('ai-tvchart', TRADE_SYMBOL_TV);
 
     if (aistartBtn) aistartBtn.addEventListener('click', toggleBotState);
     if (airesetBtn) airesetBtn.addEventListener('click', resetBot);
@@ -40,6 +43,7 @@ export function initializeAibotView() {
 
     aiorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            // Asigna el valor a la variable declarada
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
             const aiOrderList = document.getElementById('ai-order-list');
@@ -49,7 +53,7 @@ export function initializeAibotView() {
 
     setOrdersActiveTab('tab-opened');
     const aiOrderList = document.getElementById('ai-order-list');
-    fetchOrders('opened', aiOrderList);
+    fetchOrders(currentTab, aiOrderList);
     intervals.aibot = setInterval(getBalances, 10000);
     intervals.orders = setInterval(() => {
         const aiOrderList = document.getElementById('ai-order-list');
