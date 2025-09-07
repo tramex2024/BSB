@@ -1,29 +1,32 @@
 // server/controllers/orderController.js
 
 const bitmartService = require('../services/bitmartService');
-const Order = require('../models/Order');
+const Order = require('../models/Order'); // Mantén el modelo si lo usas para otros fines
 
 exports.getOrders = async (req, res) => {
-    // AHORA OBTENEMOS EL TIPO DE ORDEN DE LOS PARÁMETROS DE RUTA
-    const { status } = req.params;
+    // El frontend envía el tipo de orden en un "query parameter" llamado 'type'
+    const { type } = req.query;
 
-    console.log(`[Backend]: Intentando obtener órdenes de tipo: ${status}`);
+    console.log(`[Backend]: Intentando obtener órdenes de tipo: ${type}`);
 
-    if (!status) {
-        return res.status(400).json({ success: false, message: 'Missing "status" path parameter.' });
+    if (!type) {
+        return res.status(400).json({ success: false, message: 'Missing "type" query parameter.' });
     }
 
     try {
         let result;
-        const symbol = 'BTC_USDT';
+        const symbol = 'BTC_USDT'; // El símbolo de trading
 
-        switch (status) {
+        // Determina qué API de Bitmart llamar en base al 'type'
+        switch (type) {
             case 'opened':
+                // Lógica para obtener órdenes abiertas de la API de Bitmart
                 result = await bitmartService.getOpenOrders(symbol);
                 break;
             case 'filled':
             case 'cancelled':
             case 'all':
+                // Lógica para obtener órdenes históricas de la API de Bitmart
                 const endTime = Date.now();
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -36,16 +39,19 @@ exports.getOrders = async (req, res) => {
                     endTime: endTime,
                     limit: 100 
                 };
-                if (status !== 'all') {
-                    historyParams.status = status;
+                if (type !== 'all') {
+                    // Si el tipo es 'filled' o 'cancelled', añade el filtro
+                    historyParams.status = type;
                 }
                 
                 result = await bitmartService.getHistoryOrders(historyParams);
                 break;
             default:
-                return res.status(400).json({ success: false, message: 'Invalid order status' });
+                // Si el 'type' no coincide con ninguno de los casos anteriores
+                return res.status(400).json({ success: false, message: 'Invalid order type' });
         }
 
+        // Envía la respuesta con los datos obtenidos de la API
         res.status(200).json(result);
         
     } catch (error) {
