@@ -6,6 +6,7 @@ import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { loadBotConfigAndState, toggleBotState, resetBot } from './bot.js';
 import { actualizarCalculosAibot } from './aicalculations.js';
 import { TRADE_SYMBOL_TV } from '../main.js';
+import { intervals } from '../main.js'; 
 
 export function initializeAibotView() {
     console.log("Inicializando vista del Aibot...");

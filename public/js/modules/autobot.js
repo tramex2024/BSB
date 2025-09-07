@@ -6,6 +6,7 @@ import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { loadBotConfigAndState, toggleBotState, resetBot, checkBotStatus } from './bot.js';
 import { actualizarCalculosAutobot } from './aucalculations.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART } from '../main.js';
+import { intervals } from '../main.js'; 
 
 export function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
