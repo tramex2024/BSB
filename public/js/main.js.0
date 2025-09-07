@@ -1,6 +1,7 @@
 // public/js/main.js
 
-import { toggleAuthModal, handleLogout, handleAuthFormSubmit, toggleApiModal, setupAuthListeners } from './modules/login.js';
+import { toggleAuthModal, handleAuthFormSubmit, toggleApiModal, setupAuthListeners } from './modules/login.js';
+import { handleLogout } from './modules/logout.js'; // <-- Importa la nueva función de logout
 import { getBalances } from './modules/balance.js';
 import { initializeChart } from './modules/chart.js';
 import { checkBitMartConnectionAndData } from './modules/network.js';
@@ -16,14 +17,18 @@ import { actualizarCalculosAibot } from './modules/aicalculations.js';
 
 // --- Constantes globales ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
-
-// Nueva constante para el símbolo de TradingView
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
-let currentChart = null; // Variable global para almacenar la instancia del gráfico
+let currentChart = null;
 let currentTab = 'dashboard';
 let intervals = {};
+
+// --- Elementos del DOM ---
+const loginLogoutIcon = document.getElementById('login-logout-icon');
+const apiKeyIcon = document.getElementById('api-key-icon');
+const apiForm = document.getElementById('api-form');
+const logMessageElement = document.getElementById('log-message');
 
 // --- Funciones de inicialización de la vista ---
 function initializeDashboardView() {
@@ -221,15 +226,31 @@ function initializeTab(tabName) {
     }
 }
 
+/**
+ * Actualiza el icono de login/logout basado en si hay un token de autenticación.
+ */
+function updateLoginIcon() {
+    const isLoggedIn = localStorage.getItem('authToken');
+    if (loginLogoutIcon) {
+        if (isLoggedIn) {
+            loginLogoutIcon.classList.remove('fa-sign-in-alt');
+            loginLogoutIcon.classList.add('fa-sign-out-alt');
+            loginLogoutIcon.title = 'Logout';
+        } else {
+            loginLogoutIcon.classList.remove('fa-sign-out-alt');
+            loginLogoutIcon.classList.add('fa-sign-in-alt');
+            loginLogoutIcon.title = 'Login';
+        }
+    }
+}
+
 // --- Event Listeners del DOMContentLoaded (Punto de entrada principal) ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Llama a la función al cargar la página para establecer el estado inicial
+    updateLoginIcon();
+
     setupNavTabs(initializeTab);
 
-    const logMessageElement = document.getElementById('log-message');
-    const loginLogoutIcon = document.getElementById('login-logout-icon');
-    const apiKeyIcon = document.getElementById('api-key-icon');
-    const apiForm = document.getElementById('api-form');
-    
     const socket = io(BACKEND_URL, {
         path: '/socket.io'
     });
@@ -310,7 +331,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Configura los Event Listeners del formulario de autenticación
     setupAuthListeners(() => {
         // Callback para ejecutar después de un login exitoso
-        initializeTab('dashboard'); // Recarga el Dashboard para mostrar los datos
+        updateLoginIcon();
+        initializeTab('dashboard');
     });
 
     // Lógica para el botón de login/logout
@@ -338,4 +360,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
+    
+    // Carga la pestaña inicial al arrancar la aplicación
+    const initialTab = document.querySelector('.header-middle .nav-tab.active');
+    if (initialTab) {
+        initializeTab(initialTab.dataset.tab);
+    }
 });

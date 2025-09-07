@@ -23,27 +23,26 @@
         }
         .overflow-y-auto::-webkit-scrollbar-thumb:hover {
             background: #9ca3af; /* gray-400 */
-            }
+        }
 
         /* Active tab style for main navigation (DASHBOARD, TESTBOT, etc.) */
         .header-middle .nav-tab.active {
-            border-bottom: 2px solid white; /* Indicador visual para la pestaña activa en el menú superior */
+            border-bottom: 2px solid white;
         }
         .nav-tab {
-             /* Estilos base para los tabs, como padding, color, etc. */
-             padding: 10px 15px;
-             text-decoration: none;
-             color: #ccc; /* Color de texto predeterminado */
-             transition: all 0.3s ease;
-         }
+            padding: 10px 15px;
+            text-decoration: none;
+            color: #ccc;
+            transition: all 0.3s ease;
+        }
 
         .nav-tab:hover {
             color: white;
         }
 
         /* Active tab style for order history tabs (Opened, Filled, Cancelled, All) */
-        .autobot-tabs button.active-tab { /* Esta clase es para los tabs de Order History */
-            border-color: white !important; /* Forces white border for active tab */
+        .autobot-tabs button.active-tab {
+            border-color: white !important;
         }
         .tab-content {
             display: none;
@@ -81,14 +80,22 @@
     </div>
 
     <main id="main-content" class="content">
-        </main>
+    </main>
 
     <div id="auth-modal" class="modal">
         <div class="modal-content">
+            <span class="close-button" onclick="document.getElementById('auth-modal').style.display='none';">&times;</span>
             <h3>Sign In / Sign Up</h3>
+            
             <form id="auth-form">
-                <input type="email" id="email" placeholder="Email" required>
-                <input type="text" id="token" placeholder="Token (from email)" style="display: none;">
+                <div id="email-section">
+                    <input type="email" id="email" placeholder="Email" required>
+                </div>
+                
+                <div id="token-section" style="display: none;">
+                    <input type="text" id="token" name="token" placeholder="Token (from email)">
+                </div>
+                
                 <button type="submit" id="auth-button">Continue</button>
             </form>
             <p id="auth-message"></p>
@@ -116,7 +123,9 @@
             </form>
         </div>
     </div>
-
+    
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

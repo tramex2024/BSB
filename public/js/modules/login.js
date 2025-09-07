@@ -133,6 +133,16 @@ export async function handleAuthFormSubmit(e, onLoginSuccess) {
  * @param {Function} onLoginSuccess Callback a ejecutar después de un login exitoso.
  */
 export function setupAuthListeners(onLoginSuccess) {
+    const authCloseBtn = authModal ? authModal.querySelector('.close-button') : null;
+    if (authCloseBtn) {
+        authCloseBtn.addEventListener('click', () => toggleAuthModal(false));
+    }
+    
+    const apiCloseBtn = apiModal ? apiModal.querySelector('.close-button') : null;
+    if (apiCloseBtn) {
+        apiCloseBtn.addEventListener('click', () => toggleApiModal(false));
+    }
+
     if (authModal) authModal.addEventListener('click', (e) => { 
         if (e.target === authModal) toggleAuthModal(false); 
     });
