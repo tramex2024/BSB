@@ -15,8 +15,10 @@ function createOrderHtml(order, orderType) {
     const isBuy = order.side.toLowerCase() === 'buy';
     const sideClass = isBuy ? 'text-green-500' : 'text-red-500';
     const statusText = orderType.charAt(0).toUpperCase() + orderType.slice(1);
-    const date = new Date(order.createTime).toLocaleString();
-    const orderId = order.orderId;
+    // Usar orderId si existe, de lo contrario, usar order_id.
+    const orderId = order.orderId || order.order_id;
+    // Usar createTime si existe, de lo contrario, usar create_time.
+    const date = new Date(order.createTime || order.create_time).toLocaleString();
     
     // Convertir el precio y la cantidad a números para un formato limpio.
     const price = parseFloat(order.price).toFixed(2);
