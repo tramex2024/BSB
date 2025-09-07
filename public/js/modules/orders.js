@@ -1,6 +1,5 @@
 // public/js/modules/orders.js
 
-// Importa fetchFromBackend si es necesaria en otros módulos. Si no, puedes eliminarla para limpiar el código.
 import { fetchFromBackend } from './api.js';
 
 // URL base de tu backend en Render
@@ -82,7 +81,6 @@ export async function fetchOrders(status, orderListElement) {
     }
 
     try {
-        // La URL ahora es absoluta y apunta a tu backend en Render
         const response = await fetch(`${RENDER_BACKEND_URL}/api/orders/${status}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -95,10 +93,9 @@ export async function fetchOrders(status, orderListElement) {
         }
 
         const orders = await response.json();
-        // Nota: asumiendo que renderOrders está definido en algún lugar
-        // Si no lo está, puedes reemplazar la siguiente línea con:
-        // displayOrders(orders.orders || orders, orderListElement, status);
-        renderOrders(orders, orderListElement);
+        
+        // CORRECCIÓN: Llamar a la función existente 'displayOrders'
+        displayOrders(orders.orders || orders, orderListElement, status);
 
     } catch (error) {
         console.error('Error al obtener órdenes:', error);
