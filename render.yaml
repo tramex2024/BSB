@@ -1,12 +1,12 @@
-# render.yaml
 services:
   - type: web
-    name: bsb-backend # Nombre de tu servicio en Render (puedes cambiarlo si quieres)
-    env: node # Entorno de Node.js
-    buildCommand: npm install # Comando que Render ejecutará para instalar tus dependencias
-    startCommand: node server.js # Comando que Render usará para iniciar tu servidor
+    name: bsb-backend
+    env: node
+    plan: free # Es buena práctica especificar el plan
+    node_version: "20.x" # <--- AÑADE ESTA LÍNEA
+    buildCommand: npm install
+    startCommand: node server.js
     envVars:
-      # Variables sensibles que DEBES configurar manualmente en el dashboard de Render
       - key: MONGO_URI
         sync: false
       - key: BITMART_API_KEY
@@ -15,7 +15,6 @@ services:
         sync: false
       - key: BITMART_API_MEMO
         sync: false
-      # URLs de la API de BitMart (valores fijos)
       - key: BITMART_BASE_URL
         value: https://api-cloud.bitmart.com
       - key: BITMART_SPOT_V2_URL
