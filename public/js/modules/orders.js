@@ -8,21 +8,24 @@ const RENDER_BACKEND_URL = 'https://bsb-ppex.onrender.com';
 /**
  * Función para crear un elemento HTML para una sola orden.
  * @param {object} order La orden a renderizar.
- * @param {string} orderType El tipo de orden ('opened', 'filled', 'cancelled').
+ * @param {string} orderType El tipo de orden ('opened', 'filled', 'cancelled', 'all').
  * @returns {string} El HTML para la orden.
  */
 function createOrderHtml(order, orderType) {
     const isBuy = order.side.toLowerCase() === 'buy';
     const sideClass = isBuy ? 'text-green-500' : 'text-red-500';
     const statusText = orderType.charAt(0).toUpperCase() + orderType.slice(1);
-    // Usar orderId si existe, de lo contrario, usar order_id.
-    const orderId = order.orderId || order.order_id;
-    // Usar createTime si existe, de lo contrario, usar create_time.
+    
+    // CORRECCIÓN: Usar 'order_id' o 'orderId' para mayor compatibilidad
+    const orderId = order.orderId || order.order_id || 'N/A';
+    
+    // CORRECCIÓN: Usar 'create_time' o 'createTime'
     const date = new Date(order.createTime || order.create_time).toLocaleString();
     
     // Convertir el precio y la cantidad a números para un formato limpio.
-    const price = parseFloat(order.price).toFixed(2);
-    const quantity = parseFloat(order.filledSize || order.size).toFixed(8);
+    const price = parseFloat(order.price || order.filled_price).toFixed(2);
+    // Usar 'size' para órdenes abiertas y 'filledSize' para el historial
+    const quantity = parseFloat(order.filled_size || order.size).toFixed(8);
     const symbol = order.symbol;
 
     return `
@@ -44,7 +47,8 @@ function createOrderHtml(order, orderType) {
                 <span class="text-sm sm:text-base">${statusText}</span>
             </div>
             <div class="flex-1 text-right sm:text-center text-xs sm:text-sm text-gray-500">
-                ${date}
+                <p>ID: ${orderId}</p>
+                <p>${date}</p>
             </div>
         </div>
     `;
@@ -74,6 +78,11 @@ function displayOrders(orders, orderListElement, orderType) {
     }
 }
 
+/**
+ * Obtiene las órdenes del backend y las muestra.
+ * @param {string} status El estado de la orden a buscar ('opened', 'filled', 'cancelled', 'all').
+ * @param {HTMLElement} orderListElement El elemento HTML donde mostrar las órdenes.
+ */
 export async function fetchOrders(status, orderListElement) {
     const authToken = localStorage.getItem('authToken');
     if (!authToken) {
@@ -96,8 +105,16 @@ export async function fetchOrders(status, orderListElement) {
 
         const orders = await response.json();
         
-        // CORRECCIÓN: Llamar a la función existente 'displayOrders'
-        displayOrders(orders.orders || orders, orderListElement, status);
+        let ordersToDisplay = [];
+
+        // CORRECCIÓN: Unificar el formato de los datos
+        if (orders && orders.orders) {
+            ordersToDisplay = orders.orders;
+        } else if (Array.isArray(orders)) {
+            ordersToDisplay = orders;
+        }
+
+        displayOrders(ordersToDisplay, orderListElement, status);
 
     } catch (error) {
         console.error('Error al obtener órdenes:', error);
