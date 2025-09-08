@@ -1,4 +1,4 @@
-// Archivo: BSB/server/autobotLogic.js
+// Archivo: BSB/server/autobotLogic.js          //78, 84
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
@@ -75,13 +75,13 @@ async function botCycle(currentPrice) {
         };
 
         setLongDeps(dependencies);
-        setShortDeps(dependencies);
+       // setShortDeps(dependencies);
 
         // Ejecuta la estrategia si está activa
         if (botState.lstate === 'RUNNING') {
             await runLongStrategy();
         } else if (botState.sstate === 'RUNNING') {
-            await runShortStrategy();
+       //     await runShortStrategy();
         }
         
     } catch (error) {
