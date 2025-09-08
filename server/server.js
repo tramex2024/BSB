@@ -39,10 +39,7 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
-const corsOptions = {
-    app.use(cors()); // Esto permite que cualquier origen se conecte.
-};
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', ordersRoutes);
