@@ -40,7 +40,7 @@ const io = new Server(server, {
 });
 
 const corsOptions = {
-    origin: 'https://bsb-lime.vercel.app'
+    app.use(cors()); // Esto permite que cualquier origen se conecte.
 };
 app.use(cors(corsOptions));
 app.use(express.json());
