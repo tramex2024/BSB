@@ -1,5 +1,3 @@
-// BSB/server/services/bitmartSpot.js
-
 const { makeRequest } = require('./bitmartClient');
 
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
@@ -100,26 +98,27 @@ async function getHistoryOrders(options = {}) {
     }
     
     try {
-    const response = await makeRequest('POST', endpoint, {}, requestBody);
-    
-    // VERIFICACIÓN: Muestra la respuesta completa para depuración
-    console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response, null, 2));
-    
-    let orders = [];
-    
-    // CORRECCIÓN: Verifica si la respuesta es un arreglo directamente
-    if (response.data && Array.isArray(response.data)) {
-        orders = response.data;
-    } 
-    // Si no, verifica si el arreglo está dentro de una propiedad 'list'
-    else if (response.data && response.data.data && Array.isArray(response.data.data.list)) {
-        orders = response.data.data.list;
+        const response = await makeRequest('POST', endpoint, {}, requestBody);
+        
+        // VERIFICACIÓN: Muestra la respuesta completa para depuración
+        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2));
+        
+        let orders = [];
+        
+        // CORRECCIÓN: Verifica si la respuesta es un arreglo directamente
+        if (response.data && Array.isArray(response.data)) {
+            orders = response.data;
+        } 
+        // Si no, verifica si el arreglo está dentro de una propiedad 'list'
+        else if (response.data && response.data.data && Array.isArray(response.data.data.list)) {
+            orders = response.data.data.list;
+        }
+        
+        return orders;
+    } catch (error) {
+        console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
+        throw error;
     }
-    
-    return orders;
-} catch (error) {
-    console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
-    throw error;
 }
 
 /**
