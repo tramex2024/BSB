@@ -58,10 +58,22 @@ async function getOpenOrders(symbol) {
     }
 
     const endpoint = '/spot/v4/query/open-orders';
-    const requestBody = { symbol };
+    const requestBody = {
+    symbol,
+    limit: 100 // Esto asegura que se soliciten hasta 100 órdenes abiertas.
+};
     try {
         const response = await makeRequest('POST', endpoint, {}, requestBody);
-        const orders = response.data && Array.isArray(response.data.data) ? response.data.data : (response.data && Array.isArray(response.data) ? response.data : []);
+        let orders = [];
+
+// Si la respuesta viene con la estructura { data: [...] }
+if (response.data && Array.isArray(response.data.data)) {
+    orders = response.data.data;
+}
+// Si la respuesta es un arreglo directamente
+else if (response.data && Array.isArray(response.data)) {
+    orders = response.data;
+}
         return { orders };
     } catch (error) {
         console.error(`${LOG_PREFIX} Error al obtener órdenes abiertas:`, error.message);
