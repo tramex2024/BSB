@@ -1,6 +1,6 @@
-// longStrategy.js
+// BSB/server/src/longStrategy.js
 
-const { placeOrder, getOrderDetails } = require('../services/bitmartService');
+const { placeOrder, getOrderDetails, cancelOrder } = require('../services/bitmartService');
 const autobotCore = require('../autobotLogic');
 const analyzer = require('../bitmart_indicator_analyzer');
 const Autobot = require('../models/Autobot');
@@ -11,16 +11,14 @@ const TRAILING_STOP_PERCENTAGE = 0.4;
 
 let botConfiguration = {};
 let AUTH_CREDS = {};
-let activeBotOrders = [];
 
-function setDependencies(config, creds, orders) {
+function setDependencies(config, creds) {
     botConfiguration = config;
     AUTH_CREDS = creds;
-    activeBotOrders = orders;
 }
 
 /**
- * Coloca una orden de compra de cobertura a mercado.
+ * Coloca una orden de compra de cobertura.
  * @param {object} botState - Estado actual del bot.
  * @param {object} creds - Credenciales de la API.
  * @param {number} usdtAmount - Cantidad de USDT para la orden.
@@ -30,32 +28,25 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, nextCoveragePr
     const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
     autobotCore.log(`Colocando orden de cobertura por ${usdtAmount.toFixed(2)} USDT en el precio ${nextCoveragePrice.toFixed(2)}.`, 'info');
     
-    // Aquí se colocaría la orden límite en BitMart
-    // const order = await placeOrder(creds, SYMBOL, 'buy', 'limit', usdtAmount, nextCoveragePrice);
-    
-    // Simulación de orden exitosa para la lógica
-    const order = { order_id: `simulated_buy_${Date.now()}` };
+    try {
+        const order = await placeOrder(creds, SYMBOL, 'buy', 'limit', usdtAmount, nextCoveragePrice);
 
-    if (order && order.order_id) {
-        activeBotOrders.push(order.order_id);
-        autobotCore.log(`Orden de cobertura colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
-        
-        setTimeout(async () => {
-            // En una implementación real, se verificaría el estado de la orden
-            const freshBotState = await Autobot.findOne({});
-            if (freshBotState) {
-                // Simulación de los detalles de la orden completada
-                const orderDetails = {
-                    order_id: order.order_id,
-                    price: nextCoveragePrice,
-                    size: usdtAmount / nextCoveragePrice,
-                    state: 'filled'
-                };
-                await handleSuccessfulBuy(freshBotState, orderDetails);
-            }
-        }, 10000);
-    } else {
-        autobotCore.log('Error: La respuesta de la orden de cobertura no contiene un ID.', 'error');
+        if (order && order.order_id) {
+            // Actualizamos la base de datos con la nueva orden para que el bot la rastree
+            botState.lStateData.lastOrder = {
+                order_id: order.order_id,
+                price: nextCoveragePrice,
+                size: usdtAmount / nextCoveragePrice,
+                side: 'buy',
+                state: 'new'
+            };
+            await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
+            autobotCore.log(`Orden de cobertura colocada. ID: ${order.order_id}.`, 'success');
+        } else {
+            autobotCore.log('Error: La respuesta de la orden de cobertura no contiene un ID.', 'error');
+        }
+    } catch (error) {
+        autobotCore.log(`Error al colocar la orden de cobertura: ${error.message}`, 'error');
     }
 }
 
@@ -87,26 +78,9 @@ async function handleSuccessfulBuy(botStateObj, orderDetails) {
     botStateObj.lStateData.ppc = totalUSDT / botStateObj.lStateData.ac;
     botStateObj.lStateData.orderCountInCycle = currentOrderCount + 1;
     
-    const lastOrderUsdtAmount = botStateObj.lStateData.lastOrder?.size * botStateObj.lStateData.lastOrder?.price || botConfiguration.long.purchaseUsdt;
-    const nextUSDTAmount = lastOrderUsdtAmount * (1 + (botConfiguration.long.size_var / 100));
-    const nextCoveragePrice = newPrice * (1 - (botConfiguration.long.price_var / 100));
-
-    if (botStateObj.lStateData.orderCountInCycle < botConfiguration.long.maxOrders) {
-        if (botConfiguration.amountUSDT >= nextUSDTAmount && nextUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART) {
-             autobotCore.log(`Orden anterior completada. Colocando nueva orden de cobertura en ${nextCoveragePrice.toFixed(2)} USDT por ${nextUSDTAmount.toFixed(2)} USDT.`, 'info');
-             // Aquí se colocaría la orden límite real
-        } else {
-             autobotCore.log(`Balance insuficiente o monto de orden muy bajo para la próxima cobertura. Cambiando a NO_COVERAGE.`, 'warning');
-             await autobotCore.updateBotState('NO_COVERAGE', botStateObj.sstate);
-        }
-    } else {
-        autobotCore.log('Límite máximo de órdenes de cobertura alcanzado.', 'warning');
-    }
-
     await Autobot.findOneAndUpdate({}, { 'lStateData': botStateObj.lStateData });
     await autobotCore.updateBotState('BUYING', botStateObj.sstate);
 }
-
 
 /**
  * Lógica para manejar una orden de venta exitosa y el inicio del nuevo ciclo.
@@ -152,30 +126,36 @@ async function placeFirstBuyOrder(config, creds) {
     const SYMBOL = config.symbol || TRADE_SYMBOL;
 
     autobotCore.log(`Colocando la primera orden de compra a mercado por ${purchaseAmount.toFixed(2)} USDT.`, 'info');
-    const order = await placeOrder(creds, SYMBOL, 'buy', 'market', purchaseAmount);
-    
-    if (order && order.order_id) {
-        activeBotOrders.push(order.order_id);
-        autobotCore.log(`Orden de compra colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
+    try {
+        const order = await placeOrder(creds, SYMBOL, 'buy', 'market', purchaseAmount);
         
-        setTimeout(async () => {
-            const orderDetails = await getOrderDetails(creds, SYMBOL, order.order_id);
-            if (orderDetails && orderDetails.state === 'filled') {
-                const botState = await Autobot.findOne({});
-                if (botState) {
-                    await handleSuccessfulBuy(botState, orderDetails);
+        if (order && order.order_id) {
+            autobotCore.log(`Orden de compra colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
+            
+            setTimeout(async () => {
+                const orderDetails = await getOrderDetails(creds, SYMBOL, order.order_id);
+                if (orderDetails && orderDetails.state === 'filled') {
+                    const botState = await Autobot.findOne({});
+                    if (botState) {
+                        await handleSuccessfulBuy(botState, orderDetails);
+                    }
+                } else {
+                    autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}. Volviendo al estado RUNNING.`, 'error');
+                    const botState = await Autobot.findOne({});
+                    if (botState) {
+                        await autobotCore.updateBotState('RUNNING', botState.sstate);
+                    }
                 }
-            } else {
-                // Si la orden no se completa, registrar el error y regresar al estado RUNNING
-                autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}. Volviendo al estado RUNNING.`, 'error');
-                const botState = await Autobot.findOne({});
-                if (botState) {
-                    await autobotCore.updateBotState('RUNNING', botState.sstate);
-                }
+            }, 10000);
+        } else {
+            autobotCore.log('Error: La respuesta de la orden de compra no contiene un ID. Volviendo al estado RUNNING.', 'error');
+            const botState = await Autobot.findOne({});
+            if (botState) {
+                await autobotCore.updateBotState('RUNNING', botState.sstate);
             }
-        }, 10000);
-    } else {
-        autobotCore.log('Error: La respuesta de la orden de compra no contiene un ID. Volviendo al estado RUNNING.', 'error');
+        }
+    } catch (error) {
+        autobotCore.log(`Error al colocar la primera orden de compra: ${error.message}. Volviendo al estado RUNNING.`, 'error');
         const botState = await Autobot.findOne({});
         if (botState) {
             await autobotCore.updateBotState('RUNNING', botState.sstate);
@@ -183,29 +163,98 @@ async function placeFirstBuyOrder(config, creds) {
     }
 }
 
+/**
+ * Coloca una orden de venta a mercado.
+ * @param {object} config - Configuración del bot.
+ * @param {object} creds - Credenciales de la API.
+ * @param {number} sellAmount - Cantidad de la moneda base a vender (e.g., BTC).
+ */
 async function placeSellOrder(config, creds, sellAmount) {
     const SYMBOL = config.symbol || TRADE_SYMBOL;
 
     autobotCore.log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
-    const order = await placeOrder(creds, SYMBOL, 'sell', 'market', sellAmount);
+    try {
+        const order = await placeOrder(creds, SYMBOL, 'sell', 'market', sellAmount);
 
-    if (order && order.order_id) {
-        activeBotOrders.push(order.order_id);
-        autobotCore.log(`Orden de venta colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
+        if (order && order.order_id) {
+            autobotCore.log(`Orden de venta colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
 
-        setTimeout(async () => {
-            const orderDetails = await getOrderDetails(creds, SYMBOL, order.order_id);
-            if (orderDetails && orderDetails.state === 'filled') {
-                const botState = await Autobot.findOne({});
-                if (botState) {
-                    await handleSuccessfulSell(botState, orderDetails);
+            setTimeout(async () => {
+                const orderDetails = await getOrderDetails(creds, SYMBOL, order.order_id);
+                if (orderDetails && orderDetails.state === 'filled') {
+                    const botState = await Autobot.findOne({});
+                    if (botState) {
+                        await handleSuccessfulSell(botState, orderDetails);
+                    }
+                } else {
+                    autobotCore.log(`La orden de venta ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}.`, 'error');
                 }
-            } else {
-                autobotCore.log(`La orden de venta ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}.`, 'error');
+            }, 10000);
+        } else {
+            autobotCore.log('Error: La respuesta de la orden de venta no contiene un ID.', 'error');
+        }
+    } catch (error) {
+        autobotCore.log(`Error al colocar la orden de venta: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Cancela todas las órdenes activas del bot.
+ */
+async function cancelActiveOrders(creds, botState) {
+    if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
+        autobotCore.log("No hay una orden para cancelar registrada en la base de datos.", 'info');
+        return;
+    }
+
+    const SYMBOL = botConfiguration.symbol || TRADE_SYMBOL;
+    const orderIdToCancel = botState.lStateData.lastOrder.order_id;
+    autobotCore.log(`Intentando cancelar la orden ${orderIdToCancel}.`, 'info');
+
+    try {
+        await cancelOrder(creds, SYMBOL, orderIdToCancel);
+        autobotCore.log(`Orden ${orderIdToCancel} cancelada exitosamente.`, 'success');
+        
+        // Limpiamos la orden de la base de datos después de la cancelación
+        botState.lStateData.lastOrder = null;
+        await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
+
+    } catch (error) {
+        autobotCore.log(`Error al cancelar la orden ${orderIdToCancel}: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Verifica si se necesita colocar una nueva orden de cobertura y la coloca.
+ */
+async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice) {
+    // 1. Verificamos si ya hay una orden de cobertura abierta
+    if (botState.lStateData.lastOrder && botState.lStateData.lastOrder.side === 'buy' && botState.lStateData.lastOrder.order_id) {
+        try {
+            const orderDetails = await getOrderDetails(AUTH_CREDS, botConfiguration.symbol || TRADE_SYMBOL, botState.lStateData.lastOrder.order_id);
+            if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
+                autobotCore.log(`Ya hay una orden de cobertura activa (ID: ${orderDetails.order_id}). Esperando su ejecución.`, 'info');
+                return;
             }
-        }, 10000);
-    } else {
-        autobotCore.log('Error: La respuesta de la orden de venta no contiene un ID.', 'error');
+        } catch (error) {
+            autobotCore.log(`Error al verificar el estado de la orden ${botState.lStateData.lastOrder.order_id}. ${error.message}`, 'error');
+            // Continuamos la ejecución por si la orden ya no existe en el exchange
+        }
+    }
+    
+    // 2. Si no hay una orden activa, procedemos a calcular y colocar la siguiente
+    const lastOrderUsdtAmount = botState.lStateData.lastOrder?.size * botState.lStateData.lastOrder?.price || botConfiguration.long.purchaseUsdt;
+    const nextUSDTAmount = lastOrderUsdtAmount * (1 + (botConfiguration.long.size_var / 100));
+    const lastPrice = botState.lStateData.lastOrder?.price || currentPrice;
+    const nextCoveragePrice = lastPrice * (1 - (botConfiguration.long.price_var / 100));
+
+    if (currentPrice <= nextCoveragePrice) {
+        if (availableUSDT >= nextUSDTAmount && nextUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+            await placeCoverageBuyOrder(botState, AUTH_CREDS, nextUSDTAmount, nextCoveragePrice);
+        } else {
+            autobotCore.log("Fondos insuficientes para la próxima cobertura. Cambiando a NO_COVERAGE.", 'warning');
+            await autobotCore.updateBotState('NO_COVERAGE', botState.sstate);
+        }
     }
 }
 
@@ -216,7 +265,7 @@ async function runLongStrategy(autobotState, currentPrice, availableUSDT, availa
             const analysisResult = await analyzer.runAnalysis(currentPrice);
             if (analysisResult.action === 'BUY') {
                 autobotCore.log(`¡Señal de COMPRA detectada! Razón: ${analysisResult.reason}`, 'success');
-                const purchaseAmount = botConfiguration.long.purchaseUsdt;
+                const purchaseAmount = parseFloat(botConfiguration.long.purchaseUsdt);
                 if (availableUSDT >= purchaseAmount && purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART) {
                     await placeFirstBuyOrder(botConfiguration, AUTH_CREDS);
                 } else {
@@ -228,6 +277,9 @@ async function runLongStrategy(autobotState, currentPrice, availableUSDT, availa
 
         case 'BUYING':
             autobotCore.log("Estado Long: BUYING. Gestionando compras de cobertura...", 'info');
+
+            await checkAndPlaceCoverageOrder(autobotState, availableUSDT, currentPrice);
+            
             const { ppc, ac } = autobotState.lStateData;
             const triggerPercentage = botConfiguration.long.trigger;
 
@@ -235,11 +287,16 @@ async function runLongStrategy(autobotState, currentPrice, availableUSDT, availa
                 const targetSellPrice = ppc * (1 + (triggerPercentage / 100));
                 if (currentPrice >= targetSellPrice && ac > 0) {
                     autobotCore.log(`Precio actual (${currentPrice.toFixed(2)}) alcanzó el objetivo de venta por TRIGGER (${targetSellPrice.toFixed(2)}).`, 'success');
+                    
+                    if (autobotState.lStateData.lastOrder && autobotState.lStateData.lastOrder.order_id) {
+                        await cancelActiveOrders(AUTH_CREDS, autobotState);
+                    }
+                    
                     await autobotCore.updateBotState('SELLING', autobotState.sstate);
                 }
             }
             break;
-        
+            
         case 'SELLING':
             autobotCore.log("Estado Long: SELLING. Gestionando ventas...", 'info');
             const { ac: acSelling, pm, pc } = autobotState.lStateData;
@@ -270,7 +327,7 @@ async function runLongStrategy(autobotState, currentPrice, availableUSDT, availa
                 }
             }
 
-            if (autobotState.lstate === 'NO_COVERAGE' && availableUSDT >= botConfiguration.long.purchaseUsdt) {
+            if (autobotState.lstate === 'NO_COVERAGE' && availableUSDT >= parseFloat(botConfiguration.long.purchaseUsdt)) {
                 autobotCore.log("Fondos recuperados. Volviendo a estado BUYING para intentar la cobertura.", 'success');
                 await autobotCore.updateBotState('BUYING', autobotState.sstate);
             }
