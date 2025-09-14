@@ -157,8 +157,9 @@ app.get('/api/bitmart-data', async (req, res) => {
         const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
         console.log('[LOG] Se encontraron ' + openOrders.orders.length + ' órdenes abiertas.');
 
-        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
-        console.log('[LOG] Se encontraron ' + historyOrders.orders.length + ' órdenes en el historial.');
+        const historyOrdersResponse = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
+        const historyOrders = historyOrdersResponse && historyOrdersResponse.orders ? historyOrdersResponse.orders : [];
+        console.log('[LOG] Se encontraron ' + historyOrders.length + ' órdenes en el historial.');
         
         const ticker = { data: { last: currentMarketPrice } };
         console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
