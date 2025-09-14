@@ -1,3 +1,5 @@
+// BSB/server/server.js
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -16,6 +18,11 @@ const jwt = require('jsonwebtoken');
 const WebSocket = require('ws');
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
+// Importa los archivos de rutas. Si los tienes, asegúrate de que existen.
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const ordersRoutes = require('./routes/ordersRoutes');
+
 dotenv.config();
 
 const app = express();
@@ -32,11 +39,11 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
-const corsOptions = {
-    origin: 'https://bsb-lime.vercel.app'
-};
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
+app.use('/api/auth', authRoutes);
+app.use('/api/orders', ordersRoutes);
+app.use('/api/users', userRoutes);
 
 const connectDB = async () => {
     try {
@@ -108,64 +115,6 @@ setupWebSocket(io);
 
 (async function startBotCycle() {
     try {
-        if (process.env.NODE_ENV === 'production') {
-            setInterval(async () => {
-                const authCredentials = {
-                    apiKey: BITMART_API_KEY,
-                    secretKey: BITMART_SECRET_KEY,
-                    memo: BITMART_API_MEMO
-                };
-
-                console.log('--- Verificando credenciales de la API ---');
-                console.log(`Clave API: ${authCredentials.apiKey ? '✅ Leída' : '❌ No leída'}`);
-                console.log(`Clave Secreta: ${authCredentials.secretKey ? '✅ Leída' : '❌ No leída'}`);
-                console.log(`Memo: ${authCredentials.memo}`);
-                console.log('--- Fin de la verificación de credenciales ---');
-
-                if (!authCredentials.apiKey || !authCredentials.secretKey || !authCredentials.memo) {
-                    console.error("ERROR: Las claves API no están configuradas en las variables de entorno de Render.");
-                    return;
-                }
-
-                console.log('--- Ejecutando prueba de API de BitMart desde server.js ---');
-                try {
-		    const balance = await bitmartService.getBalance(bitmartCredentials);
-
-                    // Prueba de Órdenes Abiertas
-                    console.log('--- Probando API de Órdenes Abiertas ---');
-                    const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
-                    if (openOrders.orders.length > 0) {
-                        console.log(`✅ Se encontraron ${openOrders.orders.length} órdenes abiertas.`);
-                    } else {
-                        console.log('ℹ️ No se encontraron órdenes abiertas.');
-                    }
-
-                    // Prueba de Historial de Órdenes (Rango ampliado y corrección de parámetros)
-                    console.log('--- Probando API de Historial de Órdenes ---');
-                    const now = Date.now();
-                    const ninetyDaysAgo = new Date();
-                    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                    const historyOrders = await bitmartService.getHistoryOrders(bitmartCredentials, {
-                        orderMode: 'spot',
-                        startTime: ninetyDaysAgo.getTime(),
-                        endTime: now,
-                        limit: 100
-                    });
-
-                    if (historyOrders.length > 0) {
-                        console.log(`✅ Se encontraron ${historyOrders.length} órdenes históricas.`);
-                    } else {
-                        console.log('ℹ️ No se encontraron órdenes históricas.');
-                    }
-
-                    console.log('--- Prueba de API finalizada ---');
-
-                } catch (error) {
-                    console.error('--- Error al ejecutar la prueba de API de BitMart ---', error.message);
-                }
-            }, 60000); // 60000 milisegundos = 1 minuto
-        }
-
         const botState = await Autobot.findOne({});
         if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
             await autobotLogic.botCycle(currentMarketPrice);
@@ -177,6 +126,12 @@ setupWebSocket(io);
     }
 })();
 
+// AÑADE ESTA SECCIÓN PARA USAR LOS ARCHIVOS DE RUTAS
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/orders', ordersRoutes);
+
+// RUTAS EXISTENTES
 app.get('/api/ticker/:symbol', (req, res) => {
     if (currentMarketPrice !== 'N/A') {
         res.status(200).json({ last: currentMarketPrice });
@@ -185,85 +140,41 @@ app.get('/api/ticker/:symbol', (req, res) => {
     }
 });
 
-app.get('/api/orders/:status', async (req, res) => {
-    const { status } = req.params;
-    
-    if (!bitmartCredentials.apiKey || !bitmartCredentials.secretKey || !bitmartCredentials.memo) {
-        return res.status(400).json({ success: false, message: 'API keys are not configured on the server.' });
-    }
-
-    try {
-        let result;
-        const symbol = 'BTC_USDT';
-
-        switch (status) {
-            case 'opened':
-                result = await bitmartService.getOpenOrders(bitmartCredentials, symbol);
-                break;
-            case 'filled':
-            case 'cancelled':
-            case 'all':
-                // Prueba de Historial de Órdenes (Buscando en los últimos 90 días)
-                const endTime = Date.now();
-                const ninetyDaysAgo = new Date();
-                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                const startTime = ninetyDaysAgo.getTime();
-                
-                const historyParams = {
-                    symbol: 'BTC_USDT',
-                    orderMode: 'spot',
-                    startTime: startTime,
-                    endTime: endTime,
-                    limit: 100 // O el número que prefieras
-                };
-                if (status !== 'all') {
-                    historyParams.status = status;
-                }
-                
-                result = await bitmartService.getHistoryOrders(bitmartCredentials, historyParams);
-                break;
-            default:
-                return res.status(400).json({ success: false, message: 'Invalid order status' });
-        }
-
-        res.status(200).json(result);
-        
-    } catch (error) {
-        console.error('Error in /api/orders/:status:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-    }
-});
-
 app.get('/api/bitmart-data', async (req, res) => {
-    try {
-        const isValid = await bitmartService.validateApiKeys(
-            bitmartCredentials.apiKey,
-            bitmartCredentials.secretKey,
-            bitmartCredentials.memo
-        );
-        if (!isValid) {
-            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
-        }
-        const balance = await bitmartService.getBalance(bitmartCredentials);
-        const openOrders = await bitmartService.getOpenOrders(bitmartCredentials, 'BTC_USDT');
-        
-        const ticker = { data: { last: currentMarketPrice } };
+    try {
+        const isValid = await bitmartService.validateApiKeys();
+        if (!isValid) {
+            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
+        }
+        
+        const balance = await bitmartService.getBalance();
+        console.log('[LOG] Balance obtenido:', balance);
 
-        res.status(200).json({
-            message: 'BitMart data retrieved successfully.',
-            connected: true,
-            balance: balance,
-            openOrders: openOrders.orders,
-            ticker: ticker && ticker.data ? ticker.data : null,
-        });
-    } catch (error) {
-        console.error('Error in /bitmart-data endpoint:', error.message);
-        res.status(500).json({
-            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
-            connected: false,
-            error: error.message
-        });
-    }
+        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
+        console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
+        
+        // CORRECCIÓN: Asegúrate de que estás pasando el símbolo aquí.
+        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
+        console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
+        
+        const ticker = { data: { last: currentMarketPrice } };
+        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
+
+        res.status(200).json({
+            message: 'BitMart data retrieved successfully.',
+            connected: true,
+            balance: balance,
+            openOrders: openOrders.orders,
+            ticker: ticker && ticker.data ? ticker.data : null,
+        });
+    } catch (error) {
+        console.error('Error in /bitmart-data endpoint:', error.message);
+        res.status(500).json({
+            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
+            connected: false,
+            error: error.message
+        });
+    }
 });
 
 app.get('/api/user/bot-config-and-state', async (req, res) => {
@@ -318,13 +229,10 @@ app.post('/api/autobot/start', async (req, res) => {
                 }
             });
         }
-        
+        
         botState.config = botState.config || {};
         botState.config.long = botState.config.long || {};
         botState.config.short = botState.config.short || {};
-        
-        botState.config.long = { ...botState.config.long, ...config.long };
-        botState.config.short = { ...botState.config.short, ...config.short };
 
         if (strategy === 'long') {
             botState.config.long.enabled = true;
@@ -339,7 +247,7 @@ app.post('/api/autobot/start', async (req, res) => {
         }
 
         botState.config.stopAtCycle = stopAtCycle;
-        
+        
         await botState.save();
 
         autobotLogic.log(`Estrategia Autobot ${strategy} activada.`, 'success');

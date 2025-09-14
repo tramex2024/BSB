@@ -18,7 +18,7 @@ const jwt = require('jsonwebtoken');
 const WebSocket = require('ws');
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
-// Importa los archivos de rutas. Si los tienes, asegúrate de que existen.
+// Importa los archivos de rutas
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const ordersRoutes = require('./routes/ordersRoutes');
@@ -38,6 +38,9 @@ const io = new Server(server, {
     },
     path: '/socket.io'
 });
+
+// Pasa la instancia de 'io' a la lógica del bot
+autobotLogic.setIo(io);
 
 app.use(cors());
 app.use(express.json());
@@ -141,40 +144,39 @@ app.get('/api/ticker/:symbol', (req, res) => {
 });
 
 app.get('/api/bitmart-data', async (req, res) => {
-    try {
-        const isValid = await bitmartService.validateApiKeys();
-        if (!isValid) {
-            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
-        }
-        
-        const balance = await bitmartService.getBalance();
-        console.log('[LOG] Balance obtenido:', balance);
+    try {
+        const isValid = await bitmartService.validateApiKeys();
+        if (!isValid) {
+            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
+        }
+        
+        const balance = await bitmartService.getBalance();
+        console.log('[LOG] Balance obtenido:', balance);
 
-        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
-        console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
-        
-        // CORRECCIÓN: Asegúrate de que estás pasando el símbolo aquí.
-        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
-        console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
-        
-        const ticker = { data: { last: currentMarketPrice } };
-        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
+        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
+        console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
+        
+        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
+        console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
+        
+        const ticker = { data: { last: currentMarketPrice } };
+        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
 
-        res.status(200).json({
-            message: 'BitMart data retrieved successfully.',
-            connected: true,
-            balance: balance,
-            openOrders: openOrders.orders,
-            ticker: ticker && ticker.data ? ticker.data : null,
-        });
-    } catch (error) {
-        console.error('Error in /bitmart-data endpoint:', error.message);
-        res.status(500).json({
-            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
-            connected: false,
-            error: error.message
-        });
-    }
+        res.status(200).json({
+            message: 'BitMart data retrieved successfully.',
+            connected: true,
+            balance: balance,
+            openOrders: openOrders.orders,
+            ticker: ticker && ticker.data ? ticker.data : null,
+        });
+    } catch (error) {
+        console.error('Error in /bitmart-data endpoint:', error.message);
+        res.status(500).json({
+            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
+            connected: false,
+            error: error.message
+        });
+    }
 });
 
 app.get('/api/user/bot-config-and-state', async (req, res) => {
@@ -229,7 +231,7 @@ app.post('/api/autobot/start', async (req, res) => {
                 }
             });
         }
-        
+        
         botState.config = botState.config || {};
         botState.config.long = botState.config.long || {};
         botState.config.short = botState.config.short || {};
@@ -247,8 +249,14 @@ app.post('/api/autobot/start', async (req, res) => {
         }
 
         botState.config.stopAtCycle = stopAtCycle;
-        
+        
         await botState.save();
+
+        // Emite un evento WebSocket para notificar al frontend del nuevo estado
+        io.sockets.emit('bot-state-update', {
+            lstate: botState.lstate,
+            sstate: botState.sstate
+        });
 
         autobotLogic.log(`Estrategia Autobot ${strategy} activada.`, 'success');
         res.json({ success: true, message: 'Autobot strategy started.' });
@@ -267,6 +275,13 @@ app.post('/api/autobot/stop', async (req, res) => {
             botState.config.long.enabled = false;
             botState.config.short.enabled = false;
             await botState.save();
+
+            // Emite un evento WebSocket para notificar al frontend del nuevo estado
+            io.sockets.emit('bot-state-update', {
+                lstate: botState.lstate,
+                sstate: botState.sstate
+            });
+
             autobotLogic.log('Autobot strategy stopped by user.', 'info');
             res.json({ success: true, message: 'Autobot strategy stopped.' });
         } else {
