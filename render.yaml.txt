@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: bsb-backend
+    env: node
+    plan: free # Es buena práctica especificar el plan
+    node_version: "20.x" # <--- AÑADE ESTA LÍNEA
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: BITMART_API_KEY
+        sync: false
+      - key: BITMART_SECRET_KEY
+        sync: false
+      - key: BITMART_API_MEMO
+        sync: false
+      - key: BITMART_BASE_URL
+        value: https://api-cloud.bitmart.com
+      - key: BITMART_SPOT_V2_URL
+        value: https://api-cloud.bitmart.com/spot/v2/submit_order
+      - key: BITMART_SPOT_V4_URL
+        value: https://api-cloud.bitmart.com/spot/v4
+      - key: BITMART_ACCOUNT_V1_URL
+        value: https://api-cloud.bitmart.com/account/v1
+      - key: BITMART_SYSTEM_URL
+        value: https://api-cloud.bitmart.com/system
+      - key: BITMART_QUOTATION_V3_URL
+        value: https://api-cloud.bitmart.com/spot/quotation/v3

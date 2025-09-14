@@ -39,7 +39,10 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
-app.use(cors());
+const corsOptions = {
+    origin: 'https://bsb-lime.vercel.app'
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', ordersRoutes);
@@ -140,41 +143,44 @@ app.get('/api/ticker/:symbol', (req, res) => {
     }
 });
 
+// AÑADIDO: Ruta para obtener el balance, las órdenes abiertas y el historial de órdenes
 app.get('/api/bitmart-data', async (req, res) => {
-    try {
-        const isValid = await bitmartService.validateApiKeys();
-        if (!isValid) {
-            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
-        }
-        
-        const balance = await bitmartService.getBalance();
-        console.log('[LOG] Balance obtenido:', balance);
+    try {
+        const isValid = await bitmartService.validateApiKeys();
+        if (!isValid) {
+            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
+        }
+        
+        // Agregamos logs para las variables que te preocupan
+        const balance = await bitmartService.getBalance();
+        console.log('[LOG] Balance obtenido:', balance);
 
-        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
-        console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
-        
-        // CORRECCIÓN: Asegúrate de que estás pasando el símbolo aquí.
-        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
-        console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
-        
-        const ticker = { data: { last: currentMarketPrice } };
-        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
+        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
+        console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
+        
+        // Llama a la función para obtener el historial de órdenes
+        const historyOrders = await bitmartService.getHistoryOrders('BTC_USDT');
+        console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
+        
+        // Usamos el precio del mercado que ya tenías
+        const ticker = { data: { last: currentMarketPrice } };
+        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
 
-        res.status(200).json({
-            message: 'BitMart data retrieved successfully.',
-            connected: true,
-            balance: balance,
-            openOrders: openOrders.orders,
-            ticker: ticker && ticker.data ? ticker.data : null,
-        });
-    } catch (error) {
-        console.error('Error in /bitmart-data endpoint:', error.message);
-        res.status(500).json({
-            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
-            connected: false,
-            error: error.message
-        });
-    }
+        res.status(200).json({
+            message: 'BitMart data retrieved successfully.',
+            connected: true,
+            balance: balance,
+            openOrders: openOrders.orders,
+            ticker: ticker && ticker.data ? ticker.data : null,
+        });
+    } catch (error) {
+        console.error('Error in /bitmart-data endpoint:', error.message);
+        res.status(500).json({
+            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
+            connected: false,
+            error: error.message
+        });
+    }
 });
 
 app.get('/api/user/bot-config-and-state', async (req, res) => {

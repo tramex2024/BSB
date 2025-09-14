@@ -1,0 +1,68 @@
+<div class="flex flex-col md:flex-row h-full md:h-screen">
+    <div class="w-full md:w-1/3 bg-gray-800 p-6 space-y-4 overflow-y-auto">
+        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
+            <div class="flex justify-between text-sm">
+                <div id="te-connection-status" class="flex items-center space-x-2">
+                    <span id="te-status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                    <h2 class="text-lg font-bold">TESTBOT</h2>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div><strong>Profit:</strong> <span id="teprofit" class="text-green-400">0.00</span></div>
+                </div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LState:</strong> <span id="tebot-lstate" class="text-red-400">STOPPED</span></div>
+                <div><strong>SState:</strong> <span id="tebot-sstate" class="text-red-400">STOPPED</span></div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LBalance:</strong> <span id="telbalance">0.00</span></div>
+                <div><strong>SBalance:</strong> <span id="tesbalance">0.00</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full md:w-1/3 bg-gray-800 p-6 space-y-4 overflow-y-auto">
+        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
+            <div class="flex justify-between text-sm">
+                <div id="au-connection-status" class="flex items-center space-x-2">
+                    <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                    <h2 class="text-lg font-bold">AUTOBOT</h2>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div><strong>Profit:</strong> <span id="auprofit" class="text-green-400">0.00</span></div>
+                </div>
+            </div>
+            <div class="flex justify-between text-sm">
+	        <div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>
+                <div><strong>LState:</strong> <span id="aubot-lstate" class="text-red-400">STOPPED</span></div>
+                <div><strong>SState:</strong> <span id="aubot-sstate" class="text-red-400">STOPPED</span></div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LBalance:</strong> <span id="aulbalance">0.00</span></div>
+                <div><strong>SBalance:</strong> <span id="ausbalance">0.00</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full md:w-1/3 bg-gray-800 p-6 space-y-4 overflow-y-auto">
+        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
+            <div class="flex justify-between text-sm">
+                <div id="ai-connection-status" class="flex items-center space-x-2">
+                    <span id="ai-status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                    <h2 class="text-lg font-bold">AIBOT</h2>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div><strong>Profit:</strong> <span id="aiprofit" class="text-green-400">0.00</span></div>
+                </div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LState:</strong> <span id="aibot-lstate" class="text-red-400">STOPPED</span></div>
+                <div><strong>SState:</strong> <span id="aibot-sstate" class="text-red-400">STOPPED</span></div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LBalance:</strong> <span id="ailbalance">0.00</span></div>
+                <div><strong>SBalance:</strong> <span id="aisbalance">0.00</span></div>
+            </div>
+        </div>
+    </div>
+</div>

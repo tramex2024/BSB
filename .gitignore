@@ -1,15 +1,4 @@
-# server/.gitignore
-
-# Node modules
-node_modules/
-
-# Environment variables
+/node_modules
 .env
-
-# Log files
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-.env*.local
-.DS_Store

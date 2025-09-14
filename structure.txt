@@ -1,0 +1,58 @@
+BSB/			    # Bitmart Spot Bots
+├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
+│   ├── index.html
+│   ├── css/
+│   │   └── style.css
+│   ├── src/
+│   │   └── input.css
+│   ├── js/
+│   │   ├── main.js
+│   │   ├── modules/
+│   │   	 └── auth.js
+│   │   	 └── orders.js
+│   │   	 └── aucalculations.js
+│   │   	 └── tecalculations.js
+│   │   	 └── aicalculations.js
+│   │   	 └── navigation.js
+│   │   	 └── bot.js
+│   │   	 └── network.js
+│   │   	 └── balance.js
+│   │   	 └── api.js
+│   │   	 └── chart.js
+│   └── images/
+│       └── bsb-logo.png
+├── server/                # Backend files - Deployed on Render
+│   ├── server.js
+│   ├── autobotLogic.js
+│   ├── bitmart_indicator_analyzer.js
+│   ├── models/
+│   │   └── Order.js
+│   │   └── Autobot.js
+│   │   └── User.js
+│   │   └── BotState.js
+│   ├── middleware/
+│   │   └── bitmartAuthMiddleware.js
+│   │   └── authMiddleware.js
+│   ├── services/
+│   │   └── bitmartService.js
+│   │   └── bitmartClient.js
+│   │   └── bitmartSpot.js
+│   │   └── check_time.js
+│   │   └── test_sign.js
+│   ├── routes/
+│   │   └── authRoutes.js
+│   │   └── userRoutes.js 
+│   ├── controllers/
+│   │   └── authController.js
+│   │   └── userController.js
+│   ├── utils/
+│   │   └── encryption.js
+│   │   └── cryptoUtils.js
+│   ├── seeders/
+│   │   └── seed.js
+│   ├── render.yaml
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── package.json
+│   ├── bitmart_entry_point.json
+│   └── README.md
