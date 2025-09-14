@@ -11,35 +11,73 @@ import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '
 // --- AHORA USA LA URL CORRECTA DE TU BACKEND EN RENDER ---
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 
-// --- NUEVA FUNCIÓN PARA GESTIONAR EL ESTADO DEL BOT EN LA UI ---
-function updateBotUI(lstate, sstate) {
-    const lstateElement = document.getElementById('lstate-display');
-    const sstateElement = document.getElementById('sstate-display');
-    const startStopButton = document.getElementById('austart-btn');
-    const autobotSettings = document.getElementById('autobot-settings');
+// --- FUNCIÓN COMPLETA PARA GESTIONAR EL ESTADO DEL BOT EN LA UI ---
+function updateBotUI(state) {
+    // Definimos los colores para cada estado
+    const statusColors = {
+        RUNNING: 'text-green-400',
+        STOPPED: 'text-red-400',
+        BUYING: 'text-blue-400',
+        SELLING: 'text-yellow-400',
+        NO_COVERAGE: 'text-purple-400'
+    };
 
-    if (lstateElement) lstateElement.textContent = `Estado Long: ${lstate}`;
-    if (sstateElement) sstateElement.textContent = `Estado Short: ${sstate}`;
-    
-    // Habilita o deshabilita los controles de configuración según el estado del bot
-    const isActive = lstate !== 'STOPPED' || sstate !== 'STOPPED';
-    if (autobotSettings) {
-        const inputs = autobotSettings.querySelectorAll('input, select');
-        inputs.forEach(input => input.disabled = isActive);
-    }
+    // Obtenemos los elementos de la interfaz de usuario por su ID
+    const lstateElement = document.getElementById('aubot-lstate');
+    const sstateElement = document.getElementById('aubot-sstate');
+    const startStopButton = document.getElementById('austart-btn');
+    const autobotSettings = document.getElementById('autobot-settings');
+    
+    // Lista de todos los elementos a actualizar
+    const elementsToUpdate = {
+        auprofit: 'profit',
+        aulbalance: 'lbalance',
+        ausbalance: 'sbalance',
+        aultprice: 'ltprice',
+        austprice: 'stprice',
+        aulcycle: 'lcycle',
+        auscycle: 'scycle',
+        aulcoverage: 'lcoverage',
+        auscoverage: 'scoverage',
+        aulnorder: 'lnorder',
+        ausnorder: 'snorder'
+    };
 
-    // Actualiza el texto y la clase del botón de inicio/parada
-    if (startStopButton) {
-        if (isActive) {
-            startStopButton.textContent = 'STOP';
-            startStopButton.classList.remove('start-btn');
-            startStopButton.classList.add('stop-btn');
-        } else {
-            startStopButton.textContent = 'START';
-            startStopButton.classList.remove('stop-btn');
-            startStopButton.classList.add('start-btn');
-        }
-    }
+    // Actualiza el LState y SState
+    if (lstateElement) {
+        lstateElement.textContent = state.lstate;
+        lstateElement.className = '';
+        lstateElement.classList.add(statusColors[state.lstate] || 'text-red-400');
+    }
+
+    if (sstateElement) {
+        sstateElement.textContent = state.sstate;
+        sstateElement.className = '';
+        sstateElement.classList.add(statusColors[state.sstate] || 'text-red-400');
+    }
+
+    // Actualiza los demás elementos dinámicos
+    for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            // Usamos un valor por defecto si el dato no existe
+            element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
+        }
+    }
+    
+    // Lógica para el botón START/STOP y la habilitación de la configuración
+    const isActive = state.lstate === 'RUNNING' || state.sstate === 'RUNNING';
+    
+    if (autobotSettings) {
+        const inputs = autobotSettings.querySelectorAll('input, select');
+        inputs.forEach(input => input.disabled = isActive);
+    }
+
+    if (startStopButton) {
+        startStopButton.textContent = isActive ? 'STOP' : 'START';
+        startStopButton.classList.remove('start-btn', 'stop-btn');
+        startStopButton.classList.add(isActive ? 'stop-btn' : 'start-btn');
+    }
 }
 
 export function initializeAutobotView() {

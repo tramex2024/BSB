@@ -242,10 +242,23 @@ app.post('/api/autobot/start', async (req, res) => {
 
         await botState.save();
 
-        io.sockets.emit('bot-state-update', {
-            lstate: botState.lstate,
-            sstate: botState.sstate
-        });
+        // Este es el código que reemplaza el io.sockets.emit en ambas rutas
+io.sockets.emit('bot-state-update', {
+    lstate: botState.lstate,
+    sstate: botState.sstate,
+    // Valores de ejemplo para probar la actualización en el frontend
+    auprofit: Math.floor(Math.random() * 1000) / 100, // Ganancia (número aleatorio)
+    aulbalance: Math.floor(Math.random() * 100000) / 100, // Balance Long
+    ausbalance: Math.floor(Math.random() * 10) / 1000, // Balance Short
+    aultprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Compra Long
+    austprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Venta Short
+    aulcycle: Math.floor(Math.random() * 10), // Ciclo Long
+    auscycle: Math.floor(Math.random() * 10), // Ciclo Short
+    aulcoverage: Math.floor(Math.random() * 5), // Cobertura Long
+    auscoverage: Math.floor(Math.random() * 5), // Cobertura Short
+    aulnorder: Math.floor(Math.random() * 20), // Número de órdenes Long
+    ausnorder: Math.floor(Math.random() * 20) // Número de órdenes Short
+});
 
         autobotLogic.log('Ambas estrategias de Autobot (Long y Short) activadas.', 'success');
         res.json({ success: true, message: 'Autobot strategies started.' });
@@ -268,11 +281,23 @@ app.post('/api/autobot/stop', async (req, res) => {
 
 	    console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);            
 
-            // Emite un evento WebSocket para notificar al frontend del nuevo estado
-            io.sockets.emit('bot-state-update', {
-                lstate: botState.lstate,
-                sstate: botState.sstate
-            });
+            // Este es el código que reemplaza el io.sockets.emit en ambas rutas
+io.sockets.emit('bot-state-update', {
+    lstate: botState.lstate,
+    sstate: botState.sstate,
+    // Valores de ejemplo para probar la actualización en el frontend
+    auprofit: Math.floor(Math.random() * 1000) / 100, // Ganancia (número aleatorio)
+    aulbalance: Math.floor(Math.random() * 100000) / 100, // Balance Long
+    ausbalance: Math.floor(Math.random() * 10) / 1000, // Balance Short
+    aultprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Compra Long
+    austprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Venta Short
+    aulcycle: Math.floor(Math.random() * 10), // Ciclo Long
+    auscycle: Math.floor(Math.random() * 10), // Ciclo Short
+    aulcoverage: Math.floor(Math.random() * 5), // Cobertura Long
+    auscoverage: Math.floor(Math.random() * 5), // Cobertura Short
+    aulnorder: Math.floor(Math.random() * 20), // Número de órdenes Long
+    ausnorder: Math.floor(Math.random() * 20) // Número de órdenes Short
+});
 
             autobotLogic.log('Autobot strategy stopped by user.', 'info');
             res.json({ success: true, message: 'Autobot strategy stopped.' });
