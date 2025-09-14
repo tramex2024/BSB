@@ -7,7 +7,7 @@ const cors = require('cors');
 const bitmartService = require('./services/bitmartService');
 const spotService = require('./services/bitmartSpot');
 const Order = require('./models/Order');
-const Autobot = require('./models/Autobot');
+const Autobot = require('./models/Autobot'); // <-- DECLARACIÓN ÚNICA
 const http = require('http');
 const { Server } = require("socket.io");
 const autobotLogic = require('./autobotLogic.js');
@@ -115,9 +115,6 @@ function setupWebSocket(io) {
 }
 
 setupWebSocket(io);
-
-// Agregamos este modelo aquí para que el setInterval pueda usarlo
-const Autobot = require('./models/Autobot'); 
 
 // Este es el BUCLE PRINCIPAL para emitir el estado del bot cada 3 segundos
 setInterval(async () => {
