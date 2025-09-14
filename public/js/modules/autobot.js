@@ -102,9 +102,7 @@ export function initializeAutobotView() {
     
     // --- LÓGICA DE WEBSOCKET ENCAPSULADA EN EL MÓDULO ---
     // Ahora usa la variable con la URL correcta
-    const socket = io(SOCKET_SERVER_URL, {
-    path: '/socket.io'
-});
+    const socket = io(SOCKET_SERVER_URL);
     
     // Listener para recibir y actualizar el estado del bot
     socket.on('bot-state-update', (state) => {

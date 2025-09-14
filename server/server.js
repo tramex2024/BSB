@@ -251,7 +251,8 @@ app.post('/api/autobot/start', async (req, res) => {
         botState.config.stopAtCycle = stopAtCycle;
         
         await botState.save();
-
+	console.log(`[BACKEND LOG]: Estado del bot guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
+        
         // Emite un evento WebSocket para notificar al frontend del nuevo estado
         io.sockets.emit('bot-state-update', {
             lstate: botState.lstate,
@@ -275,6 +276,8 @@ app.post('/api/autobot/stop', async (req, res) => {
             botState.config.long.enabled = false;
             botState.config.short.enabled = false;
             await botState.save();
+
+	    console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);            
 
             // Emite un evento WebSocket para notificar al frontend del nuevo estado
             io.sockets.emit('bot-state-update', {
