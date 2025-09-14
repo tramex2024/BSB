@@ -14,6 +14,7 @@ const autobotLogic = require('./autobotLogic.js');
 const { runLongStrategy, setDependencies: setLongDependencies } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDependencies } = require('./src/shortStrategy');
 const jwt = require('jsonwebtoken');
+const { calculateInitialState } = require('./autobotCalculations');
 
 const WebSocket = require('ws');
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
@@ -121,21 +122,24 @@ setInterval(async () => {
     try {
         const botState = await Autobot.findOne({});
         if (botState) {
+            // Lee los valores directamente de la base de datos
+            const lbalance = botState.lStateData.lbalance || 0;
+            const sbalance = botState.sStateData.sbalance || 0;
+
             io.sockets.emit('bot-state-update', {
                 lstate: botState.lstate,
                 sstate: botState.sstate,
-                // CLAVES CORREGIDAS PARA COINCIDIR CON EL FRONTEND
-                profit: (Math.random() * 1000).toFixed(2), 
-                lbalance: (Math.random() * 100000).toFixed(2),
-                sbalance: (Math.random() * 10).toFixed(4),
-                ltprice: (50000 + Math.random() * 5000).toFixed(2),
-                stprice: (50000 + Math.random() * 5000).toFixed(2),
-                lcycle: Math.floor(Math.random() * 10),
-                scycle: Math.floor(Math.random() * 10),
-                lcoverage: (Math.random() * 5).toFixed(2),
-                scoverage: (Math.random() * 5).toFixed(2),
-                lnorder: Math.floor(Math.random() * 20),
-                snorder: Math.floor(Math.random() * 20)
+                profit: botState.profit || 0, // Suponiendo que 'profit' también se guarda
+                lbalance: lbalance,
+                sbalance: sbalance,
+                ltprice: botState.lStateData.ltprice || 0,
+                stprice: botState.sStateData.stprice || 0,
+                lcycle: botState.lStateData.lcycle || 0,
+                scycle: botState.sStateData.scycle || 0,
+                lcoverage: botState.lStateData.lcoverage || 0,
+                scoverage: botState.sStateData.scoverage || 0,
+                lnorder: botState.lStateData.lnorder || 0,
+                snorder: botState.sStateData.snorder || 0
             });
         }
     } catch (error) {
@@ -332,6 +336,57 @@ app.post('/api/autobot/stop', async (req, res) => {
     } catch (error) {
         console.error('Failed to stop Autobot strategy:', error);
         res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
+    }
+});
+
+// Nuevo endpoint para actualizar la configuración en tiempo real
+app.post('/api/autobot/update-config', async (req, res) => {
+    try {
+        const { config } = req.body;
+        let botState = await Autobot.findOne({});
+
+        if (!botState) {
+            // Si el bot no existe, crea un nuevo estado inicial
+            botState = new Autobot({
+                lstate: 'STOPPED',
+                sstate: 'STOPPED',
+                lStateData: {},
+                sStateData: {},
+                config: config
+            });
+        } else {
+            // Si el bot ya existe, actualiza solo la configuración
+            botState.config = config;
+        }
+
+        // Usa la nueva función para calcular el estado inicial de los parámetros
+        const newParams = calculateInitialState(config);
+        botState.lStateData = { lbalance: newParams.lbalance };
+        botState.sStateData = { sbalance: newParams.sbalance };
+
+        await botState.save();
+
+        // Emite los valores actualizados para que el frontend los reciba
+        io.sockets.emit('bot-state-update', {
+            lstate: botState.lstate,
+            sstate: botState.sstate,
+            profit: newParams.profit,
+            lbalance: newParams.lbalance,
+            sbalance: newParams.sbalance,
+            ltprice: newParams.ltprice,
+            stprice: newParams.stprice,
+            lcycle: newParams.lcycle,
+            scycle: newParams.scycle,
+            lcoverage: newParams.lcoverage,
+            scoverage: newParams.scoverage,
+            lnorder: newParams.lnorder,
+            snorder: newParams.snorder
+        });
+
+        res.status(200).json({ success: true, message: 'Bot configuration updated successfully.' });
+    } catch (error) {
+        console.error('Failed to update bot configuration:', error);
+        res.status(500).json({ success: false, message: 'Failed to update bot configuration.' });
     }
 });
 
