@@ -146,12 +146,13 @@ app.get('/api/ticker/:symbol', (req, res) => {
 app.get('/api/bitmart-data', async (req, res) => {
     try {
         const isValid = await bitmartService.validateApiKeys();
+        console.log('[LOG] Validación de API Keys de BitMart:', isValid);
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
         }
         
         const balance = await bitmartService.getBalance();
-        console.log('[LOG] Balance obtenido:', balance);
+        console.log('[LOG] Balance obtenido.');
 
         const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
         console.log('[LOG] Se encontraron ' + openOrders.orders.length + ' órdenes abiertas.');
@@ -170,7 +171,7 @@ app.get('/api/bitmart-data', async (req, res) => {
             ticker: ticker && ticker.data ? ticker.data : null,
         });
     } catch (error) {
-        console.error('Error in /bitmart-data endpoint:', error.message);
+        console.error('Error en el endpoint /bitmart-data:', error);
         res.status(500).json({
             message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
             connected: false,
@@ -215,10 +216,9 @@ app.get('/api/user/bot-config-and-state', async (req, res) => {
 
 app.post('/api/autobot/start', async (req, res) => {
     try {
-        const { long, short, options } = req.body; // Desestructura la configuración del frontend
+        const { long, short, options } = req.body;
         let botState = await Autobot.findOne({});
 
-        // Si el estado del bot no existe, crea uno nuevo.
         if (!botState) {
             botState = new Autobot({
                 lstate: 'STOPPED',
@@ -233,8 +233,6 @@ app.post('/api/autobot/start', async (req, res) => {
             });
         }
 
-        // Actualiza el estado y la configuración del bot para ambas estrategias.
-        // El frontend envía los datos, el backend los guarda y los activa.
         botState.config.long = { ...botState.config.long, ...long, enabled: true };
         botState.config.short = { ...botState.config.short, ...short, enabled: true };
         botState.lstate = 'RUNNING';
@@ -243,7 +241,6 @@ app.post('/api/autobot/start', async (req, res) => {
 
         await botState.save();
 
-        // Emite un evento WebSocket para notificar al frontend del nuevo estado.
         io.sockets.emit('bot-state-update', {
             lstate: botState.lstate,
             sstate: botState.sstate
