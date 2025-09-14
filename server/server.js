@@ -144,39 +144,39 @@ app.get('/api/ticker/:symbol', (req, res) => {
 });
 
 app.get('/api/bitmart-data', async (req, res) => {
-    try {
-        const isValid = await bitmartService.validateApiKeys();
-        if (!isValid) {
-            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
-        }
-        
-        const balance = await bitmartService.getBalance();
-        console.log('[LOG] Balance obtenido:', balance);
+    try {
+        const isValid = await bitmartService.validateApiKeys();
+        if (!isValid) {
+            return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
+        }
+        
+        const balance = await bitmartService.getBalance();
+        console.log('[LOG] Balance obtenido:', balance);
 
-        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
-        console.log('[LOG] Órdenes abiertas obtenidas:', openOrders);
-        
-        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
-        console.log('[LOG] Historial de órdenes obtenido:', historyOrders);
-        
-        const ticker = { data: { last: currentMarketPrice } };
-        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
+        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
+        console.log('[LOG] Se encontraron ' + openOrders.orders.length + ' órdenes abiertas.');
 
-        res.status(200).json({
-            message: 'BitMart data retrieved successfully.',
-            connected: true,
-            balance: balance,
-            openOrders: openOrders.orders,
-            ticker: ticker && ticker.data ? ticker.data : null,
-        });
-    } catch (error) {
-        console.error('Error in /bitmart-data endpoint:', error.message);
-        res.status(500).json({
-            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
-            connected: false,
-            error: error.message
-        });
-    }
+        const historyOrders = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
+        console.log('[LOG] Se encontraron ' + historyOrders.orders.length + ' órdenes en el historial.');
+        
+        const ticker = { data: { last: currentMarketPrice } };
+        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
+
+        res.status(200).json({
+            message: 'BitMart data retrieved successfully.',
+            connected: true,
+            balance: balance,
+            openOrders: openOrders.orders,
+            ticker: ticker && ticker.data ? ticker.data : null,
+        });
+    } catch (error) {
+        console.error('Error in /bitmart-data endpoint:', error.message);
+        res.status(500).json({
+            message: 'Failed to retrieve BitMart data. Check server logs and API keys.',
+            connected: false,
+            error: error.message
+        });
+    }
 });
 
 app.get('/api/user/bot-config-and-state', async (req, res) => {
@@ -214,57 +214,48 @@ app.get('/api/user/bot-config-and-state', async (req, res) => {
 });
 
 app.post('/api/autobot/start', async (req, res) => {
-    try {
-        const { strategy, stopAtCycle, ...config } = req.body;
-        let botState = await Autobot.findOne({});
+    try {
+        const { long, short, options } = req.body; // Desestructura la configuración del frontend
+        let botState = await Autobot.findOne({});
 
-        if (!botState) {
-            botState = new Autobot({
-                lstate: 'STOPPED',
-                sstate: 'STOPPED',
-                lStateData: {},
-                sStateData: {},
-                config: {
-                    long: { enabled: false },
-                    short: { enabled: false },
-                    stopAtCycle: false
-                }
-            });
-        }
-        
-        botState.config = botState.config || {};
-        botState.config.long = botState.config.long || {};
-        botState.config.short = botState.config.short || {};
+        // Si el estado del bot no existe, crea uno nuevo.
+        if (!botState) {
+            botState = new Autobot({
+                lstate: 'STOPPED',
+                sstate: 'STOPPED',
+                lStateData: {},
+                sStateData: {},
+                config: {
+                    long: { enabled: false },
+                    short: { enabled: false },
+                    stopAtCycle: false
+                }
+            });
+        }
 
-        if (strategy === 'long') {
-            botState.config.long.enabled = true;
-            botState.config.short.enabled = false;
-            botState.lstate = 'RUNNING';
-            botState.sstate = 'STOPPED';
-        } else if (strategy === 'short') {
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = true;
-            botState.sstate = 'RUNNING';
-            botState.lstate = 'STOPPED';
-        }
+        // Actualiza el estado y la configuración del bot para ambas estrategias.
+        // El frontend envía los datos, el backend los guarda y los activa.
+        botState.config.long = { ...botState.config.long, ...long, enabled: true };
+        botState.config.short = { ...botState.config.short, ...short, enabled: true };
+        botState.lstate = 'RUNNING';
+        botState.sstate = 'RUNNING';
+        botState.config.stopAtCycle = options.stopAtCycleEnd;
 
-        botState.config.stopAtCycle = stopAtCycle;
-        
-        await botState.save();
-	console.log(`[BACKEND LOG]: Estado del bot guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
-        
-        // Emite un evento WebSocket para notificar al frontend del nuevo estado
+        await botState.save();
+
+        // Emite un evento WebSocket para notificar al frontend del nuevo estado.
         io.sockets.emit('bot-state-update', {
             lstate: botState.lstate,
             sstate: botState.sstate
         });
 
-        autobotLogic.log(`Estrategia Autobot ${strategy} activada.`, 'success');
-        res.json({ success: true, message: 'Autobot strategy started.' });
-    } catch (error) {
-        console.error('Failed to start Autobot strategy:', error);
-        res.status(500).json({ success: false, message: 'Failed to start Autobot strategy.' });
-    }
+        autobotLogic.log('Ambas estrategias de Autobot (Long y Short) activadas.', 'success');
+        res.json({ success: true, message: 'Autobot strategies started.' });
+
+    } catch (error) {
+        console.error('Failed to start Autobot strategies:', error);
+        res.status(500).json({ success: false, message: 'Failed to start Autobot strategies.' });
+    }
 });
 
 app.post('/api/autobot/stop', async (req, res) => {
