@@ -32,11 +32,11 @@ const server = http.createServer(app);
 const checkTimeSync = require('./services/check_time');
 
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    },
-    path: '/socket.io'
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    },
+    path: '/socket.io'
 });
 
 // Pasa la instancia de 'io' a la lógica del bot
@@ -49,13 +49,13 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/users', userRoutes);
 
 const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log('MongoDB Connected...');
-    } catch (err) {
-        console.error('MongoDB connection error:', err.message);
-        process.exit(1);
-    }
+    try {
+        await mongoose.connect(process.env.MONGO_URI);
+        console.log('MongoDB Connected...');
+    } catch (err) {
+        console.error('MongoDB connection error:', err.message);
+        process.exit(1);
+    }
 };
 
 connectDB();
@@ -63,10 +63,10 @@ connectDB();
 let currentMarketPrice = 'N/A';
 
 io.on('connection', (socket) => {
-    console.log(`User connected with ID: ${socket.id}`);
-    socket.on('disconnect', () => {
-        console.log(`User disconnected with ID: ${socket.id}`);
-    });
+    console.log(`User connected with ID: ${socket.id}`);
+    socket.on('disconnect', () => {
+        console.log(`User disconnected with ID: ${socket.id}`);
+    });
 });
 
 const BITMART_API_KEY = process.env.BITMART_API_KEY;
@@ -74,59 +74,89 @@ const BITMART_SECRET_KEY = process.env.BITMART_SECRET_KEY;
 const BITMART_API_MEMO = process.env.BITMART_API_MEMO || "GainBot";
 
 const bitmartCredentials = {
-    apiKey: BITMART_API_KEY,
-    secretKey: BITMART_SECRET_KEY,
-    memo: BITMART_API_MEMO
+    apiKey: BITMART_API_KEY,
+    secretKey: BITMART_SECRET_KEY,
+    memo: BITMART_API_MEMO
 };
 
 function setupWebSocket(io) {
-    const ws = new WebSocket(bitmartWsUrl);
+    const ws = new WebSocket(bitmartWsUrl);
 
-    ws.onopen = function() {
-        console.log("Conectado a la API de WebSocket de BitMart.");
-        const subscribeMessage = {
-            "op": "subscribe",
-            "args": ["spot/ticker:BTC_USDT"]
-        };
-        ws.send(JSON.stringify(subscribeMessage));
-    };
+    ws.onopen = function() {
+        console.log("Conectado a la API de WebSocket de BitMart.");
+        const subscribeMessage = {
+            "op": "subscribe",
+            "args": ["spot/ticker:BTC_USDT"]
+        };
+        ws.send(JSON.stringify(subscribeMessage));
+    };
 
-    ws.onmessage = function(event) {
-        try {
-            const data = JSON.parse(event.data);
-            if (data && data.data && data.data.length > 0 && data.data[0].symbol === 'BTC_USDT') {
-                currentMarketPrice = data.data[0].last_price;
-                io.emit('marketData', { price: currentMarketPrice });
-            }
-        } catch (error) {
-            console.error("Error al procesar el mensaje de WebSocket:", error);
-        }
-    };
+    ws.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            if (data && data.data && data.data.length > 0 && data.data[0].symbol === 'BTC_USDT') {
+                currentMarketPrice = data.data[0].last_price;
+                io.emit('marketData', { price: currentMarketPrice });
+            }
+        } catch (error) {
+            console.error("Error al procesar el mensaje de WebSocket:", error);
+        }
+    };
 
-    ws.onclose = function() {
-        console.log("Conexión de WebSocket a BitMart cerrada. Reconectando...");
-        setTimeout(() => setupWebSocket(io), 5000);
-    };
+    ws.onclose = function() {
+        console.log("Conexión de WebSocket a BitMart cerrada. Reconectando...");
+        setTimeout(() => setupWebSocket(io), 5000);
+    };
 
-    ws.onerror = function(err) {
-        console.error("Error en la conexión de WebSocket:", err);
-        ws.close();
-    };
+    ws.onerror = function(err) {
+        console.error("Error en la conexión de WebSocket:", err);
+        ws.close();
+    };
 }
 
 setupWebSocket(io);
 
+// Agregamos este modelo aquí para que el setInterval pueda usarlo
+const Autobot = require('./models/Autobot'); 
+
+// Este es el BUCLE PRINCIPAL para emitir el estado del bot cada 3 segundos
+setInterval(async () => {
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            io.sockets.emit('bot-state-update', {
+                lstate: botState.lstate,
+                sstate: botState.sstate,
+                // CLAVES CORREGIDAS PARA COINCIDIR CON EL FRONTEND
+                profit: (Math.random() * 1000).toFixed(2), 
+                lbalance: (Math.random() * 100000).toFixed(2),
+                sbalance: (Math.random() * 10).toFixed(4),
+                ltprice: (50000 + Math.random() * 5000).toFixed(2),
+                stprice: (50000 + Math.random() * 5000).toFixed(2),
+                lcycle: Math.floor(Math.random() * 10),
+                scycle: Math.floor(Math.random() * 10),
+                lcoverage: (Math.random() * 5).toFixed(2),
+                scoverage: (Math.random() * 5).toFixed(2),
+                lnorder: Math.floor(Math.random() * 20),
+                snorder: Math.floor(Math.random() * 20)
+            });
+        }
+    } catch (error) {
+        console.error('Error al emitir el estado del bot:', error);
+    }
+}, 3000); // 3 segundos
+
 (async function startBotCycle() {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
-            await autobotLogic.botCycle(currentMarketPrice);
-        }
-    } catch (error) {
-        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
-    } finally {
-        setTimeout(startBotCycle, 10000);
-    }
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
+            await autobotLogic.botCycle(currentMarketPrice);
+        }
+    } catch (error) {
+        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
+    } finally {
+        setTimeout(startBotCycle, 10000);
+    }
 })();
 
 // AÑADE ESTA SECCIÓN PARA USAR LOS ARCHIVOS DE RUTAS
@@ -136,11 +166,11 @@ app.use('/api/orders', ordersRoutes);
 
 // RUTAS EXISTENTES
 app.get('/api/ticker/:symbol', (req, res) => {
-    if (currentMarketPrice !== 'N/A') {
-        res.status(200).json({ last: currentMarketPrice });
-    } else {
-        res.status(404).json({ message: 'Ticker not found or invalid data', success: false });
-    }
+    if (currentMarketPrice !== 'N/A') {
+        res.status(200).json({ last: currentMarketPrice });
+    } else {
+        res.status(404).json({ message: 'Ticker not found or invalid data', success: false });
+    }
 });
 
 app.get('/api/bitmart-data', async (req, res) => {
@@ -182,37 +212,37 @@ app.get('/api/bitmart-data', async (req, res) => {
 });
 
 app.get('/api/user/bot-config-and-state', async (req, res) => {
-    try {
-        const autobotConfig = await Autobot.findOne({});
-        if (autobotConfig) {
-            res.status(200).json({
-                lstate: autobotConfig.lstate,
-                sstate: autobotConfig.sstate,
-                purchase: autobotConfig.config.long.purchaseUsdt,
-                price_var: autobotConfig.config.long.price_var,
-                size_var: autobotConfig.config.long.size_var,
-                trigger: autobotConfig.config.long.trigger,
-                stopAtCycle: autobotConfig.config.stopAtCycle,
-                short: {
-                    sellBtc: autobotConfig.config.short.sellBtc,
-                    price_var: autobotConfig.config.short.price_var,
-                    size_var: autobotConfig.config.short.size_var,
-                    trigger: autobotConfig.config.short.trigger,
-                },
-                long: {
-                    purchaseUsdt: autobotConfig.config.long.purchaseUsdt,
-                    price_var: autobotConfig.config.long.price_var,
-                    size_var: autobotConfig.config.long.size_var,
-                    trigger: autobotConfig.config.long.trigger,
-                },
-            });
-        } else {
-            res.status(200).json({ lstate: 'STOPPED', sstate: 'STOPPED' });
-        }
-    } catch (error) {
-        console.error('Error fetching bot state from DB:', error);
-        res.status(500).json({ message: 'Internal server error', success: false });
-    }
+    try {
+        const autobotConfig = await Autobot.findOne({});
+        if (autobotConfig) {
+            res.status(200).json({
+                lstate: autobotConfig.lstate,
+                sstate: autobotConfig.sstate,
+                purchase: autobotConfig.config.long.purchaseUsdt,
+                price_var: autobotConfig.config.long.price_var,
+                size_var: autobotConfig.config.long.size_var,
+                trigger: autobotConfig.config.long.trigger,
+                stopAtCycle: autobotConfig.config.stopAtCycle,
+                short: {
+                    sellBtc: autobotConfig.config.short.sellBtc,
+                    price_var: autobotConfig.config.short.price_var,
+                    size_var: autobotConfig.config.short.size_var,
+                    trigger: autobotConfig.config.short.trigger,
+                },
+                long: {
+                    purchaseUsdt: autobotConfig.config.long.purchaseUsdt,
+                    price_var: autobotConfig.config.long.price_var,
+                    size_var: autobotConfig.config.long.size_var,
+                    trigger: autobotConfig.config.long.trigger,
+                },
+            });
+        } else {
+            res.status(200).json({ lstate: 'STOPPED', sstate: 'STOPPED' });
+        }
+    } catch (error) {
+        console.error('Error fetching bot state from DB:', error);
+        res.status(500).json({ message: 'Internal server error', success: false });
+    }
 });
 
 app.post('/api/autobot/start', async (req, res) => {
@@ -242,23 +272,22 @@ app.post('/api/autobot/start', async (req, res) => {
 
         await botState.save();
 
-        // Este es el código que reemplaza el io.sockets.emit en ambas rutas
-io.sockets.emit('bot-state-update', {
-    lstate: botState.lstate,
-    sstate: botState.sstate,
-    // Valores de ejemplo para probar la actualización en el frontend
-    auprofit: Math.floor(Math.random() * 1000) / 100, // Ganancia (número aleatorio)
-    aulbalance: Math.floor(Math.random() * 100000) / 100, // Balance Long
-    ausbalance: Math.floor(Math.random() * 10) / 1000, // Balance Short
-    aultprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Compra Long
-    austprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Venta Short
-    aulcycle: Math.floor(Math.random() * 10), // Ciclo Long
-    auscycle: Math.floor(Math.random() * 10), // Ciclo Short
-    aulcoverage: Math.floor(Math.random() * 5), // Cobertura Long
-    auscoverage: Math.floor(Math.random() * 5), // Cobertura Short
-    aulnorder: Math.floor(Math.random() * 20), // Número de órdenes Long
-    ausnorder: Math.floor(Math.random() * 20) // Número de órdenes Short
-});
+        io.sockets.emit('bot-state-update', {
+            lstate: botState.lstate,
+            sstate: botState.sstate,
+            // CLAVES CORREGIDAS PARA COINCIDIR CON EL FRONTEND
+            profit: (Math.random() * 1000).toFixed(2), 
+            lbalance: (Math.random() * 100000).toFixed(2),
+            sbalance: (Math.random() * 10).toFixed(4),
+            ltprice: (50000 + Math.random() * 5000).toFixed(2),
+            stprice: (50000 + Math.random() * 5000).toFixed(2),
+            lcycle: Math.floor(Math.random() * 10),
+            scycle: Math.floor(Math.random() * 10),
+            lcoverage: (Math.random() * 5).toFixed(2),
+            scoverage: (Math.random() * 5).toFixed(2),
+            lnorder: Math.floor(Math.random() * 20),
+            snorder: Math.floor(Math.random() * 20)
+        });
 
         autobotLogic.log('Ambas estrategias de Autobot (Long y Short) activadas.', 'success');
         res.json({ success: true, message: 'Autobot strategies started.' });
@@ -270,51 +299,50 @@ io.sockets.emit('bot-state-update', {
 });
 
 app.post('/api/autobot/stop', async (req, res) => {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState) {
-            botState.lstate = 'STOPPED';
-            botState.sstate = 'STOPPED';
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = false;
-            await botState.save();
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            botState.lstate = 'STOPPED';
+            botState.sstate = 'STOPPED';
+            botState.config.long.enabled = false;
+            botState.config.short.enabled = false;
+            await botState.save();
 
-	    console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);            
+            console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`); 
 
-            // Este es el código que reemplaza el io.sockets.emit en ambas rutas
-io.sockets.emit('bot-state-update', {
-    lstate: botState.lstate,
-    sstate: botState.sstate,
-    // Valores de ejemplo para probar la actualización en el frontend
-    auprofit: Math.floor(Math.random() * 1000) / 100, // Ganancia (número aleatorio)
-    aulbalance: Math.floor(Math.random() * 100000) / 100, // Balance Long
-    ausbalance: Math.floor(Math.random() * 10) / 1000, // Balance Short
-    aultprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Compra Long
-    austprice: 50000 + Math.floor(Math.random() * 5000), // Precio de Venta Short
-    aulcycle: Math.floor(Math.random() * 10), // Ciclo Long
-    auscycle: Math.floor(Math.random() * 10), // Ciclo Short
-    aulcoverage: Math.floor(Math.random() * 5), // Cobertura Long
-    auscoverage: Math.floor(Math.random() * 5), // Cobertura Short
-    aulnorder: Math.floor(Math.random() * 20), // Número de órdenes Long
-    ausnorder: Math.floor(Math.random() * 20) // Número de órdenes Short
-});
+            io.sockets.emit('bot-state-update', {
+                lstate: botState.lstate,
+                sstate: botState.sstate,
+                // VALORES ESTÁTICOS AL DETENER EL BOT
+                profit: "0.00",
+                lbalance: "0.00",
+                sbalance: "0.00",
+                ltprice: "0.00",
+                stprice: "0.00",
+                lcycle: "0",
+                scycle: "0",
+                lcoverage: "0.00",
+                scoverage: "0.00",
+                lnorder: "0",
+                snorder: "0"
+            });
 
-            autobotLogic.log('Autobot strategy stopped by user.', 'info');
-            res.json({ success: true, message: 'Autobot strategy stopped.' });
-        } else {
-            res.status(404).json({ success: false, message: 'Bot state not found.' });
-        }
-    } catch (error) {
-        console.error('Failed to stop Autobot strategy:', error);
-        res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
-    }
+            autobotLogic.log('Autobot strategy stopped by user.', 'info');
+            res.json({ success: true, message: 'Autobot strategy stopped.' });
+        } else {
+            res.status(404).json({ success: false, message: 'Bot state not found.' });
+        }
+    } catch (error) {
+        console.error('Failed to stop Autobot strategy:', error);
+        res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
+    }
 });
 
 app.get('/', (req, res) => {
-    res.send('Backend is running!');
+    res.send('Backend is running!');
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    checkTimeSync();
+    console.log(`Server running on port ${PORT}`);
+    checkTimeSync();
 });
