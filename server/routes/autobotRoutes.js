@@ -5,7 +5,8 @@ const router = express.Router();
 const Autobot = require('../models/Autobot');
 const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
-const authMiddleware = require('../middleware/authMiddleware'); // Asegúrate de que este archivo exista
+const authMiddleware = require('../middleware/authMiddleware');
+const { getTickerPrice } = require('../utils/bitmartApi');
 
 // Middleware para proteger todas las rutas del router
 router.use(authMiddleware);
@@ -75,40 +76,40 @@ router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
 
-        // **PASO 1: Simular el precio actual del mercado**
-        // Este valor debe ser el precio real de BitMart cuando lo implementemos.
-        const currentPrice = 100000; 
+        // **PASO CLAVE: OBTENEMOS EL PRECIO REAL DE BITMART**
+        const currentPrice = await getTickerPrice(config.symbol);
         
-        // **PASO 2: Llamar a la función de cálculo**
-        // Ahora pasamos la configuración y el precio actual a la función.
+        // Si no se pudo obtener el precio, devolvemos un error
+        if (!currentPrice) {
+            return res.status(503).json({ success: false, message: 'Failed to get current price from BitMart API.' });
+        }
+        
+        // Ahora usamos el precio real para los cálculos
         const initialState = calculateInitialState(config, currentPrice);
 
         let botState = await Autobot.findOne({});
         
         if (!botState) {
-            // Si el documento no existe, creamos uno nuevo con los valores iniciales calculados
             botState = new Autobot({
-                lStateData: initialState,
-                sStateData: {}, // Por ahora está vacío, pero se llenará después
+                lstate: 'STOPPED',
+                sstate: 'STOPPED',
+                lStateData: {},
+                sStateData: {},
                 config: config,
                 lbalance: initialState.lbalance,
                 sbalance: initialState.sbalance,
-                lstate: 'STOPPED',
-                sstate: 'STOPPED',
-                profit: 0
+                lcoverage: initialState.lcoverage,
+                lnorder: initialState.lnorder
             });
         } else {
-            // Si ya existe un documento, lo actualizamos
             botState.config = config;
 
-            // **PASO 3: Actualizar los campos calculados si el bot está detenido**
             if (botState.lstate === 'STOPPED') {
                 botState.lbalance = initialState.lbalance;
                 botState.sbalance = initialState.sbalance;
-                botState.lStateData.lcoverage = initialState.lcoverage;
-                botState.lStateData.lnorder = initialState.lnorder;
+                botState.lcoverage = initialState.lcoverage;
+                botState.lnorder = initialState.lnorder;
                 
-                // Estos valores se inicializan al inicio de un ciclo de trading
                 botState.lStateData.ltprice = 0;
                 botState.lStateData.lcycle = 0;
             }
