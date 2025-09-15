@@ -19,7 +19,6 @@ const { calculateInitialState } = require('./autobotCalculations');
 const WebSocket = require('ws');
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
-// Importa los archivos de rutas
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const ordersRoutes = require('./routes/ordersRoutes');
@@ -40,7 +39,6 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
-// Pasa la instancia de 'io' a la lógica del bot
 autobotLogic.setIo(io);
 
 app.use(cors());
@@ -82,16 +80,11 @@ const bitmartCredentials = {
 
 function setupWebSocket(io) {
     const ws = new WebSocket(bitmartWsUrl);
-
     ws.onopen = function() {
         console.log("Conectado a la API de WebSocket de BitMart.");
-        const subscribeMessage = {
-            "op": "subscribe",
-            "args": ["spot/ticker:BTC_USDT"]
-        };
+        const subscribeMessage = { "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] };
         ws.send(JSON.stringify(subscribeMessage));
     };
-
     ws.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
@@ -103,12 +96,10 @@ function setupWebSocket(io) {
             console.error("Error al procesar el mensaje de WebSocket:", error);
         }
     };
-
     ws.onclose = function() {
         console.log("Conexión de WebSocket a BitMart cerrada. Reconectando...");
         setTimeout(() => setupWebSocket(io), 5000);
     };
-
     ws.onerror = function(err) {
         console.error("Error en la conexión de WebSocket:", err);
         ws.close();
@@ -122,16 +113,12 @@ setInterval(async () => {
     try {
         const botState = await Autobot.findOne({});
         if (botState) {
-            // Lee los valores directamente de la base de datos
-            const lbalance = botState.lStateData.lbalance || 0;
-            const sbalance = botState.sStateData.sbalance || 0;
-
             io.sockets.emit('bot-state-update', {
                 lstate: botState.lstate,
                 sstate: botState.sstate,
-                profit: botState.profit || 0, // Suponiendo que 'profit' también se guarda
-                lbalance: lbalance,
-                sbalance: sbalance,
+                profit: botState.profit || 0,
+                lbalance: botState.lbalance || 0,
+                sbalance: botState.sbalance || 0,
                 ltprice: botState.lStateData.ltprice || 0,
                 stprice: botState.sStateData.stprice || 0,
                 lcycle: botState.lStateData.lcycle || 0,
@@ -145,7 +132,7 @@ setInterval(async () => {
     } catch (error) {
         console.error('Error al emitir el estado del bot:', error);
     }
-}, 3000); // 3 segundos
+}, 3000);
 
 (async function startBotCycle() {
     try {
@@ -160,12 +147,10 @@ setInterval(async () => {
     }
 })();
 
-// AÑADE ESTA SECCIÓN PARA USAR LOS ARCHIVOS DE RUTAS
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/orders', ordersRoutes);
 
-// RUTAS EXISTENTES
 app.get('/api/ticker/:symbol', (req, res) => {
     if (currentMarketPrice !== 'N/A') {
         res.status(200).json({ last: currentMarketPrice });
@@ -177,30 +162,22 @@ app.get('/api/ticker/:symbol', (req, res) => {
 app.get('/api/bitmart-data', async (req, res) => {
     try {
         const isValid = await bitmartService.validateApiKeys();
-        console.log('[LOG] Validación de API Keys de BitMart:', isValid);
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
         }
         
         const balance = await bitmartService.getBalance();
-        console.log('[LOG] Balance obtenido.');
-
         const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
-        console.log('[LOG] Se encontraron ' + (openOrders?.orders?.length || 0) + ' órdenes abiertas.');
-
         const historyOrdersResponse = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
-        const historyOrders = historyOrdersResponse && historyOrdersResponse.orders ? historyOrdersResponse.orders : [];
-        console.log('[LOG] Se encontraron ' + historyOrders.length + ' órdenes en el historial.');
-        
+        const historyOrders = historyOrdersResponse?.orders || [];
         const ticker = { data: { last: currentMarketPrice } };
-        console.log('[LOG] Precio de mercado actual:', currentMarketPrice);
 
         res.status(200).json({
             message: 'BitMart data retrieved successfully.',
             connected: true,
             balance: balance,
             openOrders: openOrders?.orders || [],
-            historyOrders: historyOrdersResponse?.orders || [],
+            historyOrders: historyOrders,
             ticker: ticker && ticker.data ? ticker.data : null,
         });
     } catch (error) {
@@ -251,29 +228,32 @@ app.post('/api/autobot/start', async (req, res) => {
     try {
         const { long, short, options } = req.body;
         let botState = await Autobot.findOne({});
-
+        
         if (!botState) {
+            // Si el botState no existe, lo creamos
             botState = new Autobot({
                 lstate: 'STOPPED',
                 sstate: 'STOPPED',
-                lStateData: {},
-                sStateData: {},
                 config: {
-                    long: { enabled: false },
-                    short: { enabled: false },
-                    stopAtCycle: false
-                }
+                    long: { ...long, enabled: true },
+                    short: { ...short, enabled: true },
+                    stopAtCycle: options.stopAtCycleEnd
+                },
+                // Aquí se inicializa el lbalance con el valor del Amount (USDT)
+                lbalance: long.purchaseUsdt, 
+                sbalance: 0,
+                profit: 0
             });
+        } else {
+            // Si el botState ya existe, solo actualizamos los campos
+            botState.config.long = { ...botState.config.long, ...long, enabled: true };
+            botState.config.short = { ...botState.config.short, ...short, enabled: true };
+            botState.config.stopAtCycle = options.stopAtCycleEnd;
+            botState.lstate = 'RUNNING';
+            botState.sstate = 'RUNNING';
+            // Se inicializa el lbalance con el valor de la configuración
+            botState.lbalance = botState.config.long.purchaseUsdt;
         }
-        
-        const initialLBalance = parseFloat(long.purchaseUsdt);
-        
-        botState.config.long = { ...botState.config.long, ...long, enabled: true };
-        botState.config.short = { ...botState.config.short, ...short, enabled: true };
-        botState.lstate = 'RUNNING';
-        botState.sstate = 'RUNNING';
-        botState.config.stopAtCycle = options.stopAtCycleEnd;
-        botState.lStateData.lbalance = initialLBalance;
 
         await botState.save();
 
@@ -281,8 +261,8 @@ app.post('/api/autobot/start', async (req, res) => {
             lstate: botState.lstate,
             sstate: botState.sstate,
             profit: botState.profit || 0,
-            lbalance: initialLBalance,
-            sbalance: botState.sStateData.sbalance || 0,
+            lbalance: botState.lbalance || 0,
+            sbalance: botState.sbalance || 0,
             ltprice: botState.lStateData.ltprice || 0,
             stprice: botState.sStateData.stprice || 0,
             lcycle: botState.lStateData.lcycle || 0,
@@ -318,8 +298,8 @@ app.post('/api/autobot/stop', async (req, res) => {
                 lstate: botState.lstate,
                 sstate: botState.sstate,
                 profit: botState.profit || 0,
-                lbalance: botState.lStateData.lbalance || 0,
-                sbalance: botState.sStateData.sbalance || 0,
+                lbalance: botState.lbalance || 0,
+                sbalance: botState.sbalance || 0,
                 ltprice: botState.lStateData.ltprice || 0,
                 stprice: botState.sStateData.stprice || 0,
                 lcycle: botState.lStateData.lcycle || 0,
@@ -348,32 +328,32 @@ app.post('/api/autobot/update-config', async (req, res) => {
         let botState = await Autobot.findOne({});
         
         if (!botState) {
+            // Si el botState no existe, lo creamos y guardamos la configuración
             botState = new Autobot({
                 lstate: 'STOPPED',
                 sstate: 'STOPPED',
                 lStateData: {},
                 sStateData: {},
-                config: config
+                config: config,
+                // NO se inicializa el lbalance aquí
+                lbalance: 0,
+                sbalance: 0
             });
         } else {
+            // Si el botState ya existe, solo actualizamos la configuración
             botState.config = config;
         }
 
-        const newParams = calculateInitialState(config);
-        botState.lStateData = { lbalance: newParams.lbalance };
-        botState.sStateData = { sbalance: newParams.sbalance };
-
         await botState.save();
 
-        // CORRECTO: Leemos el estado completo después de guardar y lo emitimos
         const updatedBotState = await Autobot.findOne({});
 
         io.sockets.emit('bot-state-update', {
             lstate: updatedBotState.lstate,
             sstate: updatedBotState.sstate,
             profit: updatedBotState.profit || 0,
-            lbalance: updatedBotState.lStateData.lbalance || 0,
-            sbalance: updatedBotState.sStateData.sbalance || 0,
+            lbalance: updatedBotState.lbalance || 0, // Muestra el lbalance actual (que será 0 si no se ha iniciado)
+            sbalance: updatedBotState.sbalance || 0,
             ltprice: updatedBotState.lStateData.ltprice || 0,
             stprice: updatedBotState.sStateData.stprice || 0,
             lcycle: updatedBotState.lStateData.lcycle || 0,
