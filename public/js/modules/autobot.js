@@ -8,6 +8,9 @@ import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '
 
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
+// El símbolo ya está definido en main.js, pero lo repetimos para claridad
+// const TRADE_SYMBOL_TV = 'BITMART:BTCUSDT'; 
+// const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
 // IDs de los campos de configuración que necesitan ser gestionados
 const configInputIds = [
@@ -62,10 +65,16 @@ function updateBotUI(state) {
         sstateElement.classList.add(statusColors[state.sstate] || 'text-red-400');
     }
 
+    // Actualiza los elementos con los nuevos datos
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
         if (element) {
-            element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
+            // Verifica si el valor es un número para redondear
+            if (typeof state[dataKey] === 'number') {
+                element.textContent = state[dataKey].toFixed(2);
+            } else {
+                element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
+            }
         }
     }
     
@@ -89,6 +98,8 @@ function updateBotUI(state) {
  */
 function getBotConfiguration() {
     const config = {
+        // **CORRECCIÓN CLAVE:** Ahora enviamos el símbolo al backend
+        symbol: TRADE_SYMBOL_BITMART, 
         long: {
             amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
             purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
@@ -115,7 +126,7 @@ function getBotConfiguration() {
  */
 async function sendConfigToBackend() {
     const config = getBotConfiguration();
-    const token = localStorage.getItem('authToken'); // **CORREGIDO: Ahora usa 'authToken'**
+    const token = localStorage.getItem('authToken'); 
 
     if (!token) {
         console.error('Error: Token de autenticación no encontrado. Por favor, inicie sesión.');
@@ -127,7 +138,7 @@ async function sendConfigToBackend() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // Usa la variable token corregida
+                'Authorization': `Bearer ${token}` 
             },
             body: JSON.stringify({ config }),
         });
@@ -138,7 +149,6 @@ async function sendConfigToBackend() {
             console.error('Failed to update config on backend:', data.message);
         } else {
             console.log('Config updated successfully:', data.message);
-            // Esto es solo para la UI. El backend también necesita la corrección.
             const lstateElement = document.getElementById('aubot-lstate');
             if (lstateElement && lstateElement.textContent === 'STOPPED') {
                 document.getElementById('aulbalance').textContent = config.long.amountUsdt.toFixed(2);
@@ -186,6 +196,8 @@ export function initializeAutobotView() {
             let body = {};
             if (!isRunning) {
                 // Obtenemos la última configuración antes de iniciar el bot
+                // Ya no necesitamos enviar el body, ya que la ruta /start/stop no lo necesita
+                // Pero lo dejamos si lo vas a usar en el futuro
                 body = getBotConfiguration();
                 console.log('[FRONTEND LOG]: Enviando configuración al iniciar:', body);
             }
@@ -194,7 +206,7 @@ export function initializeAutobotView() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}` // AÑADIDO: Autenticación
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
                     },
                     body: JSON.stringify(body),
                 });
@@ -210,7 +222,7 @@ export function initializeAutobotView() {
 
     if (auresetBtn) {
         auresetBtn.addEventListener('click', () => {
-            // Lógica para el botón reset (debe estar en el módulo bot.js)
+            // Lógica para el botón reset
         });
     }
     
