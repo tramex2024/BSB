@@ -32,6 +32,8 @@ const configInputIds = [
     'au-stop-at-cycle-end',
 ];
 
+let allOrders = [];
+
 /**
  * Recopila todos los datos de los campos de configuración.
  * @returns {object} Un objeto con la configuración del bot.
@@ -132,12 +134,109 @@ function setupConfigListeners() {
 }
 
 /**
+ * Renderiza la lista de órdenes en el DOM.
+ * @param {Array} orders - La lista de órdenes a mostrar.
+ */
+function renderOrders(orders) {
+    const orderListEl = document.getElementById('au-order-list');
+    orderListEl.innerHTML = ''; // Limpia el contenido actual
+
+    if (orders.length === 0) {
+        orderListEl.innerHTML = '<p class="text-gray-400">No hay órdenes para mostrar.</p>';
+        return;
+    }
+
+    orders.forEach(order => {
+        const orderEl = document.createElement('div');
+        orderEl.className = 'flex justify-between items-center text-xs p-2 rounded bg-gray-700';
+        const orderSideClass = order.side === 'buy' ? 'text-green-400' : 'text-red-400';
+        
+        orderEl.innerHTML = `
+            <div class="flex-1">${order.symbol}</div>
+            <div class="flex-1 ${orderSideClass}">${order.side.toUpperCase()}</div>
+            <div class="flex-1">${order.order_amount}</div>
+            <div class="flex-1">${order.price}</div>
+            <div class="flex-1">${new Date(order.create_time).toLocaleTimeString()}</div>
+        `;
+        orderListEl.appendChild(orderEl);
+    });
+}
+
+/**
+ * Filtra las órdenes basándose en el estado y las renderiza.
+ * @param {string} filter - El filtro ('opened', 'filled', 'cancelled', 'all').
+ */
+function filterAndRenderOrders(filter) {
+    let filteredOrders = [];
+    if (filter === 'all') {
+        filteredOrders = allOrders;
+    } else if (filter === 'opened') {
+        filteredOrders = allOrders.filter(order => order.status === 'open');
+    } else if (filter === 'filled') {
+        filteredOrders = allOrders.filter(order => order.status === 'filled');
+    } else if (filter === 'cancelled') {
+        filteredOrders = allOrders.filter(order => order.status === 'cancelled');
+    }
+    renderOrders(filteredOrders);
+}
+
+/**
+ * Configura los listeners para las pestañas de órdenes.
+ */
+function setupOrderTabs() {
+    const tabs = document.querySelectorAll('.autobot-tabs button');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', (event) => {
+            tabs.forEach(t => t.classList.remove('border-green-500'));
+            event.target.classList.add('border-green-500');
+            const filter = event.target.id.replace('tab-', '');
+            filterAndRenderOrders(filter);
+        });
+    });
+}
+
+/**
+ * Obtiene las órdenes del backend y las guarda.
+ */
+async function fetchOrders() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/bitmart-data`);
+        const data = await response.json();
+        
+        if (data.success === false) {
+            console.error('Error al obtener datos de BitMart:', data.message);
+            const orderListEl = document.getElementById('au-order-list');
+            orderListEl.innerHTML = '<p class="text-red-400">Error: No se pudieron cargar las órdenes. <br>Revisa tus claves API.</p>';
+            return;
+        }
+
+        // Combina órdenes abiertas y del historial
+        const openOrders = data.openOrders.map(order => ({ ...order, status: 'open' }));
+        const historyOrders = data.historyOrders.map(order => {
+            let status = 'filled'; // Asumimos 'filled' por defecto
+            if (order.state === '9' || order.state === '4') { // Ejemplo de BitMart, puede variar
+                status = 'cancelled';
+            }
+            return { ...order, status: status };
+        });
+
+        allOrders = [...openOrders, ...historyOrders];
+        renderOrders(allOrders); // Renderiza todas las órdenes por defecto
+
+    } catch (error) {
+        console.error('Error al obtener las órdenes del backend:', error);
+        const orderListEl = document.getElementById('au-order-list');
+        orderListEl.innerHTML = '<p class="text-red-400">Error de conexión. No se pudieron cargar las órdenes.</p>';
+    }
+}
+
+/**
  * Inicializa la vista del Autobot y configura los listeners.
  */
 export function initializeAutobotView() {
     const chartContainer = document.getElementById('au-tvchart');
     if (chartContainer) {
-        initializeChart('au-tvchart', 'BTCUSDT'); // <-- CORRECCIÓN: ahora pasamos el ID como string
+        initializeChart('au-tvchart', 'BTCUSDT');
     }
 
     // Configura los listeners para los inputs
@@ -178,4 +277,8 @@ export function initializeAutobotView() {
 
     // Envía la configuración inicial al cargar la página
     sendConfigToBackend();
+
+    // Llama a las funciones para manejar las órdenes
+    setupOrderTabs();
+    fetchOrders();
 }
