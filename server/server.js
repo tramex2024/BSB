@@ -343,6 +343,7 @@ app.post('/api/autobot/stop', async (req, res) => {
 app.post('/api/autobot/update-config', async (req, res) => {
     try {
         const { config } = req.body;
+        console.log('[BACKEND LOG]: Valor de purchaseUsdt recibido:', config.long.purchaseUsdt);
         let botState = await Autobot.findOne({});
 
         if (!botState) {

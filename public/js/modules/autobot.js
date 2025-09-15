@@ -121,6 +121,10 @@ function getBotConfiguration() {
  */
 async function sendConfigToBackend() {
     const config = getBotConfiguration();
+    
+    // AGREGA ESTA LÍNEA para ver qué valor se captura del frontend
+    console.log('[FRONTEND LOG]: Valor de purchaseUsdt antes de enviar:', config.long.purchaseUsdt);
+
     try {
         const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
             method: 'POST',
