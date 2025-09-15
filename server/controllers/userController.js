@@ -1,7 +1,8 @@
 // server/controllers/userController.js
 
 const User = require('../models/User');
-const BotState = require('../models/BotState');
+const Autobot = require('../models/Autobot');
+//const BotState = require('../models/BotState');
 const jwt = require('jsonwebtoken');
 
 const { encrypt, decrypt } = require('../utils/encryption');
@@ -214,5 +215,49 @@ exports.getTickerPrice = async (req, res) => {
     } catch (error) {
         console.error(`Error fetching ticker data for ${symbol}:`, error.message);
         res.status(500).json({ message: 'Error fetching ticker data from BitMart.', error: error.message });
+    }
+};
+
+// --- NUEVA FUNCIÓN CONTROLADORA: Actualizar Configuración del Bot ---
+exports.updateBotConfig = async (req, res) => {
+    const userId = req.user.id;
+    const { config } = req.body;
+
+    if (!config) {
+        return res.status(400).json({ success: false, message: 'Configuration data is missing.' });
+    }
+
+    try {
+        // Busca el documento del bot para el usuario, o crea uno nuevo si no existe.
+        let bot = await Autobot.findOne({ userId });
+
+        if (!bot) {
+            bot = new Autobot({ 
+                userId,
+                config: config,
+                // Al crear, el balance inicial es el amount total
+                lbalance: config.long.amountUsdt || 0 
+            });
+        } else {
+            // Actualiza la configuración
+            bot.config = config;
+            // Si el bot está detenido, resetea el lbalance al nuevo amount
+            if (bot.lstate === 'STOPPED') {
+                bot.lbalance = config.long.amountUsdt || bot.lbalance;
+            }
+        }
+
+        await bot.save();
+        
+        // Opcional: Emitir actualización por WebSocket si es necesario
+        // if (autobotLogic.ioInstance) {
+        //     autobotLogic.ioInstance.to(userId).emit('bot-state-update', bot.toObject());
+        // }
+
+        res.status(200).json({ success: true, message: 'Bot configuration updated successfully.' });
+
+    } catch (error) {
+        console.error('Error updating bot configuration:', error);
+        res.status(500).json({ success: false, message: 'Error updating configuration on server.' });
     }
 };

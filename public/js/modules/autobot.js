@@ -90,12 +90,14 @@ function updateBotUI(state) {
 function getBotConfiguration() {
     const config = {
         long: {
+            amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
             purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
             price_var: parseFloat(document.getElementById('audecrement').value),
             size_var: parseFloat(document.getElementById('auincrement').value),
             trigger: parseFloat(document.getElementById('autrigger').value),
         },
         short: {
+            amountBtc: parseFloat(document.getElementById('auamount-btc').value),
             sellBtc: parseFloat(document.getElementById('aupurchase-btc').value),
             price_var: parseFloat(document.getElementById('audecrement').value),
             size_var: parseFloat(document.getElementById('auincrement').value),
@@ -115,15 +117,28 @@ async function sendConfigToBackend() {
     const config = getBotConfiguration();
 
     try {
-        const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
+        // 👇 AJUSTE DE RUTA
+        const response = await fetch(`${BACKEND_URL}/api/user/autobot/update-config`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                // IMPORTANTE: Debes enviar el token de autenticación
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
             body: JSON.stringify({ config }),
         });
+        
+        const data = await response.json();
+
         if (!response.ok) {
-            console.error('Failed to update config on backend');
+            console.error('Failed to update config on backend:', data.message);
+        } else {
+            console.log('Config updated successfully:', data.message);
+            // Actualiza el LBalance en la UI inmediatamente si el bot está detenido
+            const lstateElement = document.getElementById('aubot-lstate');
+            if (lstateElement && lstateElement.textContent === 'STOPPED') {
+                document.getElementById('aulbalance').textContent = config.long.amountUsdt.toFixed(2);
+            }
         }
     } catch (error) {
         console.error('Error sending config to backend:', error);

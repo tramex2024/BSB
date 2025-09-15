@@ -56,4 +56,7 @@ router.post('/toggle-bot', bitmartAuthMiddleware, userController.toggleBotState)
 // Esta ruta no necesita 'bitmartAuthMiddleware' porque es una API pública.
 router.get('/bitmart/ticker', userController.getTickerPrice);
 
+// --- NUEVA RUTA para actualizar la configuración del Autobot ---
+router.post('/autobot/update-config', userController.updateBotConfig);
+
 module.exports = router;
