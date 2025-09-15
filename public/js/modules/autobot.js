@@ -4,11 +4,10 @@ import { getBalances } from './balance.js';
 import { initializeChart } from './chart.js';
 import { checkBitMartConnectionAndData } from './network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
-import { loadBotConfigAndState, toggleBotState, resetBot } from './bot.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
 
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
-const BACKEND_URL = 'https://bsb-ppex.onrender.com'; // Definimos el BACKEND_URL aquí para consistencia
+const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 
 // IDs de los campos de configuración que necesitan ser gestionados
 const configInputIds = [
@@ -22,9 +21,8 @@ const configInputIds = [
     'au-stop-at-cycle-end',
 ];
 
-// --- NUEVA FUNCIÓN PARA GESTIONAR EL ESTADO Y LOS CÁLCULOS EN LA UI ---
+// --- FUNCIONES PARA GESTIONAR EL ESTADO Y LOS CÁLCULOS EN LA UI ---
 function updateBotUI(state) {
-    // Definimos los colores para cada estado
     const statusColors = {
         RUNNING: 'text-green-400',
         STOPPED: 'text-red-400',
@@ -33,13 +31,11 @@ function updateBotUI(state) {
         NO_COVERAGE: 'text-purple-400'
     };
 
-    // Obtenemos los elementos de la interfaz de usuario por su ID
     const lstateElement = document.getElementById('aubot-lstate');
     const sstateElement = document.getElementById('aubot-sstate');
     const startStopButton = document.getElementById('austart-btn');
     const autobotSettings = document.getElementById('autobot-settings');
     
-    // Lista de todos los elementos a actualizar
     const elementsToUpdate = {
         auprofit: 'profit',
         aulbalance: 'lbalance',
@@ -54,7 +50,6 @@ function updateBotUI(state) {
         ausnorder: 'snorder'
     };
 
-    // Actualiza el LState y SState
     if (lstateElement) {
         lstateElement.textContent = state.lstate;
         lstateElement.className = '';
@@ -67,16 +62,13 @@ function updateBotUI(state) {
         sstateElement.classList.add(statusColors[state.sstate] || 'text-red-400');
     }
 
-    // Actualiza los demás elementos dinámicos
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
         if (element) {
-            // Usamos un valor por defecto si el dato no existe
             element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
         }
     }
     
-    // Lógica para el botón START/STOP y la habilitación de la configuración
     const isActive = state.lstate === 'RUNNING' || state.sstate === 'RUNNING';
     
     if (autobotSettings) {
@@ -121,9 +113,6 @@ function getBotConfiguration() {
  */
 async function sendConfigToBackend() {
     const config = getBotConfiguration();
-    
-    // AGREGA ESTA LÍNEA para ver qué valor se captura del frontend
-    console.log('[FRONTEND LOG]: Valor de purchaseUsdt antes de enviar:', config.long.purchaseUsdt);
 
     try {
         const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
@@ -155,33 +144,56 @@ function setupConfigListeners() {
     });
 }
 
+// --- FUNCIÓN DE INICIALIZACIÓN ---
 export function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
     
     let currentTab = 'opened';
     
-    // Obtiene los elementos del DOM
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
     
-    // Llama a las funciones existentes para el gráfico y la conexión
     checkBitMartConnectionAndData();
     window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
 
-    // NUEVO: Configura los listeners para los inputs de configuración
     setupConfigListeners();
 
-    // Configura el listener del botón START/STOP
+    // Lógica para el botón START/STOP
     if (austartBtn) {
-        austartBtn.addEventListener('click', () => {
-            toggleBotState();
+        austartBtn.addEventListener('click', async () => {
+            const isRunning = austartBtn.textContent === 'STOP';
+            let endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
+            let body = {};
+            if (!isRunning) {
+                // Obtenemos la última configuración antes de iniciar el bot
+                body = getBotConfiguration();
+                console.log('[FRONTEND LOG]: Enviando configuración al iniciar:', body);
+            }
+            try {
+                const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(body),
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    console.error(`Error al ${isRunning ? 'detener' : 'iniciar'} el bot:`, data.message);
+                }
+            } catch (error) {
+                console.error(`Error de red al ${isRunning ? 'detener' : 'iniciar'} el bot:`, error);
+            }
         });
     }
 
-    if (auresetBtn) auresetBtn.addEventListener('click', () => resetBot('long'));
+    if (auresetBtn) {
+        auresetBtn.addEventListener('click', () => {
+            // Lógica para el botón reset (debe estar en el módulo bot.js)
+        });
+    }
     
-    // Lógica para las pestañas de órdenes (ya existente)
     auorderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
@@ -195,14 +207,12 @@ export function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     fetchOrders(currentTab, auOrderList);
     
-    // Lógica de Socket.IO para recibir el estado del bot
     const socket = io(SOCKET_SERVER_URL);
     
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
     });
 
-    // Llama a las funciones existentes para los balances y órdenes
     getBalances();
     intervals.autobot = setInterval(getBalances, 10000);
     intervals.orders = setInterval(() => {
@@ -212,6 +222,5 @@ export function initializeAutobotView() {
         }
     }, 15000);
 
-    // NUEVO: Envía la configuración inicial al cargar la página
     sendConfigToBackend();
 }
