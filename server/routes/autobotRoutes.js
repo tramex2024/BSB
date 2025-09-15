@@ -150,7 +150,7 @@ router.post('/stop', async (req, res) => {
 
 
 
-/ Ruta para actualizar la configuración del bot
+// Ruta para actualizar la configuración del bot
 
 router.post('/update-config', auth, async (req, res) => {
 
