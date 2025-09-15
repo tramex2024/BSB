@@ -7,7 +7,7 @@ const cors = require('cors');
 const bitmartService = require('./services/bitmartService');
 const spotService = require('./services/bitmartSpot');
 const Order = require('./models/Order');
-const Autobot = require('./models/Autobot'); // <-- DECLARACIÓN ÚNICA
+const Autobot = require('./models/Autobot');
 const http = require('http');
 const { Server } = require("socket.io");
 const autobotLogic = require('./autobotLogic.js');
@@ -186,7 +186,7 @@ app.get('/api/bitmart-data', async (req, res) => {
         console.log('[LOG] Balance obtenido.');
 
         const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
-        console.log('[LOG] Se encontraron ' + openOrders.orders.length + ' órdenes abiertas.');
+        console.log('[LOG] Se encontraron ' + (openOrders?.orders?.length || 0) + ' órdenes abiertas.');
 
         const historyOrdersResponse = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
         const historyOrders = historyOrdersResponse && historyOrdersResponse.orders ? historyOrdersResponse.orders : [];
@@ -199,7 +199,8 @@ app.get('/api/bitmart-data', async (req, res) => {
             message: 'BitMart data retrieved successfully.',
             connected: true,
             balance: balance,
-            openOrders: openOrders.orders,
+            openOrders: openOrders?.orders || [],
+            historyOrders: historyOrdersResponse?.orders || [],
             ticker: ticker && ticker.data ? ticker.data : null,
         });
     } catch (error) {
@@ -264,30 +265,32 @@ app.post('/api/autobot/start', async (req, res) => {
                 }
             });
         }
-
+        
+        const initialLBalance = parseFloat(long.purchaseUsdt);
+        
         botState.config.long = { ...botState.config.long, ...long, enabled: true };
         botState.config.short = { ...botState.config.short, ...short, enabled: true };
         botState.lstate = 'RUNNING';
         botState.sstate = 'RUNNING';
         botState.config.stopAtCycle = options.stopAtCycleEnd;
+        botState.lStateData.lbalance = initialLBalance;
 
         await botState.save();
 
         io.sockets.emit('bot-state-update', {
             lstate: botState.lstate,
             sstate: botState.sstate,
-            // CLAVES CORREGIDAS PARA COINCIDIR CON EL FRONTEND
-            profit: (Math.random() * 1000).toFixed(2), 
-            lbalance: (Math.random() * 100000).toFixed(2),
-            sbalance: (Math.random() * 10).toFixed(4),
-            ltprice: (50000 + Math.random() * 5000).toFixed(2),
-            stprice: (50000 + Math.random() * 5000).toFixed(2),
-            lcycle: Math.floor(Math.random() * 10),
-            scycle: Math.floor(Math.random() * 10),
-            lcoverage: (Math.random() * 5).toFixed(2),
-            scoverage: (Math.random() * 5).toFixed(2),
-            lnorder: Math.floor(Math.random() * 20),
-            snorder: Math.floor(Math.random() * 20)
+            profit: botState.profit || 0,
+            lbalance: initialLBalance,
+            sbalance: botState.sStateData.sbalance || 0,
+            ltprice: botState.lStateData.ltprice || 0,
+            stprice: botState.sStateData.stprice || 0,
+            lcycle: botState.lStateData.lcycle || 0,
+            scycle: botState.sStateData.scycle || 0,
+            lcoverage: botState.lStateData.lcoverage || 0,
+            scoverage: botState.sStateData.scoverage || 0,
+            lnorder: botState.lStateData.lnorder || 0,
+            snorder: botState.sStateData.snorder || 0
         });
 
         autobotLogic.log('Ambas estrategias de Autobot (Long y Short) activadas.', 'success');
@@ -314,18 +317,17 @@ app.post('/api/autobot/stop', async (req, res) => {
             io.sockets.emit('bot-state-update', {
                 lstate: botState.lstate,
                 sstate: botState.sstate,
-                // VALORES ESTÁTICOS AL DETENER EL BOT
-                profit: "0.00",
-                lbalance: "0.00",
-                sbalance: "0.00",
-                ltprice: "0.00",
-                stprice: "0.00",
-                lcycle: "0",
-                scycle: "0",
-                lcoverage: "0.00",
-                scoverage: "0.00",
-                lnorder: "0",
-                snorder: "0"
+                profit: botState.profit || 0,
+                lbalance: botState.lStateData.lbalance || 0,
+                sbalance: botState.sStateData.sbalance || 0,
+                ltprice: botState.lStateData.ltprice || 0,
+                stprice: botState.sStateData.stprice || 0,
+                lcycle: botState.lStateData.lcycle || 0,
+                scycle: botState.sStateData.scycle || 0,
+                lcoverage: botState.lStateData.lcoverage || 0,
+                scoverage: botState.sStateData.scoverage || 0,
+                lnorder: botState.lStateData.lnorder || 0,
+                snorder: botState.sStateData.snorder || 0
             });
 
             autobotLogic.log('Autobot strategy stopped by user.', 'info');
@@ -339,15 +341,13 @@ app.post('/api/autobot/stop', async (req, res) => {
     }
 });
 
-// Nuevo endpoint para actualizar la configuración en tiempo real
 app.post('/api/autobot/update-config', async (req, res) => {
     try {
         const { config } = req.body;
-        console.log('[BACKEND LOG]: Valor de purchaseUsdt recibido:', config.long.purchaseUsdt);
+        console.log('[BACKEND LOG]: Valor de purchaseUsdt recibido en update-config:', config.long.purchaseUsdt);
         let botState = await Autobot.findOne({});
-
+        
         if (!botState) {
-            // Si el bot no existe, crea un nuevo estado inicial
             botState = new Autobot({
                 lstate: 'STOPPED',
                 sstate: 'STOPPED',
@@ -356,32 +356,32 @@ app.post('/api/autobot/update-config', async (req, res) => {
                 config: config
             });
         } else {
-            // Si el bot ya existe, actualiza solo la configuración
             botState.config = config;
         }
 
-        // Usa la nueva función para calcular el estado inicial de los parámetros
         const newParams = calculateInitialState(config);
         botState.lStateData = { lbalance: newParams.lbalance };
         botState.sStateData = { sbalance: newParams.sbalance };
 
         await botState.save();
 
-        // Emite los valores actualizados para que el frontend los reciba
+        // CORRECTO: Leemos el estado completo después de guardar y lo emitimos
+        const updatedBotState = await Autobot.findOne({});
+
         io.sockets.emit('bot-state-update', {
-            lstate: botState.lstate,
-            sstate: botState.sstate,
-            profit: newParams.profit,
-            lbalance: newParams.lbalance,
-            sbalance: newParams.sbalance,
-            ltprice: newParams.ltprice,
-            stprice: newParams.stprice,
-            lcycle: newParams.lcycle,
-            scycle: newParams.scycle,
-            lcoverage: newParams.lcoverage,
-            scoverage: newParams.scoverage,
-            lnorder: newParams.lnorder,
-            snorder: newParams.snorder
+            lstate: updatedBotState.lstate,
+            sstate: updatedBotState.sstate,
+            profit: updatedBotState.profit || 0,
+            lbalance: updatedBotState.lStateData.lbalance || 0,
+            sbalance: updatedBotState.sStateData.sbalance || 0,
+            ltprice: updatedBotState.lStateData.ltprice || 0,
+            stprice: updatedBotState.sStateData.stprice || 0,
+            lcycle: updatedBotState.lStateData.lcycle || 0,
+            scycle: updatedBotState.sStateData.scycle || 0,
+            lcoverage: updatedBotState.lStateData.lcoverage || 0,
+            scoverage: updatedBotState.sStateData.scoverage || 0,
+            lnorder: updatedBotState.lStateData.lnorder || 0,
+            snorder: updatedBotState.sStateData.snorder || 0
         });
 
         res.status(200).json({ success: true, message: 'Bot configuration updated successfully.' });
