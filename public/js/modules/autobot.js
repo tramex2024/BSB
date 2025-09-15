@@ -1,7 +1,7 @@
 // public/js/modules/autobot.js
 
 import { BACKEND_URL } from '../main.js';
-import { initializeChart } from './chart.js'; // <-- CAMBIO A initializeChart
+import { initializeChart } from './chart.js';
 
 // Mapa de elementos del DOM que necesitan ser actualizados
 const elementsToUpdate = {
@@ -137,7 +137,7 @@ function setupConfigListeners() {
 export function initializeAutobotView() {
     const chartContainer = document.getElementById('au-tvchart');
     if (chartContainer) {
-        initializeChart(chartContainer, 'BTCUSDT'); // <-- CAMBIO A initializeChart
+        initializeChart('au-tvchart', 'BTCUSDT'); // <-- CORRECCIÓN: ahora pasamos el ID como string
     }
 
     // Configura los listeners para los inputs
