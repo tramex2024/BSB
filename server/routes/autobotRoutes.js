@@ -15,7 +15,6 @@ router.use(authMiddleware);
 
 router.post('/start', async (req, res) => {
     try {
-        // En lugar de long, short, options, esperamos recibir la 'config' completa
         const { config } = req.body;
         const userId = req.user.id;
         const symbol = config.symbol;
@@ -24,7 +23,6 @@ router.post('/start', async (req, res) => {
             return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
 
-        // Paso 1: Obtener el precio actual de BitMart
         const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
 
@@ -32,7 +30,6 @@ router.post('/start', async (req, res) => {
             return res.status(503).json({ success: false, message: 'Fallo al obtener el precio actual de la API de BitMart.' });
         }
 
-        // Paso 2: Calcular el estado inicial con el precio real
         const initialState = calculateInitialState(config, currentPrice);
 
         let autobot = await Autobot.findOne({ user: userId });
@@ -42,16 +39,14 @@ router.post('/start', async (req, res) => {
                 config: { ...config, ...initialState }
             });
         } else {
-            // Actualizar la configuración y el estado inicial del bot
             autobot.config = { ...autobot.config, ...config, ...initialState };
         }
-        
-        // Actualizar el estado del bot a 'RUNNING'
+
         autobot.lstate = 'RUNNING';
         autobot.sstate = 'RUNNING';
 
         await autobot.save();
-        
+
         console.log('[BACKEND LOG]: Autobot strategies started and saved.');
 
         res.json({ success: true, message: 'Autobot strategies started.' });
@@ -73,7 +68,7 @@ router.post('/stop', async (req, res) => {
             await botState.save();
 
             console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
-            
+
             autobotLogic.log('Autobot strategy stopped by user.', 'info');
             res.json({ success: true, message: 'Autobot strategy stopped.' });
         } else {
@@ -96,7 +91,6 @@ router.post('/update-config', async (req, res) => {
             return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
 
-        // Usamos la función getTicker de tu servicio existente
         const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
 
