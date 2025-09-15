@@ -115,14 +115,19 @@ function getBotConfiguration() {
  */
 async function sendConfigToBackend() {
     const config = getBotConfiguration();
+    const token = localStorage.getItem('authToken'); // **CORREGIDO: Ahora usa 'authToken'**
+
+    if (!token) {
+        console.error('Error: Token de autenticación no encontrado. Por favor, inicie sesión.');
+        return;
+    }
 
     try {
         const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                // IMPORTANTE: Debes enviar el token de autenticación
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                'Authorization': `Bearer ${token}` // Usa la variable token corregida
             },
             body: JSON.stringify({ config }),
         });
@@ -133,7 +138,7 @@ async function sendConfigToBackend() {
             console.error('Failed to update config on backend:', data.message);
         } else {
             console.log('Config updated successfully:', data.message);
-            // Actualiza el LBalance en la UI inmediatamente si el bot está detenido
+            // Esto es solo para la UI. El backend también necesita la corrección.
             const lstateElement = document.getElementById('aubot-lstate');
             if (lstateElement && lstateElement.textContent === 'STOPPED') {
                 document.getElementById('aulbalance').textContent = config.long.amountUsdt.toFixed(2);

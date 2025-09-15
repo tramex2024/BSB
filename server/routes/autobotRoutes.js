@@ -85,11 +85,15 @@ router.post('/update-config', async (req, res) => {
                 lStateData: {},
                 sStateData: {},
                 config: config,
-                lbalance: 0,
+                lbalance: config.long.amountUsdt, // **¡CORRECCIÓN!** Actualiza el lbalance inicial
                 sbalance: 0
             });
         } else {
             botState.config = config;
+            // **¡CORRECCIÓN!** Si el bot está detenido, actualiza el lbalance
+            if (botState.lstate === 'STOPPED') {
+                botState.lbalance = config.long.amountUsdt;
+            }
         }
 
         await botState.save();

@@ -90,7 +90,7 @@ exports.verifyToken = async (req, res) => {
         const jwtToken = jwt.sign(
             { id: user._id, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: '7d' } // Token válido por 7 días
+            { expiresIn: '365d' } // Token válido por 365 días
         );
 
         // **CORRECCIÓN:** Guardar el token de sesión JWT en la base de datos
