@@ -117,8 +117,7 @@ async function sendConfigToBackend() {
     const config = getBotConfiguration();
 
     try {
-        // 👇 AJUSTE DE RUTA
-        const response = await fetch(`${BACKEND_URL}/api/user/autobot/update-config`, {
+        const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -190,6 +189,7 @@ export function initializeAutobotView() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}` // AÑADIDO: Autenticación
                     },
                     body: JSON.stringify(body),
                 });
@@ -236,6 +236,4 @@ export function initializeAutobotView() {
             fetchOrders(currentTab, auOrderList);
         }
     }, 15000);
-
-    sendConfigToBackend();
 }
