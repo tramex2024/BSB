@@ -62,6 +62,7 @@ BSB/			    # Bitmart Spot Bots
     │   └── authRoutes.js
     │   └── userRoutes.js 
     │   └── ordersRoutes.js
+    │   └── autobotRoutes.js
     ├── controllers/
     │   └── authController.js
     │   └── userController.js
