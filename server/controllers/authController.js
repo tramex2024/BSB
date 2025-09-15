@@ -1,9 +1,8 @@
-// src/server/controllers/authController.js (o la ruta donde lo tengas)
+// src/server/controllers/authController.js
 
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-const randToken = require('rand-token'); // Considera usar 'crypto' para mayor seguridad en el token
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({
@@ -20,8 +19,6 @@ exports.requestToken = async (req, res) => {
     try {
         let user = await User.findOne({ email });
         // Generar un token de 6 dígitos numérico
-        // const token = randToken.generate(6, '0123456789'); // This generates random numbers
-        // Para asegurar que sea un string de 6 dígitos numéricos:
         const token = Math.floor(100000 + Math.random() * 900000).toString(); // Genera un número de 6 dígitos como string
         const tokenExpires = Date.now() + 10 * 60 * 1000; // Token valid for 10 minutes
 
@@ -56,30 +53,25 @@ exports.requestToken = async (req, res) => {
 exports.verifyToken = async (req, res) => {
     const { email, token } = req.body;
 
-    // --- AÑADE ESTAS LÍNEAS DE CÓDIGO ---
     console.log('--- DEBUG: Verify Token Request ---');
     console.log('Token recibido del frontend:', token);
     console.log('Email recibido del frontend:', email);
-    // --- FIN DE LÍNEAS AÑADIDAS ---
 
     try {
         const user = await User.findOne({ email });
 
-    // --- AÑADE ESTAS OTRAS LÍNEAS ---
         console.log('Usuario encontrado en la base de datos:', user);
         if (user) {
             console.log('Token guardado en la DB:', user.token);
             console.log('Expiración del token en la DB:', user.tokenExpires);
         }
         console.log('--- FIN DE DEBUG ---');
-    // --- FIN DE LÍNEAS AÑADIDAS ---
 
         if (!user) {
-            console.error(`[VERIFY TOKEN] User not found for email: ${email}`); // Añadir log
+            console.error(`[VERIFY TOKEN] User not found for email: ${email}`);
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        // --- AÑADIR CONSOLE.ERROR AQUÍ PARA DEPURAR EL 400 ---
         if (!user.token || user.token !== token || user.tokenExpires < Date.now()) {
             let reason = '';
             if (!user.token) {
@@ -90,29 +82,36 @@ exports.verifyToken = async (req, res) => {
                 reason = `Token expired. Expires: ${new Date(user.tokenExpires).toLocaleString()}, Current: ${new Date().toLocaleString()}`;
             }
             console.error(`[VERIFY TOKEN ERROR] Invalid or expired token for email: ${email}. Reason: ${reason}`);
-            // console.error(`[DEBUG] Stored Token: ${user.token}, Provided Token: ${token}, Stored Expires: ${new Date(user.tokenExpires).toISOString()}, Current Time: ${new Date().toISOString()}`);
 
             return res.status(400).json({ message: 'Invalid or expired token.' });
         }
 
-        // Token is valid, clear it for security
-        user.token = null; // Establecer a null es correcto si el campo no es `required: true`
-        user.tokenExpires = null; // Establecer a null es correcto
-        await user.save();
-
-        // Generate JWT for persistent login
+        // Generar JWT para la sesión persistente
         const jwtToken = jwt.sign(
             { id: user._id, email: user.email },
             process.env.JWT_SECRET,
-            { expiresIn: '7d' } // Token valid for 7 days
+            { expiresIn: '7d' } // Token válido por 7 días
         );
 
-        res.status(200).json({ message: 'Login successful!', token: jwtToken, user: { id: user._id, email: user.email } });
+        // **CORRECCIÓN:** Guardar el token de sesión JWT en la base de datos
+        // He añadido un nuevo campo 'jwtToken' para guardar el token de sesión
+        user.jwtToken = jwtToken;
+
+        // Opcionalmente, puedes no borrar el token numérico, como solicitaste
+        // user.token = null;
+        // user.tokenExpires = null;
+        
+        // Guardar el documento actualizado en la base de datos
+        await user.save();
+
+        res.status(200).json({ 
+            message: 'Login successful!', 
+            token: jwtToken, // Esto envía el token al frontend para que lo guarde
+            user: { id: user._id, email: user.email } 
+        });
 
     } catch (error) {
-        console.error('Error verifying token (catch block):', error); // Mensaje más específico
+        console.error('Error verifying token (catch block):', error);
         res.status(500).json({ message: 'Server error. Please try again later.' });
     }
 };
-
-// ... Si tienes otras funciones de BitMart API Keys en este archivo, déjalas ...

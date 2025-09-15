@@ -11,7 +11,12 @@ const userSchema = new mongoose.Schema({
         trim: true,
         match: [/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/, 'Please fill a valid email address']
     },
-        
+    
+    jwtToken: {
+        type: String,
+        default: null,
+    },
+    
     // Campos para el token de autenticación de un solo uso (para login sin contraseña)
     // Estos campos NO deben ser required: true, ya que se anulan después de la verificación.
     token: { 
