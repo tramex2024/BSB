@@ -72,7 +72,7 @@ router.post('/stop', async (req, res) => {
             botState.config.short.enabled = false;
             await botState.save();
 
-            console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`); 
+            console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
             
             autobotLogic.log('Autobot strategy stopped by user.', 'info');
             res.json({ success: true, message: 'Autobot strategy stopped.' });
@@ -86,7 +86,7 @@ router.post('/stop', async (req, res) => {
 });
 
 // Ruta para actualizar la configuración del bot
-router.post('/update-config', auth, async (req, res) => {
+router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
         const userId = req.user.id;
