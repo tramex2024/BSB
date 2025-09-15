@@ -1,135 +1,181 @@
 // public/js/modules/autobot.js
 
-import { getBalances } from './balance.js';
-import { initializeChart } from './chart.js';
-import { checkBitMartConnectionAndData } from './network.js';
-import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
-import { loadBotConfigAndState, toggleBotState, resetBot } from './bot.js';
-import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
+import { BACKEND_URL } from '../main.js';
+import { createChart } from './chart.js';
 
-const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
+// Mapa de elementos del DOM que necesitan ser actualizados
+const elementsToUpdate = {
+    profit: 'auprofit',
+    lstate: 'aubot-lstate',
+    sstate: 'aubot-sstate',
+    lbalance: 'aulbalance',
+    sbalance: 'ausbalance',
+    ltprice: 'aultprice',
+    stprice: 'austprice',
+    lcycle: 'aulcycle',
+    scycle: 'auscycle',
+    lcoverage: 'aulcoverage',
+    scoverage: 'auscoverage',
+    lnorder: 'aulnorder',
+    snorder: 'ausnorder',
+};
 
-// --- NUEVA FUNCIÓN PARA GESTIONAR EL ESTADO Y LOS CÁLCULOS EN LA UI ---
-function updateBotUI(state) {
-    // Definimos los colores para cada estado
-    const statusColors = {
-        RUNNING: 'text-green-400',
-        STOPPED: 'text-red-400',
-        BUYING: 'text-blue-400',
-        SELLING: 'text-yellow-400',
-        NO_COVERAGE: 'text-purple-400'
+// IDs de los campos de configuración
+const configInputIds = [
+    'auamount-usdt',
+    'auamount-btc',
+    'aupurchase-usdt',
+    'aupurchase-btc',
+    'auincrement',
+    'audecrement',
+    'autrigger',
+    'au-stop-at-cycle-end',
+];
+
+/**
+ * Recopila todos los datos de los campos de configuración.
+ * @returns {object} Un objeto con la configuración del bot.
+ */
+function getBotConfiguration() {
+    const config = {
+        long: {
+            purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
+            price_var: parseFloat(document.getElementById('audecrement').value),
+            size_var: parseFloat(document.getElementById('auincrement').value),
+            trigger: parseFloat(document.getElementById('autrigger').value),
+        },
+        short: {
+            sellBtc: parseFloat(document.getElementById('aupurchase-btc').value),
+            price_var: parseFloat(document.getElementById('audecrement').value),
+            size_var: parseFloat(document.getElementById('auincrement').value),
+            trigger: parseFloat(document.getElementById('autrigger').value),
+        },
+        options: {
+            stopAtCycleEnd: document.getElementById('au-stop-at-cycle-end').checked,
+        },
     };
+    return config;
+}
 
-    // Obtenemos los elementos de la interfaz de usuario por su ID
-    const lstateElement = document.getElementById('aubot-lstate');
-    const sstateElement = document.getElementById('aubot-sstate');
-    const startStopButton = document.getElementById('austart-btn');
-    const autobotSettings = document.getElementById('autobot-settings');
-    
-    // Lista de todos los elementos a actualizar
-    const elementsToUpdate = {
-        auprofit: 'profit',
-        aulbalance: 'lbalance',
-        ausbalance: 'sbalance',
-        aultprice: 'ltprice',
-        austprice: 'stprice',
-        aulcycle: 'lcycle',
-        auscycle: 'scycle',
-        aulcoverage: 'lcoverage',
-        auscoverage: 'scoverage',
-        aulnorder: 'lnorder',
-        ausnorder: 'snorder'
-    };
-
-    // Actualiza el LState y SState
-    if (lstateElement) {
-        lstateElement.textContent = state.lstate;
-        lstateElement.className = '';
-        lstateElement.classList.add(statusColors[state.lstate] || 'text-red-400');
-    }
-
-    if (sstateElement) {
-        sstateElement.textContent = state.sstate;
-        sstateElement.className = '';
-        sstateElement.classList.add(statusColors[state.sstate] || 'text-red-400');
-    }
-
-    // Actualiza los demás elementos dinámicos
-    for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
-        const element = document.getElementById(elementId);
-        if (element) {
-            // Usamos un valor por defecto si el dato no existe
-            element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
+/**
+ * Actualiza la UI con los datos del estado del bot.
+ * @param {object} botState - El estado del bot recibido del backend.
+ */
+function updateBotUI(botState) {
+    // Actualiza los elementos del DOM basados en el estado del bot
+    for (const key in elementsToUpdate) {
+        if (elementsToUpdate.hasOwnProperty(key)) {
+            const el = document.getElementById(elementsToUpdate[key]);
+            if (el && botState[key] !== undefined) {
+                el.textContent = botState[key].toFixed ? botState[key].toFixed(2) : botState[key];
+            }
         }
     }
     
-    // Lógica para el botón START/STOP y la habilitación de la configuración
-    const isActive = state.lstate === 'RUNNING' || state.sstate === 'RUNNING';
-    
-    if (autobotSettings) {
-        const inputs = autobotSettings.querySelectorAll('input, select');
-        inputs.forEach(input => input.disabled = isActive);
-    }
+    // Maneja el estado de los botones y la conexión
+    const startBtn = document.getElementById('austart-btn');
+    const resetBtn = document.getElementById('aureset-btn');
+    const statusDot = document.getElementById('status-dot');
 
-    if (startStopButton) {
-        startStopButton.textContent = isActive ? 'STOP' : 'START';
-        startStopButton.classList.remove('start-btn', 'stop-btn');
-        startStopButton.classList.add(isActive ? 'stop-btn' : 'start-btn');
+    const isRunning = botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING';
+
+    startBtn.textContent = isRunning ? 'STOP' : 'START';
+    startBtn.classList.toggle('bg-green-600', !isRunning);
+    startBtn.classList.toggle('bg-red-600', isRunning);
+
+    resetBtn.disabled = isRunning;
+    statusDot.classList.toggle('bg-green-500', isRunning);
+    statusDot.classList.toggle('bg-red-500', !isRunning);
+
+    // Deshabilita/Habilita los campos de configuración
+    configInputIds.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.disabled = isRunning;
+        }
+    });
+}
+
+/**
+ * Envía la configuración del bot al backend en tiempo real.
+ */
+async function sendConfigToBackend() {
+    const config = getBotConfiguration();
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ config }),
+        });
+        if (!response.ok) {
+            console.error('Failed to update config on backend');
+        }
+    } catch (error) {
+        console.error('Error sending config to backend:', error);
     }
 }
 
-export function initializeAutobotView() {
-    console.log("Inicializando vista del Autobot...");
-    
-    let currentTab = 'opened';
-    
-    const auamountUSDTInput = document.getElementById('auamount-usdt');
-    const aupurchaseUSDTInput = document.getElementById("aupurchase-usdt");
-    const aupurchaseBTCInput = document.getElementById("aupurchase-btc");
-    const auincrementInput = document.getElementById("auincrement");
-    const audecrementInput = document.getElementById("audecrement");
-    const autriggerInput = document.getElementById("autrigger");
-    const austartBtn = document.getElementById('austart-btn');
-    const auresetBtn = document.getElementById('aureset-btn');
-    const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    
-    checkBitMartConnectionAndData();
-    
-    window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+/**
+ * Configura los event listeners para los campos de configuración.
+ */
+function setupConfigListeners() {
+    configInputIds.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.addEventListener('input', () => {
+                sendConfigToBackend();
+            });
+        }
+    });
+}
 
-    if (austartBtn) {
-        austartBtn.addEventListener('click', () => {
-            toggleBotState();
-        });
+/**
+ * Inicializa la vista del Autobot y configura los listeners.
+ */
+export function initializeAutobotView() {
+    const chartContainer = document.getElementById('au-tvchart');
+    if (chartContainer) {
+        createChart(chartContainer, 'BTCUSDT');
     }
 
-    if (auresetBtn) auresetBtn.addEventListener('click', () => resetBot('long'));
-    
-    auorderTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            currentTab = tab.id.replace('tab-', '');
-            setOrdersActiveTab(tab.id);
-            const auOrderList = document.getElementById('au-order-list');
-            fetchOrders(currentTab, auOrderList);
-        });
-    });
+    // Configura los listeners para los inputs
+    setupConfigListeners();
 
-    setOrdersActiveTab('tab-opened');
-    const auOrderList = document.getElementById('au-order-list');
-    fetchOrders(currentTab, auOrderList);
-    
-    const socket = io(SOCKET_SERVER_URL);
-    
-    socket.on('bot-state-update', (state) => {
-        updateBotUI(state);
-    });
-
-    getBalances();
-    intervals.autobot = setInterval(getBalances, 10000);
-    intervals.orders = setInterval(() => {
-        const auOrderList = document.getElementById('au-order-list');
-        if (auOrderList) {
-            fetchOrders(currentTab, auOrderList);
+    // Configura el listener del botón START/STOP
+    const startBtn = document.getElementById('austart-btn');
+    startBtn.onclick = async () => {
+        const isRunning = startBtn.textContent === 'STOP';
+        const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
+        
+        const body = isRunning ? {} : getBotConfiguration();
+        
+        try {
+            const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            const data = await response.json();
+            if (!data.success) {
+                console.error(`Error al ${isRunning ? 'detener' : 'iniciar'} el bot:`, data.message);
+            }
+        } catch (error) {
+            console.error(`Error de red al ${isRunning ? 'detener' : 'iniciar'} el bot:`, error);
         }
-    }, 15000);
+    };
+
+    // Configura el listener de Socket.IO para el estado del bot
+    const socket = io(BACKEND_URL, {
+        path: '/socket.io'
+    });
+    socket.on('bot-state-update', (data) => {
+        updateBotUI(data);
+    });
+
+    // Envía la configuración inicial al cargar la página
+    sendConfigToBackend();
 }
