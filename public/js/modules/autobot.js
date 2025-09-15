@@ -138,9 +138,11 @@ async function sendConfigToBackend() {
     try {
         const config = getBotConfiguration();
         
-        const token = localStorage.getItem('token'); 
+        // This is the key line
+        const token = localStorage.getItem('token');
         if (!token) {
             console.error('No se encontró el token de autenticación.');
+            // This is the code that is being executed
             displayMessage('Authentication token not found. Please log in again.', 'error');
             return;
         }
