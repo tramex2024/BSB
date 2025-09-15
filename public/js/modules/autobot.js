@@ -122,37 +122,38 @@ function getBotConfiguration() {
  * Envía la configuración del bot al backend en tiempo real.
  */
 async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    const token = localStorage.getItem('authToken');
-
-    if (!token) {
-        console.error('Error: Token de autenticación no encontrado. Por favor, inicie sesión.');
-        return;
-    }
-
     try {
-        const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
+        const config = getBotConfiguration();
+        
+        const token = localStorage.getItem('token'); 
+        if (!token) {
+            console.error('No se encontró el token de autenticación.');
+            displayMessage('Authentication token not found. Please log in again.', 'error');
+            return;
+        }
+
+        const response = await fetch('/api/autobot/update-config', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}` 
             },
             body: JSON.stringify({ config }),
         });
-        
-        const data = await response.json();
 
-        if (!response.ok) {
-            console.error('Failed to update config on backend:', data.message);
+        const result = await response.json();
+        
+        if (response.ok) {
+            console.log('Configuración enviada con éxito. Respuesta del servidor:', result);
+            displayMessage('Configuración y estado inicial actualizados con éxito.', 'success');
         } else {
-            console.log('Config updated successfully:', data.message);
-            const lstateElement = document.getElementById('aubot-lstate');
-            if (lstateElement && lstateElement.textContent === 'STOPPED') {
-                document.getElementById('aulbalance').textContent = config.long.amountUsdt.toFixed(2);
-            }
+            console.error('Error al actualizar la configuración en el backend:', result.message);
+            displayMessage(`Failed to update config on backend: ${result.message}`, 'error');
         }
+
     } catch (error) {
-        console.error('Error sending config to backend:', error);
+        console.error('Failed to send config:', error);
+        displayMessage('Failed to connect to backend.', 'error');
     }
 }
 

@@ -16,7 +16,7 @@ router.use(authMiddleware);
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
-        const userId = req.user.id;
+        const userId = req.user.id; // ¡Ahora esto funcionará!
         const symbol = config.symbol;
 
         if (!symbol) {
@@ -59,7 +59,7 @@ router.post('/start', async (req, res) => {
 
 router.post('/stop', async (req, res) => {
     try {
-        const botState = await Autobot.findOne({});
+        const botState = await Autobot.findOne({ user: req.user.id }); // Asegúrate de que esta línea también use req.user.id
         if (botState) {
             botState.lstate = 'STOPPED';
             botState.sstate = 'STOPPED';
@@ -84,7 +84,7 @@ router.post('/stop', async (req, res) => {
 router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
-        const userId = req.user.id;
+        const userId = req.user.id; // ¡Ahora esto funcionará!
         const symbol = config.symbol;
 
         if (!symbol) {
