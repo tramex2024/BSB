@@ -118,6 +118,19 @@ function getBotConfiguration() {
     return config;
 }
 
+// Función para mostrar mensajes de estado
+function displayMessage(message, type) {
+    const messageContainer = document.getElementById('message-container');
+    if (messageContainer) {
+        messageContainer.textContent = message;
+        messageContainer.className = `message ${type}`;
+        setTimeout(() => {
+            messageContainer.textContent = '';
+            messageContainer.className = 'message';
+        }, 5000); // El mensaje desaparece después de 5 segundos
+    }
+}
+
 /**
  * Envía la configuración del bot al backend en tiempo real.
  */
