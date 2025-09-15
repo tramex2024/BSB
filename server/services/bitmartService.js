@@ -79,6 +79,14 @@ async function cancelOrder(symbol, order_id) {
     return await spotService.cancelOrder(symbol, order_id);
 }
 
+/**
+ * Obtiene el ticker para un símbolo específico.
+ * Simplemente reenviamos la llamada a spotService.
+ */
+async function getTicker(symbol) {
+    return await spotService.getTicker(symbol);
+}
+
 module.exports = {
     validateApiKeys,
     getBalance,
@@ -87,4 +95,5 @@ module.exports = {
     placeOrder,
     getOrderDetail,
     cancelOrder,
+    getTicker
 };

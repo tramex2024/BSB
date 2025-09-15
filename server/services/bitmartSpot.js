@@ -1,3 +1,5 @@
+// Archivo: BSB/server/services/bitmartSpot.js
+
 const { makeRequest } = require('./bitmartClient');
 
 const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';

@@ -6,41 +6,54 @@ const Autobot = require('../models/Autobot');
 const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
-const { getTickerPrice } = require('../utils/bitmartApi');
+
+// Importamos el servicio centralizado de BitMart
+const bitmartService = require('../services/bitmartService');
 
 // Middleware para proteger todas las rutas del router
 router.use(authMiddleware);
 
 router.post('/start', async (req, res) => {
     try {
-        const { long, short, options } = req.body;
-        let botState = await Autobot.findOne({});
-        
-        if (!botState) {
-            botState = new Autobot({
-                lstate: 'STOPPED',
-                sstate: 'STOPPED',
-                config: {
-                    long: { ...long, enabled: true },
-                    short: { ...short, enabled: true },
-                    stopAtCycle: options.stopAtCycleEnd
-                },
-                lbalance: long.purchaseUsdt,  
-                sbalance: 0,
-                profit: 0
-            });
-        } else {
-            botState.config.long = { ...botState.config.long, ...long, enabled: true };
-            botState.config.short = { ...botState.config.short, ...short, enabled: true };
-            botState.config.stopAtCycle = options.stopAtCycleEnd;
-            botState.lstate = 'RUNNING';
-            botState.sstate = 'RUNNING';
-            botState.lbalance = botState.config.long.purchaseUsdt;
+        // En lugar de long, short, options, esperamos recibir la 'config' completa
+        const { config } = req.body;
+        const userId = req.user.id;
+        const symbol = config.symbol;
+
+        if (!symbol) {
+            return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
 
-        await botState.save();
+        // Paso 1: Obtener el precio actual de BitMart
+        const tickerData = await bitmartService.getTicker(symbol);
+        const currentPrice = parseFloat(tickerData.last_price);
 
-        autobotLogic.log('Ambas estrategias de Autobot (Long y Short) activadas.', 'success');
+        if (isNaN(currentPrice)) {
+            return res.status(503).json({ success: false, message: 'Fallo al obtener el precio actual de la API de BitMart.' });
+        }
+
+        // Paso 2: Calcular el estado inicial con el precio real
+        const initialState = calculateInitialState(config, currentPrice);
+
+        let autobot = await Autobot.findOne({ user: userId });
+        if (!autobot) {
+            autobot = new Autobot({
+                user: userId,
+                config: { ...config, ...initialState }
+            });
+        } else {
+            // Actualizar la configuración y el estado inicial del bot
+            autobot.config = { ...autobot.config, ...config, ...initialState };
+        }
+        
+        // Actualizar el estado del bot a 'RUNNING'
+        autobot.lstate = 'RUNNING';
+        autobot.sstate = 'RUNNING';
+
+        await autobot.save();
+        
+        console.log('[BACKEND LOG]: Autobot strategies started and saved.');
+
         res.json({ success: true, message: 'Autobot strategies started.' });
 
     } catch (error) {
@@ -72,55 +85,42 @@ router.post('/stop', async (req, res) => {
     }
 });
 
-router.post('/update-config', async (req, res) => {
+/ Ruta para actualizar la configuración del bot
+router.post('/update-config', auth, async (req, res) => {
     try {
         const { config } = req.body;
+        const userId = req.user.id;
+        const symbol = config.symbol;
 
-        // **PASO CLAVE: OBTENEMOS EL PRECIO REAL DE BITMART**
-        const currentPrice = await getTickerPrice(config.symbol);
-        
-        // Si no se pudo obtener el precio, devolvemos un error
-        if (!currentPrice) {
-            return res.status(503).json({ success: false, message: 'Failed to get current price from BitMart API.' });
+        if (!symbol) {
+            return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
-        
-        // Ahora usamos el precio real para los cálculos
+
+        // Usamos la función getTicker de tu servicio existente
+        const tickerData = await bitmartService.getTicker(symbol);
+        const currentPrice = parseFloat(tickerData.last_price);
+
+        if (isNaN(currentPrice)) {
+            return res.status(503).json({ success: false, message: 'Fallo al obtener el precio actual de la API de BitMart.' });
+        }
+
         const initialState = calculateInitialState(config, currentPrice);
 
-        let botState = await Autobot.findOne({});
-        
-        if (!botState) {
-            botState = new Autobot({
-                lstate: 'STOPPED',
-                sstate: 'STOPPED',
-                lStateData: {},
-                sStateData: {},
-                config: config,
-                lbalance: initialState.lbalance,
-                sbalance: initialState.sbalance,
-                lcoverage: initialState.lcoverage,
-                lnorder: initialState.lnorder
+        let autobot = await Autobot.findOne({ user: userId });
+        if (!autobot) {
+            autobot = new Autobot({
+                user: userId,
+                config: { ...config, ...initialState }
             });
         } else {
-            botState.config = config;
-
-            if (botState.lstate === 'STOPPED') {
-                botState.lbalance = initialState.lbalance;
-                botState.sbalance = initialState.sbalance;
-                botState.lcoverage = initialState.lcoverage;
-                botState.lnorder = initialState.lnorder;
-                
-                botState.lStateData.ltprice = 0;
-                botState.lStateData.lcycle = 0;
-            }
+            autobot.config = { ...config, ...initialState };
         }
 
-        await botState.save();
-
-        res.status(200).json({ success: true, message: 'Bot configuration updated successfully.' });
+        await autobot.save();
+        res.json({ success: true, message: 'Configuración y estado inicial actualizados con éxito.', data: { initialState, currentPrice } });
     } catch (error) {
-        console.error('Failed to update bot configuration:', error);
-        res.status(500).json({ success: false, message: 'Failed to update bot configuration.' });
+        console.error('Error al actualizar la configuración del bot:', error);
+        res.status(500).json({ success: false, message: 'Error del servidor al actualizar la configuración.' });
     }
 });
 
