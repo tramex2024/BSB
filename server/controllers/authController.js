@@ -56,8 +56,23 @@ exports.requestToken = async (req, res) => {
 exports.verifyToken = async (req, res) => {
     const { email, token } = req.body;
 
+    // --- AÑADE ESTAS LÍNEAS DE CÓDIGO ---
+    console.log('--- DEBUG: Verify Token Request ---');
+    console.log('Token recibido del frontend:', token);
+    console.log('Email recibido del frontend:', email);
+    // --- FIN DE LÍNEAS AÑADIDAS ---
+
     try {
         const user = await User.findOne({ email });
+
+    // --- AÑADE ESTAS OTRAS LÍNEAS ---
+        console.log('Usuario encontrado en la base de datos:', user);
+        if (user) {
+            console.log('Token guardado en la DB:', user.token);
+            console.log('Expiración del token en la DB:', user.tokenExpires);
+        }
+        console.log('--- FIN DE DEBUG ---');
+    // --- FIN DE LÍNEAS AÑADIDAS ---
 
         if (!user) {
             console.error(`[VERIFY TOKEN] User not found for email: ${email}`); // Añadir log
