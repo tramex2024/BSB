@@ -39,7 +39,6 @@ router.post('/start', async (req, res) => {
 
         await botState.save();
 
-        // No es necesario emitir aquí, el bucle principal lo hará
         autobotLogic.log('Ambas estrategias de Autobot (Long y Short) activadas.', 'success');
         res.json({ success: true, message: 'Autobot strategies started.' });
 
@@ -75,24 +74,43 @@ router.post('/stop', async (req, res) => {
 router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
-        console.log('[BACKEND LOG]: Valor de purchaseUsdt recibido en update-config:', config.long.purchaseUsdt);
+
+        // **PASO 1: Simular el precio actual del mercado**
+        // Este valor debe ser el precio real de BitMart cuando lo implementemos.
+        const currentPrice = 100000; 
+        
+        // **PASO 2: Llamar a la función de cálculo**
+        // Ahora pasamos la configuración y el precio actual a la función.
+        const initialState = calculateInitialState(config, currentPrice);
+
         let botState = await Autobot.findOne({});
         
         if (!botState) {
+            // Si el documento no existe, creamos uno nuevo con los valores iniciales calculados
             botState = new Autobot({
+                lStateData: initialState,
+                sStateData: {}, // Por ahora está vacío, pero se llenará después
+                config: config,
+                lbalance: initialState.lbalance,
+                sbalance: initialState.sbalance,
                 lstate: 'STOPPED',
                 sstate: 'STOPPED',
-                lStateData: {},
-                sStateData: {},
-                config: config,
-                lbalance: config.long.amountUsdt, // **¡CORRECCIÓN!** Actualiza el lbalance inicial
-                sbalance: 0
+                profit: 0
             });
         } else {
+            // Si ya existe un documento, lo actualizamos
             botState.config = config;
-            // **¡CORRECCIÓN!** Si el bot está detenido, actualiza el lbalance
+
+            // **PASO 3: Actualizar los campos calculados si el bot está detenido**
             if (botState.lstate === 'STOPPED') {
-                botState.lbalance = config.long.amountUsdt;
+                botState.lbalance = initialState.lbalance;
+                botState.sbalance = initialState.sbalance;
+                botState.lStateData.lcoverage = initialState.lcoverage;
+                botState.lStateData.lnorder = initialState.lnorder;
+                
+                // Estos valores se inicializan al inicio de un ciclo de trading
+                botState.lStateData.ltprice = 0;
+                botState.lStateData.lcycle = 0;
             }
         }
 
