@@ -110,18 +110,23 @@ export async function handleAuthFormSubmit(e, onLoginSuccess) {
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userEmail', email);
 
-                if (authMessage) authMessage.textContent = data.message;
-                if (authMessage) authMessage.className = 'text-green-500';
+                if (authMessage) {
+                    authMessage.textContent = data.message;
+                    authMessage.className = 'text-green-500';
+                }
                 
-                // CORRECCIÓN CLAVE: Ejecuta el callback inmediatamente después de guardar el token
-                // Esto asegura que la aplicación se inicialice antes de cerrar el modal
+                // --- CORRECCIÓN CLAVE AQUÍ ---
+                // Llama a la función de inicialización INMEDIATAMENTE
+                // después de guardar el token.
                 if (onLoginSuccess) {
                     onLoginSuccess();
                 }
 
-                // Espera 1.5 segundos para cerrar el modal y darle tiempo al usuario de ver el mensaje
+                // El temporizador es solo para cerrar el modal
                 setTimeout(() => {
                     toggleAuthModal(false);
+                    // Opcional: reiniciar el formulario después de cerrar el modal
+                    if (authForm) authForm.reset();
                 }, 1500);
 
             } else {
