@@ -12,7 +12,7 @@ const bitmartService = require('../services/bitmartService');
 
 // Middleware para proteger todas las rutas del router
 // Comentamos esta línea para desactivar la autenticación temporalmente.
-// router.use(authMiddleware);
+router.use(authMiddleware);
 
 router.post('/start', async (req, res) => {
     try {
