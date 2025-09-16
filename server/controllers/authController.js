@@ -20,14 +20,14 @@ exports.requestToken = async (req, res) => {
         let user = await User.findOne({ email });
         // Generar un token de 6 dígitos numérico
         const token = Math.floor(100000 + Math.random() * 900000).toString(); // Genera un número de 6 dígitos como string
-        const tokenExpires = Date.now() + 10 * 60 * 1000; // Token valid for 10 minutes
+        const tokenExpires = Date.now() + 10 * 60 * 1000; // Token válido por 10 minutos
 
         if (!user) {
-            // New user, create an entry
+            // Nuevo usuario, crea una entrada
             user = new User({ email, token, tokenExpires });
             await user.save();
         } else {
-            // Existing user, update token
+            // Usuario existente, actualiza el token
             user.token = token;
             user.tokenExpires = tokenExpires;
             await user.save();
@@ -40,12 +40,21 @@ exports.requestToken = async (req, res) => {
             html: `<p>Your login token for BSB is: <strong>${token}</strong>. It is valid for 10 minutes.</p>`
         };
 
-        await transporter.sendMail(mailOptions);
+        // Usa un callback para detectar errores de envío del correo.
+        await transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error('Error al enviar el correo:', error);
+                // Si hay un error aquí, la respuesta al usuario aún será 200 para no dar pistas a un atacante,
+                // pero tú verás el error en el log del servidor.
+            } else {
+                console.log('Correo enviado:', info.response);
+            }
+        });
 
         res.status(200).json({ message: 'A token has been sent to your email.' });
 
     } catch (error) {
-        console.error('Error requesting token:', error);
+        console.error('Error general en requestToken:', error);
         res.status(500).json({ message: 'Server error. Please try again later.' });
     }
 };
