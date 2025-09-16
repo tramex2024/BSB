@@ -27,7 +27,8 @@ function toggleLogoutModal(show) {
  * Actualiza el icono de login/logout basado en si hay un token de autenticación.
  */
 export function updateLoginIcon() {
-    const isLoggedIn = localStorage.getItem('authToken');
+    // CORRECCIÓN CLAVE: Usamos 'token' en lugar de 'authToken'
+    const isLoggedIn = localStorage.getItem('token');
     if (loginLogoutIcon) {
         if (isLoggedIn) {
             loginLogoutIcon.classList.remove('fa-sign-in-alt');
@@ -41,18 +42,20 @@ export function updateLoginIcon() {
     }
 }
 
-export function initializeAppEvents() {
+/**
+ * Configura los event listeners principales de la aplicación.
+ * @param {Function} onLoginSuccessCallback - Callback a ejecutar después de un login exitoso.
+ */
+export function initializeAppEvents(onLoginSuccessCallback) {
     updateLoginIcon();
 
-    setupAuthListeners(() => {
-        // Callback después del login
-        updateLoginIcon();
-        // La lógica de la vista se maneja en navigation.js
-    });
+    // Ahora pasamos el callback de éxito al listener de autenticación
+    setupAuthListeners(onLoginSuccessCallback);
 
     if (loginLogoutIcon) {
         loginLogoutIcon.addEventListener('click', () => {
-            if (localStorage.getItem('authToken')) {
+            // CORRECCIÓN CLAVE: Usamos 'token' en lugar de 'authToken'
+            if (localStorage.getItem('token')) {
                 toggleLogoutModal(true);
             } else {
                 toggleAuthModal(true);
@@ -65,11 +68,9 @@ export function initializeAppEvents() {
             handleLogout();
             updateLoginIcon();
             toggleLogoutModal(false);
-            // Redirigir a la vista de "logged out"
-            const navTabs = document.querySelectorAll('.header-middle .nav-tab');
-            navTabs.forEach(tab => tab.style.display = 'none');
-            const loggedOutView = document.getElementById('logged-out-view');
-            if(loggedOutView) loggedOutView.style.display = 'block';
+            
+            // Redirigir a la vista de "logged out" (o recargar para un estado limpio)
+            window.location.reload();
         });
     }
 
@@ -81,7 +82,8 @@ export function initializeAppEvents() {
 
     if (apiKeyIcon) {
         apiKeyIcon.addEventListener('click', () => {
-            if (!localStorage.getItem('authToken')) {
+            // CORRECCIÓN CLAVE: Usamos 'token' en lugar de 'authToken'
+            if (!localStorage.getItem('token')) {
                 alert("Please login first to configure API keys.");
                 return;
             }

@@ -2,7 +2,6 @@
 
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { handleLoginSuccess } from './modules/login.js'; // Importa la función de manejo de login
 
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
@@ -31,7 +30,7 @@ const views = {
  * Se llama desde navigation.js después de cargar el contenido HTML.
  * @param {string} tabName - El nombre de la pestaña a inicializar.
  */
-function initializeTab(tabName) {
+export function initializeTab(tabName) {
     // Limpia los intervalos de la pestaña anterior
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
@@ -51,10 +50,8 @@ function initializeTab(tabName) {
 /**
  * Función que inicializa la aplicación completa después de un login exitoso.
  */
-function initializeFullApp() {
+export function initializeFullApp() {
     console.log("Token de autenticación encontrado. Inicializando la aplicación...");
-    
-    setupNavTabs(initializeTab);
     
     // Conexión del socket
     const socket = io(BACKEND_URL, {
@@ -76,26 +73,25 @@ function initializeFullApp() {
         }
     });
 
-    // Esta es la parte que necesitas en los otros módulos, no aquí.
-    // La dejé en tu código original para que la uses como referencia.
-    // const usdtDashboardElement = document.getElementById('usdt-balance');
-    // const btcDashboardElement = document.getElementById('btc-balance');
-    // ...
+    // Carga la pestaña inicial y configura la navegación
+    setupNavTabs(initializeTab);
 }
 
 // --- LÓGICA PRINCIPAL AL CARGAR LA PÁGINA ---
 document.addEventListener('DOMContentLoaded', () => {
-    initializeAppEvents();
+    // Configura los eventos globales y el comportamiento del login/logout
+    initializeAppEvents(initializeFullApp); // Pasamos la función como callback
     updateLoginIcon();
-
+    
     // Verifica si ya existe un token de autenticación.
     const token = localStorage.getItem('token');
     if (token) {
         // Si hay token, inicializa la aplicación completa.
         initializeFullApp();
     } else {
-        // Si no hay token, solo configura los eventos de autenticación
-        // y muestra el modal de login si es necesario.
-        console.log("No se encontró un token de autenticación. El usuario debe iniciar sesión.");
+        // Si no hay token, la navegación ya se encargará de restringir el acceso.
+        // Solo necesitamos que el dashboard se cargue inicialmente.
+        console.log("No se encontró un token de autenticación. La navegación está restringida.");
+        setupNavTabs(initializeTab); // Carga la navegación y la pestaña del dashboard
     }
 });
