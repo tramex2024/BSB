@@ -3,9 +3,11 @@
 const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
-const autobotLogic = require('../autobotLogic.js'); // Contiene el objeto io
+const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
+
+// Importamos el servicio centralizado de BitMart
 const bitmartService = require('../services/bitmartService');
 
 // Middleware para proteger todas las rutas del router

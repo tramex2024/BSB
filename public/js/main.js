@@ -2,6 +2,7 @@
 
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
+import { handleLoginSuccess } from './modules/login.js'; // Importa la función de manejo de login
 
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
@@ -47,10 +48,12 @@ function initializeTab(tabName) {
     }
 }
 
-// --- LÓGICA PRINCIPAL AL CARGAR LA PÁGINA ---
-document.addEventListener('DOMContentLoaded', () => {
-    initializeAppEvents();
-    updateLoginIcon();
+/**
+ * Función que inicializa la aplicación completa después de un login exitoso.
+ */
+function initializeFullApp() {
+    console.log("Token de autenticación encontrado. Inicializando la aplicación...");
+    
     setupNavTabs(initializeTab);
     
     // Conexión del socket
@@ -63,17 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
         priceElements.forEach(el => {
             el.textContent = data.price ? `$${parseFloat(data.price).toFixed(2)}` : 'N/A';
         });
-        
-        // La lógica de actualización de balances ahora debe ir en los módulos de vista
-        // cuando se inicialicen. Por ahora, se mantendrá aquí para compatibilidad.
-        const usdtDashboardElement = document.getElementById('usdt-balance');
-        const btcDashboardElement = document.getElementById('btc-balance');
-        if (usdtDashboardElement && data.usdt) {
-            usdtDashboardElement.textContent = parseFloat(data.usdt).toFixed(8);
-        }
-        if (btcDashboardElement && data.btc) {
-            btcDashboardElement.textContent = parseFloat(data.btc).toFixed(8);
-        }
     });
 
     socket.on('bot-log', (log) => {
@@ -83,4 +75,27 @@ document.addEventListener('DOMContentLoaded', () => {
             logMessageElement.className = `log-message log-${log.type}`;
         }
     });
+
+    // Esta es la parte que necesitas en los otros módulos, no aquí.
+    // La dejé en tu código original para que la uses como referencia.
+    // const usdtDashboardElement = document.getElementById('usdt-balance');
+    // const btcDashboardElement = document.getElementById('btc-balance');
+    // ...
+}
+
+// --- LÓGICA PRINCIPAL AL CARGAR LA PÁGINA ---
+document.addEventListener('DOMContentLoaded', () => {
+    initializeAppEvents();
+    updateLoginIcon();
+
+    // Verifica si ya existe un token de autenticación.
+    const token = localStorage.getItem('token');
+    if (token) {
+        // Si hay token, inicializa la aplicación completa.
+        initializeFullApp();
+    } else {
+        // Si no hay token, solo configura los eventos de autenticación
+        // y muestra el modal de login si es necesario.
+        console.log("No se encontró un token de autenticación. El usuario debe iniciar sesión.");
+    }
 });
