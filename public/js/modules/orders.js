@@ -84,7 +84,7 @@ function displayOrders(orders, orderListElement, orderType) {
  * @param {HTMLElement} orderListElement El elemento HTML donde mostrar las órdenes.
  */
 export async function fetchOrders(status, orderListElement) {
-    const authToken = localStorage.getItem('authToken');
+    const authToken = localStorage.getItem('token');
     if (!authToken) {
         console.error('Error al obtener órdenes: Token de autenticación no encontrado.');
         orderListElement.innerHTML = `<p class="text-red-500">Error: Not authenticated. Please log in.</p>`;
