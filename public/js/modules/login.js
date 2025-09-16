@@ -1,6 +1,8 @@
 // public/js/modules/login.js
 
 import { BACKEND_URL } from '../main.js';
+import { displayLogMessage } from './auth.js';
+import { updateLoginIcon } from './appEvents.js';
 
 // --- Constantes del DOM (NO MODIFICAR) ---
 const authModal = document.getElementById('auth-modal');
@@ -105,17 +107,23 @@ export async function handleAuthFormSubmit(e, onLoginSuccess) {
             data = await response.json();
 
             if (response.ok) {
-                // CORRECCIÓN CLAVE AQUÍ: Cambiar 'authToken' a 'token'
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userEmail', email);
-                
+
                 if (authMessage) authMessage.textContent = data.message;
                 if (authMessage) authMessage.className = 'text-green-500';
                 
+                // CORRECCIÓN CLAVE: Ejecuta el callback inmediatamente después de guardar el token
+                // Esto asegura que la aplicación se inicialice antes de cerrar el modal
+                if (onLoginSuccess) {
+                    onLoginSuccess();
+                }
+
+                // Espera 1.5 segundos para cerrar el modal y darle tiempo al usuario de ver el mensaje
                 setTimeout(() => {
                     toggleAuthModal(false);
-                    if (onLoginSuccess) onLoginSuccess();
                 }, 1500);
+
             } else {
                 if (authMessage) authMessage.textContent = data.error || 'Invalid token or email.';
                 if (authMessage) authMessage.className = 'text-red-500';
