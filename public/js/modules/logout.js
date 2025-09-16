@@ -9,7 +9,8 @@ import { BACKEND_URL } from '../main.js';
  * @returns {Promise<object|null>} La respuesta JSON del backend.
  */
 async function fetchFromBackend(url, options = {}) {
-    const token = localStorage.getItem('authToken');
+    // CORRECCIÓN CLAVE: Usa 'token' en lugar de 'authToken'
+    const token = localStorage.getItem('token');
     if (token) {
         options.headers = {
             ...options.headers,
@@ -47,8 +48,8 @@ export async function handleLogout() {
     } catch (error) {
         console.error('[FRONTEND] Falló la llamada al backend para deslogueo, pero continuará el proceso local:', error);
     } finally {
-        // Limpia el token y recarga la página
-        localStorage.removeItem('authToken');
+        // CORRECCIÓN CLAVE: Limpia el token usando la clave 'token'
+        localStorage.removeItem('token');
         localStorage.removeItem('userEmail');
         window.location.reload();
     }
