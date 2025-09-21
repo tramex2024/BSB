@@ -1,6 +1,16 @@
 // BSB/server/autobotCalculations.js
 
 /**
+ * Helper function to safely parse a value as a number.
+ * @param {any} value - The value to parse.
+ * @returns {number} The parsed number, or 0 if parsing fails.
+ */
+function parseNumber(value) {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * Calculates the price coverage (LCoverage) and number of orders (LNOrder)
  * for the Long strategy.
  *
@@ -18,30 +28,24 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
     let numberOfOrders = 0;
     let coveragePrice = currentPrice;
 
-    // Assumes the first order can be placed
     if (currentBalance >= nextOrderAmount) {
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
         coveragePrice = nextOrderPrice;
 
-        // Loop to calculate subsequent orders
         while (true) {
-            // Calculate price and amount of the next order
             nextOrderPrice = nextOrderPrice * (1 - decrement);
             nextOrderAmount = nextOrderAmount * (1 + increment);
 
-            // Check if the balance is sufficient for the next order
             if (currentBalance >= nextOrderAmount) {
                 currentBalance -= nextOrderAmount;
                 numberOfOrders++;
                 coveragePrice = nextOrderPrice;
             } else {
-                // Not enough balance, exit the loop
                 break;
             }
         }
     } else {
-        // If initial balance is less than the first order amount
         return { coveragePrice: currentPrice, numberOfOrders: 0 };
     }
     
@@ -66,30 +70,24 @@ function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, size
     let numberOfOrders = 0;
     let coveragePrice = currentPrice;
 
-    // Assumes the first order can be placed
     if (currentBalance >= nextOrderAmount) {
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
         coveragePrice = nextOrderPrice;
 
-        // Loop to calculate subsequent orders
         while (true) {
-            // Calculate price and amount of the next order
             nextOrderPrice = nextOrderPrice * (1 + increment);
             nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
 
-            // Check if the balance is sufficient for the next order
             if (currentBalance >= nextOrderAmount) {
                 currentBalance -= nextOrderAmount;
                 numberOfOrders++;
                 coveragePrice = nextOrderPrice;
             } else {
-                // Not enough balance, exit the loop
                 break;
             }
         }
     } else {
-        // If initial balance is less than the first order amount
         return { coveragePrice: currentPrice, numberOfOrders: 0 };
     }
     
@@ -105,25 +103,23 @@ function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, size
 function calculateInitialState(config, currentPrice) {
     const { long, short } = config;
 
-    const lbalance = parseFloat(long.amountUsdt) || 0;
-    const sbalance = parseFloat(short.amountBtc) || 0;
+    const lbalance = parseNumber(long.amountUsdt);
+    const sbalance = parseNumber(short.amountBtc);
 
-    // Calculate coverage and number of Long orders
     const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
         lbalance,
         currentPrice,
-        parseFloat(long.purchaseUsdt) || 0,
-        (parseFloat(long.price_var) || 0) / 100, // Convert to decimal
-        (parseFloat(long.size_var) || 0) / 100 // Convert to decimal
+        parseNumber(long.purchaseUsdt),
+        parseNumber(long.price_var) / 100,
+        parseNumber(long.size_var) / 100
     );
 
-    // Calculate coverage and number of Short orders
     const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
         sbalance,
         currentPrice,
-        parseFloat(short.sellBtc) || 0,
-        (parseFloat(short.price_var) || 0) / 100, // Convert to decimal
-        (parseFloat(short.size_var) || 0) / 100 // Convert to decimal
+        parseNumber(short.sellBtc),
+        parseNumber(short.price_var) / 100,
+        parseNumber(short.size_var) / 100
     );
 
     return {
