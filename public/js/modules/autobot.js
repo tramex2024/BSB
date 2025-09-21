@@ -138,6 +138,10 @@ async function sendConfigToBackend() {
     try {
         const config = getBotConfiguration();        
         
+        // --- AQUÍ ESTÁ EL CAMBIO ---
+        console.log('Enviando configuración al backend:', config);
+        // -------------------------
+
         const token = localStorage.getItem('token');
         if (!token) {
             console.error('No se encontró el token de autenticación.');            
