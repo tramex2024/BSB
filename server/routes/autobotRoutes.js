@@ -116,19 +116,41 @@ router.post('/update-config', async (req, res) => {
 
         let autobot = await Autobot.findOne({});
         if (!autobot) {
+            // If bot doesn't exist, create it with all initial values
             autobot = new Autobot({
-                config: { ...config, ...initialState },
-                lstate: 'STOPPED',
-                sstate: 'STOPPED'
+                config: config,
+                lstate: 'STOPPED', 
+                sstate: 'STOPPED',
+                lbalance: initialState.lbalance,
+                sbalance: initialState.sbalance,
+                lcoverage: initialState.lcoverage,
+                scoverage: initialState.scoverage,
+                lnorder: initialState.lnorder,
+                snorder: initialState.snorder,
+                profit: initialState.profit
             });
         } else {
-            autobot.config = { ...config, ...initialState };
+            // Update configuration and calculated parameters
+            autobot.config = config;
+            autobot.lcoverage = initialState.lcoverage;
+            autobot.lnorder = initialState.lnorder;
+            autobot.scoverage = initialState.scoverage;
+            autobot.snorder = initialState.snorder;
+            
+            // Critical Change:
+            // Update lbalance only if the bot is not running
+            if (autobot.lstate === 'STOPPED') {
+                autobot.lbalance = initialState.lbalance;
+            }
+            if (autobot.sstate === 'STOPPED') {
+                autobot.sbalance = initialState.sbalance;
+            }
         }
 
         await autobot.save();
 
         console.log('[BACKEND LOG]: Configuración y estado inicial actualizados en la DB.');
-
+        
         if (autobotLogic.io) {
             autobotLogic.io.emit('bot-state-update', autobot.toObject());
             console.log('[BACKEND LOG]: Estado del bot emitido (al actualizar config) a través de Socket.IO.');
@@ -138,7 +160,6 @@ router.post('/update-config', async (req, res) => {
 
     } catch (error) {
         console.error('Error al actualizar la configuración del bot:', error);
-        // Manejo específico para el error de BitMart
         if (error.message.includes('Symbol not found')) {
             return res.status(400).json({ success: false, message: 'El símbolo de trading no es válido o no se encuentra en BitMart. Por favor, verifica el símbolo de la configuración.' });
         }
