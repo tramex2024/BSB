@@ -58,30 +58,16 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
 function calculateInitialState(config, currentPrice) {
     const { long, short } = config;
 
-    // Use a helper function for robust parsing
-    const parseNumber = (value) => {
-        const parsed = parseFloat(value);
-        return isNaN(parsed) ? 0 : parsed;
-    };
+    const lbalance = parseFloat(long.amountUsdt) || 0;
+    const sbalance = parseFloat(short.amountBtc) || 0;
 
-    const lbalance = parseNumber(long.amountUsdt);
-    const sbalance = parseNumber(short.amountBtc);
-
+    // Calcular la cobertura y el número de órdenes Long
     const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
         lbalance,
         currentPrice,
-        parseNumber(long.purchaseUsdt),
-        parseNumber(long.price_var) / 100,
-        parseNumber(long.size_var) / 100
-    );
-
-    // Now, let's handle the short calculations similarly.
-    const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
-        sbalance,
-        currentPrice,
-        parseNumber(short.sellBtc),
-        parseNumber(short.price_var) / 100,
-        parseNumber(short.size_var) / 100
+        parseFloat(long.purchaseUsdt) || 0,
+        (parseFloat(long.price_var) || 0) / 100, // Convertir a decimal
+        (parseFloat(long.size_var) || 0) / 100 // Convertir a decimal
     );
 
     return {
@@ -95,43 +81,10 @@ function calculateInitialState(config, currentPrice) {
         lcycle: 0,
         scycle: 0,
         lcoverage: lcoverage,
-        scoverage: scoverage,
+        scoverage: 0, // Aún no implementamos Short
         lnorder: lnorder,
-        snorder: snorder,
+        snorder: 0 // Aún no implementamos Short
     };
-}
-
-// You will also need to add the `calculateShortCoverage` function, as it's not present in the code you've provided. Here's a placeholder for it:
-function calculateShortCoverage(sbalance, currentPrice, sellBtc, priceIncrement, sizeIncrement) {
-    let currentBTCBalance = sbalance;
-    let nextOrderPrice = currentPrice;
-    let nextOrderAmount = sellBtc;
-    let numberOfOrders = 0;
-    let coveragePrice = currentPrice;
-
-    // Basic implementation for Short, you can expand this logic later
-    if (currentBTCBalance >= nextOrderAmount) {
-        currentBTCBalance -= nextOrderAmount;
-        numberOfOrders++;
-        coveragePrice = nextOrderPrice;
-
-        while (currentBTCBalance >= nextOrderAmount * (1 + sizeIncrement)) {
-            nextOrderPrice = nextOrderPrice * (1 + priceIncrement);
-            nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
-
-            if (currentBTCBalance >= nextOrderAmount) {
-                currentBTCBalance -= nextOrderAmount;
-                numberOfOrders++;
-                coveragePrice = nextOrderPrice;
-            } else {
-                break;
-            }
-        }
-    } else {
-        return { coveragePrice: currentPrice, numberOfOrders: 0 };
-    }
-
-    return { coveragePrice, numberOfOrders };
 }
 
 module.exports = {
