@@ -59,36 +59,36 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
  * @param {number} sizeIncrement - The amount increment percentage (e.g., 1 for 100%).
  * @returns {object} An object with SCoverage and SNOrder.
  */
-function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, sizeIncrement) {
-    let currentBalance = sbalance;
-    let nextOrderPrice = currentPrice;
-    let nextOrderAmount = sellBtc;
-    let numberOfOrders = 0;
-    let coveragePrice = currentPrice;
+//function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, sizeIncrement) {
+//    let currentBalance = sbalance;
+//    let nextOrderPrice = currentPrice;
+//    let nextOrderAmount = sellBtc;
+//    let numberOfOrders = 0;
+//    let coveragePrice = currentPrice;
 
-    if (currentBalance >= nextOrderAmount) {
-        currentBalance -= nextOrderAmount;
-        numberOfOrders++;
-        coveragePrice = nextOrderPrice;
+//    if (currentBalance >= nextOrderAmount) {
+//        currentBalance -= nextOrderAmount;
+//        numberOfOrders++;
+//        coveragePrice = nextOrderPrice;
 
-        while (true) {
-            nextOrderPrice = nextOrderPrice * (1 + increment);
-            nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
+//        while (true) {
+//            nextOrderPrice = nextOrderPrice * (1 + increment);
+//            nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
 
-            if (currentBalance >= nextOrderAmount) {
-                currentBalance -= nextOrderAmount;
-                numberOfOrders++;
-                coveragePrice = nextOrderPrice;
-            } else {
-                break;
-            }
-        }
-    } else {
-        return { coveragePrice: currentPrice, numberOfOrders: 0 };
-    }
+//            if (currentBalance >= nextOrderAmount) {
+//                currentBalance -= nextOrderAmount;
+//                numberOfOrders++;
+//                coveragePrice = nextOrderPrice;
+//            } else {
+//                break;
+//            }
+//        }
+//    } else {
+//        return { coveragePrice: currentPrice, numberOfOrders: 0 };
+//    }
     
-    return { coveragePrice, numberOfOrders };
-}
+//    return { coveragePrice, numberOfOrders };
+//}
 
 /**
  * Calcula el estado inicial de los parámetros del bot, incluyendo LCoverage y LNOrder.
@@ -131,5 +131,5 @@ function calculateInitialState(config, currentPrice) {
 module.exports = {
     calculateInitialState,
     calculateLongCoverage,
-    calculateShortCoverage
+    //calculateShortCoverage
 };
