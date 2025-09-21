@@ -136,18 +136,17 @@ function displayMessage(message, type) {
  */
 async function sendConfigToBackend() {
     try {
-        const config = getBotConfiguration();
+        const config = getBotConfiguration();        
         
-        // This is the key line
         const token = localStorage.getItem('token');
         if (!token) {
-            console.error('No se encontró el token de autenticación.');
-            // This is the code that is being executed
+            console.error('No se encontró el token de autenticación.');            
             displayMessage('Authentication token not found. Please log in again.', 'error');
             return;
         }
-
-        const response = await fetch('/api/autobot/update-config', {
+        
+	const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, { 
+        //const response = await fetch('/api/autobot/update-config', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -219,7 +218,8 @@ export function initializeAutobotView() {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     },
-                    body: JSON.stringify(body),
+                    //body: JSON.stringify(body),
+		    body: JSON.stringify({ config: body }),
                 });
                 const data = await response.json();
                 if (!data.success) {

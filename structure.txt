@@ -1,4 +1,13 @@
 BSB/			    # Bitmart Spot Bots
+├── README.md
+├── package.json
+├── package-lock.json
+├── tailwind.config.js
+├── postcss.config.js
+├── favicon.ico.txt
+├── .gitignore
+├── .env
+├── .git/					# Git directory files
 ├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
 │   ├── index.html
 │   ├── testbot.html
@@ -18,7 +27,6 @@ BSB/			    # Bitmart Spot Bots
 │        	 └── logout.js
 │       	 └── auth.js
 │        	 └── orders.js
-│       	 └── aucalculations.js
 │       	 └── tecalculations.js
 │       	 └── aicalculations.js
 │       	 └── navigation.js
@@ -37,13 +45,9 @@ BSB/			    # Bitmart Spot Bots
 ├── server/                # Backend files - Deployed on Render
     ├── server.js
     ├── autobotLogic.js
+    ├── autobotCalculations.js
     ├── bitmart_indicator_analyzer.js
-    ├── render.yaml
-    ├── tailwind.config.js
-    ├── postcss.config.js
-    ├── package.json
-    ├── bitmart_entry_point.json
-    ├── README.md
+    ├── bitmart_entry_point.json    
     ├── models/
     │   └── Order.js
     │   └── Autobot.js
