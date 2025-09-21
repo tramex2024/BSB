@@ -18,7 +18,6 @@ router.use(authMiddleware);
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
-        // const userId = req.user.id; // Esta línea ya no es necesaria con el cambio
         const symbol = config.symbol;
 
         if (!symbol) {
@@ -48,7 +47,6 @@ router.post('/start', async (req, res) => {
 
         await autobot.save();
         
-        // Emite el estado actualizado al iniciar el bot
         if (autobotLogic.io) {
             autobotLogic.io.emit('bot-state-update', autobot.toObject());
             console.log('[BACKEND LOG]: Estado del bot emitido (al iniciar) a través de Socket.IO.');
@@ -60,6 +58,10 @@ router.post('/start', async (req, res) => {
 
     } catch (error) {
         console.error('Failed to start Autobot strategies:', error);
+        // Manejo específico para el error de BitMart
+        if (error.message.includes('Symbol not found')) {
+            return res.status(400).json({ success: false, message: 'El símbolo de trading no es válido o no se encuentra en BitMart. Por favor, verifica el símbolo de la configuración.' });
+        }
         res.status(500).json({ success: false, message: 'Failed to start Autobot strategies.' });
     }
 });
@@ -97,7 +99,6 @@ router.post('/stop', async (req, res) => {
 router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
-        // const userId = req.user.id; // Esta línea ya no es necesaria con el cambio
         const symbol = config.symbol;
 
         if (!symbol) {
@@ -111,19 +112,16 @@ router.post('/update-config', async (req, res) => {
             return res.status(503).json({ success: false, message: 'Fallo al obtener el precio actual de la API de BitMart.' });
         }
 
-        // 1. Recalcula el estado inicial con la nueva configuración
         const initialState = calculateInitialState(config, currentPrice);
 
-        // 2. Encuentra y actualiza el bot en la base de datos
         let autobot = await Autobot.findOne({});
         if (!autobot) {
             autobot = new Autobot({
                 config: { ...config, ...initialState },
-                lstate: 'STOPPED', // Si no existe, asume que está parado
+                lstate: 'STOPPED',
                 sstate: 'STOPPED'
             });
         } else {
-            // Actualiza solo la configuración y los valores calculados
             autobot.config = { ...config, ...initialState };
         }
 
@@ -131,17 +129,19 @@ router.post('/update-config', async (req, res) => {
 
         console.log('[BACKEND LOG]: Configuración y estado inicial actualizados en la DB.');
 
-        // 3. ¡EL PASO CLAVE! Emite el estado actualizado a todos los clientes a través de Socket.IO
         if (autobotLogic.io) {
             autobotLogic.io.emit('bot-state-update', autobot.toObject());
             console.log('[BACKEND LOG]: Estado del bot emitido (al actualizar config) a través de Socket.IO.');
         }
 
-        // 4. Envía la respuesta HTTP al frontend
         res.json({ success: true, message: 'Configuración y estado inicial actualizados con éxito.', data: autobot.toObject() });
 
     } catch (error) {
         console.error('Error al actualizar la configuración del bot:', error);
+        // Manejo específico para el error de BitMart
+        if (error.message.includes('Symbol not found')) {
+            return res.status(400).json({ success: false, message: 'El símbolo de trading no es válido o no se encuentra en BitMart. Por favor, verifica el símbolo de la configuración.' });
+        }
         res.status(500).json({ success: false, message: 'Error del servidor al actualizar la configuración.' });
     }
 });
