@@ -28,7 +28,7 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
     let numberOfOrders = 0;
     let coveragePrice = currentPrice;
 
-    if (currentBalance >= nextOrderAmount) {
+    if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) { // Added condition: nextOrderAmount > 0
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
         coveragePrice = nextOrderPrice;
@@ -37,7 +37,7 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
             nextOrderPrice = nextOrderPrice * (1 - decrement);
             nextOrderAmount = nextOrderAmount * (1 + increment);
 
-            if (currentBalance >= nextOrderAmount) {
+            if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) { // Added condition: nextOrderAmount > 0
                 currentBalance -= nextOrderAmount;
                 numberOfOrders++;
                 coveragePrice = nextOrderPrice;
@@ -70,7 +70,7 @@ function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, size
     let numberOfOrders = 0;
     let coveragePrice = currentPrice;
 
-    if (currentBalance >= nextOrderAmount) {
+    if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) { // ✅ Added condition: nextOrderAmount > 0
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
         coveragePrice = nextOrderPrice;
@@ -78,8 +78,8 @@ function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, size
         while (true) {
             nextOrderPrice = nextOrderPrice * (1 + increment);
             nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
-
-            if (currentBalance >= nextOrderAmount) {
+            
+            if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) { // ✅ Added condition: nextOrderAmount > 0
                 currentBalance -= nextOrderAmount;
                 numberOfOrders++;
                 coveragePrice = nextOrderPrice;
