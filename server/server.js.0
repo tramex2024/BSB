@@ -14,9 +14,6 @@ const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
 const checkTimeSync = require('./services/check_time');
 
-// Importa las funciones de cálculo
-const { calculateLongCoverage, calculateShortCoverage } = require('./autobotCalculations');
-
 // Modelos
 const Order = require('./models/Order');
 const Autobot = require('./models/Autobot');
@@ -25,7 +22,7 @@ const Autobot = require('./models/Autobot');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const ordersRoutes = require('./routes/ordersRoutes');
-const autobotRoutes = require('./routes/autobotRoutes');
+const autobotRoutes = require('./routes/autobotRoutes'); // Importa el nuevo router
 
 // Middleware
 const authMiddleware = require('./middleware/authMiddleware');
@@ -54,7 +51,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/autobot', autobotRoutes);
+app.use('/api/autobot', autobotRoutes); // Usa el nuevo router, ya protegido
 
 // Conexión a la Base de Datos
 const connectDB = async () => {
@@ -71,41 +68,6 @@ connectDB();
 
 let currentMarketPrice = 'N/A';
 
-// **NUEVA FUNCIÓN: Recalcular y guardar el estado del bot en tiempo real**
-async function updateBotStateWithPrice(price) {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState) {
-            // Recalcula lcoverage y lnorder con el nuevo precio
-            const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
-                botState.lbalance,
-                parseFloat(price),
-                botState.config.long.purchaseUsdt,
-                botState.config.long.price_var / 100,
-                botState.config.long.size_var / 100
-            );
-
-            // Recalcula scoverage y snorder
-            const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
-                botState.sbalance,
-                parseFloat(price),
-                botState.config.short.sellBtc,
-                botState.config.short.price_var / 100,
-                botState.config.short.size_var / 100
-            );
-
-            // Actualiza los valores en el objeto y guarda en la base de datos
-            botState.lcoverage = lcoverage;
-            botState.lnorder = lnorder;
-            botState.scoverage = scoverage;
-            botState.snorder = snorder;
-            await botState.save();
-        }
-    } catch (error) {
-        console.error('Error al actualizar el estado del bot con el nuevo precio:', error);
-    }
-}
-
 // Configuración de WebSocket para datos de mercado
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 function setupWebSocket(io) {
@@ -115,15 +77,12 @@ function setupWebSocket(io) {
         const subscribeMessage = { "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] };
         ws.send(JSON.stringify(subscribeMessage));
     };
-    ws.onmessage = async function(event) {
+    ws.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
             if (data && data.data && data.data.length > 0 && data.data[0].symbol === 'BTC_USDT') {
                 currentMarketPrice = data.data[0].last_price;
                 io.emit('marketData', { price: currentMarketPrice });
-
-                // Llama a la nueva función para recalcular y guardar
-                await updateBotStateWithPrice(currentMarketPrice);
             }
         } catch (error) {
             console.error("Error al procesar el mensaje de WebSocket:", error);
@@ -160,14 +119,14 @@ setInterval(async () => {
                 profit: botState.profit || 0,
                 lbalance: botState.lbalance || 0,
                 sbalance: botState.sbalance || 0,
-                ltprice: botState.ltprice || 0,
-                stprice: botState.stprice || 0,
-                lcycle: botState.lcycle || 0,
-                syle: botState.scycle || 0,
-                lcoverage: botState.lcoverage || 0,
-                scoverage: botState.scoverage || 0,
-                lnorder: botState.lnorder || 0,
-                snorder: botState.snorder || 0
+                ltprice: botState.ltprice || 0, // Corrected path
+                stprice: botState.stprice || 0, // Corrected path
+                lcycle: botState.lcycle || 0, // Corrected path
+                scycle: botState.scycle || 0, // Corrected path
+                lcoverage: botState.lcoverage || 0, // ✅ CORRECTED PATH
+                scoverage: botState.scoverage || 0, // ✅ CORRECTED PATH
+                lnorder: botState.lnorder || 0, // ✅ CORRECTED PATH
+                snorder: botState.snorder || 0 // ✅ CORRECTED PATH
             });
         }
     } catch (error) {
@@ -200,6 +159,7 @@ app.get('/api/ticker/:symbol', (req, res) => {
 
 app.get('/api/bitmart-data', async (req, res) => {
     try {
+        // La lógica de validación de claves debe estar en un middleware para proteger la ruta
         const isValid = await bitmartService.validateApiKeys();
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });

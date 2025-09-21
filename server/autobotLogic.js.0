@@ -55,8 +55,7 @@ async function botCycle(currentPrice) {
             BTC: { available: availableBTC, frozen: parseFloat(btcBalance.frozen) }
         });
 
-        // Este código ya no es necesario aquí, ya que se encarga server.js
-        /*
+        // RECALCULATE LCOVERAGE AND LNORDER BASED ON CURRENT PRICE
         const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
             botState.lbalance,
             parseFloat(currentPrice),
@@ -64,6 +63,8 @@ async function botCycle(currentPrice) {
             botState.config.long.price_var / 100,
             botState.config.long.size_var / 100
         );
+
+        // RECALCULATE SCOVERAGE AND SNORDER (EVEN IF SHORT STRATEGY IS COMMENTED OUT)
         const { coveragePrice: newSCoverage, numberOfOrders: newSNOrder } = calculateShortCoverage(
             botState.sbalance,
             parseFloat(currentPrice),
@@ -71,12 +72,14 @@ async function botCycle(currentPrice) {
             botState.config.short.price_var / 100,
             botState.config.short.size_var / 100
         );
+
+        // UPDATE THE DATABASE STATE WITH NEW CALCULATED VALUES
         botState.lcoverage = newLCoverage;
         botState.lnorder = newLNOrder;
         botState.scoverage = newSCoverage;
         botState.snorder = newSNOrder;
+        
         await botState.save();
-        */
 
         const dependencies = {
             log,
