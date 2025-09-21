@@ -116,7 +116,7 @@ router.post('/update-config', async (req, res) => {
 
         let autobot = await Autobot.findOne({});
         if (!autobot) {
-            // If bot doesn't exist, create it with all initial values
+            // Si el bot no existe, lo creamos con todos los valores iniciales.
             autobot = new Autobot({
                 config: config,
                 lstate: 'STOPPED', 
@@ -130,15 +130,14 @@ router.post('/update-config', async (req, res) => {
                 profit: initialState.profit
             });
         } else {
-            // Update configuration and calculated parameters
+            // Si el bot existe, actualizamos solo la configuración y los valores calculados.
             autobot.config = config;
             autobot.lcoverage = initialState.lcoverage;
             autobot.lnorder = initialState.lnorder;
             autobot.scoverage = initialState.scoverage;
             autobot.snorder = initialState.snorder;
             
-            // Critical Change:
-            // Update lbalance only if the bot is not running
+            // Si el bot está detenido, actualizamos los balances con los valores de la configuración.
             if (autobot.lstate === 'STOPPED') {
                 autobot.lbalance = initialState.lbalance;
             }
