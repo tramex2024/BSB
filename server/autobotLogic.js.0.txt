@@ -1,11 +1,13 @@
-// BSB/server/autobotLogic.js
+// Archivo: BSB/server/autobotLogic.js          
+// estrategia short comentada en las lineas 78 y 84
+
+// Archivo: BSB/server/autobotLogic.js
 // Contiene la lógica del ciclo de trading del bot en el backend.
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
-const { calculateLongCoverage, calculateShortCoverage } = require('./autobotCalculations');
 
 let io;
 
@@ -28,11 +30,13 @@ async function botCycle(currentPrice) {
             return;
         }
 
+        // Usa el precio del WebSocket que se pasa como argumento
         if (currentPrice === 'N/A') {
             log('No se pudo obtener el precio del mercado. Reintentando en el próximo ciclo.', 'error');
             return;
         }
 
+        // Ya tienes el precio, ahora obtén los balances desde BitMartService
         const balancesArray = await bitmartService.getAccountBalances({
             apiKey: process.env.BITMART_API_KEY,
             secretKey: process.env.BITMART_SECRET_KEY,
@@ -50,37 +54,13 @@ async function botCycle(currentPrice) {
         const availableUSDT = parseFloat(usdtBalance.available);
         const availableBTC = parseFloat(btcBalance.available);
 
+        // Emite los balances a través de WebSockets
         io.emit('wallet-balances', {
             USDT: { available: availableUSDT, frozen: parseFloat(usdtBalance.frozen) },
             BTC: { available: availableBTC, frozen: parseFloat(btcBalance.frozen) }
         });
 
-        // RECALCULATE LCOVERAGE AND LNORDER BASED ON CURRENT PRICE
-        const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-            botState.lbalance,
-            parseFloat(currentPrice),
-            botState.config.long.purchaseUsdt,
-            botState.config.long.price_var / 100,
-            botState.config.long.size_var / 100
-        );
-
-        // RECALCULATE SCOVERAGE AND SNORDER (EVEN IF SHORT STRATEGY IS COMMENTED OUT)
-        const { coveragePrice: newSCoverage, numberOfOrders: newSNOrder } = calculateShortCoverage(
-            botState.sbalance,
-            parseFloat(currentPrice),
-            botState.config.short.sellBtc,
-            botState.config.short.price_var / 100,
-            botState.config.short.size_var / 100
-        );
-
-        // UPDATE THE DATABASE STATE WITH NEW CALCULATED VALUES
-        botState.lcoverage = newLCoverage;
-        botState.lnorder = newLNOrder;
-        botState.scoverage = newSCoverage;
-        botState.snorder = newSNOrder;
-        
-        await botState.save();
-
+        // Configura las dependencias para las estrategias
         const dependencies = {
             log,
             io,
@@ -100,16 +80,20 @@ async function botCycle(currentPrice) {
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
+        // Ejecuta la estrategia si está activa
         if (botState.lstate === 'RUNNING') {
             await runLongStrategy();
         } else if (botState.sstate === 'RUNNING') {
-            // await runShortStrategy();
+            await runShortStrategy();
         }
+        
     } catch (error) {
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
 }
 
+// Las funciones start y stop no controlan el bucle, sino el estado del bot.
+// El bucle se maneja en server.js
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
 }
