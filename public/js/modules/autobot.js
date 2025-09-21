@@ -94,27 +94,22 @@ function updateBotUI(state) {
  * @returns {object} Un objeto con la configuración del bot.
  */
 function getBotConfiguration() {
-    // Helper function to get and validate a float value
-    const getFloatValue = (id) => {
-        const value = parseFloat(document.getElementById(id).value);
-        return isNaN(value) ? 0 : value;
-    };
-
     const config = {
+        // CORRECCIÓN CLAVE: Pasamos el símbolo que necesitamos
         symbol: TRADE_SYMBOL_BITMART,
         long: {
-            amountUsdt: getFloatValue('auamount-usdt'),
-            purchaseUsdt: getFloatValue('aupurchase-usdt'),
-            price_var: getFloatValue('audecrement'),
-            size_var: getFloatValue('auincrement'),
-            trigger: getFloatValue('autrigger'),
+            amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
+            purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
+            price_var: parseFloat(document.getElementById('audecrement').value),
+            size_var: parseFloat(document.getElementById('auincrement').value),
+            trigger: parseFloat(document.getElementById('autrigger').value),
         },
         short: {
-            amountBtc: getFloatValue('auamount-btc'),
-            sellBtc: getFloatValue('aupurchase-btc'),
-            price_var: getFloatValue('audecrement'),
-            size_var: getFloatValue('auincrement'),
-            trigger: getFloatValue('autrigger'),
+            amountBtc: parseFloat(document.getElementById('auamount-btc').value),
+            sellBtc: parseFloat(document.getElementById('aupurchase-btc').value),
+            price_var: parseFloat(document.getElementById('audecrement').value),
+            size_var: parseFloat(document.getElementById('auincrement').value),
+            trigger: parseFloat(document.getElementById('autrigger').value),
         },
         options: {
             stopAtCycleEnd: document.getElementById('au-stop-at-cycle-end').checked,
