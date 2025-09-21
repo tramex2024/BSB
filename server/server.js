@@ -119,14 +119,14 @@ setInterval(async () => {
                 profit: botState.profit || 0,
                 lbalance: botState.lbalance || 0,
                 sbalance: botState.sbalance || 0,
-                ltprice: botState.lStateData.ltprice || 0,
-                stprice: botState.sStateData.stprice || 0,
-                lcycle: botState.lStateData.lcycle || 0,
-                scycle: botState.sStateData.scycle || 0,
-                lcoverage: botState.lStateData.lcoverage || 0,
-                scoverage: botState.sStateData.scoverage || 0,
-                lnorder: botState.lStateData.lnorder || 0,
-                snorder: botState.sStateData.snorder || 0
+                ltprice: botState.ltprice || 0, // Corrected path
+                stprice: botState.stprice || 0, // Corrected path
+                lcycle: botState.lcycle || 0, // Corrected path
+                scycle: botState.scycle || 0, // Corrected path
+                lcoverage: botState.lcoverage || 0, // ✅ CORRECTED PATH
+                scoverage: botState.scoverage || 0, // ✅ CORRECTED PATH
+                lnorder: botState.lnorder || 0, // ✅ CORRECTED PATH
+                snorder: botState.snorder || 0 // ✅ CORRECTED PATH
             });
         }
     } catch (error) {
