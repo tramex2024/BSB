@@ -48,6 +48,47 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
     return { coveragePrice, numberOfOrders };
 }
 
+/**
+ * Calculates the price coverage (SCoverage) and number of orders (SNOrder)
+ * for the Short strategy.
+ *
+ * @param {number} sbalance - The available balance in BTC.
+ * @param {number} currentPrice - The current cryptocurrency price.
+ * @param {number} sellBtc - The amount of the first order in BTC.
+ * @param {number} increment - The price increment percentage (e.g., 0.01 for 1%).
+ * @param {number} sizeIncrement - The amount increment percentage (e.g., 1 for 100%).
+ * @returns {object} An object with SCoverage and SNOrder.
+ */
+function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, sizeIncrement) {
+    let currentBalance = sbalance;
+    let nextOrderPrice = currentPrice;
+    let nextOrderAmount = sellBtc;
+    let numberOfOrders = 0;
+    let coveragePrice = currentPrice;
+
+    if (currentBalance >= nextOrderAmount) {
+        currentBalance -= nextOrderAmount;
+        numberOfOrders++;
+        coveragePrice = nextOrderPrice;
+
+        while (true) {
+            nextOrderPrice = nextOrderPrice * (1 + increment);
+            nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
+
+            if (currentBalance >= nextOrderAmount) {
+                currentBalance -= nextOrderAmount;
+                numberOfOrders++;
+                coveragePrice = nextOrderPrice;
+            } else {
+                break;
+            }
+        }
+    } else {
+        return { coveragePrice: currentPrice, numberOfOrders: 0 };
+    }
+    
+    return { coveragePrice, numberOfOrders };
+}
 
 /**
  * Calcula el estado inicial de los parámetros del bot, incluyendo LCoverage y LNOrder.
@@ -89,5 +130,6 @@ function calculateInitialState(config, currentPrice) {
 
 module.exports = {
     calculateInitialState,
-    calculateLongCoverage
+    calculateLongCoverage,
+    calculateShortCoverage
 };
