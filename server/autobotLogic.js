@@ -33,7 +33,7 @@ async function botCycle(currentPrice) {
             return;
         }
 
-        const balancesArray = await bitmartService.getAccountBalances({
+        const balancesArray = await bitmartService.getBalance({
             apiKey: process.env.BITMART_API_KEY,
             secretKey: process.env.BITMART_SECRET_KEY,
             apiMemo: process.env.BITMART_API_MEMO
