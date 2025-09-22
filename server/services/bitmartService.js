@@ -88,7 +88,7 @@ async function cancelOrder(creds, symbol, order_id) {
 
 /**
  * Obtiene el ticker para un símbolo específico.
- * Nota: El ticker no requiere autenticación, por lo que no necesita las credenciales.
+ * Simplemente reenviamos la llamada a spotService.
  */
 async function getTicker(symbol) {
     return await spotService.getTicker(symbol);
