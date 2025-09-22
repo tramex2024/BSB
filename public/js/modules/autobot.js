@@ -4,15 +4,10 @@ import { getBalances } from './balance.js';
 import { initializeChart } from './chart.js';
 import { checkBitMartConnectionAndData } from './network.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
-// Esta línea ya importa las variables, no es necesario declararlas de nuevo
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
 
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 const BACKEND_URL = 'https://bsb-ppex.onrender.com';
-
-// He eliminado las líneas que declaraban las variables de nuevo aquí.
-// const TRADE_SYMBOL_TV = 'BITMART:BTCUSDT';
-// const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
 // IDs de los campos de configuración que necesitan ser gestionados
 const configInputIds = [
@@ -69,7 +64,8 @@ function updateBotUI(state) {
 
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
-        // Apply toFixed(2) to coverage values and toFixed(0) for order count
+        if (element) {
+            // Apply toFixed(2) to coverage values and toFixed(0) for order count
             if (dataKey === 'lcoverage' || dataKey === 'scoverage') {
                 element.textContent = state[dataKey] !== undefined ? parseFloat(state[dataKey]).toFixed(2) : 'N/A';
             } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
@@ -77,19 +73,24 @@ function updateBotUI(state) {
             } else {
                 element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
             }
+        }
     }
     
-    const isActive = state.lstate === 'RUNNING' || state.sstate === 'RUNNING';
+    // Nueva lógica para habilitar/deshabilitar los inputs
+    const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     
     if (autobotSettings) {
         const inputs = autobotSettings.querySelectorAll('input, select');
-        inputs.forEach(input => input.disabled = isActive);
+        inputs.forEach(input => {
+            // Habilita los inputs solo si ambos bots están en estado STOPPED
+            input.disabled = !isStopped;
+        });
     }
 
     if (startStopButton) {
-        startStopButton.textContent = isActive ? 'STOP' : 'START';
+        startStopButton.textContent = isStopped ? 'START' : 'STOP';
         startStopButton.classList.remove('start-btn', 'stop-btn');
-        startStopButton.classList.add(isActive ? 'stop-btn' : 'start-btn');
+        startStopButton.classList.add(isStopped ? 'start-btn' : 'stop-btn');
     }
 }
 
@@ -99,7 +100,6 @@ function updateBotUI(state) {
  */
 function getBotConfiguration() {
     const config = {
-        // CORRECCIÓN CLAVE: Pasamos el símbolo que necesitamos
         symbol: TRADE_SYMBOL_BITMART,
         long: {
             amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
@@ -141,10 +141,7 @@ function displayMessage(message, type) {
 async function sendConfigToBackend() {
     try {
         const config = getBotConfiguration();        
-        
-        // --- AQUÍ ESTÁ EL CAMBIO ---
         console.log('Enviando configuración al backend:', config);
-        // -------------------------
 
         const token = localStorage.getItem('token');
         if (!token) {
@@ -153,8 +150,7 @@ async function sendConfigToBackend() {
             return;
         }
         
-	const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, { 
-        //const response = await fetch('/api/autobot/update-config', {
+        const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -215,7 +211,6 @@ export function initializeAutobotView() {
             let endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
             let body = {};
             if (!isRunning) {
-                // Obtenemos la última configuración antes de iniciar el bot
                 body = getBotConfiguration();
                 console.log('[FRONTEND LOG]: Enviando configuración al iniciar:', body);
             }
@@ -226,8 +221,7 @@ export function initializeAutobotView() {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     },
-                    //body: JSON.stringify(body),
-		    body: JSON.stringify({ config: body }),
+                    body: JSON.stringify({ config: body }),
                 });
                 const data = await response.json();
                 if (!data.success) {

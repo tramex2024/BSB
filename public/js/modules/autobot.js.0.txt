@@ -69,10 +69,14 @@ function updateBotUI(state) {
 
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
-        if (element) {
-            // Se asume que estos valores ya vienen redondeados del backend
-            element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
-        }
+        // Apply toFixed(2) to coverage values and toFixed(0) for order count
+            if (dataKey === 'lcoverage' || dataKey === 'scoverage') {
+                element.textContent = state[dataKey] !== undefined ? parseFloat(state[dataKey]).toFixed(2) : 'N/A';
+            } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
+                element.textContent = state[dataKey] !== undefined ? parseFloat(state[dataKey]).toFixed(0) : 'N/A';
+            } else {
+                element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
+            }
     }
     
     const isActive = state.lstate === 'RUNNING' || state.sstate === 'RUNNING';
