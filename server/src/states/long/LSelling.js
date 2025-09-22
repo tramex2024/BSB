@@ -1,7 +1,8 @@
 // BSB/server/src/states/long/LSelling.js
 
 const autobotCore = require('../../../autobotLogic');
-const { placeSellOrder } = require('./longUtils');
+const Autobot = require('../../../models/Autobot');
+const { placeSellOrder } = require('../../longUtils');
 const TRAILING_STOP_PERCENTAGE = 0.4;
 
 async function run(dependencies) {

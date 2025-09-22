@@ -1,9 +1,7 @@
 // BSB/server/src/states/long/LBuying.js
 
 const autobotCore = require('../../../autobotLogic');
-const { checkAndPlaceCoverageOrder, cancelActiveOrders } = require('./longUtils');
-const { cancelActiveOrders } = require('../../cancelActiveOrders'); // Extraer esta función
-const { placeSellOrder } = require('../../placeSellOrder'); // Extraer esta función
+const { checkAndPlaceCoverageOrder, cancelActiveOrders } = require('../../longUtils');
 
 async function run(dependencies) {
     const { botState, currentPrice, availableUSDT, config, creds } = dependencies;
