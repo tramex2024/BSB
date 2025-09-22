@@ -1,8 +1,8 @@
-// shortStrategy.js
+// BSB/server/src/shortStrategy.js
 
 const { placeOrder, getOrderDetails } = require('../services/bitmartService');
 const autobotCore = require('../autobotLogic');
-const analyzer = require('../bitmart_indicator_analyzer');
+const analyzer = require('./bitmart_indicator_analyzer');
 const Autobot = require('../models/Autobot');
 
 const TRADE_SYMBOL = 'BTC_USDT';
