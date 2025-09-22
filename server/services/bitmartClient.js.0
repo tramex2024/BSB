@@ -4,27 +4,38 @@ const CryptoJS = require('crypto-js');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 
-async function makeRequest(creds, method, path, params = {}, body = {}) {
-    const { apiKey, secretKey, memo } = creds;
+async function makeRequest(method, path, params = {}, body = {}) {
+    const { BITMART_API_KEY, BITMART_SECRET_KEY, BITMART_API_MEMO } = process.env;
 
-    if (!apiKey || !secretKey || !memo) {
+    const credentials = {
+        apiKey: BITMART_API_KEY,
+        secretKey: BITMART_SECRET_KEY,
+        memo: BITMART_API_MEMO,
+    };
+    
+    if (!credentials.apiKey || !credentials.secretKey || !credentials.memo) {
         throw new Error("Las credenciales de la API no están configuradas.");
     }
 
     const timestamp = Date.now().toString();
 
     let bodyForSign = '';
+    let queryString = '';
 
-    if (method === 'POST') {
+    if (method === 'GET') {
+        if (Object.keys(params).length > 0) {
+            queryString = new URLSearchParams(params).toString();
+        }
+    } else if (method === 'POST') {
         bodyForSign = JSON.stringify(body);
     }
     
-    const message = timestamp + '#' + memo + '#' + bodyForSign;
-    const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
+    const message = timestamp + '#' + credentials.memo + '#' + bodyForSign;
+    const sign = CryptoJS.HmacSHA256(message, credentials.secretKey).toString(CryptoJS.enc.Hex);
 
     const headers = {
         'Content-Type': 'application/json',
-        'X-BM-KEY': apiKey,
+        'X-BM-KEY': credentials.apiKey,
         'X-BM-TIMESTAMP': timestamp,
         'X-BM-SIGN': sign,
     };
