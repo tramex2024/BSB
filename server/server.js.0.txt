@@ -200,20 +200,14 @@ app.get('/api/ticker/:symbol', (req, res) => {
 
 app.get('/api/bitmart-data', async (req, res) => {
     try {
-        const creds = {
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO
-        };
-        
-        const isValid = await bitmartService.validateApiKeys(creds);
+        const isValid = await bitmartService.validateApiKeys();
         if (!isValid) {
             return res.status(401).json({ message: 'BitMart API keys are not valid.', connected: false });
         }
-
-        const balance = await bitmartService.getBalance(creds);
-        const openOrders = await bitmartService.getOpenOrders(creds, 'BTC_USDT');
-        const historyOrdersResponse = await bitmartService.getHistoryOrders(creds, { symbol: 'BTC_USDT' });
+        
+        const balance = await bitmartService.getBalance();
+        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
+        const historyOrdersResponse = await bitmartService.getHistoryOrders({ symbol: 'BTC_USDT' });
         const historyOrders = historyOrdersResponse?.orders || [];
         const ticker = { data: { last: currentMarketPrice } };
 
