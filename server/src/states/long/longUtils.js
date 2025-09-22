@@ -1,9 +1,9 @@
 // BSB/server/src/longUtils.js
 
 // Importaciones necesarias
-const { placeOrder, getOrderDetails, cancelOrder } = require('../services/bitmartService');
-const Autobot = require('../models/Autobot');
-const autobotCore = require('../autobotLogic');
+const { placeOrder, getOrderDetails, cancelOrder } = require('../../services/bitmartService');
+const Autobot = require('../../models/Autobot');
+const autobotCore = require('../../autobotLogic');
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
