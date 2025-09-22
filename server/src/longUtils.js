@@ -1,9 +1,10 @@
 // BSB/server/src/longUtils.js
 
-const { placeOrder, getOrderDetails, cancelOrder } = require('../services/bitmartService');
+// CORRECTED IMPORT: Use getOrderDetail and remove the unnecessary import from autobotRoutes.
+const { placeOrder, getOrderDetail, cancelOrder } = require('../services/bitmartService');
 const Autobot = require('../models/Autobot');
 const autobotCore = require('../autobotLogic');
-const { getBotConfiguration } = require('../routes/autobotRoutes'); 
+// REMOVED: const { getBotConfiguration } = require('../routes/autobotRoutes');
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
@@ -20,6 +21,7 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, nextCoveragePr
     autobotCore.log(`Colocando orden de cobertura por ${usdtAmount.toFixed(2)} USDT en el precio ${nextCoveragePrice.toFixed(2)}.`, 'info');
     
     try {
+        // Pass credentials
         const order = await placeOrder(creds, SYMBOL, 'buy', 'limit', usdtAmount, nextCoveragePrice);
 
         if (order && order.order_id) {
@@ -121,7 +123,8 @@ async function placeFirstBuyOrder(config, creds) {
             autobotCore.log(`Orden de compra colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
             
             setTimeout(async () => {
-                const orderDetails = await getOrderDetails(creds, SYMBOL, order.order_id);
+                // CORRECTED: Use getOrderDetail instead of getOrderDetails
+                const orderDetails = await getOrderDetail(creds, SYMBOL, order.order_id);
                 if (orderDetails && orderDetails.state === 'filled') {
                     const botState = await Autobot.findOne({});
                     if (botState) {
@@ -168,7 +171,8 @@ async function placeSellOrder(config, creds, sellAmount) {
             autobotCore.log(`Orden de venta colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
 
             setTimeout(async () => {
-                const orderDetails = await getOrderDetails(creds, SYMBOL, order.order_id);
+                // CORRECTED: Use getOrderDetail instead of getOrderDetails
+                const orderDetails = await getOrderDetail(creds, SYMBOL, order.order_id);
                 if (orderDetails && orderDetails.state === 'filled') {
                     const botState = await Autobot.findOne({});
                     if (botState) {
@@ -188,6 +192,8 @@ async function placeSellOrder(config, creds, sellAmount) {
 
 /**
  * Cancela todas las órdenes activas del bot.
+ * @param {object} creds - Credenciales de la API.
+ * @param {object} botState - Estado actual del bot.
  */
 async function cancelActiveOrders(creds, botState) {
     if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
@@ -195,12 +201,13 @@ async function cancelActiveOrders(creds, botState) {
         return;
     }
 
-    const config = getBotConfiguration();
-    const SYMBOL = config.symbol || TRADE_SYMBOL;
+    // CORRECTED: Get symbol from the botState object directly
+    const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
     const orderIdToCancel = botState.lStateData.lastOrder.order_id;
     autobotCore.log(`Intentando cancelar la orden ${orderIdToCancel}.`, 'info');
 
     try {
+        // Pass credentials
         await cancelOrder(creds, SYMBOL, orderIdToCancel);
         autobotCore.log(`Orden ${orderIdToCancel} cancelada exitosamente.`, 'success');
         
@@ -218,7 +225,8 @@ async function cancelActiveOrders(creds, botState) {
 async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config) {
     if (botState.lStateData.lastOrder && botState.lStateData.lastOrder.side === 'buy' && botState.lStateData.lastOrder.order_id) {
         try {
-            const orderDetails = await getOrderDetails(creds, config.symbol || TRADE_SYMBOL, botState.lStateData.lastOrder.order_id);
+            // CORRECTED: Use getOrderDetail instead of getOrderDetails
+            const orderDetails = await getOrderDetail(creds, config.symbol || TRADE_SYMBOL, botState.lStateData.lastOrder.order_id);
             if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
                 autobotCore.log(`Ya hay una orden de cobertura activa (ID: ${orderDetails.order_id}). Esperando su ejecución.`, 'info');
                 return;
