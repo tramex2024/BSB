@@ -1,8 +1,8 @@
 // BSB/server/src/states/long/LRunning.js
 
-const autobotCore = require('../../autobotLogic');
+const autobotCore = require('../../../autobotLogic');
 const analyzer = require('../../bitmart_indicator_analyzer');
-const { placeFirstBuyOrder } = require('../../placeFirstBuyOrder'); // Nota: esta función debe ser extraída
+const { placeFirstBuyOrder } = require('../../longUtils');
 
 async function run(dependencies) {
     const { botState, currentPrice, availableUSDT, config, creds } = dependencies;

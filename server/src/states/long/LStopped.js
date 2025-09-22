@@ -1,6 +1,6 @@
 // BSB/server/src/states/long/LStopped.js
 
-const autobotCore = require('../../autobotLogic');
+const autobotCore = require('../../../autobotLogic');
 
 async function run(dependencies) {
     autobotCore.log("Estado Long: STOPPED. El bot está inactivo.", 'info');

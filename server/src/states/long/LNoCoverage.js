@@ -1,6 +1,6 @@
 // BSB/server/src/states/long/LNoCoverage.js
 
-const autobotCore = require('../../autobotLogic');
+const autobotCore = require('../../../autobotLogic');
 
 async function run(dependencies) {
     const { botState, currentPrice, availableUSDT, config } = dependencies;
