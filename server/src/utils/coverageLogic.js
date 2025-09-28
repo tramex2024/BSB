@@ -3,6 +3,7 @@
 const { getOrderDetail } = require('../../services/bitmartService');
 const autobotCore = require('../../autobotLogic');
 const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManager');
+const { updateLStateData } = require('../../autobotLogic'); // Importa la función de guardado
 
 /**
  * Verifica si se necesita colocar una nueva orden de cobertura y la coloca.
@@ -43,10 +44,17 @@ async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice,
         if (availableUSDT >= nextUSDTAmount && nextUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART) {
             await placeCoverageBuyOrder(botState, creds, nextUSDTAmount, nextCoveragePrice);
         } else {
-            autobotCore.log("Fondos insuficientes para la próxima cobertura. Cambiando a NO_COVERAGE.", 'warning');
-            await autobotCore.updateBotState('NO_COVERAGE', botState.sstate);
-        }
+            // AÑADIDO: Lógica de NO_COVERAGE
+
+        // 1. Guardar el monto que se necesitaba para la próxima orden.
+        botState.lStateData.requiredCoverageAmount = nextUSDTAmount;
+        await updateLStateData(botState.lStateData); // Persiste en la DB
+
+        // 2. Transicionar a NO_COVERAGE.
+        autobotCore.log("Fondos insuficientes para la próxima cobertura. Cambiando a NO_COVERAGE.", 'warning');
+        await autobotCore.updateBotState('NO_COVERAGE', botState.sstate);
     }
+  }
 }
 
 module.exports = {
