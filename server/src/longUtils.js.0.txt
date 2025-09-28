@@ -111,11 +111,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, config) {
  * @param {object} config - Configuración del bot.
  * @param {object} creds - Credenciales de la API.
  */
-/**
- * Coloca la primera orden de compra a mercado.
- * @param {object} config - Configuración del bot.
- * @param {object} creds - Credenciales de la API.
- */
 async function placeFirstBuyOrder(config, creds) {
     const purchaseAmount = parseFloat(config.long.purchaseUsdt);
     const SYMBOL = config.symbol || TRADE_SYMBOL;
@@ -126,44 +121,23 @@ async function placeFirstBuyOrder(config, creds) {
         
         if (order && order.order_id) {
             autobotCore.log(`Orden de compra colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
-
-            // --- INICIO DE CORRECCIÓN CRÍTICA ---
-            const botState = await Autobot.findOne({});
-            if (botState) {
-                // 1. Guarda el ID de la orden en el estado inmediatamente.
-                botState.lStateData.lastOrder = {
-                    order_id: order.order_id,
-                    price: null, // Precio desconocido por ser orden a mercado
-                    size: null, 
-                    side: 'buy',
-                    state: 'pending_fill'
-                };
-                await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
-                
-                // 2. Cambia el estado a 'BUYING' para evitar re-ejecutar LRunning.js en el próximo ciclo.
-                // El estado 'BUYING' será responsable de esperar la ejecución de esta orden.
-                await autobotCore.updateBotState('BUYING', botState.sstate); 
-            }
-            // --- FIN DE CORRECCIÓN CRÍTICA ---
             
             setTimeout(async () => {
                 // CORRECTED: Use getOrderDetail instead of getOrderDetails
                 const orderDetails = await getOrderDetail(creds, SYMBOL, order.order_id);
                 if (orderDetails && orderDetails.state === 'filled') {
-                    const updatedBotState = await Autobot.findOne({}); // Volvemos a buscar el estado ya actualizado
-                    if (updatedBotState) {
-                        // handleSuccessfulBuy ya se encarga de actualizar los AC/PPC y mantiene el estado en 'BUYING'
-                        await handleSuccessfulBuy(updatedBotState, orderDetails);
+                    const botState = await Autobot.findOne({});
+                    if (botState) {
+                        await handleSuccessfulBuy(botState, orderDetails);
                     }
                 } else {
                     autobotCore.log(`La orden inicial ${order.order_id} no se completó. Estado: ${orderDetails?.state || 'desconocido'}. Volviendo al estado RUNNING.`, 'error');
-                    // Si falla, volvemos a RUNNING para reintentar la entrada en el próximo ciclo.
-                    const updatedBotState = await Autobot.findOne({}); 
-                    if (updatedBotState) {
-                        await autobotCore.updateBotState('RUNNING', updatedBotState.sstate);
+                    const botState = await Autobot.findOne({});
+                    if (botState) {
+                        await autobotCore.updateBotState('RUNNING', botState.sstate);
                     }
                 }
-            }, 2000);
+            }, 10000);
         } else {
             autobotCore.log('Error: La respuesta de la orden de compra no contiene un ID. Volviendo al estado RUNNING.', 'error');
             const botState = await Autobot.findOne({});

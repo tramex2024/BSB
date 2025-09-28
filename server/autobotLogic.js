@@ -99,7 +99,8 @@ async function botCycle(currentPrice) {
 
         if (botState.lstate === 'RUNNING') {
             await runLongStrategy();
-        } else if (botState.sstate === 'RUNNING') {
+        }
+        if (botState.sstate === 'RUNNING') {
             // await runShortStrategy();
         }
     } catch (error) {
