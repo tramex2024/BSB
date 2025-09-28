@@ -1,6 +1,6 @@
 // BSB/server/src/utils/coverageLogic.js
 
-const { getOrderDetail } = require('../services/bitmartService');
+const { getOrderDetail } = require('../../services/bitmartService');
 const autobotCore = require('../../autobotLogic');
 const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManager');
 
