@@ -108,6 +108,34 @@ async function botCycle(currentPrice) {
     }
 }
 
+/**
+ * Función que actualiza únicamente el estado principal del bot (lstate/sstate).
+ * @param {string} newState - El nuevo estado a establecer.
+ * @param {string} strategy - 'long' o 'short'.
+ */
+async function updateBotState(newState, strategy) {
+    try {
+        const updateField = strategy === 'long' ? 'lstate' : 'sstate';
+        await Autobot.findOneAndUpdate({}, { [updateField]: newState });
+        log(`Estado de la estrategia ${strategy} actualizado a: ${newState}`, 'info');
+    } catch (error) {
+        log(`Error al actualizar el estado: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Función que actualiza únicamente los datos del ciclo Long (lStateData) en la base de datos.
+ * @param {object} lStateData - El objeto lStateData actualizado con nuevos precios/montos.
+ */
+async function updateLStateData(lStateData) {
+    try {
+        await Autobot.findOneAndUpdate({}, { lStateData: lStateData });
+        // No es necesario loguear en cada actualización de dato, ya que ocurre a menudo
+    } catch (error) {
+        log(`Error al guardar lStateData: ${error.message}`, 'error');
+    }
+}
+
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
 }
@@ -122,4 +150,6 @@ module.exports = {
     stop,
     log,
     botCycle,
+    updateBotState,      
+    updateLStateData
 };
