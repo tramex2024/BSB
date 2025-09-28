@@ -2,7 +2,7 @@
 
 const autobotCore = require('../../../autobotLogic');
 const Autobot = require('../../../models/Autobot');
-const { placeSellOrder } = require('../../longUtils');
+const { placeSellOrder } = require('../../utils/orderManager');
 const TRAILING_STOP_PERCENTAGE = 0.4;
 
 async function run(dependencies) {

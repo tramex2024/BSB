@@ -2,7 +2,7 @@
 
 const autobotCore = require('../../../autobotLogic');
 const analyzer = require('../../bitmart_indicator_analyzer');
-const { placeFirstBuyOrder } = require('../../longUtils');
+const { placeFirstBuyOrder } = require('../../utils/orderManager');
 
 async function run(dependencies) {
     const { botState, currentPrice, availableUSDT, config, creds } = dependencies;

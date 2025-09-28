@@ -1,7 +1,7 @@
 // BSB/server/src/states/long/LBuying.js
 
 const autobotCore = require('../../../autobotLogic');
-const { checkAndPlaceCoverageOrder, cancelActiveOrders } = require('../../longUtils');
+const { checkAndPlaceCoverageOrder } = require('../../utils/coverageLogic'); y const { cancelActiveOrders } = require('../../utils/orderManager');
 
 async function run(dependencies) {
     const { botState, currentPrice, availableUSDT, config, creds } = dependencies;
