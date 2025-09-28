@@ -1,6 +1,6 @@
 // BSB/server/src/utils/orderManager.js
 
-const { placeOrder, getOrderDetail, cancelOrder } = require('../services/bitmartService');
+const { placeOrder, getOrderDetail, cancelOrder } = require('../../services/bitmartService');
 const Autobot = require('../../models/Autobot');
 const autobotCore = require('../../autobotLogic');
 const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager'); // Necesita funciones de manejo de datos
