@@ -2,7 +2,8 @@
 
 const Autobot = require('../../models/Autobot');
 const autobotCore = require('../../autobotLogic');
-const { placeFirstBuyOrder } = require('./orderManager'); // Necesita la función de orden
+// NOTA: Se ha ELIMINADO la importación global de placeFirstBuyOrder
+// para romper la dependencia circular.
 
 /**
  * Lógica para manejar una orden de compra exitosa (Inicial o de Cobertura).
@@ -22,7 +23,7 @@ async function handleSuccessfulBuy(botStateObj, orderDetails) {
         state: 'filled'
     };
 
-    // 2. Cálculo del DCA
+    // 2. Cálculo del DCA (Dollar-Cost Averaging)
     const newSize = parseFloat(orderDetails.size);
     const newPrice = parseFloat(orderDetails.price);
     const currentAC = botStateObj.lStateData.ac || 0;
@@ -31,6 +32,7 @@ async function handleSuccessfulBuy(botStateObj, orderDetails) {
 
     const totalUSDT = (currentAC * currentPPC) + (newSize * newPrice);
     botStateObj.lStateData.ac = currentAC + newSize;
+    // Evita la división por cero
     botStateObj.lStateData.ppc = botStateObj.lStateData.ac > 0 ? totalUSDT / botStateObj.lStateData.ac : 0; 
     botStateObj.lStateData.orderCountInCycle = currentOrderCount + 1;
     
@@ -64,15 +66,19 @@ async function handleSuccessfulSell(botStateObj, orderDetails, config, creds) {
 
     await Autobot.findOneAndUpdate({}, { 'lStateData': botStateObj.lStateData });
     
-    // 2. Control de flujo
+    // 2. Control de flujo y reinicio
     if (config.long.stopAtCycle) {
         autobotCore.log('stopAtCycle activado. Bot Long se detendrá.', 'info');
         await autobotCore.updateBotState('STOPPED', botStateObj.sstate);
     } else {
-        // CORRECCIÓN: Reinicio inmediato con una nueva compra a mercado.
+        // SOLUCIÓN PARA LA DEPENDENCIA CIRCULAR:
+        // Importamos placeFirstBuyOrder aquí. 
+        // Esto asegura que orderManager.js esté completamente cargado antes de acceder a la función.
+        const { placeFirstBuyOrder } = require('./orderManager'); 
+
         autobotCore.log('Venta completada. Reiniciando ciclo con una nueva compra a mercado (BUYING).', 'info');
         
-        // La función placeFirstBuyOrder gestionará la colocación y el cambio de estado a 'BUYING'.
+        // placeFirstBuyOrder se encarga de colocar la orden y cambiar el estado a 'BUYING'.
         await placeFirstBuyOrder(config, creds); 
     }
 }
