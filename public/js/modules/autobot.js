@@ -10,6 +10,10 @@ import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiS
 
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 
+// Constantes de mínimos de BitMart
+const MIN_USDT_AMOUNT = 5.00;
+const MIN_BTC_AMOUNT = 0.00005;
+
 // NUEVAS VARIABLES GLOBALES PARA LOS LÍMITES REALES
 let maxUsdtBalance = 0;
 let maxBtcBalance = 0;
@@ -25,45 +29,58 @@ function updateMaxBalanceDisplay(currency, balance) {
 }
 
 /**
- * Valida un input de monto contra el saldo real disponible.
- * Muestra un mensaje de advertencia si excede el límite.
- * @param {string} inputId - ID del campo de input ('auamount-usdt' o 'auamount-btc').
- * @param {number} maxLimit - El límite máximo (maxUsdtBalance o maxBtcBalance).
+ * Valida un input de monto contra el saldo real disponible y los mínimos de BitMart.
+ * @param {string} inputId - ID del campo de input.
+ * @param {number} maxLimit - El saldo máximo disponible.
  * @param {string} currency - 'USDT' o 'BTC'.
- * @returns {boolean} True si es válido (o si la validación es ignorada), False si excede el límite.
+ * @returns {boolean} True si es válido, False si no lo es.
  */
 function validateAmountInput(inputId, maxLimit, currency) {
     const input = document.getElementById(inputId);
-    const errorDisplayId = `au-error-${currency.toLowerCase()}`; // ID del nuevo elemento de error
+    const errorDisplayId = `au-error-${currency.toLowerCase()}`;
     const errorElement = document.getElementById(errorDisplayId); 
     
     if (!input) return true;
 
     const value = parseFloat(input.value);
-
-    // Permitimos valores vacíos, nulos o ceros si el bot está detenido o la lógica lo permite. 
+    const minBitmart = currency === 'USDT' ? MIN_USDT_AMOUNT : MIN_BTC_AMOUNT;
+    
+    // 1. Verificar si el valor es válido (no NaN y positivo)
     if (isNaN(value) || value <= 0) {
-        if (errorElement) errorElement.style.display = 'none';
-        // No bloqueamos, dejamos que el backend decida si es una configuración válida.
-        return true; 
+        if (errorElement) {
+            errorElement.textContent = `El monto de ${currency} debe ser un número positivo.`;
+            errorElement.style.display = 'block';
+        }
+        return false;
     }
 
+    // 2. Verificar el mínimo de BitMart
+    if (value < minBitmart) {
+        if (errorElement) {
+            errorElement.textContent = `El monto mínimo requerido por BitMart es ${minBitmart.toFixed(currency === 'USDT' ? 2 : 5)} ${currency}.`;
+            errorElement.style.display = 'block';
+        }
+        return false;
+    }
+
+    // 3. Verificar el límite máximo (Saldo Disponible)
     if (value > maxLimit) {
         const msg = `¡Advertencia! El monto excede el saldo real disponible (${maxLimit.toFixed(currency === 'USDT' ? 2 : 5)} ${currency}).`;
         if (errorElement) {
             errorElement.textContent = msg;
             errorElement.style.display = 'block';
         }
-        return false; // Bloqueamos el envío de la configuración
+        return false;
     }
 
+    // Si todo es correcto, ocultar el error
     if (errorElement) errorElement.style.display = 'none';
     return true;
 }
 
-
 /**
  * Configura los event listeners para los campos de configuración.
+ * Nota: El código es el mismo que antes, pero llama a la función validateAmountInput actualizada.
  */
 function setupConfigListeners() {
     // Campos que requieren validación de balance real
@@ -84,13 +101,17 @@ function setupConfigListeners() {
         if (input) {
             // Validación y envío al teclear
             input.addEventListener('input', () => {
-                // Antes de enviar, validamos
+                // Se llama a la función de validación actualizada
                 const isValid = validateAmountInput(id, currency === 'USDT' ? maxUsdtBalance : maxBtcBalance, currency);
                 if (isValid) {
                     // Solo enviamos si pasa la validación de límites.
                     sendConfigToBackend();
                 } 
-                // Si NO es válido (retorna false), no se envía la configuración, y el error de UX se muestra.
+            });
+            
+            // Añadir un listener 'blur' para re-validar cuando el usuario sale del campo (mejor UX)
+            input.addEventListener('blur', () => {
+                 validateAmountInput(id, currency === 'USDT' ? maxUsdtBalance : maxBtcBalance, currency);
             });
         }
     });
