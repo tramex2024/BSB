@@ -1,4 +1,4 @@
-// Archivo: BSB/server/services/bitmartService.js (ACTUALIZADO)
+// Archivo: BSB/server/services/bitmartService.js
 
 const spotService = require('./bitmartSpot');
 
@@ -11,8 +11,7 @@ const LOG_PREFIX = '[BITMART_SERVICE]';
 async function validateApiKeys() {
     try {
         console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-        // Usamos getBalance de spotService para probar las credenciales
-        await spotService.getBalance(); 
+        await spotService.getBalance();
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
@@ -88,14 +87,6 @@ async function getTicker(symbol) {
     return await spotService.getTicker(symbol);
 }
 
-/**
- * Obtiene los datos de velas (klines).
- * REEXPORTA la función desde bitmartSpot.js
- */
-async function getKlines(symbol, interval, size) {
-    return await spotService.getKlines(symbol, interval, size);
-}
-
 module.exports = {
     validateApiKeys,
     getBalance,
@@ -104,7 +95,5 @@ module.exports = {
     placeOrder,
     getOrderDetail,
     cancelOrder,
-    getTicker,
-    // ¡AÑADIDO! Esto resuelve el error 'is not a function' en el analizador
-    getKlines 
+    getTicker
 };
