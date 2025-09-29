@@ -21,46 +21,75 @@ function log(message, type = 'info') {
 
 /**
  * CICLO DE ESTRATEGIA (DISPARO RÁPIDO): Recibe el precio en tiempo real del WebSocket.
- * SOLO debe ejecutar la lógica de trading (runLongStrategy, etc.).
+ * Realiza una validación de fondos en tiempo de ejecución antes de ejecutar la estrategia.
  */
 async function botCycle(priceFromWebSocket) {
     try {
         let botState = await Autobot.findOne({});
         
-        // 1. NORMALIZACIÓN DEL PRECIO (CORRECCIÓN CLAVE)
+        // 1. NORMALIZACIÓN DEL PRECIO
         const currentPrice = parseFloat(priceFromWebSocket); // Aseguramos que sea un número flotante
 
-        // 2. Comprobación de precio y estado
+        // 2. Comprobación básica de estado y precio
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            // Solo loggeamos el error si el precio no es válido o si el botState no existe.
             if (priceFromWebSocket !== 'N/A') { 
                 log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
             }
             return;
         }
+
+        // --- INICIO DE LA VALIDACIÓN DE FONDOS EN TIEMPO DE EJECUCIÓN ---
         
-        // **OPCIÓN TEMPORAL: Recuperar balances para inyección (Esto debe ser movido a balanceCycle)**
-        const balancesArray = await bitmartService.getBalance({
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO
-        });
-        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+        // 3. OBTENER SALDOS REALES DISPONIBLES EN BITMART
+        const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
+        
+        // Asignación de fondos según la configuración (asumo los mismos campos que en configRoutes.js)
+        const assignedUSDT = parseFloat(botState.config.long.purchaseUsdt || 0);
+        const assignedBTC = parseFloat(botState.config.short.purchaseBTC || 0);
 
-        const availableUSDT = parseFloat(usdtBalance?.available || 0);
-        const availableBTC = parseFloat(btcBalance?.available || 0);
+        let longStrategyStopped = false;
+        let shortStrategyStopped = false;
 
+        // 4. VALIDACIÓN LONG (USDT)
+        if (assignedUSDT > availableUSDT && botState.lstate !== 'STOPPED') {
+            const msg = `CRÍTICO: Fondos de USDT insuficientes. Asignado: ${assignedUSDT.toFixed(2)}, Disponible Real: ${availableUSDT.toFixed(2)}. Deteniendo estrategia LONG.`;
+            log(msg, 'error');
+            
+            // Detener la estrategia LONG y guardar el cambio
+            await updateBotState({ lstate: 'STOPPED' });
+            botState.lstate = 'STOPPED'; // Actualizar el estado local para este ciclo
+            longStrategyStopped = true;
+        }
+        
+        // 5. VALIDACIÓN SHORT (BTC)
+        if (assignedBTC > availableBTC && botState.sstate !== 'STOPPED') {
+            const msg = `CRÍTICO: Fondos de BTC insuficientes. Asignado: ${assignedBTC.toFixed(8)}, Disponible Real: ${availableBTC.toFixed(8)}. Deteniendo estrategia SHORT.`;
+            log(msg, 'error');
+            
+            // Detener la estrategia SHORT y guardar el cambio
+            await updateBotState({ sstate: 'STOPPED' });
+            botState.sstate = 'STOPPED'; // Actualizar el estado local para este ciclo
+            shortStrategyStopped = true;
+        }
+
+        if (longStrategyStopped || shortStrategyStopped) {
+            // Si alguna estrategia fue detenida por falta de fondos, evitamos la ejecución del ciclo de trading por seguridad.
+            return;
+        }
+        
+        // --- FIN DE LA VALIDACIÓN DE FONDOS EN TIEMPO DE EJECUCIÓN ---
+
+        // 6. Configurar las dependencias para la inyección
         const dependencies = {
             log,
             io,
             bitmartService,
             Autobot,
-            currentPrice, // Ahora es un número garantizado
-            availableUSDT, 
-            availableBTC, 
+            currentPrice, 
+            availableUSDT,  // Inyectamos el saldo real disponible
+            availableBTC,   // Inyectamos el saldo real disponible
             botState,
-            updateBotState, // Inyectamos las funciones de estado
+            updateBotState, 
             updateLStateData,
             bitmartCredentials: {
                 apiKey: process.env.BITMART_API_KEY,
@@ -72,14 +101,15 @@ async function botCycle(priceFromWebSocket) {
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        if (botState.lstate !== 'STOPPED') { // Solo corre la estrategia si está activa
+        // 7. Ejecutar estrategias (solo si el estado no fue forzado a STOPPED)
+        if (botState.lstate !== 'STOPPED') {
             await runLongStrategy();
         }
         if (botState.sstate !== 'STOPPED') {
             // await runShortStrategy();
         }
+        
     } catch (error) {
-        // Tu anterior error de log ya no ocurrirá, pero loggeamos el nuevo.
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
 }

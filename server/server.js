@@ -26,6 +26,7 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const ordersRoutes = require('./routes/ordersRoutes');
 const autobotRoutes = require('./routes/autobotRoutes');
+const configRoutes = require('./routes/configRoutes');
 
 // Middleware
 const authMiddleware = require('./middleware/authMiddleware');
@@ -55,6 +56,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/autobot', autobotRoutes);
+app.use('/api/v1/config', configRoutes);
 
 // Conexión a la Base de Datos
 const connectDB = async () => {

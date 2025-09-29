@@ -30,6 +30,28 @@ async function getBalance() {
 }
 
 /**
+ * Obtiene los saldos disponibles para trading (available) de USDT y BTC.
+ * @returns {Promise<{availableUSDT: number, availableBTC: number}>} - Objeto con los balances disponibles.
+ */
+async function getAvailableTradingBalances() {
+    try {
+        const balancesArray = await spotService.getBalance();
+        
+        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
+        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+
+        const availableUSDT = parseFloat(usdtBalance?.available || 0);
+        const availableBTC = parseFloat(btcBalance?.available || 0);
+        
+        return { availableUSDT, availableBTC };
+    } catch (error) {
+        console.error(`${LOG_PREFIX} Error al obtener los balances de trading:`, error.message);
+        // Devolvemos cero si falla para evitar asignar fondos irreales por error.
+        return { availableUSDT: 0, availableBTC: 0 }; 
+    }
+}
+
+/**
  * Obtiene las órdenes abiertas para un símbolo específico.
  * @param {string} symbol - Símbolo de trading (e.g., 'BTC_USDT').
  * @returns {Promise<object>} - Un objeto con la lista de órdenes abiertas.
@@ -104,7 +126,7 @@ module.exports = {
     placeOrder,
     getOrderDetail,
     cancelOrder,
-    getTicker,
-    // ¡AÑADIDO! Esto resuelve el error 'is not a function' en el analizador
-    getKlines 
+    getTicker,    
+    getKlines,
+    getAvailableTradingBalances, 
 };

@@ -47,6 +47,7 @@
         </div>
 
         <div class="space-y-4 text-sm">
+	<div id="autobot-settings" class="space-y-4 text-sm">    
             <hr class="border-gray-600"/>
             <div class="flex space-x-4">
                 <div class="flex-1">
@@ -78,7 +79,7 @@
                 <label class="block">Trigger (%)</label>
                 <input id="autrigger" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
             </div>
-
+            </div>
             <div class="flex flex-col space-y-2">
                 <div class="flex items-center">
                     <input type="checkbox" id="au-stop-at-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
