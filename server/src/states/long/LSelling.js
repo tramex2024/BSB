@@ -32,7 +32,8 @@ async function run(dependencies) {
             // Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED.
         }
     }
-    log(`Esperando condiciones para la venta. Precio actual: ${currentPrice.toFixed(2)}, PM: ${newPm.toFixed(2)}, PC: ${newPc.toFixed(2)}`);
+    // En BSB/server/src/states/long/LSelling.js (línea final de log)
+autobotCore.log(`Esperando condiciones para la venta. Precio actual: ${currentPrice.toFixed(2)}, PM: ${newPm.toFixed(2)}, PC: ${newPc.toFixed(2)}`);
 }
 
 module.exports = { run };

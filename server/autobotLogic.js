@@ -23,70 +23,66 @@ function log(message, type = 'info') {
  * CICLO DE ESTRATEGIA (DISPARO RÁPIDO): Recibe el precio en tiempo real del WebSocket.
  * SOLO debe ejecutar la lógica de trading (runLongStrategy, etc.).
  */
-async function botCycle(currentPrice) {
-    try {
-        let botState = await Autobot.findOne({});
-        if (!botState || currentPrice === 'N/A') {
-            return;
-        }
+async function botCycle(priceFromWebSocket) {
+    try {
+        let botState = await Autobot.findOne({});
         
-        // **ELIMINADAS LAS LLAMADAS LENTAS A BITMART SERVICE.getBalance()**
+        // 1. NORMALIZACIÓN DEL PRECIO (CORRECCIÓN CLAVE)
+        const currentPrice = parseFloat(priceFromWebSocket); // Aseguramos que sea un número flotante
 
-        // Nota: Los balances (availableUSDT/BTC) NO se actualizan en cada ciclo.
-        // Se usarán los últimos balances disponibles (emitidos por balanceCycle) 
-        // o se obtendrán al comienzo del ciclo de estrategia si es CRÍTICO. 
-        // Vamos a REUTILIZAR los balances del ciclo LENTO para inyección de dependencias
-        // para evitar llamadas innecesarias a la API.
-
-        // Por ahora, asumiremos que los balances necesarios para la estrategia
-        // deben ser recuperados si son CRÍTICOS (e.g., para placeFirstBuyOrder).
-        // Para los estados de cobertura, usaremos la lógica actual del bot.
+        // 2. Comprobación de precio y estado
+        if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
+            // Solo loggeamos el error si el precio no es válido o si el botState no existe.
+            if (priceFromWebSocket !== 'N/A') { 
+                log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
+            }
+            return;
+        }
         
-        // Recuperamos balances solo si es CRÍTICO para la estrategia (lo moveremos a balanceCycle)
-        // Por ahora, para mantener la funcionalidad, simularemos balances estáticos o inyectados
-        
-        // **OPCIÓN TEMPORAL: Recuperar balances para inyección**
+        // **OPCIÓN TEMPORAL: Recuperar balances para inyección (Esto debe ser movido a balanceCycle)**
         const balancesArray = await bitmartService.getBalance({
             apiKey: process.env.BITMART_API_KEY,
             secretKey: process.env.BITMART_SECRET_KEY,
             apiMemo: process.env.BITMART_API_MEMO
         });
         const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
 
-        const availableUSDT = parseFloat(usdtBalance?.available || 0);
-        const availableBTC = parseFloat(btcBalance?.available || 0);
+        const availableUSDT = parseFloat(usdtBalance?.available || 0);
+        const availableBTC = parseFloat(btcBalance?.available || 0);
 
-        const dependencies = {
-            log,
-            io,
-            bitmartService,
-            Autobot,
-            currentPrice,
-            availableUSDT, // Inyectado
-            availableBTC, // Inyectado
-            botState,
-            bitmartCredentials: {
-                apiKey: process.env.BITMART_API_KEY,
-                secretKey: process.env.BITMART_SECRET_KEY,
-                memo: process.env.BITMART_API_MEMO
-            }
-        };
+        const dependencies = {
+            log,
+            io,
+            bitmartService,
+            Autobot,
+            currentPrice, // Ahora es un número garantizado
+            availableUSDT, 
+            availableBTC, 
+            botState,
+            updateBotState, // Inyectamos las funciones de estado
+            updateLStateData,
+            bitmartCredentials: {
+                apiKey: process.env.BITMART_API_KEY,
+                secretKey: process.env.BITMART_SECRET_KEY,
+                memo: process.env.BITMART_API_MEMO
+            }
+        };
 
-        setLongDeps(dependencies);
-        setShortDeps(dependencies);
+        setLongDeps(dependencies);
+        setShortDeps(dependencies);
 
-        if (botState.lstate !== 'STOPPED') { // Solo corre la estrategia si está activa
-            await runLongStrategy();
-        }
-        if (botState.sstate !== 'STOPPED') {
-            // await runShortStrategy();
-        }
-    } catch (error) {
-        log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
-    }
+        if (botState.lstate !== 'STOPPED') { // Solo corre la estrategia si está activa
+            await runLongStrategy();
+        }
+        if (botState.sstate !== 'STOPPED') {
+            // await runShortStrategy();
+        }
+    } catch (error) {
+        // Tu anterior error de log ya no ocurrirá, pero loggeamos el nuevo.
+        log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
+    }
 }
-
 
 /**
  * CICLO DE BALANCES (DISPARO LENTO): Obtiene balances y los emite al frontend.
