@@ -124,8 +124,6 @@ function setupWebSocket(io) {
 
                 // Llama a la nueva función para recalcular y guardar
                 await updateBotStateWithPrice(currentMarketPrice);
-		// AÑADIDO CRÍTICO: Disparar el ciclo de la estrategia en tiempo real
-        await autobotLogic.botCycle(currentMarketPrice); // ¡NUEVO DISPARO RÁPIDO!
             }
         } catch (error) {
             console.error("Error al procesar el mensaje de WebSocket:", error);
@@ -177,7 +175,19 @@ setInterval(async () => {
     }
 }, 3000);
 
-
+// Bucle principal de la lógica del bot
+(async function startBotCycle() {
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState && (botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING') && currentMarketPrice !== 'N/A') {
+            await autobotLogic.botCycle(currentMarketPrice);
+        }
+    } catch (error) {
+        console.error('[BOT LOG]: Error en el ciclo principal del bot:', error.message);
+    } finally {
+        setTimeout(startBotCycle, 10000);
+    }
+})();
 
 // Endpoint de la API
 app.get('/api/ticker/:symbol', (req, res) => {
