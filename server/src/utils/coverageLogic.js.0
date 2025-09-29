@@ -1,7 +1,7 @@
-// BSB/server/src/utils/coverageLogic.js (ACTUALIZADO)
+// BSB/server/src/utils/coverageLogic.js
 
 const { getOrderDetail } = require('../../services/bitmartService');
-// const autobotCore = require('../../autobotLogic'); // ¡ELIMINADO!
+const autobotCore = require('../../autobotLogic');
 const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManager');
 // NOTA: updateLStateData NO se importa globalmente para romper la dependencia circular.
 
@@ -13,15 +13,12 @@ const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderMa
  * @param {number} currentPrice - Precio actual del mercado.
  * @param {object} creds - Credenciales de la API.
  * @param {object} config - Configuración del bot.
- * @param {function} log - Función de logging inyectada.
- * @param {function} updateBotState - Función para cambiar el estado inyectada.
- * @param {function} updateLStateData - Función para actualizar lStateData inyectada.
  */
-async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config, log, updateBotState, updateLStateData) {
+async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config) {
     const { ppc, orderCountInCycle } = botState.lStateData;
     const { price_var, size_var, purchaseUsdt } = config.long;
 
-    // Solo procedemos si ya hay una posición (PPC > 0)
+    // Solo procedemos si ya hay una posición (PPC > 0), de lo contrario, estamos en RUNNING o BUYING inicial.
     if (ppc <= 0) {
         return;
     }
@@ -36,20 +33,27 @@ async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice,
     const sizeIncrement = (size_var / 100) * orderCountInCycle;
     const nextUSDTAmount = parseFloat(purchaseUsdt) * (1 + sizeIncrement);
     
-    // 3. Persistir el precio de la próxima orden para el Front-End (Si es necesario)
-    // ESTA LÓGICA DE PERSISTENCIA SE MUEVE A LBUYING.JS si no hay fondos
+    // 3. Persistir el precio de la próxima orden para el Front-End
+    if (botState.lStateData.nextCoveragePrice !== nextCoveragePrice) {
+        // SOLUCIÓN DE DEPENDENCIA CIRCULAR: Importamos updateLStateData aquí si es necesario.
+        // Si ya hay un proceso activo, no interrumpimos con una importación interna. 
+        // Vamos a asumir que el guardado de nextCoveragePrice se hace en el estado central
+        // o si los datos del ciclo se actualizaron después de una compra exitosa (handleSuccessfulBuy).
+    }
 
     // 4. Condición de Disparo y Colocación
     if (currentPrice <= nextCoveragePrice) {
-        log(`Disparo de cobertura Long activado. Precio objetivo: ${nextCoveragePrice.toFixed(2)} vs Precio actual: ${currentPrice.toFixed(2)}`, 'info');
+        autobotCore.log(`Disparo de cobertura Long activado. Precio objetivo: ${nextCoveragePrice.toFixed(2)} vs Precio actual: ${currentPrice.toFixed(2)}`, 'info');
 
         if (availableUSDT >= nextUSDTAmount && nextUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART) {
             // Hay fondos, colocar la orden de cobertura
-            // Nota: placeCoverageBuyOrder ahora debe recibir 'log' como dependencia
-            await placeCoverageBuyOrder(botState, creds, nextUSDTAmount, nextCoveragePrice, log);
+            await placeCoverageBuyOrder(creds, botState, nextUSDTAmount, nextCoveragePrice);
 
         } else {
             // FONDOS INSUFICIENTES: Transición a NO_COVERAGE
+
+            // SOLUCIÓN DE DEPENDENCIA CIRCULAR: Importamos updateLStateData aquí.
+            const { updateLStateData, updateBotState } = require('../../autobotLogic'); 
 
             // 1. Guardar el monto que se necesitaba para la próxima orden (requiredCoverageAmount).
             botState.lStateData.requiredCoverageAmount = nextUSDTAmount;
@@ -57,13 +61,10 @@ async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice,
             // También se recomienda guardar el precio de disparo fallido para el Front-End
             botState.lStateData.nextCoveragePrice = nextCoveragePrice; 
 
-            // Usamos la función inyectada
-            await updateLStateData(botState.lStateData); 
+            await updateLStateData(botState.lStateData); // Persiste en la DB
 
             // 2. Transicionar a NO_COVERAGE.
-            log(`Fondos insuficientes para la próxima cobertura (${nextUSDTAmount.toFixed(2)} USDT). Disponible: ${availableUSDT.toFixed(2)} USDT. Cambiando a NO_COVERAGE.`, 'warning');
-            
-            // Usamos la función inyectada
+            autobotCore.log(`Fondos insuficientes para la próxima cobertura (${nextUSDTAmount.toFixed(2)} USDT). Disponible: ${availableUSDT.toFixed(2)} USDT. Cambiando a NO_COVERAGE.`, 'warning');
             await updateBotState('NO_COVERAGE', botState.sstate);
         }
     }

@@ -1,17 +1,15 @@
-// BSB/server/src/states/long/LSelling.js
+// BSB/server/src/states/long/LSelling.js (ACTUALIZADO)
 
-const autobotCore = require('../../../autobotLogic');
-// ELIMINADA la importación directa de 'Autobot' para usar la utilidad centralizada
 const { placeSellOrder } = require('../../utils/orderManager');
 
-// Mantenemos el valor fijo según tu backtest
 const TRAILING_STOP_PERCENTAGE = 0.4; 
 
 async function run(dependencies) {
-    const { botState, currentPrice, config, creds } = dependencies;
+    // Extraemos las funciones de las dependencias
+    const { botState, currentPrice, config, creds, log, updateLStateData } = dependencies;
     const { ac: acSelling, pm } = botState.lStateData;
 
-    autobotCore.log("Estado Long: SELLING. Gestionando ventas...", 'info');
+    log("Estado Long: SELLING. Gestionando ventas...", 'info');
 
     // 1. CÁLCULO DEL TRAILING STOP
     const newPm = Math.max(pm || 0, currentPrice);
@@ -21,22 +19,20 @@ async function run(dependencies) {
     botState.lStateData.pm = newPm;
     botState.lStateData.pc = newPc;
 
-    // CORRECCIÓN: Usamos la función centralizada updateLStateData
-    await autobotCore.updateLStateData(botState.lStateData); 
+    await updateLStateData(botState.lStateData); // Usamos la función inyectada
 
     // 3. CONDICIÓN DE VENTA Y LIQUIDACIÓN
     if (acSelling > 0) {
         if (currentPrice <= newPc) {
-            autobotCore.log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
+            log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
             
-            // Coloca la orden de venta. El reinicio del ciclo (limpieza de lStateData y cambio a RUNNING)
-            // será manejado por el callback asíncrono handleSuccessfulSell en dataManager.js.
-            await placeSellOrder(config, creds, acSelling);
+            // Llama a la función y pasa log
+            await placeSellOrder(config, creds, acSelling, log);
 
             // Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED.
         }
     }
-    autobotCore.log(`Esperando condiciones para la venta. Precio actual: ${currentPrice.toFixed(2)}, PM: ${newPm.toFixed(2)}, PC: ${newPc.toFixed(2)}`);
+    log(`Esperando condiciones para la venta. Precio actual: ${currentPrice.toFixed(2)}, PM: ${newPm.toFixed(2)}, PC: ${newPc.toFixed(2)}`);
 }
 
 module.exports = { run };
