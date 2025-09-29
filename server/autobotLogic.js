@@ -118,6 +118,13 @@ async function balanceCycle() {
     }
 }
 
+async function start() {
+    log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
+}
+
+async function stop() {
+    log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
+}
 
 // Las funciones updateBotState, updateLStateData, start y stop se mantienen igual.
 // ... (código para updateBotState, updateLStateData, start, stop) ...

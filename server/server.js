@@ -257,6 +257,12 @@ app.get('/', (req, res) => {
     res.send('Backend is running!');
 });
 
+// Bucle para actualizar balances (Ciclo LENTO: cada 5 segundos)
+setInterval(async () => {
+    // LLama al nuevo ciclo lento para obtener y emitir balances a la UI.
+    await autobotLogic.balanceCycle();
+}, 5000);
+
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     checkTimeSync();
