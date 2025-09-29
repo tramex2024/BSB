@@ -1,16 +1,31 @@
-// BSB/server/src/states/long/LBuying.js (ACTUALIZADO)
+// BSB/server/src/states/long/LBuying.js (ACTUALIZADO - Versión Final)
 
 const { checkAndPlaceCoverageOrder } = require('../../utils/coverageLogic'); 
 const { cancelActiveOrders } = require('../../utils/orderManager');
 
 async function run(dependencies) {
-    // Extraemos todas las dependencias necesarias, incluyendo las funciones de actualización
-    const { botState, currentPrice, availableUSDT, config, creds, log, updateBotState, updateLStateData } = dependencies;
+    // Extraemos TODAS las dependencias necesarias, incluyendo la nueva función:
+    const { 
+        botState, currentPrice, availableUSDT, config, creds, log, 
+        updateBotState, updateLStateData, updateGeneralBotState // <--- ¡AQUÍ ESTÁ!
+    } = dependencies;
 
     log("Estado Long: BUYING. Gestionando compras de cobertura...", 'info');
 
-    // LLAMADA ACTUALIZADA: Pasamos las funciones de persistencia y log como argumentos.
-    await checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config, log, updateBotState, updateLStateData); 
+    // LLAMADA ACTUALIZADA: Inyectamos la función genérica de actualización
+    // NOTA: La lógica para RESTAR el LBalance y cambiar a NO_COVERAGE debe estar 
+    // DENTRO de la función checkAndPlaceCoverageOrder.
+    await checkAndPlaceCoverageOrder(
+        botState, 
+        availableUSDT, 
+        currentPrice, 
+        creds, 
+        config, 
+        log, 
+        updateBotState, 
+        updateLStateData,
+        updateGeneralBotState // <--- NUEVO ARGUMENTO PASADO AL ORDENADOR
+    ); 
 
     const { ppc, ac } = botState.lStateData;
     const triggerPercentage = config.long.trigger;
@@ -32,7 +47,8 @@ async function run(dependencies) {
                 await cancelActiveOrders(creds, botState, log); 
             }
             
-            await updateBotState('SELLING', botState.sstate); // Usamos la función inyectada
+            // Cambiamos el estado de Long a SELLING
+            await updateBotState('SELLING', 'long');
         }
     }
 }

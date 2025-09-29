@@ -144,8 +144,6 @@ async function balanceCycle() {
     }
 }
 
-// BSB/server/autobotLogic.js (RESTORE THE FOLLOWING FUNCTIONS)
-
 /**
  * Función que actualiza únicamente el estado principal del bot (lstate/sstate).
  * @param {string} newState - El nuevo estado a establecer.
@@ -174,6 +172,19 @@ async function updateLStateData(lStateData) {
     }
 }
 
+/**
+ * Función genérica para actualizar campos top-level en el modelo Autobot.
+ * Útil para lbalance, sbalance, profit, etc.
+ * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... }
+ */
+async function updateGeneralBotState(fieldsToUpdate) {
+    try {
+        await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate });
+    } catch (error) {
+        log(`Error al actualizar campos generales del estado del bot: ${error.message}`, 'error');
+    }
+}
+
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
 }
@@ -191,5 +202,6 @@ module.exports = {
     botCycle,        // Ciclo RÁPIDO (Estrategia)
     balanceCycle,    // Ciclo LENTO (Balances)
     updateBotState,
-    updateLStateData
+    updateLStateData,
+    updateGeneralBotState
 };

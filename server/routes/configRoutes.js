@@ -20,44 +20,71 @@ router.get('/', async (req, res) => {
     }
 });
 
-
-// Ruta POST: Actualiza la configuración con validación de fondos
+// Ruta POST: Actualiza la configuración con validación y establece LBalance/SBalance
 router.post('/', async (req, res) => {
     try {
         const newConfig = req.body;
         
-        // --- 1. OBTENER SALDOS REALES DE BITMART ---
+        // --- 1. IDENTIFICAR LOS CAMPOS DE CAPITAL ASIGNADO (CORRECCIÓN) ---
+        // Asumimos que Amount (USDT) se mapea a amountUsdt, y Amount (BTC) a amountBtc.
+        const assignedUSDT = parseFloat(newConfig.long.amountUsdt || 0); // CORRECTO
+        const assignedBTC = parseFloat(newConfig.short.amountBtc || 0);  // CORRECTO
+
+        // --- 2. OBTENER SALDOS REALES DE BITMART ---
         const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
 
-        // --- 2. VALIDACIÓN CRÍTICA DE ASIGNACIÓN DE FONDOS LONG (USDT) ---
-        const assignedUSDT = parseFloat(newConfig.long.purchaseUsdt); 
+        // --- 3. VALIDACIÓN CRÍTICA DE FONDOS ---
         
         if (assignedUSDT > availableUSDT) {
-            const msg = `Error: La asignación de USDT para la estrategia Long (${assignedUSDT.toFixed(2)} USDT) excede el saldo real disponible en BitMart (${availableUSDT.toFixed(2)} USDT).`;
+            const msg = `Error: Asignación de USDT (${assignedUSDT.toFixed(2)}) excede el saldo real disponible (${availableUSDT.toFixed(2)}).`;
             log(msg, 'error');
             return res.status(400).json({ success: false, message: msg });
         }
 
-        // --- 3. VALIDACIÓN CRÍTICA DE ASIGNACIÓN DE FONDOS SHORT (BTC) ---
-        const assignedBTC = parseFloat(newConfig.short.purchaseBTC || 0); 
-        
         if (assignedBTC > availableBTC) {
-            const msg = `Error: La asignación de BTC para la estrategia Short (${assignedBTC.toFixed(8)} BTC) excede el saldo real disponible en BitMart (${availableBTC.toFixed(8)} BTC).`;
+            const msg = `Error: Asignación de BTC (${assignedBTC.toFixed(8)}) excede el saldo real disponible (${availableBTC.toFixed(8)}).`;
             log(msg, 'error');
             return res.status(400).json({ success: false, message: msg });
         }
-
-        // --- 4. GUARDAR Y RESPONDER (Solo si la validación pasa) ---
+        
+        // --- 4. CARGAR ESTADO Y APLICAR LÓGICA DE INICIALIZACIÓN ---
         let botState = await Autobot.findOne({});
-        if (!botState) {
-            botState = new Autobot({ config: newConfig });
+        const isNewBot = !botState;
+        
+        if (isNewBot) {
+            // Inicializar un nuevo bot
+            botState = new Autobot({ 
+                config: newConfig,
+                lbalance: assignedUSDT, // INICIALIZACIÓN LBalance
+                sbalance: assignedBTC,  // INICIALIZACIÓN SBalance
+            });
+            log('Primer estado del bot inicializado con la configuración y balances.', 'success');
+
         } else {
+            
+            // Si el bot estaba en STOPPED, o si el usuario quiere resetear, reinicializamos LBalance/SBalance.
+            // Para el flujo de "START/STOP", solo actualizamos la configuración por ahora.
+            
+            // Lógica de Inicialización/Reasignación de LBalance y SBalance:
+            // Esto se hace cuando la estrategia está DETENIDA (o en un "RESET" implícito/explícito).
+            // Si los estados son 'STOPPED', asumimos que el usuario está redefiniendo el capital.
+            if (botState.lstate === 'STOPPED') {
+                 botState.lbalance = assignedUSDT;
+                 log(`LBalance reinicializado a ${assignedUSDT.toFixed(2)} USDT.`, 'info');
+            }
+            if (botState.sstate === 'STOPPED') {
+                 botState.sbalance = assignedBTC;
+                 log(`SBalance reinicializado a ${assignedBTC.toFixed(8)} BTC.`, 'info');
+            }
+
+            // Actualizar solo la configuración
             botState.config = newConfig;
         }
+        
         await botState.save();
 
-        log('Configuración guardada exitosamente y validada contra los balances de BitMart.', 'success');
-        res.json({ success: true, message: 'Configuración actualizada.' });
+        log('Configuración guardada y LBalance/SBalance actualizado según el estado.', 'success');
+        res.json({ success: true, message: 'Configuración y balances de estrategia actualizados.' });
 
     } catch (error) {
         log(`Error al actualizar la configuración: ${error.message}`, 'error');
