@@ -118,6 +118,36 @@ async function balanceCycle() {
     }
 }
 
+// BSB/server/autobotLogic.js (RESTORE THE FOLLOWING FUNCTIONS)
+
+/**
+ * Función que actualiza únicamente el estado principal del bot (lstate/sstate).
+ * @param {string} newState - El nuevo estado a establecer.
+ * @param {string} strategy - 'long' o 'short'.
+ */
+async function updateBotState(newState, strategy) {
+    try {
+        const updateField = strategy === 'long' ? 'lstate' : 'sstate';
+        await Autobot.findOneAndUpdate({}, { [updateField]: newState });
+        log(`Estado de la estrategia ${strategy} actualizado a: ${newState}`, 'info');
+    } catch (error) {
+        log(`Error al actualizar el estado: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Función que actualiza únicamente los datos del ciclo Long (lStateData) en la base de datos.
+ * @param {object} lStateData - El objeto lStateData actualizado con nuevos precios/montos.
+ */
+async function updateLStateData(lStateData) {
+    try {
+        await Autobot.findOneAndUpdate({}, { lStateData: lStateData });
+        // No es necesario loguear en cada actualización de dato
+    } catch (error) {
+        log(`Error al guardar lStateData: ${error.message}`, 'error');
+    }
+}
+
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
 }
@@ -125,9 +155,6 @@ async function start() {
 async function stop() {
     log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
 }
-
-// Las funciones updateBotState, updateLStateData, start y stop se mantienen igual.
-// ... (código para updateBotState, updateLStateData, start, stop) ...
 
 // **AGREGA BALANCE CYCLE A LAS EXPORTACIONES**
 module.exports = {
