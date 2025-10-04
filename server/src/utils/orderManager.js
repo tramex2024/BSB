@@ -22,7 +22,7 @@ async function placeFirstBuyOrder(config, creds, log, updateBotState) {
 
     log(`Colocando la primera orden de compra a mercado por ${purchaseAmount.toFixed(2)} USDT.`, 'info');
     try {
-        const order = await placeOrder(creds, SYMBOL, 'buy', 'market', purchaseAmount);
+        const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', purchaseAmount);
         
         if (order && order.order_id) {
             log(`Orden de compra colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
@@ -84,7 +84,7 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, nextCoveragePr
     log(`Colocando orden de cobertura a MERCADO por ${usdtAmount.toFixed(2)} USDT.`, 'info');
     
     try {
-        const order = await placeOrder(creds, SYMBOL, 'buy', 'market', usdtAmount);
+        const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', usdtAmount);
 
         if (order && order.order_id) {
             // Guardamos el ID inmediatamente 
@@ -135,7 +135,7 @@ async function placeSellOrder(config, creds, sellAmount, log) {
 
     log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
     try {
-        const order = await placeOrder(creds, SYMBOL, 'sell', 'market', sellAmount);
+        const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmount);
 
         if (order && order.order_id) {
             log(`Orden de venta colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');

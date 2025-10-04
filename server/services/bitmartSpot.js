@@ -175,6 +175,7 @@ async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETR
  * @returns {Promise<object>} - Respuesta de la API.
  */
 async function placeOrder(symbol, side, type, size, price) {
+    const standardizedSide = side.toLowerCase();    
     const requestBody = { symbol, side, type };
     if (type === 'limit') {
         if (!price) throw new Error("El precio es requerido para órdenes 'limit'.");
@@ -182,7 +183,7 @@ async function placeOrder(symbol, side, type, size, price) {
     } else if (type === 'market') {
         if (side === 'buy') Object.assign(requestBody, { notional: size.toString() });
         else if (side === 'sell') Object.assign(requestBody, { size: size.toString() });
-        else throw new Error(`Tipo de orden no soportado para side: ${side} y type: ${type}`);
+        else throw new Error(`Tipo de orden no soportado: ${type}`);
     } else {
         throw new Error(`Tipo de orden no soportado: ${type}`);
     }

@@ -78,8 +78,8 @@ async function getHistoryOrders(options = {}) {
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-async function placeOrder(symbol, side, type, size, price) {
-    return await spotService.placeOrder(symbol, side, type, size, price);
+async function placeOrder(creds, symbol, side, type, size, price) {
+    return await spotService.placeOrder(creds, symbol, side, type, size, price);
 }
 
 /**
