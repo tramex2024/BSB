@@ -1,4 +1,4 @@
-// BSB/server/autobotLogic.js (CORREGIDO)
+// BSB/server/autobotLogic.js (CORREGIDO Y COMPLETO)
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
@@ -9,14 +9,14 @@ const { runShortStrategy, setDependencies: setShortDeps } = require('./src/short
 let io;
 
 function setIo(socketIo) {
-    io = socketIo;
+    io = socketIo;
 }
 
 function log(message, type = 'info') {
-    if (io) {
-        io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
-    }
-    console.log(`[BOT LOG]: ${message}`);
+    if (io) {
+        io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
+    }
+    console.log(`[BOT LOG]: ${message}`);
 }
 
 /**
@@ -43,9 +43,10 @@ async function botCycle(priceFromWebSocket) {
         // 3. OBTENER SALDOS REALES DISPONIBLES EN BITMART
         const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
         
-        // Asignación de fondos según la configuración (asumo los mismos campos que en configRoutes.js)
+        // Asignación de fondos según la configuración (usamos los campos correctos para la validación)
+        // NOTA: Asumo que 'purchaseUsdt' y 'purchaseBTC' son los montos asignados
         const assignedUSDT = parseFloat(botState.config.long.purchaseUsdt || 0);
-        const assignedBTC = parseFloat(botState.config.short.purchaseBTC || 0);
+        const assignedBTC = parseFloat(botState.config.short.sellBtc || 0); // Corregido a sellBtc para Short
 
         let longStrategyStopped = false;
         let shortStrategyStopped = false;
@@ -56,7 +57,7 @@ async function botCycle(priceFromWebSocket) {
             log(msg, 'error');
             
             // Detener la estrategia LONG y guardar el cambio
-            await updateBotState({ lstate: 'STOPPED' });
+            await updateBotState('STOPPED', 'long'); // Usar la función para la actualización
             botState.lstate = 'STOPPED'; // Actualizar el estado local para este ciclo
             longStrategyStopped = true;
         }
@@ -67,7 +68,7 @@ async function botCycle(priceFromWebSocket) {
             log(msg, 'error');
             
             // Detener la estrategia SHORT y guardar el cambio
-            await updateBotState({ sstate: 'STOPPED' });
+            await updateBotState('STOPPED', 'short'); // Usar la función para la actualización
             botState.sstate = 'STOPPED'; // Actualizar el estado local para este ciclo
             shortStrategyStopped = true;
         }
@@ -86,16 +87,22 @@ async function botCycle(priceFromWebSocket) {
             bitmartService,
             Autobot,
             currentPrice, 
-            availableUSDT,  // Inyectamos el saldo real disponible
-            availableBTC,   // Inyectamos el saldo real disponible
+            availableUSDT, 
+            availableBTC, 
             botState,
-            updateBotState, 
-            updateLStateData,
-            bitmartCredentials: {
+            
+            // --- CORRECCIÓN CRÍTICA DE INYECCIÓN ---
+            config: botState.config, // ⬅️ Inyectamos la configuración
+            creds: {                 // ⬅️ Inyectamos las credenciales requeridas por orderManager
                 apiKey: process.env.BITMART_API_KEY,
                 secretKey: process.env.BITMART_SECRET_KEY,
                 memo: process.env.BITMART_API_MEMO
-            }
+            },
+            // ------------------------------------
+
+            updateBotState, 
+            updateLStateData,
+            updateGeneralBotState // Inyectamos la función genérica de actualización
         };
 
         setLongDeps(dependencies);
@@ -106,7 +113,7 @@ async function botCycle(priceFromWebSocket) {
             await runLongStrategy();
         }
         if (botState.sstate !== 'STOPPED') {
-            // await runShortStrategy();
+            // await runShortStrategy(); // Dejada como comentario, como en tu código original
         }
         
     } catch (error) {
@@ -165,8 +172,9 @@ async function updateBotState(newState, strategy) {
  */
 async function updateLStateData(lStateData) {
     try {
-        await Autobot.findOneAndUpdate({}, { lStateData: lStateData });
-        // No es necesario loguear en cada actualización de dato
+        // En un bot que maneja ambas estrategias, idealmente usaríamos un campo sStateData, 
+        // pero asumimos que lStateData maneja los datos de ciclo para ambas temporalmente si no hay sStateData.
+        await Autobot.findOneAndUpdate({}, { lStateData: lStateData }); 
     } catch (error) {
         log(`Error al guardar lStateData: ${error.message}`, 'error');
     }
@@ -193,14 +201,13 @@ async function stop() {
     log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
 }
 
-// **AGREGA BALANCE CYCLE A LAS EXPORTACIONES**
 module.exports = {
     setIo,
     start,
     stop,
     log,
-    botCycle,        // Ciclo RÁPIDO (Estrategia)
-    balanceCycle,    // Ciclo LENTO (Balances)
+    botCycle,    
+    balanceCycle, 
     updateBotState,
     updateLStateData,
     updateGeneralBotState
