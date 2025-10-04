@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LNoCoverage.js (ACTUALIZADO)
+// BSB/server/src/states/long/LNoCoverage.js (CORREGIDO)
 
 const { cancelActiveOrders, MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/orderManager');
 
@@ -21,7 +21,8 @@ async function run(dependencies) {
             await cancelActiveOrders(creds, botState, log);
         }
         
-        await updateBotState('SELLING', botState.sstate); // Usamos la función inyectada
+        // CORRECCIÓN CRÍTICA: Transicionar a SELLING para la estrategia 'long'
+        await updateBotState('SELLING', 'long'); 
         return;
     }
 
@@ -32,7 +33,8 @@ async function run(dependencies) {
     if (availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
         log(`Fondos recuperados (${availableUSDT.toFixed(2)} USDT). Monto requerido (${requiredAmount.toFixed(2)} USDT). Volviendo a BUYING.`, 'success');
         
-        await updateBotState('BUYING', botState.sstate); // Usamos la función inyectada
+        // CORRECCIÓN CRÍTICA: Transicionar a BUYING para la estrategia 'long'
+        await updateBotState('BUYING', 'long'); 
     }
 }
 

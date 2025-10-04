@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LRunning.js (ACTUALIZADO)
+// BSB/server/src/states/long/LRunning.js (ACTUALIZADO - Con corrección de estado)
 
 const analyzer = require('../../bitmart_indicator_analyzer');
 const { placeFirstBuyOrder } = require('../../utils/orderManager');
@@ -21,7 +21,9 @@ async function run(dependencies) {
             await placeFirstBuyOrder(config, creds, log, updateBotState); 
         } else {
             log(`No hay suficiente USDT para la primera orden. Cambiando a NO_COVERAGE.`, 'warning');
-            await updateBotState('NO_COVERAGE', botState.sstate);
+            
+            // CORRECCIÓN: Usar 'long' en lugar de botState.sstate
+            await updateBotState('NO_COVERAGE', 'long'); 
         }
     }
 }

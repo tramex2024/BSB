@@ -1,23 +1,22 @@
-// BSB/server/src/states/short/SNoCoverage.js (INVERTIDO DE LNoCoverage.js)
+// BSB/server/src/states/short/SNoCoverage.js (INVERTIDO Y COMPLETO)
 
-const { cancelActiveOrders } = require('../../utils/orderManager');
-// Nota: MIN_USDT_VALUE_FOR_BITMART se usará para verificar el valor del BTC a vender.
+const { cancelActiveOrders, MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/orderManager');
 
 async function run(dependencies) {
-    // Extraemos las funciones de las dependencias
+    // Extraemos las funciones de las dependencias, usando availableBTC
     const { botState, currentPrice, availableBTC, config, creds, log, updateBotState } = dependencies;
-    const { MIN_USDT_VALUE_FOR_BITMART } = config; // Asumo que MIN_USDT_VALUE_FOR_BITMART está disponible via config o dependencies si no está en orderManager.
 
     log("Estado Short: NO_COVERAGE. Esperando BTC disponible o precio de recompra.", 'warning');
 
-    const { av } = botState.sStateData; // 'av' es el BTC vendido, que se debe recomprar.
+    const { av, requiredCoverageAmount } = botState.sStateData; // 'av' es el BTC vendido
+    const requiredAmount = requiredCoverageAmount || 0;
     
     // --- 1. VERIFICACIÓN DE TRANSICIÓN A RECOMPRA (Ganancia alcanzada) ---
     // En Short, la liquidación (BUYING) se activa cuando el precio BAJA al objetivo (LTPrice).
     const targetBuyPrice = botState.sStateData.LTPrice || 0; 
 
-    if (currentPrice <= targetBuyPrice && av > 0 && targetBuyPrice > 0) { // Invertido: <= y usamos 'av'
-        log(`Precio actual alcanzó el objetivo de recompra (${targetBuyPrice.toFixed(2)}) desde NO_COVERAGE. Transicionando a BUYING.`, 'success');
+    if (currentPrice <= targetBuyPrice && av > 0 && targetBuyPrice > 0) { // Invertido: <=
+        log(`Precio actual alcanzó el objetivo de recompra (${targetBuyPrice.toFixed(2)}) desde NO_COVERAGE.`, 'success');
         
         if (botState.sStateData.lastOrder && botState.sStateData.lastOrder.order_id) {
             // Cancelar órdenes activas
@@ -30,11 +29,9 @@ async function run(dependencies) {
     }
 
     // --- 2. VERIFICACIÓN DE TRANSICIÓN A COBERTURA (Capital BTC recuperado) ---
-    // Invertido: Revisamos si el BTC disponible (capital operativo) cubre la orden requerida.
-    const requiredAmount = botState.sStateData.requiredCoverageAmount || 0;
+    // Revisamos si el BTC disponible (capital operativo) cubre la orden requerida.
     
-    // Verificamos si el capital real (availableBTC) cubre la orden requerida
-    // Y si el valor de esa orden cumple con el mínimo de BitMart.
+    // El monto requerido en BTC debe ser validado por su valor mínimo en USDT
     const requiredValueInUsdt = requiredAmount * currentPrice;
 
     if (availableBTC >= requiredAmount && requiredValueInUsdt >= MIN_USDT_VALUE_FOR_BITMART) {
