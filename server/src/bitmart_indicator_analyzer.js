@@ -88,7 +88,7 @@ function calculateIndicators(candles) {
     const closePrices = candles.map(c => c.close);
 
     // LOG TEMPORAL: Mostrar precios de cierre que se usan para RSI
-    console.log(`[ANALYZER-DEBUG] Precios de cierre para RSI (${closePrices.length} velas):`, closePrices.map(p => p.toFixed(2)).join(', '));
+//    console.log(`[ANALYZER-DEBUG] Precios de cierre para RSI (${closePrices.length} velas):`, closePrices.map(p => p.toFixed(2)).join(', '));
 
     // Validar que tenemos suficientes datos para cada indicador
     const requiredWarmUp = RSI_PERIOD; // Para RSI
