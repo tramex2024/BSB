@@ -1,4 +1,4 @@
-// Archivo: BSB/server/services/bitmartSpot.js
+// Archivo: BSB/server/services/bitmartSpot.js     //118
 
 const { makeRequest } = require('./bitmartClient');
 
@@ -115,7 +115,7 @@ async function getHistoryOrders(options = {}) {
         const response = await makeRequest('POST', endpoint, {}, requestBody);
         
         // VERIFICACIÓN: Muestra la respuesta completa para depuración
-        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2));
+//        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2));
         
         let orders = [];
         
