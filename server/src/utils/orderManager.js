@@ -187,6 +187,7 @@ async function cancelActiveOrders(creds, botState, log) { // <== Ensure this ent
         log("No hay una orden para cancelar registrada.", 'info');
         return;
     }
+}
 
 module.exports = {
     placeFirstBuyOrder,
