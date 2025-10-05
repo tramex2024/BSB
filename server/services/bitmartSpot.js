@@ -116,7 +116,8 @@ async function getHistoryOrders(options = {}) {
         
         // VERIFICACIÓN: Muestra la respuesta completa para depuración
         // console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); // COMENTADO
-        
+        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
+
         let orders = [];
         
         // CORRECCIÓN: Verifica si la respuesta es un arreglo directamente
