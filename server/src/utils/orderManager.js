@@ -1,8 +1,7 @@
-// BSB/server/src/utils/orderManager.js (ACTUALIZADO)
+// BSB/server/src/utils/orderManager.js
 
 const { placeOrder, getOrderDetail, cancelOrder } = require('../../services/bitmartService');
 const Autobot = require('../../models/Autobot');
-// const autobotCore = require('../../autobotLogic'); // ¡ELIMINADO!
 const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager'); // Necesita funciones de manejo de datos
 
 const TRADE_SYMBOL = 'BTC_USDT';
@@ -22,16 +21,20 @@ async function placeFirstBuyOrder(config, creds, log, updateBotState) {
 
     log(`Colocando la primera orden de compra a mercado por ${purchaseAmount.toFixed(2)} USDT.`, 'info');
     try {
-        const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', purchaseAmount);
+        // Usamos 'BUY' ya que bitmartSpot.js lo estandariza a minúsculas
+        const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', purchaseAmount); 
         
         if (order && order.order_id) {
             log(`Orden de compra colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
 
+            //⬇️ CORRECCIÓN CRÍTICA 1: Capturar el ID en el scope local antes del setTimeout
+            const currentOrderId = order.order_id;
+            
             const botState = await Autobot.findOne({});
             if (botState) {
                 // Guarda el ID y cambia el estado inmediatamente a BUYING para evitar spam
                 botState.lStateData.lastOrder = {
-                    order_id: order.order_id,
+                    order_id: currentOrderId,
                     price: null,
                     size: null, 
                     side: 'buy',
@@ -39,12 +42,15 @@ async function placeFirstBuyOrder(config, creds, log, updateBotState) {
                 };
                 await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
                 
-                // Usamos la función inyectada
+                // Usamos la función inyectada. Asumiendo que esta función actualiza la DB y notifica al ciclo principal.
+                // ⬇️ CORRECCIÓN CRÍTICA 2: El ciclo principal leerá este estado y no volverá a llamar a placeFirstBuyOrder.
                 await updateBotState('BUYING', botState.sstate); 
+                log(`Estado de la estrategia RUNNING actualizado a: BUYING`);
             }
             
             setTimeout(async () => {
-                const orderDetails = await getOrderDetail(creds, SYMBOL, order.order_id);
+                // ⬇️ CORRECCIÓN CRÍTICA 3: Usar currentOrderId capturado en el scope
+                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId); 
                 const updatedBotState = await Autobot.findOne({});
 
                 if (orderDetails && orderDetails.state === 'filled') {
@@ -52,7 +58,7 @@ async function placeFirstBuyOrder(config, creds, log, updateBotState) {
                         await handleSuccessfulBuy(updatedBotState, orderDetails);
                     }
                 } else {
-                    log(`La orden inicial ${order.order_id} no se completó. Volviendo al estado RUNNING.`, 'error');
+                    log(`La orden inicial ${currentOrderId} no se completó. Volviendo al estado RUNNING.`, 'error');
                     if (updatedBotState) {
                         // Limpiar lastOrder antes de volver a RUNNING
                         updatedBotState.lStateData.lastOrder = null;
@@ -87,30 +93,34 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, nextCoveragePr
         const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', usdtAmount);
 
         if (order && order.order_id) {
+            // ⬇️ CORRECCIÓN CRÍTICA: Capturar el ID en el scope local
+            const currentOrderId = order.order_id; 
+
             // Guardamos el ID inmediatamente 
             botState.lStateData.lastOrder = {
-                order_id: order.order_id,
+                order_id: currentOrderId,
                 price: nextCoveragePrice, 
                 size: usdtAmount, 
                 side: 'buy',
                 state: 'pending_fill'
             };
             await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
-            log(`Orden de cobertura colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
+            log(`Orden de cobertura colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
 
             setTimeout(async () => {
-                const orderDetails = await getOrderDetail(creds, SYMBOL, order.order_id);
+                // ⬇️ CORRECCIÓN CRÍTICA: Usar currentOrderId capturado en el scope
+                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
                 const updatedBotState = await Autobot.findOne({});
                 
                 if (orderDetails && orderDetails.state === 'filled') {
                     if (updatedBotState) {
-                           await handleSuccessfulBuy(updatedBotState, orderDetails); 
+                             await handleSuccessfulBuy(updatedBotState, orderDetails); 
                     }
                 } else {
-                    log(`La orden de cobertura ${order.order_id} no se completó.`, 'error');
+                    log(`La orden de cobertura ${currentOrderId} no se completó.`, 'error');
                     if (updatedBotState) {
-                           updatedBotState.lStateData.lastOrder = null;
-                           await Autobot.findOneAndUpdate({}, { 'lStateData': updatedBotState.lStateData });
+                             updatedBotState.lStateData.lastOrder = null;
+                             await Autobot.findOneAndUpdate({}, { 'lStateData': updatedBotState.lStateData });
                     }
                 }
             }, ORDER_CHECK_TIMEOUT_MS);
@@ -138,10 +148,13 @@ async function placeSellOrder(config, creds, sellAmount, log) {
         const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmount);
 
         if (order && order.order_id) {
-            log(`Orden de venta colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
+            // ⬇️ CORRECCIÓN CRÍTICA: Capturar el ID en el scope local
+            const currentOrderId = order.order_id;
+            log(`Orden de venta colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
 
             setTimeout(async () => {
-                const orderDetails = await getOrderDetail(creds, SYMBOL, order.order_id);
+                // ⬇️ CORRECCIÓN CRÍTICA: Usar currentOrderId capturado en el scope
+                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
                 if (orderDetails && orderDetails.state === 'filled') {
                     const botState = await Autobot.findOne({});
                     if (botState) {
@@ -149,7 +162,7 @@ async function placeSellOrder(config, creds, sellAmount, log) {
                         await handleSuccessfulSell(botState, orderDetails, config, creds); 
                     }
                 } else {
-                    log(`La orden de venta ${order.order_id} no se completó.`, 'error');
+                    log(`La orden de venta ${currentOrderId} no se completó.`, 'error');
                 }
             }, ORDER_CHECK_TIMEOUT_MS);
         } else {
@@ -176,10 +189,10 @@ async function cancelActiveOrders(creds, botState, log) {
     // Debes añadir aquí la lógica real de cancelación, que también usa 'log'
     // ...
     // try {
-    //    await cancelOrder(creds, SYMBOL, botState.lStateData.lastOrder.order_id);
-    //    log(`Orden ${botState.lStateData.lastOrder.order_id} cancelada exitosamente.`, 'success');
+    //     await cancelOrder(creds, SYMBOL, botState.lStateData.lastOrder.order_id);
+    //     log(`Orden ${botState.lStateData.lastOrder.order_id} cancelada exitosamente.`, 'success');
     // } catch(e) {
-    //    log(`Error al cancelar orden ${botState.lStateData.lastOrder.order_id}: ${e.message}`, 'error');
+    //     log(`Error al cancelar orden ${botState.lStateData.lastOrder.order_id}: ${e.message}`, 'error');
     // }
 }
 

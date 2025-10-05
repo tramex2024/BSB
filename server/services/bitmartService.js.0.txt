@@ -1,4 +1,4 @@
-// Archivo: BSB/server/services/bitmartService.js (ACTUALIZADO)
+// Archivo: BSB/server/services/bitmartService.js
 
 const spotService = require('./bitmartSpot');
 
@@ -11,8 +11,7 @@ const LOG_PREFIX = '[BITMART_SERVICE]';
 async function validateApiKeys() {
     try {
         console.log('\n--- Iniciando validación de credenciales API de BitMart ---');
-        // Usamos getBalance de spotService para probar las credenciales
-        await spotService.getBalance(); 
+        await spotService.getBalance();
         console.log('✅ Credenciales API de BitMart validadas con éxito. CONECTADO.');
         return true;
     } catch (error) {
@@ -27,28 +26,6 @@ async function validateApiKeys() {
  */
 async function getBalance() {
     return await spotService.getBalance();
-}
-
-/**
- * Obtiene los saldos disponibles para trading (available) de USDT y BTC.
- * @returns {Promise<{availableUSDT: number, availableBTC: number}>} - Objeto con los balances disponibles.
- */
-async function getAvailableTradingBalances() {
-    try {
-        const balancesArray = await spotService.getBalance();
-        
-        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-
-        const availableUSDT = parseFloat(usdtBalance?.available || 0);
-        const availableBTC = parseFloat(btcBalance?.available || 0);
-        
-        return { availableUSDT, availableBTC };
-    } catch (error) {
-        console.error(`${LOG_PREFIX} Error al obtener los balances de trading:`, error.message);
-        // Devolvemos cero si falla para evitar asignar fondos irreales por error.
-        return { availableUSDT: 0, availableBTC: 0 }; 
-    }
 }
 
 /**
@@ -78,8 +55,8 @@ async function getHistoryOrders(options = {}) {
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-async function placeOrder(creds, symbol, side, type, size, price) {
-    return await spotService.placeOrder(creds, symbol, side, type, size, price);
+async function placeOrder(symbol, side, type, size, price) {
+    return await spotService.placeOrder(symbol, side, type, size, price);
 }
 
 /**
@@ -110,14 +87,6 @@ async function getTicker(symbol) {
     return await spotService.getTicker(symbol);
 }
 
-/**
- * Obtiene los datos de velas (klines).
- * REEXPORTA la función desde bitmartSpot.js
- */
-async function getKlines(symbol, interval, size) {
-    return await spotService.getKlines(symbol, interval, size);
-}
-
 module.exports = {
     validateApiKeys,
     getBalance,
@@ -126,7 +95,5 @@ module.exports = {
     placeOrder,
     getOrderDetail,
     cancelOrder,
-    getTicker,    
-    getKlines,
-    getAvailableTradingBalances, 
+    getTicker
 };
