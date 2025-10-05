@@ -1,4 +1,4 @@
-// BSB/server/autobotLogic.js (CORREGIDO Y COMPLETO)
+// BSB/server/autobotLogic.js (CORREGIDO Y COMPLETO)     // 66 -79
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
@@ -73,10 +73,10 @@ async function botCycle(priceFromWebSocket) {
 //            shortStrategyStopped = true;
 //        }
 
-        if (longStrategyStopped || shortStrategyStopped) {
+//        if (longStrategyStopped || shortStrategyStopped) {
             // Si alguna estrategia fue detenida por falta de fondos, evitamos la ejecución del ciclo de trading por seguridad.
-            return;
-        }
+//            return;
+//        }
         
         // --- FIN DE LA VALIDACIÓN DE FONDOS EN TIEMPO DE EJECUCIÓN ---
 
