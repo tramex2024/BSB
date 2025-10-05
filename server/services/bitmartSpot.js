@@ -114,22 +114,36 @@ async function getHistoryOrders(options = {}) {
     try {
         const response = await makeRequest('POST', endpoint, {}, requestBody);
         
-        // VERIFICACIÓN: Muestra la respuesta completa para depuración
-        // console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); // COMENTADO
+        // Muestra la respuesta completa para depuración (Útil para confirmar nuevos formatos)
         console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
-
-        let orders = [];
         
-        // CORRECCIÓN: Verifica si la respuesta es un arreglo directamente
+        let rawOrders = [];
+        
+        // CORRECCIÓN: Manejo de la estructura de respuesta de BitMart
         if (response.data && Array.isArray(response.data)) {
-            orders = response.data;
+            rawOrders = response.data;
         } 
-        // Si no, verifica si el arreglo está dentro de una propiedad 'list'
         else if (response.data && response.data.data && Array.isArray(response.data.data.list)) {
-            orders = response.data.data.list;
+            rawOrders = response.data.data.list;
         }
+
+        // 🛠️ NORMALIZACIÓN DE DATOS: Asegura que price y size muestren los valores de ejecución
+        const normalizedOrders = rawOrders.map(order => {
+            
+            // Si la orden se llenó (filledSize > 0 o priceAvg > 0), usamos los datos de ejecución real.
+            // Esto corrige el problema de órdenes de mercado que tienen 'price' y 'size' como '0.00'.
+            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
+            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
+
+            return {
+                ...order, // Mantiene todos los campos originales
+                // Sobrescribe los campos clave con los valores reales para el frontend
+                price: finalPrice, 
+                size: finalSize,   
+            };
+        });
         
-        return orders;
+        return normalizedOrders;
     } catch (error) {
         console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
         throw error;
