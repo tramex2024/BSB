@@ -45,6 +45,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
             method,
             url: `${BASE_URL}${path}`,
             headers,
+	    timeout: 10000,
         };
 
         if (method === 'GET') {
