@@ -63,15 +63,15 @@ async function botCycle(priceFromWebSocket) {
         }
         
         // 5. VALIDACIÓN SHORT (BTC)
-        if (assignedBTC > availableBTC && botState.sstate !== 'STOPPED') {
-            const msg = `CRÍTICO: Fondos de BTC insuficientes. Asignado: ${assignedBTC.toFixed(8)}, Disponible Real: ${availableBTC.toFixed(8)}. Deteniendo estrategia SHORT.`;
-            log(msg, 'error');
+//        if (assignedBTC > availableBTC && botState.sstate !== 'STOPPED') {
+//            const msg = `CRÍTICO: Fondos de BTC insuficientes. Asignado: ${assignedBTC.toFixed(8)}, Disponible Real: ${availableBTC.toFixed(8)}. Deteniendo estrategia SHORT.`;
+//            log(msg, 'error');
             
             // Detener la estrategia SHORT y guardar el cambio
-            await updateBotState('STOPPED', 'short'); // Usar la función para la actualización
-            botState.sstate = 'STOPPED'; // Actualizar el estado local para este ciclo
-            shortStrategyStopped = true;
-        }
+//            await updateBotState('STOPPED', 'short'); // Usar la función para la actualización
+//            botState.sstate = 'STOPPED'; // Actualizar el estado local para este ciclo
+//            shortStrategyStopped = true;
+//        }
 
         if (longStrategyStopped || shortStrategyStopped) {
             // Si alguna estrategia fue detenida por falta de fondos, evitamos la ejecución del ciclo de trading por seguridad.
