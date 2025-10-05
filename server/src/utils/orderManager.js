@@ -176,7 +176,17 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
     }
 }
 
-// ... (cancelActiveOrders sin cambios)
+/**
+ * Cancela la última orden activa del bot.
+ * @param {object} creds - Credenciales de la API.
+ * @param {object} botState - Estado actual del bot.
+ * @param {function} log - Función de logging inyectada.
+ */
+async function cancelActiveOrders(creds, botState, log) { // <== Ensure this entire line is NOT commented.
+    if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
+        log("No hay una orden para cancelar registrada.", 'info');
+        return;
+    }
 
 module.exports = {
     placeFirstBuyOrder,
