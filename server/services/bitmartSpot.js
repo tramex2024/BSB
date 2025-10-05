@@ -115,7 +115,7 @@ async function getHistoryOrders(options = {}) {
         const response = await makeRequest('POST', endpoint, {}, requestBody);
         
         // Muestra la respuesta completa para depuración (Útil para confirmar nuevos formatos)
-        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
+//        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
         
         let rawOrders = [];
         
