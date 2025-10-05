@@ -6,7 +6,7 @@ const authMiddleware = (req, res, next) => {
     // 1. Obtener el encabezado de autorización
     const authHeader = req.header('Authorization');
     
-    console.log("[authMiddleware] Received Authorization header:", authHeader);
+//    console.log("[authMiddleware] Received Authorization header:", authHeader);
 
     // 2. Verificar si el encabezado existe
     if (!authHeader) {
@@ -24,7 +24,7 @@ const authMiddleware = (req, res, next) => {
     }
 
     const token = tokenParts[1];
-    console.log("[authMiddleware] Extracted token:", token);
+//    console.log("[authMiddleware] Extracted token:", token);
 
     try {
         // 5. Verificar el token
