@@ -30,7 +30,7 @@ const authMiddleware = (req, res, next) => {
         // 5. Verificar el token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        console.log("[authMiddleware] Token verified. Decoded payload:", decoded);
+//        console.log("[authMiddleware] Token verified. Decoded payload:", decoded);
 
         // 6. Asignar el payload decodificado a req.user
         req.user = decoded; 
