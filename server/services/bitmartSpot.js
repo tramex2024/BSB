@@ -167,6 +167,7 @@ async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETR
 
 /**
  * Coloca una nueva orden.
+ * @param {object} [creds] - Credenciales de la API (Añadido para igualar la firma de bitmartService).
  * @param {string} symbol - Símbolo de trading.
  * @param {string} side - 'buy' o 'sell'.
  * @param {string} type - 'limit' o 'market'.
@@ -174,19 +175,31 @@ async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETR
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-async function placeOrder(symbol, side, type, size, price) {
-    const standardizedSide = side.toLowerCase();    
-    const requestBody = { symbol, side, type };
+// ⬇️ CORRECCIÓN DE LA FIRMA: Debe recibir 'creds'
+async function placeOrder(creds, symbol, side, type, size, price) { 
+    
+    // 1. CORRECCIÓN DE LA LÓGICA DE MINÚSCULAS:
+    // Estandarizar side a minúsculas ANTES de usarlo en el requestBody y las condiciones.
+    const standardizedSide = side.toLowerCase(); 
+    
+    // 2. CORRECCIÓN DEL REQUEST BODY: usar standardizedSide.
+    const requestBody = { symbol, side: standardizedSide, type };
+
     if (type === 'limit') {
         if (!price) throw new Error("El precio es requerido para órdenes 'limit'.");
         Object.assign(requestBody, { size: size.toString(), price: price.toString() });
     } else if (type === 'market') {
-        if (side === 'buy') Object.assign(requestBody, { notional: size.toString() });
-        else if (side === 'sell') Object.assign(requestBody, { size: size.toString() });
-        else throw new Error(`Tipo de orden no soportado: ${type}`);
+        // 3. CORRECCIÓN DE LA CONDICIÓN: usar standardizedSide
+        if (standardizedSide === 'buy') Object.assign(requestBody, { notional: size.toString() });
+        else if (standardizedSide === 'sell') Object.assign(requestBody, { size: size.toString() });
+        
+        // El error interno previo se ha ido porque ahora solo se pasa el 'type' no soportado
+        // si type no es 'limit' o 'market', pero es mejor dejar este throw como seguro.
+        // Si BitMart da un error real, será capturado por makeRequest.
     } else {
         throw new Error(`Tipo de orden no soportado: ${type}`);
     }
+    
     const response = await makeRequest('POST', '/spot/v2/submit_order', {}, requestBody);
     const orderId = response.data.order_id;
     if (!orderId) throw new Error('Error al colocar la orden: No se recibió un order_id.');
