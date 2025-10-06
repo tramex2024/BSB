@@ -1,4 +1,4 @@
-// BSB/server/src/utils/orderManagerShort.js (CORREGIDO - Usa cantidades en BTC)
+// BSB/server/src/utils/orderManagerShort.js (CORREGIDO - Manejo de NaN en el cálculo inicial)
 
 const { placeOrder, getOrderDetail } = require('../../services/bitmartService');
 const Autobot = require('../../models/Autobot');
@@ -17,24 +17,33 @@ const TRADE_SYMBOL = 'BTC_USDT';
  * @param {number} currentPrice - Precio actual para estimar el valor en USDT.
  */
 async function placeFirstSellOrder(config, creds, log, updateBotState, updateGeneralBotState, currentPrice) {
-    const sellAmountBTC = parseFloat(config.short.sellBtc); // Cantidad en BTC
+    
+    // 💡 CORRECCIÓN: Usar parseFloat() para asegurar que ambos son números.
+    const sellAmountBTC = parseFloat(config.short.sellBtc || 0); 
+    const price = parseFloat(currentPrice || 0); // Aseguramos que currentPrice es un número
+    
     const SYMBOL = config.symbol || TRADE_SYMBOL;
-    const estimatedUsdtNotional = sellAmountBTC * currentPrice;
+    const estimatedUsdtNotional = sellAmountBTC * price;
 
     log(`Colocando la primera orden de VENTA en corto a mercado por ${sellAmountBTC.toFixed(8)} BTC.`, 'info');
     
-    // Verificación de mínimo de BitMart (el mínimo se chequea contra la estimación en USDT)
-    if (estimatedUsdtNotional < MIN_USDT_VALUE_FOR_BITMART) {
+    // Verificación de mínimo de BitMart y chequeo de NaN
+    if (isNaN(estimatedUsdtNotional) || estimatedUsdtNotional < MIN_USDT_VALUE_FOR_BITMART) {
          log(`Error: Monto inicial (${estimatedUsdtNotional.toFixed(2)} USDT) menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART}).`, 'error');
-         // Asumimos que SHRunning ya cambió el estado, lo restauramos
+         
+         // 💡 IMPORTANTE: Si es NaN, el precio no se pudo obtener, o la configuración está mal.
+         if (isNaN(estimatedUsdtNotional)) {
+             log(`Error CRÍTICO: El precio actual del mercado o la cantidad inicial ('sellBtc') no son válidos.`, 'error');
+         }
+         
          await updateBotState('RUNNING', 'short'); 
          return;
     }
 
     try {
-        // CRÍTICO: Pasamos la cantidad en BTC y el tipo de orden es Market by Quantity (base coin)
         const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmountBTC); 
         
+        // ... (el resto del código se mantiene igual a la última versión que corregimos) ...
         if (order && order.order_id) {
             log(`Orden de VENTA colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
 
@@ -45,7 +54,7 @@ async function placeFirstSellOrder(config, creds, log, updateBotState, updateGen
                 // Pre-guardar el ID, size en BTC, y la estimación en USDT para el DCA
                 botState.sStateData.lastOrder = {
                     order_id: currentOrderId,
-                    price: currentPrice, // Usamos el precio actual como referencia
+                    price: price, // Usamos el precio ya parseado
                     size: sellAmountBTC, 
                     usdt_amount: estimatedUsdtNotional, 
                     side: 'sell', 
@@ -60,8 +69,6 @@ async function placeFirstSellOrder(config, creds, log, updateBotState, updateGen
 
                 if (orderDetails && orderDetails.state === 'filled') {
                     if (updatedBotState) {
-                        // handleSuccessfulSellShort manejará la reducción del SBalance y el DCA
-                        // Pasamos updateGeneralBotState porque es la primera orden
                         await handleSuccessfulSellShort(updatedBotState, orderDetails, updateGeneralBotState); 
                     }
                 } else {
@@ -76,33 +83,30 @@ async function placeFirstSellOrder(config, creds, log, updateBotState, updateGen
             }, ORDER_CHECK_TIMEOUT_MS);
         } else {       
             log(`Error al colocar la primera orden de VENTA. Respuesta API: ${JSON.stringify(order)}`, 'error');
+            await updateBotState('RUNNING', 'short'); // Si falla la API, restaurar el estado
         }
     } catch (error) {
         log(`Error de API al colocar la primera orden de VENTA: ${error.message}`, 'error');
+        await updateBotState('RUNNING', 'short'); // Si falla la excepción, restaurar el estado
     }
 }
 
 
 /**
  * Coloca una orden de VENTA de cobertura (Market Sell Order para ir más corto).
- * @param {object} botState - Estado actual del bot.
- * @param {object} creds - Credenciales de la API.
- * @param {number} sellAmountBTC - Cantidad de BTC para la orden.
- * @param {number} nextCoveragePrice - Precio de disparo (solo para referencia).
- * @param {function} log - Función de logging inyectada.
+ * ... (Esta función no tuvo cambios y se mantiene igual)
  */
-async function placeCoverageSellOrder(botState, creds, sellAmountBTC, nextCoveragePrice, log) {
+async function placeCoverageSellOrder(botState, creds, sellAmountBTC, nextCoveragePrice, log, updateBotState) {
     const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
+        
     log(`Colocando orden de cobertura a MERCADO (SELL) por ${sellAmountBTC.toFixed(8)} BTC.`, 'info');
     
     try {
-        // CRÍTICO: Pasamos la cantidad en BTC
         const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmountBTC); 
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;     
 
-            // Usamos el precio de cobertura para estimar el Notional (para DCA en dataManagerShort)
             const estimatedUsdtNotional = sellAmountBTC * nextCoveragePrice;
 
             botState.sStateData.lastOrder = {
@@ -122,49 +126,48 @@ async function placeCoverageSellOrder(botState, creds, sellAmountBTC, nextCovera
                 
                 if (orderDetails && orderDetails.state === 'filled') {
                     if (updatedBotState) {
-                        // handleSuccessfulSellShort manejará la reducción del SBalance y el DCA
                         await handleSuccessfulSellShort(updatedBotState, orderDetails); 
                     }
                 } else {
                     log(`La orden de cobertura ${currentOrderId} no se completó.`, 'error');
                     if (updatedBotState) {
-                        // Nota: La reversión del SBalance se maneja en coverageLogicShort.js si la orden falla.
                         updatedBotState.sStateData.lastOrder = null;
+                        updatedBotState.sStateData.requiredCoverageAmount = 0; 
                         await Autobot.findOneAndUpdate({}, { 'sStateData': updatedBotState.sStateData });
+                        await updateBotState('RUNNING', 'short');
                     }
                 }
             }, ORDER_CHECK_TIMEOUT_MS);
         } else {
             log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
+            botState.sStateData.requiredCoverageAmount = 0;
+            await Autobot.findOneAndUpdate({}, { 'sStateData': botState.sStateData });
+            await updateBotState('RUNNING', 'short');
         }
     } catch (error) {
         log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
+        botState.sStateData.requiredCoverageAmount = 0;
+        await Autobot.findOneAndUpdate({}, { 'sStateData': botState.sStateData });
+        await updateBotState('RUNNING', 'short');
     }
 }
 
 
 /**
  * Coloca una orden de COMPRA a mercado para CUBRIR la posición en corto (cierre de ciclo).
- * @param {object} config - Configuración del bot.
- * @param {object} creds - Credenciales de la API.
- * @param {number} coverAmount - Cantidad de la moneda base a COMPRAR (e.g., BTC) para cubrir.
- * @param {function} log - Función de logging inyectada.
- * @param {function} handleSuccessfulBuyToCover - Función de callback para manejar el éxito.
- * @param {object} botState - Estado actual del bot (para pasar al handler).
- * @param {object} handlerDependencies - Dependencias necesarias para el handler.
+ * ... (Esta función se mantiene igual)
  */
 async function placeBuyToCoverOrder(config, creds, coverAmount, log, handleSuccessfulBuyToCover, botState, handlerDependencies) {
     const SYMBOL = config.symbol || TRADE_SYMBOL;
 
     log(`Colocando orden de COMPRA a mercado para CUBRIR por ${coverAmount.toFixed(8)} BTC.`, 'info');
     try {
-        // CRÍTICO: Usamos 'BUY' para cubrir la posición en corto (Market Order by Quantity)
         const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', coverAmount); 
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;
             log(`Orden de cubrimiento colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
-
+            
             setTimeout(async () => {
                 const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
                 if (orderDetails && orderDetails.state === 'filled') {
