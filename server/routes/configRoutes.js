@@ -73,24 +73,33 @@ router.post('/', async (req, res) => {
                  log(`SBalance reinicializado a ${assignedBTC.toFixed(8)} BTC.`, 'info');
             }
 
-            // 💡 CRÍTICO: FUSIÓN DE CONFIGURACIÓN para evitar borrar campos
-            // Usamos Object.assign para fusionar las propiedades anidadas (long y short)
-
+            // 💡 CRÍTICO: MANEJO DE CONFIGURACIÓN ANIDADA Y FUSIÓN
+            
+            // 1. Fusión de propiedades anidadas ('long')
             if (newConfig.long) {
-                // Fusiona los cambios de 'long' (incluido profit_percent)
-                botState.config.long = Object.assign(botState.config.long || {}, newConfig.long);
+                // Actualizamos las propiedades directamente en el subdocumento Mongoose
+                Object.keys(newConfig.long).forEach(key => {
+                    botState.config.long[key] = newConfig.long[key];
+                });
             }
             
+            // 2. Fusión de propiedades anidadas ('short')
             if (newConfig.short) {
-                // Fusiona los cambios de 'short'
-                botState.config.short = Object.assign(botState.config.short || {}, newConfig.short);
+                // Actualizamos las propiedades directamente en el subdocumento Mongoose
+                Object.keys(newConfig.short).forEach(key => {
+                    botState.config.short[key] = newConfig.short[key];
+                });
             }
 
-            // Actualiza otras propiedades de nivel superior (como 'symbol')
-            // Esto asegura que la config general también se actualice si el front la envía.
-            delete newConfig.long; // Eliminamos la propiedad long del nivel superior
-            delete newConfig.short; // Eliminamos la propiedad short del nivel superior
-            botState.config = Object.assign(botState.config, newConfig);
+            // 3. Actualiza otras propiedades de nivel superior (symbol, stopAtCycle)
+            // Se asume que newConfig.stopAtCycle está aquí.
+            Object.assign(botState.config, newConfig);
+
+            // 4. FORZAR LA DETECCIÓN DE CAMBIOS EN LA CONFIG ANIDADA
+            // Esto es necesario para que Mongoose guarde los cambios en 'long' y 'short'
+            botState.markModified('config.long');
+            botState.markModified('config.short');
+            // botState.markModified('config'); // markModified en el subdoc es más específico
 
         }
         
