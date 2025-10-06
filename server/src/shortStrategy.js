@@ -1,11 +1,11 @@
 // BSB/server/src/shortStrategy.js (ACTUALIZADO - Router de Estados)
 
 // Importa los módulos de cada estado Short (Asumimos que ya los creaste)
-const SRunning = require('./states/short/SRunning');
-const SBuying = require('./states/short/SBuying');
-const SSelling = require('./states/short/SSelling');
-const SNoCoverage = require('./states/short/SNoCoverage');
-const SStopped = require('./states/short/SStopped');
+const SRunning = require('./states/short/SHRunning');
+const SBuying = require('./states/short/SHBuying');
+const SSelling = require('./states/short/SHSelling');
+const SNoCoverage = require('./states/short/SHNoCoverage');
+const SStopped = require('./states/short/SHStopped');
 
 let dependencies = {};
 
