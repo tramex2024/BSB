@@ -1,116 +1,90 @@
-// BSB/server/src/utils/dataManager.js (FINALIZADO - Control de Contadores y Capital)
+// BSB/server/src/utils/dataManager.js (CORREGIDO - Uso de config.long.profit_percent para el Precio Objetivo)
 
 const Autobot = require('../../models/Autobot');
-const autobotCore = require('../../autobotLogic');
-// NOTA: Se ha ELIMINADO la importación global de placeFirstBuyOrder
-// para romper la dependencia circular con orderManager.js
-
-// Constante para el porcentaje de trailing stop (tomado de LSelling para consistencia)
-const TRAILING_STOP_PERCENTAGE = 0.4; 
+const { placeBuyToCoverOrder } = require('./orderManagerShort'); // Necesario para el ciclo Short (aunque este es el archivo Long)
 
 /**
- * Lógica para manejar una orden de compra exitosa (Inicial o de Cobertura).
- * Actualiza el Precio Promedio de Compra (PPC) y la Cantidad Acumulada (AC).
- *
- * Esta función cumple con el punto 1 y 2 de tu estrategia:
- * 1. Persiste los datos de la orden (orderCountInCycle incrementado, AC, PPC, lastOrder).
- * 2. Inicializa PM, PC, y LTPrice después de la primera orden para el estado BUYING.
- * * @param {object} botStateObj - Objeto de estado del bot.
- * @param {object} orderDetails - Detalles de la orden de BitMart.
- * @param {function} [updateGeneralBotState] - Función para actualizar LBalance (inyectada solo desde placeFirstBuyOrder).
+ * Recalcula el Precio Promedio de Compra (PPC), la Cantidad Acumulada (AC) y el Precio Objetivo (LTP).
+ * Se ejecuta después de CADA orden de COMPRA exitosa (inicial o cobertura).
+ * @param {object} botState - Estado actual del bot.
+ * @param {object} orderDetails - Detalles de la orden de BitMart completada.
+ * @param {function} updateGeneralBotState - Función para actualizar LBalance, LtPrice, LOrder (solo para la primera orden).
  */
-async function handleSuccessfulBuy(botStateObj, orderDetails, updateGeneralBotState) { 
-    autobotCore.log(`Orden de compra exitosa. ID: ${orderDetails.order_id}`, 'success');
+async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState = null) {
+    const { lStateData, config, lbalance: currentLBalance } = botState;
+    const { ac: currentAc, ppc: currentPPC, orderCountInCycle } = lStateData;
+    const SYMBOL = config.symbol || 'BTC_USDT';
 
-    const newSize = parseFloat(orderDetails.filledSize || orderDetails.size);
-    const newPrice = parseFloat(orderDetails.priceAvg || orderDetails.price); // Precio real de ejecución
-    const newNotional = parseFloat(orderDetails.filledNotional); // Monto real gastado en USDT <-- DECLARACIÓN ÚNICA
+    // Datos de la orden llenada
+    const filledSize = parseFloat(orderDetails.filledSize || orderDetails.size);
+    const filledPrice = parseFloat(orderDetails.priceAvg || orderDetails.price);
+    const filledUsdt = filledSize * filledPrice;
 
-    // 1. Cálculo del DCA (Dollar-Cost Averaging)
-    const currentAC = botStateObj.lStateData.ac || 0;
-    const currentPPC = botStateObj.lStateData.ppc || 0;
-    const currentOrderCount = botStateObj.lStateData.orderCountInCycle || 0;
-    
-    // ❌ LÍNEA DUPLICADA ELIMINADA AQUÍ ❌
-    // const newNotional = parseFloat(orderDetails.filledNotional); 
+    // 1. CÁLCULO DE NUEVO AC y PPC (Average Cost / Precio Promedio)
+    const newAc = currentAc + filledSize;
+    // Evitar división por cero, aunque newAc siempre será > 0 aquí
+    const newPPC = (newAc > 0) ? ((currentAc * currentPPC) + (filledSize * filledPrice)) / newAc : filledPrice;
 
-    const totalUSDT = (currentAC * currentPPC) + newNotional; 
+    // 2. CÁLCULO DEL NUEVO PRECIO OBJETIVO (LTP)
+    // 💡 USANDO config.long.profit_percent de tu esquema
+    const profitPercent = parseFloat(config.long.profit_percent); 
+    const newLtPrice = newPPC * (1 + (profitPercent / 100)); // PPC + profit_percent(%)
 
-    botStateObj.lStateData.ac = currentAC + newSize;
-    botStateObj.lStateData.ppc = botStateObj.lStateData.ac > 0 ? totalUSDT / botStateObj.lStateData.ac : 0; 
-    
-    // 2. Incremento del Contador de Órdenes
-    botStateObj.lStateData.orderCountInCycle = currentOrderCount + 1; 
+    // 3. ACTUALIZACIÓN DE CONTADORES
+    const newOrderCount = orderCountInCycle + 1;
 
-    // 3. INICIALIZACIÓN DE PARÁMETROS CRÍTICOS (PM, PC, LTPrice)
-    const newPPC = botStateObj.lStateData.ppc;
+    // 4. ACTUALIZACIÓN DEL ESTADO ESPECÍFICO (lStateData)
+    const updatedLStateData = {
+        ac: newAc,
+        ppc: newPPC,
+        pm: newLtPrice, // Inicializamos PM con el LTP
+        pc: newLtPrice, // Inicializamos PC con el LTP
+        orderCountInCycle: newOrderCount,
+        lastOrder: null // Limpiamos la última orden al llenarse
+    };
+    await Autobot.findOneAndUpdate({}, { 'lStateData': updatedLStateData });
 
-    // Se inicializa solo si es la primera orden (o si los parámetros están en cero)
-    if (currentOrderCount === 0 || botStateObj.lStateData.pm === 0) { 
-        // El Precio Máximo (PM) se inicializa en el Precio Promedio de Compra
-        botStateObj.lStateData.pm = newPPC; 
-        
-        // El Precio de Venta (PC) se establece inicialmente para la ganancia objetivo (PPC + % profit)
-        // Lo inicializamos un 0.4% por encima del PPC para que el precio de mercado tenga que subir un poco
-        // antes de que el trailing stop pueda activarse.
-        botStateObj.lStateData.pc = newPPC * (1 + (TRAILING_STOP_PERCENTAGE / 100));
-        
-        // LTPrice (Last Transaction Price) es el precio de ejecución de la orden
-        botStateObj.lStateData.LTPrice = newPrice;
-    } else {
-        // Para órdenes de cobertura, solo actualizamos el LTPrice 
-        botStateObj.lStateData.LTPrice = newPrice;
-    }
-    
-    // 4. Registro de la última orden completada
-    botStateObj.lStateData.lastOrder = {
-       order_id: orderDetails.order_id,
-       price: newPrice,
-       size: newSize, 
-       usdt_amount: newNotional, // CLAVE: Monto en USDT para la lógica geométrica
-       side: 'buy',
-       state: 'filled'
+    // 5. ACTUALIZACIÓN DEL ESTADO GENERAL (LBalance y LtPrice)
+    const updateGeneral = {
+        ltprice: newLtPrice, // Guardamos el nuevo precio objetivo
+        lnorder: newOrderCount, // Número de órdenes
+        lcoverage: 0 // Resetear la cobertura requerida (se recalcula en LRunning)
     };
 
-    // 5. Actualización del LBalance (Solo para la primera compra exitosa)
-    if (updateGeneralBotState) { 
-        // Se ejecuta solo en la primera orden (llamada desde placeFirstBuyOrder)
-        const newLBalance = botStateObj.lbalance - newNotional;
-        await updateGeneralBotState({ lbalance: newLBalance });
-        autobotCore.log(`LBalance reducido en ${newNotional.toFixed(2)} USDT. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+    if (newOrderCount === 1 && updateGeneralBotState) {
+        // Solo para la primera orden: descontamos el USDT del LBalance
+        const newLBalance = currentLBalance - filledUsdt;
+        updateGeneral.lbalance = newLBalance;
+    }
+
+    if (updateGeneralBotState) {
+        await updateGeneralBotState(updateGeneral);
     }
     
-    // 6. Persiste los datos actualizados
-    await Autobot.findOneAndUpdate({}, { 'lStateData': botStateObj.lStateData });
+    // 6. TRANSICIÓN DE ESTADO FINAL
+    // Si ya tenemos una posición, vamos al estado SELLING para monitorear el Trailing Stop.
+    const newState = newOrderCount > 0 ? 'SELLING' : 'RUNNING'; 
+    await Autobot.findOneAndUpdate({}, { 'lstate': newState });
+
+    console.log(`[LONG] Compra exitosa. PPC: ${newPPC.toFixed(2)}, AC: ${newAc.toFixed(8)}. Nuevo estado: ${newState}`);
 }
 
 /**
- * Lógica para manejar una orden de venta exitosa y el control de flujo post-ciclo.
- * * Esta función cumple con el punto 4 de tu estrategia:
- * 4. Resetea los parámetros a 0 para el próximo ciclo.
- * * @param {object} botStateObj - Objeto de estado del bot.
- * @param {object} orderDetails - Detalles de la orden de BitMart.
- * @param {object} dependencies - Dependencias inyectadas.
+ * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
+ * Esta función se invoca desde orderManager.js.
+ * @param {object} botStateObj - Estado del bot antes de la venta.
+ * @param {object} orderDetails - Detalles de la orden de BitMart completada.
+ * @param {object} dependencies - Dependencias necesarias (log, updateBotState, updateLStateData, updateGeneralBotState).
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
-    const { config, log, updateBotState } = dependencies; 
-
-    log(`Orden de venta exitosa. ID: ${orderDetails.order_id}`, 'success');
+    // Nota: Esta función es manejada por LSelling.js/handleSuccessfulSell
+    // Aseguramos que la lógica central de LSelling.js se ejecute.
+    const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
     
-    // ⚠️ NOTA: La lógica de reseteo de 'lStateData' (ppc=0, ac=0, orderCountInCycle=0, etc.)
-    // Y la gestión de capital (LBalance) están ahora en LSelling.js para asegurar
-    // que la limpieza y el flujo de capital sean atómicos y ocurran ANTES de cualquier reinicio.
-    
-    // 1. Control de flujo y reinicio (o detención)
-    if (config.long.stopAtCycle) {
-        log('stopAtCycle activado. Bot Long se detendrá.', 'info');
-        await updateBotState('STOPPED', 'long');
-    } else {
-        // Vuelve a BUYING a través de placeFirstBuyOrder (ejecutado en LSelling.js)
-        // No hay transición aquí, ya que LSelling.js maneja la importación y llamada.
-        log('Venta completada. Reiniciando ciclo automáticamente.', 'info');
-    }
+    // El handler de LSelling.js ya tiene la lógica de cálculo de profit, reinicio, y transición de estado.
+    await LSellingHandler(botStateObj, orderDetails, dependencies);
 }
+
 
 module.exports = {
     handleSuccessfulBuy,

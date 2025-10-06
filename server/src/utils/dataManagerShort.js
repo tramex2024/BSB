@@ -1,211 +1,92 @@
-// BSB/server/src/utils/orderManagerShort.js (CORREGIDO - Manejo de errores, guardado de lastOrder y recuperación de fallos)
+// BSB/server/src/utils/dataManagerShort.js (CORREGIDO - Uso de config.short.profit_percent para el Precio Objetivo)
 
-const { placeOrder, getOrderDetail } = require('../../services/bitmartService');
 const Autobot = require('../../models/Autobot');
-const { handleSuccessfulSellShort, handleSuccessfulBuyToCoverShort } = require('./dataManagerShort'); 
-const MIN_USDT_VALUE_FOR_BITMART = 5.00;
-const ORDER_CHECK_TIMEOUT_MS = 2000;
-const TRADE_SYMBOL = 'BTC_USDT';
+const { placeBuyToCoverOrder } = require('./orderManagerShort'); 
 
 /**
- * Coloca la primera orden de VENTA a mercado (Entrada inicial en corto).
- * @param {object} config - Configuración del bot.
- * @param {object} creds - Credenciales de la API.
- * @param {function} log - Función de logging inyectada.
- * @param {function} updateBotState - Función para cambiar el estado inyectada.
- * @param {function} updateGeneralBotState - Función para actualizar SBalance inyectada.
- * @param {number} currentPrice - Precio actual para estimar el valor en USDT.
- */
-async function placeFirstSellOrder(config, creds, log, updateBotState, updateGeneralBotState, currentPrice) {
-    const sellAmountBTC = parseFloat(config.short.sellBtc); // Cantidad en BTC
-    const SYMBOL = config.symbol || TRADE_SYMBOL;
-    const estimatedUsdtNotional = sellAmountBTC * currentPrice;
-
-    log(`Colocando la primera orden de VENTA en corto a mercado por ${sellAmountBTC.toFixed(8)} BTC.`, 'info');
-    
-    // Verificación de mínimo de BitMart
-    if (estimatedUsdtNotional < MIN_USDT_VALUE_FOR_BITMART) {
-         log(`Error: Monto inicial (${estimatedUsdtNotional.toFixed(2)} USDT) menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART}).`, 'error');
-         await updateBotState('RUNNING', 'short'); 
-         return;
-    }
-
-    try {
-        const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmountBTC); 
-        
-        // 💡 CORRECCIÓN CRÍTICA: SOLO CONTINUAR SI LA ORDEN TIENE ID
-        if (order && order.order_id) {
-            log(`Orden de VENTA colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
-
-            const currentOrderId = order.order_id;
-            let botState = await Autobot.findOne({}); 
-
-            if (botState) {
-                // Pre-guardar el ID, size en BTC, y la estimación en USDT para el DCA
-                botState.sStateData.lastOrder = {
-                    order_id: currentOrderId,
-                    price: currentPrice, // Usamos el precio actual como referencia
-                    size: sellAmountBTC, 
-                    usdt_amount: estimatedUsdtNotional, 
-                    side: 'sell', 
-                    state: 'pending_fill'
-                };
-                // 💡 CRÍTICO: Guardamos el estado inmediatamente para bloquear duplicados
-                await Autobot.findOneAndUpdate({}, { 'sStateData': botState.sStateData });
-            }
-            
-            setTimeout(async () => {
-                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId); 
-                let updatedBotState = await Autobot.findOne({});
-
-                if (orderDetails && orderDetails.state === 'filled') {
-                    if (updatedBotState) {
-                        await handleSuccessfulSellShort(updatedBotState, orderDetails, updateGeneralBotState); 
-                    }
-                } else {
-                    log(`La orden inicial de venta ${currentOrderId} no se completó. Volviendo al estado RUNNING.`, 'error');
-                    if (updatedBotState) {
-                        updatedBotState.sStateData.lastOrder = null;
-                        updatedBotState.sStateData.orderCountInCycle = 0; 
-                        await Autobot.findOneAndUpdate({}, { 'sStateData': updatedBotState.sStateData });
-                        await updateBotState('RUNNING', 'short'); 
-                    }
-                }
-            }, ORDER_CHECK_TIMEOUT_MS);
-        } else {       
-            log(`Error al colocar la primera orden de VENTA. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            await updateBotState('RUNNING', 'short'); // Si falla la API, restaurar el estado
-        }
-    } catch (error) {
-        log(`Error de API al colocar la primera orden de VENTA: ${error.message}`, 'error');
-        await updateBotState('RUNNING', 'short'); // Si falla la excepción, restaurar el estado
-    }
-}
-
-
-/**
- * Coloca una orden de VENTA de cobertura (Market Sell Order para ir más corto).
+ * Recalcula el Precio Promedio de Venta (PPS), la Cantidad Acumulada (AC) y el Precio Objetivo (STP).
+ * Se ejecuta después de CADA orden de VENTA exitosa (inicial o cobertura).
  * @param {object} botState - Estado actual del bot.
- * @param {object} creds - Credenciales de la API.
- * @param {number} sellAmountBTC - Cantidad de BTC para la orden.
- * @param {number} nextCoveragePrice - Precio de disparo (solo para referencia).
- * @param {function} log - Función de logging inyectada.
- * @param {function} updateBotState - Función para cambiar el estado inyectada.
+ * @param {object} orderDetails - Detalles de la orden de BitMart completada.
+ * @param {function} updateGeneralBotState - Función para actualizar SBalance, SPrice, SOrder (opcional, solo para la primera orden).
  */
-async function placeCoverageSellOrder(botState, creds, sellAmountBTC, nextCoveragePrice, log, updateBotState) {
-    const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
+async function handleSuccessfulSellShort(botState, orderDetails, updateGeneralBotState = null) {
+    const { sStateData, config, sbalance: currentSBalance } = botState;
+    const { ac: currentAc, ppc: currentPPS, orderCountInCycle } = sStateData;
+    const SYMBOL = config.symbol || 'BTC_USDT';
+
+    // Datos de la orden llenada
+    const filledSize = parseFloat(orderDetails.filledSize || orderDetails.size);
+    const filledPrice = parseFloat(orderDetails.priceAvg || orderDetails.price);
+
+    // 1. CÁLCULO DE NUEVO AC y PPS (Precio Promedio de Venta Short)
+    const newAc = currentAc + filledSize;
+    const newPPS = (newAc > 0) ? ((currentAc * currentPPS) + (filledSize * filledPrice)) / newAc : filledPrice;
+
+    // 2. CÁLCULO DEL NUEVO PRECIO OBJETIVO (STP)
+    // 💡 USANDO config.short.profit_percent de tu esquema
+    const profitPercent = parseFloat(config.short.profit_percent);
+    // Para SHORT, el precio objetivo debe ser MENOR al PPS (para ganar).
+    const newStPrice = newPPS * (1 - (profitPercent / 100)); // PPS - profit_percent(%)
+
+    // 3. ACTUALIZACIÓN DE CONTADORES
+    const newOrderCount = orderCountInCycle + 1;
+
+    // 4. ACTUALIZACIÓN DEL ESTADO ESPECÍFICO (sStateData)
+    const updatedSStateData = {
+        ac: newAc,
+        ppc: newPPS, // Usamos ppc para el precio promedio de VENTA (PPS)
+        pm: newStPrice, // Inicializamos PM (Precio Mínimo) con el STP
+        pc: newStPrice, // Inicializamos PC (Precio de Cierre) con el STP
+        orderCountInCycle: newOrderCount,
+        lastOrder: null // Limpiamos la última orden al llenarse
+    };
     
-    // NOTA: requiredCoverageAmount ya se restó del SBalance en coverageLogicShort.js antes de llamar aquí.
-    
-    log(`Colocando orden de cobertura a MERCADO (SELL) por ${sellAmountBTC.toFixed(8)} BTC.`, 'info');
-    
-    try {
-        const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmountBTC); 
-
-        // 💡 CORRECCIÓN CRÍTICA: SOLO CONTINUAR SI LA ORDEN TIENE ID
-        if (order && order.order_id) {
-            const currentOrderId = order.order_id;     
-
-            // Usamos el precio de cobertura para estimar el Notional (para DCA en dataManagerShort)
-            const estimatedUsdtNotional = sellAmountBTC * nextCoveragePrice;
-
-            botState.sStateData.lastOrder = {
-                order_id: currentOrderId,
-                price: nextCoveragePrice,   
-                size: sellAmountBTC,   
-                usdt_amount: estimatedUsdtNotional, 
-                side: 'sell',
-                state: 'pending_fill'
-            };
-            // 💡 CRÍTICO: Guardamos el estado inmediatamente para bloquear duplicados en coverageLogicShort.
-            await Autobot.findOneAndUpdate({}, { 'sStateData': botState.sStateData });
-            log(`Orden de cobertura colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
-
-            setTimeout(async () => {
-                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
-                const updatedBotState = await Autobot.findOne({});
-                
-                if (orderDetails && orderDetails.state === 'filled') {
-                    if (updatedBotState) {
-                        // handleSuccessfulSellShort manejará la reducción del SBalance y el DCA
-                        // Aquí no se toca el SBalance, ya se hizo antes de la llamada.
-                        await handleSuccessfulSellShort(updatedBotState, orderDetails); 
-                    }
-                } else {
-                    log(`La orden de cobertura ${currentOrderId} no se completó.`, 'error');
-                    if (updatedBotState) {
-                        // Limpiamos lastOrder y volvemos a RUNNING para reevaluar.
-                        updatedBotState.sStateData.lastOrder = null;
-                        updatedBotState.sStateData.requiredCoverageAmount = 0; // Limpiamos el monto requerido
-                        await Autobot.findOneAndUpdate({}, { 'sStateData': updatedBotState.sStateData });
-                        // La lógica de reversión del SBalance se debe hacer en coverageLogicShort.js si la orden falla,
-                        // pero por seguridad, volvemos a RUNNING aquí.
-                        await updateBotState('RUNNING', 'short');
-                    }
-                }
-            }, ORDER_CHECK_TIMEOUT_MS);
-        } else {
-            log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            // 💡 CRÍTICO: Si la orden falló en la API, debemos limpiar requiredCoverageAmount y volver a RUNNING.
-            // La reversión del SBalance debe ocurrir en coverageLogicShort.js
-            botState.sStateData.requiredCoverageAmount = 0;
-            await Autobot.findOneAndUpdate({}, { 'sStateData': botState.sStateData });
-            await updateBotState('RUNNING', 'short');
-        }
-    } catch (error) {
-        log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
-        // 💡 CRÍTICO: Si hay una excepción, debemos limpiar requiredCoverageAmount y volver a RUNNING.
-        botState.sStateData.requiredCoverageAmount = 0;
-        await Autobot.findOneAndUpdate({}, { 'sStateData': botState.sStateData });
-        await updateBotState('RUNNING', 'short');
+    // Limpiamos el monto requerido de cobertura, ya que la orden se llenó.
+    if (sStateData.requiredCoverageAmount > 0) {
+        updatedSStateData.requiredCoverageAmount = 0;
     }
+    
+    await Autobot.findOneAndUpdate({}, { 'sStateData': updatedSStateData });
+
+    // 5. ACTUALIZACIÓN DEL ESTADO GENERAL (SBalance y StPrice)
+    const updateGeneral = {
+        stprice: newStPrice, // Guardamos el nuevo precio objetivo
+        snorder: newOrderCount, // Número de órdenes
+        scoverage: 0 // Resetear la cobertura requerida
+    };
+
+    if (updateGeneralBotState) {
+        await updateGeneralBotState(updateGeneral);
+    }
+    
+    // 6. TRANSICIÓN DE ESTADO FINAL
+    // Si ya tenemos una posición, vamos al estado BUYING (Liquidación por Trailing Stop).
+    const newState = newOrderCount > 0 ? 'BUYING' : 'RUNNING'; 
+    await Autobot.findOneAndUpdate({}, { 'sstate': newState });
+
+    console.log(`[SHORT] Venta/Cobertura exitosa. PPS: ${newPPS.toFixed(2)}, AC: ${newAc.toFixed(8)}. Nuevo estado: ${newState}`);
 }
 
 
 /**
- * Coloca una orden de COMPRA a mercado para CUBRIR la posición en corto (cierre de ciclo).
- * @param {object} config - Configuración del bot.
- * @param {object} creds - Credenciales de la API.
- * @param {number} coverAmount - Cantidad de BTC para la orden.
- * @param {function} log - Función de logging inyectada.
- * @param {function} handleSuccessfulBuyToCover - Función de callback para manejar el éxito.
- * @param {object} botState - Estado actual del bot (para pasar al handler).
- * @param {object} handlerDependencies - Dependencias necesarias para el handler.
+ * Lógica para manejar una orden de COMPRA exitosa (cierre de ciclo Short).
+ * Esta función es invocada desde orderManagerShort.js.
+ * @param {object} botStateObj - Estado del bot antes de la compra.
+ * @param {object} orderDetails - Detalles de la orden de BitMart completada.
+ * @param {object} dependencies - Dependencias necesarias (log, updateBotState, updateSStateData, updateGeneralBotState).
  */
-async function placeBuyToCoverOrder(config, creds, coverAmount, log, handleSuccessfulBuyToCover, botState, handlerDependencies) {
-    const SYMBOL = config.symbol || TRADE_SYMBOL;
-
-    log(`Colocando orden de COMPRA a mercado para CUBRIR por ${coverAmount.toFixed(8)} BTC.`, 'info');
-    try {
-        // CRÍTICO: Usamos 'BUY' para cubrir la posición en corto (Market Order by Quantity)
-        const order = await placeOrder(creds, SYMBOL, 'BUY', 'market', coverAmount); 
-
-        if (order && order.order_id) {
-            const currentOrderId = order.order_id;
-            log(`Orden de cubrimiento colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
-
-            // 💡 NOTA: No es necesario guardar lastOrder aquí, ya que SHSelling no tiene un loop que cause duplicación.
-            
-            setTimeout(async () => {
-                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
-                if (orderDetails && orderDetails.state === 'filled') {
-                    // 💡 CORRECCIÓN: Usamos el estado que recibimos como base.
-                    await handleSuccessfulBuyToCover(botState, orderDetails, handlerDependencies); 
-                } else {
-                    log(`La orden de cubrimiento ${currentOrderId} no se completó.`, 'error');
-                }
-            }, ORDER_CHECK_TIMEOUT_MS);
-        } else {
-            log(`Error al colocar la orden de cubrimiento. Respuesta API: ${JSON.stringify(order)}`, 'error');
-        }
-    } catch (error) {
-        log(`Error de API al colocar la orden de cubrimiento: ${error.message}`, 'error');
-    }
+async function handleSuccessfulBuyToCoverShort(botStateObj, orderDetails, dependencies) {
+    // Nota: Esta función es manejada por SBuying.js/handleSuccessfulBuyToCoverShort
+    // Aseguramos que la lógica central de SBuying.js se ejecute.
+    const { handleSuccessfulBuyToCoverShort: SBuyingHandler } = require('../states/short/SBuying');
+    
+    // El handler de SBuying.js ya tiene la lógica de cálculo de profit, reinicio, y transición de estado.
+    await SBuyingHandler(botStateObj, orderDetails, dependencies);
 }
+
 
 module.exports = {
-    placeFirstSellOrder,
-    placeCoverageSellOrder,
-    placeBuyToCoverOrder,
-    MIN_USDT_VALUE_FOR_BITMART
+    handleSuccessfulSellShort,
+    handleSuccessfulBuyToCoverShort
 };
