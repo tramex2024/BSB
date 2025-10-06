@@ -37,11 +37,7 @@ async function run(dependencies) {
         }
 
         if (currentPrice >= targetSellPrice && ac > 0) {
-            log(`Precio actual (${currentPrice.toFixed(2)}) alcanzó el objetivo de venta por TRIGGER (${targetSellPrice.toFixed(2)}).`, 'success');
-
-            if (botState.lStateData.lastOrder && botState.lStateData.lastOrder.order_id) {
-                await cancelActiveOrders(creds, botState, log); 
-            }
+            log(`Precio actual (${currentPrice.toFixed(2)}) alcanzó el objetivo de venta por TRIGGER (${targetSellPrice.toFixed(2)}).`, 'success');            
             
             await updateBotState('SELLING', 'long');
         }

@@ -182,10 +182,34 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
  * @param {object} botState - Estado actual del bot.
  * @param {function} log - Función de logging inyectada.
  */
-async function cancelActiveOrders(creds, botState, log) { // <== Ensure this entire line is NOT commented.
-    if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
-        log("No hay una orden para cancelar registrada.", 'info');
-        return;
+async function cancelActiveOrders(creds, botState, log) {
+    if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
+        log("No hay una orden para cancelar registrada.", 'info');
+        return;
+    }
+
+    const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
+    const orderId = botState.lStateData.lastOrder.order_id;
+    
+    try {
+        log(`Intentando cancelar orden ID: ${orderId}...`, 'warning');
+        
+        // 💡 LLAMADA CRÍTICA: Ejecutar la cancelación
+        const result = await cancelOrder(creds, SYMBOL, orderId);
+        
+        if (result && result.code === 1000) {
+            log(`Orden ${orderId} cancelada exitosamente.`, 'success');
+        } else {
+            // Manejo de errores, por ejemplo, si la orden ya fue llenada/cancelada
+            log(`No se pudo cancelar la orden ${orderId}. Razón: ${JSON.stringify(result)}`, 'error');
+        }
+        
+        // 💡 Limpiar el lastOrder del estado (incluso si la cancelación falla, ya no queremos monitorearla)
+        botState.lStateData.lastOrder = null;
+        await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
+
+    } catch (error) {
+        log(`Error de API al intentar cancelar la orden ${orderId}: ${error.message}`, 'error');
     }
 }
 

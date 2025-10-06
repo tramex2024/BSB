@@ -35,6 +35,7 @@ const configSchema = new mongoose.Schema({
 });
 
 const autobotSchema = new mongoose.Schema({
+    totalProfit: { type: Number, default: 0 },
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
     lbalance: { type: Number, default: 0 },

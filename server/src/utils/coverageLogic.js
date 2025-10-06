@@ -1,9 +1,7 @@
-// BSB/server/src/utils/coverageLogic.js (ACTUALIZADO)
+// BSB/server/src/utils/coverageLogic.js (CORREGIDO - Lógica de Escalamiento GEOMÉTRICO)
 
-const { getOrderDetail } = require('../../services/bitmartService');
-// const autobotCore = require('../../autobotLogic'); // ¡ELIMINADO!
 const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManager');
-// NOTA: updateLStateData NO se importa globalmente para romper la dependencia circular.
+const Autobot = require('../../models/Autobot'); 
 
 /**
  * Verifica las condiciones de cobertura y, si es necesario y hay fondos, coloca la orden.
@@ -16,55 +14,72 @@ const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderMa
  * @param {function} log - Función de logging inyectada.
  * @param {function} updateBotState - Función para cambiar el estado inyectada.
  * @param {function} updateLStateData - Función para actualizar lStateData inyectada.
+ * @param {function} updateGeneralBotState - Función para actualizar LBalance inyectada. 
  */
-async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config, log, updateBotState, updateLStateData) {
-    const { ppc, orderCountInCycle } = botState.lStateData;
+async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config, log, updateBotState, updateLStateData, updateGeneralBotState) {
+    
+    // Obtenemos los datos necesarios para la lógica geométrica (basada en la orden anterior)
+    const { ppc, ac, lastOrder } = botState.lStateData;
     const { price_var, size_var, purchaseUsdt } = config.long;
 
-    // Solo procedemos si ya hay una posición (PPC > 0)
-    if (ppc <= 0) {
+    if (ppc <= 0 || !lastOrder || !lastOrder.price) {
+        log("Lógica de cobertura: Posición no inicializada o incompleta.", 'warning');
         return;
     }
 
-    // 1. CÁLCULO DEL PRÓXIMO PRECIO DE COBERTURA
-    // El precio de cobertura se calcula como el PPC menos el porcentaje de price_var
-    const priceDecrement = (price_var / 100) * orderCountInCycle;
-    const nextCoveragePrice = ppc * (1 - priceDecrement);
-
-    // 2. CÁLCULO DEL MONTO REQUERIDO ESCALADO
-    // El monto escala con el size_var por cada orden en el ciclo.
-    const sizeIncrement = (size_var / 100) * orderCountInCycle;
-    const nextUSDTAmount = parseFloat(purchaseUsdt) * (1 + sizeIncrement);
+    const lastOrderPrice = parseFloat(lastOrder.price); // Precio de la última compra
     
-    // 3. Persistir el precio de la próxima orden para el Front-End (Si es necesario)
-    // ESTA LÓGICA DE PERSISTENCIA SE MUEVE A LBUYING.JS si no hay fondos
+    // 💡 CRÍTICO: Usamos el monto en USDT de la última orden para el escalamiento.
+    // Usamos 'purchaseUsdt' como fallback si por alguna razón no está registrado.
+    const lastOrderUsdtAmount = parseFloat(lastOrder.usdt_amount || config.long.purchaseUsdt);
 
-    // 4. Condición de Disparo y Colocación
+    // 1. CÁLCULO DEL PRÓXIMO PRECIO DE COBERTURA (Referencia al precio de la ORDEN ANTERIOR)
+    // Formula: Precio Anterior * (1 - (Decremento / 100))
+    const nextCoveragePrice = lastOrderPrice * (1 - (price_var / 100));
+
+    // 2. CÁLCULO DEL MONTO REQUERIDO ESCALADO (Referencia al monto de la ORDEN ANTERIOR)
+    // Formula: Monto Anterior * (1 + (Incremento / 100))
+    const baseAmount = lastOrderUsdtAmount; 
+    const nextUSDTAmount = baseAmount * (1 + (size_var / 100));
+    
+    // 3. Condición de Disparo y Colocación
     if (currentPrice <= nextCoveragePrice) {
-        log(`Disparo de cobertura Long activado. Precio objetivo: ${nextCoveragePrice.toFixed(2)} vs Precio actual: ${currentPrice.toFixed(2)}`, 'info');
+        log(`Disparo de cobertura Long activado. Precio objetivo: ${nextCoveragePrice.toFixed(2)} vs Precio actual: ${currentPrice.toFixed(2)}. Monto: ${nextUSDTAmount.toFixed(2)} USDT.`, 'info');
 
-        if (availableUSDT >= nextUSDTAmount && nextUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART) {
-            // Hay fondos, colocar la orden de cobertura
-            // Nota: placeCoverageBuyOrder ahora debe recibir 'log' como dependencia
-            await placeCoverageBuyOrder(botState, creds, nextUSDTAmount, nextCoveragePrice, log);
+        // 4. Verificación de Fondos (Límite Asignado y Saldo Real)
+        const currentLBalance = parseFloat(botState.lbalance || 0);
+        const isSufficient = currentLBalance >= nextUSDTAmount && 
+                             availableUSDT >= nextUSDTAmount && 
+                             nextUSDTAmount >= MIN_USDT_VALUE_FOR_BITMART;
+
+        if (isSufficient) {
+            
+            // 5. RESTA DE CAPITAL ASIGNADO (LBalance)
+            const newLBalance = currentLBalance - nextUSDTAmount;
+            await updateGeneralBotState({ lbalance: newLBalance });
+            log(`LBalance asignado reducido en ${nextUSDTAmount.toFixed(2)} USDT para cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+
+            // 6. Colocar la orden de cobertura
+            await placeCoverageBuyOrder(botState, creds, nextUSDTAmount, nextCoveragePrice, log); 
 
         } else {
             // FONDOS INSUFICIENTES: Transición a NO_COVERAGE
 
-            // 1. Guardar el monto que se necesitaba para la próxima orden (requiredCoverageAmount).
-            botState.lStateData.requiredCoverageAmount = nextUSDTAmount;
+            let reason = '';
+            if (currentLBalance < nextUSDTAmount) {
+                reason = `LÍMITE DE CAPITAL ASIGNADO (LBalance: ${currentLBalance.toFixed(2)} USDT) insuficiente.`;
+            } else {
+                reason = `Fondos REALES (${availableUSDT.toFixed(2)} USDT) insuficientes.`;
+            }
             
-            // También se recomienda guardar el precio de disparo fallido para el Front-End
+            // 7. Persistir los datos de la orden fallida para el Front-End
+            botState.lStateData.requiredCoverageAmount = nextUSDTAmount;
             botState.lStateData.nextCoveragePrice = nextCoveragePrice; 
-
-            // Usamos la función inyectada
             await updateLStateData(botState.lStateData); 
 
-            // 2. Transicionar a NO_COVERAGE.
-            log(`Fondos insuficientes para la próxima cobertura (${nextUSDTAmount.toFixed(2)} USDT). Disponible: ${availableUSDT.toFixed(2)} USDT. Cambiando a NO_COVERAGE.`, 'warning');
-            
-            // Usamos la función inyectada
-            await updateBotState('NO_COVERAGE', botState.sstate);
+            // 8. Transicionar a NO_COVERAGE.
+            log(`No se puede colocar la orden. ${reason} Cambiando a NO_COVERAGE.`, 'warning');
+            await updateBotState('NO_COVERAGE', 'long');
         }
     }
 }
