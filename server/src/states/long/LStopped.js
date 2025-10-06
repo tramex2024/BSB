@@ -1,35 +1,38 @@
-// BSB/server/src/states/long/LStopped.js (CORREGIDO - Inicialización de Parámetros)
+// BSB/server/src/states/long/LStopped.js (CORREGIDO - Inicialización Completa de Parámetros)
 
 const Autobot = require('../../../models/Autobot');
 
-const LSTATE = 'long';
-
 /**
  * Resetea todos los parámetros de estado de la posición Long.
- * Esto asegura que al reiniciar el bot, comience un ciclo completamente nuevo.
  */
 async function resetLState(log, updateGeneralBotState) {
     const resetLStateData = { 
-        ac: 0, ppc: 0, 
+        ppc: 0, 
+        ac: 0, 
+        ppv: 0, // Incluido del esquema
+        av: 0,  // Incluido del esquema
         orderCountInCycle: 0, 
         lastOrder: null, 
-        pm: 0, pc: 0, 
+        pm: 0, 
+        pc: 0, 
+        pv: 0,  // 💡 CRÍTICO: Aseguramos el reseteo de pv
         requiredCoverageAmount: 0, 
         nextCoveragePrice: 0 
+        // Nota: el _id del subdocumento NO se toca.
     };
 
-    // 1. Resetear los datos de estado específicos
+    // 1. Resetear los datos de estado específicos (lStateData)
+    // El update solo actualiza los campos definidos en resetLStateData.
     await Autobot.findOneAndUpdate({}, { 'lStateData': resetLStateData });
 
-    // 2. Resetear los campos de estado general (para el Front-End)
+    // 2. Resetear los campos de estado general relacionados con la posición
     const updateGeneral = {
         ltprice: 0,
         lcoverage: 0,
         lnorder: 0
-        // Nota: El lbalance y lcycle NO se resetean aquí, solo el estado de la posición.
+        // No reseteamos lbalance, lcycle, totalProfit aquí
     };
     
-    // Usamos la función inyectada para actualizar el estado general
     if (updateGeneralBotState) {
         await updateGeneralBotState(updateGeneral);
     }
@@ -43,13 +46,10 @@ async function run(dependencies) {
 
     log("Estado Long: STOPPED. Deteniendo el monitoreo y reseteando posición...", 'info');
     
-    // 💡 CRÍTICO: Llamamos a la función de reseteo al entrar en estado STOPPED
     await resetLState(log, updateGeneralBotState);
-    
-    // El estado del bot ya es 'STOPPED', no es necesario hacer un updateBotState.
 }
 
 module.exports = { 
     run,
-    resetLState // Exportamos por si se necesita desde otro lado (ej. un forzado de reset)
+    resetLState
 };

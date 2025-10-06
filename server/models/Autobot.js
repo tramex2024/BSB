@@ -34,7 +34,7 @@ const configSchema = new mongoose.Schema({
         purchaseUsdt: { type: Number, default: 5.00 },
         price_var: { type: Number, default: 0.1 },
         size_var: { type: Number, default: 5.0 },
-        profit_percent: { type: Number, default: 0.2 } // Renombrado de 'trigger'
+        profit_percent: { type: Number, default: 1.0 } // Renombrado de 'trigger'
     },
     short: {
         enabled: { type: Boolean, default: false },        
@@ -42,7 +42,7 @@ const configSchema = new mongoose.Schema({
         sellBtc: { type: Number, default: 0.00005 }, // Monto de la orden inicial/cobertura (BTC)
         price_var: { type: Number, default: 0.1 },
         size_var: { type: Number, default: 5.0 },
-        profit_percent: { type: Number, default: 0.2 } 
+        profit_percent: { type: Number, default: 1.0 } 
     },
     stopAtCycle: { type: Boolean, default: false }
 });
