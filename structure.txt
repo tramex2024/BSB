@@ -20,78 +20,85 @@ BSB/			    # Bitmart Spot Bots
 │   ├── images/
 │   │   └── bsb-logo.png
 │   ├── js/
-│       ├── main.js
-│       ├── modules/
-│       	 └── login.js
-│        	 └── logout.js
-│       	 └── auth.js
-│        	 └── orders.js
-│       	 └── tecalculations.js
-│       	 └── aicalculations.js
-│       	 └── navigation.js
-│       	 └── bot.js
-│       	 └── autobot.js
-│       	 └── aibot.js
-│       	 └── testbot.js
-│       	 └── dashboard.js
-│       	 └── network.js
-│       	 └── balance.js
-│       	 └── api.js
-│       	 └── apiService.js
-│       	 └── uiManager.js
-│       	 └── chart.js
-│       	 └── appEvents.js
-│       	 └── network.js
+│        ├── main.js
+│        ├── modules/
+│       	  └── login.js
+│        	  └── logout.js
+│       	  └── auth.js
+│        	  └── orders.js
+│       	  └── tecalculations.js
+│       	  └── aicalculations.js
+│       	  └── navigation.js
+│       	  └── bot.js
+│       	  └── autobot.js
+│       	  └── aibot.js
+│       	  └── testbot.js
+│       	  └── dashboard.js
+│       	  └── network.js
+│       	  └── balance.js
+│       	  └── api.js
+│       	  └── apiService.js
+│       	  └── uiManager.js
+│       	  └── chart.js
+│       	  └── appEvents.js
+│       	  └── network.js
 │
 ├── server/                # Backend files - Deployed on Render
-    ├── server.js
-    ├── autobotLogic.js
-    ├── autobotCalculations.js      
-    ├── models/
-    │   └── Order.js
-    │   └── Autobot.js
-    │   └── User.js
-    │   └── BotState.js
-    ├── middleware/
-    │   └── bitmartAuthMiddleware.js
-    │   └── authMiddleware.js
-    ├── services/
-    │   └── bitmartService.js
-    │   └── bitmartClient.js
-    │   └── bitmartSpot.js
-    │   └── check_time.js
-    │   └── test_sign.js
-    ├── routes/
-    │   └── authRoutes.js
-    │   └── userRoutes.js 
-    │   └── ordersRoutes.js
-    │   └── autobotRoutes.js
-    ├── controllers/
-    │   └── authController.js
-    │   └── userController.js
-    │   └── orderController.js
-    ├── utils/
-    │   └── encryption.js
-    │   └── cryptoUtils.js
-    ├── seeders/
-    │   └── seed.js
-    ├── src/
-	├── bitmart_indicator_analyzer.js
-        ├── bitmart_entry_point.json  
-        ├── longStrategy.js
-        ├── shortStrategy.js	
-        ├── longUtils.js
-        ├── shortUtils.js
-	├── states/
-	     ├── long/
-	     │	  └── LStopped.js
-	     │	  └── LSelling.js
-	     │	  └── LRunning.js
-	     │	  └── LNoCoverage.js
-	     │	  └── LBuying.js
-	     ├── short/	
-             	  └── SStopped.js
-		  └── SSelling.js
-		  └── SRunning.js
-		  └── SNoCoverage.js
-		  └── SBuying.js	
+     ├── server.js
+     ├── autobotLogic.js
+     ├── autobotCalculations.js      
+     ├── models/
+     │   └── Order.js
+     │   └── Autobot.js
+     │   └── User.js
+     │   └── BotState.js
+     ├── middleware/
+     │   └── bitmartAuthMiddleware.js
+     │   └── authMiddleware.js
+     ├── services/
+     │   └── bitmartService.js
+     │   └── bitmartClient.js
+     │   └── bitmartSpot.js
+     │   └── check_time.js
+     │   └── test_sign.js
+     ├── routes/
+     │   └── authRoutes.js
+     │   └── userRoutes.js 
+     │   └── ordersRoutes.js
+     │   └── autobotRoutes.js
+     │   └── configRoutes.js
+     │   └── balanceRoutes.js
+     ├── controllers/
+     │   └── authController.js
+     │   └── userController.js
+     │   └── orderController.js
+     ├── utils/
+     │   └── encryption.js
+     │   └── cryptoUtils.js
+     ├── seeders/
+     │   └── seed.js
+     ├── src/
+          ├── bitmart_indicator_analyzer.js
+          ├── bitmart_entry_point.json  
+          ├── longStrategy.js
+          ├── shortStrategy.js
+          ├── utils/
+          │    └── dataManager.js
+          │    └── orderManager.js
+          │    └── coverageLogic.js
+	  │    └── dataManagerShort.js
+          │    └── orderManagerShort.js
+          │    └── coverageLogicShort.js
+          ├── states/
+	       ├── long/
+	       │   └── LStopped.js
+	       │   └── LSelling.js
+	       │   └── LRunning.js
+	       │   └── LNoCoverage.js
+	       │   └── LBuying.js
+	       ├── short/	
+               	    └── SHStopped.js
+		    └── SHSelling.js
+		    └── SHRunning.js
+		    └── SHNoCoverage.js
+		    └── SHBuying.js	
