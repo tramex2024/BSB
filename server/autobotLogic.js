@@ -120,9 +120,9 @@ async function botCycle(priceFromWebSocket) {
         if (botState.lstate !== 'STOPPED') {
             await runLongStrategy();
         }
-        if (botState.sstate !== 'STOPPED') {
-            await runShortStrategy(); // 💡 DESCOMENTADO/AÑADIDO: Ejecutar el ciclo Short
-        }
+//        if (botState.sstate !== 'STOPPED') {
+//            await runShortStrategy(); // 💡 DESCOMENTADO/AÑADIDO: Ejecutar el ciclo Short
+//        }
         
     } catch (error) {
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
