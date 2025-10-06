@@ -1,89 +1,115 @@
-// BSB/server/src/utils/coverageLogicShort.js (INVERTIDO Y COMPLETO CON CONSUMO DE SBALANCE)
+// BSB/server/src/utils/coverageLogicShort.js (CORREGIDO - Bloqueo de Órdenes Duplicadas y manejo de fallos)
 
-const { getOrderDetail } = require('../../services/bitmartService');
-const { placeCoverageSellOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManager');
-// NOTA: Asumimos que la contraparte de placeCoverageBuyOrder es placeCoverageSellOrder
+const { placeCoverageSellOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManagerShort');
+const Autobot = require('../../models/Autobot'); 
+const AutobotCore = require('../../autobotLogic'); // Para updateGeneralBotState
 
 /**
- * Verifica las condiciones de cobertura Short (Venta de BTC) y, si es necesario y hay capital, coloca la orden.
- *
- * @param {object} botState - Objeto de estado del bot (de la DB).
- * @param {number} availableBTC - BTC disponible en la cuenta (balance real del exchange).
+ * Verifica las condiciones de cobertura (DCA UP) y, si es necesario y hay fondos, coloca la orden.
+ * La cobertura Short se dispara cuando el precio SUBE.
+ * * @param {object} botState - Objeto de estado del bot (de la DB).
+ * @param {number} availableUSDT - USDT disponible en la cuenta.
  * @param {number} currentPrice - Precio actual del mercado.
  * @param {object} creds - Credenciales de la API.
  * @param {object} config - Configuración del bot.
  * @param {function} log - Función de logging inyectada.
  * @param {function} updateBotState - Función para cambiar el estado inyectada.
- * @param {function} updateSStateData - Función para actualizar sStateData inyectada. 
- * @param {function} updateGeneralBotState - Función para actualizar campos generales (SBalance) inyectada.
+ * @param {function} updateSStateData - Función para actualizar sStateData inyectada.
+ * @param {function} updateGeneralBotState - Función para actualizar SBalance inyectada. 
  */
-async function checkAndPlaceCoverageOrderShort(botState, availableBTC, currentPrice, creds, config, log, updateBotState, updateSStateData, updateGeneralBotState) {
+async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config, log, updateBotState, updateSStateData, updateGeneralBotState) {
     
-    // Usamos sStateData y ppv (Precio Promedio de Venta)
-    const { ppv, orderCountInCycle } = botState.sStateData; 
-    const { price_var, size_var, sellBtc } = config.short; // sellBtc es el capital base en BTC
+    // Usamos sStateData (Short State Data)
+    const { ppc: pps, ac: acShort, lastOrder, requiredCoverageAmount } = botState.sStateData;
+    const { price_var, size_var, sellBtc } = config.short; 
+    const currentSBalance = parseFloat(botState.sbalance || 0);
 
-    // Solo procedemos si ya hay una posición (PPV > 0)
-    if (ppv <= 0) {
+    // 💡 CORRECCIÓN CRÍTICA #3: BLOQUEO DE ORDEN DUPLICADA
+    // Si ya existe una orden de VENTA pendiente (Short Sell/Cobertura), no intentar colocar otra.
+    if (lastOrder && lastOrder.side === 'sell' && lastOrder.state === 'pending_fill') {
+        log(`Ya existe una orden de COBERTURA (SELL) pendiente (ID: ${lastOrder.order_id}). Esperando confirmación.`, 'info');
+        return; // Detener la ejecución en este ciclo.
+    }
+    // FIN CORRECCIÓN CRÍTICA #3
+    
+    // 💡 CRÍTICO: Si existe un requiredCoverageAmount pero NO hay lastOrder (lo que indica que la orden FALLÓ en orderManagerShort.js), 
+    // debemos REVERTIR el SBalance antes de intentar una nueva orden, o quedará asignado.
+    if (requiredCoverageAmount > 0 && (!lastOrder || lastOrder.state !== 'pending_fill')) {
+        log(`Advertencia: Se detectó capital asignado (${requiredCoverageAmount.toFixed(2)} USDT) sin orden activa. Reasignando capital a SBalance.`, 'warning');
+        
+        const newSBalance = currentSBalance + requiredCoverageAmount;
+        await updateGeneralBotState({ sbalance: newSBalance });
+        
+        // Limpiar el monto requerido
+        botState.sStateData.requiredCoverageAmount = 0;
+        await updateSStateData(botState.sStateData);
+        await updateBotState('RUNNING', 'short');
+        return; // Detener para que el ciclo se reinicie limpiamente.
+    }
+
+
+    if (pps <= 0 || !lastOrder || !lastOrder.price) {
+        log("Lógica de cobertura Short: Posición no inicializada o incompleta.", 'warning');
         return;
     }
 
-    // 1. CÁLCULO DEL PRÓXIMO PRECIO DE COBERTURA
-    // Invertido: El precio de cobertura (Venta) se calcula como el PPV más el porcentaje de price_var
-    const priceIncrement = (price_var / 100) * orderCountInCycle;
-    const nextCoveragePrice = ppv * (1 + priceIncrement); 
+    const lastOrderPrice = parseFloat(lastOrder.price); 
+    // Usamos el monto de la última orden de cobertura (la última que se llenó)
+    const lastOrderUsdtNotional = parseFloat(lastOrder.usdt_amount || (sellBtc * lastOrder.price)); 
 
-    // 2. CÁLCULO DEL MONTO REQUERIDO ESCALADO
-    // El monto escala con el size_var. Usamos BTC.
-    const sizeIncrement = (size_var / 100) * orderCountInCycle;
-    const nextBTCAmount = parseFloat(sellBtc) * (1 + sizeIncrement);
-    const nextUSDTValue = nextBTCAmount * currentPrice; // Valor en USDT para la validación de BitMart
+    // 1. CÁLCULO DEL PRÓXIMO PRECIO DE COBERTURA (Disparo UP)
+    const nextCoveragePrice = lastOrderPrice * (1 + (price_var / 100));
 
-    // 3. Condición de Disparo (Price UP)
-    if (currentPrice >= nextCoveragePrice) {
-        log(`Disparo de cobertura Short activado. Precio objetivo (Venta): ${nextCoveragePrice.toFixed(2)} vs Precio actual: ${currentPrice.toFixed(2)}`, 'info');
+    // 2. CÁLCULO DEL MONTO REQUERIDO ESCALADO (en USDT)
+    const nextUSDTNotional = lastOrderUsdtNotional * (1 + (size_var / 100));
+    
+    // 3. Condición de Disparo (Precio actual SUBE al objetivo)
+    if (currentPrice >= nextCoveragePrice) { 
+        
+        // 4. CALCULAR EL MONTO DE LA ORDEN EN BTC (Cantidad requerida)
+        const nextSellAmountBTC = nextUSDTNotional / currentPrice;
 
-        // --- A. VALIDACIÓN DE CAPITAL OPERATIVO (SBalance) ---
-        // CRÍTICO: ¿El capital operativo restante (SBalance) es suficiente para la próxima orden (nextBTCAmount)?
-        if (botState.sbalance < nextBTCAmount) {
+        log(`Disparo de cobertura Short activado. Objetivo (UP): ${nextCoveragePrice.toFixed(2)}. Monto Estimado: ${nextUSDTNotional.toFixed(2)} USDT (${nextSellAmountBTC.toFixed(8)} BTC).`, 'info');
+
+        // 5. Verificación de Fondos (SBalance y Saldo Real)
+        const isSufficient = currentSBalance >= nextUSDTNotional && // Verificamos USDT contra SBalance
+                             availableUSDT >= nextUSDTNotional && 
+                             nextUSDTNotional >= MIN_USDT_VALUE_FOR_BITMART;
+
+        if (isSufficient) {
             
-            // 1. Guardar los datos de fallo y la cantidad que se necesitaba.
-            botState.sStateData.requiredCoverageAmount = nextBTCAmount;
+            // 6. RESTA DE CAPITAL ASIGNADO (SBalance) ANTES de colocar la orden
+            const newSBalance = currentSBalance - nextUSDTNotional;
+            await updateGeneralBotState({ sbalance: newSBalance });
+            log(`SBalance asignado reducido en ${nextUSDTNotIONAL.toFixed(2)} USDT para cobertura.`, 'info');
+            
+            // 7. Persistir los datos de la orden *antes* de colocarla (para reversión si falla)
+            botState.sStateData.requiredCoverageAmount = nextUSDTNotional; // Monto requerido en USDT
             botState.sStateData.nextCoveragePrice = nextCoveragePrice; 
             await updateSStateData(botState.sStateData); 
 
-            // 2. Transicionar a NO_COVERAGE.
-            log(`FONDOS BTC AGOTADOS. SBalance (${botState.sbalance.toFixed(8)} BTC) es insuficiente para la orden de ${nextBTCAmount.toFixed(8)} BTC. Cambiando a NO_COVERAGE.`, 'warning');
-            await updateBotState('NO_COVERAGE', 'short');
-            return; // Detener la ejecución
-        }
-
-        // --- B. VALIDACIÓN DE SALDO REAL DEL EXCHANGE ---
-        if (availableBTC >= nextBTCAmount && nextUSDTValue >= MIN_USDT_VALUE_FOR_BITMART) {
-            
-            // --- 4. CONSUMO DE CAPITAL OPERATIVO (SBalance) ---
-            const newSBalance = botState.sbalance - nextBTCAmount;
-            await updateGeneralBotState({ sbalance: newSBalance });
-            log(`SBalance consumido: Se restó ${nextBTCAmount.toFixed(8)} BTC. SBalance restante: ${newSBalance.toFixed(8)} BTC.`, 'info');
-
-            // 5. COLOCACIÓN DE LA ORDEN DE VENTA LÍMITE (COBERTURA)
-            await placeCoverageSellOrder(botState, creds, nextBTCAmount, nextCoveragePrice, log);
+            // 8. Colocar la orden de cobertura (VENTA en corto)
+            // placeCoverageSellOrder gestionará el lastOrder y la transición
+            await placeCoverageSellOrder(botState, creds, nextSellAmountBTC, nextCoveragePrice, log, updateBotState); 
 
         } else {
-            // FONDOS REALES INSUFICIENTES O MONTO MÍNIMO NO ALCANZADO (Aunque SBalance fuera suficiente)
-
-            // 1. Guardar los datos de fallo.
-            botState.sStateData.requiredCoverageAmount = nextBTCAmount;
+            // FONDOS INSUFICIENTES: Transición a SH_NO_COVERAGE
+            let reason = currentSBalance < nextUSDTNotional ? 
+                         `LÍMITE DE CAPITAL ASIGNADO (SBalance: ${currentSBalance.toFixed(2)} USDT) insuficiente.` : 
+                         `Fondos REALES (${availableUSDT.toFixed(2)} USDT) insuficientes.`;
+            
+            // Persistir los datos de la orden fallida para el Front-End
+            botState.sStateData.requiredCoverageAmount = nextUSDTNotional; // Monto requerido en USDT
             botState.sStateData.nextCoveragePrice = nextCoveragePrice; 
             await updateSStateData(botState.sStateData); 
 
-            // 2. Transicionar a NO_COVERAGE.
-            log(`Fondos reales insuficientes en BitMart o monto mínimo (${nextUSDTValue.toFixed(2)} USDT) no alcanzado. Disponible: ${availableBTC.toFixed(8)} BTC. Cambiando a NO_COVERAGE.`, 'warning');
-            await updateBotState('NO_COVERAGE', 'short');
+            // Transicionar a SH_NO_COVERAGE.
+            log(`No se puede colocar la orden. ${reason} Cambiando a SH_NO_COVERAGE.`, 'warning');
+            await updateBotState('SH_NO_COVERAGE', 'short');
         }
     }
 }
 
 module.exports = {
-    checkAndPlaceCoverageOrderShort
+    checkAndPlaceCoverageOrder
 };

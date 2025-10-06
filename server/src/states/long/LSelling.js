@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LSelling.js (FINALIZADO - Lógica de Reinicio, Trailing Stop y Reseteo Completo)
+// BSB/server/src/states/long/LSelling.js (CORREGIDO - Bloqueo de Órdenes Duplicadas)
 
 const { placeSellOrder } = require('../../utils/orderManager');
 const TRAILING_STOP_PERCENTAGE = 0.4;
@@ -39,9 +39,9 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         totalProfit: (botStateObj.totalProfit || 0) + profit,
         
         // 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
-        ltprice: 0,        // Precio Objetivo
-        lcoverage: 0,      // Monto de Cobertura Requerido
-        lnorder: 0,        // Número de Órdenes
+        ltprice: 0,         // Precio Objetivo
+        lcoverage: 0,       // Monto de Cobertura Requerido
+        lnorder: 0,         // Número de Órdenes
         lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
     });
 
@@ -82,6 +82,14 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 async function run(dependencies) {
     const { botState, currentPrice, config, creds, log, updateLStateData, updateBotState, updateGeneralBotState } = dependencies;
     
+    // 💡 CORRECCIÓN CRÍTICA #2: BLOQUEO DE ORDEN DUPLICADA
+    const lastOrder = botState.lStateData.lastOrder;
+    if (lastOrder && lastOrder.side === 'sell' && lastOrder.state === 'pending_fill') {
+        log(`Ya existe una orden de VENTA pendiente (ID: ${lastOrder.order_id}). Esperando confirmación para liquidar el ciclo.`, 'info');
+        return; // Detiene la ejecución en este ciclo.
+    }
+    // FIN CORRECCIÓN CRÍTICA #2
+
     // Se definen las dependencias que necesitará el handler al ejecutarse (al llenar la orden de venta)
     const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState, botState };
 
@@ -105,7 +113,7 @@ async function run(dependencies) {
             log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
             
             // LLAMADA: placeSellOrder coloca la orden y luego llama a handleSuccessfulSell al llenarse.
-            // Pasamos acSelling (total de activos a vender) y las dependencias para el handler.
+            // placeSellOrder se encargará de guardar el lastOrder y programar el chequeo.
             await placeSellOrder(config, creds, acSelling, log, handleSuccessfulSell, botState, handlerDependencies);
 
             // Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED.
