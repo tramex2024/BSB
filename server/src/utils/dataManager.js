@@ -1,14 +1,14 @@
-// BSB/server/src/utils/dataManager.js (CORREGIDO - Uso de config.long.profit_percent para el Precio Objetivo)
+// BSB/server/src/utils/dataManager.js (CORREGIDO - Uso de profit_percent y sin dependencia circular)
 
 const Autobot = require('../../models/Autobot');
-const { placeBuyToCoverOrder } = require('./orderManagerShort'); // Necesario para el ciclo Short (aunque este es el archivo Long)
+// ❌ Importación de orderManagerShort eliminada para romper la dependencia circular.
 
 /**
  * Recalcula el Precio Promedio de Compra (PPC), la Cantidad Acumulada (AC) y el Precio Objetivo (LTP).
  * Se ejecuta después de CADA orden de COMPRA exitosa (inicial o cobertura).
  * @param {object} botState - Estado actual del bot.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {function} updateGeneralBotState - Función para actualizar LBalance, LtPrice, LOrder (solo para la primera orden).
+ * @param {function} updateGeneralBotState - Función para actualizar LBalance, LtPrice, LOrder (opcional).
  */
 async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState = null) {
     const { lStateData, config, lbalance: currentLBalance } = botState;
@@ -22,11 +22,10 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
     // 1. CÁLCULO DE NUEVO AC y PPC (Average Cost / Precio Promedio)
     const newAc = currentAc + filledSize;
-    // Evitar división por cero, aunque newAc siempre será > 0 aquí
     const newPPC = (newAc > 0) ? ((currentAc * currentPPC) + (filledSize * filledPrice)) / newAc : filledPrice;
 
     // 2. CÁLCULO DEL NUEVO PRECIO OBJETIVO (LTP)
-    // 💡 USANDO config.long.profit_percent de tu esquema
+    // 💡 USANDO config.long.profit_percent
     const profitPercent = parseFloat(config.long.profit_percent); 
     const newLtPrice = newPPC * (1 + (profitPercent / 100)); // PPC + profit_percent(%)
 
@@ -48,7 +47,7 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     const updateGeneral = {
         ltprice: newLtPrice, // Guardamos el nuevo precio objetivo
         lnorder: newOrderCount, // Número de órdenes
-        lcoverage: 0 // Resetear la cobertura requerida (se recalcula en LRunning)
+        lcoverage: 0 // Resetear la cobertura requerida
     };
 
     if (newOrderCount === 1 && updateGeneralBotState) {
@@ -62,7 +61,6 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     }
     
     // 6. TRANSICIÓN DE ESTADO FINAL
-    // Si ya tenemos una posición, vamos al estado SELLING para monitorear el Trailing Stop.
     const newState = newOrderCount > 0 ? 'SELLING' : 'RUNNING'; 
     await Autobot.findOneAndUpdate({}, { 'lstate': newState });
 
@@ -71,17 +69,14 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
 /**
  * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
- * Esta función se invoca desde orderManager.js.
  * @param {object} botStateObj - Estado del bot antes de la venta.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {object} dependencies - Dependencias necesarias (log, updateBotState, updateLStateData, updateGeneralBotState).
+ * @param {object} dependencies - Dependencias necesarias.
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
-    // Nota: Esta función es manejada por LSelling.js/handleSuccessfulSell
-    // Aseguramos que la lógica central de LSelling.js se ejecute.
+    // ✅ Importación Tardia: Se carga el módulo SOLO cuando se ejecuta esta función.
     const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
     
-    // El handler de LSelling.js ya tiene la lógica de cálculo de profit, reinicio, y transición de estado.
     await LSellingHandler(botStateObj, orderDetails, dependencies);
 }
 

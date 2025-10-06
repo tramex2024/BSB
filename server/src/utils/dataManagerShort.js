@@ -1,14 +1,14 @@
-// BSB/server/src/utils/dataManagerShort.js (CORREGIDO - Uso de config.short.profit_percent para el Precio Objetivo)
+// BSB/server/src/utils/dataManagerShort.js (CORREGIDO - Uso de profit_percent y sin dependencia circular)
 
 const Autobot = require('../../models/Autobot');
-const { placeBuyToCoverOrder } = require('./orderManagerShort'); 
+// ❌ Importación de orderManagerShort eliminada para romper la dependencia circular.
 
 /**
  * Recalcula el Precio Promedio de Venta (PPS), la Cantidad Acumulada (AC) y el Precio Objetivo (STP).
  * Se ejecuta después de CADA orden de VENTA exitosa (inicial o cobertura).
  * @param {object} botState - Estado actual del bot.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {function} updateGeneralBotState - Función para actualizar SBalance, SPrice, SOrder (opcional, solo para la primera orden).
+ * @param {function} updateGeneralBotState - Función para actualizar SBalance, SPrice, SOrder (opcional).
  */
 async function handleSuccessfulSellShort(botState, orderDetails, updateGeneralBotState = null) {
     const { sStateData, config, sbalance: currentSBalance } = botState;
@@ -24,7 +24,7 @@ async function handleSuccessfulSellShort(botState, orderDetails, updateGeneralBo
     const newPPS = (newAc > 0) ? ((currentAc * currentPPS) + (filledSize * filledPrice)) / newAc : filledPrice;
 
     // 2. CÁLCULO DEL NUEVO PRECIO OBJETIVO (STP)
-    // 💡 USANDO config.short.profit_percent de tu esquema
+    // 💡 USANDO config.short.profit_percent
     const profitPercent = parseFloat(config.short.profit_percent);
     // Para SHORT, el precio objetivo debe ser MENOR al PPS (para ganar).
     const newStPrice = newPPS * (1 - (profitPercent / 100)); // PPS - profit_percent(%)
@@ -42,14 +42,14 @@ async function handleSuccessfulSellShort(botState, orderDetails, updateGeneralBo
         lastOrder: null // Limpiamos la última orden al llenarse
     };
     
-    // Limpiamos el monto requerido de cobertura, ya que la orden se llenó.
+    // Limpiamos el monto requerido de cobertura
     if (sStateData.requiredCoverageAmount > 0) {
         updatedSStateData.requiredCoverageAmount = 0;
     }
     
     await Autobot.findOneAndUpdate({}, { 'sStateData': updatedSStateData });
 
-    // 5. ACTUALIZACIÓN DEL ESTADO GENERAL (SBalance y StPrice)
+    // 5. ACTUALIZACIÓN DEL ESTADO GENERAL
     const updateGeneral = {
         stprice: newStPrice, // Guardamos el nuevo precio objetivo
         snorder: newOrderCount, // Número de órdenes
@@ -61,7 +61,6 @@ async function handleSuccessfulSellShort(botState, orderDetails, updateGeneralBo
     }
     
     // 6. TRANSICIÓN DE ESTADO FINAL
-    // Si ya tenemos una posición, vamos al estado BUYING (Liquidación por Trailing Stop).
     const newState = newOrderCount > 0 ? 'BUYING' : 'RUNNING'; 
     await Autobot.findOneAndUpdate({}, { 'sstate': newState });
 
@@ -71,17 +70,14 @@ async function handleSuccessfulSellShort(botState, orderDetails, updateGeneralBo
 
 /**
  * Lógica para manejar una orden de COMPRA exitosa (cierre de ciclo Short).
- * Esta función es invocada desde orderManagerShort.js.
  * @param {object} botStateObj - Estado del bot antes de la compra.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {object} dependencies - Dependencias necesarias (log, updateBotState, updateSStateData, updateGeneralBotState).
+ * @param {object} dependencies - Dependencias necesarias.
  */
 async function handleSuccessfulBuyToCoverShort(botStateObj, orderDetails, dependencies) {
-    // Nota: Esta función es manejada por SBuying.js/handleSuccessfulBuyToCoverShort
-    // Aseguramos que la lógica central de SBuying.js se ejecute.
+    // ✅ Importación Tardia: Se carga el módulo SOLO cuando se ejecuta esta función.
     const { handleSuccessfulBuyToCoverShort: SBuyingHandler } = require('../states/short/SBuying');
     
-    // El handler de SBuying.js ya tiene la lógica de cálculo de profit, reinicio, y transición de estado.
     await SBuyingHandler(botStateObj, orderDetails, dependencies);
 }
 
