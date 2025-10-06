@@ -24,14 +24,15 @@ async function handleSuccessfulBuy(botStateObj, orderDetails, updateGeneralBotSt
 
     const newSize = parseFloat(orderDetails.filledSize || orderDetails.size);
     const newPrice = parseFloat(orderDetails.priceAvg || orderDetails.price); // Precio real de ejecución
-    const newNotional = parseFloat(orderDetails.filledNotional); // Monto real gastado en USDT
+    const newNotional = parseFloat(orderDetails.filledNotional); // Monto real gastado en USDT <-- DECLARACIÓN ÚNICA
 
     // 1. Cálculo del DCA (Dollar-Cost Averaging)
     const currentAC = botStateObj.lStateData.ac || 0;
     const currentPPC = botStateObj.lStateData.ppc || 0;
     const currentOrderCount = botStateObj.lStateData.orderCountInCycle || 0;
     
-    const newNotional = parseFloat(orderDetails.filledNotional); // Monto real gastado en USDT
+    // ❌ LÍNEA DUPLICADA ELIMINADA AQUÍ ❌
+    // const newNotional = parseFloat(orderDetails.filledNotional); 
 
     const totalUSDT = (currentAC * currentPPC) + newNotional; 
 
@@ -50,10 +51,6 @@ async function handleSuccessfulBuy(botStateObj, orderDetails, updateGeneralBotSt
         botStateObj.lStateData.pm = newPPC; 
         
         // El Precio de Venta (PC) se establece inicialmente para la ganancia objetivo (PPC + % profit)
-        // NOTA: Para el trailing stop, el PC es el precio de activación de la venta (PM - 0.4%).
-        // Lo inicializamos con el precio de la primera compra para dar espacio a la subida.
-        // Asumimos que el "precio de venta" que quieres ver inicialmente en el frontend (LTarget)
-        // se calcula en otro lugar (LBuying.js) y esto es solo el PM/PC para el Trailing.
         // Lo inicializamos un 0.4% por encima del PPC para que el precio de mercado tenga que subir un poco
         // antes de que el trailing stop pueda activarse.
         botStateObj.lStateData.pc = newPPC * (1 + (TRAILING_STOP_PERCENTAGE / 100));
@@ -70,10 +67,10 @@ async function handleSuccessfulBuy(botStateObj, orderDetails, updateGeneralBotSt
        order_id: orderDetails.order_id,
        price: newPrice,
        size: newSize, 
-       usdt_amount: newNotional,
+       usdt_amount: newNotional, // CLAVE: Monto en USDT para la lógica geométrica
        side: 'buy',
        state: 'filled'
-};
+    };
 
     // 5. Actualización del LBalance (Solo para la primera compra exitosa)
     if (updateGeneralBotState) { 
