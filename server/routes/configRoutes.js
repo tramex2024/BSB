@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
 // Ruta POST: Actualiza la configuración con validación y establece LBalance/SBalance
 router.post('/', async (req, res) => {
     try {
+	log(`[CONFIG POST] Data recibida: ${JSON.stringify(req.body)}`, 'debug'); 
         const newConfig = req.body;
         
         // --- 1. IDENTIFICAR LOS CAMPOS DE CAPITAL ASIGNADO ---
