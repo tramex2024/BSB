@@ -18,9 +18,9 @@ const TRADE_SYMBOL = 'BTC_USDT';
  */
 async function placeFirstSellOrder(config, creds, log, updateBotState, updateGeneralBotState, currentPrice) {
     
-    // 💡 CORRECCIÓN: Usar parseFloat() para asegurar que ambos son números.
+    // 💡 CORRECCIÓN CRÍTICA: Aseguramos que los valores son numéricos, usando 0 si son inválidos.
     const sellAmountBTC = parseFloat(config.short.sellBtc || 0); 
-    const price = parseFloat(currentPrice || 0); // Aseguramos que currentPrice es un número
+    const price = parseFloat(currentPrice || 0);
     
     const SYMBOL = config.symbol || TRADE_SYMBOL;
     const estimatedUsdtNotional = sellAmountBTC * price;
@@ -29,13 +29,14 @@ async function placeFirstSellOrder(config, creds, log, updateBotState, updateGen
     
     // Verificación de mínimo de BitMart y chequeo de NaN
     if (isNaN(estimatedUsdtNotional) || estimatedUsdtNotional < MIN_USDT_VALUE_FOR_BITMART) {
-         log(`Error: Monto inicial (${estimatedUsdtNotional.toFixed(2)} USDT) menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART}).`, 'error');
          
-         // 💡 IMPORTANTE: Si es NaN, el precio no se pudo obtener, o la configuración está mal.
-         if (isNaN(estimatedUsdtNotional)) {
-             log(`Error CRÍTICO: El precio actual del mercado o la cantidad inicial ('sellBtc') no son válidos.`, 'error');
+         if (price === 0) {
+             log(`Error CRÍTICO: El precio actual del mercado es cero o no se pudo obtener. Imposible calcular el notional.`, 'error');
+         } else {
+             log(`Error: Monto inicial (${estimatedUsdtNotional.toFixed(2)} USDT) menor que el mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART}).`, 'error');
          }
          
+         // Volvemos a RUNNING para reintentar en el siguiente ciclo.
          await updateBotState('RUNNING', 'short'); 
          return;
     }
@@ -43,7 +44,7 @@ async function placeFirstSellOrder(config, creds, log, updateBotState, updateGen
     try {
         const order = await placeOrder(creds, SYMBOL, 'SELL', 'market', sellAmountBTC); 
         
-        // ... (el resto del código se mantiene igual a la última versión que corregimos) ...
+        // 💡 CRÍTICO: SOLO CONTINUAR SI LA ORDEN TIENE ID
         if (order && order.order_id) {
             log(`Orden de VENTA colocada. ID: ${order.order_id}. Esperando confirmación...`, 'success');
 
@@ -94,7 +95,6 @@ async function placeFirstSellOrder(config, creds, log, updateBotState, updateGen
 
 /**
  * Coloca una orden de VENTA de cobertura (Market Sell Order para ir más corto).
- * ... (Esta función no tuvo cambios y se mantiene igual)
  */
 async function placeCoverageSellOrder(botState, creds, sellAmountBTC, nextCoveragePrice, log, updateBotState) {
     const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
@@ -155,7 +155,6 @@ async function placeCoverageSellOrder(botState, creds, sellAmountBTC, nextCovera
 
 /**
  * Coloca una orden de COMPRA a mercado para CUBRIR la posición en corto (cierre de ciclo).
- * ... (Esta función se mantiene igual)
  */
 async function placeBuyToCoverOrder(config, creds, coverAmount, log, handleSuccessfulBuyToCover, botState, handlerDependencies) {
     const SYMBOL = config.symbol || TRADE_SYMBOL;
