@@ -2,7 +2,7 @@
 
 const { placeOrder, getOrderDetail } = require('../../services/bitmartService');
 const Autobot = require('../../models/Autobot');
-const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManagerLong'); 
+const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager'); 
 // NOTA: dataManagerLong.js debe existir y exportar ambas funciones.
 
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;

@@ -1,7 +1,6 @@
 // BSB/server/src/utils/dataManagerShort.js (CORREGIDO - Uso de profit_percent y sin dependencia circular)
 
 const Autobot = require('../../models/Autobot');
-// ❌ Importación de orderManagerShort eliminada para romper la dependencia circular.
 
 /**
  * Recalcula el Precio Promedio de Venta (PPS), la Cantidad Acumulada (AC) y el Precio Objetivo (STP).
