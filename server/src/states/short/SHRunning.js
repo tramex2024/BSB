@@ -32,7 +32,7 @@ async function run(dependencies) {
     if (isSufficient) {
         log(`Condiciones de inicio cumplidas. Capital asignado (USDT): ${currentSBalanceUSDT.toFixed(2)}.`, 'success');
         
-        await updateBotState('SHBUYING', SSTATE); // Transiciona para esperar la cubertura (BUY)
+        await updateBotState('BUYING', SSTATE); // Transiciona para esperar la cubertura (BUY)
         
         // Colocar la primera orden de VENTA en corto
         await placeFirstSellOrder(config, dependencies.creds, log, updateBotState, updateGeneralBotState, currentPrice);
