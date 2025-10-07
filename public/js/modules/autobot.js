@@ -18,28 +18,20 @@ let maxBtcBalance = 0;
 
 /**
  * Recolecta todos los valores de configuración de la interfaz y los mapea a la estructura anidada del backend.
- * Incluye corrección para formatos decimales (coma a punto) y logs de diagnóstico para el Trigger.
+ * Incluye corrección para formatos decimales (coma a punto).
  * @returns {object} El objeto de configuración listo para ser enviado.
  */
 function collectConfigData() {
     // Helper para obtener y parsear un valor float
     const getFloat = id => {
         const element = document.getElementById(id);
-        if (!element) return 0; // Si el elemento no existe, devuelve 0.
+        if (!element) return 0;
         
-        // Paso 1: Reemplazar comas por puntos para asegurar formato internacional (1,5 -> 1.5)
+        // Corregir comas a puntos para asegurar formato internacional (1,5 -> 1.5)
         const rawValue = element.value.replace(',', '.'); 
         
-        // Paso 2: Convertir a float. Si falla (NaN), devuelve 0.
+        // Convertir a float. Si falla (NaN), devuelve 0.
         const value = parseFloat(rawValue || 0) || 0;
-        
-        // LOG DE DIAGNÓSTICO (¡CRÍTICO!) para el Trigger:
-        if (id === 'autrigger') {
-            console.log(`[TRIGGER DEBUG] ID: ${id}`);
-            console.log(`[TRIGGER DEBUG] Valor de input (string): ${element.value}`);
-            console.log(`[TRIGGER DEBUG] Valor RAW (punto): ${rawValue}`);
-            console.log(`[TRIGGER DEBUG] Valor FINAL (float): ${value}`);
-        }
         
         return value;
     };
@@ -47,7 +39,7 @@ function collectConfigData() {
     // Helper para obtener un valor booleano
     const getBool = id => document.getElementById(id)?.checked || false;
     
-    // --- RECOLECCIÓN DE CAMPOS COMUNES Y ESPECÍFICOS ---
+    // --- RECOLECCIÓN DE CAMPOS ---
     
     // Incremento (Variación de Tamaño) -> size_var
     const sizeVariation = getFloat('auincrement'); 
@@ -64,14 +56,14 @@ function collectConfigData() {
     return {
         // PROPIEDADES GENERALES
         symbol: TRADE_SYMBOL_BITMART, 
-        stopAtCycle: stopAtCycle, // Campo de nivel superior
+        stopAtCycle: stopAtCycle,
         
         // ESTRATEGIA LONG
         long: {
             amountUsdt: getFloat('auamount-usdt'), 
             purchaseUsdt: getFloat('aupurchase-usdt'), 
             
-            // Mapeo a DB (profit_percent, price_var, size_var)
+            // Mapeo a DB
             profit_percent: profitTrigger, 
             price_var: priceVariation, 
             size_var: sizeVariation,
@@ -93,7 +85,6 @@ function collectConfigData() {
         }
     };
 }
-
 /**
  * Muestra el límite real disponible junto a los inputs.
  */

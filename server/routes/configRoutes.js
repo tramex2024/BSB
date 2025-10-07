@@ -23,16 +23,14 @@ router.get('/', async (req, res) => {
 // Ruta POST: Actualiza la configuración con validación y establece LBalance/SBalance
 router.post('/', async (req, res) => {
     try {
-	log(`[CONFIG POST] Data recibida: ${JSON.stringify(req.body)}`, 'debug'); 
         const newConfig = req.body;
         
         // --- 1. IDENTIFICAR LOS CAMPOS DE CAPITAL ASIGNADO ---
         // Utilizamos valores seguros para evitar NaN en validación
-        const assignedUSDT = parseFloat(newConfig.long?.amountUsdt || 0); 
-        const assignedBTC = parseFloat(newConfig.short?.amountBtc || 0);  
+        const assignedUSDT = parseFloat(newConfig.long?.amountUsdt || 0); 
+        const assignedBTC = parseFloat(newConfig.short?.amountBtc || 0);  
 
         // --- 2. OBTENER SALDOS REALES DE BITMART ---
-        // NOTA: Asumimos que getAvailableTradingBalances se encarga de las credenciales
         const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
 
         // --- 3. VALIDACIÓN CRÍTICA DE FONDOS ---
@@ -57,8 +55,8 @@ router.post('/', async (req, res) => {
             // Inicializar un nuevo bot
             botState = new Autobot({ 
                 config: newConfig,
-                lbalance: assignedUSDT, 
-                sbalance: assignedBTC,  
+                lbalance: assignedUSDT, 
+                sbalance: assignedBTC,  
             });
             log('Primer estado del bot inicializado con la configuración y balances.', 'success');
 
@@ -74,34 +72,25 @@ router.post('/', async (req, res) => {
                  log(`SBalance reinicializado a ${assignedBTC.toFixed(8)} BTC.`, 'info');
             }
 
-            // 💡 CRÍTICO: MANEJO DE CONFIGURACIÓN ANIDADA Y FUSIÓN
+            // 💡 CRÍTICO: REASIGNACIÓN DIRECTA DE LA CONFIGURACIÓN (Solución Definitiva para el Trigger)
             
-            // 1. Fusión de propiedades anidadas ('long')
-            if (newConfig.long) {
-                // Actualizamos las propiedades directamente en el subdocumento Mongoose
-                Object.keys(newConfig.long).forEach(key => {
-                    botState.config.long[key] = newConfig.long[key];
-                });
-            }
+            // 1. Fusionar la nueva configuración LONG. toObject() es clave para la fusión.
+            botState.config.long = { 
+                ...(botState.config.long?.toObject() || {}), 
+                ...newConfig.long 
+            };
             
-            // 2. Fusión de propiedades anidadas ('short')
-            if (newConfig.short) {
-                // Actualizamos las propiedades directamente en el subdocumento Mongoose
-                Object.keys(newConfig.short).forEach(key => {
-                    botState.config.short[key] = newConfig.short[key];
-                });
-            }
-
-            // 3. Actualiza otras propiedades de nivel superior (symbol, stopAtCycle)
-            // Se asume que newConfig.stopAtCycle está aquí.
+            // 2. Fusionar la nueva configuración SHORT.
+            botState.config.short = { 
+                ...(botState.config.short?.toObject() || {}), 
+                ...newConfig.short 
+            };
+            
+            // 3. Fusionar propiedades de nivel superior (symbol, stopAtCycle, etc.)
             Object.assign(botState.config, newConfig);
 
-            // 4. FORZAR LA DETECCIÓN DE CAMBIOS EN LA CONFIG ANIDADA
-            // Esto es necesario para que Mongoose guarde los cambios en 'long' y 'short'
-            botState.markModified('config.long');
-            botState.markModified('config.short');
-            // botState.markModified('config'); // markModified en el subdoc es más específico
-
+            // 4. Forzar la detección de cambios en la configuración anidada
+            botState.markModified('config'); 
         }
         
         await botState.save();
