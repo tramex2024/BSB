@@ -206,7 +206,7 @@ export async function initializeAutobotView() {
         updateBotUI(state);
     });
 
-    getBalances();
+    //getBalances();
     intervals.autobot = setInterval(getBalances, 10000);
     intervals.orders = setInterval(() => {
         const auOrderList = document.getElementById('au-order-list');
