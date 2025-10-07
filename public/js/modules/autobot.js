@@ -18,47 +18,71 @@ let maxBtcBalance = 0;
 
 /**
  * Recolecta todos los valores de configuración de la interfaz y los mapea a la estructura anidada del backend.
- * Utiliza los nombres exactos de la DB: size_var (Incremento) y price_var (Decremento).
+ * Incluye corrección para formatos decimales (coma a punto) y logs de diagnóstico para el Trigger.
  * @returns {object} El objeto de configuración listo para ser enviado.
  */
 function collectConfigData() {
     // Helper para obtener y parsear un valor float
-    const getFloat = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
+    const getFloat = id => {
+        const element = document.getElementById(id);
+        if (!element) return 0; // Si el elemento no existe, devuelve 0.
+        
+        // Paso 1: Reemplazar comas por puntos para asegurar formato internacional (1,5 -> 1.5)
+        const rawValue = element.value.replace(',', '.'); 
+        
+        // Paso 2: Convertir a float. Si falla (NaN), devuelve 0.
+        const value = parseFloat(rawValue || 0) || 0;
+        
+        // LOG DE DIAGNÓSTICO (¡CRÍTICO!) para el Trigger:
+        if (id === 'autrigger') {
+            console.log(`[TRIGGER DEBUG] ID: ${id}`);
+            console.log(`[TRIGGER DEBUG] Valor de input (string): ${element.value}`);
+            console.log(`[TRIGGER DEBUG] Valor RAW (punto): ${rawValue}`);
+            console.log(`[TRIGGER DEBUG] Valor FINAL (float): ${value}`);
+        }
+        
+        return value;
+    };
+    
     // Helper para obtener un valor booleano
     const getBool = id => document.getElementById(id)?.checked || false;
     
-    // --- CAMPOS COMUNES ---
-    // auincrement (Incremento de Tamaño) -> size_var
+    // --- RECOLECCIÓN DE CAMPOS COMUNES Y ESPECÍFICOS ---
+    
+    // Incremento (Variación de Tamaño) -> size_var
     const sizeVariation = getFloat('auincrement'); 
-    // audecrement (Decremento de Precio) -> price_var
+    
+    // Decremento (Variación de Precio) -> price_var
     const priceVariation = getFloat('audecrement'); 
-    // autrigger (Trigger de Ganancia) -> profit_percent
+    
+    // Trigger de Ganancia -> profit_percent
     const profitTrigger = getFloat('autrigger');    
-    // au-stop-at-cycle-end -> stopAtCycle (Nivel superior)
+    
+    // Stop At Cycle End -> stopAtCycle (Nivel superior)
     const stopAtCycle = getBool('au-stop-at-cycle-end'); 
 
     return {
         // PROPIEDADES GENERALES
         symbol: TRADE_SYMBOL_BITMART, 
-        stopAtCycle: stopAtCycle, // 💡 CAMPO EN EL NIVEL SUPERIOR
+        stopAtCycle: stopAtCycle, // Campo de nivel superior
         
         // ESTRATEGIA LONG
         long: {
             amountUsdt: getFloat('auamount-usdt'), 
             purchaseUsdt: getFloat('aupurchase-usdt'), 
             
-            // Mapeo a DB
+            // Mapeo a DB (profit_percent, price_var, size_var)
             profit_percent: profitTrigger, 
-            price_var: priceVariation, // El Decremento (Precio) se mapea a price_var
-            size_var: sizeVariation,   // El Incremento (Tamaño) se mapea a size_var
+            price_var: priceVariation, 
+            size_var: sizeVariation,
             
-            enabled: true // Se asume que siempre se envía true al modificar la config
+            enabled: true 
         },
         
         // ESTRATEGIA SHORT
         short: {
             amountBtc: getFloat('auamount-btc'), 
-            sellBtc: getFloat('aupurchase-btc'), // 'Purchase BTC' es 'sellBtc'
+            sellBtc: getFloat('aupurchase-btc'), 
             
             // Mapeo a DB
             profit_percent: profitTrigger, 
@@ -69,7 +93,6 @@ function collectConfigData() {
         }
     };
 }
-
 
 /**
  * Muestra el límite real disponible junto a los inputs.
