@@ -30,9 +30,8 @@ async function run(dependencies) {
         log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
 
         try {
-            // 1. Consultar el estado real de la orden en BitMart
-            // 💡 CORRECCIÓN CRÍTICA: Eliminamos 'creds' de los argumentos, ya que getOrderDetail solo espera (symbol, orderId).
-            const orderDetails = await getOrderDetail(SYMBOL, orderIdString);
+            // 1. Consultar el estado real de la orden en BitMart            
+            const orderDetails = await getOrderDetail(creds, SYMBOL, orderIdString);
             
             if (orderDetails && orderDetails.state === 'filled') {
                 log(`Recuperación exitosa: La orden ID ${orderIdString} se completó durante el tiempo de inactividad.`, 'success');

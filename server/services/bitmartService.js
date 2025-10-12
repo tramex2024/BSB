@@ -86,13 +86,14 @@ async function placeOrder(creds, symbol, side, type, size, price) {
 
 /**
  * Obtiene los detalles de una orden específica con reintentos.
+ * @param {object} creds - Credenciales de la API (AÑADIDO).
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
  * @returns {Promise<object>} - Detalles de la orden.
  */
-async function getOrderDetail(symbol, orderId) {
-    // Si bitmartSpot.js no usa 'creds' en getOrderDetail, solo pasamos los parámetros requeridos
-    return await spotService.getOrderDetail(symbol, orderId);
+async function getOrderDetail(creds, symbol, orderId) { // 💡 CORRECCIÓN CRÍTICA: AÑADIMOS 'creds'
+    // Ahora pasamos 'creds' si tu spotService lo necesita para la autenticación
+    return await spotService.getOrderDetail(creds, symbol, orderId); 
 }
 
 /**

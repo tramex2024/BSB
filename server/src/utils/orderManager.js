@@ -44,9 +44,8 @@ async function placeFirstBuyOrder(config, creds, log, updateBotState, updateGene
                 log(`Estado de la estrategia RUNNING actualizado a: BUYING`);
             }
             
-            setTimeout(async () => {
-                // 💡 CORRECCIÓN CRÍTICA: Eliminamos 'creds'
-                const orderDetails = await getOrderDetail(SYMBOL, currentOrderId); 
+            setTimeout(async () => {                
+                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId); 
                 let updatedBotState = await Autobot.findOne({});
 
                 if (orderDetails && orderDetails.state === 'filled') {
@@ -102,8 +101,7 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, nextCoveragePr
             log(`Orden de cobertura colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
 
             setTimeout(async () => {
-                // 💡 CORRECCIÓN CRÍTICA: Eliminamos 'creds'
-                const orderDetails = await getOrderDetail(SYMBOL, currentOrderId);
+                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
                 const updatedBotState = await Autobot.findOne({});
                 
                 if (orderDetails && orderDetails.state === 'filled') {
@@ -160,8 +158,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
 
 
             setTimeout(async () => {
-                // 💡 CORRECCIÓN CRÍTICA: Eliminamos 'creds'
-                const orderDetails = await getOrderDetail(SYMBOL, currentOrderId);
+                const orderDetails = await getOrderDetail(creds, SYMBOL, currentOrderId);
                 if (orderDetails && orderDetails.state === 'filled') {
                     await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
                 } else {

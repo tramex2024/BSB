@@ -151,33 +151,40 @@ async function getHistoryOrders(options = {}) {
 }
 
 /**
- * Obtiene los detalles de una orden específica con reintentos.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} orderId - ID de la orden.
- * @param {number} [retries=0] - Número de reintentos.
- * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
- * @returns {Promise<object>} - Detalles de la orden.
- */
-async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
-    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
-        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
-    }
-    const requestBody = { symbol, order_id: orderId };
-    if (retries >= MAX_RETRIES) {
-        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
-    }
-    try {
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', {}, requestBody);
-        const order = response.data.data;
-        return order;
-    } catch (error) {
-        if (error.isRetryable && retries < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-            return getOrderDetail(symbol, orderId, retries + 1, delay * 1.5);
-        } else {
-            throw error;
-        }
-    }
+ * Obtiene los detalles de una orden específica con reintentos.
+ * @param {object} creds - Credenciales de la API (AÑADIDO).
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} orderId - ID de la orden.
+ * @param {number} [retries=0] - Número de reintentos.
+ * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
+ * @returns {Promise<object>} - Detalles de la orden.
+ */
+async function getOrderDetail(creds, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
+    // 💡 IMPORTANTE: Si la capa makeRequest usa el objeto 'creds' para la firma, debe ser pasado.
+    
+    // NOTA: La validación de 'symbol' y 'orderId' ahora será manejada por bitmartService.js, 
+    // pero la dejamos aquí como doble-seguridad.
+    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
+        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
+    }
+    const requestBody = { symbol, order_id: orderId };
+    if (retries >= MAX_RETRIES) {
+        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
+    }
+    try {
+        // 💡 CORRECCIÓN CRÍTICA: Pasamos 'creds' en el makeRequest (asumiendo que es el tercer argumento de makeRequest)
+        const response = await makeRequest('POST', '/spot/v4/query/order-detail', creds, requestBody); 
+        const order = response.data.data;
+        return order;
+    } catch (error) {
+        if (error.isRetryable && retries < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return getOrderDetail(creds, symbol, orderId, retries + 1, delay * 1.5); // Llamada recursiva corregida
+        } else {
+            // Re-lanzar un error más descriptivo
+            throw new Error(`Falló la solicitud a BitMart en /spot/v4/query/order-detail: ${error.message}`);
+        }
+    }
 }
 
 /**
