@@ -62,7 +62,23 @@ async function makeRequest(method, path, params = {}, body = {}) {
             throw new Error(`Error de la API: ${response.data.message} (Code: ${response.data.code})`);
         }
     } catch (error) {
-        throw new Error(`Falló la solicitud a BitMart en ${path}: ${error.response ? error.response.data.message : error.message}`);
+        let errorMessage;
+        
+        if (error.response) {
+            // Case 1: Received a response, but it was an error status (e.g., 403, 429)
+            // Prioritize the API's custom error message (code/message)
+            const apiError = error.response.data;
+            errorMessage = apiError.message || `HTTP ${error.response.status} - Code ${apiError.code || 'N/A'}`;
+        } else if (error.request) {
+            // Case 2: Request was made but no response was received (e.g., network failure, timeout)
+            errorMessage = `No se recibió respuesta del servidor: ${error.message}`;
+        } else {
+            // Case 3: Error setting up the request (e.g., credentials)
+            errorMessage = `Error de configuración de la solicitud: ${error.message}`;
+        }
+        
+        // Throw the error with a clearer message
+        throw new Error(`Falló la solicitud a BitMart en ${path}: ${errorMessage}`);
     }
 }
 

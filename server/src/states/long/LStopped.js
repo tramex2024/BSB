@@ -13,11 +13,11 @@ const CLEAN_AUTOBOT_DOCUMENT_BASE = {
       "symbol": "BTC_USDT",
       "long": { 
         "amountUsdt": 15, "purchaseUsdt": 5, "price_var": 1, 
-        "size_var": 100, "enabled": false, "profit_percent": 1 
+        "size_var": 100, "enabled": false, "profit_percent": 1.5 
       },
       "short": { 
-        "amountBtc": 0.00004, "sellBtc": 0.00005, "price_var": 1, 
-        "size_var": 100, "enabled": false, "profit_percent": 1 
+        "amountBtc": 0.00005, "sellBtc": 0.00005, "price_var": 1, 
+        "size_var": 100, "enabled": false, "profit_percent": 1.5 
       },
       "stopAtCycle": false
     },

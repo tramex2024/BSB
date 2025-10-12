@@ -101,6 +101,12 @@ router.post('/update-config', async (req, res) => {
         const { config } = req.body;
         const symbol = config.symbol;
 
+        // 🚨 AGREGAR ESTAS LÍNEAS PARA DIAGNÓSTICO
+        console.log('--- DIAGNÓSTICO DE CONFIGURACIÓN RECIBIDA ---');
+        console.log('Configuración Long:', config.long);
+        console.log('Configuración Short:', config.short);
+        console.log('-------------------------------------------');
+
         if (!symbol) {
             return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
