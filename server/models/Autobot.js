@@ -34,7 +34,7 @@ const configSchema = new mongoose.Schema({
         purchaseUsdt: { type: Number, default: 5.00 },
         price_var: { type: Number, default: 0.1 },
         size_var: { type: Number, default: 5.0 },
-        profit_percent: { type: Number, default: 1.0 } // Renombrado de 'trigger'
+        profit_percent: { type: Number, default: 1.5 } // Renombrado de 'trigger'
     },
     short: {
         enabled: { type: Boolean, default: false },        
@@ -42,7 +42,7 @@ const configSchema = new mongoose.Schema({
         sellBtc: { type: Number, default: 0.00005 }, // Monto de la orden inicial/cobertura (BTC)
         price_var: { type: Number, default: 0.1 },
         size_var: { type: Number, default: 5.0 },
-        profit_percent: { type: Number, default: 1.0 } 
+        profit_percent: { type: Number, default: 1.5 } 
     },
     stopAtCycle: { type: Boolean, default: false }
 });
@@ -51,7 +51,7 @@ const configSchema = new mongoose.Schema({
 // ESQUEMA PRINCIPAL DE AUTOBOT
 // =========================================================================
 const autobotSchema = new mongoose.Schema({
-    totalProfit: { type: Number, default: 0 },
+    totalProfit: { type: Number, default: 10000.00 },
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
     lbalance: { type: Number, default: 0 },

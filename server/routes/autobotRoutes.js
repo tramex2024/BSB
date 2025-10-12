@@ -98,7 +98,7 @@ router.post('/stop', async (req, res) => {
 // Ruta para actualizar la configuración del bot
 router.post('/update-config', async (req, res) => {
     try {
-        const { config } = req.body;
+        const { config, totalProfit } = req.body;
         const symbol = config.symbol;
 
         if (!symbol) {
