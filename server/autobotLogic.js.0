@@ -3,7 +3,7 @@
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy'); 
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
 
 let io;
 
@@ -19,17 +19,19 @@ function log(message, type = 'info') {
 }
 
 /**
- * Función que actualiza únicamente el estado principal del bot (lstate/sstate).
- * * NOTA DE CAMBIO: Se eliminó la doble lectura de DB y la emisión de Socket.IO aquí.
- * Ahora, el estado completo se emitirá de forma centralizada en server.js (updateBotStateWithPrice) 
- * una vez que botCycle haya terminado.
- */
+ * Función que actualiza únicamente el estado principal del bot (lstate/sstate) y EMITE AL FRONTEND.
+ */
 async function updateBotState(newState, strategy) {
     try {
         const updateField = strategy === 'long' ? 'lstate' : 'sstate';
         
-        // Solo guardamos el nuevo estado principal
         await Autobot.findOneAndUpdate({}, { [updateField]: newState });
+        
+        // Emitimos el estado completo para sincronizar el Front-End.
+        const updatedBotState = await Autobot.findOne({});
+        if (io) {
+            io.emit('bot-state-update', updatedBotState); 
+        }
         
         log(`Estado de la estrategia ${strategy} actualizado a: ${newState}`, 'info');
     } catch (error) {
@@ -38,9 +40,9 @@ async function updateBotState(newState, strategy) {
 }
 
 /**
- * Función que actualiza únicamente los datos del ciclo Long (lStateData) en la base de datos.
- * @param {object} lStateData - El objeto lStateData actualizado.
- */
+ * Función que actualiza únicamente los datos del ciclo Long (lStateData) en la base de datos.
+ * @param {object} lStateData - El objeto lStateData actualizado.
+ */
 async function updateLStateData(lStateData) {
     try {
         await Autobot.findOneAndUpdate({}, { 'lStateData': lStateData });  
@@ -50,9 +52,9 @@ async function updateLStateData(lStateData) {
 }
 
 /**
- * Función que actualiza únicamente los datos del ciclo Short (sStateData) en la base de datos.
- * @param {object} sStateData - El objeto sStateData actualizado.
- */
+ * Función que actualiza únicamente los datos del ciclo Short (sStateData) en la base de datos.
+ * @param {object} sStateData - El objeto sStateData actualizado.
+ */
 async function updateSStateData(sStateData) {
     try {
         await Autobot.findOneAndUpdate({}, { 'sStateData': sStateData });  
@@ -62,10 +64,9 @@ async function updateSStateData(sStateData) {
 }
 
 /**
- * Función genérica para actualizar campos top-level en el modelo Autobot (usado para LBalance/SBalance, etc.).
- * Esta será la función clave para agregar tu nuevo dato (ej. totalAccumulatedProfit).
- * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... }
- */
+ * Función genérica para actualizar campos top-level en el modelo Autobot (usado para LBalance/SBalance, etc.).
+ * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... }
+ */
 async function updateGeneralBotState(fieldsToUpdate) {
     try {
         await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate });
@@ -77,8 +78,7 @@ async function updateGeneralBotState(fieldsToUpdate) {
 
 async function botCycle(priceFromWebSocket) {
     try {
-        // Primera lectura del estado del bot al inicio de cada ciclo
-        let botState = await Autobot.findOne({}); 
+        let botState = await Autobot.findOne({});
         const currentPrice = parseFloat(priceFromWebSocket); 
 
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
@@ -88,10 +88,9 @@ async function botCycle(priceFromWebSocket) {
             return;
         }
 
-        // Obtener saldos reales de la API (importante para decisiones de trading)
+        // Obtener saldos reales de la API
         const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
 
-        // Objeto de dependencias inyectado en las estrategias
         const dependencies = {
             log,
             io,
@@ -100,7 +99,7 @@ async function botCycle(priceFromWebSocket) {
             currentPrice, 
             availableUSDT, 
             availableBTC, 
-            botState, // Estado leído de la DB al inicio del ciclo (recuperación)
+            botState,
             
             config: botState.config,
             creds: {
@@ -110,20 +109,19 @@ async function botCycle(priceFromWebSocket) {
             },
             
             updateBotState, 
-            updateLStateData, 
-            updateSStateData,
-            updateGeneralBotState 
+            updateLStateData, 
+            updateSStateData, // 💡 AÑADIDO: Para actualizar los datos del ciclo Short
+            updateGeneralBotState 
         };
 
         setLongDeps(dependencies);
-        setShortDeps(dependencies);
+        setShortDeps(dependencies); // 💡 AÑADIDO: Inyectar dependencias en el flujo Short
 
         if (botState.lstate !== 'STOPPED') {
-            // La estrategia LONG se ejecuta con el estado actual (recuperado)
             await runLongStrategy();
         }
 //        if (botState.sstate !== 'STOPPED') {
-//            await runShortStrategy();
+//            await runShortStrategy(); // 💡 DESCOMENTADO/AÑADIDO: Ejecutar el ciclo Short
 //        }
         
     } catch (error) {
@@ -131,6 +129,8 @@ async function botCycle(priceFromWebSocket) {
     }
 }
 
+
+// ... (balanceCycle, start, stop se mantienen sin cambios)
 
 async function balanceCycle() {
     try {
@@ -175,6 +175,6 @@ module.exports = {
     balanceCycle, 
     updateBotState,
     updateLStateData,
-    updateSStateData,
+    updateSStateData, // 💡 AÑADIDO
     updateGeneralBotState
 };

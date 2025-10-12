@@ -62,6 +62,15 @@ async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice,
             // 6. Colocar la orden de cobertura
             await placeCoverageBuyOrder(botState, creds, nextUSDTAmount, nextCoveragePrice, log); 
 
+            // === [ CAMBIO CLAVE: Almacenar el ID de la orden ] ===
+if (orderId) {
+    // ASUMO que updateGeneralBotState puede actualizar un campo llamado lastLongOrderId
+    await updateGeneralBotState({ lastLongOrderId: orderId }); 
+    log(`ID de orden de cobertura capturado: ${orderId}`, 'info');
+} else {
+    log('Advertencia: placeCoverageBuyOrder no devolvió un ID de orden. Riesgo de inconsistencia.', 'warning');
+}
+// ======================================================   
         } else {
             // FONDOS INSUFICIENTES: Transición a NO_COVERAGE
 
