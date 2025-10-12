@@ -159,41 +159,23 @@ async function getHistoryOrders(options = {}) {
  * @returns {Promise<object>} - Detalles de la orden.
  */
 async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
-    const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
-    const MAX_RETRIES = 5;
-    const INITIAL_RETRY_DELAY_MS = 500;
-
     if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
         throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
     }
-
     const requestBody = { symbol, order_id: orderId };
-
     if (retries >= MAX_RETRIES) {
         throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
     }
-
     try {
-        // Usamos la firma correcta de makeRequest: (method, path, queryParams, bodyParams)
-        // Ya no necesitamos pasar 'creds'
         const response = await makeRequest('POST', '/spot/v4/query/order-detail', {}, requestBody);
-        
         const order = response.data.data;
         return order;
-
     } catch (error) {
-        // Mantenemos el log crudo para capturar el error de la API.
-        console.error(`${LOG_PREFIX} ERROR CRUDO DE BITMART AL CONSULTAR ORDEN ${orderId}:`, error.message, error.response?.data);
-        
-        // Si hay reintentos
         if (error.isRetryable && retries < MAX_RETRIES) {
             await new Promise(resolve => setTimeout(resolve, delay));
-            // Llamada recursiva corregida (sin 'creds')
             return getOrderDetail(symbol, orderId, retries + 1, delay * 1.5);
         } else {
-            // Utilizamos el mensaje de error mejorado para el throw
-            const detailedError = error.message || 'Error Desconocido o de Autenticación';
-            throw new Error(`Falló la solicitud a BitMart en /spot/v4/query/order-detail: ${detailedError}`);
+            throw error;
         }
     }
 }

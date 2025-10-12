@@ -66,34 +66,33 @@ async function getOpenOrders(symbol) {
  * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
  */
 async function getHistoryOrders(options = {}) {
-    // Llama directamente al servicio spot, que es donde se realiza la solicitud API.
     return await spotService.getHistoryOrders(options);
 }
 
 /**
- * Coloca una nueva orden.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} side - 'buy' o 'sell'.
- * @param {string} type - 'limit' o 'market'.
- * @param {string} size - Cantidad de la orden.
- * @param {string} [price] - Precio para órdenes limit.
- * @returns {Promise<object>} - Respuesta de la API.
- */
-// ✅ CORREGIDO: Eliminamos 'creds' ya que makeRequest usa process.env.
-async function placeOrder(symbol, side, type, size, price) {
-    return await spotService.placeOrder(symbol, side, type, size, price);
+ * Coloca una nueva orden.
+ * @param {object} creds - Credenciales de la API.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} side - 'buy' o 'sell'.
+ * @param {string} type - 'limit' o 'market'.
+ * @param {string} size - Cantidad de la orden.
+ * @param {string} [price] - Precio para órdenes limit.
+ * @returns {Promise<object>} - Respuesta de la API.
+ */
+// ⬇️ Firma de la función que acepta 'creds' y lo pasa a spotService
+async function placeOrder(creds, symbol, side, type, size, price) {
+    return await spotService.placeOrder(creds, symbol, side, type, size, price);
 }
 
 /**
- * Obtiene los detalles de una orden específica con reintentos.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} orderId - ID de la orden.
- * @returns {Promise<object>} - Detalles de la orden.
- */
-// ✅ CORREGIDO: Eliminamos 'creds' ya que makeRequest usa process.env.
-async function getOrderDetail(symbol, orderId) { 
-    // Ahora pasamos solo los dos argumentos necesarios a spotService.
-    return await spotService.getOrderDetail(symbol, orderId); 
+ * Obtiene los detalles de una orden específica con reintentos.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} orderId - ID de la orden.
+ * @returns {Promise<object>} - Detalles de la orden.
+ */
+async function getOrderDetail(symbol, orderId) {
+    // Si bitmartSpot.js no usa 'creds' en getOrderDetail, solo pasamos los parámetros requeridos
+    return await spotService.getOrderDetail(symbol, orderId);
 }
 
 /**
