@@ -1,6 +1,6 @@
-// BSB/server/src/states/long/LBuying.js (FINAL - Permite la gestión de LBalance y RECUPERACIÓN)
+// BSB/server/src/states/long/LBuying.js (FINAL - CON CORRECCIÓN DE LLAMADA DE SERVICIO)
 
-const { checkAndPlaceCoverageOrder } = require('../../utils/coverageLogic'); 
+const { checkAndPlaceCoverageOrder } = require('../../utils/coverageLogic'); 
 const { cancelActiveOrders } = require('../../utils/orderManager');
 const { getOrderDetail } = require('../../../services/bitmartService'); 
 const { handleSuccessfulBuy } = require('../../utils/dataManager'); 
@@ -10,10 +10,10 @@ async function run(dependencies) {
     const { 
         botState, currentPrice, config, creds, log, 
         updateBotState, updateLStateData, updateGeneralBotState,
-        // Otras dependencias (availableUSDT, availableBTC, etc.) se acceden via dependencies.
     } = dependencies;
     
-    const SYMBOL = config.symbol || 'BTC_USDT';
+    // Forzamos SYMBOL a ser cadena de texto (como precaución)
+    const SYMBOL = String(config.symbol || 'BTC_USDT'); 
 
     log("Estado Long: BUYING. Verificando el estado de la última orden o gestionando compras de cobertura...", 'info');
     
@@ -24,54 +24,51 @@ async function run(dependencies) {
 
     // Verificar si hay una orden de compra pendiente registrada en la DB
     if (lastOrder && lastOrder.order_id && lastOrder.side === 'buy') {
-        log(`Recuperación: Orden de compra pendiente con ID ${lastOrder.order_id} detectada en DB. Consultando BitMart...`, 'warning');
+        
+        const orderIdString = String(lastOrder.order_id); 
+        
+        log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
 
         try {
             // 1. Consultar el estado real de la orden en BitMart
-            const orderDetails = await getOrderDetail(creds, SYMBOL, lastOrder.order_id);
+            // 💡 CORRECCIÓN CRÍTICA: Eliminamos 'creds' de los argumentos, ya que getOrderDetail solo espera (symbol, orderId).
+            const orderDetails = await getOrderDetail(SYMBOL, orderIdString);
             
             if (orderDetails && orderDetails.state === 'filled') {
-                // Caso A: ORDEN LLENADA (Ejecución Exitosa después del reinicio)
-                log(`Recuperación exitosa: La orden ID ${lastOrder.order_id} se completó durante el tiempo de inactividad.`, 'success');
+                log(`Recuperación exitosa: La orden ID ${orderIdString} se completó durante el tiempo de inactividad.`, 'success');
                 
-                // 2. Procesar la compra exitosa y actualizar el estado
-                // Usamos el botState actual que se leyó al inicio del ciclo
+                // Procesar la compra exitosa y actualizar el estado
                 await handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState);
                 
-                // 3. Volver al estado RUNNING para buscar el siguiente punto de venta
                 await updateBotState('RUNNING', 'long'); 
-                return; // Finaliza la ejecución del BUYING por este ciclo
+                return;
 
             } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
-                // Caso B: ORDEN AÚN ACTIVA (Esperar)
-                log(`Recuperación: La orden ID ${lastOrder.order_id} sigue ${orderDetails.state} en BitMart. Esperando.`, 'info');
-                // El bot se mantiene en estado BUYING y permite que la lógica de cobertura verifique.
+                log(`Recuperación: La orden ID ${orderIdString} sigue ${orderDetails.state} en BitMart. Esperando.`, 'info');
                 
             } else {
-                // Caso C: ORDEN CANCELADA, FALLIDA o NO ENCONTRADA (Inconsistencia o fallo)
-                log(`La orden ID ${lastOrder.order_id} no está activa ni completada. Asumiendo fallo y liberando el ciclo. Estado: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
+                log(`La orden ID ${orderIdString} no está activa ni completada. Asumiendo fallo y liberando el ciclo. Estado: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
                 
-                // 2. Limpiar lastOrder
+                // Limpiar lastOrder
                 botState.lStateData.lastOrder = null;
                 await updateLStateData(botState.lStateData);
                 
-                // 3. Volver a RUNNING para intentar la compra de nuevo en la próxima iteración.
+                // Volver a RUNNING
                 await updateBotState('RUNNING', 'long');
-                return; // Finaliza la ejecución
+                return; 
             }
 
         } catch (error) {
             log(`Error al consultar orden en BitMart durante la recuperación: ${error.message}`, 'error');
-            // Si falla la consulta, nos mantenemos en BUYING y esperamos al siguiente ciclo.
+            // Mantenemos el estado BUYING
         }
     }
     // =================================================================
     // === [ FIN DEL BLOQUE DE RECUPERACIÓN ] ============================
     // =================================================================
 
-    // Lógica NORMAL de Cobertura (Se ejecuta si no había orden o si la orden aún está activa - Caso B)
-    
-    // checkAndPlaceCoverageOrder DEBE usar el LBalance y el Saldo Real
+    // Lógica NORMAL de Cobertura
+    // checkAndPlaceCoverageOrder DEBE usar el LBalance y el Saldo Real
     await checkAndPlaceCoverageOrder(
         dependencies.botState, 
         dependencies.availableUSDT, 
@@ -81,7 +78,7 @@ async function run(dependencies) {
         log, 
         updateBotState, 
         updateLStateData,
-        updateGeneralBotState // ⬅️ Para actualizar LBalance
+        updateGeneralBotState
     ); 
 
     // Lógica del TRIGGER de VENTA
