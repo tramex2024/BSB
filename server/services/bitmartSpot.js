@@ -151,42 +151,51 @@ async function getHistoryOrders(options = {}) {
 }
 
 /**
- * Obtiene los detalles de una orden específica con reintentos.
- * @param {object} creds - Credenciales de la API.
- * @param {string} symbol - Símbolo de trading.
- * @param {string} orderId - ID de la orden.
- * @param {number} [retries=0] - Número de reintentos.
- * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
- * @returns {Promise<object>} - Detalles de la orden.
- */
-async function getOrderDetail(creds, symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
-    // NOTA: Mantenemos la validación aquí.
-    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
-        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
-    }
-    const requestBody = { symbol, order_id: orderId };
-    if (retries >= MAX_RETRIES) {
-        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
-    }
-    try {
-        // La llamada con creds en el tercer argumento se mantiene como la corrección de autenticación.
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', creds, requestBody); 
-        const order = response.data.data;
-        return order;
-    } catch (error) {
-        // Log de depuración: Mantenemos el log crudo para obtener el mensaje real.
-        console.error(`${LOG_PREFIX} ERROR CRUDO DE BITMART AL CONSULTAR ORDEN ${orderId}:`, error.message, error.response?.data);
-        
-        if (error.isRetryable && retries < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-            // ✅ CORRECCIÓN CRÍTICA: La llamada recursiva debe incluir 'creds' y todos los argumentos.
-            return getOrderDetail(creds, symbol, orderId, retries + 1, delay * 1.5);
-        } else {
-            // Utilizamos el mensaje de error mejorado para el throw
-            const detailedError = error.message || 'Error Desconocido (Probable fallo de autenticación o ID no encontrado)';
-            throw new Error(`Falló la solicitud a BitMart en /spot/v4/query/order-detail: ${detailedError}`);
-        }
-    }
+ * Obtiene los detalles de una orden específica con reintentos.
+ * @param {string} symbol - Símbolo de trading.
+ * @param {string} orderId - ID de la orden.
+ * @param {number} [retries=0] - Número de reintentos.
+ * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
+ * @returns {Promise<object>} - Detalles de la orden.
+ */
+async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
+    const LOG_PREFIX = '[BITMART_SPOT_SERVICE]';
+    const MAX_RETRIES = 5;
+    const INITIAL_RETRY_DELAY_MS = 500;
+
+    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
+        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
+    }
+
+    const requestBody = { symbol, order_id: orderId };
+
+    if (retries >= MAX_RETRIES) {
+        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
+    }
+
+    try {
+        // Usamos la firma correcta de makeRequest: (method, path, queryParams, bodyParams)
+        // Ya no necesitamos pasar 'creds'
+        const response = await makeRequest('POST', '/spot/v4/query/order-detail', {}, requestBody);
+        
+        const order = response.data.data;
+        return order;
+
+    } catch (error) {
+        // Mantenemos el log crudo para capturar el error de la API.
+        console.error(`${LOG_PREFIX} ERROR CRUDO DE BITMART AL CONSULTAR ORDEN ${orderId}:`, error.message, error.response?.data);
+        
+        // Si hay reintentos
+        if (error.isRetryable && retries < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            // Llamada recursiva corregida (sin 'creds')
+            return getOrderDetail(symbol, orderId, retries + 1, delay * 1.5);
+        } else {
+            // Utilizamos el mensaje de error mejorado para el throw
+            const detailedError = error.message || 'Error Desconocido o de Autenticación';
+            throw new Error(`Falló la solicitud a BitMart en /spot/v4/query/order-detail: ${detailedError}`);
+        }
+    }
 }
 
 /**
