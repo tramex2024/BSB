@@ -101,15 +101,23 @@ router.post('/update-config', async (req, res) => {
         const { config } = req.body;
         const symbol = config.symbol;
 
-        // 🚨 AGREGAR ESTAS LÍNEAS PARA DIAGNÓSTICO
-        console.log('--- DIAGNÓSTICO DE CONFIGURACIÓN RECIBIDA ---');
-        console.log('Configuración Long:', config.long);
-        console.log('Configuración Short:', config.short);
-        console.log('-------------------------------------------');
-
         if (!symbol) {
             return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
+
+        // 🚨 CORRECCIÓN CRÍTICA: Mapear 'trigger' a 'profit_percent'
+        // Esto asegura que el valor del frontend se guarde con el nombre correcto en la DB (Mongoose).
+        if (config.long && config.long.trigger !== undefined) {
+            // Asignar el valor de 'trigger' a 'profit_percent'
+            config.long.profit_percent = config.long.trigger;
+            // Eliminar el campo 'trigger' para evitar problemas con Mongoose
+            delete config.long.trigger; 
+        }
+        if (config.short && config.short.trigger !== undefined) {
+            config.short.profit_percent = config.short.trigger;
+            delete config.short.trigger;
+        }
+        // FIN del mapeo
 
         const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
@@ -137,7 +145,7 @@ router.post('/update-config', async (req, res) => {
             });
         } else {
             // Si el bot existe, actualizamos solo la configuración y los valores calculados.
-            autobot.config = config;
+            autobot.config = config; // <-- ¡Aquí se guarda el 'profit_percent' mapeado!
             autobot.lcoverage = initialState.lcoverage;
             autobot.lnorder = initialState.lnorder;
             autobot.scoverage = initialState.scoverage;
