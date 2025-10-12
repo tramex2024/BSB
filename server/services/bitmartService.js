@@ -61,6 +61,16 @@ async function getOpenOrders(symbol) {
 }
 
 /**
+ * Obtiene el historial de órdenes para un símbolo y estado.
+ * @param {object} options - Opciones de la consulta.
+ * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
+ */
+async function getHistoryOrders(options = {}) {
+    // Llama directamente al servicio spot, que es donde se realiza la solicitud API.
+    return await spotService.getHistoryOrders(options);
+}
+
+/**
  * Coloca una nueva orden.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} side - 'buy' o 'sell'.
