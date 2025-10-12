@@ -1,24 +1,8 @@
-// Archivo: BSB/server/services/bitmartClient.js (Función makeRequest COMPLETA Y CORREGIDA)
-
+// Archivo: BSB/server/services/bitmartClient.js
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
-
-/**
- * Función auxiliar para ordenar las claves de un objeto
- * alfabéticamente. Esto es requerido por la firma de BitMart V4.
- */
-function sortObjectKeys(obj) {
-    if (typeof obj !== 'object' || obj === null) {
-        return obj;
-    }
-    const sorted = {};
-    Object.keys(obj).sort().forEach(key => {
-        sorted[key] = obj[key];
-    });
-    return sorted;
-}
 
 async function makeRequest(method, path, params = {}, body = {}) {
     const { BITMART_API_KEY, BITMART_SECRET_KEY, BITMART_API_MEMO } = process.env;
@@ -43,9 +27,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
             queryString = new URLSearchParams(params).toString();
         }
     } else if (method === 'POST') {
-        // 🚨 CORRECCIÓN CRÍTICA: Ordenar el cuerpo (body) alfabéticamente antes de firmar
-        const sortedBody = sortObjectKeys(body); 
-        bodyForSign = JSON.stringify(sortedBody);
+        bodyForSign = JSON.stringify(body);
     }
     
     const message = timestamp + '#' + credentials.memo + '#' + bodyForSign;
@@ -63,7 +45,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
             method,
             url: `${BASE_URL}${path}`,
             headers,
-            timeout: 10000,
+	    timeout: 10000,
         };
 
         if (method === 'GET') {
@@ -80,8 +62,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
             throw new Error(`Error de la API: ${response.data.message} (Code: ${response.data.code})`);
         }
     } catch (error) {
-        // Esto captura los errores de Axios y los errores de respuesta de BitMart
-        throw new Error(`Falló la solicitud a BitMart en ${path}: ${error.response ? error.response.data.message || 'Error Desconocido de BitMart' : error.message}`);
+        throw new Error(`Falló la solicitud a BitMart en ${path}: ${error.response ? error.response.data.message : error.message}`);
     }
 }
 
