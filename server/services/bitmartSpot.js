@@ -158,28 +158,55 @@ async function getHistoryOrders(options = {}) {
  * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
  * @returns {Promise<object>} - Detalles de la orden.
  */
-async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
-    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
-        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
-    }
-    const requestBody = { symbol, order_id: orderId };
-    if (retries >= MAX_RETRIES) {
-        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
-    }
+async function getOrderDetailDirect(symbol, orderId) {
+    // Nota: Esta función asume que tienes acceso a la función makeRequest
+    // estable que probamos en bot.js, configurada para manejar firmas, headers,
+    // y el agente HTTP/HTTPS.
+
     try {
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', {}, requestBody);
-        const order = response.data.data;
-        return order;
-    } catch (error) {
-        if (error.isRetryable && retries < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-            return getOrderDetail(symbol, orderId, retries + 1, delay * 1.5);
+        // 1. Usar el endpoint de Historial V4 POST, ya probado como estable (TEST 2)
+        const endpoint = '/spot/v4/query/history-orders';
+        
+        // Configuramos la solicitud para obtener las órdenes recientes del símbolo
+        const requestBody = { 
+            symbol: symbol, 
+            orderMode: 'spot', // Asumiendo que es una orden spot
+            limit: 100         // Consultar las 100 órdenes más recientes
+        };
+        
+        // Ejecutar la solicitud
+        const response = await makeRequest('POST', endpoint, {}, requestBody);
+        
+        let allOrders = [];
+        
+        // 2. Leer la lista de órdenes (Corrección de formato de lectura del TEST 2)
+        // La respuesta exitosa de makeRequest es { code: 1000, data: [ ... lista ... ] }
+        if (response.data && Array.isArray(response.data)) {
+            allOrders = response.data;
         } else {
-            throw error;
+            // Si la API devuelve éxito pero no lista, puede ser un problema de límite o historial vacío
+            console.log(`[LOG]: La API de Historial no devolvió una lista de órdenes para ${symbol}.`);
+            return null;
         }
+
+        // 3. Buscar la orden específica en la lista (Lógica del TEST 3)
+        const orderDetails = allOrders.find(o => o.orderId === orderId);
+
+        if (orderDetails) {
+            console.log(`[LOG]: Detalle de orden ${orderId} encontrado en el historial. Estado: ${orderDetails.state}`);
+            // Retorna el objeto de la orden con todos sus detalles (state, priceAvg, filledSize, etc.)
+            return orderDetails;
+        } else {
+            console.log(`[LOG]: Orden ${orderId} no encontrada en las ${allOrders.length} órdenes recientes de ${symbol}.`);
+            return null;
+        }
+
+    } catch (error) {
+        // Capturar cualquier fallo en la conexión o firma
+        console.error(`[LOG - ERROR]: Falló la consulta de detalle (vía Historial) para ${orderId}: ${error.message}`);
+        return null;
     }
 }
-
 /**
  * Coloca una nueva orden.
  * @param {object} [creds] - Credenciales de la API (Añadido para igualar la firma de bitmartService).
