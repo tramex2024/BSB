@@ -158,7 +158,7 @@ async function getHistoryOrders(options = {}) {
  * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
  * @returns {Promise<object>} - Detalles de la orden.
  */
-async function getOrderDetailDirect(symbol, orderId) {
+async function getOrderDetail(symbol, orderId) {
     // Nota: Esta función asume que tienes acceso a la función makeRequest
     // estable que probamos en bot.js, configurada para manejar firmas, headers,
     // y el agente HTTP/HTTPS.
