@@ -29,6 +29,8 @@ async function run(dependencies) {
         
         log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
 
+        log(`[DEBUG - PARAMS] Intentando consultar orden. SYMBOL: '${SYMBOL}', ID: '${orderIdString}'`, 'debug'); // 💡 NUEVO LOG DE PARÁMETROS
+
         try {
             // 1. Consultar el estado real de la orden en BitMart            
             const orderDetails = await getOrderDetail(creds, SYMBOL, orderIdString);
