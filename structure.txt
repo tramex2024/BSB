@@ -72,6 +72,7 @@ BSB/			    # Bitmart Spot Bots
      │   └── authController.js
      │   └── userController.js
      │   └── orderController.js
+     │   └── balanceController.js
      ├── utils/
      │   └── encryption.js
      │   └── cryptoUtils.js
