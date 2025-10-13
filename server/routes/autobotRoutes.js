@@ -72,36 +72,35 @@ router.post('/start', async (req, res) => {
 });
 
 router.post('/stop', async (req, res) => {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState) {
-            botState.lstate = 'STOPPED';
-            botState.sstate = 'STOPPED';
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = false;
-            await botState.save();
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            botState.lstate = 'STOPPED';
+            botState.sstate = 'STOPPED';
+            botState.config.long.enabled = false;
+            botState.config.short.enabled = false;
+            await botState.save();
 
-            console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
-            
-            // 🚨 CAMBIO CLAVE 2: Forzar la inclusión del campo en el objeto emitido/respondido
+            console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
+            
+            // 🚨 CORRECCIÓN CLAVE: Aseguramos que totalProfit exista antes de emitir.
             const botData = botState.toObject();
-            botData.totalProfit = botState.totalProfit || 0; // Garantiza que se lea de la DB
-
-            // Emite el estado actualizado al detener el bot
-            if (autobotLogic.io) {
-                autobotLogic.io.emit('bot-state-update', botData);
-                // 🚨 DIAGNÓSTICO: Verificamos el valor exacto que se está enviando
-                console.log(`[BACKEND DIAG]: Estado emitido (Stop). TotalProfit enviado: ${botData.totalProfit}`);
-                console.log('[BACKEND LOG]: Estado del bot emitido (al detener) a través de Socket.IO.');
+            if (botData.totalProfit === undefined) {
+                botData.totalProfit = botState.totalProfit || 0;
             }
 
-            autobotLogic.log('Autobot strategy stopped by user.', 'info');
-            // Devolvemos el objeto completo en la respuesta HTTP también
-            res.json({ success: true, message: 'Autobot strategy stopped.', data: botData });
-        } else {
-            res.status(404).json({ success: false, message: 'Bot state not found.' });
-        }
-    } catch (error) {
+            // Emite el estado actualizado al detener el bot
+            if (autobotLogic.io) {
+                autobotLogic.io.emit('bot-state-update', botData);
+                console.log(`[BACKEND LOG]: Estado del bot emitido (al detener). TotalProfit: ${botData.totalProfit}`);
+            }
+
+            autobotLogic.log('Autobot strategy stopped by user.', 'info');
+            res.json({ success: true, message: 'Autobot strategy stopped.', data: botData });
+        } else {
+            res.status(404).json({ success: false, message: 'Bot state not found.' });
+        }
+    } catch (error) {
         console.error('Failed to stop Autobot strategy:', error);
         res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
     }
