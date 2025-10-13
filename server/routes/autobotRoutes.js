@@ -1,5 +1,3 @@
-// server/routes/autobotRoutes.js
-
 const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
@@ -47,14 +45,21 @@ router.post('/start', async (req, res) => {
 
         await autobot.save();
         
+        // 🚨 CAMBIO CLAVE 1: Forzar la inclusión del campo en el objeto emitido/respondido
+        const botData = autobot.toObject();
+        botData.totalProfit = autobot.totalProfit || 0; // Garantiza que se lea de la DB si se modificó manualmente
+
         if (autobotLogic.io) {
-            autobotLogic.io.emit('bot-state-update', autobot.toObject());
+            autobotLogic.io.emit('bot-state-update', botData);
+            // 🚨 DIAGNÓSTICO: Verificamos el valor exacto que se está enviando
+            console.log(`[BACKEND DIAG]: Estado emitido (Start). TotalProfit enviado: ${botData.totalProfit}`);
             console.log('[BACKEND LOG]: Estado del bot emitido (al iniciar) a través de Socket.IO.');
         }
 
         console.log('[BACKEND LOG]: Autobot strategies started and saved.');
 
-        res.json({ success: true, message: 'Autobot strategies started.' });
+        // Devolvemos el objeto completo en la respuesta HTTP también
+        res.json({ success: true, message: 'Autobot strategies started.', data: botData });
 
     } catch (error) {
         console.error('Failed to start Autobot strategies:', error);
@@ -78,14 +83,21 @@ router.post('/stop', async (req, res) => {
 
             console.log(`[BACKEND LOG]: Bot detenido y estado guardado en la DB: lstate: ${botState.lstate}, sstate: ${botState.sstate}`);
             
+            // 🚨 CAMBIO CLAVE 2: Forzar la inclusión del campo en el objeto emitido/respondido
+            const botData = botState.toObject();
+            botData.totalProfit = botState.totalProfit || 0; // Garantiza que se lea de la DB
+
             // Emite el estado actualizado al detener el bot
             if (autobotLogic.io) {
-                autobotLogic.io.emit('bot-state-update', botState.toObject());
+                autobotLogic.io.emit('bot-state-update', botData);
+                // 🚨 DIAGNÓSTICO: Verificamos el valor exacto que se está enviando
+                console.log(`[BACKEND DIAG]: Estado emitido (Stop). TotalProfit enviado: ${botData.totalProfit}`);
                 console.log('[BACKEND LOG]: Estado del bot emitido (al detener) a través de Socket.IO.');
             }
 
             autobotLogic.log('Autobot strategy stopped by user.', 'info');
-            res.json({ success: true, message: 'Autobot strategy stopped.' });
+            // Devolvemos el objeto completo en la respuesta HTTP también
+            res.json({ success: true, message: 'Autobot strategy stopped.', data: botData });
         } else {
             res.status(404).json({ success: false, message: 'Bot state not found.' });
         }
@@ -106,11 +118,8 @@ router.post('/update-config', async (req, res) => {
         }
 
         // 🚨 CORRECCIÓN CRÍTICA: Mapear 'trigger' a 'profit_percent'
-        // Esto asegura que el valor del frontend se guarde con el nombre correcto en la DB (Mongoose).
         if (config.long && config.long.trigger !== undefined) {
-            // Asignar el valor de 'trigger' a 'profit_percent'
             config.long.profit_percent = config.long.trigger;
-            // Eliminar el campo 'trigger' para evitar problemas con Mongoose
             delete config.long.trigger; 
         }
         if (config.short && config.short.trigger !== undefined) {
@@ -142,6 +151,7 @@ router.post('/update-config', async (req, res) => {
                 lnorder: initialState.lnorder,
                 snorder: initialState.snorder,
                 profit: initialState.profit
+                // totalProfit se inicializa con el default del esquema (10000.00)
             });
         } else {
             // Si el bot existe, actualizamos solo la configuración y los valores calculados.
@@ -159,17 +169,27 @@ router.post('/update-config', async (req, res) => {
                 autobot.sbalance = initialState.sbalance;
             }
         }
+        
+        // 🚨 CAMBIO CLAVE 3: Si se pasa totalProfit en el body (p. ej. desde un formulario de configuración)
+        if (totalProfit !== undefined) {
+            autobot.totalProfit = totalProfit;
+        }
 
         await autobot.save();
 
         console.log('[BACKEND LOG]: Configuración y estado inicial actualizados en la DB.');
         
+        const botData = autobot.toObject();
+        botData.totalProfit = autobot.totalProfit || 0; // Forzamos inclusión
+
         if (autobotLogic.io) {
-            autobotLogic.io.emit('bot-state-update', autobot.toObject());
+            autobotLogic.io.emit('bot-state-update', botData);
+            // 🚨 DIAGNÓSTICO: Verificamos el valor exacto que se está enviando
+            console.log(`[BACKEND DIAG]: Estado emitido (Update). TotalProfit enviado: ${botData.totalProfit}`);
             console.log('[BACKEND LOG]: Estado del bot emitido (al actualizar config) a través de Socket.IO.');
         }
 
-        res.json({ success: true, message: 'Configuración y estado inicial actualizados con éxito.', data: autobot.toObject() });
+        res.json({ success: true, message: 'Configuración y estado inicial actualizados con éxito.', data: botData });
 
     } catch (error) {
         console.error('Error al actualizar la configuración del bot:', error);
