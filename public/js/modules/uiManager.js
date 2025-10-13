@@ -1,10 +1,8 @@
 // public/js/modules/uiManager.js
 
-// Função para atualizar a interface de usuário com o estado do bot
+// Función para actualizar la interfaz de usuario con el estado del bot
 export function updateBotUI(state) {
-    // 🚨 DIAGNÓSTICO DO FRONTEND: Verificamos o objeto de estado completo recebido
-    
-    const statusColors = {
+    const statusColors = {
         RUNNING: 'text-green-400',
         STOPPED: 'text-red-400',
         BUYING: 'text-blue-400',
@@ -18,9 +16,8 @@ export function updateBotUI(state) {
     const autobotSettings = document.getElementById('autobot-settings');
     
     const elementsToUpdate = {
-        // Usa o ID 'auprofit' do HTML para mostrar o campo 'totalProfit'
-        auprofit: 'totalProfit', 
-        
+        // 🛑 Mapeamos el elemento HTML 'auprofit' a la clave 'total_profit' recibida por Socket.IO
+        auprofit: 'total_profit', 
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
         aultprice: 'ltprice',
@@ -50,29 +47,28 @@ export function updateBotUI(state) {
         if (element) {
             let value;
             if (state[dataKey] !== undefined) {
-                // Tentativa de conversão
+                // Tentativa de conversión
                 value = parseFloat(state[dataKey]); 
             } else {
-                value = NaN; // Usamos NaN para simplificar a verificação
+                value = NaN; // Usamos NaN para simplificar la verificación
             }
 
-            // Aplicar formato segundo o tipo de dado
-            if (dataKey === 'totalProfit' || dataKey === 'profit') {
-                // Se a conversão falhou (retornou NaN) ou o valor não está definido, mostra N/A.
+            // Aplicar formato según el tipo de dato
+            if (dataKey === 'total_profit' || dataKey === 'profit') {
+                // Total Profit (2 decimales, con signo $)
                 if (isNaN(value)) {
                     element.textContent = 'N/A';
                 } else {
-                    // Total Profit ou Profit por ciclo (2 decimais, se mostra com $)
                     element.textContent = `$${value.toFixed(2)}`;
                 }
             } else if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance') {
-                // Montos de dinheiro/balance (2 decimales)
+                // Montos de dinero/balance (2 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
             } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
                 // Contadores (0 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
             } else {
-                // Outros (preços, etc.)
+                // Otros (precios, etc.)
                 element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
             }
         }
@@ -94,7 +90,7 @@ export function updateBotUI(state) {
     }
 }
 
-// Função para mostrar mensagens de estado na UI
+// Función para mostrar mensajes de estado en la UI
 export function displayMessage(message, type) {
     const messageContainer = document.getElementById('message-container');
     if (messageContainer) {

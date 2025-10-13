@@ -15,15 +15,16 @@ router.use(authMiddleware);
 
 // Función de ayuda para serializar y emitir el estado
 const emitBotState = (autobot, io) => {
-    // Garantizamos que totalProfit sea accesible y tenga un valor.
-    autobot.totalProfit = autobot.totalProfit || 0;
+    // 🛑 CAMBIO CLAVE: Referenciamos el nuevo campo total_profit
+    autobot.total_profit = autobot.total_profit || 0; 
 
     // Convertimos a objeto plano de JS para serialización de Socket.IO
     const botData = autobot.toObject();
     
-    // 🛑 Paso Crítico: Forzamos la inclusión del campo que Mongoose a veces ignora
-    botData.totalProfit = autobot.totalProfit; 
+    // Paso Crítico: Forzamos la inclusión del campo con el nuevo nombre
+    botData.total_profit = autobot.total_profit; 
 
+    // Logging Final para confirmar que el valor va incluido en el JSON emitido
     console.log(`[BACKEND LOG]: Objeto COMPLETO a emitir: ${JSON.stringify(botData)}`);
 
     if (io) {
@@ -108,14 +109,15 @@ router.post('/stop', async (req, res) => {
 
 router.post('/update-config', async (req, res) => {
     try {
-        const { config, totalProfit } = req.body;
+        // 🛑 CAMBIO CLAVE: Usamos total_profit
+        const { config, total_profit } = req.body; 
         const symbol = config.symbol;
 
         if (!symbol) {
             return res.status(400).json({ success: false, message: 'El símbolo del trading no está especificado.' });
         }
 
-        // 🚨 CORRECCIÓN CRÍTICA: Mapear 'trigger' a 'profit_percent'
+        // Mapeo de 'trigger' a 'profit_percent'
         if (config.long && config.long.trigger !== undefined) {
             config.long.profit_percent = config.long.trigger;
             delete config.long.trigger; 
@@ -149,7 +151,6 @@ router.post('/update-config', async (req, res) => {
                 lnorder: initialState.lnorder,
                 snorder: initialState.snorder,
                 profit: initialState.profit,
-                // Si es nuevo, toma el default del esquema.
             });
         } else {
             // Si el bot existe, actualizamos
