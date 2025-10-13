@@ -16,10 +16,13 @@ export function updateBotUI(state) {
     const autobotSettings = document.getElementById('autobot-settings');
     
     const elementsToUpdate = {
-        auprofit: 'profit',
-        // 🚨 CORRECCIÓN: Agregar la clave totalProfit para mapearla a un elemento en el frontend.
-        // Asegúrate de que el ID 'au-total-profit' exista en tu HTML, o cámbialo al ID que uses.
-        'au-total-profit': 'totalProfit', 
+        // 🚨 CORRECCIÓN CLAVE: Usamos el ID 'auprofit' del HTML
+        // para mostrar la clave del estado 'totalProfit' (el acumulado)
+        auprofit: 'totalProfit', 
+        
+        // Si quieres mostrar la ganancia por ciclo en otro lugar, debes añadir un ID nuevo.
+        // Ejemplo: 'aucycleprofit': 'profit', 
+
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
         aultprice: 'ltprice',
@@ -58,14 +61,14 @@ export function updateBotUI(state) {
             if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance') {
                 // Montos de dinero/balance (2 decimales)
                 element.textContent = value !== 'N/A' ? value.toFixed(2) : 'N/A';
-            } else if (dataKey === 'totalProfit') {
-                // Total Profit (2 decimales, se muestra como $XX.XX)
+            } else if (dataKey === 'totalProfit' || dataKey === 'profit') {
+                // Total Profit o Profit por ciclo (2 decimales, se muestra con $)
                 element.textContent = value !== 'N/A' ? `$${value.toFixed(2)}` : 'N/A';
             } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
                 // Contadores (0 decimales)
                 element.textContent = value !== 'N/A' ? value.toFixed(0) : 'N/A';
             } else {
-                // Otros (profit, precios)
+                // Otros (precios, etc.)
                 element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
             }
         }
