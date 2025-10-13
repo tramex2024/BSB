@@ -51,8 +51,8 @@ const configSchema = new mongoose.Schema({
 // ESQUEMA PRINCIPAL DE AUTOBOT
 // =========================================================================
 const autobotSchema = new mongoose.Schema({
-    // ✅ Campo totalProfit, que ya está definido correctamente.
-    totalProfit: { type: Number, default: 10000.00 },
+    // 🛑 RENOMBRADO para evitar el problema de serialización
+    total_profit: { type: Number, default: 10000.00 },
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
     lbalance: { type: Number, default: 0 },
