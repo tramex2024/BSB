@@ -3,9 +3,7 @@
 // Função para atualizar a interface de usuário com o estado do bot
 export function updateBotUI(state) {
     // 🚨 DIAGNÓSTICO DO FRONTEND: Verificamos o objeto de estado completo recebido
-    console.log('[FRONTEND DIAG]: Estado do Bot Recebido:', state);
-    console.log('[FRONTEND DIAG]: state.totalProfit Recebido:', state.totalProfit);
-
+    
     const statusColors = {
         RUNNING: 'text-green-400',
         STOPPED: 'text-red-400',
