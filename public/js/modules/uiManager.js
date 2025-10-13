@@ -1,8 +1,12 @@
 // public/js/modules/uiManager.js
 
-// Función para actualizar la interfaz de usuario con el estado del bot
+// Função para atualizar a interface de usuário com o estado do bot
 export function updateBotUI(state) {
-    const statusColors = {
+    // 🚨 DIAGNÓSTICO DO FRONTEND: Verificamos o objeto de estado completo recebido
+    console.log('[FRONTEND DIAG]: Estado do Bot Recebido:', state);
+    console.log('[FRONTEND DIAG]: state.totalProfit Recebido:', state.totalProfit);
+
+    const statusColors = {
         RUNNING: 'text-green-400',
         STOPPED: 'text-red-400',
         BUYING: 'text-blue-400',
@@ -16,13 +20,9 @@ export function updateBotUI(state) {
     const autobotSettings = document.getElementById('autobot-settings');
     
     const elementsToUpdate = {
-        // 🚨 CORRECCIÓN CLAVE: Usamos el ID 'auprofit' del HTML
-        // para mostrar la clave del estado 'totalProfit' (el acumulado)
+        // Usa o ID 'auprofit' do HTML para mostrar o campo 'totalProfit'
         auprofit: 'totalProfit', 
         
-        // Si quieres mostrar la ganancia por ciclo en otro lugar, debes añadir un ID nuevo.
-        // Ejemplo: 'aucycleprofit': 'profit', 
-
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
         aultprice: 'ltprice',
@@ -52,23 +52,29 @@ export function updateBotUI(state) {
         if (element) {
             let value;
             if (state[dataKey] !== undefined) {
-                value = parseFloat(state[dataKey]);
+                // Tentativa de conversão
+                value = parseFloat(state[dataKey]); 
             } else {
-                value = 'N/A';
+                value = NaN; // Usamos NaN para simplificar a verificação
             }
 
-            // Aplicar formato según el tipo de dato
-            if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance') {
-                // Montos de dinero/balance (2 decimales)
-                element.textContent = value !== 'N/A' ? value.toFixed(2) : 'N/A';
-            } else if (dataKey === 'totalProfit' || dataKey === 'profit') {
-                // Total Profit o Profit por ciclo (2 decimales, se muestra con $)
-                element.textContent = value !== 'N/A' ? `$${value.toFixed(2)}` : 'N/A';
+            // Aplicar formato segundo o tipo de dado
+            if (dataKey === 'totalProfit' || dataKey === 'profit') {
+                // Se a conversão falhou (retornou NaN) ou o valor não está definido, mostra N/A.
+                if (isNaN(value)) {
+                    element.textContent = 'N/A';
+                } else {
+                    // Total Profit ou Profit por ciclo (2 decimais, se mostra com $)
+                    element.textContent = `$${value.toFixed(2)}`;
+                }
+            } else if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance') {
+                // Montos de dinheiro/balance (2 decimales)
+                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
             } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
                 // Contadores (0 decimales)
-                element.textContent = value !== 'N/A' ? value.toFixed(0) : 'N/A';
+                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
             } else {
-                // Otros (precios, etc.)
+                // Outros (preços, etc.)
                 element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
             }
         }
@@ -90,7 +96,7 @@ export function updateBotUI(state) {
     }
 }
 
-// Función para mostrar mensajes de estado en la UI
+// Função para mostrar mensagens de estado na UI
 export function displayMessage(message, type) {
     const messageContainer = document.getElementById('message-container');
     if (messageContainer) {
