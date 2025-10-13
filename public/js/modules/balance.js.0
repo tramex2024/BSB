@@ -1,53 +1,41 @@
-// public/js/modules/balance.js (VERSIÓN COMPLETA Y CORREGIDA)
+// public/js/modules/balance.js (ACTUALIZADO)
 
 import { BACKEND_URL } from '../main.js';
 
-// --- FUNCIONES INTERNAS ---
+// --- FUNCIONES INTERNAS (Mantienen la lógica de actualización del display) ---
 
-/**
- * Actualiza el elemento con el ID 'aubalance' con el saldo real de USDT y BTC
- * del exchange en el formato "USDT: X | BTC: Y".
- * @param {Array<object>} walletData - Array de objetos de saldo de la API de BitMart.
- */
 function updateBotBalances(walletData) {
     if (!walletData) return;
 
-    // Buscamos los balances de USDT y BTC en el array de datos
     const usdtBalance = walletData.find(w => w.currency === 'USDT');
     const btcBalance = walletData.find(w => w.currency === 'BTC');
 
-    // Extraemos el saldo disponible ('available') y lo formateamos
-    // USDT: 2 decimales
     const usdtValue = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
-    // BTC: 5 decimales
     const btcValue = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
     
-    // 💡 CONSTRUIR EL FORMATO REQUERIDO: (USDT: X | BTC: Y)
-    const formattedBalance = `USDT: ${usdtValue} | BTC: ${btcValue}`;
-
-    // 💡 ASIGNAR AL ID DEL FRONTEND
-    const totalBalanceEl = document.getElementById('aubalance');
+    // Muestra el balance en el panel de cada bot
+    const bots = ['te', 'au', 'ai'];
+    bots.forEach(prefix => {
+        const totalBalanceEl = document.getElementById(`${prefix}balance`);
         
-    if (totalBalanceEl) {
-        // Asignamos el valor con el formato solicitado
-        totalBalanceEl.textContent = formattedBalance; 
-    }
+        if (totalBalanceEl) {
+            totalBalanceEl.textContent = `USDT: ${usdtValue} | BTC: ${btcValue}`;
+        }
+    });
 }
 
 // --- FUNCIONES EXPORTADAS ---
 
 /**
  * Obtiene los saldos de trading disponibles de BitMart desde el nuevo endpoint.
- * (Usado para la validación de límites al configurar el bot).
  * @returns {Promise<{availableUSDT: number, availableBTC: number}>} Los saldos o un default si falla.
  */
 export async function fetchAvailableBalancesForValidation() {
     try {
         const token = localStorage.getItem('token');
-        // NOTA: Asumimos que la ruta '/api/v1/balances/available' devuelve un objeto con 'balances'
         const response = await fetch(`${BACKEND_URL}/api/v1/balances/available`, {
             headers: {
-                'Authorization': `Bearer ${token}` 
+                'Authorization': `Bearer ${token}` // Usamos el token para la nueva ruta
             }
         });
         
@@ -73,13 +61,12 @@ export async function fetchAvailableBalancesForValidation() {
 }
 
 /**
- * Obtiene los saldos reales de la cuenta de BitMart.
- * (Usado para la actualización periódica del UI a través de polling).
+ * Mantiene la función original para la actualización periódica del UI.
+ * Asumo que /api/bitmart-data sigue devolviendo el array completo de balances.
  */
 export async function getBalances() {
     try {
-        // endpoint antiguo/general para compatibilidad con el UI display:
-        // Asumimos que esta ruta devuelve un objeto con data.balance = Array<Balances>
+        // endpoint antiguo para compatibilidad con el UI display:
         const token = localStorage.getItem('token');
         const response = await fetch(`${BACKEND_URL}/api/bitmart-data`, {
             headers: {
@@ -94,8 +81,7 @@ export async function getBalances() {
         const data = await response.json();
         
         if (data.connected && data.balance) {
-            // Llama a la función corregida para actualizar el display
-            updateBotBalances(data.balance); 
+            updateBotBalances(data.balance);
         } else {
             console.error('API response does not contain wallet data:', data.message);
         }
