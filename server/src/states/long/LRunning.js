@@ -1,11 +1,10 @@
-// BSB/server/src/states/long/LRunning.js (CORREGIDO - Prioriza Posición y Doble Chequeo)
+// BSB/server/src/states/long/LRunning.js (CORREGIDO - Candado Inmediato)
 
 const analyzer = require('../../bitmart_indicator_analyzer');
 const { placeFirstBuyOrder } = require('../../utils/orderManager');
 
 async function run(dependencies) {
-    // Nota: 'creds' no es necesario para placeFirstBuyOrder, ya está en bitmartService.js
-    const { botState, currentPrice, availableUSDT, config, creds, log, updateBotState, updateGeneralBotState } = dependencies;
+    const { botState, currentPrice, availableUSDT, config, log, updateBotState, updateGeneralBotState } = dependencies;
     
     // 💡 1. VERIFICACIÓN DE POSICIÓN (PRIORIDAD AL INICIO)
     if (botState.lStateData.orderCountInCycle > 0) {
@@ -19,7 +18,10 @@ async function run(dependencies) {
     // Si no hay posición, procedemos con el análisis.
     const analysisResult = await analyzer.runAnalysis(currentPrice);
 
-    if (analysisResult.action === 'BUY') {
+    // Tu log muestra que la señal es solo la razón: 
+    // [BOT LOG]: ¡Señal de COMPRA detectada! Razón: No se encontraron señales de entrada o salida claras en este momento.
+    // Esto es confuso, pero si el analyzer.runAnalysis() está forzando un 'BUY' con esta razón, lo aceptamos.
+    if (analysisResult.action === 'BUY') { 
         log(`¡Señal de COMPRA detectada! Razón: ${analysisResult.reason}`, 'success');
         
         // 💡 2. RED DE SEGURIDAD (DOBLE CHEQUEO)
@@ -30,7 +32,8 @@ async function run(dependencies) {
         }
 
         const purchaseAmount = parseFloat(config.long.purchaseUsdt);
-        const MIN_USDT_VALUE_FOR_BITMART = 5.00;
+        // Usamos la constante de BitMart para el mínimo
+        const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
         
         // ⚠️ VERIFICACIÓN DEL LÍMITE DE CAPITAL (LBalance)
         const currentLBalance = parseFloat(botState.lbalance || 0);
@@ -39,8 +42,14 @@ async function run(dependencies) {
         const isCapitalLimitSufficient = currentLBalance >= purchaseAmount;
         
         if (isRealBalanceSufficient && isCapitalLimitSufficient) {
-            // ✅ CORRECCIÓN CLAVE: Pasamos solo los 4 argumentos requeridos en el orden correcto.
+            // Llama a la función que ahora se encargará de:
+            // 1. Colocar la orden.
+            // 2. Descontar el LBalance.
+            // 3. 🛑 Unificar la actualización DB (lStateData + lstate: BUYING).
             await placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState); 
+            
+            // 🛑 CRÍTICO: Detener este ciclo para que el bot pase a BUYING en la siguiente iteración.
+            return; 
         } else {
             let reason = '';
             if (!isRealBalanceSufficient) {
