@@ -1,7 +1,6 @@
-// BSB/server/src/utils/dataManager.js (CORREGIDO - Contador, Transición y LBalance)
-
 const Autobot = require('../../models/Autobot');
-const log = console.log; // Asumimos que se usa un log simple o se inyecta
+// NOTA: Se eliminó 'const log = console.log' para asegurar que se use el 'log' inyectado
+// que emite al frontend (Socket.IO).
 
 /**
  * Recalcula el Precio Promedio de Compra (PPC), la Cantidad Acumulada (AC) y el Precio Objetivo (LTP).
@@ -10,8 +9,9 @@ const log = console.log; // Asumimos que se usa un log simple o se inyecta
  * * @param {object} botState - Estado actual del bot.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
  * @param {function} updateGeneralBotState - Función para actualizar el estado general (opcional).
+ * @param {function} log - 🛑 CRÍTICO: Función de logging inyectada.
  */
-async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState = null) {
+async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState = null, log) { // 🛑 'log' AÑADIDO
     const { lStateData, config } = botState;
     // Usamos una pequeña tolerancia para el chequeo de AC, ya que puede ser casi cero en la primera orden.
     const AC_TOLERANCE = 0.00000001; 
@@ -60,12 +60,11 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     };
     await Autobot.findOneAndUpdate({}, { 'lStateData': updatedLStateData });
 
-    // 5. 🛑 CRÍTICO: ACTUALIZACIÓN DEL ESTADO GENERAL (NO SE DESCUENTA LBalance AQUÍ)
+    // 5. ACTUALIZACIÓN DEL ESTADO GENERAL
     const updateGeneral = {
         ltprice: newLtPrice, // Guardamos el nuevo precio objetivo
         lnorder: newOrderCount, // Número de órdenes
         lcoverage: 0, // Resetear la cobertura requerida (se asume que se completó)
-        // lbalance: newLBalance // ELIMINADO: Se descuenta en coverageLogic.js o orderManager.js
     };
     
     if (updateGeneralBotState) {
@@ -82,14 +81,14 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
  * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
  * @param {object} botStateObj - Estado del bot antes de la venta.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {object} dependencies - Dependencias necesarias.
+ * @param {object} dependencies - Dependencias necesarias (DEBE incluir 'log').
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     // ✅ Importación Tardia: Se carga el módulo SOLO cuando se ejecuta esta función.
     const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
     
     // LSellingHandler se encargará de:
-    // 1. Calcular ganancia/pérdida.
+    // 1. Calcular ganancia/pérdida (usando dependencies.log para registrar).
     // 2. Sumar la ganancia al LBalance.
     // 3. Limpiar lStateData (PPC, AC, etc.).
     // 4. Transicionar a 'RUNNING'.
