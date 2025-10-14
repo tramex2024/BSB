@@ -4,13 +4,12 @@ const analyzer = require('../../bitmart_indicator_analyzer');
 const { placeFirstBuyOrder } = require('../../utils/orderManager');
 
 async function run(dependencies) {
+    // Nota: 'creds' no es necesario para placeFirstBuyOrder, ya está en bitmartService.js
     const { botState, currentPrice, availableUSDT, config, creds, log, updateBotState, updateGeneralBotState } = dependencies;
     
     // 💡 1. VERIFICACIÓN DE POSICIÓN (PRIORIDAD AL INICIO)
-    // Si ya se colocó la primera orden, pasamos inmediatamente a BUYING.
     if (botState.lStateData.orderCountInCycle > 0) {
         log("Posición detectada (orderCountInCycle > 0). Transicionando a BUYING.", 'info');
-        // Asumiendo que updateBotState también maneja la lógica de salir del ciclo para RUNNING
         await updateBotState('BUYING', 'long'); 
         return; // Detener la ejecución de RUNNING
     }
@@ -24,7 +23,6 @@ async function run(dependencies) {
         log(`¡Señal de COMPRA detectada! Razón: ${analysisResult.reason}`, 'success');
         
         // 💡 2. RED DE SEGURIDAD (DOBLE CHEQUEO)
-        // Volvemos a verificar el contador de órdenes justo antes de comprar.
         if (botState.lStateData.orderCountInCycle > 0) {
             log('Red de seguridad activada: orderCountInCycle ya es > 0, cancelando compra duplicada.', 'warning');
             await updateBotState('BUYING', 'long');
@@ -41,9 +39,8 @@ async function run(dependencies) {
         const isCapitalLimitSufficient = currentLBalance >= purchaseAmount;
         
         if (isRealBalanceSufficient && isCapitalLimitSufficient) {
-            // Llama a la función y pasa log y updateBotState
-            // NOTA: placeFirstBuyOrder ahora se encargará de actualizar orderCountInCycle a 1 y pasar a BUYING.
-            await placeFirstBuyOrder(config, creds, log, updateBotState, updateGeneralBotState); 
+            // ✅ CORRECCIÓN CLAVE: Pasamos solo los 4 argumentos requeridos en el orden correcto.
+            await placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState); 
         } else {
             let reason = '';
             if (!isRealBalanceSufficient) {
