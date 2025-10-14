@@ -19,14 +19,12 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
 
     log(`Colocando la primera orden de compra a mercado por ${purchaseAmount.toFixed(2)} USDT.`, 'info');
     try {
-        // La llamada a placeOrder ahora es correcta (4 argumentos: symbol, side, type, amount)
         const order = await placeOrder(SYMBOL, 'BUY', 'market', purchaseAmount); 
         
         if (order && order.order_id) {
             log(`Orden de compra colocada. ID: ${order.order_id}. Iniciando bloqueo y monitoreo...`, 'success');
 
             const currentOrderId = order.order_id;
-            // Leer el estado más reciente justo antes de la transacción
             let botState = await Autobot.findOne({}); 
 
             if (botState) {
@@ -38,7 +36,7 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
                 await updateGeneralBotState({ lbalance: newLBalance });
                 log(`LBalance asignado reducido en ${purchaseAmount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
 
-                // 3. 🛑 CORRECCIÓN CLAVE: BLOQUEO, ID y TRANSICIÓN DE ESTADO (¡UNIFICADO ATÓMICAMENTE!)
+                // 3. BLOQUEO, ID y TRANSICIÓN DE ESTADO (UNIFICADO ATÓMICAMENTE)
                 const updatedLStateData = {
                     ...botState.lStateData,
                     orderCountInCycle: 1, // CANDADO
@@ -55,10 +53,9 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
                 // Asegura que 'lstate' sea 'BUYING' y 'orderCountInCycle' sea '1' en una sola operación DB.
                 await Autobot.findOneAndUpdate({}, { 
                     'lStateData': updatedLStateData,
-                    'lstate': 'BUYING' // Transición de estado de RUNNING a BUYING
+                    'lstate': 'BUYING' 
                 });
                 
-                // NOTIFICACIÓN: Actualizar el estado del socket/frontend
                 await updateBotState('BUYING', 'long'); 
                 log(`Estado de la estrategia RUNNING actualizado a: BUYING`);
             }
@@ -67,18 +64,26 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
             setTimeout(async () => {           
                 const orderDetails = await getOrderDetail(SYMBOL, currentOrderId); 
                 let updatedBotState = await Autobot.findOne({});
-
-                if (orderDetails && orderDetails.state === 'filled') {
+                
+                // 🛑 CORRECCIÓN: Verificar filledSize para manejar 'partially_canceled'
+                const filledSize = parseFloat(orderDetails?.filledSize || 0);
+                
+                // ÉXITO: Si está 'filled' O si hay ejecución parcial (filledSize > 0)
+                if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) { 
+                    log(`Orden ${currentOrderId} completada o completada parcialmente (Size: ${filledSize}). Procesando compra...`, 'success');
+                    
                     if (updatedBotState) {
-                        // Pasar updateGeneralBotState y log
+                        // handleSuccessfulBuy procesará la parte ejecutada
                         await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log); 
                     }
                 } else {
-                    // Si falla, DEVOLVEMOS EL LBALANCE y regresamos a RUNNING.
-                    log(`La orden inicial ${currentOrderId} no se completó/falló. DEVOLVIENDO LBALANCE y volviendo a RUNNING.`, 'error');
+                    // FALLO TOTAL: La orden no se completó y no hubo ejecución (filledSize es 0).
+                    log(`La orden inicial ${currentOrderId} falló/se canceló sin ejecución. DEVOLVIENDO LBALANCE y volviendo a RUNNING.`, 'error');
+                    
                     if (updatedBotState) {
                         const finalState = await Autobot.findOne({});
-                        const returnedLBalance = parseFloat(finalState.lbalance) + purchaseAmount;
+                        // Solo devolvemos el monto que se intentó comprar (purchaseAmount)
+                        const returnedLBalance = parseFloat(finalState.lbalance) + purchaseAmount; 
                         await updateGeneralBotState({ lbalance: returnedLBalance });
                         log(`LBalance devuelto: ${purchaseAmount.toFixed(2)} USDT. Nuevo balance: ${returnedLBalance.toFixed(2)} USDT.`, 'warning');
                         
@@ -86,11 +91,13 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
                             'lStateData.lastOrder': null,
                             'lStateData.orderCountInCycle': 0 
                         });
+                        // 🟢 Volver a RUNNING
                         await updateBotState('RUNNING', 'long'); 
                     }
                 }
             }, ORDER_CHECK_TIMEOUT_MS);
         } else {       
+            // Si la API no devuelve ID, volvemos a RUNNING.
             log(`Error al colocar la primera orden de compra. La API no devolvió un ID. Volviendo a RUNNING.`, 'error');
             await updateBotState('RUNNING', 'long');
         }
@@ -104,7 +111,7 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
  * Coloca una orden de compra de cobertura (a Mercado).
  * @param {object} botState - Estado actual del bot.
  * @param {number} usdtAmount - Cantidad de USDT a comprar.
- * @param {number} nextCoveragePrice - Precio de la próxima orden de cobertura.
+ * @param {number} nextCoveragePrice - Precio de la próxima orden de cobertura (solo para referencia de DB).
  * @param {function} log - Función de logging.
  * @param {function} updateGeneralBotState - Función para actualizar el estado general.
  */
@@ -113,7 +120,6 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
     log(`Colocando orden de cobertura a MERCADO por ${usdtAmount.toFixed(2)} USDT.`, 'info');
     
     try {
-        // La llamada a placeOrder ahora es correcta (4 argumentos: symbol, side, type, amount)
         const order = await placeOrder(SYMBOL, 'BUY', 'market', usdtAmount);
 
         if (order && order.order_id) {
@@ -132,14 +138,17 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
             setTimeout(async () => {
                 const orderDetails = await getOrderDetail(SYMBOL, currentOrderId);
                 const updatedBotState = await Autobot.findOne({});
+                const filledSize = parseFloat(orderDetails?.filledSize || 0);
                 
-                if (orderDetails && orderDetails.state === 'filled') {
+                // ÉXITO: Si está 'filled' O si hay ejecución parcial (filledSize > 0)
+                if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
                     if (updatedBotState) {
                         // Pasar updateGeneralBotState y log
                         await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log); 
                     }
                 } else {
-                    log(`La orden de cobertura ${currentOrderId} no se completó.`, 'error');
+                    log(`La orden de cobertura ${currentOrderId} no se completó/falló sin ejecución.`, 'error');
+                    // Si la orden falla, limpiamos el lastOrder
                     if (updatedBotState) {
                         updatedBotState.lStateData.lastOrder = null;
                         await Autobot.findOneAndUpdate({}, { 'lStateData': updatedBotState.lStateData });
@@ -191,7 +200,9 @@ async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, bot
 
             setTimeout(async () => {
                 const orderDetails = await getOrderDetail(SYMBOL, currentOrderId);
-                if (orderDetails && orderDetails.state === 'filled') {
+                const filledSize = parseFloat(orderDetails?.filledSize || 0);
+
+                if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
                     await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
                 } else {
                     log(`La orden de venta ${currentOrderId} no se completó.`, 'error');
