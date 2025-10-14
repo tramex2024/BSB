@@ -75,11 +75,9 @@ export async function fetchAvailableBalancesForValidation() {
 
 /**
  * Obtiene los saldos reales de la cuenta de BitMart para el polling y display.
- * Asumo que /api/bitmart-data también devuelve la información necesaria.
  */
 export async function getBalances() {
     try {
-        // Asumo que esta ruta devuelve un objeto con data.balance = Array<Balances> o similar
         const token = localStorage.getItem('token');
         const response = await fetch(`${BACKEND_URL}/api/bitmart-data`, {
             headers: {
@@ -93,6 +91,9 @@ export async function getBalances() {
         
         const data = await response.json();
         
+        // 💡 LÍNEA CLAVE: Imprime la respuesta completa de la API
+        console.log('[POLLING DEBUG] Respuesta de /api/bitmart-data:', data); 
+
         if (data.connected && data.balance) {
             // Llama a la función para actualizar el display con el formato (USDT: X | BTC: Y)
             updateBotBalances(data.balance); 
