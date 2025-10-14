@@ -80,8 +80,8 @@ async function getHistoryOrders(options = {}) {
  * @returns {Promise<object>} - Respuesta de la API.
  */
 // ⬇️ Firma de la función que acepta 'creds' y lo pasa a spotService
-async function placeOrder(creds, symbol, side, type, size, price) {
-    return await spotService.placeOrder(creds, symbol, side, type, size, price);
+async function placeOrder(symbol, side, type, amount, price) {
+    return await spotService.placeOrder(symbol, side, type, amount, price);
 }
 
 /**

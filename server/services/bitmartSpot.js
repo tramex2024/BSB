@@ -217,23 +217,33 @@ async function getOrderDetail(symbol, orderId) {
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-// ⬇️ CORRECCIÓN DE LA FIRMA: Debe recibir 'creds' y manejar la estandarización.
-async function placeOrder(creds, symbol, side, type, size, price) {
+async function placeOrder(symbol, side, type, amount, price) {
     const standardizedSide = side.toLowerCase(); // Estandarizar side a minúsculas
     const requestBody = { symbol, side: standardizedSide, type };
 
     if (type === 'limit') {
         if (!price) throw new Error("El precio es requerido para órdenes 'limit'.");
-        Object.assign(requestBody, { size: size.toString(), price: price.toString() });
+        // size para Limit Order es la cantidad de la moneda base
+        Object.assign(requestBody, { size: amount.toString(), price: price.toString() });
     } else if (type === 'market') {
         // Usar standardizedSide para la lógica de notional/size
-        if (standardizedSide === 'buy') Object.assign(requestBody, { notional: size.toString() });
-        else if (standardizedSide === 'sell') Object.assign(requestBody, { size: size.toString() });
-        else throw new Error(`Tipo de orden no soportado para side: ${standardizedSide} y type: ${type}`);
+        if (standardizedSide === 'buy') {
+             // 🛑 Para BUY Market, BitMart usa 'notional' (USDT amount)
+             Object.assign(requestBody, { notional: amount.toString() }); 
+        } else if (standardizedSide === 'sell') {
+            // Para SELL Market, BitMart usa 'size' (Base Coin amount)
+            Object.assign(requestBody, { size: amount.toString() }); 
+        } else {
+            throw new Error(`Lado de orden no soportado: ${standardizedSide}`);
+        }
     } else {
+        // Esta línea ahora debería recibir 'market', 'limit', etc.
         throw new Error(`Tipo de orden no soportado: ${type}`);
     }
+    
+    // Endpoint V2 para enviar órdenes
     const response = await makeRequest('POST', '/spot/v2/submit_order', {}, requestBody);
+    
     const orderId = response.data.order_id;
     if (!orderId) throw new Error('Error al colocar la orden: No se recibió un order_id.');
     return response.data;
