@@ -75,33 +75,45 @@ export async function fetchAvailableBalancesForValidation() {
 
 /**
  * Obtiene los saldos reales de la cuenta de BitMart para el polling y display.
+ * 🚀 AHORA UTILIZA LA RUTA /api/v1/balances/available Y ADAPTA LA RESPUESTA.
  */
 export async function getBalances() {
     try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${BACKEND_URL}/api/bitmart-data`, {
+        // 🛑 Usamos la ruta que sabemos que funciona: /api/v1/balances/available
+        const response = await fetch(`${BACKEND_URL}/api/v1/balances/available`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         });
         
         if (!response.ok) {
-            throw new Error('Failed to fetch BitMart data.');
+            throw new Error('Failed to fetch available balances for polling.');
         }
         
         const data = await response.json();
         
-        // 💡 LÍNEA CLAVE: Imprime la respuesta completa de la API
-        console.log('[POLLING DEBUG] Respuesta de /api/bitmart-data:', data); 
+        console.log('[POLLING DEBUG - Ruta Unificada] Respuesta de /api/v1/balances/available:', data); 
 
-        if (data.connected && data.balance) {
-            // Llama a la función para actualizar el display con el formato (USDT: X | BTC: Y)
-            updateBotBalances(data.balance); 
+        // 🛑 Adaptación de la respuesta:
+        if (data.success && data.data && data.data.exchange) {
+            const exchangeData = data.data.exchange;
+            
+            // Convertimos el objeto de resumen (exchangeData) al formato Array 
+            // que espera updateBotBalances: [{ currency, available }, ...]
+            const formattedBalances = [
+                { currency: 'USDT', available: exchangeData.availableUSDT },
+                { currency: 'BTC', available: exchangeData.availableBTC }
+            ];
+            
+            // Llamamos a la función de actualización con el array de balances
+            updateBotBalances(formattedBalances); 
+            
         } else {
-            console.error('API response does not contain wallet data:', data.message);
+            console.error('[POLLING] Respuesta API válida, pero estructura de datos incorrecta.', data.message);
         }
 
     } catch (error) {
-        console.error('Error getting balances:', error);
+        console.error('Error getting balances (polling):', error);
     }
 }
