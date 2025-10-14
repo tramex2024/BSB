@@ -44,7 +44,6 @@ function updateBotBalances(walletData) {
 export async function fetchAvailableBalancesForValidation() {
     try {
         const token = localStorage.getItem('token');
-        // NOTA: Asumimos que la ruta '/api/v1/balances/available' devuelve un objeto con 'balances'
         const response = await fetch(`${BACKEND_URL}/api/v1/balances/available`, {
             headers: {
                 'Authorization': `Bearer ${token}` 
@@ -57,6 +56,10 @@ export async function fetchAvailableBalancesForValidation() {
         
         const data = await response.json();
         
+        // 💡 LÍNEA CLAVE: Imprime la respuesta completa de la API
+        console.log('[BALANCE DEBUG] Respuesta completa de /api/v1/balances/available:', data); 
+        
+        // El resto de la lógica permanece igual, para que puedas ver dónde falla.
         if (data.success && data.balances) {
             return {
                 availableUSDT: data.balances.availableUSDT,
