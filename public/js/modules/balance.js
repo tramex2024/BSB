@@ -1,4 +1,4 @@
-// public/js/modules/balance.js (VERSIÓN COMPLETA Y CORREGIDA)
+// public/js/modules/balance.js (VERSIÓN FINAL Y CORREGIDA)
 
 import { BACKEND_URL } from '../main.js';
 
@@ -7,10 +7,10 @@ import { BACKEND_URL } from '../main.js';
 /**
  * Actualiza el elemento con el ID 'aubalance' con el saldo real de USDT y BTC
  * del exchange en el formato "USDT: X | BTC: Y".
- * @param {Array<object>} walletData - Array de objetos de saldo de la API de BitMart.
+ * @param {Array<object>} walletData - Array de objetos de saldo procesados.
  */
 function updateBotBalances(walletData) {
-    if (!walletData) return;
+    if (!walletData || walletData.length < 2) return;
 
     // Buscamos los balances de USDT y BTC en el array de datos
     const usdtBalance = walletData.find(w => w.currency === 'USDT');
@@ -22,14 +22,13 @@ function updateBotBalances(walletData) {
     // BTC: 5 decimales
     const btcValue = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
     
-    // 💡 CONSTRUIR EL FORMATO REQUERIDO: (USDT: X | BTC: Y)
+    // CONSTRUIR EL FORMATO REQUERIDO
     const formattedBalance = `USDT: ${usdtValue} | BTC: ${btcValue}`;
 
-    // 💡 ASIGNAR AL ID DEL FRONTEND
+    // ASIGNAR AL ID DEL FRONTEND
     const totalBalanceEl = document.getElementById('aubalance');
         
     if (totalBalanceEl) {
-        // Asignamos el valor con el formato solicitado
         totalBalanceEl.textContent = formattedBalance; 
     }
 }
@@ -37,10 +36,8 @@ function updateBotBalances(walletData) {
 // --- FUNCIONES EXPORTADAS ---
 
 /**
- * Obtiene los saldos de trading disponibles de BitMart desde el nuevo endpoint.
- * (Usado para la validación de límites al configurar el bot).
- * 🛑 CORRECCIÓN CLAVE: Espera la estructura { success: true, data: { exchange: { ... } } }
- * @returns {Promise<{availableUSDT: number, availableBTC: number}>} Los saldos o un default si falla.
+ * Obtiene los saldos para la validación de límites.
+ * 🛑 CORRECCIÓN CLAVE: Extrae los datos desde data.data.exchange
  */
 export async function fetchAvailableBalancesForValidation() {
     try {
@@ -57,18 +54,17 @@ export async function fetchAvailableBalancesForValidation() {
         
         const data = await response.json();
         
-        // 💡 DEBUG LOG: Dejar el log aquí es útil para futuros errores
         console.log('[BALANCE DEBUG] Respuesta completa de /api/v1/balances/available:', data); 
         
-        // 🛑 CORRECCIÓN: Ahora busca la clave 'data' y luego 'exchange'
+        // 🚀 CORRECCIÓN APLICADA: data.data existe, y dentro de data.data está exchange.
         if (data.success && data.data && data.data.exchange) { 
+            const exchangeData = data.data.exchange;
             return {
-                availableUSDT: data.data.exchange.availableUSDT,
-                availableBTC: data.data.exchange.availableBTC
+                availableUSDT: exchangeData.availableUSDT,
+                availableBTC: exchangeData.availableBTC
             };
         } else {
-            // Maneja la respuesta exitosa pero con estructura incorrecta
-            console.error('[BALANCE] Respuesta API inválida para balances disponibles: Estructura incorrecta o:', data.message);
+            console.error('[BALANCE] Respuesta API válida, pero estructura de datos incorrecta.', data.message);
             return { availableUSDT: 0, availableBTC: 0 };
         }
     } catch (error) {
@@ -78,13 +74,12 @@ export async function fetchAvailableBalancesForValidation() {
 }
 
 /**
- * Obtiene los saldos reales de la cuenta de BitMart.
- * (Usado para la actualización periódica del UI a través de polling).
+ * Obtiene los saldos reales de la cuenta de BitMart para el polling y display.
+ * Asumo que /api/bitmart-data también devuelve la información necesaria.
  */
 export async function getBalances() {
     try {
-        // endpoint antiguo/general para compatibilidad con el UI display:
-        // Asumimos que esta ruta devuelve un objeto con data.balance = Array<Balances>
+        // Asumo que esta ruta devuelve un objeto con data.balance = Array<Balances> o similar
         const token = localStorage.getItem('token');
         const response = await fetch(`${BACKEND_URL}/api/bitmart-data`, {
             headers: {
@@ -99,7 +94,7 @@ export async function getBalances() {
         const data = await response.json();
         
         if (data.connected && data.balance) {
-            // Llama a la función corregida para actualizar el display con el formato (USDT: X | BTC: Y)
+            // Llama a la función para actualizar el display con el formato (USDT: X | BTC: Y)
             updateBotBalances(data.balance); 
         } else {
             console.error('API response does not contain wallet data:', data.message);
