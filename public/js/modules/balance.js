@@ -39,6 +39,7 @@ function updateBotBalances(walletData) {
 /**
  * Obtiene los saldos de trading disponibles de BitMart desde el nuevo endpoint.
  * (Usado para la validación de límites al configurar el bot).
+ * 🛑 CORRECCIÓN CLAVE: Espera la estructura { success: true, data: { exchange: { ... } } }
  * @returns {Promise<{availableUSDT: number, availableBTC: number}>} Los saldos o un default si falla.
  */
 export async function fetchAvailableBalancesForValidation() {
@@ -56,17 +57,18 @@ export async function fetchAvailableBalancesForValidation() {
         
         const data = await response.json();
         
-        // 💡 LÍNEA CLAVE: Imprime la respuesta completa de la API
+        // 💡 DEBUG LOG: Dejar el log aquí es útil para futuros errores
         console.log('[BALANCE DEBUG] Respuesta completa de /api/v1/balances/available:', data); 
         
-        // El resto de la lógica permanece igual, para que puedas ver dónde falla.
-        if (data.success && data.balances) {
+        // 🛑 CORRECCIÓN: Ahora busca la clave 'data' y luego 'exchange'
+        if (data.success && data.data && data.data.exchange) { 
             return {
-                availableUSDT: data.balances.availableUSDT,
-                availableBTC: data.balances.availableBTC
+                availableUSDT: data.data.exchange.availableUSDT,
+                availableBTC: data.data.exchange.availableBTC
             };
         } else {
-            console.error('[BALANCE] Respuesta API inválida para balances disponibles:', data.message);
+            // Maneja la respuesta exitosa pero con estructura incorrecta
+            console.error('[BALANCE] Respuesta API inválida para balances disponibles: Estructura incorrecta o:', data.message);
             return { availableUSDT: 0, availableBTC: 0 };
         }
     } catch (error) {
@@ -97,7 +99,7 @@ export async function getBalances() {
         const data = await response.json();
         
         if (data.connected && data.balance) {
-            // Llama a la función corregida para actualizar el display
+            // Llama a la función corregida para actualizar el display con el formato (USDT: X | BTC: Y)
             updateBotBalances(data.balance); 
         } else {
             console.error('API response does not contain wallet data:', data.message);
