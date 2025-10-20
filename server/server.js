@@ -1,4 +1,4 @@
-// BSB/server/server.js          //Lineas comentadas: 64-74      Lineas agregadas: 76-89      
+// BSB/server/server.js          //Lineas comentadas: 22, 64-74      Lineas agregadas: 23, 76-89      
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -19,7 +19,8 @@ const { calculateLongCoverage, calculateShortCoverage } = require('./autobotCalc
 
 // Modelos
 const Order = require('./models/Order');
-const Autobot = require('./models/Autobot');
+//const Autobot = require('./models/Autobot');
+let Autobot;
 
 // Routers
 const authRoutes = require('./routes/authRoutes');
