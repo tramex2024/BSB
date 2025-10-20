@@ -74,9 +74,9 @@ app.use('/api/v1/balances', balanceRoutes);
 //connectDB();
 
 // 🛑 AÑADIR UN SWITCH TEMPORAL:
-const USE_MOCK_DB = true; // CAMBIAR A 'false' cuando MongoDB Atlas esté listo.
-
 let Autobot;
+
+const USE_MOCK_DB = true; // CAMBIAR A 'false' cuando MongoDB Atlas esté listo.
 
 if (USE_MOCK_DB) {
     Autobot = require('./models/AutobotMock');
