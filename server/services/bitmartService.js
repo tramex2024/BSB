@@ -121,6 +121,16 @@ async function getKlines(symbol, interval, size) {
     return await spotService.getKlines(symbol, interval, size);
 }
 
+// 🚨 FUNCIÓN DE WRAPPER AÑADIDA PARA COMPATIBILIDAD CON orderManager.js
+/**
+ * Coloca una orden de mercado usando notional (USDT).
+ * Nota: placeOrder en BitMart usa el campo 'size' para el notional en órdenes a mercado.
+ */
+async function placeMarketOrder({ symbol, side, notional }) {
+    // spotService.placeOrder(symbol, side, type, size/notional, price)
+    return await spotService.placeOrder(symbol, side, 'market', notional, null);
+}
+
 module.exports = {
     validateApiKeys,
     getBalance,
@@ -131,5 +141,6 @@ module.exports = {
     cancelOrder,
     getTicker,    
     getKlines,
-    getAvailableTradingBalances, 
+    getAvailableTradingBalances,
+    placeMarketOrder, 
 };

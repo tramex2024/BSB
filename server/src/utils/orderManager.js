@@ -54,12 +54,14 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
     log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info');
 
     try {
-        // --- 2. COLOCACIÓN DE ORDEN REAL ---
-        const orderResult = await bitmartService.placeMarketOrder({ // ✅ CORREGIDO
-            symbol: SYMBOL,
-            side: 'buy',
-            notional: amount // Monto en USDT
-        });
+        // ✅ Usamos la función genérica 'placeOrder' que SÍ existe y le pasamos los parámetros
+const orderResult = await bitmartService.placeOrder(
+    SYMBOL, 
+    'buy', 
+    'market', 
+    amount, // La cantidad es el 'notional'
+    null // No hay precio para una orden a mercado
+);
 
         if (!orderResult || !orderResult.order_id) {
             log(`Error al recibir ID de la orden de BitMart. Resultado: ${JSON.stringify(orderResult)}`, 'error');
