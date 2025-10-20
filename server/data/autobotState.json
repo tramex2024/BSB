@@ -1,0 +1,18 @@
+// BSB/server/data/autobotState.json
+{
+    "lstate": "RUNNING",
+    "lbalance": 12.00,
+    "lStateData": {
+        "pm": 0,
+        "tc": 0,
+        "orderCountInCycle": 0,
+        "lastOrder": null
+    },
+    "config": {
+        "symbol": "BTC_USDT",
+        "long": {
+            "purchaseUsdt": 5.00
+        }
+    }
+    // Incluye cualquier otro campo esencial que tu código lea de la DB.
+}

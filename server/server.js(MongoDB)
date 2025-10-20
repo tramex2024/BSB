@@ -1,4 +1,4 @@
-// BSB/server/server.js          //Lineas comentadas: 64-74      Lineas agregadas: 76-89      
+// BSB/server/server.js
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -61,32 +61,17 @@ app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/balances', balanceRoutes);
 
 // Conexión a la Base de Datos
-//const connectDB = async () => {
-//    try {
-//        await mongoose.connect(process.env.MONGO_URI);
-//        console.log('MongoDB Connected...');
-//    } catch (err) {
-//        console.error('MongoDB connection error:', err.message);
-//        process.exit(1);
-//    }
-//};
+const connectDB = async () => {
+    try {
+        await mongoose.connect(process.env.MONGO_URI);
+        console.log('MongoDB Connected...');
+    } catch (err) {
+        console.error('MongoDB connection error:', err.message);
+        process.exit(1);
+    }
+};
 
-//connectDB();
-
-// 🛑 AÑADIR UN SWITCH TEMPORAL:
-const USE_MOCK_DB = true; // CAMBIAR A 'false' cuando MongoDB Atlas esté listo.
-
-let Autobot;
-
-if (USE_MOCK_DB) {
-    Autobot = require('./models/AutobotMock');
-    console.log('[MOCK DB]: ⚠️ Using local JSON data store for testing.');
-} else {
-    // Lógica para la base de datos real
-    require('./config/db')(); // Conecta la base de datos real
-    Autobot = require('./models/Autobot'); 
-    console.log('MongoDB Connected...'); // Esto ya estaba en tu log
-}
+connectDB();
 
 let currentMarketPrice = 'N/A';
 
