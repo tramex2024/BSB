@@ -1,6 +1,12 @@
-const { placeOrder, getOrderDetail, cancelOrder } = require('../../services/bitmartService');
+// BSB/server/src/utils/orderManager.js
+
 const Autobot = require('../../models/Autobot');
-const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager'); 
+const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager');
+const bitmartService = require('../../services/bitmartService');
+
+//const { placeOrder, getOrderDetail, cancelOrder } = require('../../services/bitmartService');
+//const Autobot = require('../../models/Autobot');
+//const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager'); 
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
