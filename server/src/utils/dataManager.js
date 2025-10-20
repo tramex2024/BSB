@@ -121,6 +121,44 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     await LSellingHandler(botStateObj, orderDetails, dependencies);
 }
 
+async function resetAndInitializeBot(log) {
+    // 1. OBTENER CONFIGURACIÓN ACTUAL (Para no perder los settings del usuario)
+    const currentBot = await Autobot.findOne({});
+    
+    // Si no hay documento, usamos la configuración por defecto
+    const config = currentBot ? currentBot.config : { /* ... tus valores por defecto ... */ }; 
+    const initialLBalance = config.long.amountUsdt || 0; // Usar 15 USDT como base
+    const totalProfit = currentBot ? currentBot.totalProfit : 0; // Preservar ganancias
+
+    // 2. ELIMINAR el documento existente
+    await Autobot.deleteMany({});
+    log('Documento Autobot eliminado completamente.', 'error');
+
+    // 3. CREAR el objeto base limpio
+    const newBotData = {
+        "lstate": "RUNNING", // Estado inicial de un bot que se inicia/resetea
+        "sstate": "RUNNING",
+        
+        "config": config,
+        "total_profit": totalProfit,
+        
+        // 🎯 INICIALIZACIÓN CRÍTICA
+        "lbalance": initialLBalance, // Usar el capital de la configuración (15 USDT)
+        "sbalance": config.short.amountBtc || 0, // Si usas balance corto
+        
+        // Todos los contadores de ciclo y posición a CERO
+        "lStateData": { "ppc": 0, "ac": 0, "ppv": 0, "av": 0, "orderCountInCycle": 0, "lastOrder": null, "pm": 0, "pc": 0, "requiredCoverageAmount": 0, "nextCoveragePrice": 0 },
+        "sStateData": { "ppc": 0, "ac": 0, "ppv": 0, "av": 0, "orderCountInCycle": 0, "lastOrder": null, "pm": 0, "pc": 0, "requiredCoverageAmount": 0, "nextCoveragePrice": 0 },
+        
+        "lcycle": 0, "lnorder": 0, "ltprice": 0,
+        "scycle": 0, "snorder": 0, "stprice": 0,
+    };
+    
+    const newAutobot = new Autobot(newBotData);
+    await newAutobot.save();
+    
+    log(`Documento Autobot creado. LBalance inicializado a ${initialLBalance} USDT. Listo para operar.`, 'info');
+}
 
 module.exports = {
     handleSuccessfulBuy,
