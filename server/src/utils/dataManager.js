@@ -1,10 +1,10 @@
+// BSB/server/src/utils/dataManager.js
+
 const Autobot = require('../../models/Autobot');
-// NOTA: Se eliminó 'const log = console.log' para asegurar que se use el 'log' inyectado
-// que emite al frontend (Socket.IO).
 
 /**
  * Maneja una compra exitosa (total o parcial), actualiza la posición del bot
- * (Price Mean y Total Count), y pasa al estado SELLING.
+ * (Price Mean y Total Count), y pasa al estado de gestión de posición (BUYING).
  *
  * @param {object} botState - Estado actual del bot (leído antes de la ejecución de la orden).
  * @param {object} orderDetails - Detalles de la orden ejecutada (de getOrderDetail).
@@ -12,7 +12,7 @@ const Autobot = require('../../models/Autobot');
  * @param {function} log - Función de logging.
  */
 async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState, log) {
-    const Autobot = require('../../models/Autobot'); // Asegúrate de que esta línea esté en tu dataManager.js
+    const Autobot = require('../../models/Autobot'); 
 
     // --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS DE LA ORDEN ---
     
@@ -20,8 +20,10 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     const executedQty = parseFloat(orderDetails.filledSize || 0); // La cantidad de BTC comprada (tc_size)
     const executedAvgPrice = parseFloat(orderDetails.priceAvg || 0); // Precio promedio de ejecución real
     
-    // El monto USDT gastado se intenta obtener de la orden original (si existe)
-    const usdtAmount = parseFloat(orderDetails.notional || botState.lStateData.lastOrder?.usdt_amount || 0); 
+    // El monto USDT que el bot intentó gastar (fue descontado del LBalance en placeFirstBuyOrder)
+    const intendedUsdtSpent = parseFloat(botState.lStateData.lastOrder?.usdt_amount || 0); 
+    // El monto REALMENTE gastado (del exchange)
+    const actualUsdtSpent = parseFloat(orderDetails.notional || 0); 
 
     // Determinar el precio final a usar. priceAvg (precio promedio) tiene prioridad.
     const finalPriceUsed = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
@@ -39,6 +41,9 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     // Extraer datos de la posición actual con seguridad (si es la primera orden, serán 0)
     const currentTotalQty = parseFloat(botState.lStateData.tc || 0); // Total Count actual
     const currentPriceMean = parseFloat(botState.lStateData.pm || 0); // Precio Medio actual
+    
+    // Definir el contador de órdenes para el incremento
+    const currentOrderCount = parseInt(botState.lStateData.orderCountInCycle || 0); 
     
     // Costo total actual de la posición y costo de la nueva orden
     const currentTotalCost = currentTotalQty * currentPriceMean;
@@ -59,29 +64,38 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
     // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance) ---
 
-    // Aquí iría la lógica avanzada para devolver capital si la orden fue parcial,
-    // pero por ahora nos centramos en la estabilidad y asumimos que el LBalance ya se ajustó correctamente
-    // en la lógica de 'placeFirstBuyOrder' (que solo devolvió el capital si la orden falló totalmente).
+    // ********** LÓGICA AVANZADA: DEVOLUCIÓN DE CAPITAL (CORRECCIÓN) **********
+    
+    // Monto a devolver al LBalance (lo que se descontó vs lo que se gastó)
+    const usdtToRefund = intendedUsdtSpent - actualUsdtSpent;
+
+    if (usdtToRefund > 0.01) { // Usamos un umbral para evitar errores de redondeo minúsculos
+        const currentLBalance = parseFloat(botState.lbalance || 0);
+        const newLBalance = currentLBalance + usdtToRefund;
+
+        log(`Devolviendo ${usdtToRefund.toFixed(2)} USDT al LBalance debido a ejecución parcial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+
+        // Actualizar el LBalance en el documento principal de la DB
+        await updateGeneralBotState({ lbalance: newLBalance });
+    }
+
+    // ************************************************************
     
     // --- 4. ACTUALIZAR ESTADO DE LA BASE DE DATOS ---
 
-    // Preparamos los nuevos datos de la posición
-    const updatedLStateData = {
-        ...botState.lStateData,
-        tc: newTotalQty,
-        pm: newPriceMean, // ¡Valor numérico estable!
-        orderCountInCycle: botState.lStateData.orderCountInCycle + 1, // Aumentar el contador
-        lastOrder: null, // Limpiar la última orden (se completó)
+    // La transición es siempre a BUYING para gestionar la posición/cobertura.
+    const nextState = 'BUYING'; 
+    
+    // Usar $set para actualizar campos individuales del sub-documento de forma segura.
+    const update = {
+        'lstate': nextState,
+        'lStateData.tc': newTotalQty,
+        'lStateData.pm': newPriceMean,
+        'lStateData.orderCountInCycle': currentOrderCount + 1, // Aumentar el contador
+        'lStateData.lastOrder': null, // Limpiar la última orden (se completó)
     };
-
-    // Determinar el estado de transición: A SELLING si es la primera orden, a BUYING si es cobertura.
-    const nextState = botState.lStateData.orderCountInCycle === 0 ? 'SELLING' : 'BUYING';
-
-    // TRANSACCIÓN ATÓMICA: Actualizar la posición y cambiar el estado
-    await Autobot.findOneAndUpdate({}, { 
-        'lStateData': updatedLStateData,
-        'lstate': nextState 
-    });
+    
+    await Autobot.findOneAndUpdate({}, { $set: update });
 
     log(`[LONG] Orden confirmada. Nuevo PM: ${newPriceMean.toFixed(2)}, Qty: ${newTotalQty.toFixed(8)}. Transicionando a ${nextState}.`, 'info');
 
@@ -96,7 +110,7 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
  * @param {object} dependencies - Dependencias necesarias (DEBE incluir 'log').
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
-    // ✅ Importación Tardia: Se carga el módulo SOLO cuando se ejecuta esta función.
+    // Importación Tardia: Se carga el módulo SOLO cuando se ejecuta esta función.
     const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
     
     // LSellingHandler se encargará de:

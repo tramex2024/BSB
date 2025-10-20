@@ -7,106 +7,95 @@ const MIN_USDT_VALUE_FOR_BITMART = 5.00;
 const ORDER_CHECK_TIMEOUT_MS = 2000;
 
 /**
- * Coloca la primera orden de compra a mercado (Entrada inicial) y descuenta el capital del LBalance.
- * @param {object} config - Configuración del bot.
+ * Coloca la primera orden de compra (o inicial) y realiza un bloqueo atómico.
+ * * @param {object} config - Configuración del bot.
  * @param {function} log - Función de logging.
- * @param {function} updateBotState - Función para actualizar el estado del bot (notificación).
- * @param {function} updateGeneralBotState - Función para actualizar el estado general (LBalance).
+ * @param {function} updateBotState - Función para actualizar el estado del bot (lstate/sstate).
+ * @param {function} updateGeneralBotState - Función para actualizar campos generales (lbalance/sbalance).
  */
-async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState) { 
-    const purchaseAmount = parseFloat(config.long.purchaseUsdt);
-    const SYMBOL = config.symbol || TRADE_SYMBOL;
+async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState) {
+    
+    // --- 1. BLOQUEO ATÓMICO Y TRANSICIÓN DE ESTADO ---
+    // Intentamos cambiar el estado de RUNNING a BUYING en una sola operación atómica.
+    
+    const initialCheck = await Autobot.findOneAndUpdate(
+        { lstate: 'RUNNING' }, // Condición: SOLO actualiza si el estado actual es RUNNING.
+        { $set: { lstate: 'BUYING' } }, // Actualización: Cambia el estado a BUYING.
+        { new: true } // Retorna el documento actualizado (si la operación fue exitosa).
+    );
 
-    log(`Colocando la primera orden de compra a mercado por ${purchaseAmount.toFixed(2)} USDT.`, 'info');
+    if (!initialCheck) {
+        // Esto significa que otro ciclo ya se adelantó y cambió el estado. ¡Bloqueo exitoso!
+        log('Advertencia: Intento de doble compra bloqueado. El estado ya ha cambiado a BUYING.', 'warning');
+        return; 
+    }
+    
+    // Si el código llega a este punto, hemos asegurado la DB y el estado AHORA es BUYING.
+    // --------------------------------------------------------------------
+    
+    const { purchaseUsdt } = config.long;
+    const SYMBOL = config.symbol;
+    const amount = parseFloat(purchaseUsdt);
+
+    if (amount < 5) {
+        log('Error: La cantidad de compra es menor al mínimo de BitMart ($5). Cancelando.', 'error');
+        // Revertir el estado ya que no se colocó la orden real
+        await updateBotState('RUNNING', 'long'); 
+        return;
+    }
+
+    log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info');
+
     try {
-        const order = await placeOrder(SYMBOL, 'BUY', 'market', purchaseAmount); 
-        
-        if (order && order.order_id) {
-            log(`Orden de compra colocada. ID: ${order.order_id}. Iniciando bloqueo y monitoreo...`, 'success');
+        // --- 2. COLOCACIÓN DE ORDEN REAL ---
+        // Asumiendo que bitmartService.placeMarketOrder existe y devuelve el orderId.
+        const orderResult = await bitmartService.placeMarketOrder({
+            symbol: SYMBOL,
+            side: 'buy',
+            notional: amount // Monto en USDT
+        });
 
-            const currentOrderId = order.order_id;
-            let botState = await Autobot.findOne({}); 
-
-            if (botState) {
-                // 1. DESCUENTO DEL LBALANCE ASIGNADO
-                const currentLBalance = parseFloat(botState.lbalance || 0);
-                const newLBalance = currentLBalance - purchaseAmount;
-
-                // 2. Persistir el NUEVO LBalance
-                await updateGeneralBotState({ lbalance: newLBalance });
-                log(`LBalance asignado reducido en ${purchaseAmount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
-
-                // 3. BLOQUEO, ID y TRANSICIÓN DE ESTADO (UNIFICADO ATÓMICAMENTE)
-                const updatedLStateData = {
-                    ...botState.lStateData,
-                    orderCountInCycle: 1, // CANDADO
-                    lastOrder: {
-                        order_id: currentOrderId,
-                        price: null,
-                        size: null,
-                        side: 'buy',
-                        state: 'pending_fill',
-                        usdt_amount: purchaseAmount, 
-                    }
-                };
-                
-                // Asegura que 'lstate' sea 'BUYING' y 'orderCountInCycle' sea '1' en una sola operación DB.
-                await Autobot.findOneAndUpdate({}, { 
-                    'lStateData': updatedLStateData,
-                    'lstate': 'BUYING' 
-                });
-                
-                await updateBotState('BUYING', 'long'); 
-                log(`Estado de la estrategia RUNNING actualizado a: BUYING`);
-            }
-            
-            // Bloque de monitoreo de la orden
-            setTimeout(async () => {           
-                const orderDetails = await getOrderDetail(SYMBOL, currentOrderId); 
-                let updatedBotState = await Autobot.findOne({});
-                
-                // 🛑 CORRECCIÓN: Verificar filledSize para manejar 'partially_canceled'
-                const filledSize = parseFloat(orderDetails?.filledSize || 0);
-                
-                // ÉXITO: Si está 'filled' O si hay ejecución parcial (filledSize > 0)
-                if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) { 
-                    log(`Orden ${currentOrderId} completada o completada parcialmente (Size: ${filledSize}). Procesando compra...`, 'success');
-                    
-                    if (updatedBotState) {
-                        // handleSuccessfulBuy procesará la parte ejecutada
-                        await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log); 
-                    }
-                } else {
-                    // FALLO TOTAL: La orden no se completó y no hubo ejecución (filledSize es 0).
-                    log(`La orden inicial ${currentOrderId} falló/se canceló sin ejecución. DEVOLVIENDO LBALANCE y volviendo a RUNNING.`, 'error');
-                    
-                    if (updatedBotState) {
-                        const finalState = await Autobot.findOne({});
-                        // Solo devolvemos el monto que se intentó comprar (purchaseAmount)
-                        const returnedLBalance = parseFloat(finalState.lbalance) + purchaseAmount; 
-                        await updateGeneralBotState({ lbalance: returnedLBalance });
-                        log(`LBalance devuelto: ${purchaseAmount.toFixed(2)} USDT. Nuevo balance: ${returnedLBalance.toFixed(2)} USDT.`, 'warning');
-                        
-                        await Autobot.findOneAndUpdate({}, { 
-                            'lStateData.lastOrder': null,
-                            'lStateData.orderCountInCycle': 0 
-                        });
-                        // 🟢 Volver a RUNNING
-                        await updateBotState('RUNNING', 'long'); 
-                    }
-                }
-            }, ORDER_CHECK_TIMEOUT_MS);
-        } else {       
-            // Si la API no devuelve ID, volvemos a RUNNING.
-            log(`Error al colocar la primera orden de compra. La API no devolvió un ID. Volviendo a RUNNING.`, 'error');
-            await updateBotState('RUNNING', 'long');
+        if (!orderResult || !orderResult.order_id) {
+            log(`Error al recibir ID de la orden de BitMart. Resultado: ${JSON.stringify(orderResult)}`, 'error');
+            // Revertir el estado si la orden no se pudo colocar (por ejemplo, error de API)
+            await updateBotState('RUNNING', 'long'); 
+            return;
         }
+
+        const orderId = orderResult.order_id;
+        log(`Orden de compra colocada. ID: ${orderId}. Iniciando bloqueo y monitoreo...`, 'info');
+
+        // --- 3. ACTUALIZACIÓN DE ESTADO Y BALANCE ---
+
+        // Asumiendo que initialCheck contiene el botState actualizado (lstate: BUYING)
+        const currentBotState = initialCheck; 
+        const currentLBalance = parseFloat(currentBotState.lbalance || 0);
+        
+        // Descontar la cantidad de compra del LBalance.
+        const newLBalance = currentLBalance - amount;
+
+        // Guardar el lastOrder y el nuevo LBalance
+        await updateGeneralBotState({
+            'lbalance': newLBalance,
+            'lStateData.lastOrder': {
+                order_id: orderId,
+                side: 'buy',
+                usdt_amount: amount,
+                // Agrega otros campos necesarios aquí
+            }
+        });
+
+        log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+        
+        // No es necesario llamar a updateBotState aquí, ya que el bloqueo atómico ya lo hizo.
+
     } catch (error) {
-        log(`Error de excepción al colocar la primera orden de compra: ${error.message}. Volviendo a RUNNING.`, 'error');
+        log(`Error CRÍTICO al colocar la primera orden: ${error.message}`, 'error');
+        
+        // Revertir el estado a RUNNING en caso de un error de API/Excepción
         await updateBotState('RUNNING', 'long');
     }
 }
-
 /**
  * Coloca una orden de compra de cobertura (a Mercado).
  * @param {object} botState - Estado actual del bot.
