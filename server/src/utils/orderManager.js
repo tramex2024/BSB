@@ -2,11 +2,12 @@
 
 const Autobot = require('../../models/Autobot');
 const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager');
-const bitmartService = require('../../services/bitmartService');
 
-//const { placeOrder, getOrderDetail, cancelOrder } = require('../../services/bitmartService');
-//const Autobot = require('../../models/Autobot');
-//const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager'); 
+// 🚨 CORRECCIÓN: Importamos el módulo completo como 'bitmartService'
+const bitmartService = require('../../services/bitmartService'); 
+
+// Eliminamos la línea const { placeOrder, getOrderDetail, cancelOrder } = ...
+// y usamos bitmartService.placeOrder, bitmartService.getOrderDetail, etc., en todo el archivo.
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
@@ -14,7 +15,7 @@ const ORDER_CHECK_TIMEOUT_MS = 2000;
 
 /**
  * Coloca la primera orden de compra (o inicial) y realiza un bloqueo atómico.
- * * @param {object} config - Configuración del bot.
+ * @param {object} config - Configuración del bot.
  * @param {function} log - Función de logging.
  * @param {function} updateBotState - Función para actualizar el estado del bot (lstate/sstate).
  * @param {function} updateGeneralBotState - Función para actualizar campos generales (lbalance/sbalance).
@@ -54,8 +55,7 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
 
     try {
         // --- 2. COLOCACIÓN DE ORDEN REAL ---
-        // Asumiendo que bitmartService.placeMarketOrder existe y devuelve el orderId.
-        const orderResult = await bitmartService.placeMarketOrder({
+        const orderResult = await bitmartService.placeMarketOrder({ // ✅ CORREGIDO
             symbol: SYMBOL,
             side: 'buy',
             notional: amount // Monto en USDT
@@ -115,15 +115,15 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
     log(`Colocando orden de cobertura a MERCADO por ${usdtAmount.toFixed(2)} USDT.`, 'info');
     
     try {
-        const order = await placeOrder(SYMBOL, 'BUY', 'market', usdtAmount);
+        const order = await bitmartService.placeOrder(SYMBOL, 'BUY', 'market', usdtAmount); // ✅ CORREGIDO
 
         if (order && order.order_id) {
-            const currentOrderId = order.order_id;    
+            const currentOrderId = order.order_id;  
 
             botState.lStateData.lastOrder = {
                 order_id: currentOrderId,
-                price: nextCoveragePrice,   
-                size: usdtAmount,   
+                price: nextCoveragePrice,  
+                size: usdtAmount,  
                 side: 'buy',
                 state: 'pending_fill'
             };
@@ -131,7 +131,7 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
             log(`Orden de cobertura colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
 
             setTimeout(async () => {
-                const orderDetails = await getOrderDetail(SYMBOL, currentOrderId);
+                const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); // ✅ CORREGIDO
                 const updatedBotState = await Autobot.findOne({});
                 const filledSize = parseFloat(orderDetails?.filledSize || 0);
                 
@@ -177,7 +177,7 @@ async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, bot
 
     log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
     try {
-        const order = await placeOrder(SYMBOL, 'SELL', 'market', sellAmount);
+        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', sellAmount); // ✅ CORREGIDO
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;
@@ -194,7 +194,7 @@ async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, bot
 
 
             setTimeout(async () => {
-                const orderDetails = await getOrderDetail(SYMBOL, currentOrderId);
+                const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); // ✅ CORREGIDO
                 const filledSize = parseFloat(orderDetails?.filledSize || 0);
 
                 if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
@@ -233,7 +233,7 @@ async function cancelActiveOrders(botState, log) {
     try {
         log(`Intentando cancelar orden ID: ${orderId}...`, 'warning');
         
-        const result = await cancelOrder(SYMBOL, orderId);
+        const result = await bitmartService.cancelOrder(SYMBOL, orderId); // ✅ CORREGIDO
         
         if (result && result.code === 1000) {
             log(`Orden ${orderId} cancelada exitosamente.`, 'success');
