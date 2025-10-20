@@ -20,7 +20,7 @@ const { calculateLongCoverage, calculateShortCoverage } = require('./autobotCalc
 // Modelos
 const Order = require('./models/Order');
 //const Autobot = require('./models/Autobot');
-let Autobot;
+let Autobot = require('./models/Autobot');
 
 // Routers
 const authRoutes = require('./routes/authRoutes');
@@ -75,7 +75,6 @@ app.use('/api/v1/balances', balanceRoutes);
 //connectDB();
 
 // 🛑 AÑADIR UN SWITCH TEMPORAL:
-let Autobot;
 
 const USE_MOCK_DB = true; // CAMBIAR A 'false' cuando MongoDB Atlas esté listo.
 
