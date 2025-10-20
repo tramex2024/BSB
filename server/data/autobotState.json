@@ -1,4 +1,4 @@
-// BSB/server/data/autobotState.json
+// BSB/server/data/autobotState.json (DEBE CONTENER ESTO COMO MÍNIMO)
 {
     "lstate": "RUNNING",
     "lbalance": 12.00,
@@ -14,5 +14,4 @@
             "purchaseUsdt": 5.00
         }
     }
-    // Incluye cualquier otro campo esencial que tu código lea de la DB.
 }
