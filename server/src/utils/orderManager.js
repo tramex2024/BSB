@@ -104,66 +104,111 @@ const orderResult = await bitmartService.placeOrder(
         await updateBotState('RUNNING', 'long');
     }
 }
+
 /**
- * Coloca una orden de compra de cobertura (a Mercado).
- * @param {object} botState - Estado actual del bot.
- * @param {number} usdtAmount - Cantidad de USDT a comprar.
- * @param {number} nextCoveragePrice - Precio de la próxima orden de cobertura (solo para referencia de DB).
+ * Coloca una orden de compra de cobertura (a Mercado) y actualiza el capital para la ejecución.
+ * * @param {object} botState - Estado actual del bot.
+ * @param {number} usdtAmount - Cantidad de USDT a comprar (requerido para esta orden).
+ * @param {number} nextCoveragePrice - Precio objetivo de la próxima orden de cobertura (solo para referencia de DB).
  * @param {function} log - Función de logging.
  * @param {function} updateGeneralBotState - Función para actualizar el estado general.
  */
 async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, log, updateGeneralBotState) { 
     const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
+    const currentLBalance = parseFloat(botState.lbalance || 0);
+
+    // --- CÁLCULO DE LA PRÓXIMA COBERTURA (Progresión Geométrica) ---
+    // Usamos el monto de esta orden (usdtAmount) para calcular el monto de la ORDEN SIGUIENTE.
+    const sizeVariance = botState.config.long.size_var / 100;
+    const nextOrderAmount = usdtAmount * (1 + sizeVariance);
+
+    // --- PRE-DEDUCCIÓN DEL BALANCE ---
+    // Deducción del LBalance ANTES de colocar la orden (pre-deducción)
+    const newLBalance = currentLBalance - usdtAmount;
+    if (newLBalance < 0) {
+        log(`Error: Capital insuficiente para la orden de cobertura de ${usdtAmount.toFixed(2)} USDT.`, 'error');
+        // El bot debería haber cambiado a RUNNING en LBuying.js, pero aseguramos la salida.
+        return; 
+    }
+    await updateGeneralBotState({ lbalance: newLBalance });
+    log(`LBalance asignado reducido en ${usdtAmount.toFixed(2)} USDT para la orden de cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+
+
     log(`Colocando orden de cobertura a MERCADO por ${usdtAmount.toFixed(2)} USDT.`, 'info');
     
     try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'BUY', 'market', usdtAmount); // ✅ CORREGIDO
+        // Colocamos la orden usando el monto necesario para ESTA compra.
+        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtAmount); 
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;  
 
-            botState.lStateData.lastOrder = {
-                order_id: currentOrderId,
-                price: nextCoveragePrice,  
-                size: usdtAmount,  
-                side: 'buy',
-                state: 'pending_fill'
+            // --- 2. ACTUALIZACIÓN DE ESTADO PENDIENTE ---
+            
+            // Actualizar lastOrder y el monto de la SIGUIENTE orden de cobertura.
+            const lStateUpdate = {
+                'lStateData.lastOrder': {
+                    order_id: currentOrderId,
+                    side: 'buy',
+                    usdt_amount: usdtAmount, // Monto utilizado en ESTA orden (para la devolución)
+                },
+                // 🚨 Actualizamos el monto requerido para la SIGUIENTE compra
+                'lStateData.requiredCoverageAmount': nextOrderAmount 
             };
-            await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
-            log(`Orden de cobertura colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
+            
+            await Autobot.findOneAndUpdate({}, { $set: lStateUpdate });
+            log(`Orden de cobertura colocada. ID: ${currentOrderId}. Próximo monto de cobertura calculado: ${nextOrderAmount.toFixed(2)} USDT.`, 'success');
 
+            // --- 3. MONITOREO INMEDIATO ---
+            // Usaremos el mismo mecanismo de setTimeout para el monitoreo inmediato
             setTimeout(async () => {
-                const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); // ✅ CORREGIDO
-                const updatedBotState = await Autobot.findOne({});
-                const filledSize = parseFloat(orderDetails?.filledSize || 0);
-                
-                // ÉXITO: Si está 'filled' O si hay ejecución parcial (filledSize > 0)
-                if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
-                    if (updatedBotState) {
-                        // Pasar updateGeneralBotState y log
-                        await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log); 
+                try {
+                    const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); 
+                    const updatedBotState = await Autobot.findOne({});
+                    const filledSize = parseFloat(orderDetails?.filledSize || 0);
+                    
+                    if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
+                        if (updatedBotState) {
+                            // handleSuccessfulBuy: Actualiza PPC, AC, lastExecutionPrice, y limpia lastOrder.
+                            await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log);  
+                        }
+                    } else {
+                        log(`La orden de cobertura ${currentOrderId} no se completó/falló sin ejecución.`, 'error');
+                        // Si la orden falla, limpiamos el lastOrder y revertimos el balance no gastado
+                        if (updatedBotState) {
+                            const actualUsdtSpent = parseFloat(orderDetails?.notional || 0);
+                            const usdtToRefund = usdtAmount - actualUsdtSpent;
+
+                            if (usdtToRefund > 0.01) {
+                                const finalLBalance = parseFloat(updatedBotState.lbalance || 0) + usdtToRefund;
+                                await updateGeneralBotState({ lbalance: finalLBalance });
+                                log(`Se revierte ${usdtToRefund.toFixed(2)} USDT al balance.`, 'info');
+                            }
+                            
+                            await Autobot.findOneAndUpdate({}, { 'lStateData.lastOrder': null });
+                        }
                     }
-                } else {
-                    log(`La orden de cobertura ${currentOrderId} no se completó/falló sin ejecución.`, 'error');
-                    // Si la orden falla, limpiamos el lastOrder
-                    if (updatedBotState) {
-                        updatedBotState.lStateData.lastOrder = null;
-                        await Autobot.findOneAndUpdate({}, { 'lStateData': updatedBotState.lStateData });
-                    }
+                } catch (timeoutError) {
+                    log(`Error en el chequeo de timeout de la orden de cobertura: ${timeoutError.message}`, 'error');
                 }
             }, ORDER_CHECK_TIMEOUT_MS);
+
         } else {
             log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            botState.lStateData.lastOrder = null;
-            await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
+            
+            // Revertir el balance pre-deducido si la orden nunca se colocó.
+            const finalLBalance = newLBalance + usdtAmount;
+            await updateGeneralBotState({ lbalance: finalLBalance });
+            log(`Se revierte ${usdtAmount.toFixed(2)} USDT al balance (error de colocación).`, 'info');
         }
     } catch (error) {
         log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
-        botState.lStateData.lastOrder = null;
-        await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
+        // Revertir el balance pre-deducido en caso de error de API
+        const finalLBalance = newLBalance + usdtAmount;
+        await updateGeneralBotState({ lbalance: finalLBalance });
+        log(`Se revierte ${usdtAmount.toFixed(2)} USDT al balance (error de API).`, 'info');
     }
 }
-
 
 /**
  * Coloca una orden de venta a mercado.

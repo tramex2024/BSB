@@ -26,33 +26,35 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     const actualUsdtSpent = parseFloat(orderDetails.notional || 0); 
 
     // Determinar el precio final a usar. priceAvg (precio promedio) tiene prioridad.
-    const finalPriceUsed = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
+    // 🚨 ESTE ES EL PRECIO DE EJECUCIÓN PONDERADO QUE DEBEMOS ALMACENAR
+    const finalExecutionPrice = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
     
     // Si no se ejecutó nada, o el precio es ilógico, salimos.
-    if (executedQty <= 0 || finalPriceUsed <= 0) {
+    if (executedQty <= 0 || finalExecutionPrice <= 0) {
         log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución o precio cero. Limpiando lastOrder.', 'error');
         // Limpiamos el lastOrder y dejamos el estado en BUYING/RUNNING si no hay posición.
         await Autobot.findOneAndUpdate({}, { 'lStateData.lastOrder': null });
         return; 
     }
 
-    // --- 2. CÁLCULO DEL NUEVO PRECIO MEDIO (PM) ---
+    // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) ---
+    // Nota: Renombrar pm (precio medio) a ppc (precio promedio de compra) en la DB
 
     // Extraer datos de la posición actual con seguridad (si es la primera orden, serán 0)
-    const currentTotalQty = parseFloat(botState.lStateData.tc || 0); // Total Count actual
-    const currentPriceMean = parseFloat(botState.lStateData.pm || 0); // Precio Medio actual
+    const currentTotalQty = parseFloat(botState.lStateData.ac || 0); // Cantidad Total (AC) actual
+    const currentPriceMean = parseFloat(botState.lStateData.ppc || 0); // Precio Promedio de Compra (PPC) actual
     
     // Definir el contador de órdenes para el incremento
     const currentOrderCount = parseInt(botState.lStateData.orderCountInCycle || 0); 
     
     // Costo total actual de la posición y costo de la nueva orden
     const currentTotalCost = currentTotalQty * currentPriceMean;
-    const newOrderCost = executedQty * finalPriceUsed;
+    const newOrderCost = executedQty * finalExecutionPrice; // Usamos el precio de ejecución final
     
     // Nuevo tamaño total de la posición (denominador)
     const newTotalQty = currentTotalQty + executedQty;
 
-    // Calculamos el nuevo precio medio. Usamos el precio anterior como valor de respaldo (fallback).
+    // Calculamos el nuevo precio promedio de compra (PPC)
     let newPriceMean = currentPriceMean; 
     
     if (newTotalQty > 0) {
@@ -89,15 +91,24 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     // Usar $set para actualizar campos individuales del sub-documento de forma segura.
     const update = {
         'lstate': nextState,
-        'lStateData.tc': newTotalQty,
-        'lStateData.pm': newPriceMean,
+        'lStateData.ac': newTotalQty, // AC es la cantidad total
+        'lStateData.ppc': newPriceMean, // PPC es el precio promedio de compra
+        // 🚨 NUEVO CAMPO: Guardamos el precio de ejecución de la ÚLTIMA orden
+        'lStateData.lastExecutionPrice': finalExecutionPrice, 
+        
         'lStateData.orderCountInCycle': currentOrderCount + 1, // Aumentar el contador
         'lStateData.lastOrder': null, // Limpiar la última orden (se completó)
+        
+        // El PM (Precio Máximo) debe actualizarse aquí si se compró a un precio más alto.
+        // Pero dado que esta lógica es solo para COMPRA (bajando), lo más seguro es actualizar PM
+        // en LBuying.js o mantenerlo como el precio de ejecución para el cálculo inicial del PC.
+        // Lo dejaremos para LBuying.js para no crear redundancia.
     };
     
+    // Actualizar el documento en la DB con el nuevo precio de ejecución
     await Autobot.findOneAndUpdate({}, { $set: update });
 
-    log(`[LONG] Orden confirmada. Nuevo PM: ${newPriceMean.toFixed(2)}, Qty: ${newTotalQty.toFixed(8)}. Transicionando a ${nextState}.`, 'info');
+    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPriceMean.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
 
     // Notificación:
     await updateGeneralBotState({ lstate: nextState }); 
