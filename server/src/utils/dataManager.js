@@ -4,7 +4,7 @@ const Autobot = require('../../models/Autobot');
 
 /**
  * Maneja una compra exitosa (total o parcial), actualiza la posición del bot
- * (Price Mean y Total Count), y pasa al estado de gestión de posición (BUYING).
+ * (PPC, AC, lastExecutionPrice), y pasa al estado de gestión de posición (BUYING).
  *
  * @param {object} botState - Estado actual del bot (leído antes de la ejecución de la orden).
  * @param {object} orderDetails - Detalles de la orden ejecutada (de getOrderDetail).
@@ -16,52 +16,42 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
     // --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS DE LA ORDEN ---
     
-    // Usamos parseFloat y aseguramos que el valor sea 0 si es null/undefined.
-    const executedQty = parseFloat(orderDetails.filledSize || 0); // La cantidad de BTC comprada (tc_size)
+    const executedQty = parseFloat(orderDetails.filledSize || 0); // Cantidad de activo comprada
     const executedAvgPrice = parseFloat(orderDetails.priceAvg || 0); // Precio promedio de ejecución real
     
-    // El monto USDT que el bot intentó gastar (fue descontado del LBalance en placeFirstBuyOrder)
     const intendedUsdtSpent = parseFloat(botState.lStateData.lastOrder?.usdt_amount || 0); 
-    // El monto REALMENTE gastado (del exchange)
     const actualUsdtSpent = parseFloat(orderDetails.notional || 0); 
 
-    // Determinar el precio final a usar. priceAvg (precio promedio) tiene prioridad.
-    // 🚨 ESTE ES EL PRECIO DE EJECUCIÓN PONDERADO QUE DEBEMOS ALMACENAR
+    // 🚨 ALMACENAR ESTE VALOR COMO PRECIO DE EJECUCIÓN 
     const finalExecutionPrice = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
     
-    // Si no se ejecutó nada, o el precio es ilógico, salimos.
     if (executedQty <= 0 || finalExecutionPrice <= 0) {
         log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución o precio cero. Limpiando lastOrder.', 'error');
-        // Limpiamos el lastOrder y dejamos el estado en BUYING/RUNNING si no hay posición.
         await Autobot.findOneAndUpdate({}, { 'lStateData.lastOrder': null });
         return; 
     }
 
-    // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) ---
-    // Nota: Renombrar pm (precio medio) a ppc (precio promedio de compra) en la DB
+    // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) y AC ---
 
-    // Extraer datos de la posición actual con seguridad (si es la primera orden, serán 0)
-    const currentTotalQty = parseFloat(botState.lStateData.ac || 0); // Cantidad Total (AC) actual
-    const currentPriceMean = parseFloat(botState.lStateData.ppc || 0); // Precio Promedio de Compra (PPC) actual
+    // 🚨 CAMBIO: Usamos 'ac' (Cantidad Total) y 'ppc' (Precio Promedio de Compra)
+    const currentTotalQty = parseFloat(botState.lStateData.ac || 0); 
+    const currentPriceMean = parseFloat(botState.lStateData.ppc || 0); 
     
-    // Definir el contador de órdenes para el incremento
     const currentOrderCount = parseInt(botState.lStateData.orderCountInCycle || 0); 
     
     // Costo total actual de la posición y costo de la nueva orden
     const currentTotalCost = currentTotalQty * currentPriceMean;
-    const newOrderCost = executedQty * finalExecutionPrice; // Usamos el precio de ejecución final
+    const newOrderCost = executedQty * finalExecutionPrice; 
     
-    // Nuevo tamaño total de la posición (denominador)
+    // Nuevo tamaño total de la posición (AC)
     const newTotalQty = currentTotalQty + executedQty;
 
     // Calculamos el nuevo precio promedio de compra (PPC)
-    let newPriceMean = currentPriceMean; 
+    let newPPC = currentPriceMean; 
     
     if (newTotalQty > 0) {
-        // CORRECCIÓN CLAVE: Evitamos la división por cero y aseguramos el cálculo.
-        newPriceMean = (currentTotalCost + newOrderCost) / newTotalQty;
-        // También verificamos el resultado por si acaso, usando el precio anterior si es inválido.
-        if (isNaN(newPriceMean)) newPriceMean = currentPriceMean; 
+        newPPC = (currentTotalCost + newOrderCost) / newTotalQty;
+        if (isNaN(newPPC)) newPPC = currentPriceMean; 
     }
 
     // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance) ---
