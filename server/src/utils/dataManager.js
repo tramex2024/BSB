@@ -75,6 +75,9 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     
     botState.lStateData.orderCountInCycle = currentOrderCount + 1; 
     botState.lStateData.lastOrder = null;       // Limpiar la última orden
+
+    // 🛑 CORRECCIÓN FINAL: Forzamos a Mongoose a reconocer el cambio en el subdocumento
+    botState.markModified('lStateData');
     
     // Utilizamos save() en el objeto que ya se leyó (botState)
     await botState.save(); // <-- Usar .save() es más fiable para subdocumentos
