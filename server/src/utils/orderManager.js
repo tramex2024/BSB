@@ -52,24 +52,23 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
 
     log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info');
 
-    try {
-        const orderResult = await bitmartService.placeOrder(
-            SYMBOL, 
-            'buy', 
-            'market', 
-            amount, // La cantidad es el 'notional'
-            null // No hay precio para una orden a mercado
-        );
+    botState.lstate = nextState;
+    botState.lStateData.ac = newTotalQty;       
+    botState.lStateData.ppc = newPPC;           
+    botState.lStateData.lastExecutionPrice = finalExecutionPrice; 
+    
+    botState.lStateData.orderCountInCycle = currentOrderCount + 1; 
+    botState.lStateData.lastOrder = null;       // Limpiar la última orden
+    
+    // Utilizamos save() en el objeto que ya se leyó (botState)
+    await botState.save(); // <-- Usar .save() es más fiable para subdocumentos
 
-        if (!orderResult || !orderResult.order_id) {
-            log(`Error al recibir ID de la orden de BitMart. Resultado: ${JSON.stringify(orderResult)}`, 'error');
-            // Revertir el estado si la orden no se pudo colocar (por ejemplo, error de API)
-            await updateBotState('RUNNING', 'long'); 
-            return;
-        }
+    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
 
-        const orderId = orderResult.order_id;
-        log(`Orden de compra colocada. ID: ${orderId}. Iniciando bloqueo y monitoreo...`, 'info');
+    // Notificación: (Si la necesitas, pero la DB ya se actualizó)
+    // await updateGeneralBotState({ lstate: nextState });  // Puedes comentar o eliminar si no es necesaria para notificación aparte
+
+} // Fin de handleSuccessfulBuy
 
         // --- 3. ACTUALIZACIÓN DE ESTADO Y BALANCE ---
 

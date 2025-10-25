@@ -68,24 +68,23 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
     const nextState = 'BUYING'; 
     
-    const update = {
-        'lstate': nextState,
-        'lStateData.ac': newTotalQty,       // Guardar la Cantidad Total (AC)
-        'lStateData.ppc': newPPC,           // ✅ CORRECCIÓN: Usar la variable newPPC
-        'lStateData.lastExecutionPrice': finalExecutionPrice, // Precio de la ÚLTIMA orden
-        
-        'lStateData.orderCountInCycle': currentOrderCount + 1, 
-        'lStateData.lastOrder': null,       // Limpiar la última orden
-    };
-    
-    // Actualizar el documento en la DB
-    await Autobot.findOneAndUpdate({}, { $set: update });
+    botState.lstate = nextState;
+    botState.lStateData.ac = newTotalQty;       
+    botState.lStateData.ppc = newPPC;           
+    botState.lStateData.lastExecutionPrice = finalExecutionPrice; 
+    
+    botState.lStateData.orderCountInCycle = currentOrderCount + 1; 
+    botState.lStateData.lastOrder = null;       // Limpiar la última orden
+    
+    // Utilizamos save() en el objeto que ya se leyó (botState)
+    await botState.save(); // <-- Usar .save() es más fiable para subdocumentos
 
-    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
+    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
 
-    // Notificación:
-    await updateGeneralBotState({ lstate: nextState }); 
-}
+    // Notificación: (Si la necesitas, pero la DB ya se actualizó)
+    // await updateGeneralBotState({ lstate: nextState });  // Puedes comentar o eliminar si no es necesaria para notificación aparte
+
+} // Fin de handleSuccessfulBuy
 
 /**
  * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
