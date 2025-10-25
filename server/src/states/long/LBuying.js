@@ -14,7 +14,8 @@ const { calculateLongTargets } = require('../../utils/dataManager');
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log, creds,
-        updateBotState, updateLStateData, updateGeneralBotState
+        updateBotState, updateLStateData, updateGeneralBotState,
+        getBotState // Necesario para la auditoría 3/3
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -93,8 +94,13 @@ async function run(dependencies) {
                 log(`[AUDITORÍA 2/3] -> DESPUÉS de guardar (Objeto en memoria). PPC: ${newPpc.toFixed(2)}, AC: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
 
                 // 5. Verificación (Opcional, pero útil para depuración)
-                const updatedBotState = await dependencies.getBotState();
-                log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${updatedBotState.lStateData.ppc.toFixed(2)}, AC leído: ${updatedBotState.lStateData.ac.toFixed(8)}, LState: ${updatedBotState.lstate}`, 'debug');
+                // Se verifica la existencia de getBotState antes de llamarla
+                if (getBotState) {
+                    const updatedBotState = await getBotState();
+                    log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${updatedBotState.lStateData.ppc.toFixed(2)}, AC leído: ${updatedBotState.lStateData.ac.toFixed(8)}, LState: ${updatedBotState.lstate}`, 'debug');
+                } else {
+                     log(`[AUDITORÍA 3/3] -> VERIFICACIÓN OMITIDA. getBotState no está disponible en las dependencias.`, 'debug');
+                }
 
                 log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}. Transicionando a BUYING.`, 'success');
 
