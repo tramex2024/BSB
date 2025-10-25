@@ -1,12 +1,8 @@
-// BSB/server/src/utils/dataManager.js
-
-//const Autobot = require('../../models/Autobot');
-
 // Archivo BSB/server/src/utils/dataManager.js
+
 const { log } = require('../logger'); 
 // CORRECCIÓN DE RUTA Y NOMBRE DE ARCHIVO
 const { calculateNextTarget, calculateNextCoverage } = require('../../autobotCalculations'); 
-
 
 /**
  * Maneja una ejecución de orden de COMPRA (LONG) exitosa, ya sea total o parcial.
@@ -17,6 +13,10 @@ const { calculateNextTarget, calculateNextCoverage } = require('../../autobotCal
  */
 async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
     try {
+        // CORRECCIÓN CRÍTICA: Aseguramos que el argumento usdtAmount sea un número válido
+        // para prevenir errores de concatenación de cadenas en las sumas.
+        const orderUsdtAmount = parseFloat(usdtAmount || 0); 
+
         // --- 1. CÁLCULO DE POSICIÓN (PPC y AC) ---
 
         // 🎯 CORRECCIÓN DE EXTRACCIÓN DE DATOS: Asegurar que los campos sean válidos,
@@ -34,11 +34,13 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
             
             // Si la orden fue parcialmente cancelada y no se ejecutó nada, asumimos que no hay ejecución.
             if (orderDetails.state === 'partially_canceled' || orderDetails.state === 'canceled') {
-                log(`[LONG] Orden marcada como cancelada/parcial. Reembolsando el monto completo de ${usdtAmount} USDT al LBalance.`, 'warning');
+                // Usamos orderUsdtAmount (sanitizado) en el log
+                log(`[LONG] Orden marcada como cancelada/parcial. Reembolsando el monto completo de ${orderUsdtAmount} USDT al LBalance.`, 'warning');
                 
                 // Si no se ejecutó nada, se devuelve todo el capital asignado al balance.
                 const currentLBalance = parseFloat(botState.lbalance || 0);
-                botState.lbalance = currentLBalance + usdtAmount;
+                // Usamos orderUsdtAmount para asegurar la suma numérica
+                botState.lbalance = currentLBalance + orderUsdtAmount;
                 
                 // Mantenemos el estado en BUYING para la siguiente verificación de cobertura.
                 botState.markModified('lStateData');
@@ -68,7 +70,7 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
         // --- 2. GESTIÓN DEL CAPITAL RESTANTE (LBalance) - CORRECCIÓN ATÓMICA ---
 
         // Calculamos el capital no gastado para devolverlo al balance.
-        const usdtToRefund = usdtAmount - usdtSpent;
+        const usdtToRefund = orderUsdtAmount - usdtSpent; // Usamos orderUsdtAmount
         
         if (usdtToRefund > 0.01) { 
             // 🛑 Modificamos LBalance en el objeto 'botState' 
