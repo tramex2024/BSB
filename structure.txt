@@ -50,6 +50,7 @@ BSB/			    # Bitmart Spot Bots
      ├── models/
      │   └── Order.js
      │   └── Autobot.js
+     │   └── AutobotMock.js
      │   └── User.js
      │   └── BotState.js
      ├── middleware/

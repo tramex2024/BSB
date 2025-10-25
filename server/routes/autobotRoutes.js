@@ -4,6 +4,7 @@ const Autobot = require('../models/Autobot');
 const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
+const { CLEAN_STRATEGY_DATA, CLEAN_ROOT_FIELDS } = require('./src/utils/cleanState'); // ✅ Importación de la limpieza
 
 // Importamos el servicio centralizado de BitMart
 const bitmartService = require('../services/bitmartService');
@@ -84,27 +85,41 @@ router.post('/start', async (req, res) => {
 });
 
 router.post('/stop', async (req, res) => {
-    try {
-        const botState = await Autobot.findOne({});
-        if (botState) {
-            botState.lstate = 'STOPPED';
-            botState.sstate = 'STOPPED';
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = false;
-            await botState.save();
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            
+            // 1. Limpieza de campos de nivel raíz (targets y contadores de ciclo)
+            botState.lstate = 'STOPPED';
+            botState.sstate = 'STOPPED';
+            botState.config.long.enabled = false;
+            botState.config.short.enabled = false;
+
+            // ✅ APLICAR LA LIMPIEZA DE ROOT: Targets de venta y reinicio de ciclos
+            botState.ltprice = CLEAN_ROOT_FIELDS.ltprice; 
+            botState.stprice = CLEAN_ROOT_FIELDS.stprice;
+            botState.lcycle = CLEAN_ROOT_FIELDS.lcycle;
+            botState.scycle = CLEAN_ROOT_FIELDS.scycle;
+
+            // ✅ APLICAR LA LIMPIEZA DE ESTRATEGIA: Limpieza profunda de posición
+            // Esto asegura que PPC, AC, pm, pc, lastOrder, etc., estén a cero.
+            botState.lStateData = CLEAN_STRATEGY_DATA;
+            botState.sStateData = CLEAN_STRATEGY_DATA;
+            
+            await botState.save();
 
             // Usamos la función de ayuda para serializar y emitir
             const botData = emitBotState(botState, autobotLogic.io);
 
-            autobotLogic.log('Autobot strategy stopped by user.', 'info');
-            res.json({ success: true, message: 'Autobot strategy stopped.', data: botData });
-        } else {
-            res.status(404).json({ success: false, message: 'Bot state not found.' });
-        }
-    } catch (error) {
-        console.error('Failed to stop Autobot strategy:', error);
-        res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
-    }
+            autobotLogic.log('Autobot strategy stopped by user. All strategy data and targets cleaned.', 'info');
+            res.json({ success: true, message: 'Autobot strategy stopped. Targets and position data cleaned.', data: botData });
+        } else {
+            res.status(404).json({ success: false, message: 'Bot state not found.' });
+        }
+    } catch (error) {
+        console.error('Failed to stop Autobot strategy:', error);
+        res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
+    }
 });
 
 router.post('/update-config', async (req, res) => {
