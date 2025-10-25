@@ -72,6 +72,8 @@ async function run(dependencies) {
                 const totalUsdtUsed = parseFloat(orderDetails.executed_value || 0);
                 const newLBalance = (botState.lbalance || 0) - totalUsdtUsed;
 
+                log(`[AUDITORÍA 1/3] -> ANTES de guardar. PPC a guardar: ${newPpc.toFixed(2)}, AC a guardar: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
+
                 // 3. 🎯 CREACIÓN DE LA ACTUALIZACIÓN ATÓMICA DE DATOS
                 const atomicUpdate = {
                     // Actualización del estado general
@@ -88,7 +90,13 @@ async function run(dependencies) {
                 // 4. Aplicar la actualización atómica
                 await updateGeneralBotState(atomicUpdate);
                 
-                log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}.`, 'success');
+                log(`[AUDITORÍA 2/3] -> DESPUÉS de guardar (Objeto en memoria). PPC: ${newPpc.toFixed(2)}, AC: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
+
+                // 5. Verificación (Opcional, pero útil para depuración)
+                const updatedBotState = await dependencies.getBotState();
+                log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${updatedBotState.lStateData.ppc.toFixed(2)}, AC leído: ${updatedBotState.lStateData.ac.toFixed(8)}, LState: ${updatedBotState.lstate}`, 'debug');
+
+                log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}. Transicionando a BUYING.`, 'success');
 
             } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
                 // La orden sigue activa o parcialmente ejecutada. Esperar.
