@@ -4,7 +4,7 @@ const Autobot = require('../models/Autobot');
 const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
-const { CLEAN_STRATEGY_DATA, CLEAN_ROOT_FIELDS } = require('./src/utils/cleanState'); // ✅ Importación de la limpieza
+const { CLEAN_STRATEGY_DATA, CLEAN_ROOT_FIELDS } = require('../src/utils/cleanState'); // ✅ Importación de la limpieza
 
 // Importamos el servicio centralizado de BitMart
 const bitmartService = require('../services/bitmartService');
