@@ -38,23 +38,58 @@ async function run(dependencies) {
         try {
             const orderDetails = await getOrderDetail(SYMBOL, orderIdString);
             
-            if (orderDetails && (orderDetails.state === 'filled' || orderDetails.state === 'partially_canceled')) {
-                // Si está completada (total o parcial)
-                log(`Recuperación exitosa: La orden ID ${orderIdString} se completó/canceló parcialmente.`, 'success');
-                // handleSuccessfulBuy: Actualiza PPC, AC, lastExecutionPrice y limpia lastOrder.
-                await handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState, log); 
-                return;
-
-            } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
-                log(`Recuperación: La orden ID ${orderIdString} sigue ${orderDetails.state} en BitMart. Esperando.`, 'info');
-                // Continuar esperando a la próxima iteración.
-                return;
+            if (orderDetails) {
                 
+                // PASO 1: Extracción de Montos de la Orden para la comparación
+                const totalRequestedAmount = parseFloat(orderDetails.amount || 0); // La cantidad total solicitada ('All Btc' en tu app)
+                const filledVolume = parseFloat(orderDetails.filled_volume || 0); // La cantidad ejecutada ('filled' en tu app)
+
+                // PASO 2: Nueva Condición de Éxito (TOTAL)
+                const isOrderFullyFilled = 
+                    orderDetails.state === 'filled' || 
+                    (orderDetails.state === 'partially_canceled' && filledVolume >= totalRequestedAmount);
+
+                if (isOrderFullyFilled) {
+                    // Si está completada (total o total disfrazada)
+                    log(`Recuperación exitosa: La orden ID ${orderIdString} se completó (Estado: ${orderDetails.state}). Procesando...`, 'success');
+                    
+                    // handleSuccessfulBuy: Actualiza PPC, AC, lastExecutionPrice y limpia lastOrder.
+                    // Nota: Asumimos que handleSuccessfulBuy sabe manejar el reembolso de lo no gastado (si aplica).
+                    await handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState, log); 
+                    return;
+
+                } else if (orderDetails.state === 'new' || orderDetails.state === 'partially_filled' || 
+                           (orderDetails.state === 'partially_canceled' && filledVolume > 0 && filledVolume < totalRequestedAmount)) {
+                    
+                    // Condición para seguir esperando o manejar una ejecución parcial real:
+                    // new, partially_filled, o partially_canceled con ejecución parcial real.
+                    
+                    if (filledVolume > 0 && orderDetails.state === 'partially_filled') {
+                         // Si es partially_filled, procesamos la parte ejecutada y seguimos esperando o pasamos a cobertura.
+                         // *** IMPORTANTE: Si la lógica de tu bot permite pasar a cobertura después de un 'partially_filled'
+                         // sin esperar el resto, entonces handleSuccessfulBuy debe ser llamado aquí.
+                         log(`Recuperación: La orden ID ${orderIdString} tiene ejecución parcial (${filledVolume}/${totalRequestedAmount}). Procesando parte ejecutada.`, 'info');
+                         await handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState, log);
+                         return; // El ciclo continuará con la lógica de monitoreo de targets.
+                    } else {
+                        log(`Recuperación: La orden ID ${orderIdString} sigue ${orderDetails.state} en BitMart. Esperando.`, 'info');
+                        // Continuar esperando a la próxima iteración.
+                        return;
+                    }
+
+                } else {
+                    // Asumiendo fallo (e.g., canceled sin ejecución, o no encontrada).
+                    log(`La orden ID ${orderIdString} no está activa ni completada (Estado: ${orderDetails.state}). Limpiando lastOrder.`, 'error');
+                    await updateLStateData({ 'lastOrder': null });
+                    // Aquí se debería llamar a handleSuccessfulBuy si es un 'canceled' total para reembolsar el balance
+                    // Pero como no tenemos la info completa de 'canceled', nos limitamos a limpiar y salir.
+                    return; 
+                }
+
             } else {
-                // Asumiendo fallo (e.g., canceled, o no encontrada).
-                log(`La orden ID ${orderIdString} no está activa ni completada. Limpiando lastOrder.`, 'error');
-                await updateLStateData({ 'lastOrder': null });
-                return; 
+                // orderDetails es nulo o vacío
+                log(`Advertencia: No se pudo obtener detalle para la orden ID ${orderIdString}. Reintentando.`, 'warning');
+                return;
             }
 
         } catch (error) {
@@ -154,10 +189,6 @@ async function run(dependencies) {
         
         if (currentPrice <= lStateData.nextCoveragePrice && botState.lbalance >= nextCoverageAmount) {
             log(`PRECIO DE COBERTURA ALCANZADO (${lStateData.nextCoveragePrice.toFixed(2)}). Intentando nueva compra de cobertura por ${nextCoverageAmount.toFixed(2)} USDT.`, 'warning');
-            
-            // 🚨 Llamada a la función de cobertura. Esta función debe:
-            // 1. Colocar la orden a mercado (usando nextCoverageAmount).
-            // 2. Guardar el orderID en lStateData.lastOrder y el nuevo monto en lStateData.requiredCoverageAmount.
             
             // Revertir el estado a RUNNING si el capital no es suficiente:
             if (botState.lbalance < nextCoverageAmount) {
