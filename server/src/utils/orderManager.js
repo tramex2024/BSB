@@ -3,11 +3,7 @@
 const Autobot = require('../../models/Autobot');
 const { handleSuccessfulBuy, handleSuccessfulSell } = require('./dataManager');
 
-// 🚨 CORRECCIÓN: Importamos el módulo completo como 'bitmartService'
 const bitmartService = require('../../services/bitmartService'); 
-
-// Eliminamos la línea const { placeOrder, getOrderDetail, cancelOrder } = ...
-// y usamos bitmartService.placeOrder, bitmartService.getOrderDetail, etc., en todo el archivo.
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
@@ -15,7 +11,9 @@ const ORDER_CHECK_TIMEOUT_MS = 2000;
 
 /**
  * Coloca la primera orden de compra (o inicial) y realiza un bloqueo atómico.
- * @param {object} config - Configuración del bot.
+ *
+ * NOTA: Esta versión incluye la SIMULACIÓN de orden para pruebas.
+ * * @param {object} config - Configuración del bot.
  * @param {function} log - Función de logging.
  * @param {function} updateBotState - Función para actualizar el estado del bot (lstate/sstate).
  * @param {function} updateGeneralBotState - Función para actualizar campos generales (lbalance/sbalance).
@@ -23,16 +21,13 @@ const ORDER_CHECK_TIMEOUT_MS = 2000;
 async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState) {
     
     // --- 1. BLOQUEO ATÓMICO Y TRANSICIÓN DE ESTADO ---
-    // Intentamos cambiar el estado de RUNNING a BUYING en una sola operación atómica.
-    
     const initialCheck = await Autobot.findOneAndUpdate(
-        { lstate: 'RUNNING' }, // Condición: SOLO actualiza si el estado actual es RUNNING.
-        { $set: { lstate: 'BUYING' } }, // Actualización: Cambia el estado a BUYING.
-        { new: true } // Retorna el documento actualizado (si la operación fue exitosa).
+        { lstate: 'RUNNING' }, 
+        { $set: { lstate: 'BUYING' } }, 
+        { new: true } 
     );
 
     if (!initialCheck) {
-        // Esto significa que otro ciclo ya se adelantó y cambió el estado. ¡Bloqueo exitoso!
         log('Advertencia: Intento de doble compra bloqueado. El estado ya ha cambiado a BUYING.', 'warning');
         return; 
     }
@@ -43,34 +38,40 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
     const SYMBOL = config.symbol;
     const amount = parseFloat(purchaseUsdt);
 
-    if (amount < 5) {
-        log('Error: La cantidad de compra es menor al mínimo de BitMart ($5). Cancelando.', 'error');
-        // Revertir el estado ya que no se colocó la orden real
+    if (amount < MIN_USDT_VALUE_FOR_BITMART) {
+        log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
         await updateBotState('RUNNING', 'long'); 
         return;
     }
 
-    log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info');
+    log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT (SIMULADO).`, 'info');
 
-    botState.lstate = nextState;
-    botState.lStateData.ac = newTotalQty;       
-    botState.lStateData.ppc = newPPC;           
-    botState.lStateData.lastExecutionPrice = finalExecutionPrice; 
-    
-    botState.lStateData.orderCountInCycle = currentOrderCount + 1; 
-    botState.lStateData.lastOrder = null;       // Limpiar la última orden
-    
-    // Utilizamos save() en el objeto que ya se leyó (botState)
-    await botState.save(); // <-- Usar .save() es más fiable para subdocumentos
+    try {
+        // 🛑 BLOQUE DE SIMULACIÓN: COMENTAR para volver a modo REAL 🛑
+        
+        // const orderResult = await bitmartService.placeOrder( // ❌ COMENTAR
+        //      SYMBOL, 
+        //      'buy', 
+        //      'market', 
+        //      amount, 
+        //      null 
+        // );
+        
+        // ✅ SIMULACIÓN: Usamos la ID de la orden que ya tenías ejecutada
+        const orderResult = { order_id: '1315603471516548352' }; 
+        
+        // 🛑 FIN BLOQUE DE SIMULACIÓN 🛑
 
-    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
+        if (!orderResult || !orderResult.order_id) {
+            log(`Error al recibir ID de la orden de BitMart. Resultado: ${JSON.stringify(orderResult)}`, 'error');
+            await updateBotState('RUNNING', 'long'); 
+            return;
+        }
 
-    // Notificación: (Si la necesitas, pero la DB ya se actualizó)
-    // await updateGeneralBotState({ lstate: nextState });  // Puedes comentar o eliminar si no es necesaria para notificación aparte
+        const orderId = orderResult.order_id;
+        log(`Orden de compra colocada. ID: ${orderId}. Iniciando bloqueo y monitoreo...`, 'info');
 
-} // Fin de handleSuccessfulBuy
-
-        // --- 3. ACTUALIZACIÓN DE ESTADO Y BALANCE ---
+        // --- 3. ACTUALIZACIÓN DE ESTADO Y BALANCE (Corrección de Persistencia) ---
 
         const currentBotState = initialCheck; 
         const currentLBalance = parseFloat(currentBotState.lbalance || 0);
@@ -78,8 +79,8 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
         // Descontar la cantidad de compra del LBalance.
         const newLBalance = currentLBalance - amount;
 
-        // 🚨 CORRECCIÓN CRÍTICA 🚨: Actualizar lbalance y lStateData.lastOrder
-        // Usamos Autobot.findOneAndUpdate para garantizar la actualización del subdocumento.
+        // ✅ CORRECCIÓN CRÍTICA: Actualizar lbalance y lStateData.lastOrder
+        // Usamos Autobot.findOneAndUpdate para garantizar la actualización atómica del subdocumento.
         await Autobot.findOneAndUpdate({}, {
             $set: {
                 'lbalance': newLBalance,
@@ -87,7 +88,7 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
                     order_id: orderId,
                     side: 'buy',
                     usdt_amount: amount,
-                    // Agrega otros campos necesarios aquí
+                    // Otros campos si son necesarios
                 }
             }
         });
@@ -110,22 +111,19 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
  * @param {function} log - Función de logging.
  * @param {function} updateGeneralBotState - Función para actualizar el estado general.
  */
-async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, log, updateGeneralBotState) { 
+async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, log, updateGeneralBotState) { 
     const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
     const currentLBalance = parseFloat(botState.lbalance || 0);
 
     // --- CÁLCULO DE LA PRÓXIMA COBERTURA (Progresión Geométrica) ---
-    // Usamos el monto de esta orden (usdtAmount) para calcular el monto de la ORDEN SIGUIENTE.
     const sizeVariance = botState.config.long.size_var / 100;
     const nextOrderAmount = usdtAmount * (1 + sizeVariance);
 
     // --- PRE-DEDUCCIÓN DEL BALANCE ---
-    // Deducción del LBalance ANTES de colocar la orden (pre-deducción)
     const newLBalance = currentLBalance - usdtAmount;
     if (newLBalance < 0) {
         log(`Error: Capital insuficiente para la orden de cobertura de ${usdtAmount.toFixed(2)} USDT.`, 'error');
-        // El bot debería haber cambiado a RUNNING en LBuying.js, pero aseguramos la salida.
-        return; 
+        return; 
     }
     await updateGeneralBotState({ lbalance: newLBalance });
     log(`LBalance asignado reducido en ${usdtAmount.toFixed(2)} USDT para la orden de cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
@@ -134,44 +132,38 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
     log(`Colocando orden de cobertura a MERCADO por ${usdtAmount.toFixed(2)} USDT.`, 'info');
     
     try {
-        // Colocamos la orden usando el monto necesario para ESTA compra.
-        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtAmount); 
+        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtAmount); 
 
         if (order && order.order_id) {
-            const currentOrderId = order.order_id;  
+            const currentOrderId = order.order_id;  
 
             // --- 2. ACTUALIZACIÓN DE ESTADO PENDIENTE ---
             
-            // Actualizar lastOrder y el monto de la SIGUIENTE orden de cobertura.
             const lStateUpdate = {
                 'lStateData.lastOrder': {
                     order_id: currentOrderId,
                     side: 'buy',
-                    usdt_amount: usdtAmount, // Monto utilizado en ESTA orden (para la devolución)
+                    usdt_amount: usdtAmount,
                 },
-                // 🚨 Actualizamos el monto requerido para la SIGUIENTE compra
-                'lStateData.requiredCoverageAmount': nextOrderAmount 
+                'lStateData.requiredCoverageAmount': nextOrderAmount 
             };
             
             await Autobot.findOneAndUpdate({}, { $set: lStateUpdate });
             log(`Orden de cobertura colocada. ID: ${currentOrderId}. Próximo monto de cobertura calculado: ${nextOrderAmount.toFixed(2)} USDT.`, 'success');
 
             // --- 3. MONITOREO INMEDIATO ---
-            // Usaremos el mismo mecanismo de setTimeout para el monitoreo inmediato
             setTimeout(async () => {
                 try {
-                    const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); 
+                    const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); 
                     const updatedBotState = await Autobot.findOne({});
                     const filledSize = parseFloat(orderDetails?.filledSize || 0);
                     
                     if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
                         if (updatedBotState) {
-                            // handleSuccessfulBuy: Actualiza PPC, AC, lastExecutionPrice, y limpia lastOrder.
-                            await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log);  
+                            await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log);  
                         }
                     } else {
                         log(`La orden de cobertura ${currentOrderId} no se completó/falló sin ejecución.`, 'error');
-                        // Si la orden falla, limpiamos el lastOrder y revertimos el balance no gastado
                         if (updatedBotState) {
                             const actualUsdtSpent = parseFloat(orderDetails?.notional || 0);
                             const usdtToRefund = usdtAmount - actualUsdtSpent;
@@ -221,7 +213,7 @@ async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, bot
 
     log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
     try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', sellAmount); // ✅ CORREGIDO
+        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', sellAmount); 
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;
@@ -234,11 +226,12 @@ async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, bot
                 side: 'sell',
                 state: 'pending_fill'
             };
+            // Usar updateOne o findOneAndUpdate para persistir el lastOrder
             await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
 
 
             setTimeout(async () => {
-                const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); // ✅ CORREGIDO
+                const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); 
                 const filledSize = parseFloat(orderDetails?.filledSize || 0);
 
                 if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
@@ -277,7 +270,7 @@ async function cancelActiveOrders(botState, log) {
     try {
         log(`Intentando cancelar orden ID: ${orderId}...`, 'warning');
         
-        const result = await bitmartService.cancelOrder(SYMBOL, orderId); // ✅ CORREGIDO
+        const result = await bitmartService.cancelOrder(SYMBOL, orderId); 
         
         if (result && result.code === 1000) {
             log(`Orden ${orderId} cancelada exitosamente.`, 'success');
