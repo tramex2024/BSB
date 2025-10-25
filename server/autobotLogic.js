@@ -82,10 +82,13 @@ async function updateSStateData(fieldsToUpdate) {
 
 /**
  * Función genérica para actualizar campos top-level en el modelo Autobot (usado para LBalance/SBalance, etc.).
- * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... }
+ * Esta función AHORA también acepta campos con notación de punto para subdocumentos.
+ * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... } o { 'subdocumento.campo': nuevoValor, ... }
  */
 async function updateGeneralBotState(fieldsToUpdate) {
     try {
+        // Al usar $set, podemos pasar campos de primer nivel Y campos con notación de punto
+        // (ej: { ltprice: 100, 'lStateData.pc': 50 })
         await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate });
     } catch (error) {
         log(`Error al actualizar campos generales del estado del bot: ${error.message}`, 'error');
@@ -95,6 +98,8 @@ async function updateGeneralBotState(fieldsToUpdate) {
 
 async function botCycle(priceFromWebSocket) {
     try {
+        // 🛑 CRÍTICO: Recargar el botState ANTES de cada ciclo.
+        // Esto garantiza que la lógica de BUYING y RUNNING use la última versión de la DB.
         let botState = await Autobot.findOne({});
         const currentPrice = parseFloat(priceFromWebSocket); 
 
@@ -116,6 +121,7 @@ async function botCycle(priceFromWebSocket) {
             currentPrice, 
             availableUSDT, 
             availableBTC, 
+            // 🛑 Usar el botState recién cargado
             botState,
             
             config: botState.config,
