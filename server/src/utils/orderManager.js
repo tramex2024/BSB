@@ -37,7 +37,6 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
         return; 
     }
     
-    // Si el código llega a este punto, hemos asegurado la DB y el estado AHORA es BUYING.
     // --------------------------------------------------------------------
     
     const { purchaseUsdt } = config.long;
@@ -54,14 +53,13 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
     log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info');
 
     try {
-        // ✅ Usamos la función genérica 'placeOrder' que SÍ existe y le pasamos los parámetros
-const orderResult = await bitmartService.placeOrder(
-    SYMBOL, 
-    'buy', 
-    'market', 
-    amount, // La cantidad es el 'notional'
-    null // No hay precio para una orden a mercado
-);
+        const orderResult = await bitmartService.placeOrder(
+            SYMBOL, 
+            'buy', 
+            'market', 
+            amount, // La cantidad es el 'notional'
+            null // No hay precio para una orden a mercado
+        );
 
         if (!orderResult || !orderResult.order_id) {
             log(`Error al recibir ID de la orden de BitMart. Resultado: ${JSON.stringify(orderResult)}`, 'error');
@@ -75,28 +73,28 @@ const orderResult = await bitmartService.placeOrder(
 
         // --- 3. ACTUALIZACIÓN DE ESTADO Y BALANCE ---
 
-        // Asumiendo que initialCheck contiene el botState actualizado (lstate: BUYING)
         const currentBotState = initialCheck; 
         const currentLBalance = parseFloat(currentBotState.lbalance || 0);
         
         // Descontar la cantidad de compra del LBalance.
         const newLBalance = currentLBalance - amount;
 
-        // Guardar el lastOrder y el nuevo LBalance
-        await updateGeneralBotState({
-            'lbalance': newLBalance,
-            'lStateData.lastOrder': {
-                order_id: orderId,
-                side: 'buy',
-                usdt_amount: amount,
-                // Agrega otros campos necesarios aquí
+        // 🚨 CORRECCIÓN CRÍTICA 🚨: Actualizar lbalance y lStateData.lastOrder
+        // Usamos Autobot.findOneAndUpdate para garantizar la actualización del subdocumento.
+        await Autobot.findOneAndUpdate({}, {
+            $set: {
+                'lbalance': newLBalance,
+                'lStateData.lastOrder': {
+                    order_id: orderId,
+                    side: 'buy',
+                    usdt_amount: amount,
+                    // Agrega otros campos necesarios aquí
+                }
             }
         });
 
         log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
         
-        // No es necesario llamar a updateBotState aquí, ya que el bloqueo atómico ya lo hizo.
-
     } catch (error) {
         log(`Error CRÍTICO al colocar la primera orden: ${error.message}`, 'error');
         
