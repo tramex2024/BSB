@@ -13,42 +13,41 @@ const { calculateNextTarget, calculateNextCoverage } = require('../../autobotCal
  */
 async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
     try {
-        // CORRECCIÓN CRÍTICA: Aseguramos que el argumento usdtAmount sea un número válido
-        // para prevenir errores de concatenación de cadenas en las sumas.
-        const orderUsdtAmount = parseFloat(usdtAmount || 0); 
+        const orderUsdtAmount = parseFloat(usdtAmount || 0);
 
         // --- 1. CÁLCULO DE POSICIÓN (PPC y AC) ---
 
-        // 🎯 CORRECCIÓN DE EXTRACCIÓN DE DATOS: Asegurar que los campos sean válidos,
-        // especialmente para órdenes partially_canceled, donde BitMart debe retornar
-        // los valores de 'fill_quantity' y 'notional' de la parte ejecutada.
-        const orderQty = parseFloat(orderDetails.fill_quantity); 
-        const usdtSpent = parseFloat(orderDetails.notional);
-        const finalExecutionPrice = parseFloat(orderDetails.avg_price || orderDetails.price); 
+        // Extracción de datos de la orden. Usamos fill_quantity y notional para datos reales de ejecución.
+        const orderQty = parseFloat(orderDetails.fill_quantity || 0); // Cantidad de activo comprada
+        const usdtSpent = parseFloat(orderDetails.notional || 0); // Costo real en USDT de la parte ejecutada
+        const finalExecutionPrice = parseFloat(orderDetails.avg_price || orderDetails.price || 0); // Precio de ejecución
 
-        // Verificamos si los valores extraídos son cero o NaN
-        if (isNaN(orderQty) || orderQty <= 0 || isNaN(usdtSpent) || usdtSpent <= 0 || isNaN(finalExecutionPrice) || finalExecutionPrice <= 0) {
-             // Registramos los valores exactos para debug si falla
-            log(`[LONG] Fallo en la extracción de datos. orderQty: ${orderDetails.fill_quantity} (${orderQty}), usdtSpent: ${orderDetails.notional} (${usdtSpent}), finalPrice: ${orderDetails.avg_price || orderDetails.price} (${finalExecutionPrice})`, 'error');
-            log(`[LONG] Error: Cantidad ejecutada (${orderQty}) o costo de ejecución (${usdtSpent}) o precio (${finalExecutionPrice}) no son válidos. No se puede actualizar la posición.`, 'error');
+        // Verificamos si los valores esenciales son cero o inválidos
+        if (orderQty <= 0 || usdtSpent <= 0 || finalExecutionPrice <= 0) {
+            log(`[LONG] Fallo en la extracción de datos. orderQty: ${orderQty}, usdtSpent: ${usdtSpent}, finalPrice: ${finalExecutionPrice}`, 'error');
+            log(`[LONG] Error: Cantidad ejecutada, costo de ejecución o precio es cero/inválido. No se puede actualizar la posición.`, 'error');
             
-            // Si la orden fue parcialmente cancelada y no se ejecutó nada, asumimos que no hay ejecución.
+            // Lógica de reembolso original y más simple:
             if (orderDetails.state === 'partially_canceled' || orderDetails.state === 'canceled') {
-                // Usamos orderUsdtAmount (sanitizado) en el log
                 log(`[LONG] Orden marcada como cancelada/parcial. Reembolsando el monto completo de ${orderUsdtAmount} USDT al LBalance.`, 'warning');
                 
-                // Si no se ejecutó nada, se devuelve todo el capital asignado al balance.
                 const currentLBalance = parseFloat(botState.lbalance || 0);
-                // Usamos orderUsdtAmount para asegurar la suma numérica
+                
+                // CRÍTICO: Aseguramos que orderUsdtAmount sea un número. 
+                // Si el error persiste, sabremos que el NaN viene del scope exterior.
+                if (isNaN(orderUsdtAmount)) {
+                    log('[LONG] ERROR: orderUsdtAmount sigue siendo NaN. DETENIENDO PROCESO DE REEMBOLSO Y GUARDADO.', 'error');
+                    return null;
+                }
+
                 botState.lbalance = currentLBalance + orderUsdtAmount;
                 
-                // Mantenemos el estado en BUYING para la siguiente verificación de cobertura.
                 botState.markModified('lStateData');
                 await botState.save(); 
                 return botState;
             }
             
-            return;
+            return null;
         }
 
         const currentPPC = parseFloat(botState.lStateData.ppc || 0);
@@ -67,26 +66,21 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
         log(`[LONG] Cálculo: PPC Anterior: ${currentPPC.toFixed(2)}, Costo Orden: ${usdtSpent.toFixed(2)}, PPC Nuevo: ${newPPC.toFixed(2)}`, 'debug');
 
 
-        // --- 2. GESTIÓN DEL CAPITAL RESTANTE (LBalance) - CORRECCIÓN ATÓMICA ---
+        // --- 2. GESTIÓN DEL CAPITAL RESTANTE (LBalance) ---
 
         // Calculamos el capital no gastado para devolverlo al balance.
-        const usdtToRefund = orderUsdtAmount - usdtSpent; // Usamos orderUsdtAmount
+        const usdtToRefund = orderUsdtAmount - usdtSpent;
         
         if (usdtToRefund > 0.01) { 
-            // 🛑 Modificamos LBalance en el objeto 'botState' 
-            
             const currentLBalance = parseFloat(botState.lbalance || 0);
             const newLBalance = currentLBalance + usdtToRefund;
             
             log(`Devolviendo ${usdtToRefund.toFixed(2)} USDT al LBalance debido a ejecución parcial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
             
-            // 1. Aplicamos el cambio de balance al objeto que vamos a guardar
             botState.lbalance = newLBalance;
-            // La llamada a updateGeneralBotState se eliminó para evitar el conflicto de escritura.
         }
 
         // --- 3. CÁLCULO DE OBJETIVOS (Venta y Cobertura) ---
-        // Estas funciones vienen de '../../autobotCalculations'
         const config = botState.config.long;
         
         // Objetivo de Venta (ltprice)
@@ -125,7 +119,7 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
         return botState;
 
     } catch (error) {
-        log(`Error al manejar la orden de compra exitosa (ID: ${orderDetails.order_id}): ${error.message}`, 'error');
+        log(`Error al manejar la orden de compra exitosa (ID: ${orderDetails?.order_id || 'undefined'}): ${error.message}`, 'error');
         return null;
     }
 }
