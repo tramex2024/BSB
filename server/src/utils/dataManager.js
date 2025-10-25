@@ -5,8 +5,6 @@ const Autobot = require('../../models/Autobot');
 const { log } = require('../logger'); 
 // Asume que estas funciones están definidas en otro lugar (ej. utils/calculations.js)
 const { calculateNextTarget, calculateNextCoverage } = require('../../autobotCalculations'); 
-// Asume que este módulo se encarga de las actualizaciones generales (aunque lo evitamos aquí por el conflicto)
-const { updateGeneralBotState } = require('./dataManager'); 
 
 /**
  * Maneja una ejecución de orden de COMPRA (LONG) exitosa, ya sea total o parcial.
