@@ -22,7 +22,7 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     const intendedUsdtSpent = parseFloat(botState.lStateData.lastOrder?.usdt_amount || 0); 
     const actualUsdtSpent = parseFloat(orderDetails.notional || 0); 
 
-    // 🚨 ALMACENAR ESTE VALOR COMO PRECIO DE EJECUCIÓN 
+    // Obtener el precio de ejecución real.
     const finalExecutionPrice = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
     
     if (executedQty <= 0 || finalExecutionPrice <= 0) {
@@ -33,7 +33,6 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
     // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) y AC ---
 
-    // 🚨 CAMBIO: Usamos 'ac' (Cantidad Total) y 'ppc' (Precio Promedio de Compra)
     const currentTotalQty = parseFloat(botState.lStateData.ac || 0); 
     const currentPriceMean = parseFloat(botState.lStateData.ppc || 0); 
     
@@ -56,49 +55,33 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
 
     // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance) ---
 
-    // ********** LÓGICA AVANZADA: DEVOLUCIÓN DE CAPITAL (CORRECCIÓN) **********
-    
-    // Monto a devolver al LBalance (lo que se descontó vs lo que se gastó)
     const usdtToRefund = intendedUsdtSpent - actualUsdtSpent;
 
-    if (usdtToRefund > 0.01) { // Usamos un umbral para evitar errores de redondeo minúsculos
+    if (usdtToRefund > 0.01) { 
         const currentLBalance = parseFloat(botState.lbalance || 0);
         const newLBalance = currentLBalance + usdtToRefund;
-
         log(`Devolviendo ${usdtToRefund.toFixed(2)} USDT al LBalance debido a ejecución parcial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
-
-        // Actualizar el LBalance en el documento principal de la DB
         await updateGeneralBotState({ lbalance: newLBalance });
     }
-
-    // ************************************************************
     
     // --- 4. ACTUALIZAR ESTADO DE LA BASE DE DATOS ---
 
-    // La transición es siempre a BUYING para gestionar la posición/cobertura.
     const nextState = 'BUYING'; 
     
-    // Usar $set para actualizar campos individuales del sub-documento de forma segura.
     const update = {
         'lstate': nextState,
-        'lStateData.ac': newTotalQty, // AC es la cantidad total
-        'lStateData.ppc': newPriceMean, // PPC es el precio promedio de compra
-        // 🚨 NUEVO CAMPO: Guardamos el precio de ejecución de la ÚLTIMA orden
-        'lStateData.lastExecutionPrice': finalExecutionPrice, 
+        'lStateData.ac': newTotalQty,       // Guardar la Cantidad Total (AC)
+        'lStateData.ppc': newPPC,           // ✅ CORRECCIÓN: Usar la variable newPPC
+        'lStateData.lastExecutionPrice': finalExecutionPrice, // Precio de la ÚLTIMA orden
         
-        'lStateData.orderCountInCycle': currentOrderCount + 1, // Aumentar el contador
-        'lStateData.lastOrder': null, // Limpiar la última orden (se completó)
-        
-        // El PM (Precio Máximo) debe actualizarse aquí si se compró a un precio más alto.
-        // Pero dado que esta lógica es solo para COMPRA (bajando), lo más seguro es actualizar PM
-        // en LBuying.js o mantenerlo como el precio de ejecución para el cálculo inicial del PC.
-        // Lo dejaremos para LBuying.js para no crear redundancia.
+        'lStateData.orderCountInCycle': currentOrderCount + 1, 
+        'lStateData.lastOrder': null,       // Limpiar la última orden
     };
     
-    // Actualizar el documento en la DB con el nuevo precio de ejecución
+    // Actualizar el documento en la DB
     await Autobot.findOneAndUpdate({}, { $set: update });
 
-    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPriceMean.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
+    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
 
     // Notificación:
     await updateGeneralBotState({ lstate: nextState }); 
