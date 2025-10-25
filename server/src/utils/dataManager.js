@@ -1,10 +1,12 @@
 // BSB/server/src/utils/dataManager.js
 
-const Autobot = require('../../models/Autobot');
-// Archivo simulado BSB/server/src/utils/dataManager.js
+//const Autobot = require('../../models/Autobot');
+
+// Archivo BSB/server/src/utils/dataManager.js
 const { log } = require('../logger'); 
-// Asume que estas funciones están definidas en otro lugar (ej. utils/calculations.js)
+// CORRECCIÓN DE RUTA Y NOMBRE DE ARCHIVO
 const { calculateNextTarget, calculateNextCoverage } = require('../../autobotCalculations'); 
+
 
 /**
  * Maneja una ejecución de orden de COMPRA (LONG) exitosa, ya sea total o parcial.
@@ -17,12 +19,33 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
     try {
         // --- 1. CÁLCULO DE POSICIÓN (PPC y AC) ---
 
-        const orderQty = parseFloat(orderDetails.fill_quantity || 0); // Cantidad de activo comprada
-        const finalExecutionPrice = parseFloat(orderDetails.price || orderDetails.avg_price || 0); // Precio de ejecución
-        const usdtSpent = parseFloat(orderDetails.notional || 0);
+        // 🎯 CORRECCIÓN DE EXTRACCIÓN DE DATOS: Asegurar que los campos sean válidos,
+        // especialmente para órdenes partially_canceled, donde BitMart debe retornar
+        // los valores de 'fill_quantity' y 'notional' de la parte ejecutada.
+        const orderQty = parseFloat(orderDetails.fill_quantity); 
+        const usdtSpent = parseFloat(orderDetails.notional);
+        const finalExecutionPrice = parseFloat(orderDetails.avg_price || orderDetails.price); 
 
-        if (orderQty === 0 || finalExecutionPrice === 0) {
-            log(`[LONG] Error: Cantidad ejecutada (orderQty: ${orderQty}) o precio de ejecución (finalExecutionPrice: ${finalExecutionPrice}) es cero. No se puede actualizar la posición.`, 'error');
+        // Verificamos si los valores extraídos son cero o NaN
+        if (isNaN(orderQty) || orderQty <= 0 || isNaN(usdtSpent) || usdtSpent <= 0 || isNaN(finalExecutionPrice) || finalExecutionPrice <= 0) {
+             // Registramos los valores exactos para debug si falla
+            log(`[LONG] Fallo en la extracción de datos. orderQty: ${orderDetails.fill_quantity} (${orderQty}), usdtSpent: ${orderDetails.notional} (${usdtSpent}), finalPrice: ${orderDetails.avg_price || orderDetails.price} (${finalExecutionPrice})`, 'error');
+            log(`[LONG] Error: Cantidad ejecutada (${orderQty}) o costo de ejecución (${usdtSpent}) o precio (${finalExecutionPrice}) no son válidos. No se puede actualizar la posición.`, 'error');
+            
+            // Si la orden fue parcialmente cancelada y no se ejecutó nada, asumimos que no hay ejecución.
+            if (orderDetails.state === 'partially_canceled' || orderDetails.state === 'canceled') {
+                log(`[LONG] Orden marcada como cancelada/parcial. Reembolsando el monto completo de ${usdtAmount} USDT al LBalance.`, 'warning');
+                
+                // Si no se ejecutó nada, se devuelve todo el capital asignado al balance.
+                const currentLBalance = parseFloat(botState.lbalance || 0);
+                botState.lbalance = currentLBalance + usdtAmount;
+                
+                // Mantenemos el estado en BUYING para la siguiente verificación de cobertura.
+                botState.markModified('lStateData');
+                await botState.save(); 
+                return botState;
+            }
+            
             return;
         }
 
@@ -46,23 +69,22 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
 
         // Calculamos el capital no gastado para devolverlo al balance.
         const usdtToRefund = usdtAmount - usdtSpent;
-        let newLBalance = parseFloat(botState.lbalance || 0);
-
+        
         if (usdtToRefund > 0.01) { 
-            // 🛑 CORRECCIÓN CRÍTICA: Modificamos LBalance en el objeto 'botState' 
-            // y *ELIMINAMOS* la llamada a updateGeneralBotState para evitar la condición de carrera.
+            // 🛑 Modificamos LBalance en el objeto 'botState' 
             
             const currentLBalance = parseFloat(botState.lbalance || 0);
-            newLBalance = currentLBalance + usdtToRefund;
+            const newLBalance = currentLBalance + usdtToRefund;
             
             log(`Devolviendo ${usdtToRefund.toFixed(2)} USDT al LBalance debido a ejecución parcial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
             
             // 1. Aplicamos el cambio de balance al objeto que vamos a guardar
             botState.lbalance = newLBalance;
-            // ❌ Se ELIMINA la línea de updateGeneralBotState
+            // La llamada a updateGeneralBotState se eliminó para evitar el conflicto de escritura.
         }
 
         // --- 3. CÁLCULO DE OBJETIVOS (Venta y Cobertura) ---
+        // Estas funciones vienen de '../../autobotCalculations'
         const config = botState.config.long;
         
         // Objetivo de Venta (ltprice)
@@ -106,12 +128,7 @@ async function handleSuccessfulBuy(botState, orderDetails, usdtAmount) {
     }
 }
 
-/**
- * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
- * @param {object} botStateObj - Estado del bot antes de la venta.
- * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {object} dependencies - Dependencias necesarias (DEBE incluir 'log').
- */
+// Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     // Importación Tardia: Se carga el módulo SOLO cuando se ejecuta esta función.
     const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
@@ -124,19 +141,22 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     await LSellingHandler(botStateObj, orderDetails, dependencies);
 }
 
+// Lógica de reseteo (asume que existe)
 async function resetAndInitializeBot(log) {
+    const Autobot = require('../../models/Autobot'); 
+    
     // 1. OBTENER CONFIGURACIÓN ACTUAL (Para no perder los settings del usuario)
     const currentBot = await Autobot.findOne({});
     
     // Si no hay documento, usamos la configuración por defecto
     const config = currentBot ? currentBot.config : { /* ... tus valores por defecto ... */ }; 
     const initialLBalance = config.long.amountUsdt || 0; // Usar 15 USDT como base
-    const totalProfit = currentBot ? currentBot.totalProfit : 0; // Preservar ganancias
-
+    const totalProfit = currentBot ? currentBot.total_profit : 0; // Preservar ganancias
+    
     // 2. ELIMINAR el documento existente
     await Autobot.deleteMany({});
     log('Documento Autobot eliminado completamente.', 'error');
-
+    
     // 3. CREAR el objeto base limpio
     const newBotData = {
         "lstate": "RUNNING", // Estado inicial de un bot que se inicia/resetea
@@ -165,5 +185,7 @@ async function resetAndInitializeBot(log) {
 
 module.exports = {
     handleSuccessfulBuy,
-    handleSuccessfulSell
+    handleSuccessfulSell,
+    // La función resetAndInitializeBot también debería ser exportada si se usa externamente
+    resetAndInitializeBot
 };
