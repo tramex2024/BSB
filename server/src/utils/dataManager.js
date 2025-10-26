@@ -1,8 +1,12 @@
 // Archivo BSB/server/src/utils/dataManager.js
 
 const { log } = require('../logger'); 
-// CORRECCIÓN DE RUTA Y NOMBRE DE ARCHIVO
-const { calculateNextTarget, calculateNextCoverage } = require('../../autobotCalculations'); 
+// ✅ CORRECCIÓN CRÍTICA: Aseguramos la importación de la función faltante (y las otras).
+const { 
+    calculateLongTargets, // ¡AGREGADO!
+    calculateNextTarget, 
+    calculateNextCoverage 
+} = require('../../autobotCalculations'); // Asumiendo que esta es la ruta correcta
 
 /**
  * Maneja una compra exitosa (total o parcial), actualiza la posición del bot
@@ -73,11 +77,11 @@ async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState
     
     // Aplicamos los cambios al objeto de Mongoose en memoria
     botState.lstate = nextState;
-    botState.lStateData.ac = newTotalQty;       
-    botState.lStateData.ppc = newPPC;           
+    botState.lStateData.ac = newTotalQty;         
+    botState.lStateData.ppc = newPPC;             
     botState.lStateData.lastExecutionPrice = finalExecutionPrice; 
     botState.lStateData.orderCountInCycle = currentOrderCount + 1; 
-    botState.lStateData.lastOrder = null;       
+    botState.lStateData.lastOrder = null;         
     
     // 🛑 LOG 1: Contenido del documento ANTES de llamar a .save()
     log(`[AUDITORÍA 1/3] -> ANTES de guardar. PPC a guardar: ${botState.lStateData.ppc.toFixed(2)}, AC a guardar: ${botState.lStateData.ac.toFixed(8)}, LState: ${botState.lstate}`, 'debug');
@@ -145,5 +149,7 @@ async function resetAndInitializeBot(log) {
 module.exports = {
     handleSuccessfulBuy,
     handleSuccessfulSell,
-    resetAndInitializeBot
+    resetAndInitializeBot,
+    // ✅ CORRECCIÓN CRÍTICA: Re-exportar la función para LBuying.js
+    calculateLongTargets 
 };
