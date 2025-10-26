@@ -72,27 +72,30 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
 
         // --- 3. ACTUALIZACIÓN DE ESTADO Y BALANCE (Corrección de Persistencia) ---
 
-        const currentBotState = initialCheck; 
-        const currentLBalance = parseFloat(currentBotState.lbalance || 0);
-        
-        // Descontar la cantidad de compra del LBalance.
-        const newLBalance = currentLBalance - amount;
+        const currentBotState = initialCheck; 
+        const currentLBalance = parseFloat(currentBotState.lbalance || 0);
+        
+        // Descontar la cantidad de compra del LBalance.
+        const newLBalance = currentLBalance - amount;
 
-        // ✅ CORRECCIÓN CRÍTICA: Actualizar lbalance y lStateData.lastOrder
-        // Usamos Autobot.findOneAndUpdate para garantizar la actualización atómica del subdocumento.
-        await Autobot.findOneAndUpdate({}, {
-            $set: {
-                'lbalance': newLBalance,
-                'lStateData.lastOrder': {
-                    order_id: orderId,
-                    side: 'buy',
-                    usdt_amount: amount,
-                    // Otros campos si son necesarios
-                }
+        // ✅ CORRECCIÓN CRÍTICA: Actualizar lbalance, lastOrder Y orderCountInCycle
+        await Autobot.findOneAndUpdate({}, {
+            $set: {
+                'lbalance': newLBalance,
+                'lStateData.lastOrder': {
+                    order_id: orderId,
+                    side: 'buy',
+                    usdt_amount: amount,
+                    // Otros campos si son necesarios
+                }
+            },
+            // 💡 AÑADIMOS EL INCREMENTO ATÓMICO: orderCountInCycle pasa de 0 a 1
+            $inc: {
+                'lStateData.orderCountInCycle': 1
             }
-        });
+        });
 
-        log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+        log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
         
     } catch (error) {
         log(`Error CRÍTICO al colocar la primera orden: ${error.message}`, 'error');
