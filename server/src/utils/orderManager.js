@@ -19,50 +19,49 @@ const ORDER_CHECK_TIMEOUT_MS = 2000;
  * @param {function} updateGeneralBotState - Función para actualizar campos generales (lbalance/sbalance).
  */
 async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState) {
-    
-    // --- 1. BLOQUEO ATÓMICO Y TRANSICIÓN DE ESTADO ---
-    const initialCheck = await Autobot.findOneAndUpdate(
-        { lstate: 'RUNNING' }, 
-        { $set: { lstate: 'BUYING' } }, 
-        { new: true } 
-    );
+    
+    // --- 1. BLOQUEO ATÓMICO Y TRANSICIÓN DE ESTADO ---
+    const initialCheck = await Autobot.findOneAndUpdate(
+        { lstate: 'RUNNING' }, 
+        { $set: { lstate: 'BUYING' } }, 
+        { new: true } 
+    );
 
-    if (!initialCheck) {
-        log('Advertencia: Intento de doble compra bloqueado. El estado ya ha cambiado a BUYING.', 'warning');
-        return; 
-    }
-    
-    // --------------------------------------------------------------------
-    
-    const { purchaseUsdt } = config.long;
-    const SYMBOL = config.symbol;
-    const amount = parseFloat(purchaseUsdt);
+    if (!initialCheck) {
+        log('Advertencia: Intento de doble compra bloqueado. El estado ya ha cambiado a BUYING.', 'warning');
+        return; 
+    }
+    
+    // --------------------------------------------------------------------
+    
+    const { purchaseUsdt } = config.long;
+    const SYMBOL = config.symbol;
+    const amount = parseFloat(purchaseUsdt);
 
-    if (amount < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
-        await updateBotState('RUNNING', 'long'); 
-        return;
-    }
+    if (amount < MIN_USDT_VALUE_FOR_BITMART) {
+        log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
+        await updateBotState('RUNNING', 'long'); 
+        return;
+    }
 
-    log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT (SIMULADO).`, 'info');
+    log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info'); // Ya no dice SIMULADO
 
-    try {
-        // 🛑 BLOQUE DE SIMULACIÓN: COMENTAR para volver a modo REAL 🛑
-        
-        // const orderResult = await bitmartService.placeOrder( // ❌ COMENTAR
-        //      SYMBOL, 
-        //      'buy', 
-        //      'market', 
-        //      amount, 
-        //      null 
-        // );
-        
-        // ✅ SIMULACIÓN: Usamos la ID de la orden que ya tenías ejecutada
-        const orderResult = { order_id: '1315603471516548352' }; 
-        
-        // 🛑 FIN BLOQUE DE SIMULACIÓN 🛑
+    try {
+        // 🛑 BLOQUE DE SIMULACIÓN ELIMINADO / COMENTADO 🛑
+        
+        const orderResult = await bitmartService.placeOrder( // ✅ VOLVEMOS A LA LLAMADA REAL
+            SYMBOL, 
+            'buy', 
+            'market', 
+            amount, 
+            null 
+        );
+        
+        // ❌ ELIMINADA: const orderResult = { order_id: '1315603471516548352' }; 
+        
+        // 🛑 FIN BLOQUE DE SIMULACIÓN 🛑
 
-        if (!orderResult || !orderResult.order_id) {
+        if (!orderResult || !orderResult.order_id) {
             log(`Error al recibir ID de la orden de BitMart. Resultado: ${JSON.stringify(orderResult)}`, 'error');
             await updateBotState('RUNNING', 'long'); 
             return;
