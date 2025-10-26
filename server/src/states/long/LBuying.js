@@ -109,12 +109,32 @@ async function run(dependencies) {
                 // La orden sigue activa o parcialmente ejecutada. Esperar.
                 log(`La orden ID ${orderIdString} sigue activa (${orderDetails.state}). Esperando ejecución.`, 'info');
                 return;
-            } else {
-                // Maneja la orden no encontrada o cancelada/expirada.
-                 log(`La orden ID ${orderIdString} no está activa. Limpiando lastOrder para reintentar. Estado BitMart: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
-                 await updateLStateData({ 'lastOrder': null });
-                 return;
-            }
+            } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
+                // La orden sigue activa o parcialmente ejecutada. Esperar.
+                log(`La orden ID ${orderIdString} sigue activa (${orderDetails.state}). Esperando ejecución.`, 'info');
+                return;
+            } else {
+                // =========================================================
+                // 🛠️ BLOQUE DE MONITOREO CORREGIDO 🛠️
+                // Esto detiene la limpieza inmediata de 'lastOrder' si BitMart es lento.
+                // =========================================================
+                if (orderDetails && orderDetails.state === 'canceled' && parseFloat(orderDetails.filled_volume || 0) === 0) {
+                    log(`La orden ID ${orderIdString} fue CANCELADA sin ejecución. Limpiando lastOrder. Estado BitMart: ${orderDetails.state}`, 'error');
+                    await updateLStateData({ 'lastOrder': null });
+                } else if (!orderDetails || (orderDetails && orderDetails.state === 'unknown')) {
+                    // Si no encontramos detalles (el error 'No Encontrada' del log), damos tiempo.
+                    log(`ADVERTENCIA CRÍTICA: La orden ID ${orderIdString} no se puede consultar. Reintentando en el próximo ciclo. NO se limpia lastOrder.`, 'error');
+                    // Simplemente salimos de la función (return implícito)
+                } else {
+                    // Manejo de otros estados de error o no completados (e.g., failed, expired)
+                    log(`La orden ID ${orderIdString} tuvo un estado de error no procesable. Limpiando lastOrder para reintentar. Estado BitMart: ${orderDetails.state}`, 'error');
+                    await updateLStateData({ 'lastOrder': null });
+                }
+                return;
+                // =========================================================
+                // ⬆️ FIN DEL BLOQUE CORREGIDO ⬆️
+                // =========================================================
+            }
 
         } catch (error) {
             log(`Error al consultar orden en BitMart durante el monitoreo de COMPRA: ${error.message}. Reintentando...`, 'error');
