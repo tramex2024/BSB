@@ -1,10 +1,12 @@
 // BSB/server/src/states/long/LBuying.js
 
 const { getOrderDetail } = require('../../../services/bitmartService');
-const DataManager = require('../../utils/dataManager'); // Importamos el módulo completo.
-const calculateLongTargets = DataManager.calculateLongTargets || DataManager; // CRÍTICO: Esto maneja los dos tipos de exportación posibles (por defecto o con nombre).
-// Se elimina la dependencia de placeLimitSellOrder, ya que todas las órdenes de venta se gestionan en LSelling.
-// const { placeLimitSellOrder } = require('../../utils/orderManager'); 
+// 🛑 CORRECCIÓN 1: La importación de calculateLongTargets debe ser directa.
+// Asumiendo que 'autobotCalculations.js' está en '../..' y DataManager es 'autobotCalculations.js'.
+// Sustituimos la importación inestable por una desestructuración clara.
+const { calculateLongTargets } = require('../../utils/dataManager'); // Asumiendo que DataManager es autobotCalculations.js
+// Si DataManager es un archivo wrapper en utils, esta importación está bien, siempre y cuando
+// el wrapper exporte calculateLongTargets. Si no, debe ser: require('../../../autobotCalculations').
 
 /**
  * Función central de la estrategia Long en estado BUYING.
@@ -34,7 +36,9 @@ async function run(dependencies) {
         log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
 
         try {
-            const orderDetails = await getOrderDetail(creds, SYMBOL, orderIdString);
+            // 🛑 CORRECCIÓN 2: getOrderDetail en bitmartService.js solo acepta (symbol, orderId), 
+            // no (creds, symbol, orderId). Pasar 'creds' como primer argumento causa el Bad Request 400.
+            const orderDetails = await getOrderDetail(SYMBOL, orderIdString);
             
             // Si la orden se llenó o fue cancelada con ejecución parcial, la procesamos.
             const isOrderProcessed = orderDetails && (
@@ -110,6 +114,7 @@ async function run(dependencies) {
                 log(`La orden ID ${orderIdString} sigue activa (${orderDetails.state}). Esperando ejecución.`, 'info');
                 return;
             } else {
+                // Esto maneja el Error 400 convertido a 'No Encontrada' o la orden realmente cancelada/expirada.
                  log(`La orden ID ${orderIdString} no está activa. Limpiando lastOrder para reintentar. Estado BitMart: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
                  await updateLStateData({ 'lastOrder': null });
                  return;

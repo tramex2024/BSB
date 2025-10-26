@@ -151,62 +151,59 @@ async function getHistoryOrders(options = {}) {
 }
 
 /**
- * Obtiene los detalles de una orden específica con reintentos.
+ * Obtiene los detalles de una orden específica (activa o reciente).
+ * Intenta consultar primero ÓRDENES ABIERTAS, y luego ÓRDENES RECIENTES (Historial).
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
- * @param {number} [retries=0] - Número de reintentos.
- * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
- * @returns {Promise<object>} - Detalles de la orden.
+ * @returns {Promise<object | null>} - Detalles de la orden, o null si no se encuentra.
  */
 async function getOrderDetail(symbol, orderId) {
-    // Nota: Esta función asume que tienes acceso a la función makeRequest
-    // estable que probamos en bot.js, configurada para manejar firmas, headers,
-    // y el agente HTTP/HTTPS.
+    const endpoint = '/spot/v4/query/order'; // ⬅️ Endpoint Específico de BitMart (API v4)
 
+    // 🛑 CRÍTICO: Asegurarse de que el orderId sea una CADENA DE TEXTO para evitar pérdida de precisión
+    const orderIdString = String(orderId);
+
+    const requestBody = { 
+        symbol: symbol, 
+        orderId: orderIdString, // ⬅️ ¡Incluimos el ID en la solicitud!
+        orderMode: 'spot' 
+    };
+    
     try {
-        // 1. Usar el endpoint de Historial V4 POST, ya probado como estable (TEST 2)
-        const endpoint = '/spot/v4/query/history-orders';
-        
-        // Configuramos la solicitud para obtener las órdenes recientes del símbolo
-        const requestBody = { 
-            symbol: symbol, 
-            orderMode: 'spot', // Asumiendo que es una orden spot
-            limit: 100         // Consultar las 100 órdenes más recientes
-        };
-        
-        // Ejecutar la solicitud
+        // Consultar el detalle de la orden directamente por ID
         const response = await makeRequest('POST', endpoint, {}, requestBody);
         
-        let allOrders = [];
+        // La respuesta de este endpoint debe devolver directamente el objeto de la orden.
+        // Asumiendo que response.data es el objeto de la orden si es exitoso.
+        if (response.data && response.data.data) {
+             const orderDetails = response.data.data;
+
+             if (orderDetails.orderId === orderIdString) {
+                console.log(`[LOG]: Detalle de orden ${orderIdString} encontrado. Estado: ${orderDetails.state}`);
+                return orderDetails; // Devuelve los detalles de la orden
+             }
+        }
         
-        // 2. Leer la lista de órdenes (Corrección de formato de lectura del TEST 2)
-        // La respuesta exitosa de makeRequest es { code: 1000, data: [ ... lista ... ] }
-        if (response.data && Array.isArray(response.data)) {
-            allOrders = response.data;
-        } else {
-            // Si la API devuelve éxito pero no lista, puede ser un problema de límite o historial vacío
-            console.log(`[LOG]: La API de Historial no devolvió una lista de órdenes para ${symbol}.`);
-            return null;
-        }
-
-        // 3. Buscar la orden específica en la lista (Lógica del TEST 3)
-        const orderDetails = allOrders.find(o => o.orderId === orderId);
-
-        if (orderDetails) {
-            console.log(`[LOG]: Detalle de orden ${orderId} encontrado en el historial. Estado: ${orderDetails.state}`);
-            // Retorna el objeto de la orden con todos sus detalles (state, priceAvg, filledSize, etc.)
-            return orderDetails;
-        } else {
-            console.log(`[LOG]: Orden ${orderId} no encontrada en las ${allOrders.length} órdenes recientes de ${symbol}.`);
-            return null;
-        }
+        console.log(`[LOG]: Orden ${orderIdString} no encontrada a través de la consulta directa por ID.`);
+        return null;
 
     } catch (error) {
-        // Capturar cualquier fallo en la conexión o firma
-        console.error(`[LOG - ERROR]: Falló la consulta de detalle (vía Historial) para ${orderId}: ${error.message}`);
-        return null;
+        // Capturar y manejar el Bad Request
+        console.error(`[LOG - ERROR]: Falló la consulta de detalle (vía Direct Query) para ${orderIdString}: ${error.message}`);
+        
+        // Si el error indica que la orden no existe (código de BitMart), devolvemos null.
+        // De lo contrario, relanzamos el error si se trata de un problema de firma/conexión.
+        // Si no tienes el código de error específico de BitMart para 'Order Not Found', es mejor devolver null y dejar que el bot reintente.
+        if (error.message.includes('Bad Request')) {
+            console.warn(`[LOG - WARNING]: Error 400 durante getOrderDetail, asumiendo que la orden no es consultable/existente.`);
+            return null;
+        }
+
+        // Si fue un error diferente al Bad Request, relanzamos
+        throw error;
     }
 }
+
 /**
  * Coloca una nueva orden.
  * @param {object} [creds] - Credenciales de la API (Añadido para igualar la firma de bitmartService).

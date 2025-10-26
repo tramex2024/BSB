@@ -84,6 +84,7 @@ BSB/			    # Bitmart Spot Bots
           ├── bitmart_entry_point.json  
           ├── longStrategy.js
           ├── shortStrategy.js
+          ├── logger.js
           ├── utils/
           │    └── dataManager.js
           │    └── orderManager.js
