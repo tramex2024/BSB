@@ -1,8 +1,7 @@
-
 // BSB/server/src/states/long/LBuying.js
 
 const { getOrderDetail } = require('../../../services/bitmartService');
-const { calculateLongTargets } = require('../../utils/dataManager'); // Importación original por destructuring restaurada.
+const DataManager = require('../../utils/dataManager'); // Corregido: Importamos el módulo completo para resolver el error 'is not a function'
 // Se elimina la dependencia de placeLimitSellOrder, ya que todas las órdenes de venta se gestionan en LSelling.
 // const { placeLimitSellOrder } = require('../../utils/orderManager'); 
 
@@ -129,8 +128,8 @@ async function run(dependencies) {
     if (!lStateData.lastOrder) {
         log("Calculando objetivos iniciales (Venta/Cobertura) para la nueva posición...", 'info');
         
-        // Uso de calculateLongTargets directamente (restaurado)
-        const { targetSellPrice, nextCoveragePrice, requiredCoverageAmount } = calculateLongTargets(
+        // Uso de DataManager.calculateLongTargets
+        const { targetSellPrice, nextCoveragePrice, requiredCoverageAmount } = DataManager.calculateLongTargets(
             lStateData.ppc, 
             config.long.profit_percent, 
             config.long.price_var, 
