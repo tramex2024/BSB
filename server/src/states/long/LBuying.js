@@ -1,7 +1,7 @@
 // BSB/server/src/states/long/LBuying.js
 
 const { getOrderDetail } = require('../../../services/bitmartService');
-const { calculateLongTargets } = require('../../utils/dataManager'); // RESTAURADO: Importación por desestructuración.
+const calculateLongTargets = require('../../utils/dataManager'); // CORREGIDO: Importación directa asumiendo que la función es el export principal del módulo.
 // Se elimina la dependencia de placeLimitSellOrder, ya que todas las órdenes de venta se gestionan en LSelling.
 // const { placeLimitSellOrder } = require('../../utils/orderManager'); 
 
