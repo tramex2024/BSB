@@ -1,4 +1,4 @@
-// Archivo: BSB/server/services/bitmartSpot.js     //118
+// Archivo: BSB/server/services/bitmartSpot.js
 
 const { makeRequest } = require('./bitmartClient');
 
@@ -114,21 +114,36 @@ async function getHistoryOrders(options = {}) {
     try {
         const response = await makeRequest('POST', endpoint, {}, requestBody);
         
-        // VERIFICACIÓN: Muestra la respuesta completa para depuración
-//        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2));
+        // Muestra la respuesta completa para depuración (Útil para confirmar nuevos formatos)
+//        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
         
-        let orders = [];
+        let rawOrders = [];
         
-        // CORRECCIÓN: Verifica si la respuesta es un arreglo directamente
+        // CORRECCIÓN: Manejo de la estructura de respuesta de BitMart
         if (response.data && Array.isArray(response.data)) {
-            orders = response.data;
+            rawOrders = response.data;
         } 
-        // Si no, verifica si el arreglo está dentro de una propiedad 'list'
         else if (response.data && response.data.data && Array.isArray(response.data.data.list)) {
-            orders = response.data.data.list;
+            rawOrders = response.data.data.list;
         }
+
+        // 🛠️ NORMALIZACIÓN DE DATOS: Asegura que price y size muestren los valores de ejecución
+        const normalizedOrders = rawOrders.map(order => {
+            
+            // Si la orden se llenó (filledSize > 0 o priceAvg > 0), usamos los datos de ejecución real.
+            // Esto corrige el problema de órdenes de mercado que tienen 'price' y 'size' como '0.00'.
+            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
+            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
+
+            return {
+                ...order, // Mantiene todos los campos originales
+                // Sobrescribe los campos clave con los valores reales para el frontend
+                price: finalPrice, 
+                size: finalSize,   
+            };
+        });
         
-        return orders;
+        return normalizedOrders;
     } catch (error) {
         console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
         throw error;
@@ -136,32 +151,56 @@ async function getHistoryOrders(options = {}) {
 }
 
 /**
- * Obtiene los detalles de una orden específica con reintentos.
+ * Obtiene los detalles de una orden específica (activa o reciente).
+ * Intenta consultar primero ÓRDENES ABIERTAS, y luego ÓRDENES RECIENTES (Historial).
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
- * @param {number} [retries=0] - Número de reintentos.
- * @param {number} [delay=INITIAL_RETRY_DELAY_MS] - Retraso inicial entre reintentos.
- * @returns {Promise<object>} - Detalles de la orden.
+ * @returns {Promise<object | null>} - Detalles de la orden, o null si no se encuentra.
  */
-async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETRY_DELAY_MS) {
-    if (!symbol || typeof symbol !== 'string' || !orderId || typeof orderId !== 'string') {
-        throw new Error(`${LOG_PREFIX} 'symbol' y 'orderId' son parámetros requeridos y deben ser cadenas de texto.`);
-    }
-    const requestBody = { symbol, order_id: orderId };
-    if (retries >= MAX_RETRIES) {
-        throw new Error(`Fallaron ${MAX_RETRIES} reintentos al obtener detalles de la orden ${orderId}.`);
-    }
+async function getOrderDetail(symbol, orderId) {
+    const endpoint = '/spot/v4/query/order'; // ⬅️ Endpoint Específico de BitMart (API v4)
+
+    // 🛑 CRÍTICO: Asegurarse de que el orderId sea una CADENA DE TEXTO para evitar pérdida de precisión
+    const orderIdString = String(orderId);
+
+    const requestBody = { 
+        symbol: symbol, 
+        orderId: orderIdString, // ⬅️ ¡Incluimos el ID en la solicitud!
+        orderMode: 'spot' 
+    };
+    
     try {
-        const response = await makeRequest('POST', '/spot/v4/query/order-detail', {}, requestBody);
-        const order = response.data.data;
-        return order;
-    } catch (error) {
-        if (error.isRetryable && retries < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-            return getOrderDetail(symbol, orderId, retries + 1, delay * 1.5);
-        } else {
-            throw error;
+        // Consultar el detalle de la orden directamente por ID
+        const response = await makeRequest('POST', endpoint, {}, requestBody);
+        
+        // La respuesta de este endpoint debe devolver directamente el objeto de la orden.
+        // Asumiendo que response.data es el objeto de la orden si es exitoso.
+        if (response.data && response.data.data) {
+             const orderDetails = response.data.data;
+
+             if (orderDetails.orderId === orderIdString) {
+                console.log(`[LOG]: Detalle de orden ${orderIdString} encontrado. Estado: ${orderDetails.state}`);
+                return orderDetails; // Devuelve los detalles de la orden
+             }
         }
+        
+        console.log(`[LOG]: Orden ${orderIdString} no encontrada a través de la consulta directa por ID.`);
+        return null;
+
+    } catch (error) {
+        // Capturar y manejar el Bad Request
+        console.error(`[LOG - ERROR]: Falló la consulta de detalle (vía Direct Query) para ${orderIdString}: ${error.message}`);
+        
+        // Si el error indica que la orden no existe (código de BitMart), devolvemos null.
+        // De lo contrario, relanzamos el error si se trata de un problema de firma/conexión.
+        // Si no tienes el código de error específico de BitMart para 'Order Not Found', es mejor devolver null y dejar que el bot reintente.
+        if (error.message.includes('Bad Request')) {
+            console.warn(`[LOG - WARNING]: Error 400 durante getOrderDetail, asumiendo que la orden no es consultable/existente.`);
+            return null;
+        }
+
+        // Si fue un error diferente al Bad Request, relanzamos
+        throw error;
     }
 }
 
@@ -175,32 +214,33 @@ async function getOrderDetail(symbol, orderId, retries = 0, delay = INITIAL_RETR
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-// ⬇️ CORRECCIÓN DE LA FIRMA: Debe recibir 'creds'
-async function placeOrder(creds, symbol, side, type, size, price) { 
-    
-    // 1. CORRECCIÓN DE LA LÓGICA DE MINÚSCULAS:
-    // Estandarizar side a minúsculas ANTES de usarlo en el requestBody y las condiciones.
-    const standardizedSide = side.toLowerCase(); 
-    
-    // 2. CORRECCIÓN DEL REQUEST BODY: usar standardizedSide.
+async function placeOrder(symbol, side, type, amount, price) {
+    const standardizedSide = side.toLowerCase(); // Estandarizar side a minúsculas
     const requestBody = { symbol, side: standardizedSide, type };
 
     if (type === 'limit') {
         if (!price) throw new Error("El precio es requerido para órdenes 'limit'.");
-        Object.assign(requestBody, { size: size.toString(), price: price.toString() });
+        // size para Limit Order es la cantidad de la moneda base
+        Object.assign(requestBody, { size: amount.toString(), price: price.toString() });
     } else if (type === 'market') {
-        // 3. CORRECCIÓN DE LA CONDICIÓN: usar standardizedSide
-        if (standardizedSide === 'buy') Object.assign(requestBody, { notional: size.toString() });
-        else if (standardizedSide === 'sell') Object.assign(requestBody, { size: size.toString() });
-        
-        // El error interno previo se ha ido porque ahora solo se pasa el 'type' no soportado
-        // si type no es 'limit' o 'market', pero es mejor dejar este throw como seguro.
-        // Si BitMart da un error real, será capturado por makeRequest.
+        // Usar standardizedSide para la lógica de notional/size
+        if (standardizedSide === 'buy') {
+             // 🛑 Para BUY Market, BitMart usa 'notional' (USDT amount)
+             Object.assign(requestBody, { notional: amount.toString() }); 
+        } else if (standardizedSide === 'sell') {
+            // Para SELL Market, BitMart usa 'size' (Base Coin amount)
+            Object.assign(requestBody, { size: amount.toString() }); 
+        } else {
+            throw new Error(`Lado de orden no soportado: ${standardizedSide}`);
+        }
     } else {
+        // Esta línea ahora debería recibir 'market', 'limit', etc.
         throw new Error(`Tipo de orden no soportado: ${type}`);
     }
     
+    // Endpoint V2 para enviar órdenes
     const response = await makeRequest('POST', '/spot/v2/submit_order', {}, requestBody);
+    
     const orderId = response.data.order_id;
     if (!orderId) throw new Error('Error al colocar la orden: No se recibió un order_id.');
     return response.data;

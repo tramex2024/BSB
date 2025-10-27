@@ -1,9 +1,9 @@
 // BSB/server/src/states/long/LBuying.js
 
 const { getOrderDetail } = require('../../../services/bitmartService');
-const { calculateLongTargets } = require('../../utils/dataManager');
-// Se elimina la dependencia de placeLimitSellOrder, ya que todas las órdenes de venta se gestionan en LSelling.
-// const { placeLimitSellOrder } = require('../../utils/orderManager'); 
+const { 
+    calculateLongTargets 
+} = require('../../utils/dataManager'); // Importamos la función directamente
 
 /**
  * Función central de la estrategia Long en estado BUYING.
@@ -14,7 +14,8 @@ const { calculateLongTargets } = require('../../utils/dataManager');
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log, creds,
-        updateBotState, updateLStateData, updateGeneralBotState
+        updateBotState, updateLStateData, updateGeneralBotState,
+        getBotState // Necesario para la auditoría 3/3
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -32,7 +33,8 @@ async function run(dependencies) {
         log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
 
         try {
-            const orderDetails = await getOrderDetail(creds, SYMBOL, orderIdString);
+            // 🛑 CORRECCIÓN 2 FINALIZADA: Solo se envían SYMBOL y orderIdString.
+            const orderDetails = await getOrderDetail(SYMBOL, orderIdString);
             
             // Si la orden se llenó o fue cancelada con ejecución parcial, la procesamos.
             const isOrderProcessed = orderDetails && (
@@ -72,6 +74,8 @@ async function run(dependencies) {
                 const totalUsdtUsed = parseFloat(orderDetails.executed_value || 0);
                 const newLBalance = (botState.lbalance || 0) - totalUsdtUsed;
 
+                log(`[AUDITORÍA 1/3] -> ANTES de guardar. PPC a guardar: ${newPpc.toFixed(2)}, AC a guardar: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
+
                 // 3. 🎯 CREACIÓN DE LA ACTUALIZACIÓN ATÓMICA DE DATOS
                 const atomicUpdate = {
                     // Actualización del estado general
@@ -88,17 +92,49 @@ async function run(dependencies) {
                 // 4. Aplicar la actualización atómica
                 await updateGeneralBotState(atomicUpdate);
                 
-                log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}.`, 'success');
+                log(`[AUDITORÍA 2/3] -> DESPUÉS de guardar (Objeto en memoria). PPC: ${newPpc.toFixed(2)}, AC: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
+
+                // 5. Verificación (Opcional, pero útil para depuración)
+                // Se verifica la existencia de getBotState antes de llamarla
+                if (getBotState) {
+                    const updatedBotState = await getBotState();
+                    log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${updatedBotState.lStateData.ppc.toFixed(2)}, AC leído: ${updatedBotState.lStateData.ac.toFixed(8)}, LState: ${updatedBotState.lstate}`, 'debug');
+                } else {
+                     log(`[AUDITORÍA 3/3] -> VERIFICACIÓN OMITIDA. getBotState no está disponible en las dependencias.`, 'debug');
+                }
+
+                log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}. Transicionando a BUYING.`, 'success');
 
             } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
                 // La orden sigue activa o parcialmente ejecutada. Esperar.
                 log(`La orden ID ${orderIdString} sigue activa (${orderDetails.state}). Esperando ejecución.`, 'info');
                 return;
-            } else {
-                 log(`La orden ID ${orderIdString} no está activa. Limpiando lastOrder para reintentar. Estado BitMart: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
-                 await updateLStateData({ 'lastOrder': null });
-                 return;
-            }
+            } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
+                // La orden sigue activa o parcialmente ejecutada. Esperar.
+                log(`La orden ID ${orderIdString} sigue activa (${orderDetails.state}). Esperando ejecución.`, 'info');
+                return;
+            } else {
+                // =========================================================
+                // 🛠️ BLOQUE DE MONITOREO CORREGIDO 🛠️
+                // Esto detiene la limpieza inmediata de 'lastOrder' si BitMart es lento.
+                // =========================================================
+                if (orderDetails && orderDetails.state === 'canceled' && parseFloat(orderDetails.filled_volume || 0) === 0) {
+                    log(`La orden ID ${orderIdString} fue CANCELADA sin ejecución. Limpiando lastOrder. Estado BitMart: ${orderDetails.state}`, 'error');
+                    await updateLStateData({ 'lastOrder': null });
+                } else if (!orderDetails || (orderDetails && orderDetails.state === 'unknown')) {
+                    // Si no encontramos detalles (el error 'No Encontrada' del log), damos tiempo.
+                    log(`ADVERTENCIA CRÍTICA: La orden ID ${orderIdString} no se puede consultar. Reintentando en el próximo ciclo. NO se limpia lastOrder.`, 'error');
+                    // Simplemente salimos de la función (return implícito)
+                } else {
+                    // Manejo de otros estados de error o no completados (e.g., failed, expired)
+                    log(`La orden ID ${orderIdString} tuvo un estado de error no procesable. Limpiando lastOrder para reintentar. Estado BitMart: ${orderDetails.state}`, 'error');
+                    await updateLStateData({ 'lastOrder': null });
+                }
+                return;
+                // =========================================================
+                // ⬆️ FIN DEL BLOQUE CORREGIDO ⬆️
+                // =========================================================
+            }
 
         } catch (error) {
             log(`Error al consultar orden en BitMart durante el monitoreo de COMPRA: ${error.message}. Reintentando...`, 'error');
@@ -114,6 +150,7 @@ async function run(dependencies) {
     if (!lStateData.lastOrder) {
         log("Calculando objetivos iniciales (Venta/Cobertura) para la nueva posición...", 'info');
         
+        // Uso de calculateLongTargets
         const { targetSellPrice, nextCoveragePrice, requiredCoverageAmount } = calculateLongTargets(
             lStateData.ppc, 
             config.long.profit_percent, 
