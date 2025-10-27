@@ -1,4 +1,4 @@
-// Archivo: BSB/server/services/bitmartService.js (ACTUALIZADO)
+// Archivo: BSB/server/services/bitmartService.js
 
 const spotService = require('./bitmartSpot');
 
@@ -71,6 +71,7 @@ async function getHistoryOrders(options = {}) {
 
 /**
  * Coloca una nueva orden.
+ * @param {object} creds - Credenciales de la API.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} side - 'buy' o 'sell'.
  * @param {string} type - 'limit' o 'market'.
@@ -78,8 +79,9 @@ async function getHistoryOrders(options = {}) {
  * @param {string} [price] - Precio para órdenes limit.
  * @returns {Promise<object>} - Respuesta de la API.
  */
-async function placeOrder(creds, symbol, side, type, size, price) {
-    return await spotService.placeOrder(creds, symbol, side, type, size, price);
+// ⬇️ Firma de la función que acepta 'creds' y lo pasa a spotService
+async function placeOrder(symbol, side, type, amount, price) {
+    return await spotService.placeOrder(symbol, side, type, amount, price);
 }
 
 /**
@@ -89,6 +91,7 @@ async function placeOrder(creds, symbol, side, type, size, price) {
  * @returns {Promise<object>} - Detalles de la orden.
  */
 async function getOrderDetail(symbol, orderId) {
+    // Si bitmartSpot.js no usa 'creds' en getOrderDetail, solo pasamos los parámetros requeridos
     return await spotService.getOrderDetail(symbol, orderId);
 }
 
@@ -118,6 +121,16 @@ async function getKlines(symbol, interval, size) {
     return await spotService.getKlines(symbol, interval, size);
 }
 
+// 🚨 FUNCIÓN DE WRAPPER AÑADIDA PARA COMPATIBILIDAD CON orderManager.js
+/**
+ * Coloca una orden de mercado usando notional (USDT).
+ * Nota: placeOrder en BitMart usa el campo 'size' para el notional en órdenes a mercado.
+ */
+async function placeMarketOrder({ symbol, side, notional }) {
+    // spotService.placeOrder(symbol, side, type, size/notional, price)
+    return await spotService.placeOrder(symbol, side, 'market', notional, null);
+}
+
 module.exports = {
     validateApiKeys,
     getBalance,
@@ -128,5 +141,6 @@ module.exports = {
     cancelOrder,
     getTicker,    
     getKlines,
-    getAvailableTradingBalances, 
+    getAvailableTradingBalances,
+    placeMarketOrder, 
 };
