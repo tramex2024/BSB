@@ -54,8 +54,12 @@ function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
 
 
 // -------------------------------------------------------------------------
-// LÓGICA DE TARGETS POST-COMPRA (LONG) - AUDITORÍA LISTA
+// LÓGICA DE TARGETS POST-COMPRA (LONG) - AUDITORÍA DE DEBUGGING
 // -------------------------------------------------------------------------
+
+/**
+ * Calcula los targets de Venta (Take Profit) y Cobertura (DCA) después de una compra (LONG).
+ */
 function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance) {
     const profitDecimal = parseNumber(profit_percent) / 100;
     const priceVarDecimal = parseNumber(price_var) / 100;
@@ -64,19 +68,18 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
 
-    // 🟢 AUDITORÍA FORZADA
-    console.log(`[DCA AUDIT CALC] Base: ${baseAmount} (from ${basePurchaseUsdt}), SizeVarDec: ${sizeVarDecimal} (from ${size_var}), Count: ${count}`);
+    // 🛑 AUDITORÍA CRÍTICA: Ver valores de configuración antes y después del parsing
+    console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
+    console.log(`[DCA DEBUG] Parsed Values -> Base: ${baseAmount}, SizeDec: ${sizeVarDecimal}, Count: ${count}`);
 
-    // 🟢 CORRECCIÓN 1: Usar 'const' en lugar de reasignar una variable global.
+    // Cálculo del Target de Venta
     const targetSellPrice = ppc * (1 + profitDecimal);
     
-    // 🛑 ELIMINADA: Eliminamos la re-asignación duplicada de targetSellPrice
-    // targetSellPrice = ppc * (1 + profitDecimal); 
-    
-    // Calcular el monto requerido para la próxima orden
+    // Cálculo del Monto de Cobertura Requerido
+    // requiredCoverageAmount = base * (1 + size_var/100) ^ count
     const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
-    console.log(`[DCA AUDIT RESULT] Required Amount Calculated: ${requiredCoverageAmount}`);
+    console.log(`[DCA DEBUG] Required Amount (Calculated): ${requiredCoverageAmount}`);
 
     // 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
     if (requiredCoverageAmount === 0 && count > 0) {
@@ -86,21 +89,23 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
             Count: ${count} (Expected 3)`);
     }
 
+    // Cálculo del Precio de la Próxima Cobertura
     const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
 
-    // Calcular la cobertura máxima
+    // Cálculo de la Cobertura Máxima (Solo informativo)
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,
-        ppc, // Usamos PPC como precio de partida para la simulación
+        ppc, 
         requiredCoverageAmount,
         priceVarDecimal,
         sizeVarDecimal
     );
     
+    // Devolver 0 si no hay fondos disponibles, pero manteniendo el cálculo requerido
     if(requiredCoverageAmount > balance){
         return { 
             targetSellPrice, nextCoveragePrice, 
-            requiredCoverageAmount: 0,
+            requiredCoverageAmount: 0, // 👈 0 para indicar que no se puede colocar la orden
             lCoveragePrice: nextCoveragePrice, 
             lNOrderMax: 0 
         };
