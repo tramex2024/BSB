@@ -79,6 +79,14 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     // Calcular el monto requerido para la próxima orden
     const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
+    // 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
+if (requiredCoverageAmount === 0 && count > 0) {
+    console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT. Variables used: 
+        Base: ${baseAmount} (Expected 5), 
+        SizeVarDec: ${sizeVarDecimal} (Expected 1), 
+        Count: ${count} (Expected 3)`);
+}
+
     // 🟢 CORRECCIÓN CLAVE: Usamos la función auxiliar para calcular el precio de la próxima orden.
     const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
 
