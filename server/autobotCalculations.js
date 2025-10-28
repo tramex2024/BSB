@@ -68,26 +68,27 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
 
-    // 🛑 AUDITORÍA CRÍTICA: Ver valores de configuración antes y después del parsing
-    console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
-    console.log(`[DCA DEBUG] Parsed Values -> Base: ${baseAmount}, SizeDec: ${sizeVarDecimal}, Count: ${count}`);
+    // 🛑 AUDITORÍA CRÍTICA
+console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
+console.log(`[DCA DEBUG] Parsed Values -> Base: ${baseAmount}, SizeDec: ${sizeVarDecimal}, Count: ${count}`);
 
-    // Cálculo del Target de Venta
-    const targetSellPrice = ppc * (1 + profitDecimal);
-    
-    // Cálculo del Monto de Cobertura Requerido
-    // requiredCoverageAmount = base * (1 + size_var/100) ^ count
-    const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
+// Cálculo del Monto de Cobertura Requerido
+const calculatedAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
-    console.log(`[DCA DEBUG] Required Amount (Calculated): ${requiredCoverageAmount}`);
+console.log(`[DCA DEBUG] Required Amount (Calculated): ${calculatedAmount}`);
 
-    // 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
-    if (requiredCoverageAmount === 0 && count > 0) {
-        console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT. Variables used: 
-            Base: ${baseAmount} (Expected 5), 
-            SizeVarDec: ${sizeVarDecimal} (Expected 1), 
-            Count: ${count} (Expected 3)`);
-    }
+let finalRequiredAmount = calculatedAmount;
+
+// 🎯 LÓGICA DE PRUEBA: Si es 0, lo cambiamos a 99.99.
+if (calculatedAmount === 0 && count > 0) {
+    console.error("[CRITICAL TEST] CALCULO FALLIDO (0). Forzando RequiredAmount a 99.99 para prueba de persistencia.");
+    finalRequiredAmount = 99.99;
+}
+
+// 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
+if (finalRequiredAmount === 0 && count > 0) {
+    console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT... (Variables usadas: Base: ${baseAmount}, SizeVarDec: ${sizeVarDecimal}, Count: ${count})`);
+}
 
     // Cálculo del Precio de la Próxima Cobertura
     const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
