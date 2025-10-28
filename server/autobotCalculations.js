@@ -1,25 +1,23 @@
-// BSB/server/autobotCalculations.js
+/**
+ * BSB/server/autobotCalculations.js (SOLO LÓGICA LONG Y COMÚN)
+ */
+
+const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations'); // 💡 IMPORTAR SHORT
 
 /**
  * Helper function to safely parse a value as a number.
- * @param {any} value - The value to parse.
- * @returns {number} The parsed number, or 0 if parsing fails.
  */
 function parseNumber(value) {
     const parsed = parseFloat(value);
     return isNaN(parsed) ? 0 : parsed;
 }
 
+// -------------------------------------------------------------------------
+// LÓGICA DE COBERTURA (LONG)
+// -------------------------------------------------------------------------
+
 /**
- * Calculates the price coverage (LCoverage) and number of orders (LNOrder)
- * for the Long strategy. (Mantiene el código original)
- *
- * @param {number} lbalance - The available balance in USDT.
- * @param {number} currentPrice - The current cryptocurrency price.
- * @param {number} purchaseUsdt - The amount of the first order in USDT.
- * @param {number} decrement - The price decrement percentage (e.g., 0.01 for 1%).
- * @param {number} increment - The amount increment percentage (e.g., 1 for 100%).
- * @returns {object} An object with LCoverage and LNOrder.
+ * Calcula la cobertura de precio (LCoverage) y número de órdenes (LNOrder) para Long.
  */
 function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, increment) {
     let currentBalance = lbalance;
@@ -31,8 +29,8 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
     if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
-        coveragePrice = nextOrderPrice;
-
+        coveragePrice = nextOrderPrice * (1 - decrement);
+        
         while (true) {
             nextOrderPrice = nextOrderPrice * (1 - decrement);
             nextOrderAmount = nextOrderAmount * (1 + increment);
@@ -40,50 +38,9 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
             if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
                 currentBalance -= nextOrderAmount;
                 numberOfOrders++;
-                coveragePrice = nextOrderPrice;
+                coveragePrice = nextOrderPrice * (1 - decrement);
             } else {
-                break;
-            }
-        }
-    } else {
-        return { coveragePrice: currentPrice, numberOfOrders: 0 };
-    }
-    
-    return { coveragePrice, numberOfOrders };
-}
-
-/**
- * Calculates the price coverage (SCoverage) and number of orders (SNOrder)
- * for the Short strategy. (Mantiene el código original)
- *
- * @param {number} sbalance - The available balance in BTC.
- * @param {number} currentPrice - The current cryptocurrency price.
- * @param {number} sellBtc - The amount of the first order in BTC.
- * @param {number} increment - The price increment percentage (e.g., 0.01 for 1%).
- * @param {number} sizeIncrement - The amount increment percentage (e.g., 1 for 100%).
- * @returns {object} An object with SCoverage and SNOrder.
- */
-function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, sizeIncrement) {
-    let currentBalance = sbalance;
-    let nextOrderPrice = currentPrice;
-    let nextOrderAmount = sellBtc;
-    let numberOfOrders = 0;
-    let coveragePrice = currentPrice;
-
-    if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-        currentBalance -= nextOrderAmount;
-        numberOfOrders++;
-        coveragePrice = nextOrderPrice;
-
-        while (true) {
-            nextOrderPrice = nextOrderPrice * (1 + increment);
-            nextOrderAmount = nextOrderAmount * (1 + sizeIncrement);
-            
-            if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-                currentBalance -= nextOrderAmount;
-                numberOfOrders++;
-                coveragePrice = nextOrderPrice;
-            } else {
+                coveragePrice = nextOrderPrice; 
                 break;
             }
         }
@@ -95,18 +52,12 @@ function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, size
 }
 
 
+// -------------------------------------------------------------------------
+// LÓGICA DE TARGETS POST-COMPRA (LONG)
+// -------------------------------------------------------------------------
+
 /**
- * 🚨 FUNCIÓN CORREGIDA: Calcula los targets de Venta (Take Profit) y Cobertura (DCA)
- * después de una compra. AHORA INCLUYE LCoverage y LNOrder.
- *
- * @param {number} ppc - Precio Promedio de Compra de la posición actual (lStateData.ppc).
- * @param {number} profit_percent - Porcentaje de ganancia deseado (ej: 0.01 para 1%).
- * @param {number} price_var - Variación de precio para la próxima orden de cobertura (ej: 0.01 para 1%).
- * @param {number} size_var - Variación de tamaño para la próxima orden de cobertura (ej: 1 para 100%).
- * @param {number} basePurchaseUsdt - El monto base del primer DCA en USDT (config.long.purchaseUsdt).
- * @param {number} orderCountInCycle - El número de órdenes ya ejecutadas en el ciclo (lStateData.orderCountInCycle).
- * @param {number} lbalance - Balance USDT disponible para cobertura. <== ¡NUEVO PARÁMETRO!
- * @returns {object} Objeto con targetSellPrice, nextCoveragePrice, requiredCoverageAmount, lCoveragePrice, lNOrderMax.
+ * Calcula los targets de Venta (Take Profit) y Cobertura (DCA) después de una compra (LONG).
  */
 function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance) {
     const profitDecimal = parseNumber(profit_percent) / 100;
@@ -116,55 +67,36 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
 
-    // 1. Calcular el Precio de Venta (Take Profit)
     const targetSellPrice = ppc * (1 + profitDecimal);
-
-    // 2. Calcular el Monto Requerido para la Próxima Cobertura
-    // La fórmula es: baseAmount * (1 + size_var)^count. Usamos 'count' para obtener la siguiente orden.
     const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count);
-
-    // 3. Calcular el Precio de la Próxima Cobertura (DCA)
-    // Se usa el PPC como precio de referencia para la caída (tal como lo tienes).
     const nextCoveragePrice = ppc * (1 - priceVarDecimal); 
 
-    // 4. Calcular el Límite de Cobertura (LCoverage) y Órdenes Posibles (LNOrder)
-    // Usamos la función ya existente calculateLongCoverage, pero simulando
-    // que el PPC es el "precio actual" y que la orden a colocar es la primera del cálculo (índice 0).
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,
-        ppc, // Usamos PPC como punto de partida para el cálculo de cobertura total
-        requiredCoverageAmount, // El monto de la PRÓXIMA orden es el 'purchaseUsdt' inicial para la función de cobertura
+        ppc,
+        requiredCoverageAmount,
         priceVarDecimal,
         sizeVarDecimal
     );
     
-    // Si la próxima orden ya no se puede colocar con el balance, lNOrderMax será 0.
     if(requiredCoverageAmount > balance){
-        // En este caso, lcoverage debe reflejar el precio de la *próxima* orden.
         return { 
-            targetSellPrice, 
-            nextCoveragePrice, 
-            requiredCoverageAmount: 0, // No hay suficiente monto
+            targetSellPrice, nextCoveragePrice, 
+            requiredCoverageAmount: 0,
             lCoveragePrice: nextCoveragePrice, 
             lNOrderMax: 0 
         };
     }
     
-    // Devolvemos todos los targets
     return { 
-        targetSellPrice, 
-        nextCoveragePrice, 
-        requiredCoverageAmount,
-        lCoveragePrice, 
-        lNOrderMax 
+        targetSellPrice, nextCoveragePrice, requiredCoverageAmount,
+        lCoveragePrice, lNOrderMax 
     };
 }
 
+
 /**
- * Calculates the initial state of the bot's parameters. (Mantiene el código original)
- * @param {object} config - The configuration object from the frontend.
- * @param {number} currentPrice - The current cryptocurrency price.
- * @returns {object} An object with the calculated parameters.
+ * Calculates the initial state of the bot's parameters (USA BOTH).
  */
 function calculateInitialState(config, currentPrice) {
     const { long, short } = config;
@@ -172,6 +104,7 @@ function calculateInitialState(config, currentPrice) {
     const lbalance = parseNumber(long.amountUsdt);
     const sbalance = parseNumber(short.amountBtc);
 
+    // LONG INITIAL CALCULATIONS
     const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
         lbalance,
         currentPrice,
@@ -180,6 +113,7 @@ function calculateInitialState(config, currentPrice) {
         parseNumber(long.size_var) / 100
     );
 
+    // SHORT INITIAL CALCULATIONS (Llama al nuevo archivo)
     const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
         sbalance,
         currentPrice,
@@ -189,19 +123,11 @@ function calculateInitialState(config, currentPrice) {
     );
 
     return {
-        lstate: 'STOPPED',
-        sstate: 'STOPPED',
-        profit: 0,
-        lbalance: lbalance,
-        sbalance: sbalance,
-        ltprice: 0,
-        stprice: 0,
-        lcycle: 0,
-        scycle: 0,
-        lcoverage: lcoverage,
-        scoverage: scoverage,
-        lnorder: lnorder,
-        snorder: snorder,
+        lstate: 'STOPPED', sstate: 'STOPPED', profit: 0,
+        lbalance: lbalance, sbalance: sbalance,
+        ltprice: 0, stprice: 0, lcycle: 0, scycle: 0,
+        lcoverage: lcoverage, scoverage: scoverage,
+        lnorder: lnorder, snorder: snorder,
     };
 }
 
@@ -209,6 +135,6 @@ module.exports = {
     parseNumber,
     calculateInitialState,
     calculateLongCoverage,
-    calculateShortCoverage,
-    calculateLongTargets // ⬅️ ¡CORRECCIÓN CRÍTICA: Exportación agregada!
+    calculateLongTargets,
+    // NO exportamos las funciones Short aquí, solo las importamos y usamos en calculateInitialState.
 };
