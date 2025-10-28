@@ -99,6 +99,11 @@ async function updateBotStateWithPrice(price) {
 //                botState.config.short.size_var / 100
 //            );
             */
+
+            // 🟢 CORRECCIÓN: Inicializar scoverage y snorder al valor actual de la DB
+            const scoverage = botState.scoverage;
+            const snorder = botState.snorder;
+
             // 🛑 CAMBIO CLAVE: Usamos findOneAndUpdate para actualizar SOLO los campos de cobertura.
             // Esto evita sobrescribir lStateData, lbalance, lstate, etc. con datos obsoletos.
             const updatedBotState = await Autobot.findOneAndUpdate(
@@ -108,7 +113,7 @@ async function updateBotStateWithPrice(price) {
                         lcoverage: lcoverage,
                         lnorder: lnorder,
                         scoverage: scoverage,
-                        snorder: snorder,
+                        snorder: snorder,                                  
                         lastUpdateTime: new Date()
                     }
                 },
