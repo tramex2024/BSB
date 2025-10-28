@@ -2,16 +2,16 @@
  * BSB/server/autobotCalculations.js (SOLO LÓGICA LONG Y COMÚN - CORREGIDO)
  */
 
-//const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations');
+// const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations');
 const { parseNumber } = require('./utils/helpers'); // 🟢 CORRECCIÓN: Importa desde el nuevo helper
+
+// 🛑 ELIMINADA: Declaración global innecesaria de targetSellPrice
+// let targetSellPrice = 0; 
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
+// ... (calculateLongCoverage se mantiene igual) ...
 // -------------------------------------------------------------------------
-
-/**
- * Calcula la cobertura de precio (LCoverage) y número de órdenes (LNOrder) para Long.
- */
 function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, increment) {
     let currentBalance = lbalance;
     let nextOrderPrice = currentPrice;
@@ -46,26 +46,16 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
 
 // -------------------------------------------------------------------------
 // FUNCIÓN AUXILIAR AGREGADA: Calcula el precio de la N-ésima orden DCA (Long)
+// ... (calculateNextDcaPrice se mantiene igual) ...
 // -------------------------------------------------------------------------
-/**
- * Calcula el precio exacto de la próxima orden de cobertura (DCA)
- * aplicando el price_var (decremento) al Precio Promedio de Compra (PPC) actual.
- */
 function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
-    // La fórmula corregida para el próximo precio de cobertura:
-    // Precio de la próxima orden = PPC * (1 - priceVarDecimal)
-    // Esto asegura el 1% de separación desde el PPC consolidado.
     return ppc * (1 - priceVarDecimal);
 }
 
 
 // -------------------------------------------------------------------------
-// LÓGICA DE TARGETS POST-COMPRA (LONG) - CORREGIDA
+// LÓGICA DE TARGETS POST-COMPRA (LONG) - AUDITORÍA LISTA
 // -------------------------------------------------------------------------
-
-/**
- * Calcula los targets de Venta (Take Profit) y Cobertura (DCA) después de una compra (LONG).
- */
 function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance) {
     const profitDecimal = parseNumber(profit_percent) / 100;
     const priceVarDecimal = parseNumber(price_var) / 100;
@@ -74,29 +64,29 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
 
+    // 🟢 AUDITORÍA FORZADA
+    console.log(`[DCA AUDIT CALC] Base: ${baseAmount} (from ${basePurchaseUsdt}), SizeVarDec: ${sizeVarDecimal} (from ${size_var}), Count: ${count}`);
+
+    // 🟢 CORRECCIÓN 1: Usar 'const' en lugar de reasignar una variable global.
     const targetSellPrice = ppc * (1 + profitDecimal);
     
-    // 🟢 AUDITORÍA FORZADA
-console.log(`[DCA AUDIT CALC] Base: ${baseAmount} (from ${basePurchaseUsdt}), SizeVarDec: ${sizeVarDecimal} (from ${size_var}), Count: ${count}`);
+    // 🛑 ELIMINADA: Eliminamos la re-asignación duplicada de targetSellPrice
+    // targetSellPrice = ppc * (1 + profitDecimal); 
+    
+    // Calcular el monto requerido para la próxima orden
+    const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
-const targetSellPrice = ppc * (1 + profitDecimal);
-    
-// Calcular el monto requerido para la próxima orden
-const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
-
-console.log(`[DCA AUDIT RESULT] Required Amount Calculated: ${requiredCoverageAmount}`);
+    console.log(`[DCA AUDIT RESULT] Required Amount Calculated: ${requiredCoverageAmount}`);
 
     // 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
-if (requiredCoverageAmount === 0 && count > 0) {
-    console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT. Variables used: 
-        Base: ${baseAmount} (Expected 5), 
-        SizeVarDec: ${sizeVarDecimal} (Expected 1), 
-        Count: ${count} (Expected 3)`);
-}
+    if (requiredCoverageAmount === 0 && count > 0) {
+        console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT. Variables used: 
+            Base: ${baseAmount} (Expected 5), 
+            SizeVarDec: ${sizeVarDecimal} (Expected 1), 
+            Count: ${count} (Expected 3)`);
+    }
 
-    // 🟢 CORRECCIÓN CLAVE: Usamos la función auxiliar para calcular el precio de la próxima orden.
     const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
-
 
     // Calcular la cobertura máxima
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
@@ -141,7 +131,8 @@ function calculateInitialState(config, currentPrice) {
         parseNumber(long.size_var) / 100
     );
 
-    // SHORT INITIAL CALCULATIONS (Llama al nuevo archivo)
+    // 🛑 SHORT INITIAL CALCULATIONS (COMENTADA POR DEPENDENCIA CIRCULAR)
+    /*
     const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
         sbalance,
         currentPrice,
@@ -149,9 +140,12 @@ function calculateInitialState(config, currentPrice) {
         parseNumber(short.price_var) / 100,
         parseNumber(short.size_var) / 100
     );
+    */
+    const scoverage = 0; // Inicializar a 0 si la lógica está comentada
+    const snorder = 0;
 
     return {
-        lstate: 'STOPPED', sstate: 'STOPPED', profit: 0,
+        lstate: 'BUYING', sstate: 'STOPPED', profit: 0, // Aseguramos que sstate esté en STOPPED
         lbalance: lbalance, sbalance: sbalance,
         ltprice: 0, stprice: 0, lcycle: 0, scycle: 0,
         lcoverage: lcoverage, scoverage: scoverage,
