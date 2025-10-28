@@ -1,7 +1,6 @@
 // BSB/server/src/states/long/LBuying.js
 
-// 🛑 IMPORTACIÓN CRÍTICA: Necesitas getRecentOrders para la lógica de respaldo
-const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService'); 
+const { getOrderDetail } = require('../../../services/bitmartService');
 const { 
     calculateLongTargets 
 } = require('../../utils/dataManager'); // Importamos la función directamente
@@ -14,9 +13,9 @@ const { 
  */
 async function run(dependencies) {
     const {
-        botState, currentPrice, config, log,
+        botState, currentPrice, config, log, creds,
         updateBotState, updateLStateData, updateGeneralBotState,
-        getBotState 
+        getBotState // Necesario para la auditoría 3/3
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -34,58 +33,29 @@ async function run(dependencies) {
         log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
 
         try {
-            
-            // 1. Intentar la consulta directa por ID
-            let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
-            let finalDetails = orderDetails;
-            let isOrderProcessed = false;
-            let filledVolume = parseFloat(finalDetails?.filledVolume || 0); 
-            
-            // 🛑 Criterio inicial de éxito/procesamiento
-            if (finalDetails) {
-                 isOrderProcessed = (
-                    finalDetails.state === 'filled' || 
-                    finalDetails.state === 'partially_canceled' || 
-                    (finalDetails.state === 'canceled' && filledVolume > 0) ||
-                    filledVolume > 0 
-                );
-            }
-            
+            const orderDetails = await getOrderDetail(SYMBOL, orderIdString);
+            
+            // Si la orden se llenó o fue cancelada con ejecución parcial, la procesamos.
+            const filledVolume = parseFloat(orderDetails?.filledVolume || 0); // Usar filledVolume en lugar de filled_volume (Ajuste para BitMart API)
+            const isOrderProcessed = orderDetails && (
+                orderDetails.state === 'filled' || 
+                orderDetails.state === 'partially_canceled' || 
+                (orderDetails.state === 'canceled' && filledVolume > 0)
+            );
 
-            // ======================================================
-            // 💡 LÓGICA DE RESPALDO (si la consulta directa falla o es incompleta)
-            // ======================================================
-            if (!isOrderProcessed) {
-                log(`Fallo/inconcluso en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'warning');
-                
-                // 2. Buscar en el historial
-                const recentOrders = await getRecentOrders(SYMBOL); 
-                finalDetails = recentOrders.find(order => order.orderId === orderIdString || order.order_id === orderIdString); // Buscar por ambos campos por seguridad
-                
-                if (finalDetails) {
-                    filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0); // Asumiendo que filledVolume/filledSize son campos de historial
-                    isOrderProcessed = filledVolume > 0;
-                    
-                    if (isOrderProcessed) {
-                        log(`Orden ${orderIdString} encontrada y confirmada como llenada en el historial (Volumen llenado: ${filledVolume}).`, 'success');
-                    }
-                }
-            }
-
-
-            if (isOrderProcessed) {
-                // Usamos priceAvg si está disponible, si no, el precio (mejor para órdenes de mercado)
-                const averagePrice = parseFloat(finalDetails.priceAvg || finalDetails.price || 0);
+            if (isOrderProcessed) {
+                const averagePrice = parseFloat(orderDetails.price_avg || orderDetails.price || 0);
                 
-                // Si filledVolume es 0, a pesar de las banderas, no procesamos.
+                // Si filledVolume es 0 (aunque la bandera diga true, puede ser un error), no hay nada que procesar.
                 if (filledVolume === 0) {
                     log(`Error: Orden ID ${orderIdString} cancelada o no ejecutada (Volumen 0). Limpiando lastOrder.`, 'error');
                     await updateLStateData({ 'lastOrder': null });
+                    // Revertir a RUNNING para reintentar la compra inicial.
                     await updateBotState('RUNNING', 'long');
                     return;
                 }
 
-                log(`Recuperación exitosa: La orden ID ${orderIdString} se completó. Procesando consolidación...`, 'success');
+                log(`Recuperación exitosa: La orden ID ${orderIdString} se completó (Estado: ${orderDetails.state}). Procesando...`, 'success');
 
                 // === LÓGICA DE CONSOLIDACIÓN DE POSICIÓN (CRÍTICA) ===
                 const oldAc = lStateData.ac || 0;
@@ -101,8 +71,8 @@ async function run(dependencies) {
                     newPpc = (totalSpentOld + totalSpentNew) / newAc;
                 }
                 
-                // 2. Calcular el nuevo Balance y Total Gastado (usamos executedValue si está disponible, si no, lo calculamos)
-                const totalUsdtUsed = parseFloat(finalDetails.executedValue || finalDetails.executed_value || (filledVolume * averagePrice));
+                // 2. Calcular el nuevo Balance y Total Gastado (para auditoría)
+                const totalUsdtUsed = parseFloat(orderDetails.executed_value || 0);
                 const newLBalance = (botState.lbalance || 0) + (lastOrder.usdt_amount - totalUsdtUsed); // Reintegramos el USDT no usado
                 
                 log(`[AUDITORÍA 1/3] -> ANTES de guardar. PPC a guardar: ${newPpc.toFixed(2)}, AC a guardar: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
@@ -135,20 +105,25 @@ async function run(dependencies) {
 
                 log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}. Transicionando a BUYING.`, 'success');
 
-            } else if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
+            } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
                 // ⏸️ Orden activa/parcialmente ejecutada. Persistir.
-                log(`La orden ID ${orderIdString} sigue activa (${finalDetails.state}). Esperando ejecución.`, 'info');
+                log(`La orden ID ${orderIdString} sigue activa (${orderDetails.state}). Esperando ejecución.`, 'info');
                 return;
+            } else if (!orderDetails || (orderDetails && orderDetails.state === 'unknown')) {
+                // 🤷 Orden no encontrada/desconocida (error de asincronía). Persistir.
+                log(`ADVERTENCIA: La orden ID ${orderIdString} no se puede consultar o tiene estado desconocido. Se mantiene pendiente para reintento.`, 'warning');
+                return; 
             } else {
-                // ❌ Otros estados de error final SIN NINGUNA ejecución. Limpiamos.
-                log(`La orden ID ${orderIdString} tuvo un estado de error final sin ejecución o es desconocida. Limpiando lastOrder. Estado BitMart: ${finalDetails?.state || 'N/A'}`, 'error');
+                // ❌ Otros estados de error final (canceled, failed, expired) SIN NINGUNA ejecución. Limpiamos.
+                log(`La orden ID ${orderIdString} tuvo un estado de error final sin ejecución. Limpiando lastOrder. Estado BitMart: ${orderDetails.state}`, 'error');
                 await updateLStateData({ 'lastOrder': null });
-                await updateBotState('RUNNING', 'long');
+                // Revertir a RUNNING para reintentar la compra inicial.
+                await updateBotState('RUNNING', 'long'); 
                 return;
             }
 
         } catch (error) {
-            log(`Error de API al consultar la orden ${orderIdString} o en lógica de respaldo: ${error.message}. Persistiendo y reintentando en el próximo ciclo...`, 'error');
+            log(`Error al consultar orden en BitMart durante el monitoreo de COMPRA: ${error.message}. Persistiendo y reintentando en el próximo ciclo...`, 'error');
             return;
         }
     }

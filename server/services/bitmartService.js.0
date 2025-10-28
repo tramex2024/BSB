@@ -70,18 +70,6 @@ async function getHistoryOrders(options = {}) {
 }
 
 /**
- * 💡 NUEVA FUNCIÓN AÑADIDA: Obtiene órdenes recientes que ya fueron llenadas o canceladas/llenadas.
- * Se utiliza para la lógica de respaldo en LBuying.js.
- * @param {string} symbol - Símbolo de trading (e.g., 'BTC_USDT').
- * @returns {Promise<object[]>} - Un arreglo de órdenes recientes.
- */
-async function getRecentOrders(symbol) {
-    // Usamos getHistoryOrders con un límite pequeño y estado 'all' para encontrar órdenes recientes.
-    // getHistoryOrders ya maneja la normalización del estado 'all'.
-    return await spotService.getHistoryOrders({ symbol, limit: 50 });
-}
-
-/**
  * Coloca una nueva orden.
  * @param {object} creds - Credenciales de la API.
  * @param {string} symbol - Símbolo de trading.
@@ -155,5 +143,4 @@ module.exports = {
     getKlines,
     getAvailableTradingBalances,
     placeMarketOrder, 
-    getRecentOrders,
 };
