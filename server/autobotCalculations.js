@@ -3,7 +3,7 @@
  */
 
 //const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations');
-const { parseNumber } = require('./src/utils/helpers'); // 🟢 CORRECCIÓN: Importa desde el nuevo helper
+const { parseNumber } = require('./utils/helpers'); // 🟢 CORRECCIÓN: Importa desde el nuevo helper
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)

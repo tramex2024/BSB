@@ -46,7 +46,8 @@ BSB/			    # Bitmart Spot Bots
 ├── server/                # Backend files - Deployed on Render
      ├── server.js
      ├── autobotLogic.js
-     ├── autobotCalculations.js      
+     ├── autobotCalculations.js
+     ├── autobotShortCalculations.js      
      ├── models/
      │   └── Order.js
      │   └── Autobot.js
@@ -92,6 +93,8 @@ BSB/			    # Bitmart Spot Bots
 	  │    └── dataManagerShort.js
           │    └── orderManagerShort.js
           │    └── coverageLogicShort.js
+          │    └── cleanState.js
+          │    └── helpers.js
           ├── states/
 	       ├── long/
 	       │   └── LStopped.js
@@ -100,8 +103,8 @@ BSB/			    # Bitmart Spot Bots
 	       │   └── LNoCoverage.js
 	       │   └── LBuying.js
 	       ├── short/	
-               	    └── SHStopped.js
-		    └── SHSelling.js
-		    └── SHRunning.js
-		    └── SHNoCoverage.js
-		    └── SHBuying.js	
+               	    └── SStopped.js
+		    └── SSelling.js
+		    └── SRunning.js
+		    └── SNoCoverage.js
+		    └── SBuying.js	

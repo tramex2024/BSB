@@ -15,7 +15,7 @@ const autobotLogic = require('./autobotLogic.js');
 const checkTimeSync = require('./services/check_time');
 
 // Importa las funciones de cálculo
-const { calculateLongCoverage, calculateShortCoverage } = require('./autobotCalculations');
+const { calculateLongCoverage /*, calculateShortCoverage*/ } = require('./autobotCalculations');
 
 // Modelos
 const Order = require('./models/Order');
@@ -90,15 +90,15 @@ async function updateBotStateWithPrice(price) {
                 botState.config.long.size_var / 100
             );
 
-            // Recalcula scoverage y snorder
-            const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
-                botState.sbalance,
-                parseFloat(price),
-                botState.config.short.sellBtc,
-                botState.config.short.price_var / 100,
-                botState.config.short.size_var / 100
-            );
-            
+            /*// Recalcula scoverage y snorder
+ //           const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
+ //               botState.sbalance,
+ //               parseFloat(price),
+ //               botState.config.short.sellBtc,
+ //               botState.config.short.price_var / 100,
+//                botState.config.short.size_var / 100
+//            );
+            */
             // 🛑 CAMBIO CLAVE: Usamos findOneAndUpdate para actualizar SOLO los campos de cobertura.
             // Esto evita sobrescribir lStateData, lbalance, lstate, etc. con datos obsoletos.
             const updatedBotState = await Autobot.findOneAndUpdate(
