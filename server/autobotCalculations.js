@@ -4,13 +4,7 @@
 
 const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations'); // 💡 IMPORTAR SHORT
 
-/**
- * Helper function to safely parse a value as a number.
- */
-function parseNumber(value) {
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? 0 : parsed;
-}
+const { parseNumber } = require('./utils/helpers'); // Asumiendo que el path es correcto
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
