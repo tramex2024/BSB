@@ -96,69 +96,41 @@ function calculateShortCoverage(sbalance, currentPrice, sellBtc, increment, size
 
 
 /**
- * 🚨 FUNCIÓN CORREGIDA: Calcula los targets de Venta (Take Profit) y Cobertura (DCA)
- * después de una compra. AHORA INCLUYE LCoverage y LNOrder.
- *
- * @param {number} ppc - Precio Promedio de Compra de la posición actual (lStateData.ppc).
+ * 🚨 FUNCIÓN FALTANTE: Calcula los targets de Venta (Take Profit) y Cobertura (DCA)
+ * después de una compra.
+ * * @param {number} ppc - Precio Promedio de Compra de la posición actual (lStateData.ppc).
  * @param {number} profit_percent - Porcentaje de ganancia deseado (ej: 0.01 para 1%).
  * @param {number} price_var - Variación de precio para la próxima orden de cobertura (ej: 0.01 para 1%).
  * @param {number} size_var - Variación de tamaño para la próxima orden de cobertura (ej: 1 para 100%).
  * @param {number} basePurchaseUsdt - El monto base del primer DCA en USDT (config.long.purchaseUsdt).
  * @param {number} orderCountInCycle - El número de órdenes ya ejecutadas en el ciclo (lStateData.orderCountInCycle).
- * @param {number} lbalance - Balance USDT disponible para cobertura. <== ¡NUEVO PARÁMETRO!
- * @returns {object} Objeto con targetSellPrice, nextCoveragePrice, requiredCoverageAmount, lCoveragePrice, lNOrderMax.
+ * @returns {object} Objeto con targetSellPrice, nextCoveragePrice, y requiredCoverageAmount.
  */
-function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance) {
+function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle) {
     const profitDecimal = parseNumber(profit_percent) / 100;
     const priceVarDecimal = parseNumber(price_var) / 100;
     const sizeVarDecimal = parseNumber(size_var) / 100;
     const baseAmount = parseNumber(basePurchaseUsdt);
     const count = orderCountInCycle || 0;
-    const balance = parseNumber(lbalance);
 
     // 1. Calcular el Precio de Venta (Take Profit)
     const targetSellPrice = ppc * (1 + profitDecimal);
 
-    // 2. Calcular el Monto Requerido para la Próxima Cobertura
-    // La fórmula es: baseAmount * (1 + size_var)^count. Usamos 'count' para obtener la siguiente orden.
-    const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count);
-
-    // 3. Calcular el Precio de la Próxima Cobertura (DCA)
-    // Se usa el PPC como precio de referencia para la caída (tal como lo tienes).
+    // 2. Calcular el Precio de la Próxima Cobertura (DCA)
+    // Se usa el PPC como precio de referencia para la caída
     const nextCoveragePrice = ppc * (1 - priceVarDecimal); 
 
-    // 4. Calcular el Límite de Cobertura (LCoverage) y Órdenes Posibles (LNOrder)
-    // Usamos la función ya existente calculateLongCoverage, pero simulando
-    // que el PPC es el "precio actual" y que la orden a colocar es la primera del cálculo (índice 0).
-    const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
-        balance,
-        ppc, // Usamos PPC como punto de partida para el cálculo de cobertura total
-        requiredCoverageAmount, // El monto de la PRÓXIMA orden es el 'purchaseUsdt' inicial para la función de cobertura
-        priceVarDecimal,
-        sizeVarDecimal
-    );
-    
-    // Si la próxima orden ya no se puede colocar con el balance, lNOrderMax será 0.
-    if(requiredCoverageAmount > balance){
-        // En este caso, lcoverage debe reflejar el precio de la *próxima* orden.
-        return { 
-            targetSellPrice, 
-            nextCoveragePrice, 
-            requiredCoverageAmount: 0, // No hay suficiente monto
-            lCoveragePrice: nextCoveragePrice, 
-            lNOrderMax: 0 
-        };
-    }
-    
-    // Devolvemos todos los targets
+    // 3. Calcular el Monto Requerido para la Próxima Cobertura
+    // La fórmula es: baseAmount * (1 + size_var)^count
+    const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count);
+
     return { 
         targetSellPrice, 
         nextCoveragePrice, 
-        requiredCoverageAmount,
-        lCoveragePrice, 
-        lNOrderMax 
+        requiredCoverageAmount 
     };
 }
+
 
 /**
  * Calculates the initial state of the bot's parameters. (Mantiene el código original)

@@ -158,35 +158,40 @@ async function run(dependencies) {
     // =================================================================
     // === [ 2. GESTIÓN DE TARGETS DE VENTA Y COBERTURA ] ================
     // =================================================================
-    if (!lStateData.lastOrder && lStateData.ppc > 0) { // Añadimos check de PPC > 0
-        log("Calculando objetivos iniciales (Venta/Cobertura) para la nueva posición...", 'info');
-        
-        // Uso de calculateLongTargets
-        const { targetSellPrice, nextCoveragePrice, requiredCoverageAmount } = calculateLongTargets(
-            lStateData.ppc, 
-            config.long.profit_percent, 
-            config.long.price_var, 
-            config.long.size_var,
-            config.long.purchaseUsdt,
-            lStateData.orderCountInCycle
-        );
+    if (!lStateData.lastOrder && lStateData.ppc > 0) { 
+    log("Calculando objetivos iniciales (Venta/Cobertura) y Límite de Cobertura...", 'info');
+    
+    //⬇️ MODIFICACIÓN: Pasamos lBalance al cálculo
+    const { 
+        targetSellPrice, 
+        nextCoveragePrice, 
+        requiredCoverageAmount, 
+        lCoveragePrice,      // <-- Captura el nuevo LCoverage (Precio)
+        lNOrderMax           // <-- Captura el nuevo LNOrder (Cantidad)
+    } = calculateLongTargets(
+        lStateData.ppc, 
+        config.long.profit_percent, 
+        config.long.price_var, 
+        config.long.size_var,
+        config.long.purchaseUsdt,
+        lStateData.orderCountInCycle,
+        botState.lbalance // <== ¡CRÍTICO: Pasar el LBalance!
+    );
 
-        log(`Targets Iniciales establecidos. Venta (ltprice): ${targetSellPrice.toFixed(2)}, Próxima Cobertura: ${nextCoveragePrice.toFixed(2)} (${requiredCoverageAmount.toFixed(2)} USDT)`, 'info');
+    log(`Límite de Cobertura (LCoverage): ${lCoveragePrice.toFixed(2)} USD (Órdenes restantes posibles: ${lNOrderMax}).`, 'warning');
 
-        // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
-        const targetsUpdate = {
-            // Campos de nivel superior
-            ltprice: targetSellPrice,
-            lcoverage: requiredCoverageAmount, 
-            
-            // Campos de lStateData
-            'lStateData.requiredCoverageAmount': requiredCoverageAmount,
-            'lStateData.nextCoveragePrice': nextCoveragePrice,
-        };
+    // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
+    const targetsUpdate = {
+        ltprice: targetSellPrice,
+        lcoverage: lCoveragePrice, // 💡 Ahora almacena el precio límite
+        lnorder: lNOrderMax,       // 💡 Ahora almacena el total de órdenes posibles
 
-        await updateGeneralBotState(targetsUpdate);
+        // Campos de lStateData
+        'lStateData.requiredCoverageAmount': requiredCoverageAmount,
+        'lStateData.nextCoveragePrice': nextCoveragePrice,
+    };
 
-        // 🚨 CRÍTICO: NO se coloca orden de VENTA LÍMITE aquí.
+    await updateGeneralBotState(targetsUpdate);
     }
 
     // =================================================================
