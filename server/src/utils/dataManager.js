@@ -7,106 +7,105 @@ const {
     calculateNextTarget, 
     calculateNextCoverage 
 } = require('../../autobotCalculations'); // Asumiendo que esta es la ruta correcta
+const Autobot = require('../../models/Autobot'); // Importar Mongoose Model aquí para uso interno
 
 /**
- * Maneja una compra exitosa (total o parcial), actualiza la posición del bot
- * (PPC, AC, lastExecutionPrice), y pasa al estado de gestión de posición (BUYING).
- *
- * @param {object} botState - Estado actual del bot (leído antes de la ejecución de la orden).
- * @param {object} orderDetails - Detalles de la orden ejecutada (de getOrderDetail).
- * @param {function} updateGeneralBotState - Función para actualizar el estado general (LBalance).
- * @param {function} log - Función de logging.
- */
+ * Maneja una compra exitosa (total o parcial), actualiza la posición del bot
+ * (PPC, AC, lastExecutionPrice), y pasa al estado de gestión de posición (BUYING).
+ *
+ * ✅ CRÍTICO: Se migra de botState.save() a Autobot.findOneAndUpdate() para atomicidad.
+ *
+ * @param {object} botState - Estado actual del bot (leído antes de la ejecución de la orden).
+ * @param {object} orderDetails - Detalles de la orden ejecutada (de getOrderDetail).
+ * @param {function} updateGeneralBotState - Función para actualizar el estado general (LBalance).
+ * @param {function} log - Función de logging.
+ */
 // -----------------------------------------------------------------------------------
-// INICIO DE LA FUNCIÓN handleSuccessfulBuy CON LOGS DE AUDITORÍA
+// INICIO DE LA FUNCIÓN handleSuccessfulBuy CON ACTUALIZACIÓN ATÓMICA
 // -----------------------------------------------------------------------------------
 async function handleSuccessfulBuy(botState, orderDetails, updateGeneralBotState, log) {
-    // Importamos Autobot y otras utilidades que necesitamos para la verificación en DB
-    const Autobot = require('../../models/Autobot'); 
+    // --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS DE LA ORDEN ---
+    
+    const executedQty = parseFloat(orderDetails.filledSize || 0);     
+    const executedAvgPrice = parseFloat(orderDetails.priceAvg || 0); 
+    
+    const intendedUsdtSpent = parseFloat(botState.lStateData.lastOrder?.usdt_amount || 0); 
+    const actualUsdtSpent = parseFloat(orderDetails.notional || 0); 
 
-    // --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS DE LA ORDEN ---
-    
-    // (Mantengo las claves originales que tienes para no modificar otros archivos)
-    const executedQty = parseFloat(orderDetails.filledSize || 0);     // Cantidad de activo comprada
-    const executedAvgPrice = parseFloat(orderDetails.priceAvg || 0); // Precio promedio de ejecución real
-    
-    const intendedUsdtSpent = parseFloat(botState.lStateData.lastOrder?.usdt_amount || 0); 
-    const actualUsdtSpent = parseFloat(orderDetails.notional || 0); 
+    const finalExecutionPrice = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
+    
+    if (executedQty <= 0 || finalExecutionPrice <= 0) {
+        log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución o precio cero. Limpiando lastOrder.', 'error');
+        // Limpieza simple en caso de datos inválidos
+        await Autobot.findOneAndUpdate({}, { 'lStateData.lastOrder': null });
+        return; 
+    }
 
-    const finalExecutionPrice = executedAvgPrice > 0 ? executedAvgPrice : parseFloat(orderDetails.price || 0);
-    
-    if (executedQty <= 0 || finalExecutionPrice <= 0) {
-        log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución o precio cero. Limpiando lastOrder.', 'error');
-        // Lógica de manejo de fallos... (sin cambios aquí)
-        await Autobot.findOneAndUpdate({}, { 'lStateData.lastOrder': null });
-        return; 
-    }
+    // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) y AC ---
 
-    // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) y AC ---
+    const currentTotalQty = parseFloat(botState.lStateData.ac || 0); 
+    const currentPriceMean = parseFloat(botState.lStateData.ppc || 0); 
+    
+    const currentTotalCost = currentTotalQty * currentPriceMean;
+    const newOrderCost = executedQty * finalExecutionPrice; 
+    
+    const newTotalQty = currentTotalQty + executedQty;
 
-    const currentTotalQty = parseFloat(botState.lStateData.ac || 0); 
-    const currentPriceMean = parseFloat(botState.lStateData.ppc || 0); 
-    const currentOrderCount = parseInt(botState.lStateData.orderCountInCycle || 0); 
-    
-    const currentTotalCost = currentTotalQty * currentPriceMean;
-    const newOrderCost = executedQty * finalExecutionPrice; 
-    
-    const newTotalQty = currentTotalQty + executedQty;
+    let newPPC = currentPriceMean; 
+    
+    if (newTotalQty > 0) {
+        newPPC = (currentTotalCost + newOrderCost) / newTotalQty;
+        if (isNaN(newPPC)) newPPC = currentPriceMean; 
+    }
 
-    let newPPC = currentPriceMean; 
-    
-    if (newTotalQty > 0) {
-        newPPC = (currentTotalCost + newOrderCost) / newTotalQty;
-        if (isNaN(newPPC)) newPPC = currentPriceMean; 
-    }
+    // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance y Refund) ---
 
-    // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance) ---
+    const usdtToRefund = intendedUsdtSpent - actualUsdtSpent;
+    let finalLBalance = parseFloat(botState.lbalance || 0);
 
-    const usdtToRefund = intendedUsdtSpent - actualUsdtSpent;
+    if (usdtToRefund > 0.01) { 
+        finalLBalance = finalLBalance + usdtToRefund;
+        log(`Devolviendo ${usdtToRefund.toFixed(2)} USDT al LBalance debido a ejecución parcial. Nuevo balance: ${finalLBalance.toFixed(2)} USDT.`, 'info');
+    }
+    
+    // --- 4. ACTUALIZACIÓN ATÓMICA DE ESTADO EN LA BASE DE DATOS (CRÍTICO) ---
 
-    if (usdtToRefund > 0.01) { 
-        const currentLBalance = parseFloat(botState.lbalance || 0);
-        const newLBalance = currentLBalance + usdtToRefund;
-        log(`Devolviendo ${usdtToRefund.toFixed(2)} USDT al LBalance debido a ejecución parcial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
-        await updateGeneralBotState({ lbalance: newLBalance }); 
-    }
-    
-    // --- 4. ACTUALIZAR ESTADO DE LA BASE DE DATOS (Con Logs de Auditoría) ---
+    // ✅ Creación del objeto de actualización atómica
+    const atomicUpdate = {
+        // Actualización del estado general (LBalance, lnorder)
+        $set: {
+            'lbalance': finalLBalance,
+            'lstate': 'BUYING', // El estado final DEBE ser 'BUYING'
+            'lStateData.ac': newTotalQty,
+            'lStateData.ppc': newPPC,
+            'lStateData.lastExecutionPrice': finalExecutionPrice,
+            'lStateData.lastOrder': null, // ✅ Limpiamos la orden confirmada
+            'lnorder': (botState.lnorder || 0) + 1,
+        },
+        $inc: {
+            'lStateData.orderCountInCycle': 1, // ✅ Incrementamos el contador
+        }
+    };
+    
+    log(`[AUDITORÍA 1/3] -> ANTES de la actualización atómica. PPC: ${newPPC.toFixed(2)}, AC: ${newTotalQty.toFixed(8)}`, 'debug');
 
-    const nextState = 'BUYING'; 
-    
-    // Aplicamos los cambios al objeto de Mongoose en memoria
-    botState.lstate = nextState;
-    botState.lStateData.ac = newTotalQty;         
-    botState.lStateData.ppc = newPPC;             
-    botState.lStateData.lastExecutionPrice = finalExecutionPrice; 
-    botState.lStateData.orderCountInCycle = currentOrderCount + 1; 
-    botState.lStateData.lastOrder = null;         
-    
-    // 🛑 LOG 1: Contenido del documento ANTES de llamar a .save()
-    log(`[AUDITORÍA 1/3] -> ANTES de guardar. PPC a guardar: ${botState.lStateData.ppc.toFixed(2)}, AC a guardar: ${botState.lStateData.ac.toFixed(8)}, LState: ${botState.lstate}`, 'debug');
+    // Persistencia atómica a la DB
+    const updatedBot = await Autobot.findOneAndUpdate({}, atomicUpdate, { new: true }); 
 
-    // Persistencia a la DB
-    await botState.save(); 
+    // 🛑 LOG 2 y 3: Verificación directa después de la actualización
+    if (updatedBot) {
+        log(`[AUDITORÍA 2/3] -> DESPUÉS de actualizar. LBalance final: ${updatedBot.lbalance.toFixed(2)} USDT.`, 'debug');
+        log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${updatedBot.lStateData.ppc.toFixed(2)}, AC leído: ${updatedBot.lStateData.ac.toFixed(8)}, LState: ${updatedBot.lstate}`, 'debug');
+    } else {
+        log('[AUDITORÍA 2/3 y 3/3] -> ERROR: No se encontró el documento de Autobot después de la actualización.', 'error');
+        return;
+    }
 
-    // 🛑 LOG 2: Contenido del documento DESPUÉS de que .save() regresa
-    log(`[AUDITORÍA 2/3] -> DESPUÉS de guardar (Objeto en memoria). PPC: ${botState.lStateData.ppc.toFixed(2)}, AC: ${botState.lStateData.ac.toFixed(8)}, LState: ${botState.lstate}`, 'debug');
-    
-    // 🛑 LOG 3: Verificación directa, lectura atómica desde la DB
-    const verificationBot = await Autobot.findOne({});
-    if (verificationBot) {
-        log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${verificationBot.lStateData.ppc.toFixed(2)}, AC leído: ${verificationBot.lStateData.ac.toFixed(8)}, LState: ${verificationBot.lstate}`, 'debug');
-    } else {
-        log('[AUDITORÍA 3/3] -> ERROR: No se encontró el documento de Autobot para la verificación.', 'error');
-    }
-
-
-    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a ${nextState}.`, 'info');
+    log(`[LONG] Orden confirmada. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}. Precio de ejecución: ${finalExecutionPrice.toFixed(2)}. Transicionando a BUYING.`, 'success');
 }
 // -----------------------------------------------------------------------------------
-// FIN DE LA FUNCIÓN handleSuccessfulBuy CON LOGS DE AUDITORÍA
+// FIN DE LA FUNCIÓN handleSuccessfulBuy CON ACTUALIZACIÓN ATÓMICA
 // -----------------------------------------------------------------------------------
-
 
 // Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {

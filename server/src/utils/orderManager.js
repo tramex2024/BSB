@@ -78,22 +78,20 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
         // Descontar la cantidad de compra del LBalance.
         const newLBalance = currentLBalance - amount;
 
-        // ✅ CORRECCIÓN CRÍTICA: Actualizar lbalance, lastOrder Y orderCountInCycle
-        await Autobot.findOneAndUpdate({}, {
-            $set: {
-                'lbalance': newLBalance,
-                'lStateData.lastOrder': {
-                    order_id: orderId,
-                    side: 'buy',
-                    usdt_amount: amount,
-                    // Otros campos si son necesarios
-                }
-            },
-            // 💡 AÑADIMOS EL INCREMENTO ATÓMICO: orderCountInCycle pasa de 0 a 1
-            $inc: {
-                'lStateData.orderCountInCycle': 1
-            }
-        });
+        // ✅ CORRECCIÓN FINAL: Actualizar lbalance, lastOrder Y orderCountInCycle
+await Autobot.findOneAndUpdate({}, {
+    $set: {
+        'lbalance': newLBalance,
+        'lStateData.lastOrder': {
+            order_id: orderId,
+            side: 'buy',
+            usdt_amount: amount,
+        }
+    },
+    $inc: {
+        'lStateData.orderCountInCycle': 1 // 💡 IMPORTANTE: Incrementamos aquí
+    }
+});
 
         log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
         
@@ -107,7 +105,8 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
 
 /**
  * Coloca una orden de compra de cobertura (a Mercado) y actualiza el capital para la ejecución.
- * * @param {object} botState - Estado actual del bot.
+ * (CORREGIDO: Eliminado el Monitoreo por Timeout; se delega a LBuying.js)
+ * @param {object} botState - Estado actual del bot.
  * @param {number} usdtAmount - Cantidad de USDT a comprar (requerido para esta orden).
  * @param {number} nextCoveragePrice - Precio objetivo de la próxima orden de cobertura (solo para referencia de DB).
  * @param {function} log - Función de logging.
@@ -127,6 +126,7 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
         log(`Error: Capital insuficiente para la orden de cobertura de ${usdtAmount.toFixed(2)} USDT.`, 'error');
         return; 
     }
+    // NOTA: La deducción de lbalance se hace antes de la colocación para garantizar que el bot no sobre-gaste
     await updateGeneralBotState({ lbalance: newLBalance });
     log(`LBalance asignado reducido en ${usdtAmount.toFixed(2)} USDT para la orden de cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
 
@@ -139,50 +139,26 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
         if (order && order.order_id) {
             const currentOrderId = order.order_id;  
 
-            // --- 2. ACTUALIZACIÓN DE ESTADO PENDIENTE ---
-            
-            const lStateUpdate = {
-                'lStateData.lastOrder': {
-                    order_id: currentOrderId,
-                    side: 'buy',
-                    usdt_amount: usdtAmount,
-                },
-                'lStateData.requiredCoverageAmount': nextOrderAmount 
-            };
-            
-            await Autobot.findOneAndUpdate({}, { $set: lStateUpdate });
-            log(`Orden de cobertura colocada. ID: ${currentOrderId}. Próximo monto de cobertura calculado: ${nextOrderAmount.toFixed(2)} USDT.`, 'success');
-
-            // --- 3. MONITOREO INMEDIATO ---
-            setTimeout(async () => {
-                try {
-                    const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); 
-                    const updatedBotState = await Autobot.findOne({});
-                    const filledSize = parseFloat(orderDetails?.filledSize || 0);
-                    
-                    if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
-                        if (updatedBotState) {
-                            await handleSuccessfulBuy(updatedBotState, orderDetails, updateGeneralBotState, log);  
-                        }
-                    } else {
-                        log(`La orden de cobertura ${currentOrderId} no se completó/falló sin ejecución.`, 'error');
-                        if (updatedBotState) {
-                            const actualUsdtSpent = parseFloat(orderDetails?.notional || 0);
-                            const usdtToRefund = usdtAmount - actualUsdtSpent;
-
-                            if (usdtToRefund > 0.01) {
-                                const finalLBalance = parseFloat(updatedBotState.lbalance || 0) + usdtToRefund;
-                                await updateGeneralBotState({ lbalance: finalLBalance });
-                                log(`Se revierte ${usdtToRefund.toFixed(2)} USDT al balance.`, 'info');
-                            }
-                            
-                            await Autobot.findOneAndUpdate({}, { 'lStateData.lastOrder': null });
-                        }
-                    }
-                } catch (timeoutError) {
-                    log(`Error en el chequeo de timeout de la orden de cobertura: ${timeoutError.message}`, 'error');
+            // --- 2. ACTUALIZACIÓN ATÓMICA DE ESTADO PENDIENTE ---
+            // Solo guardamos la orden, LBuying.js se encargará de consolidar y contar.
+            const updateResult = await Autobot.findOneAndUpdate({}, { 
+                $set: {
+                    'lStateData.lastOrder': {
+                        order_id: currentOrderId,
+                        side: 'buy',
+                        usdt_amount: usdtAmount,
+                    },
+                    'lStateData.requiredCoverageAmount': nextOrderAmount 
                 }
-            }, ORDER_CHECK_TIMEOUT_MS);
+            }, { new: true });
+            
+            if (updateResult) {
+                log(`Orden de cobertura colocada. ID: ${currentOrderId}. Próximo monto de cobertura calculado: ${nextOrderAmount.toFixed(2)} USDT.`, 'success');
+            } else {
+                log(`Advertencia: Orden colocada (${currentOrderId}), pero no se pudo actualizar la DB. Revisar manualmente.`, 'error');
+            }
+            
+            // NO MÁS LÓGICA DE MONITOREO/TIMEOUT AQUÍ. LBuying.js lo manejará.
 
         } else {
             log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
@@ -202,57 +178,52 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
 }
 
 /**
- * Coloca una orden de venta a mercado.
- * @param {object} config - Configuración del bot.
- * @param {number} sellAmount - Cantidad de la moneda base a vender (e.g., BTC).
- * @param {function} log - Función de logging.
- * @param {function} handleSuccessfulSell - Función de manejo de venta exitosa.
- * @param {object} botState - Estado actual del bot.
- * @param {object} handlerDependencies - Dependencias necesarias para el handler de venta.
- */
+ * Coloca una orden de venta a mercado.
+ * (CORREGIDO: Eliminado el Monitoreo por Timeout; se delega a LSelling.js)
+ * @param {object} config - Configuración del bot.
+ * @param {number} sellAmount - Cantidad de la moneda base a vender (e.g., BTC).
+ * @param {function} log - Función de logging.
+ * @param {function} handleSuccessfulSell - Función de manejo de venta exitosa (¡ya no usada aquí!).
+ * @param {object} botState - Estado actual del bot.
+ * @param {object} handlerDependencies - Dependencias necesarias (¡ya no usadas aquí!).
+ */
 async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, botState, handlerDependencies) {
-    const SYMBOL = config.symbol || TRADE_SYMBOL;
+    const SYMBOL = config.symbol || TRADE_SYMBOL;
 
-    log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
-    try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', sellAmount); 
+    log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
+    try {
+        // Nota: La API de BitMart usa 'sell' en minúsculas en algunos endpoints, pero 'SELL' para las órdenes
+        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', sellAmount); 
 
-        if (order && order.order_id) {
-            const currentOrderId = order.order_id;
-            log(`Orden de venta colocada. ID: ${currentOrderId}. Esperando confirmación...`, 'success');
-            
-            botState.lStateData.lastOrder = {
-                order_id: currentOrderId,
-                price: botState.lStateData.pc,
-                size: sellAmount,
-                side: 'sell',
-                state: 'pending_fill'
-            };
-            // Usar updateOne o findOneAndUpdate para persistir el lastOrder
-            await Autobot.findOneAndUpdate({}, { 'lStateData': botState.lStateData });
+        if (order && order.order_id) {
+            const currentOrderId = order.order_id;
+            log(`Orden de venta colocada. ID: ${currentOrderId}. Iniciando bloqueo y monitoreo en LSelling...`, 'success');
+            
+            // 1. Crear el objeto lastOrder de venta pendiente
+            const sellLastOrder = {
+                order_id: currentOrderId,
+                price: botState.lStateData.ppc, // Usamos PPC como referencia de costo
+                size: sellAmount,
+                side: 'sell',
+                state: 'pending_fill'
+            };
+            
+            // 2. Persistir el lastOrder de forma atómica
+            await Autobot.findOneAndUpdate({}, { 
+                $set: { 'lStateData.lastOrder': sellLastOrder } 
+            });
 
-
-            setTimeout(async () => {
-                const orderDetails = await bitmartService.getOrderDetail(SYMBOL, currentOrderId); 
-                const filledSize = parseFloat(orderDetails?.filledSize || 0);
-
-                if ((orderDetails && orderDetails.state === 'filled') || filledSize > 0) {
-                    await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
-                } else {
-                    log(`La orden de venta ${currentOrderId} no se completó.`, 'error');
-                    const updatedBotState = await Autobot.findOne({});
-                    if (updatedBotState) {
-                        updatedBotState.lStateData.lastOrder = null;
-                        await Autobot.findOneAndUpdate({}, { 'lStateData': updatedBotState.lStateData });
-                    }
-                }
-            }, ORDER_CHECK_TIMEOUT_MS);
-        } else {
-            log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
-        }
-    } catch (error) {
-        log(`Error de API al colocar la orden de venta: ${error.message}`, 'error');
-    }
+            // 3. El monitoreo de esta orden se realiza ahora EXCLUSIVAMENTE en LSelling.js.
+            // Eliminamos el setTimeout.
+            
+        } else {
+            log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
+            // NOTA: Si falla la colocación, el estado se mantiene en SELLING para reintento/cancelación manual.
+        }
+    } catch (error) {
+        log(`Error de API al colocar la orden de venta: ${error.message}`, 'error');
+        // NOTA: Si falla la colocación, el estado se mantiene en SELLING para reintento/cancelación manual.
+    }
 }
 
 /**
