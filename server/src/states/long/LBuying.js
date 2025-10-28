@@ -5,7 +5,7 @@ const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartSe
 const { 
     calculateLongTargets 
 } = require('../../utils/dataManager'); // Importamos la función directamente
-const { parseNumber } = require('../../autobotCalculations'); // 💡 Importar parseNumber para seguridad
+const { parseNumber } = require('../../../autobotCalculations'); // 💡 Importar parseNumber para seguridad
 
 /**
  * Función central de la estrategia Long en estado BUYING.
