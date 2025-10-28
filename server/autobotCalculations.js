@@ -4,7 +4,7 @@
 
 const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations'); // 💡 IMPORTAR SHORT
 
-const { parseNumber } = require('./utils/helpers'); // Asumiendo que el path es correcto
+const { parseNumber } = require('../../utils/helpers'); // Asumiendo que el path es correcto
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
