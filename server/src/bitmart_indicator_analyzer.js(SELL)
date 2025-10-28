@@ -4,7 +4,7 @@
 const { RSI } = require('technicalindicators');
 const fs = require('fs').promises; // Usamos fs.promises para operaciones asíncronas de archivo
 
-const bitmartService = require('./services/bitmartService'); // Asegúrate de que la ruta sea correcta
+const bitmartService = require('../services/bitmartService'); // Asegúrate de que la ruta sea correcta
 
 // Define el par de trading
 const SYMBOL = 'BTC_USDT'; // El par de trading que te interesa
