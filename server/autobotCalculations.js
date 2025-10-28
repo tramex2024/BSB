@@ -76,8 +76,15 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
 
     const targetSellPrice = ppc * (1 + profitDecimal);
     
-    // Calcular el monto requerido para la próxima orden
-    const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
+    // 🟢 AUDITORÍA FORZADA
+console.log(`[DCA AUDIT CALC] Base: ${baseAmount} (from ${basePurchaseUsdt}), SizeVarDec: ${sizeVarDecimal} (from ${size_var}), Count: ${count}`);
+
+const targetSellPrice = ppc * (1 + profitDecimal);
+    
+// Calcular el monto requerido para la próxima orden
+const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
+
+console.log(`[DCA AUDIT RESULT] Required Amount Calculated: ${requiredCoverageAmount}`);
 
     // 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
 if (requiredCoverageAmount === 0 && count > 0) {
