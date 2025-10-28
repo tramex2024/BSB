@@ -105,9 +105,9 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     if(requiredCoverageAmount > balance){
         return { 
             targetSellPrice, nextCoveragePrice, 
-            requiredCoverageAmount: 0, // 👈 0 para indicar que no se puede colocar la orden
+            requiredCoverageAmount: finalRequiredAmount, // 👈 USAR EL VALOR FINAL
             lCoveragePrice: nextCoveragePrice, 
-            lNOrderMax: 0 
+            lNOrderMax
         };
     }
     
