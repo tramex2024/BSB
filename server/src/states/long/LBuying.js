@@ -5,7 +5,7 @@ const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartSe
 const { 
     calculateLongTargets 
 } = require('../../utils/dataManager'); // Importamos la función directamente
-const { parseNumber } = require('../../../autobotCalculations'); // 💡 Importar parseNumber para seguridad
+const { parseNumber } = require('../../utils/helpers'); // 🟢 CORRECCIÓN: Importar desde el nuevo helper
 
 /**
  * Función central de la estrategia Long en estado BUYING.
@@ -137,7 +137,7 @@ async function run(dependencies) {
 
                 log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}. Transicionando a RUNNING.`, 'success');
                 
-                // 🎯 Transición inmediata a RUNNING (para evitar colocar otra orden sin calcular targets)
+                // 🎯 Transición inmediata a RUNNING 
                 await updateBotState('RUNNING', 'long'); 
                 return; // 🛑 Salir después de consolidar una orden.
 
@@ -167,9 +167,7 @@ async function run(dependencies) {
     if (!lStateData.lastOrder && lStateData.ppc > 0) { 
     log("Calculando objetivos iniciales (Venta/Cobertura) y Límite de Cobertura...", 'info');
     
-    // NOTA: Si llegamos aquí después de la consolidación, getBotState() debe ser llamado nuevamente
-    // o el objeto botState debe actualizarse en memoria, ya que los targets dependen del nuevo PPC/lbalance.
-    // Usaremos los datos del botState, asumiendo que el PPC ya fue actualizado por updateGeneralBotState en el paso 1.
+    // NOTA: Asumimos que el PPC ya fue actualizado por updateGeneralBotState en el paso 1.
     
     const { 
         targetSellPrice, 
@@ -199,6 +197,10 @@ async function run(dependencies) {
     };
 
     await updateGeneralBotState(targetsUpdate);
+
+    // 💡 LUEGO DE ACTUALIZAR LA DB, ACTUALIZAMOS LA REFERENCIA LOCAL
+lStateData.requiredCoverageAmount = requiredCoverageAmount; // Aseguramos que la variable local sea correcta
+lStateData.nextCoveragePrice = nextCoveragePrice;
 
     // 🟢 NUEVO LOG RESUMEN DE TARGETS (Insertado después de la actualización)
     const logSummary = `
@@ -231,9 +233,16 @@ async function run(dependencies) {
 
     // 3B. Colocación de ORDEN de COBERTURA (DCA)
     // Se ejecuta SÓLO si no hay orden pendiente (lastOrder = null) y el precio ha caído al target.
+    const requiredAmount = lStateData.requiredCoverageAmount;
+
     if (!lStateData.lastOrder && lStateData.nextCoveragePrice > 0 && currentPrice <= lStateData.nextCoveragePrice) {
+        
         // La colocación de la orden debe ocurrir aquí, no solo la transición.
-        const requiredAmount = lStateData.requiredCoverageAmount;
+        if (requiredAmount <= 0) {
+            log(`Error CRÍTICO: El monto requerido para la cobertura es cero (0). Verifique config.long.purchaseUsdt.`, 'error');
+            await updateBotState('NO_COVERAGE', 'long'); // 💡 Transicionar a NO_COVERAGE si el monto es 0
+            return; 
+        }
 
         if (botState.lbalance >= requiredAmount) {
             log(`[LONG] ¡Precio de COBERTURA alcanzado! Precio actual: ${currentPrice.toFixed(2)} <= ${lStateData.nextCoveragePrice.toFixed(2)}. Colocando orden de compra.`, 'warning');
@@ -259,8 +268,6 @@ async function run(dependencies) {
     }
     
     // 3C. Transición por defecto o Log final (Sin transiciones/órdenes pendientes)
-    // NOTA: Si la orden fue consolidada en la Sección 1, el bot ya se fue a RUNNING.
-    // Si la orden de cobertura fue colocada en 3B, el bot permanece en BUYING.
     // Si no hay orden, ni consolidación, ni target alcanzado, el bot debe ir a RUNNING.
     if (!lStateData.lastOrder && lStateData.ppc > 0) {
          log(`Monitoreando... Sin target alcanzado ni orden pendiente. Transicionando a RUNNING.`, 'info');

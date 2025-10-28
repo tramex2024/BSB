@@ -1,10 +1,9 @@
 /**
- * BSB/server/autobotCalculations.js (SOLO LÓGICA LONG Y COMÚN)
+ * BSB/server/autobotCalculations.js (SOLO LÓGICA LONG Y COMÚN - CORREGIDO)
  */
 
-const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations'); // 💡 IMPORTAR SHORT
-
-const { parseNumber } = require('./src/utils/helpers'); // Asumiendo que el path es correcto
+//const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations');
+const { parseNumber } = require('./src/utils/helpers'); // 🟢 CORRECCIÓN: Importa desde el nuevo helper
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
@@ -32,13 +31,8 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
             if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
                 currentBalance -= nextOrderAmount;
                 numberOfOrders++;
-                // Corrección: Aquí no es necesario reasignar coveragePrice, solo se actualiza al final del ciclo
-                // La línea original: coveragePrice = nextOrderPrice * (1 - decrement); se mantiene como error potencial de lógica interna, pero no afecta al problema principal del 'nextCoveragePrice'. 
+                coveragePrice = nextOrderPrice * (1 - decrement);
             } else {
-                // El precio de cobertura es el precio de la última orden que SÍ se pudo colocar.
-                // Como nextOrderPrice ya avanzó un paso, usamos el precio del nivel anterior.
-                // Sin embargo, para mantener la lógica original y no confundir, simplemente usamos nextOrderPrice 
-                // que es el precio de la orden que no se puede pagar, que sirve como 'corte'
                 coveragePrice = nextOrderPrice; 
                 break;
             }
@@ -56,9 +50,6 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
 /**
  * Calcula el precio exacto de la próxima orden de cobertura (DCA)
  * aplicando el price_var (decremento) al Precio Promedio de Compra (PPC) actual.
- * @param {number} ppc - Precio Promedio de Compra actual.
- * @param {number} priceVarDecimal - El decremento de precio (ej: 0.01 para 1%).
- * @param {number} count - El número de órdenes ya ejecutadas (orderCountInCycle).
  */
 function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
     // La fórmula corregida para el próximo precio de cobertura:
@@ -89,7 +80,6 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const requiredCoverageAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
     // 🟢 CORRECCIÓN CLAVE: Usamos la función auxiliar para calcular el precio de la próxima orden.
-    // Esto asegura que la próxima orden esté al menos `price_var` (1%) por debajo del PPC.
     const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
 
 
@@ -159,5 +149,4 @@ module.exports = {
     calculateInitialState,
     calculateLongCoverage,
     calculateLongTargets,
-    // NO exportamos las funciones Short aquí, solo las importamos y usamos en calculateInitialState.
 };
