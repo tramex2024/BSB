@@ -112,7 +112,7 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     }
     
     return { 
-        targetSellPrice, nextCoveragePrice, requiredCoverageAmount,
+        targetSellPrice, nextCoveragePrice, requiredCoverageAmount: 99.99,
         lCoveragePrice, lNOrderMax 
     };
 }
