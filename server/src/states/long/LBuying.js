@@ -267,7 +267,7 @@ lStateData.nextCoveragePrice = nextCoveragePrice;
         }
     }
     
-    / 3C. Transición por defecto o Log final (Sin transiciones/órdenes pendientes)
+    // 3C. Transición por defecto o Log final (Sin transiciones/órdenes pendientes)
 // Si no hay orden, ni consolidación, ni target alcanzado, el bot debe PERMANECER en BUYING.
 
 // 💡 LÓGICA CORREGIDA: NUNCA TRANSICIONAR A RUNNING SI HAY POSICIÓN (ppc > 0)
