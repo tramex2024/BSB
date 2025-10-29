@@ -1,11 +1,12 @@
-// BSB/server/src/states/long/LNoCoverage.js (FINALIZADO - Doble Chequeo de Fondos y Limpieza)
+// BSB/server/src/states/long/LNoCoverage.js (MEJORADO - Recalculo Forzado en NO_COVERAGE)
 
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/orderManager');
-const { calculateLongTargets } = require('../../utils/dataManager'); // 👈 AGREGADO: Importar la función de cálculo
+const { calculateLongTargets } = require('../../utils/dataManager'); // 👈 Importar la función de cálculo
 // const { cancelActiveOrders } = require('../../utils/orderManager'); // Eliminada la importación
 
 async function run(dependencies) {
     // Extraemos las funciones y el estado de las dependencias
+    // Asegúrate de que updateLStateData esté aquí
     const { botState, currentPrice, availableUSDT, config, log, updateBotState, updateLStateData } = dependencies;
 
     log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
@@ -23,40 +24,37 @@ async function run(dependencies) {
 
     // --- 2. VERIFICACIÓN DE TRANSICIÓN A COMPRA (Fondos recuperados) ---
     
-    // 🛑 INICIO DE LA LÓGICA DE CORRECCIÓN
+    // 🛑 INICIO DE LA LÓGICA DE RECALCULO FORZADO
     let requiredAmount = botState.lStateData.requiredCoverageAmount || 0;
-    let nextCoveragePrice = botState.lStateData.nextCoveragePrice;
+    
+    // Forzamos el recalculo si hay una posición abierta (ac > 0). 
+    // Esto asegura que cualquier cambio manual en orderCountInCycle se aplique.
+    if (ac > 0 && botState.lStateData.orderCountInCycle >= 0) { 
+        log("Forzando recalculo de RequiredAmount en NO_COVERAGE para asegurar la consistencia del estado.", 'warning');
+        
+        const recalculation = calculateLongTargets(
+            botState.lStateData.ppc, 
+            config.long.profit_percent, 
+            config.long.price_var, 
+            config.long.size_var,
+            config.long.purchaseUsdt,
+            botState.lStateData.orderCountInCycle,
+            botState.lbalance 
+        );
+        
+        // Actualizamos la variable local con el valor recalculado
+        requiredAmount = recalculation.requiredCoverageAmount;
+        let nextCoveragePrice = recalculation.nextCoveragePrice; 
 
-    // 💡 RECALCULAR si el valor es 0, lo que significa que la lógica de LBuying falló al persistir
-    //    o el cálculo inicial fue 0, y necesitamos el valor correcto para la transición.
-    if (requiredAmount === 0 && botState.lStateData.orderCountInCycle > 0) {
-        log("Detectado requiredCoverageAmount = 0. Forzando recalculo de targets para corregir el estado.", 'warning');
-        
-        // Llamar a calculateLongTargets para obtener el valor correcto (debería ser 40.00 USD)
-        const recalculation = calculateLongTargets(
-            botState.lStateData.ppc, 
-            config.long.profit_percent, 
-            config.long.price_var, 
-            config.long.size_var,
-            config.long.purchaseUsdt,
-            botState.lStateData.orderCountInCycle,
-            botState.lbalance 
-        );
-        
-        // Usamos el requiredAmount calculado (que debería ser 40.00)
-        requiredAmount = recalculation.requiredCoverageAmount;
-        nextCoveragePrice = recalculation.nextCoveragePrice; 
-
-       // 🎯 Persistir el valor CORREGIDO en la DB usando updateGeneralBotState (que acepta dot notation)
-        // Esto es solo una prueba de robustez para la persistencia
-        await dependencies.updateGeneralBotState({  // 👈 USAMOS LA FUNCIÓN GENERAL
-            'lStateData.requiredCoverageAmount': requiredAmount, 
-            'lStateData.nextCoveragePrice': nextCoveragePrice 
+        // 🎯 Persistir el valor CORREGIDO
+        await updateLStateData({ 
+            requiredCoverageAmount: requiredAmount, 
+            nextCoveragePrice: nextCoveragePrice 
         });
-        
-        log(`Required Amount corregido a ${requiredAmount.toFixed(2)} USDT.`, 'warning');
-    }
-    // 🛑 FIN DE LA LÓGICA DE CORRECCIÓN
+        
+        log(`Required Amount corregido/verificado a ${requiredAmount.toFixed(2)} USDT.`, 'warning');
+    }
+    // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
 
     const currentLBalance = parseFloat(botState.lbalance || 0);
     
