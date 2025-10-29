@@ -148,8 +148,8 @@ async function botCycle(priceFromWebSocket) {
 //      }
         
     } catch (error) {
-        log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
-    }
+    log(`Error en el ciclo principal del bot: ${error.message}`, 'error'); // 👈 ESTE log es el que falla
+}
 }
 
 

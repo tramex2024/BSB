@@ -54,7 +54,7 @@ function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
 
 
 // -------------------------------------------------------------------------
-// LÓGICA DE TARGETS POST-COMPRA (LONG) - AUDITORÍA DE DEBUGGING
+// LÓGICA DE TARGETS POST-COMPRA (LONG) - CORREGIDA
 // -------------------------------------------------------------------------
 
 /**
@@ -68,27 +68,30 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
 
-    // 🛑 AUDITORÍA CRÍTICA
-console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
-console.log(`[DCA DEBUG] Parsed Values -> Base: ${baseAmount}, SizeDec: ${sizeVarDecimal}, Count: ${count}`);
+    // 🛑 AUDITORÍA CRÍTICA (Se mantienen los logs)
+    console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
+    console.log(`[DCA DEBUG] Parsed Values -> Base: ${baseAmount}, SizeDec: ${sizeVarDecimal}, Count: ${count}`);
 
-// Cálculo del Monto de Cobertura Requerido
-const calculatedAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
+    // Cálculo del Target de Venta
+    const targetSellPrice = ppc * (1 + profitDecimal);
 
-console.log(`[DCA DEBUG] Required Amount (Calculated): ${calculatedAmount}`);
+    // Cálculo del Monto de Cobertura Requerido
+    const calculatedAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
-let finalRequiredAmount = calculatedAmount;
+    console.log(`[DCA DEBUG] Required Amount (Calculated): ${calculatedAmount}`);
 
-// 🎯 LÓGICA DE PRUEBA: Si es 0, lo cambiamos a 99.99.
-if (calculatedAmount === 0 && count > 0) {
-    console.error("[CRITICAL TEST] CALCULO FALLIDO (0). Forzando RequiredAmount a 99.99 para prueba de persistencia.");
-    finalRequiredAmount = 99.99;
-}
+    let finalRequiredAmount = calculatedAmount;
 
-// 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
-if (finalRequiredAmount === 0 && count > 0) {
-    console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT... (Variables usadas: Base: ${baseAmount}, SizeVarDec: ${sizeVarDecimal}, Count: ${count})`);
-}
+    // 🎯 LÓGICA DE PRUEBA: Si es 0, lo cambiamos a 99.99.
+    if (calculatedAmount === 0 && count > 0) {
+        console.error("[CRITICAL TEST] CALCULO FALLIDO (0). Forzando RequiredAmount a 99.99 para prueba de persistencia.");
+        finalRequiredAmount = 99.99;
+    }
+
+    // 🛑 AGREGAR VERIFICACIÓN DE FALLO DEL CÁLCULO
+    if (finalRequiredAmount === 0 && count > 0) {
+        console.error(`[CRITICAL CALC FAIL] DCA calculated 0.00 USDT... (Variables usadas: Base: ${baseAmount}, SizeVarDec: ${sizeVarDecimal}, Count: ${count})`);
+    }
 
     // Cálculo del Precio de la Próxima Cobertura
     const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
@@ -97,27 +100,26 @@ if (finalRequiredAmount === 0 && count > 0) {
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,
         ppc, 
-        requiredCoverageAmount,
+        finalRequiredAmount, // 👈 CORREGIDO: Usar finalRequiredAmount
         priceVarDecimal,
         sizeVarDecimal
     );
-    
+
     // Devolver 0 si no hay fondos disponibles, pero manteniendo el cálculo requerido
-    if(requiredCoverageAmount > balance){
+    if(finalRequiredAmount > balance){ // 👈 CORREGIDO: Usar finalRequiredAmount
         return { 
             targetSellPrice, nextCoveragePrice, 
-            requiredCoverageAmount: finalRequiredAmount, // 👈 USAR EL VALOR FINAL
+            requiredCoverageAmount: finalRequiredAmount,
             lCoveragePrice: nextCoveragePrice, 
             lNOrderMax
         };
     }
-    
+
     return { 
-        targetSellPrice, nextCoveragePrice, requiredCoverageAmount: 99.99,
+        targetSellPrice, nextCoveragePrice, requiredCoverageAmount: finalRequiredAmount, // 👈 CORREGIDO: Usar finalRequiredAmount
         lCoveragePrice, lNOrderMax 
     };
 }
-
 
 /**
  * Calculates the initial state of the bot's parameters (USA BOTH).

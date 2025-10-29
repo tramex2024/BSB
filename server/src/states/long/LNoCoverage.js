@@ -47,11 +47,12 @@ async function run(dependencies) {
         requiredAmount = recalculation.requiredCoverageAmount;
         nextCoveragePrice = recalculation.nextCoveragePrice; 
 
-        // 🎯 Persistir el valor CORREGIDO en la DB para que el Frontend y LBuying lo vean correctamente.
-        await updateLStateData({ 
-            requiredCoverageAmount: requiredAmount, 
-            nextCoveragePrice: nextCoveragePrice 
-        });
+       // 🎯 Persistir el valor CORREGIDO en la DB usando updateGeneralBotState (que acepta dot notation)
+        // Esto es solo una prueba de robustez para la persistencia
+        await dependencies.updateGeneralBotState({  // 👈 USAMOS LA FUNCIÓN GENERAL
+            'lStateData.requiredCoverageAmount': requiredAmount, 
+            'lStateData.nextCoveragePrice': nextCoveragePrice 
+        });
         
         log(`Required Amount corregido a ${requiredAmount.toFixed(2)} USDT.`, 'warning');
     }
