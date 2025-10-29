@@ -78,7 +78,11 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         // placeFirstBuyOrder colocará la orden inicial y transicionará a BUYING.
         // Pasamos 'config.long.purchaseUsdt' como monto para la primera compra.
         await placeFirstBuyOrder(config, creds, config.long.purchaseUsdt, log, updateBotState, updateGeneralBotState); 
-    }
+    	
+        // 🎯 [ADICIÓN DE SEGURIDAD]
+// Ya que placeFirstBuyOrder no garantiza la transición después del éxito, forzamos el estado.
+await updateBotState('BUYING', LSTATE);	
+    }
 }
 
 

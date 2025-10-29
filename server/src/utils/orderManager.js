@@ -43,6 +43,14 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
         await updateBotState('RUNNING', 'long'); 
         return;
     }
+    
+    // B. Error: Monto menor al mínimo
+if (amount < MIN_USDT_VALUE_FOR_BITMART) {
+    log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
+    // 💡 Corregido: Volver a NO_COVERAGE, ya que la configuración es errónea.
+    await updateBotState('NO_COVERAGE', 'long'); 
+    return;
+}
 
     log(`Colocando la primera orden de compra a mercado por ${amount.toFixed(2)} USDT.`, 'info'); // Ya no dice SIMULADO
 
@@ -99,7 +107,7 @@ await Autobot.findOneAndUpdate({}, {
         log(`Error CRÍTICO al colocar la primera orden: ${error.message}`, 'error');
         
         // Revertir el estado a RUNNING en caso de un error de API/Excepción
-        await updateBotState('RUNNING', 'long');
+        await updateBotState('BUYING /* RUNNING */', 'long');
     }
 }
 
