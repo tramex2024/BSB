@@ -267,15 +267,30 @@ lStateData.nextCoveragePrice = nextCoveragePrice;
         }
     }
     
-    // 3C. Transición por defecto o Log final (Sin transiciones/órdenes pendientes)
-    // Si no hay orden, ni consolidación, ni target alcanzado, el bot debe ir a RUNNING.
-    if (!lStateData.lastOrder && lStateData.ppc > 0) {
-         log(`Monitoreando... Sin target alcanzado ni orden pendiente. Transicionando a RUNNING.`, 'info');
-         await updateBotState('RUNNING', 'long');
-         return;
-    }
+    / 3C. Transición por defecto o Log final (Sin transiciones/órdenes pendientes)
+// Si no hay orden, ni consolidación, ni target alcanzado, el bot debe PERMANECER en BUYING.
 
-    log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
+// 💡 LÓGICA CORREGIDA: NUNCA TRANSICIONAR A RUNNING SI HAY POSICIÓN (ppc > 0)
+
+// Si la última orden fue limpiada y tenemos una posición (ppc > 0), nos quedamos en BUYING
+// para recalcular targets y verificar el precio en el siguiente ciclo.
+if (!lStateData.lastOrder && lStateData.ppc > 0) {
+    // Si no hay orden pendiente y el precio de cobertura no fue alcanzado (3B no se ejecutó),
+    // simplemente logueamos y retornamos, permaneciendo en BUYING.
+    log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}. Esperando que el precio caiga o suba.`, 'debug');
+    return; // Permanece en el estado BUYING
+}
+
+// Caso especial: Sin PPC, sin orden, y el target no fue alcanzado (inicio del bot).
+if (lStateData.ppc === 0 && !lStateData.lastOrder) {
+    log("Posición inicial (AC=0) y orden no colocada. Transicionando a NO_COVERAGE para reevaluar la situación de fondos.", 'info');
+    await updateBotState('NO_COVERAGE', 'long');
+    return;
+}
+
+log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
+
+// La transición de salida de BUYING SÓLO debe ocurrir en 3A (Venta) o 3B (NO_COVERAGE por fondos).
 }
 
 module.exports = { run };
