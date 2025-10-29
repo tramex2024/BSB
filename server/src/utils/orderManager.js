@@ -249,6 +249,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
             // Nota: Esto requiere que 'order' devuelva datos suficientes para handleSuccessfulSell.
             await handleSuccessfulSell(botState, order, handlerDependencies); 
             await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
+           }
         } else {
             log(`Error al verificar la orden ${currentOrderId}: ${error.message}`, 'error');
             // Dejar lastOrder para que LSelling.js lo maneje manualmente/en el siguiente ciclo.
