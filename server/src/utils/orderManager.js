@@ -37,14 +37,8 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
     const { purchaseUsdt } = config.long;
     const SYMBOL = config.symbol;
     const amount = parseFloat(purchaseUsdt);
-
-    if (amount < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
-        await updateBotState('RUNNING', 'long'); 
-        return;
-    }
-    
-    // B. Error: Monto menor al mínimo
+   
+    // A. Error: Monto menor al mínimo
 if (amount < MIN_USDT_VALUE_FOR_BITMART) {
     log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
     // 💡 Corregido: Volver a NO_COVERAGE, ya que la configuración es errónea.
@@ -224,17 +218,42 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
                 $set: { 'lStateData.lastOrder': sellLastOrder } 
             });
 
-            // 3. El monitoreo de esta orden se realiza ahora EXCLUSIVAMENTE en LSelling.js.
-            // Eliminamos el setTimeout.
-            
-        } else {
-            log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            // NOTA: Si falla la colocación, el estado se mantiene en SELLING para reintento/cancelación manual.
-        }
-    } catch (error) {
-        log(`Error de API al colocar la orden de venta: ${error.message}`, 'error');
-        // NOTA: Si falla la colocación, el estado se mantiene en SELLING para reintento/cancelación manual.
-    }
+            // 3. 💡 LÓGICA DE VERIFICACIÓN INMEDIATA (Post-Orden de Mercado)
+    try {
+        // Pausa breve para que BitMart consolide (opcional, pero ayuda)
+        await new Promise(resolve => setTimeout(resolve, 100)); 
+
+        const orderDetails = await bitmartService.getOrderDetail(creds, SYMBOL, currentOrderId);
+        
+        const filledVolume = parseFloat(orderDetails.filled_volume || 0);
+
+        if (filledVolume >= sellAmount * 0.999) { // 99.9% para tolerancia
+            log(`Verificación: Orden ID ${currentOrderId} COMPLETADA (${filledVolume.toFixed(8)}/${sellAmount.toFixed(8)}).`, 'success');
+            
+            // Llama al handler y cierra el ciclo (REINICIO)
+            await handleSuccessfulSell(botState, orderDetails, handlerDependencies);
+            
+            // 3. Limpiar lastOrder después del éxito.
+            await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
+        } else {
+            // Si no está llenada y no falló la consulta (caso raro de orden parcial/fallida)
+            log(`Advertencia: Orden ID ${currentOrderId} no se llenó completamente (${filledVolume.toFixed(8)}). Permitiendo reintento.`, 'warning');
+        }
+
+    } catch (error) {
+        // Maneja el error 50005 (Orden no encontrada/llenado instantáneo)
+        if (error.message.includes('50005')) {
+            log(`Advertencia: Orden ${currentOrderId} desapareció (llenado instantáneo). Asumiendo llenado.`, 'warning');
+            
+            // ASUME LLENADO TOTAL Y PROCESA EL CIERRE DEL CICLO
+            // Nota: Esto requiere que 'order' devuelva datos suficientes para handleSuccessfulSell.
+            await handleSuccessfulSell(botState, order, handlerDependencies); 
+            await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
+        } else {
+            log(`Error al verificar la orden ${currentOrderId}: ${error.message}`, 'error');
+            // Dejar lastOrder para que LSelling.js lo maneje manualmente/en el siguiente ciclo.
+        }
+    }
 }
 
 /**
