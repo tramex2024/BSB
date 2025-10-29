@@ -195,13 +195,16 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
  * @param {object} botState - Estado actual del bot.
  * @param {object} handlerDependencies - Dependencias necesarias (¡ya no usadas aquí!).
  */
-async function placeSellOrder(config, sellAmount, log, handleSuccessfulSell, botState, handlerDependencies) {
+async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSell, botState, handlerDependencies) {
     const SYMBOL = config.symbol || TRADE_SYMBOL;
 
-    log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
+    // Aseguramos que sellAmount sea un número justo antes de usarlo
+    const amountToSell = parseFloat(sellAmount);
+
+    log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
     try {
         // Nota: La API de BitMart usa 'sell' en minúsculas en algunos endpoints, pero 'SELL' para las órdenes
-        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', sellAmount); 
+        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', amountToSell); 
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;
