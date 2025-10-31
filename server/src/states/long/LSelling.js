@@ -3,6 +3,8 @@
 const { placeSellOrder } = require('../../utils/orderManager');
 const { getOrderDetail } = require('../../../services/bitmartService'); 
 
+const MIN_SELL_AMOUNT_BTC = 0.00005;
+
 // Se asume que el manejo del Trailing Stop se basa en una caída fija.
 const LSTATE = 'long'; 
 // 💡 VALOR DEFINIDO POR EL USUARIO PARA EL TRAILING STOP (0.4%)
@@ -187,18 +189,20 @@ if (lastOrder && lastOrder.order_id && lastOrder.side === 'sell') {
     }
     
     // 3. CONDICIÓN DE VENTA Y LIQUIDACIÓN
-    if (acSelling > 0 && !lastOrder) {
-        if (currentPrice <= newPc) {
-            log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
-            
-            // LLAMADA: placeSellOrder coloca la orden y luego llama a handleSuccessfulSell al llenarse.
-            await placeSellOrder(config, creds, acSelling, log, handleSuccessfulSell, botState, handlerDependencies);
+    // CRÍTICO: Aseguramos que el monto a vender sea igual o mayor al mínimo.
+    if (acSelling >= MIN_SELL_AMOUNT_BTC && !lastOrder) {
+    if (currentPrice <= newPc) {
+        log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
+        
+        // LLAMADA: placeSellOrder coloca la orden y luego llama a handleSuccessfulSell al llenarse.
+        await placeSellOrder(config, creds, acSelling, log, handleSuccessfulSell, botState, handlerDependencies);
 
-            // Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED (monitoreo superior).
-        }
-    }
-    
-    
+        // Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED (monitoreo superior).
+    }
+} else if (acSelling > 0 && acSelling < MIN_SELL_AMOUNT_BTC) {
+    // Caso de advertencia: Si tenemos BTC pero es muy poco para vender.
+    log(`Advertencia: La cantidad acumulada para vender (${acSelling.toFixed(8)} BTC) es menor al mínimo de la plataforma (${MIN_SELL_AMOUNT_BTC} BTC). Venta bloqueada.`, 'warning');
+    }       
 }
 
 module.exports = { 
