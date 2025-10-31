@@ -22,71 +22,81 @@ const TRAILING_STOP_PERCENTAGE = 0.4;
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
  * @param {object} dependencies - Dependencias inyectadas (incluye config, log, updateGeneralBotState, etc.).
  */
+
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
-    // Aseguramos la extracción de todas las dependencias necesarias
-    const { config, log, updateBotState, updateLStateData, updateGeneralBotState, creds } = dependencies;
-    
-    // 1. CÁLCULO DE CAPITAL Y GANANCIA
-    const { ac: totalBtcSold, ppc } = botStateObj.lStateData; 
-    
-    // Usamos filledSize y priceAvg (o price) para asegurar precisión en la venta.
-    const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price); 
-    // Nota: Dependemos de que orderDetails contenga la información correcta de BitMart.
-    const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || 0); 
-    
-    const totalUsdtRecovered = filledSize * sellPrice; 
-    const totalUsdtSpent = totalBtcSold * ppc; 
-    const profit = totalUsdtRecovered - totalUsdtSpent;
-    
-    // 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
-    // Sumamos el monto total de USDT recuperado (Capital original + Profit)
-    const newLBalance = botStateObj.lbalance + totalUsdtRecovered; 
-    
-    await updateGeneralBotState({ 
-        lbalance: newLBalance,
-        totalProfit: (botStateObj.totalProfit || 0) + profit, // 💡 CAMPO DE BENEFICIO ACUMULADO
-        
-        // 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
-        ltprice: 0,         // Precio Objetivo
-        lcoverage: 0,       // Monto de Cobertura Requerido
-        lnorder: 0,         // Número de Órdenes
-        lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
-    });
+    // Aseguramos la extracción de todas las dependencias necesarias
+    const { config, log, updateBotState, updateLStateData, updateGeneralBotState, creds } = dependencies;
+    
+    try {
+        // 1. CÁLCULO DE CAPITAL Y GANANCIA
+        const { ac: totalBtcSold, ppc } = botStateObj.lStateData;
+        
+        // Usamos filledSize y priceAvg (o price) para asegurar precisión en la venta.
+        const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
+        // Nota: Si la venta fue asumida (Error 50005), usamos totalBtcSold como filledSize para el cálculo.
+        const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || totalBtcSold || 0);
+        
+        const totalUsdtRecovered = filledSize * sellPrice;
+        const totalUsdtSpent = totalBtcSold * ppc;
+        const profit = totalUsdtRecovered - totalUsdtSpent;
+        
+        // 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
+        // Sumamos el monto total de USDT recuperado (Capital original + Profit)
+        const newLBalance = botStateObj.lbalance + totalUsdtRecovered;
+        
+        // --- 2a. UPDATE DE ESTADO GENERAL (Punto 1 de Persistencia) ---
+        await updateGeneralBotState({
+            lbalance: newLBalance,
+            totalProfit: (botStateObj.totalProfit || 0) + profit, // 💡 CAMPO DE BENEFICIO ACUMULADO
+            
+            // 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
+            ltprice: 0,
+            lcoverage: 0,
+            lnorder: 0,
+            lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
+        });
 
-    log(`Cierre de Ciclo Long Exitoso! Ganancia: ${profit.toFixed(2)} USDT.`, 'success');
-    log(`LBalance actualizado. Capital operativo disponible: ${newLBalance.toFixed(2)} USDT.`, 'info');
+        log(`Cierre de Ciclo Long Exitoso! Ganancia: ${profit.toFixed(2)} USDT.`, 'success');
+        log(`LBalance actualizado. Capital operativo disponible: ${newLBalance.toFixed(2)} USDT.`, 'info');
 
-    // 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
-    const resetLStateData = { 
-        ac: 0, ppc: 0, 
-        orderCountInCycle: 0, // CRÍTICO: Reset a 0 para que LRunning inicie la compra.
-        lastOrder: null, 
-        pm: 0, pc: 0, pv: 0
-    };
-    await updateLStateData(resetLStateData); 
-    
-    // 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
-    if (config.long.stopAtCycle) {
-        // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
-        log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
-        await updateBotState('STOPPED', LSTATE);
-    } else {
-        // Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
-        // Importamos placeFirstBuyOrder aquí para evitar la dependencia circular.
-        const { placeFirstBuyOrder } = require('../../utils/orderManager');
+        // 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
+        const resetLStateData = {
+            ac: 0, ppc: 0,
+            orderCountInCycle: 0, // CRÍTICO: Reset a 0 para que LRunning inicie la compra.
+            lastOrder: null,
+            pm: 0, pc: 0, pv: 0
+        };
+        // --- 3a. UPDATE DE LSTATEDATA (Punto 2 de Persistencia - CRÍTICO) ---
+        await updateLStateData(resetLStateData);
+        
+        // 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
+        if (config.long.stopAtCycle) {
+            // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
+            log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
+            await updateBotState('STOPPED', LSTATE);
+        } else {
+            // Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
+            // Importamos placeFirstBuyOrder aquí para evitar la dependencia circular.
+            const { placeFirstBuyOrder } = require('../../utils/orderManager');
 
-        log('Configuración: stopAtCycle desactivado. Reiniciando ciclo con nueva compra (BUYING).', 'info');
-        
-        // placeFirstBuyOrder colocará la orden inicial y transicionará a BUYING.
-        // Pasamos 'config.long.purchaseUsdt' como monto para la primera compra.
-        await placeFirstBuyOrder(config, creds, config.long.purchaseUsdt, log, updateBotState, updateGeneralBotState); 
-    	
-        // 🎯 [ADICIÓN DE SEGURIDAD]
-// Ya que placeFirstBuyOrder no garantiza la transición después del éxito, forzamos el estado.
-await updateBotState('BUYING', LSTATE);	
+            log('Configuración: stopAtCycle desactivado. Reiniciando ciclo con nueva compra (BUYING).', 'info');
+            
+            // placeFirstBuyOrder colocará la orden inicial y transicionará a BUYING.
+            // Pasamos 'config.long.purchaseUsdt' como monto para la primera compra.
+            await placeFirstBuyOrder(config, creds, config.long.purchaseUsdt, log, updateBotState, updateGeneralBotState);
+            
+            // 🎯 [ADICIÓN DE SEGURIDAD]
+            // Ya que placeFirstBuyOrder no garantiza la transición después del éxito, forzamos el estado.
+            await updateBotState('BUYING', LSTATE);
+        }
+
+    } catch (error) {
+        // ⚠️ BLOQUE DE RECUPERACIÓN DE PERSISTENCIA
+        log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Se forzará el estado 'ERROR'. Limpie la DB manualmente. Error: ${error.message}`, 'error');
+        // Forzar un estado que detenga la operación si falló la actualización de la DB.
+        await updateBotState('ERROR', LSTATE);
     }
 }
-
 
 // =========================================================================
 // FUNCIÓN PRINCIPAL DE GESTIÓN DEL ESTADO SELLING
