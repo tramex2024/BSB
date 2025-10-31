@@ -97,50 +97,62 @@ async function run(dependencies) {
     // === [ BLOQUE CRÍTICO DE RECUPERACIÓN DE SERVIDOR ] ================
     // =================================================================
     const lastOrder = botState.lStateData.lastOrder;
-    const SYMBOL = config.symbol || 'BTC_USDT';
+const SYMBOL = config.symbol || 'BTC_USDT';
 
-    if (lastOrder && lastOrder.order_id && lastOrder.side === 'sell') {
-        log(`Recuperación: Orden de venta pendiente con ID ${lastOrder.order_id} detectada en DB. Consultando BitMart...`, 'warning');
+if (lastOrder && lastOrder.order_id && lastOrder.side === 'sell') {
+    log(`Recuperación: Orden de venta pendiente con ID ${lastOrder.order_id} detectada en DB. Consultando BitMart...`, 'warning');
 
-        try {
-            // 1. Consultar el estado real de la orden en BitMart
-            const orderDetails = await getOrderDetail(creds, SYMBOL, lastOrder.order_id);
+    try {
+        // 1. Consultar el estado real de la orden en BitMart
+        const orderDetails = await getOrderDetail(creds, SYMBOL, lastOrder.order_id);
 
-            // Verifica si la orden fue llenada, incluso si luego fue cancelada (parcial)
-            const isOrderFilled = orderDetails && (orderDetails.state === 'filled' || 
-                (orderDetails.state === 'partially_canceled' && parseFloat(orderDetails.filled_volume || 0) > 0));
+        // Verifica si la orden fue llenada, incluso si luego fue cancelada (parcial)
+        const isOrderFilled = orderDetails && (orderDetails.state === 'filled' || 
+            (orderDetails.state === 'partially_canceled' && parseFloat(orderDetails.filled_volume || 0) > 0));
 
-            if (isOrderFilled) {
-                // Caso A: ORDEN LLENADA (Ejecución Exitosa después del reinicio)
-                log(`Recuperación exitosa: La orden ID ${lastOrder.order_id} se completó durante el tiempo de inactividad.`, 'success');
-                
-                // Las dependencias necesarias para handleSuccessfulSell
-                const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
-                
-                // 2. Procesar la venta exitosa (cierra ciclo, recupera capital, resetea estado)
-                await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
-                
-                return; // Finaliza la ejecución, el ciclo se ha cerrado.
+        if (isOrderFilled) {
+            // Caso A: ORDEN LLENADA (Ejecución Exitosa después del reinicio)
+            log(`Recuperación exitosa: La orden ID ${lastOrder.order_id} se completó durante el tiempo de inactividad.`, 'success');
+            
+            // Las dependencias necesarias para handleSuccessfulSell
+            const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
+            
+            // 2. Procesar la venta exitosa (cierra ciclo, recupera capital, resetea estado)
+            await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
+            
+            return; // Finaliza la ejecución, el ciclo se ha cerrado.
 
-            } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
-                // Caso B: ORDEN AÚN ACTIVA (Esperar)
-                log(`Recuperación: La orden ID ${lastOrder.order_id} sigue ${orderDetails.state} en BitMart. Esperando ejecución.`, 'info');
-                return; // Detenemos la ejecución. No queremos que la lógica intente colocar OTRA orden.
+        } else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
+            // Caso B: ORDEN AÚN ACTIVA (Esperar)
+            log(`Recuperación: La orden ID ${lastOrder.order_id} sigue ${orderDetails.state} en BitMart. Esperando ejecución.`, 'info');
+            return; // Detenemos la ejecución. No queremos que la lógica intente colocar OTRA orden.
 
-            } else {
-                // Caso C: ORDEN CANCELADA, FALLIDA o NO ENCONTRADA (y no se llenó)
-                log(`La orden ID ${lastOrder.order_id} no está activa ni completada. Asumiendo fallo y permitiendo una nueva venta. Estado: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
-                
-                // 2. Limpiar lastOrder para liberar el ciclo SELLING.
-                await updateLStateData({ 'lastOrder': null });
-                
-                // 3. Continuar la ejecución del código para intentar colocar la orden de venta de nuevo.
-            }
-        } catch (error) {
-            log(`Error al consultar orden en BitMart durante la recuperación: ${error.message}`, 'error');
-            return; // Detenemos la ejecución. Es más seguro esperar el siguiente ciclo.
-        }
-    }
+        } else {
+            // Caso C: ORDEN CANCELADA, FALLIDA o NO ENCONTRADA (y no se llenó)
+            log(`La orden ID ${lastOrder.order_id} no está activa ni completada. Asumiendo fallo y permitiendo una nueva venta. Estado: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
+            
+            // 2. Limpiar lastOrder para liberar el ciclo SELLING.
+            await updateLStateData({ 'lastOrder': null });
+            
+            // 3. Continuar la ejecución del código para intentar colocar la orden de venta de nuevo.
+        }
+    } catch (error) {
+        // 🛑 NUEVO MANEJO DEL ERROR 50005 🛑
+        if (error.message.includes('50005')) {
+             log(`Advertencia: Orden ${lastOrder.order_id} desapareció del historial reciente (Error 50005). Asumiendo llenado instantáneo y forzando cierre de ciclo.`, 'warning');
+            
+            // Ejecutar el handler de éxito para cerrar el ciclo
+            const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
+            // Pasamos 'null' o un objeto base si orderDetails no está disponible, confiando en los datos de la DB.
+            await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies); 
+            
+            return; // Finaliza la ejecución para el siguiente ciclo.
+        }
+
+        log(`Error al consultar orden en BitMart durante la recuperación: ${error.message}`, 'error');
+        return; // Para otros errores (red, autenticación), detenemos la ejecución para reintentar de forma segura.
+    }
+}
     // =================================================================
     // === [ FIN DEL BLOQUE DE RECUPERACIÓN ] ============================
     // =================================================================
