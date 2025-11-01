@@ -3,7 +3,7 @@
 const Autobot = require('../../models/Autobot');
 // 🛑 CORRECCIÓN: Se asume que handleSuccessfulSell se pasa como dependencia (desde LSelling.js)
 const bitmartService = require('../../services/bitmartService'); 
-const { parseNumber } = require('../../../utils/helpers'); // ✅ Importación de helper
+const { parseNumber } = require('../../utils/helpers'); // ✅ Importación de helper
 
 const TRADE_SYMBOL = 'BTC_USDT';
 const MIN_USDT_VALUE_FOR_BITMART = 5.00;
