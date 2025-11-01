@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
 const autobotLogic = require('../autobotLogic.js');
-const { calculateInitialState } = require('../autobotCalculations');
+const { calculateInitialState } = require('../utils/autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
 const { CLEAN_STRATEGY_DATA, CLEAN_ROOT_FIELDS } = require('../src/utils/cleanState'); // ✅ Importación de la limpieza
 
