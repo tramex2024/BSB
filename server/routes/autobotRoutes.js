@@ -87,35 +87,80 @@ router.post('/start', async (req, res) => {
 router.post('/stop', async (req, res) => {
     try {
         const botState = await Autobot.findOne({});
-        if (botState) {
-            
-            // 1. Limpieza de campos de nivel raíz (targets y contadores de ciclo)
-            botState.lstate = 'STOPPED';
-            botState.sstate = 'STOPPED';
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = false;
-
-            // ✅ APLICAR LA LIMPIEZA DE ROOT: Targets de venta y reinicio de ciclos
-            botState.ltprice = CLEAN_ROOT_FIELDS.ltprice; 
-            botState.stprice = CLEAN_ROOT_FIELDS.stprice;
-            botState.lcycle = CLEAN_ROOT_FIELDS.lcycle;
-            botState.scycle = CLEAN_ROOT_FIELDS.scycle;
-
-            // ✅ APLICAR LA LIMPIEZA DE ESTRATEGIA: Limpieza profunda de posición
-            // Esto asegura que PPC, AC, pm, pc, lastOrder, etc., estén a cero.
-            botState.lStateData = CLEAN_STRATEGY_DATA;
-            botState.sStateData = CLEAN_STRATEGY_DATA;
-            
-            await botState.save();
-
-            // Usamos la función de ayuda para serializar y emitir
-            const botData = emitBotState(botState, autobotLogic.io);
-
-            autobotLogic.log('Autobot strategy stopped by user. All strategy data and targets cleaned.', 'info');
-            res.json({ success: true, message: 'Autobot strategy stopped. Targets and position data cleaned.', data: botData });
-        } else {
-            res.status(404).json({ success: false, message: 'Bot state not found.' });
+        if (!botState) {
+            return res.status(404).json({ success: false, message: 'Bot state not found.' });
         }
+
+        const updates = {};
+        
+        // 1. Deshabilitar y Detener inmediatamente
+        updates.lstate = 'STOPPED';
+        updates.sstate = 'STOPPED';
+        updates['config.long.enabled'] = false;
+        updates['config.short.enabled'] = false;
+
+        // ----------------------------------------------------
+        // 2. LÓGICA DE CONCILIACIÓN y LIMPIEZA PROFUNDA (Long)
+        // ----------------------------------------------------
+        const configuredUSDT = parseFloat(botState.config.long.amountUsdt || 0); // $16.00
+        const currentLBalance = parseFloat(botState.lbalance || 0);              // $11.00
+        const currentLPosition = parseFloat(botState.lStateData.ac || 0);         // 0
+
+        // Si no hay posición abierta Y el balance actual es menor que el configurado (Capital atascado)
+        if (currentLPosition === 0 && currentLBalance < configuredUSDT) {
+            
+            // CONCILIACIÓN CRÍTICA: Forzar lbalance al capital total configurado
+            updates.lbalance = configuredUSDT; 
+
+            // Limpieza Profunda: Ya que la posición es 0 y se concilió el balance, 
+            // asumimos que el usuario quiere un reset de los datos internos del ciclo.
+            updates.lStateData = CLEAN_STRATEGY_DATA;
+            updates.ltprice = CLEAN_ROOT_FIELDS.ltprice; // Limpiar Target
+            updates.lcycle = CLEAN_ROOT_FIELDS.lcycle;   // Limpiar Ciclo
+            
+            autobotLogic.log(`[STOP-CONCILIADO] lbalance restablecido a ${configuredUSDT.toFixed(2)} USDT (AC=0).`, 'success');
+            
+        } else if (currentLPosition === 0) {
+            // Si la posición es 0 pero el balance está bien, solo limpiamos los datos del ciclo.
+            updates.lStateData = CLEAN_STRATEGY_DATA;
+            updates.ltprice = CLEAN_ROOT_FIELDS.ltprice; 
+            updates.lcycle = CLEAN_ROOT_FIELDS.lcycle;
+        } 
+        // NOTA: Si currentLPosition > 0, NO limpiamos lStateData ni conciliamos el balance, 
+        // el bot mantiene su posición para ser reanudada.
+
+
+        // ----------------------------------------------------
+        // 3. LÓGICA DE CONCILIACIÓN y LIMPIEZA PROFUNDA (Short)
+        // (Se aplica la misma lógica para sbalance/sStateData)
+        // ----------------------------------------------------
+        const configuredBTC = parseFloat(botState.config.short.amountBtc || 0);
+        const currentSBalance = parseFloat(botState.sbalance || 0);
+        const currentSPosition = parseFloat(botState.sStateData.ac || 0);
+
+        if (currentSPosition === 0 && currentSBalance < configuredBTC) {
+            updates.sbalance = configuredBTC;
+            updates.sStateData = CLEAN_STRATEGY_DATA;
+            updates.stprice = CLEAN_ROOT_FIELDS.stprice;
+            updates.scycle = CLEAN_ROOT_FIELDS.scycle;
+            // autobotLogic.log(`[STOP-CONCILIADO] sbalance restablecido a ${configuredBTC.toFixed(8)} BTC (AC=0).`, 'success');
+        } else if (currentSPosition === 0) {
+            updates.sStateData = CLEAN_STRATEGY_DATA;
+            updates.stprice = CLEAN_ROOT_FIELDS.stprice;
+            updates.scycle = CLEAN_ROOT_FIELDS.scycle;
+        }
+
+
+        // 4. Guardar las actualizaciones en la DB
+        await Autobot.findOneAndUpdate({}, { $set: updates });
+
+        // Obtener el estado actualizado para emitir (con los nuevos valores de lbalance/lStateData)
+        const updatedBotState = await Autobot.findOne({});
+        const botData = emitBotState(updatedBotState, autobotLogic.io);
+
+        autobotLogic.log('Autobot strategy stopped by user. State and balance reviewed.', 'info');
+        res.json({ success: true, message: 'Autobot strategy stopped. State and balance reviewed.', data: botData });
+        
     } catch (error) {
         console.error('Failed to stop Autobot strategy:', error);
         res.status(500).json({ success: false, message: 'Failed to stop Autobot strategy.' });
