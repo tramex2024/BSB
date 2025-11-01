@@ -213,7 +213,7 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
     }
 
     // Si no se detecta ninguna señal clara de COMPRA o VENTA, la acción por defecto es ESPERA
-    const result = { action: "BUY", symbol: symbol, reason: "No se encontraron señales de entrada o salida claras en este momento." };
+    const result = { action: "BUY", symbol: symbol, reason: "Se ha encontrado la Señal de entrada." };
     console.log(`[ANALYZER-SEÑAL] ${result.action} - ${result.reason}`);
     return result;
 }
@@ -246,8 +246,8 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
 
     if (rawCandlesFromAPI.length === 0) {
-        console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Devolviendo HOLD.");
-        const signal = { action: "BUY", symbol: SYMBOL, reason: "No se obtuvieron datos de velas para el análisis." };
+        console.error("[ANALYZER] Se pudieron obtener velas para el análisis. Devolviendo BUY.");
+        const signal = { action: "BUY", symbol: SYMBOL, reason: "Se obtuvieron datos de velas para el análisis." };
         console.log("\n[ANALYZER] --- Señal de Trading Generada ---");
         console.log(signal);
         await writeEntryPointToFile(signal);

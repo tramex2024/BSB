@@ -1,14 +1,13 @@
-// BSB/server/src/states/long/LRunning.js (CORREGIDO - Candado Inmediato)
-
 const analyzer = require('../../bitmart_indicator_analyzer');
-const { placeFirstBuyOrder } = require('../../utils/orderManager');
+// 🛑 Eliminamos la dependencia de placeFirstBuyOrder
 
 async function run(dependencies) {
-    const { botState, currentPrice, availableUSDT, config, log, updateBotState, updateGeneralBotState } = dependencies;
+    const { botState, currentPrice, availableUSDT, config, log, updateBotState } = dependencies;
     
-    // 💡 1. VERIFICACIÓN DE POSICIÓN (PRIORIDAD AL INICIO)
-    if (botState.lStateData.orderCountInCycle > 0) {
-        log("Posición detectada (orderCountInCycle > 0). Transicionando a BUYING.", 'info');
+    // 💡 1. VERIFICACIÓN DE POSICIÓN (Si ya hay una posición, transicionar a BUYING para su gestión)
+    // Usamos AC > 0 como indicador principal de una posición abierta.
+    if (botState.lStateData.AC > 0) {
+        log("Posición detectada (AC > 0). Transicionando a BUYING para su gestión.", 'info');
         await updateBotState('BUYING', 'long'); 
         return; // Detener la ejecución de RUNNING
     }
@@ -18,22 +17,12 @@ async function run(dependencies) {
     // Si no hay posición, procedemos con el análisis.
     const analysisResult = await analyzer.runAnalysis(currentPrice);
 
-    // Tu log muestra que la señal es solo la razón: 
-    // [BOT LOG]: ¡Señal de COMPRA detectada! Razón: No se encontraron señales de entrada o salida claras en este momento.
-    // Esto es confuso, pero si el analyzer.runAnalysis() está forzando un 'BUY' con esta razón, lo aceptamos.
     if (analysisResult.action === 'BUY') { 
         log(`¡Señal de COMPRA detectada! Razón: ${analysisResult.reason}`, 'success');
         
-        // 💡 2. RED DE SEGURIDAD (DOBLE CHEQUEO)
-        if (botState.lStateData.orderCountInCycle > 0) {
-            log('Red de seguridad activada: orderCountInCycle ya es > 0, cancelando compra duplicada.', 'warning');
-            await updateBotState('BUYING', 'long');
-            return;
-        }
-
-        const purchaseAmount = parseFloat(config.long.purchaseUsdt);
-        // Usamos la constante de BitMart para el mínimo
+        // 🚨 CRÍTICO: Usamos la constante de BitMart (Asumimos que está definida o importada)
         const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
+        const purchaseAmount = parseFloat(config.long.purchaseUsdt);
         
         // ⚠️ VERIFICACIÓN DEL LÍMITE DE CAPITAL (LBalance)
         const currentLBalance = parseFloat(botState.lbalance || 0);
@@ -42,13 +31,13 @@ async function run(dependencies) {
         const isCapitalLimitSufficient = currentLBalance >= purchaseAmount;
         
         if (isRealBalanceSufficient && isCapitalLimitSufficient) {
-            // Llama a la función que ahora se encargará de:
-            // 1. Colocar la orden.
-            // 2. Descontar el LBalance.
-            // 3. 🛑 Unificar la actualización DB (lStateData + lstate: BUYING).
-            await placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState); 
             
-            // 🛑 CRÍTICO: Detener este ciclo para que el bot pase a BUYING en la siguiente iteración.
+            log('Condiciones de capital y señal cumplidas. Transicionando a BUYING para colocar la orden inicial.', 'success');
+            
+            // 🎯 ACCIÓN CLAVE: SOLO TRANSICIONAR EL ESTADO
+            // LBuying.js se encargará de llamar a placeFirstBuyOrder en el siguiente ciclo.
+            await updateBotState('BUYING', 'long'); 
+            
             return; 
         } else {
             let reason = '';
