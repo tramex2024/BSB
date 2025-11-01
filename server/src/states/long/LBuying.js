@@ -283,9 +283,24 @@ if (!lStateData.lastOrder && lStateData.ppc > 0) {
 
 // Caso especial: Sin PPC, sin orden, y el target no fue alcanzado (inicio del bot).
 if (lStateData.ppc === 0 && !lStateData.lastOrder) {
-    log("Posición inicial (AC=0) y orden no colocada. Transicionando a NO_COVERAGE para reevaluar la situación de fondos.", 'info');
-    await updateBotState('NO_COVERAGE', 'long');
-    return;
+    const purchaseAmount = parseFloat(config.long.purchaseUsdt);
+    
+    if (botState.lbalance >= purchaseAmount) {
+        log("Posición inicial (AC=0). Intentando colocar la PRIMERA orden de compra...", 'info');
+
+        // 🛑 Importar la función (debe estar disponible o importarse al inicio del archivo)
+        const { placeFirstBuyOrder } = require('../../utils/orderManager'); 
+
+        // Colocar la orden. Esto también cambiará el estado a BUYING si es exitoso.
+        await placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState);
+        
+        return; // Esperar al siguiente ciclo para monitorear la orden.
+    } else {
+        // Fondos insuficientes para la primera orden. TRANSICIÓN CORRECTA.
+        log(`Posición inicial (AC=0). Balance insuficiente (${botState.lbalance.toFixed(2)} < ${purchaseAmount.toFixed(2)}). Transicionando a NO_COVERAGE.`, 'info');
+        await updateBotState('NO_COVERAGE', 'long');
+        return;
+    }
 }
 
 log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');

@@ -1,11 +1,12 @@
-// BSB/server/src/states/long/LNoCoverage.js (AJUSTADO)
+// BSB/server/src/states/long/LNoCoverage.js (MEJORADO - Recalculo Forzado en NO_COVERAGE)
 
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/orderManager');
-const { calculateLongTargets } = require('../../utils/dataManager');
-// const { cancelActiveOrders } = require('../../utils/orderManager');
+const { calculateLongTargets } = require('../../utils/dataManager'); // 👈 Importar la función de cálculo
+// const { cancelActiveOrders } = require('../../utils/orderManager'); // Eliminada la importación
 
 async function run(dependencies) {
     // Extraemos las funciones y el estado de las dependencias
+    // Asegúrate de que updateLStateData esté aquí
     const { botState, currentPrice, availableUSDT, config, log, updateBotState, updateLStateData } = dependencies;
 
     log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
@@ -13,7 +14,7 @@ async function run(dependencies) {
     const { ac } = botState.lStateData;
     
     // --- 1. VERIFICACIÓN DE TRANSICIÓN A VENTA (Ganancia alcanzada) ---
-    const targetSellPrice = botState.ltprice || 0; // Usar botState.ltprice para el target (lo que está en la DB principal)
+    const targetSellPrice = botState.lStateData.LTPrice || 0; 
 
     if (currentPrice >= targetSellPrice && ac > 0 && targetSellPrice > 0) {
         log(`Precio actual alcanzó el objetivo de venta (${targetSellPrice.toFixed(2)}) desde NO_COVERAGE.`, 'success');
@@ -26,8 +27,9 @@ async function run(dependencies) {
     // 🛑 INICIO DE LA LÓGICA DE RECALCULO FORZADO
     let requiredAmount = botState.lStateData.requiredCoverageAmount || 0;
     
-    // Forzamos el recalculo si hay una posición abierta (ac > 0). 
-    if (ac > 0 && botState.lStateData.orderCountInCycle >= 0) { 
+    // Forzamos el recalculo si hay una posición abierta (ac > 0). 
+    // Esto asegura que cualquier cambio manual en orderCountInCycle se aplique.
+    if (ac > 0 && botState.lStateData.orderCountInCycle >= 0) { 
         log("Forzando recalculo de RequiredAmount en NO_COVERAGE para asegurar la consistencia del estado.", 'warning');
         
         const recalculation = calculateLongTargets(
@@ -45,23 +47,18 @@ async function run(dependencies) {
         let nextCoveragePrice = recalculation.nextCoveragePrice; 
 
         // 🎯 Persistir el valor CORREGIDO
-        await updateLStateData({ 
-            requiredCoverageAmount: requiredAmount, 
-            nextCoveragePrice: nextCoveragePrice 
+        await updateLStateData({ 
+            requiredCoverageAmount: requiredAmount, 
+            nextCoveragePrice: nextCoveragePrice 
         });
         
         log(`Required Amount corregido/verificado a ${requiredAmount.toFixed(2)} USDT.`, 'warning');
     }
-    // === LÓGICA AGREGADA: CORRECCIÓN DEL ESTADO INICIAL (ac = 0) ===
-    else if (ac === 0) {
-        requiredAmount = config.long.purchaseUsdt;
-        log(`Posición reseteada (AC=0). Monto Requerido forzado a: ${requiredAmount.toFixed(2)} USDT (Primera Compra).`, 'info');
-    }
-    // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
+    // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
 
     const currentLBalance = parseFloat(botState.lbalance || 0);
     
-    // ✅ CRÍTICO: Ahora requiredAmount será 5.00 USDT si AC=0.
+    // ✅ CRÍTICO: Debe tener LBalance, Saldo Real y el monto requerido debe ser mayor al mínimo.
     const isReadyToResume = 
         currentLBalance >= requiredAmount && 
         availableUSDT >= requiredAmount && 

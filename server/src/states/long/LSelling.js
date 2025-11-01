@@ -60,16 +60,17 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 
         // 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
         const resetLStateData = {
-            ac: 0, ppc: 0,
-            orderCountInCycle: 0, // CRÍTICO: Reset a 0 para que LRunning inicie la compra.
-            lastOrder: null,
-            pm: 0, pc: 0, pv: 0
-        };
+    ac: 0, ppc: 0,
+    orderCountInCycle: 0, 
+    lastOrder: null, // <--- ESTO ES CRÍTICO
+    pm: 0, pc: 0, pv: 0
+}
         // --- 3a. UPDATE DE LSTATEDATA (Punto 2 de Persistencia - CRÍTICO) ---
-        await updateLStateData(resetLStateData);
-        
-        // 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
-        if (config.long.stopAtCycle) {
+// La limpieza de lastOrder debe ocurrir aquí, antes de llamar a placeFirstBuyOrder.
+await updateLStateData(resetLStateData);
+
+// 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
+if (config.long.stopAtCycle) {
             // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
             log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
             await updateBotState('STOPPED', LSTATE);
@@ -158,17 +159,19 @@ if (lastOrder && lastOrder.order_id && lastOrder.side === 'sell') {
             // 3. Continuar la ejecución del código para intentar colocar la orden de venta de nuevo.
         }
     } catch (error) {
-        // 🛑 NUEVO MANEJO DEL ERROR 50005 🛑
-        if (error.message.includes('50005')) {
-             log(`Advertencia: Orden ${lastOrder.order_id} desapareció del historial reciente (Error 50005). Asumiendo llenado instantáneo y forzando cierre de ciclo.`, 'warning');
-            
-            // Ejecutar el handler de éxito para cerrar el ciclo
-            const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
-            // Pasamos 'null' o un objeto base si orderDetails no está disponible, confiando en los datos de la DB.
-            await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies); 
-            
-            return; // Finaliza la ejecución para el siguiente ciclo.
-        }
+    // 🛑 NUEVO MANEJO DEL ERROR 50005 🛑
+    if (error.message.includes('50005')) {
+        log(`Advertencia: Orden ${lastOrder.order_id} desapareció del historial reciente (Error 50005). Asumiendo llenado instantáneo y forzando cierre de ciclo.`, 'warning');
+        
+        // 1. Limpieza inmediata para evitar la doble ejecución en el siguiente ciclo.
+        await updateLStateData({ 'lastOrder': null }); 
+        
+        // 2. Ejecutar el handler de éxito para cerrar el ciclo
+        const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
+        await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies); 
+        
+        return; // Finaliza la ejecución para el siguiente ciclo.
+    }
 
         log(`Error al consultar orden en BitMart durante la recuperación: ${error.message}`, 'error');
         return; // Para otros errores (red, autenticación), detenemos la ejecución para reintentar de forma segura.

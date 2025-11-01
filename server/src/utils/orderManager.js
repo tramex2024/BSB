@@ -114,10 +114,15 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
 
     // --- PRE-DEDUCCIÓN DEL BALANCE ---
     const newLBalance = currentLBalance - usdtAmount;
-    if (newLBalance < 0) {
-        log(`Error: Capital insuficiente para la orden de cobertura de ${usdtAmount.toFixed(2)} USDT.`, 'error');
-        return; 
-    }
+if (newLBalance < 0) {
+    log(`Error: Capital insuficiente para la orden de cobertura de ${usdtAmount.toFixed(2)} USDT. Transicionando a NO_COVERAGE.`, 'error');
+    
+    // 💡 CORRECCIÓN NECESARIA: Forzar la transición de estado
+    const { updateBotState } = require('../../utils/dataManager'); // Asumiendo que se exporta
+    await updateBotState('NO_COVERAGE', 'long'); 
+    
+    return; // Detiene la ejecución
+}
     // NOTA: La deducción de lbalance se hace antes de la colocación para garantizar que el bot no sobre-gaste
     await updateGeneralBotState({ lbalance: newLBalance });
     log(`LBalance asignado reducido en ${usdtAmount.toFixed(2)} USDT para la orden de cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
