@@ -4,7 +4,7 @@ const { log } = require('../logger'); 
 // Importar SÓLO las funciones de cálculo que se usan o se re-exportan
 const { 
     calculateLongTargets 
-} = require('../../autobotCalculations'); // Asumiendo que esta es la ruta correcta
+} = require('../../utils/autobotCalculations'); // Asumiendo que esta es la ruta correcta
 const Autobot = require('../../models/Autobot'); // Importar Mongoose Model
 
 /**
