@@ -92,7 +92,7 @@ async function getRecentOrders(symbol) {
  * @returns {Promise<object>} - Respuesta de la API.
  */
 // ⬇️ Firma de la función que acepta 'creds' y lo pasa a spotService
-async function placeOrder(symbol, side, type, amount, price) {
+async function placeOrder(creds, symbol, side, type, amount, price) {
     return await spotService.placeOrder(symbol, side, type, amount, price);
 }
 
