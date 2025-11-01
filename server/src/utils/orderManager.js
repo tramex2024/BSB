@@ -45,7 +45,7 @@ async function placeFirstBuyOrder(config, creds, log, currentBotState, updateBot
         log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT antes de la orden.`, 'info');
 
         const orderResult = await bitmartService.placeOrder(
-            creds, SYMBOL, 'buy', 'market', amount, null 
+            creds, SYMBOL, 'BUY', 'market', amount, null 
         ); 
 
         orderId = orderResult.order_id;
@@ -55,7 +55,7 @@ async function placeFirstBuyOrder(config, creds, log, currentBotState, updateBot
             $set: {
                 'lStateData.lastOrder': {
                     order_id: orderId,
-                    side: 'buy',
+                    side: 'BUY',
                     usdt_amount: amount,
                     state: 'pending_fill'
                 },
@@ -107,7 +107,7 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, log, updateBot
     let orderId = null;
 
     try {
-        const order = await bitmartService.placeOrder(creds, SYMBOL, 'buy', 'market', amount); 
+        const order = await bitmartService.placeOrder(creds, SYMBOL, 'BUY', 'market', amount); 
         
         if (order && order.order_id) {
             orderId = order.order_id; 
@@ -117,7 +117,7 @@ async function placeCoverageBuyOrder(botState, creds, usdtAmount, log, updateBot
                 $set: {
                     'lStateData.lastOrder': {
                         order_id: orderId,
-                        side: 'buy',
+                        side: 'BUY',
                         usdt_amount: amount,
                         state: 'pending_fill'
                     },
@@ -164,7 +164,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
                 order_id: currentOrderId,
                 price: parseNumber(botState.lStateData.ppc), 
                 size: amountToSell,
-                side: 'sell',
+                side: 'SELL',
                 state: 'pending_fill'
             };
             
@@ -182,9 +182,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
                 if (filledVolume >= amountToSell * 0.999) {
                     log(`Verificación: Orden ID ${currentOrderId} COMPLETADA. Ejecutando handleSuccessfulSell.`, 'success');
                     // Procesa el cierre del ciclo inmediatamente
-                    await handleSuccessfulSell(botState, orderDetails, handlerDependencies);
-                    // Limpiar lastOrder después del éxito.
-                    await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
+                    await handleSuccessfulSell(botState, orderDetails, handlerDependencies);                    
                 } else {
                     log(`Verificación: Orden ID ${currentOrderId} no llenada. Monitoreo delegado a LSelling.js.`, 'warning');
                 }
