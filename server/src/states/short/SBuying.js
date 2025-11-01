@@ -1,10 +1,11 @@
 // BSB/server/src/states/short/SBuying.js
+
 // Lógica de ENTRADA INICIAL (Venta) y COBERTURA (Compra DCA)
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService'); 
 const { 
     calculateShortTargets 
-} = require('../../../autobotShortCalculations');
+} = require('../../../utils/autobotShortCalculations');
 // NOTA: placeInitialSellOrder usa BTC para la venta inicial (lado short)
 // NOTA: placeCoverageBuyOrder usa USDT para la compra de cobertura (lado short)
 const { placeInitialSellOrder, placeCoverageBuyOrder } = require('../../utils/orderManagerShort'); // Usar orderManagerShort
