@@ -2,7 +2,7 @@
 
 // 💡 Nota: Asegúrate de importar MIN_USDT_VALUE_FOR_BITMART donde esté definida
 // (Se asume que está en '../../utils/config.js' o similar, no en orderManager)
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/bitmartSpot'); // O donde esté definida
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../../../services/bitmartSpot'); // O donde esté definida
 const { calculateLongTargets } = require('../../utils/dataManager');
 
 async function run(dependencies) {
