@@ -4,7 +4,7 @@
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService'); 
 const { 
     calculateLongTargets 
-} = require('../../utils/autobotCalculations');
+} = require('../../../utils/autobotCalculations');
 const { parseNumber } = require('../../../utils/helpers'); 
 const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../utils/orderManager'); 
 

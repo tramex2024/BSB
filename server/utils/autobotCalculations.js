@@ -2,7 +2,7 @@
  * BSB/server/autobotCalculations.js (FINAL - Corregido y Optimizado)
  */
 
-const { parseNumber } = require('./utils/helpers');
+const { parseNumber } = require('./helpers');
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
