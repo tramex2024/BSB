@@ -97,14 +97,36 @@ async function placeOrder(creds, symbol, side, type, amount, price) {
 }
 
 /**
- * Obtiene los detalles de una orden específica con reintentos.
+ * Obtiene los detalles de una orden específica.
+ * ⚠️ ADVERTENCIA: Esta función ha sido modificada para usar getRecentOrders
+ * como fuente principal de datos si getOrderDetail del spotService falla,
+ * para evitar el problema de que el endpoint de spotService no devuelve órdenes llenadas.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
  * @returns {Promise<object>} - Detalles de la orden.
  */
 async function getOrderDetail(symbol, orderId) {
-    // Si bitmartSpot.js no usa 'creds' en getOrderDetail, solo pasamos los parámetros requeridos
-    return await spotService.getOrderDetail(symbol, orderId);
+    try {
+        // 1. Intentar la consulta original (si funciona, genial)
+        const details = await spotService.getOrderDetail(symbol, orderId);
+        if (details && (details.state === 'filled' || details.filledVolume > 0)) {
+            return details;
+        }
+    } catch (e) {
+        // Ignoramos errores si el problema es que la orden ya está llena (Error 50005 de BitMart).
+        // console.warn(`Error al consultar getOrderDetail: ${e.message}. Recurriendo a historial.`);
+    }
+
+    // 2. Recurrir al historial (getRecentOrders) para encontrar la orden, ya que
+    // esta función trae los estados finales (filled, canceled, etc.).
+    // Esto resuelve el problema de que spotService.getOrderDetail filtra órdenes llenadas.
+    const recentOrders = await getRecentOrders(symbol);
+    const orderInHistory = recentOrders.find(order => 
+        String(order.orderId) === String(orderId) || String(order.order_id) === String(orderId)
+    );
+    
+    // Devolvemos el detalle del historial o null si no se encuentra.
+    return orderInHistory || null;
 }
 
 /**
