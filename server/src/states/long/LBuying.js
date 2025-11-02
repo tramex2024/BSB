@@ -32,8 +32,10 @@ async function run(dependencies) {
 
     if (lastOrder && lastOrder.order_id && lastOrder.side === 'buy') {
         const orderIdString = String(lastOrder.order_id);
+//        log(`Recuperación: Orden pendiente ID ${orderIdString} detectada. Consultando BitMart...`, 'warning');
+        // 🚨 NUEVO LOG: Muestra el ID y el estado interno
+        log(`[DIAGNÓSTICO CRÍTICO] Verificando ID: ${orderIdString}. Estado interno: ${lastOrder.state || 'N/A'}`, 'error');
         log(`Recuperación: Orden pendiente ID ${orderIdString} detectada. Consultando BitMart...`, 'warning');
-
         try {
             let finalDetails = null;
             let filledVolume = 0;
