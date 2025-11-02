@@ -15,8 +15,8 @@ const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../utils/order
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log,
-        updateBotState, updateGeneralBotState, getBotState,
-        creds
+        updateBotState, updateGeneralBotState, getBotState, // Usamos updateGeneralBotState para todas las actualizaciones
+        creds // Asumimos que creds está en las dependencias para getRecentOrders
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -36,89 +36,79 @@ async function run(dependencies) {
 
         try {
             let finalDetails = null;
+            let filledVolume = 0;
+            let isOrderProcessed = false;
 
             // 1. Intentar la consulta directa por ID
             try {
                 let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
                 finalDetails = orderDetails;
+                filledVolume = parseNumber(finalDetails?.filledVolume || finalDetails?.filledSize || 0); 
             } catch (e) {
-                // Posible error 50005 (orden completada/no encontrada). Buscamos en el historial.
-                log(`Consulta directa falló (${e.message}). Buscando en el historial...`, 'warning');
-            }
-
-            // 2. Lógica de Respaldo: Si la consulta directa falló o el estado es ambiguo.
-            if (!finalDetails) {
-                const recentOrders = await getRecentOrders(creds, SYMBOL); 
-                finalDetails = recentOrders.find(order => String(order.orderId) === orderIdString || String(order.order_id) === orderIdString);
-            }
-
-            if (!finalDetails) {
-                log(`ERROR FATAL: No se pudo recuperar la orden ID ${orderIdString} en consulta directa ni en historial. Reintentando.`, 'error');
-                return;
+                // Error 50005 (orden completada/no encontrada), la manejamos en el paso 2.
+                log(`Consulta directa falló. Buscando en el historial como respaldo.`, 'warning');
             }
             
-            // 3. Evaluar el resultado final (LÓGICA MEJORADA)
+            // 🛑 Criterio inicial de éxito/procesamiento (Basado en tu lógica antigua)
+            if (finalDetails) {
+                 isOrderProcessed = (
+                     finalDetails.state === 'filled' || 
+                     finalDetails.state === 'partially_canceled' || 
+                     (finalDetails.state === 'canceled' && filledVolume > 0) ||
+                     filledVolume > 0 // El criterio final: si hay volumen, es un éxito.
+                 );
+            }
             
-            // 3A. Extracción de datos
-            const currentOrderState = finalDetails.state || 'N/A';
-            const filledVolume = parseNumber(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.executed_volume || 0); 
-            const amountTotal = parseNumber(finalDetails.size || 0); // La cantidad total de BTC solicitada ('size' en BitMart)
-            
-            // 3B. Criterios de Finalización
-            // Usamos una pequeña tolerancia para la igualdad de volumen (evitar errores de punto flotante)
-            const volumeTolerance = 0.00000001;
-            // Solo compara si el monto total (size) no es cero (caso de órdenes de mercado USDT)
-            const isFullyFilledByVolume = amountTotal > 0 && Math.abs(filledVolume - amountTotal) < volumeTolerance;
-
-            // Criterio de Consolidación (la orden ha terminado Y tiene llenado O se llenó al 100%)
-            const isConsolidationReady = (
-                currentOrderState === 'filled' ||
-                currentOrderState === 'partially_canceled' ||
-                (currentOrderState === 'canceled' && filledVolume > 0) ||
-                isFullyFilledByVolume // 👈 CRITERIO DE RESPALDO DE VOLUMEN
-            );
-            
-            if (!isConsolidationReady) {
-                // ⏸️ Orden activa, regresamos en el próximo ciclo (solo si el estado no es final)
-                const isStillActive = currentOrderState === 'new' || currentOrderState === 'partially_filled';
-
-                if (isStillActive) {
-                    log(`La orden ID ${orderIdString} sigue activa (${currentOrderState}). Esperando...`, 'info');
-                    return;
-                }
-            } 
-            
-            // ❌ Orden fallida/cancelada sin ejecución (filledVolume=0)
-            if (filledVolume === 0) {
-                log(`Orden ID ${orderIdString} falló/cancelada sin volumen. Reintegrando balance.`, 'error');
+            // ======================================================
+            // 💡 LÓGICA DE RESPALDO (TU CRITERIO DE CONFIRMACIÓN INMEDIATA)
+            // ======================================================
+            if (!isOrderProcessed) {
+                // Forzamos la búsqueda en historial si no se pudo confirmar el llenado.
+                log(`Fallo/inconcluso en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'warning');
                 
-                const amountDeducted = parseNumber(lastOrder.usdt_amount || 0);
-                currentLBalance += amountDeducted; // Reintegramos el USDT deducido.
-                await updateGeneralBotState({ lbalance: currentLBalance, 'lStateData.lastOrder': null });
-                log(`Reintegro de ${amountDeducted.toFixed(2)} USDT.`, 'info');
-                return; 
+                const recentOrders = await getRecentOrders(creds, SYMBOL);  // Usar 'creds'
+                const orderInHistory = recentOrders.find(order => String(order.orderId) === orderIdString || String(order.order_id) === orderIdString);
+                
+                if (orderInHistory) {
+                    finalDetails = orderInHistory; // Usamos los detalles del historial
+                    filledVolume = parseNumber(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.executed_volume || 0);
+                    isOrderProcessed = filledVolume > 0;
+                    
+                    if (isOrderProcessed) {
+                        log(`Orden ${orderIdString} CONFIRMADA en el historial (Volumen: ${filledVolume}).`, 'success');
+                    }
+                }
             }
 
 
-            // ======================================================
-            // === LÓGICA DE CONSOLIDACIÓN DE POSICIÓN (ÉXITO: isConsolidationReady) ===
-            // ======================================================
-            if (isConsolidationReady) {
+            // 3. EVALUACIÓN FINAL Y CONSOLIDACIÓN
+            if (isOrderProcessed) {
+                log(`Recuperación exitosa: La orden ID ${orderIdString} se completó. Procesando consolidación...`, 'success');
+
+                // Aseguramos que el volumen sea positivo antes de consolidar.
+                if (filledVolume === 0) {
+                    // Esto no debería ocurrir si isOrderProcessed es true, pero es una protección final.
+                    log(`Advertencia: Volumen llenado es cero a pesar de la bandera. Limpiando.`, 'error');
+                    await updateGeneralBotState({ 'lStateData.lastOrder': null });
+                    return;
+                }
+                
+                // LÓGICA DE CONSOLIDACIÓN
                 const averagePrice = parseNumber(finalDetails.priceAvg || finalDetails.price || 0);
                 const oldAc = parseNumber(lStateData.ac || 0);
                 const oldPpc = parseNumber(lStateData.ppc || 0);
                 
                 // 1. Calcular el nuevo PPC (Precio Promedio de Compra)
                 const totalSpentOld = oldAc * oldPpc;
-                const totalSpentNew = filledVolume * averagePrice; 
+                const totalSpentNew = filledVolume * averagePrice;
                 const newAc = oldAc + filledVolume;
                 let newPpc = (newAc > 0) ? (totalSpentOld + totalSpentNew) / newAc : 0;
                 
-                // 2. Reintegrar USDT no usado (Market Slippage)
+                // 2. Reintegrar USDT no usado
                 const totalUsdtUsed = parseNumber(finalDetails.executedValue || finalDetails.executed_value || finalDetails.filledNotional || totalSpentNew);
                 const amountDeducted = parseNumber(lastOrder.usdt_amount || 0);
                 currentLBalance += (amountDeducted - totalUsdtUsed); 
-
+                
                 // 3. 🎯 ACTUALIZACIÓN ATÓMICA DE DATOS
                 const atomicUpdate = {
                     lbalance: currentLBalance,
@@ -129,17 +119,36 @@ async function run(dependencies) {
                 };
 
                 await updateGeneralBotState(atomicUpdate);
-                // Forzar la recarga del estado local para la Sección 2.
-                const updatedBotState = await getBotState();
-                lStateData = updatedBotState.lStateData; 
-                currentLBalance = updatedBotState.lbalance;
+                
+                log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, AC: ${newAc.toFixed(8)}. Balance reintegrado. Transicionando a RUNNING.`, 'success');
+                
+                // 🎯 Transición inmediata a RUNNING (como en tu código antiguo)
+                await updateBotState('RUNNING', 'long'); 
+                return; // Salir después de consolidar una orden.
+            } 
+            
+            // 4. Espera o Fallo sin Ejecución
+            
+            // Si la orden sigue activa, esperamos.
+            if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
+                // ⏸️ Orden activa/parcialmente ejecutada. Persistir.
+                log(`La orden ID ${orderIdString} sigue activa (${finalDetails.state}). Esperando ejecución.`, 'info');
+                return;
+            } 
+            
+            // Si llegamos aquí, la orden no se procesó Y no está activa (fue cancelada sin llenado, etc.).
+            if (finalDetails && filledVolume === 0) {
+                 log(`❌ Orden ID ${orderIdString} cancelada o no ejecutada (Volumen 0). Limpiando lastOrder. Reintegrando balance deducido.`, 'error');
+                 const amountDeducted = parseNumber(lastOrder.usdt_amount || 0);
+                 currentLBalance += amountDeducted; // Reintegramos el total.
+                 await updateGeneralBotState({ lbalance: currentLBalance, 'lStateData.lastOrder': null });
+                 await updateBotState('RUNNING', 'long'); // Transicionar para reevaluar.
+                 return;
+            }
 
-                log(`[LONG] Compra confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, AC: ${newAc.toFixed(8)}. Balance reintegrado.`, 'success');
-                // No retornamos, continuamos a la Sección 2 para calcular targets inmediatamente.
-            }
 
         } catch (error) {
-            log(`Error de API/DB en el monitoreo: ${error.message}. Persistiendo y reintentando.`, 'error');
+            log(`Error CRÍTICO de API en el monitoreo: ${error.message}. Persistiendo y reintentando.`, 'error');
             return; 
         }
     }
