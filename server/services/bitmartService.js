@@ -98,34 +98,34 @@ async function placeOrder(creds, symbol, side, type, amount, price) {
 
 /**
  * Obtiene los detalles de una orden específica.
- * ⚠️ ADVERTENCIA: Esta función ha sido modificada para usar getRecentOrders
- * como fuente principal de datos si getOrderDetail del spotService falla,
- * para evitar el problema de que el endpoint de spotService no devuelve órdenes llenadas.
+ * ⚠️ PATCH CRÍTICO: Esta función ha sido modificada para usar getRecentOrders
+ * como fuente principal de datos para evitar el bug de que spotService.getOrderDetail
+ * solo devuelve órdenes abiertas ('opened').
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
  * @returns {Promise<object>} - Detalles de la orden.
  */
 async function getOrderDetail(symbol, orderId) {
+    // 1. Intentamos la consulta original para manejar errores de API, pero ignoramos el resultado fallido si la orden ya está llena.
     try {
-        // 1. Intentar la consulta original (si funciona, genial)
         const details = await spotService.getOrderDetail(symbol, orderId);
+        // Si el detalle se obtiene y tiene volumen (caso llenado rápido), lo usamos.
         if (details && (details.state === 'filled' || details.filledVolume > 0)) {
             return details;
         }
     } catch (e) {
-        // Ignoramos errores si el problema es que la orden ya está llena (Error 50005 de BitMart).
         // console.warn(`Error al consultar getOrderDetail: ${e.message}. Recurriendo a historial.`);
+        // No es necesario loguear aquí, ya que el error 50005 (orden llena) es común.
     }
 
-    // 2. Recurrir al historial (getRecentOrders) para encontrar la orden, ya que
-    // esta función trae los estados finales (filled, canceled, etc.).
-    // Esto resuelve el problema de que spotService.getOrderDetail filtra órdenes llenadas.
+    // 2. FORZAR la consulta al historial (getRecentOrders) para encontrar la orden,
+    // ya que esta función SÍ trae los estados finales (filled, canceled, etc.).
     const recentOrders = await getRecentOrders(symbol);
     const orderInHistory = recentOrders.find(order => 
         String(order.orderId) === String(orderId) || String(order.order_id) === String(orderId)
     );
     
-    // Devolvemos el detalle del historial o null si no se encuentra.
+    // Devolvemos el detalle del historial (o null si no se encuentra).
     return orderInHistory || null;
 }
 
