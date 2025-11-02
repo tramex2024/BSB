@@ -127,21 +127,32 @@ async function getHistoryOrders(options = {}) {
             rawOrders = response.data.data.list;
         }
 
-        // 🛠️ NORMALIZACIÓN DE DATOS: Asegura que price y size muestren los valores de ejecución
-        const normalizedOrders = rawOrders.map(order => {
-            
-            // Si la orden se llenó (filledSize > 0 o priceAvg > 0), usamos los datos de ejecución real.
-            // Esto corrige el problema de órdenes de mercado que tienen 'price' y 'size' como '0.00'.
-            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
-            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
+        // 🛠️ NORMALIZACIÓN DE DATOS CRÍTICA: Añade campos necesarios para la lógica del BOT
+        const normalizedOrders = rawOrders.map(order => {
+            
+            // 1. Preprocesamiento de valores de ejecución
+            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
+            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
 
-            return {
-                ...order, // Mantiene todos los campos originales
-                // Sobrescribe los campos clave con los valores reales para el frontend
-                price: finalPrice, 
-                size: finalSize,   
-            };
-        });
+            // 2. Mapeo de estado a formato de texto para LBuying.js
+            let statusName = order.state || 'new'; 
+            if (order.status === 1 || order.state === 'filled') statusName = 'filled';
+            else if (order.status === 6 || order.state === 'partially_canceled') statusName = 'partially_canceled';
+            else if (order.status === 2 || order.state === 'canceled') statusName = 'canceled';
+
+            return {
+                ...order, // Mantiene todos los campos originales (incluyendo orderId)
+
+                // 🚨 CAMPOS CRÍTICOS A EXPLICITAR:
+                order_id: String(order.orderId), // El ID en minúsculas para coincidir con el BotState
+                state: statusName,
+                filledVolume: parseFloat(order.filledSize) || 0, // ¡ESTE ES EL CAMPO QUE FALTABA!
+
+                // Sobrescribe campos con valores de ejecución
+                price: finalPrice, 
+                size: finalSize,   
+            };
+        });
         
         return normalizedOrders;
     } catch (error) {
