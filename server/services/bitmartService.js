@@ -114,8 +114,7 @@ async function getOrderDetail(symbol, orderId) {
             return details;
         }
     } catch (e) {
-        // console.warn(`Error al consultar getOrderDetail: ${e.message}. Recurriendo a historial.`);
-        // No es necesario loguear aquí, ya que el error 50005 (orden llena) es común.
+        // Ignoramos errores y procedemos al respaldo.
     }
 
     // 2. FORZAR la consulta al historial (getRecentOrders) para encontrar la orden,
