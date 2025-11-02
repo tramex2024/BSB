@@ -127,7 +127,7 @@ async function getHistoryOrders(options = {}) {
             rawOrders = response.data.data.list;
         }
 
-        // 🛠️ NORMALIZACIÓN DE DATOS CRÍTICA: Añade campos necesarios para la lógica del BOT
+      // 🛠️ NORMALIZACIÓN DE DATOS CRÍTICA: Añade campos necesarios para la lógica del BOT
         const normalizedOrders = rawOrders.map(order => {
             
             // 1. Preprocesamiento de valores de ejecución
@@ -139,14 +139,18 @@ async function getHistoryOrders(options = {}) {
             if (order.status === 1 || order.state === 'filled') statusName = 'filled';
             else if (order.status === 6 || order.state === 'partially_canceled') statusName = 'partially_canceled';
             else if (order.status === 2 || order.state === 'canceled') statusName = 'canceled';
+            else statusName = order.state || 'new'; // Mantener el estado si no se reconoce
+            
+            // 3. Obtener el valor llenado (el historial a veces usa filledSize o executed_volume)
+            const volumeLlenado = parseFloat(order.filledSize || order.executed_volume || 0);
 
             return {
-                ...order, // Mantiene todos los campos originales (incluyendo orderId)
+                ...order, // Mantiene todos los campos originales
 
                 // 🚨 CAMPOS CRÍTICOS A EXPLICITAR:
                 order_id: String(order.orderId), // El ID en minúsculas para coincidir con el BotState
                 state: statusName,
-                filledVolume: parseFloat(order.filledSize) || 0, // ¡ESTE ES EL CAMPO QUE FALTABA!
+                filledVolume: volumeLlenado, // ¡ESTE CAMPO AHORA ESTÁ GARANTIZADO!
 
                 // Sobrescribe campos con valores de ejecución
                 price: finalPrice, 
