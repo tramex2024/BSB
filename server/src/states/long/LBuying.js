@@ -32,12 +32,13 @@ async function run(dependencies) {
 
     if (lastOrder && lastOrder.order_id && lastOrder.side === 'buy') {
         const orderIdString = String(lastOrder.order_id);
-        log(`Recuperación: Orden de compra pendiente ID ${orderIdString} detectada. Consultando BitMart...`, 'warning');
+        log(`Recuperación: Orden pendiente ID ${orderIdString} detectada. Consultando BitMart...`, 'warning');
 
         try {
             let finalDetails = null;
             let filledVolume = 0;
             let isOrderProcessed = false;
+            let logSource = 'Directa'; // Para saber de dónde obtuvimos los datos
 
             // 1. Intentar la consulta directa por ID
             try {
@@ -45,40 +46,45 @@ async function run(dependencies) {
                 finalDetails = orderDetails;
                 filledVolume = parseNumber(finalDetails?.filledVolume || finalDetails?.filledSize || 0); 
             } catch (e) {
-                // Error 50005 (orden completada/no encontrada), la manejamos en el paso 2.
-                log(`Consulta directa falló. Buscando en el historial como respaldo.`, 'warning');
+                log(`Consulta Directa falló. Motivo: ${e.message}. Forzando respaldo.`, 'warning');
             }
             
-            // 🛑 Criterio inicial de éxito/procesamiento (Basado en tu lógica antigua)
+            // 🛑 Criterio inicial de éxito/procesamiento
             if (finalDetails) {
                  isOrderProcessed = (
                      finalDetails.state === 'filled' || 
                      finalDetails.state === 'partially_canceled' || 
                      (finalDetails.state === 'canceled' && filledVolume > 0) ||
-                     filledVolume > 0 // El criterio final: si hay volumen, es un éxito.
+                     filledVolume > 0
                  );
             }
             
             // ======================================================
-            // 💡 LÓGICA DE RESPALDO (TU CRITERIO DE CONFIRMACIÓN INMEDIATA)
+            // 💡 LÓGICA DE RESPALDO (Historial)
             // ======================================================
             if (!isOrderProcessed) {
-                // Forzamos la búsqueda en historial si no se pudo confirmar el llenado.
-                log(`Fallo/inconcluso en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'warning');
+                log('No se pudo confirmar. Buscando en el historial de BitMart...', 'warning');
+                logSource = 'Historial';
                 
-                const recentOrders = await getRecentOrders(creds, SYMBOL);  // Usar 'creds'
+                const recentOrders = await getRecentOrders(creds, SYMBOL); 
                 const orderInHistory = recentOrders.find(order => String(order.orderId) === orderIdString || String(order.order_id) === orderIdString);
                 
                 if (orderInHistory) {
-                    finalDetails = orderInHistory; // Usamos los detalles del historial
+                    finalDetails = orderInHistory;
                     filledVolume = parseNumber(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.executed_volume || 0);
                     isOrderProcessed = filledVolume > 0;
-                    
-                    if (isOrderProcessed) {
-                        log(`Orden ${orderIdString} CONFIRMADA en el historial (Volumen: ${filledVolume}).`, 'success');
-                    }
                 }
             }
+
+            // 📢 ¡NUEVO LOG DE DIAGNÓSTICO CRÍTICO!
+            log('----------------------------------------------------', 'debug');
+            log(`[DIAGNÓSTICO] Fuente: ${logSource}`, 'debug');
+            log(`[DIAGNÓSTICO] Estado API: ${finalDetails?.state || 'NO ENCONTRADO/NULO'}`, 'debug');
+            log(`[DIAGNÓSTICO] Volumen Llenado (filledVolume): ${filledVolume}`, 'debug');
+            log(`[DIAGNÓSTICO] ¿Consolidar (isOrderProcessed)? ${isOrderProcessed}`, 'debug');
+            log(`[DIAGNÓSTICO] Order ID Verificado: ${orderIdString}`, 'debug');
+            log('----------------------------------------------------', 'debug');
+
 
 
             // 3. EVALUACIÓN FINAL Y CONSOLIDACIÓN
