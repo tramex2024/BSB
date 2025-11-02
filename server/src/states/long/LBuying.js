@@ -20,7 +20,7 @@ async function run(dependencies) {
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
-    let lStateData = botState.lStateData; 
+    let lStateData = botState.lStateData; 
     let currentLBalance = parseNumber(botState.lbalance || 0);
 
     log("Estado Long: BUYING. Verificando el estado de la última orden de compra o gestionando targets...", 'info');
@@ -35,60 +35,87 @@ async function run(dependencies) {
         log(`Recuperación: Orden de compra pendiente ID ${orderIdString} detectada. Consultando BitMart...`, 'warning');
 
         try {
-            let finalDetails = null;
+            let finalDetails = null;
 
-            // 1. Intentar la consulta directa por ID
-            try {
-                finalDetails = await getOrderDetail(creds, SYMBOL, orderIdString);
-            } catch (e) {
-                // Posible error 50005 (orden completada/no encontrada). Buscamos en el historial.
-                log(`Consulta directa falló (${e.message}). Buscando en el historial...`, 'warning');
-            }
+            // 1. Intentar la consulta directa por ID
+            try {
+                let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
+                finalDetails = orderDetails;
+            } catch (e) {
+                // Posible error 50005 (orden completada/no encontrada). Buscamos en el historial.
+                log(`Consulta directa falló (${e.message}). Buscando en el historial...`, 'warning');
+            }
 
-            // 2. Lógica de Respaldo: Si la consulta directa falló o el estado es ambiguo.
-            if (!finalDetails || finalDetails.state === 'canceled' || finalDetails.state === 'partial_canceled' || finalDetails.filledVolume === 0) {
-                const recentOrders = await getRecentOrders(creds, SYMBOL); 
-                finalDetails = recentOrders.find(order => String(order.orderId) === orderIdString || String(order.order_id) === orderIdString);
-            }
+            // 2. Lógica de Respaldo: Si la consulta directa falló o el estado es ambiguo.
+            if (!finalDetails) {
+                const recentOrders = await getRecentOrders(creds, SYMBOL); 
+                finalDetails = recentOrders.find(order => String(order.orderId) === orderIdString || String(order.order_id) === orderIdString);
+            }
 
-            // 3. Evaluar el resultado final
-            const filledVolume = parseNumber(finalDetails?.filledVolume || finalDetails?.filledSize || 0); 
-            const isOrderProcessed = filledVolume > 0;
-            
-            if (!isOrderProcessed && finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
-                // ⏸️ Orden activa, regresamos en el próximo ciclo
-                log(`La orden ID ${orderIdString} sigue activa (${finalDetails.state}). Esperando...`, 'info');
+            if (!finalDetails) {
+                log(`ERROR FATAL: No se pudo recuperar la orden ID ${orderIdString} en consulta directa ni en historial. Reintentando.`, 'error');
                 return;
-            } 
+            }
             
-            // ❌ Orden fallida/cancelada sin ejecución (filledVolume=0)
-            if (!isOrderProcessed) {
+            // 3. Evaluar el resultado final (LÓGICA MEJORADA)
+            
+            // 3A. Extracción de datos
+            const currentOrderState = finalDetails.state || 'N/A';
+            const filledVolume = parseNumber(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.executed_volume || 0); 
+            const amountTotal = parseNumber(finalDetails.size || 0); // La cantidad total de BTC solicitada ('size' en BitMart)
+            
+            // 3B. Criterios de Finalización
+            // Usamos una pequeña tolerancia para la igualdad de volumen (evitar errores de punto flotante)
+            const volumeTolerance = 0.00000001;
+            // Solo compara si el monto total (size) no es cero (caso de órdenes de mercado USDT)
+            const isFullyFilledByVolume = amountTotal > 0 && Math.abs(filledVolume - amountTotal) < volumeTolerance;
+
+            // Criterio de Consolidación (la orden ha terminado Y tiene llenado O se llenó al 100%)
+            const isConsolidationReady = (
+                currentOrderState === 'filled' ||
+                currentOrderState === 'partially_canceled' ||
+                (currentOrderState === 'canceled' && filledVolume > 0) ||
+                isFullyFilledByVolume // 👈 CRITERIO DE RESPALDO DE VOLUMEN
+            );
+            
+            if (!isConsolidationReady) {
+                // ⏸️ Orden activa, regresamos en el próximo ciclo (solo si el estado no es final)
+                const isStillActive = currentOrderState === 'new' || currentOrderState === 'partially_filled';
+
+                if (isStillActive) {
+                    log(`La orden ID ${orderIdString} sigue activa (${currentOrderState}). Esperando...`, 'info');
+                    return;
+                }
+            } 
+            
+            // ❌ Orden fallida/cancelada sin ejecución (filledVolume=0)
+            if (filledVolume === 0) {
                 log(`Orden ID ${orderIdString} falló/cancelada sin volumen. Reintegrando balance.`, 'error');
                 
                 const amountDeducted = parseNumber(lastOrder.usdt_amount || 0);
                 currentLBalance += amountDeducted; // Reintegramos el USDT deducido.
                 await updateGeneralBotState({ lbalance: currentLBalance, 'lStateData.lastOrder': null });
                 log(`Reintegro de ${amountDeducted.toFixed(2)} USDT.`, 'info');
-                return; 
+                return; 
             }
 
 
             // ======================================================
-            // === LÓGICA DE CONSOLIDACIÓN DE POSICIÓN (ÉXITO: filledVolume > 0) ===
+            // === LÓGICA DE CONSOLIDACIÓN DE POSICIÓN (ÉXITO: isConsolidationReady) ===
             // ======================================================
-            if (isOrderProcessed) {
+            if (isConsolidationReady) {
                 const averagePrice = parseNumber(finalDetails.priceAvg || finalDetails.price || 0);
                 const oldAc = parseNumber(lStateData.ac || 0);
                 const oldPpc = parseNumber(lStateData.ppc || 0);
                 
                 // 1. Calcular el nuevo PPC (Precio Promedio de Compra)
                 const totalSpentOld = oldAc * oldPpc;
-                const totalSpentNew = filledVolume * averagePrice;
+                const totalSpentNew = filledVolume * averagePrice; 
                 const newAc = oldAc + filledVolume;
                 let newPpc = (newAc > 0) ? (totalSpentOld + totalSpentNew) / newAc : 0;
                 
                 // 2. Reintegrar USDT no usado (Market Slippage)
-                const totalUsdtUsed = parseNumber(finalDetails.executedValue || finalDetails.executed_value || totalSpentNew);
+                const totalUsdtUsed = parseNumber(finalDetails.executedValue || finalDetails.executed_value || finalDetails.filledNotional || totalSpentNew);
                 const amountDeducted = parseNumber(lastOrder.usdt_amount || 0);
                 currentLBalance += (amountDeducted - totalUsdtUsed); 
 
@@ -113,7 +140,7 @@ async function run(dependencies) {
 
         } catch (error) {
             log(`Error de API/DB en el monitoreo: ${error.message}. Persistiendo y reintentando.`, 'error');
-            return; 
+            return; 
         }
     }
     
@@ -150,7 +177,7 @@ async function run(dependencies) {
         await updateGeneralBotState(targetsUpdate);
 
         // Actualizamos el estado local para la Sección 3
-        botState.ltprice = targetSellPrice; 
+        botState.ltprice = targetSellPrice; 
         lStateData.requiredCoverageAmount = requiredCoverageAmount; 
         lStateData.nextCoveragePrice = nextCoveragePrice;
         
@@ -185,7 +212,7 @@ async function run(dependencies) {
             return; 
         }
 
-        if (currentLBalance >= requiredAmount) { 
+        if (currentLBalance >= requiredAmount) { 
             log(`[LONG] ¡Precio de COBERTURA alcanzado! Colocando orden de compra por ${requiredAmount.toFixed(2)} USDT.`, 'warning');
             
             // Colocar la nueva orden de compra a precio de mercado.
