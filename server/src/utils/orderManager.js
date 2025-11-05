@@ -56,7 +56,7 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
         const currentLBalance = parseFloat(currentBotState.lbalance || 0);
         const newLBalance = currentLBalance - amount;
 
-        // ✅ CORRECCIÓN FINAL: Actualizar lbalance, lastOrder E INCREMENTAR orderCountInCycle
+        // ✅ CORRECCIÓN FINAL: Actualizar lbalance, lastOrder 
         await Autobot.findOneAndUpdate({}, {
             $set: {
                 'lbalance': newLBalance,
@@ -65,10 +65,8 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
                     side: 'buy',
                     usdt_amount: amount,
                 }
-            },
-            $inc: { 
-                'lStateData.orderCountInCycle': 1 
             }
+            
         });
 
         log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
