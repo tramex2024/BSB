@@ -1,27 +1,22 @@
-// BSB/server/src/states/long/LBuying.js (ETAPA 2: Lógica de Inicio Integrada)
+// BSB/server/src/states/long/LBuying.js (REFACTORIZADO PARA USAR CONSOLIDATOR)
 
 // 🛑 Importaciones Esenciales
-const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService'); 
 const { 
     calculateLongTargets 
 } = require('../../utils/dataManager');
 const { parseNumber } = require('../../../utils/helpers'); 
-// 💡 NUEVAS IMPORTACIONES REQUERIDAS por la integración de la lógica de inicio
+// 💡 NUEVAS IMPORTACIONES REQUERIDAS
 const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../utils/orderManager'); 
+// ✅ NUEVA IMPORTACIÓN DEL MÓDULO CONSOLIDATOR
+const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 
-/**
- * Función central de la estrategia Long en estado BUYING.
- * Gestiona: 1. La recuperación/confirmación de órdenes de compra pendientes. 
- * 2. La consolidación de la posición (ppc/ac).
- * 3. El cálculo y establecimiento de targets (ltprice, nextCoveragePrice).
- * 4. La colocación de la PRIMERA ORDEN (si viene de RUNNING).
- */
+
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log,
         updateBotState, updateLStateData, updateGeneralBotState,
-        getBotState,
-        availableUSDT // Requerida para la verificación de fondos en la Sección 0
+        getBotState, 
+        availableUSDT 
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -32,21 +27,18 @@ async function run(dependencies) {
     // =================================================================
     // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
     // =================================================================
-    // Si no hay posición y no hay orden pendiente (viene de LRunning con señal 'BUY'), se inicia.
     if (lStateData.ppc === 0 && lStateData.orderCountInCycle === 0 && !lStateData.lastOrder) {
         log("Estado de posición inicial detectado. Iniciando lógica de primera compra (Integrada)...", 'warning');
 
-        // 💡 1. RED DE SEGURIDAD (Se mantiene la lógica original de LRunning por seguridad)
+        // 💡 1. RED DE SEGURIDAD 
         if (lStateData.orderCountInCycle > 0) {
             log('Red de seguridad activada: orderCountInCycle ya es > 0, cancelando compra duplicada.', 'warning');
             return; 
         }
 
         const purchaseAmount = parseFloat(config.long.purchaseUsdt);
-        // Usamos la constante de BitMart para el mínimo
         const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
         
-        // ⚠️ VERIFICACIÓN DEL LÍMITE DE CAPITAL (LBalance)
         const currentLBalance = parseFloat(botState.lbalance || 0);
 
         const isRealBalanceSufficient = availableUSDT >= purchaseAmount && purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART;
@@ -58,7 +50,6 @@ async function run(dependencies) {
             // 🎯 Coloca la orden, actualiza lastOrder y descuenta lbalance.
             await placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState); 
             
-            // Si es exitoso, volvemos para monitorear la orden.
             log("Primera orden colocada exitosamente. Esperando al próximo ciclo para monitorear.", 'success');
 
         } else {
@@ -77,140 +68,20 @@ async function run(dependencies) {
     }
 
     // =================================================================
-    // === [ 1. MONITOREO DE ORDEN DE COMPRA PENDIENTE ] =================
+    // === [ 1. MONITOREO Y CONSOLIDACIÓN DE ORDEN PENDIENTE ] =========
     // =================================================================
-    const lastOrder = lStateData.lastOrder;
-
-    if (lastOrder && lastOrder.order_id && lastOrder.side === 'buy') {
-        const orderIdString = String(lastOrder.order_id);
-        log(`Recuperación: Orden de compra pendiente con ID ${orderIdString} detectada en DB. Consultando BitMart...`, 'warning');
-
-        try {
-            
-            // 1. Intentar la consulta directa por ID
-            let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
-            let finalDetails = orderDetails;
-            let isOrderProcessed = false;
-            let filledVolume = parseFloat(finalDetails?.filledVolume || 0); 
-            
-            // 🛑 Criterio inicial de éxito/procesamiento
-            if (finalDetails) {
-                isOrderProcessed = (
-                    finalDetails.state === 'filled' || 
-                    finalDetails.state === 'partially_canceled' || 
-                    (finalDetails.state === 'canceled' && filledVolume > 0) ||
-                    filledVolume > 0 
-                );
-            }
-            
-
-            // ======================================================
-            // 💡 LÓGICA DE RESPALDO (si la consulta directa falla o es incompleta)
-            // ======================================================
-            if (!isOrderProcessed) {
-                log(`Fallo/inconcluso en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'warning');
-                
-                // 2. Buscar en el historial
-                const recentOrders = await getRecentOrders(SYMBOL); 
-                finalDetails = recentOrders.find(order => order.orderId === orderIdString || order.order_id === orderIdString); // Buscar por ambos campos por seguridad
-                
-                if (finalDetails) {
-                    filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0); // Asumiendo que filledVolume/filledSize son campos de historial
-                    isOrderProcessed = filledVolume > 0;
-                    
-                    if (isOrderProcessed) {
-                        log(`Orden ${orderIdString} encontrada y confirmada como llenada en el historial (Volumen llenado: ${filledVolume}).`, 'success');
-                    }
-                }
-            }
-
-
-            if (isOrderProcessed) {
-                // Usamos priceAvg si está disponible, si no, el precio (mejor para órdenes de mercado)
-                const averagePrice = parseFloat(finalDetails.priceAvg || finalDetails.price || 0);
-                
-                // Si filledVolume es 0, a pesar de las banderas, no procesamos.
-                if (filledVolume === 0) {
-                    log(`Error: Orden ID ${orderIdString} cancelada o no ejecutada (Volumen 0). Limpiando lastOrder.`, 'error');
-                    await updateLStateData({ 'lastOrder': null });
-                    await updateBotState('RUNNING', 'long');
-                    return;
-                }
-
-                log(`Recuperación exitosa: La orden ID ${orderIdString} se completó. Procesando consolidación...`, 'success');
-
-                // === LÓGICA DE CONSOLIDACIÓN DE POSICIÓN (CRÍTICA) ===
-                const oldAc = lStateData.ac || 0;
-                const oldPpc = lStateData.ppc || 0;
-                
-                // 1. Calcular el nuevo PPC (Precio Promedio de Compra)
-                const totalSpentOld = oldAc * oldPpc;
-                const totalSpentNew = filledVolume * averagePrice;
-                const newAc = oldAc + filledVolume;
-                
-                let newPpc = 0;
-                if (newAc > 0) {
-                    newPpc = (totalSpentOld + totalSpentNew) / newAc;
-                }
-                
-                // 2. Calcular el nuevo Balance y Total Gastado (usamos executedValue si está disponible, si no, lo calculamos)
-                const totalUsdtUsed = parseFloat(finalDetails.executedValue || finalDetails.executed_value || (filledVolume * averagePrice));
-                // lastOrder.usdt_amount es el monto inicial de la orden.
-                const newLBalance = (botState.lbalance || 0) + (parseNumber(lastOrder.usdt_amount) - totalUsdtUsed); // Reintegramos el USDT no usado
-                
-                log(`[AUDITORÍA 1/3] -> ANTES de guardar. PPC a guardar: ${newPpc.toFixed(2)}, AC a guardar: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
-
-                // 3. 🎯 CREACIÓN DE LA ACTUALIZACIÓN ATÓMICA DE DATOS
-                const atomicUpdate = {
-                    // Actualización del estado general
-                    lbalance: newLBalance,
-                    lnorder: (botState.lnorder || 0) + 1, // Se ha ejecutado una orden más
-                    
-                    // Actualización de LStateData (debe ser un objeto para la notación de punto)
-                    'lStateData.ppc': newPpc,
-                    'lStateData.ac': newAc,
-                    'lStateData.orderCountInCycle': (lStateData.orderCountInCycle || 0) + 1,
-                    'lStateData.lastOrder': null // ✅ Limpiamos la orden, ya se procesó con éxito.
-                };
-
-                // 4. Aplicar la actualización atómica
-                await updateGeneralBotState(atomicUpdate);
-                
-                log(`[AUDITORÍA 2/3] -> DESPUÉS de guardar (Objeto en memoria). PPC: ${newPpc.toFixed(2)}, AC: ${newAc.toFixed(8)}, LState: BUYING`, 'debug');
-
-                // 5. Verificación (Opcional, pero útil para depuración)
-                if (getBotState) {
-                    const updatedBotState = await getBotState();
-                    log(`[AUDITORÍA 3/3] -> VERIFICACIÓN EN DB. PPC leído: ${updatedBotState.lStateData.ppc.toFixed(2)}, AC leído: ${updatedBotState.lStateData.ac.toFixed(8)}, LState: ${updatedBotState.lstate}`, 'debug');
-                } else {
-                    log(`[AUDITORÍA 3/3] -> VERIFICACIÓN OMITIDA. getBotState no está disponible en las dependencias.`, 'debug');
-                }
-
-                log(`[LONG] Orden de COMPRA confirmada. Nuevo PPC: ${newPpc.toFixed(2)}, Qty Total (AC): ${newAc.toFixed(8)}. Precio de ejecución: ${averagePrice.toFixed(2)}. Transicionando a RUNNING.`, 'success');
-                
-                // 🎯 Transición inmediata a RUNNING 
-                await updateBotState('RUNNING', 'long'); 
-                return; // 🛑 Salir después de consolidar una orden.
-
-            } else if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
-                // ⏸️ Orden activa/parcialmente ejecutada. Persistir.
-                log(`La orden ID ${orderIdString} sigue activa (${finalDetails.state}). Esperando ejecución.`, 'info');
-                return;
-            } else {
-                // ❌ Otros estados de error final SIN NINGUNA ejecución. Limpiamos.
-                log(`La orden ID ${orderIdString} tuvo un estado de error final sin ejecución o es desconocida. Limpiando lastOrder. Estado BitMart: ${finalDetails?.state || 'N/A'}`, 'error');
-                await updateLStateData({ 'lastOrder': null });
-                await updateBotState('RUNNING', 'long'); // Se puede ir a RUNNING para reevaluar la situación
-                return;
-            }
-
-        } catch (error) {
-            log(`Error de API al consultar la orden ${orderIdString} o en lógica de respaldo: ${error.message}. Persistiendo y reintentando en el próximo ciclo...`, 'error');
-            return;
-        }
+    
+    const orderIsPendingOrProcessed = await monitorAndConsolidate(
+        botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState
+    );
+    
+    if (orderIsPendingOrProcessed) {
+        // Si el consolidator encuentra una orden (pendiente, fallida o exitosa), 
+        // él maneja el flujo de estado (RUNNING, BUYING, etc.). Salimos del ciclo 'run'.
+        return; 
     }
-    
-    // Si la última orden de compra ya se procesó (lastOrder es null), procedemos a calcular los targets.
+    
+    // Si no hay orden pendiente (lastOrder es null), procedemos a calcular los targets.
     
     // =================================================================
     // === [ 2. CÁLCULO Y GESTIÓN DE TARGETS ] ===========================
@@ -222,8 +93,8 @@ async function run(dependencies) {
             targetSellPrice, 
             nextCoveragePrice, 
             requiredCoverageAmount, 
-            lCoveragePrice,      // <-- Captura el nuevo LCoverage (Precio)
-            lNOrderMax           // <-- Captura el nuevo LNOrder (Cantidad)
+            lCoveragePrice,      
+            lNOrderMax           
         } = calculateLongTargets(
             lStateData.ppc, 
             config.long.profit_percent, 
@@ -231,15 +102,14 @@ async function run(dependencies) {
             config.long.size_var,
             config.long.purchaseUsdt,
             lStateData.orderCountInCycle,
-            botState.lbalance // <== ¡CRÍTICO: Pasar el LBalance!
+            botState.lbalance 
         );
 
         // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
         const targetsUpdate = {
             ltprice: targetSellPrice,
-            lcoverage: lCoveragePrice, // Ahora almacena el precio límite
-            lnorder: lNOrderMax,         // Ahora almacena el total de órdenes posibles
-
+            lcoverage: lCoveragePrice, 
+            lnorder: lNOrderMax,         
             // Campos de lStateData
             'lStateData.requiredCoverageAmount': requiredCoverageAmount,
             'lStateData.nextCoveragePrice': nextCoveragePrice,
@@ -293,7 +163,6 @@ async function run(dependencies) {
             log(`[LONG] ¡Precio de COBERTURA alcanzado! Precio actual: ${currentPrice.toFixed(2)} <= ${lStateData.nextCoveragePrice.toFixed(2)}. Colocando orden de compra.`, 'warning');
             
             try {
-                // ✅ CORRECCIÓN CRÍTICA: Se añade la dependencia updateBotState a la llamada
                 await placeCoverageBuyOrder(botState, requiredAmount, lStateData.nextCoveragePrice, log, updateGeneralBotState, updateBotState);
                 
             } catch (error) {
@@ -310,7 +179,6 @@ async function run(dependencies) {
     
     // 3C. Transición por defecto o Log final (Permanece en BUYING)
     
-    // Si la última orden fue limpiada y tenemos una posición (ppc > 0), nos quedamos en BUYING
     if (!lStateData.lastOrder && lStateData.ppc > 0) {
         log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}. Esperando que el precio caiga o suba.`, 'debug');
         return; // Permanece en el estado BUYING
