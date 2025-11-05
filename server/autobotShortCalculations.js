@@ -3,7 +3,7 @@
  */
 
 // Importamos la función helper de Long/Común para consistencia
-const { parseNumber } = require('./helpers'); // Asumiendo que el path es correcto 
+const { parseNumber } = require('./utils/helpers'); // Asumiendo que el path es correcto 
 
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (SHORT)

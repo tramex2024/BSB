@@ -127,36 +127,21 @@ async function getHistoryOrders(options = {}) {
             rawOrders = response.data.data.list;
         }
 
-      // 🛠️ NORMALIZACIÓN DE DATOS CRÍTICA: Añade campos necesarios para la lógica del BOT
-        const normalizedOrders = rawOrders.map(order => {
-            
-            // 1. Preprocesamiento de valores de ejecución
-            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
-            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
-
-            // 2. Mapeo de estado a formato de texto para LBuying.js
-            let statusName = order.state || 'new'; 
-            if (order.status === 1 || order.state === 'filled') statusName = 'filled';
-            else if (order.status === 6 || order.state === 'partially_canceled') statusName = 'partially_canceled';
-            else if (order.status === 2 || order.state === 'canceled') statusName = 'canceled';
-            else statusName = order.state || 'new'; // Mantener el estado si no se reconoce
+        // 🛠️ NORMALIZACIÓN DE DATOS: Asegura que price y size muestren los valores de ejecución
+        const normalizedOrders = rawOrders.map(order => {
             
-            // 3. Obtener el valor llenado (el historial a veces usa filledSize o executed_volume)
-            const volumeLlenado = parseFloat(order.filledSize || order.executed_volume || 0);
+            // Si la orden se llenó (filledSize > 0 o priceAvg > 0), usamos los datos de ejecución real.
+            // Esto corrige el problema de órdenes de mercado que tienen 'price' y 'size' como '0.00'.
+            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
+            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
 
-            return {
-                ...order, // Mantiene todos los campos originales
-
-                // 🚨 CAMPOS CRÍTICOS A EXPLICITAR:
-                order_id: String(order.orderId), // El ID en minúsculas para coincidir con el BotState
-                state: statusName,
-                filledVolume: volumeLlenado, // ¡ESTE CAMPO AHORA ESTÁ GARANTIZADO!
-
-                // Sobrescribe campos con valores de ejecución
-                price: finalPrice, 
-                size: finalSize,   
-            };
-        });
+            return {
+                ...order, // Mantiene todos los campos originales
+                // Sobrescribe los campos clave con los valores reales para el frontend
+                price: finalPrice, 
+                size: finalSize,   
+            };
+        });
         
         return normalizedOrders;
     } catch (error) {

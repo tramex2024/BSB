@@ -92,40 +92,19 @@ async function getRecentOrders(symbol) {
  * @returns {Promise<object>} - Respuesta de la API.
  */
 // ⬇️ Firma de la función que acepta 'creds' y lo pasa a spotService
-async function placeOrder(creds, symbol, side, type, amount, price) {
+async function placeOrder(symbol, side, type, amount, price) {
     return await spotService.placeOrder(symbol, side, type, amount, price);
 }
 
 /**
- * Obtiene los detalles de una orden específica.
- * ⚠️ PATCH CRÍTICO: Esta función ha sido modificada para usar getRecentOrders
- * como fuente principal de datos para evitar el bug de que spotService.getOrderDetail
- * solo devuelve órdenes abiertas ('opened').
+ * Obtiene los detalles de una orden específica con reintentos.
  * @param {string} symbol - Símbolo de trading.
  * @param {string} orderId - ID de la orden.
  * @returns {Promise<object>} - Detalles de la orden.
  */
 async function getOrderDetail(symbol, orderId) {
-    // 1. Intentamos la consulta original para manejar errores de API, pero ignoramos el resultado fallido si la orden ya está llena.
-    try {
-        const details = await spotService.getOrderDetail(symbol, orderId);
-        // Si el detalle se obtiene y tiene volumen (caso llenado rápido), lo usamos.
-        if (details && (details.state === 'filled' || details.filledVolume > 0)) {
-            return details;
-        }
-    } catch (e) {
-        // Ignoramos errores y procedemos al respaldo.
-    }
-
-    // 2. FORZAR la consulta al historial (getRecentOrders) para encontrar la orden,
-    // ya que esta función SÍ trae los estados finales (filled, canceled, etc.).
-    const recentOrders = await getRecentOrders(symbol);
-    const orderInHistory = recentOrders.find(order => 
-        String(order.orderId) === String(orderId) || String(order.order_id) === String(orderId)
-    );
-    
-    // Devolvemos el detalle del historial (o null si no se encuentra).
-    return orderInHistory || null;
+    // Si bitmartSpot.js no usa 'creds' en getOrderDetail, solo pasamos los parámetros requeridos
+    return await spotService.getOrderDetail(symbol, orderId);
 }
 
 /**
