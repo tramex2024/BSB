@@ -16,7 +16,7 @@ export function updateBotUI(state) {
     const autobotSettings = document.getElementById('autobot-settings');
     
     const elementsToUpdate = {
-        // Mapeamos el elemento HTML 'auprofit' a la clave 'total_profit'
+        // Clave que buscamos en el objeto 'state'
         auprofit: 'total_profit', 
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
@@ -48,12 +48,10 @@ export function updateBotUI(state) {
             let value;
 
             if (state[dataKey] !== undefined && state[dataKey] !== null) {
-                // 🛑 CORRECCIÓN: Convierte a string para manejar robustamente números (1) y valores decimales (1.23)
-                // Luego, parseFloat convierte '1' o '1.23' a número. Si es cadena vacía, será NaN.
-                const stringValue = String(state[dataKey]);
-                value = parseFloat(stringValue); 
+                // Intentamos convertir a número. Esto funciona si es '1', 1, o '1.23'.
+                value = Number(state[dataKey]); 
             } else {
-                value = NaN; // Valor ausente o nulo
+                value = NaN; // Si la clave no existe en el objeto 'state' del socket.
             }
 
             // Aplicar formato según el tipo de dato
@@ -64,14 +62,15 @@ export function updateBotUI(state) {
                 } else {
                     element.textContent = `$${value.toFixed(2)}`;
                 }
-            } else if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance' || dataKey === 'ltprice' || dataKey === 'stprice') {
+            // Incluimos ltprice y stprice aquí para un formato consistente
+            } else if (['lcoverage', 'scoverage', 'lbalance', 'sbalance', 'ltprice', 'stprice'].includes(dataKey)) {
                 // Montos de dinero/balance/precios (2 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
             } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
                 // Contadores (0 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
             } else {
-                // Valores por defecto, si no se puede formatear
+                // Valores por defecto
                 element.textContent = state[dataKey] !== undefined ? String(state[dataKey]) : 'N/A';
             }
         }
@@ -103,5 +102,5 @@ export function displayMessage(message, type) {
             messageContainer.textContent = '';
             messageContainer.className = 'message';
         }, 5000); // El mensaje desaparece después de 5 segundos
-    }
+}
 }
