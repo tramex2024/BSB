@@ -16,8 +16,8 @@ export function updateBotUI(state) {
     const autobotSettings = document.getElementById('autobot-settings');
     
     const elementsToUpdate = {
-        // Mapeamos el elemento HTML 'auprofit' a la clave 'total_profit'
-        auprofit: 'total_profit', 
+        // 🛑 Mapeamos el elemento HTML 'auprofit' a la clave 'total_profit' recibida por Socket.IO
+        auprofit: 'total_profit', 
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
         aultprice: 'ltprice',
@@ -46,34 +46,31 @@ export function updateBotUI(state) {
         const element = document.getElementById(elementId);
         if (element) {
             let value;
+            if (state[dataKey] !== undefined) {
+                // Tentativa de conversión
+                value = parseFloat(state[dataKey]); 
+            } else {
+                value = NaN; // Usamos NaN para simplificar la verificación
+            }
 
-            if (state[dataKey] !== undefined && state[dataKey] !== null) {
-                // 🛑 CORRECCIÓN: Convierte a string para manejar robustamente números (1) y valores decimales (1.23)
-                // Luego, parseFloat convierte '1' o '1.23' a número. Si es cadena vacía, será NaN.
-                const stringValue = String(state[dataKey]);
-                value = parseFloat(stringValue); 
-            } else {
-                value = NaN; // Valor ausente o nulo
-            }
-
-            // Aplicar formato según el tipo de dato
-            if (dataKey === 'total_profit' || dataKey === 'profit') {
-                // Total Profit (2 decimales, con signo $)
-                if (isNaN(value)) {
-                    element.textContent = 'N/A';
-                } else {
-                    element.textContent = `$${value.toFixed(2)}`;
-                }
-            } else if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance' || dataKey === 'ltprice' || dataKey === 'stprice') {
-                // Montos de dinero/balance/precios (2 decimales)
-                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
-            } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
-                // Contadores (0 decimales)
-                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
-            } else {
-                // Valores por defecto, si no se puede formatear
-                element.textContent = state[dataKey] !== undefined ? String(state[dataKey]) : 'N/A';
-            }
+            // Aplicar formato según el tipo de dato
+            if (dataKey === 'total_profit' || dataKey === 'profit') {
+                // Total Profit (2 decimales, con signo $)
+                if (isNaN(value)) {
+                    element.textContent = 'N/A';
+                } else {
+                    element.textContent = `$${value.toFixed(2)}`;
+                }
+            } else if (dataKey === 'lcoverage' || dataKey === 'scoverage' || dataKey === 'lbalance' || dataKey === 'sbalance') {
+                // Montos de dinero/balance (2 decimales)
+                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
+            } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
+                // Contadores (0 decimales)
+                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
+            } else {
+                // Otros (precios, etc.)
+                element.textContent = state[dataKey] !== undefined ? state[dataKey] : 'N/A';
+            }
         }
     }
     
