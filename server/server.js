@@ -2,8 +2,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const http = require = require('http');
+const http = require('http');
 const { Server } = require("socket.io");
+
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 
