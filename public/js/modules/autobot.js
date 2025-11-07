@@ -11,8 +11,8 @@ import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiS
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 
 // Constantes de mínimos de BitMart
-const MIN_USDT_AMOUNT = 6.00;
-const MIN_BTC_AMOUNT = 0.00005;
+const MIN_USDT_AMOUNT = 5.00;
+const MIN_BTC_AMOUNT = 0.00000;
 
 // NUEVAS VARIABLES GLOBALES PARA LOS LÍMITES REALES
 let maxUsdtBalance = 0;
