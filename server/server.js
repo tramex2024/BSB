@@ -8,6 +8,9 @@ const { Server } = require("socket.io");
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 
+// Importa el nuevo gestor de estado (donde ocurre la verificación y creación)
+const { loadBotState } = require('./autobotStateManager'); 
+
 // Servicios y Lógica del Bot
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
@@ -18,7 +21,7 @@ const { calculateLongCoverage /*, calculateShortCoverage*/ } = require('./autobo
 
 // Modelos
 const Order = require('./models/Order');
-const Autobot = require('./models/Autobot');
+const Autobot = require('./models/Autobot'); // Se usará para loadBotState
 
 // Routers
 const authRoutes = require('./routes/authRoutes');
@@ -59,25 +62,41 @@ app.use('/api/autobot', autobotRoutes);
 app.use('/api/v1/config', configRoutes);
 app.use('/api/v1/balances', balanceRoutes);
 
-// Conexión a la Base de Datos
+// ** PUNTO DE VERIFICACIÓN Y CREACIÓN **
+// Conexión a la Base de Datos e Inicialización del Estado
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI);
         console.log('MongoDB Connected...');
+
+        // 🛑 PASO CLAVE: LLAMA A LA LÓGICA DE BÚSQUEDA/CREACIÓN AQUÍ
+        // Esto garantiza que el documento de estado exista antes de que cualquier otra
+        // función lo intente leer (como updateBotStateWithPrice o botCycle)
+        const initialBotState = await loadBotState(Autobot);
+
+        // Opcional: Si autobotLogic necesita el estado inicial, se lo puedes pasar:
+        // autobotLogic.setInitialState(initialBotState);
+
     } catch (err) {
-        console.error('MongoDB connection error:', err.message);
+        console.error('MongoDB connection or State Initialization error:', err.message);
         process.exit(1);
     }
 };
 
+// Llama a la conexión e inicialización
 connectDB();
+// **********************************************
 
 let currentMarketPrice = 'N/A';
 
 // **FUNCIÓN CORREGIDA: Ahora usa findOneAndUpdate para la actualización atómica y parcial.**
+// NOTA: Esta función ahora está segura de que el documento de estado existe.
 async function updateBotStateWithPrice(price) {
     try {
-        const botState = await Autobot.findOne({});
+        // ** Cambio Importante: Usar findOne en lugar de findOne({}).findOne({}) puede devolver un cursor **
+        // Como el documento fue creado con name: 'BSB-PPeX', ahora podemos usarlo
+        const botState = await Autobot.findOne({ name: 'BSB-PPeX' });
+
         if (botState) {
             
             // Recalcula lcoverage y lnorder con el nuevo precio
@@ -89,22 +108,11 @@ async function updateBotStateWithPrice(price) {
                 botState.config.long.size_var / 100
             );
 
-            /*// Recalcula scoverage y snorder
- //           const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
- //               botState.sbalance,
- //               parseFloat(price),
- //               botState.config.short.sellBtc,
- //               botState.config.short.price_var / 100,
-//                botState.config.short.size_var / 100
-//            );
-            */
-
-            // 🟢 CORRECCIÓN: Inicializar scoverage y snorder al valor actual de la DB
+            // Se mantiene el estado actual para la corta hasta que se implemente el cálculo
             const scoverage = botState.scoverage;
             const snorder = botState.snorder;
 
             // 🛑 CAMBIO CLAVE: Usamos findOneAndUpdate para actualizar SOLO los campos de cobertura.
-            // Esto evita sobrescribir lStateData, lbalance, lstate, etc. con datos obsoletos.
             const updatedBotState = await Autobot.findOneAndUpdate(
                 { _id: botState._id },
                 {
@@ -125,11 +133,10 @@ async function updateBotStateWithPrice(price) {
             }
 
             // === [ Emisión Inmediata de los Datos ] ===
-            // Usamos el documento updatedBotState (que contiene todos los datos, incluyendo lStateData)
+            // Usamos el documento updatedBotState (que contiene todos los datos)
             io.sockets.emit('bot-state-update', {
                 lstate: updatedBotState.lstate,
                 sstate: updatedBotState.sstate,
-                // 🚨 CORRECCIÓN CLAVE: Cambiamos 'profit' por 'total_profit' para que coincida con el front-end.
                 total_profit: updatedBotState.total_profit || 0,
                 lbalance: updatedBotState.lbalance || 0,
                 sbalance: updatedBotState.sbalance || 0,
