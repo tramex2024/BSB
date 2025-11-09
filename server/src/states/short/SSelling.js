@@ -1,6 +1,6 @@
 // BSB/server/src/states/short/SSelling.js (FINAL - con Trailing Stop Inverso 0.4% y Recuperación Segura de Recompra)
 
-const { placeBuyOrder } = require('../managers/shortOrderManager');
+const { placeBuyOrder } = require('../../managers/shortOrderManager');
 const { getOrderDetail } = require('../../../services/bitmartService'); 
 
 // Se asume que el manejo del Trailing Stop se basa en una caída fija.
