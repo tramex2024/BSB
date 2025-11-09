@@ -1,13 +1,11 @@
-// BSB/server/src/states/long/LBuying.js (REFACTORIZADO PARA USAR CONSOLIDATOR)
+// BSB/server/src/states/long/LBuying.js (Refactorizado para consistencia y persistencia)
 
 // 🛑 Importaciones Esenciales
 const { 
     calculateLongTargets 
 } = require('../../utils/dataManager');
 const { parseNumber } = require('../../../utils/helpers'); 
-// 💡 NUEVAS IMPORTACIONES REQUERIDAS
 const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../utils/orderManager'); 
-// ✅ NUEVA IMPORTACIÓN DEL MÓDULO CONSOLIDATOR
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 
 
@@ -15,61 +13,55 @@ async function run(dependencies) {
     const {
         botState, currentPrice, config, log,
         updateBotState, updateLStateData, updateGeneralBotState,
-        getBotState, 
         availableUSDT 
-    } = dependencies;
+    } = dependencies; // Se ha quitado explícitamente 'getBotState' para resolver el error.
 
     // =================================================================
-    // === [ PRUEBA TEMPORAL DE PERSISTENCIA DB PARA 'ai' ] ============
+    // === [ PRUEBA DE PERSISTENCIA DB PARA 'ai' ] =====================
     // =================================================================
-    // Paso 1: Guardar un valor fijo (3) para 'ai'.
-    log("TEST INICIO: Escribiendo 'ai' = 3 en la DB...", 'warning');
-    // NOTA: Usamos updateGeneralBotState para el campo top-level 'ai'.
-    await updateGeneralBotState({ ai: 3 }); 
-
-    // Paso 2: Leer el estado completo de la DB.
-    const latestState = await getBotState(); 
-    const testAiValue = latestState.ai;
-
-    // Paso 3: Loguear el valor leído.
-    log(`TEST RESULTADO: Valor de 'ai' leído de la DB: ${testAiValue}`, 'warning'); 
+    // Esta prueba verifica si updateGeneralBotState está funcionando correctamente
+    // y si el botState es cargado correctamente en el siguiente ciclo.
+    const currentAi = botState.ai || 0; 
+    const nextAi = currentAi + 1; 
+    
+    log(`TEST PERSISTENCIA: Valor 'ai' de entrada: ${currentAi}. Escribiendo nuevo valor: ${nextAi}`, 'warning');
+    
+    // Escribir el nuevo valor en la DB.
+    // Asumimos que 'ai' es un campo de nivel superior en el documento de estado del bot.
+    await updateGeneralBotState({ ai: nextAi }); 
+    
+    // Si la prueba funciona, en el próximo ciclo (ai) de entrada será 'nextAi'.
     // =================================================================
     // =================================================================
 
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
-    const lStateData = botState.lStateData;
+    // Si lStateData no existe (esquema antiguo), se usará una estructura por defecto.
+    const lStateData = botState.lStateData || { 
+        ppc: 0, ac: 0, ai: 0, orderCountInCycle: 0, lastOrder: null, pm: 0, pc: 0, 
+        requiredCoverageAmount: 0, nextCoveragePrice: 0 
+    };
 
-    log("Estado Long: BUYING. Verificando el estado de la última orden de compra o gestionando targets...", 'info');
+    log(`Estado Long: BUYING. Verificando última orden y targets. PPC: ${lStateData.ppc.toFixed(2)}`, 'info');
 
     // =================================================================
-    // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
+    // === [ 0. COLOCACIÓN DE PRIMERA ORDEN ] ============================
     // =================================================================
     if (lStateData.ppc === 0 && lStateData.orderCountInCycle === 0 && !lStateData.lastOrder) {
-        log("Estado de posición inicial detectado. Iniciando lógica de primera compra (Integrada)...", 'warning');
-
-        // 💡 1. RED DE SEGURIDAD 
-        if (lStateData.orderCountInCycle > 0) {
-            log('Red de seguridad activada: orderCountInCycle ya es > 0, cancelando compra duplicada.', 'warning');
-            return; 
-        }
+        log("Iniciando lógica de primera compra...", 'warning');
 
         const purchaseAmount = parseFloat(config.long.purchaseUsdt);
         const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
-        
         const currentLBalance = parseFloat(botState.lbalance || 0);
 
         const isRealBalanceSufficient = availableUSDT >= purchaseAmount && purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART;
         const isCapitalLimitSufficient = currentLBalance >= purchaseAmount;
         
         if (isRealBalanceSufficient && isCapitalLimitSufficient) {
-            log("Verificaciones de fondos y límite aprobadas. Colocando la primera orden...", 'info');
-
-            // 🎯 Coloca la orden, actualiza lastOrder y descuenta lbalance.
+            log("Verificaciones de fondos aprobadas. Colocando la primera orden...", 'info');
+            // La función placeFirstBuyOrder maneja la actualización de lastOrder y lStateData
             await placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotState); 
             
-            log("Primera orden colocada exitosamente. Esperando al próximo ciclo para monitorear.", 'success');
-
         } else {
             let reason = '';
             if (!isRealBalanceSufficient) {
@@ -78,11 +70,11 @@ async function run(dependencies) {
                 reason = `LÍMITE DE CAPITAL ASIGNADO (${currentLBalance.toFixed(2)} USDT) insuficiente.`;
             }
 
-            log(`No se puede iniciar la orden. ${reason} Cambiando a NO_COVERAGE.`, 'warning');
+            log(`No se puede iniciar la orden. ${reason} Transicionando a NO_COVERAGE.`, 'warning');
             await updateBotState('NO_COVERAGE', 'long'); 
         }
         
-        return; // Detener el ciclo para esperar la próxima iteración.
+        return; 
     }
 
     // =================================================================
@@ -94,18 +86,17 @@ async function run(dependencies) {
     );
     
     if (orderIsPendingOrProcessed) {
-        // Si el consolidator encuentra una orden (pendiente, fallida o exitosa), 
-        // él maneja el flujo de estado (RUNNING, BUYING, etc.). Salimos del ciclo 'run'.
+        // Si hay una orden pendiente o se acaba de consolidar, se detiene aquí.
         return; 
     }
     
-    // Si no hay orden pendiente (lastOrder es null), procedemos a calcular los targets.
+    // Si no hay orden pendiente (lStateData.lastOrder es null), procedemos a calcular targets.
     
     // =================================================================
     // === [ 2. CÁLCULO Y GESTIÓN DE TARGETS ] ===========================
     // =================================================================
     if (!lStateData.lastOrder && lStateData.ppc > 0) { 
-        log("Calculando objetivos iniciales (Venta/Cobertura) y Límite de Cobertura...", 'info');
+        log("Calculando objetivos (Venta/Cobertura) y Límite de Cobertura...", 'info');
     
         const { 
             targetSellPrice, 
@@ -123,85 +114,74 @@ async function run(dependencies) {
             botState.lbalance 
         );
 
-        // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
+        // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS EN LA DB
+        // Nota: Si 'ltprice', 'lcoverage', 'lnorder' son campos de primer nivel,
+        // y el resto está en 'lStateData', este objeto funciona correctamente.
         const targetsUpdate = {
             ltprice: targetSellPrice,
             lcoverage: lCoveragePrice, 
             lnorder: lNOrderMax,          
-            // Campos de lStateData
-            'lStateData.requiredCoverageAmount': requiredCoverageAmount,
-            'lStateData.nextCoveragePrice': nextCoveragePrice,
+            'lStateData.requiredCoverageAmount': requiredCoverageAmount, // Acceso anidado
+            'lStateData.nextCoveragePrice': nextCoveragePrice,          // Acceso anidado
         };
 
         await updateGeneralBotState(targetsUpdate);
 
-        // 💡 LUEGO DE ACTUALIZAR LA DB, ACTUALIZAMOS LA REFERENCIA LOCAL
+        // 💡 Actualizamos la referencia local (botState) para el ciclo actual
         lStateData.requiredCoverageAmount = requiredCoverageAmount; 
         lStateData.nextCoveragePrice = nextCoveragePrice;
 
-        // 🟢 LOG RESUMEN DE TARGETS
         const logSummary = `
-            Estrategia LONG: Targets y Cobertura actualizados.
-            ------------------------------------------
-            💰 PPC actual: ${lStateData.ppc.toFixed(2)} USD (AC: ${lStateData.ac.toFixed(8)} BTC).
-            🎯 TP Objetivo (Venta): ${targetSellPrice.toFixed(2)} USD.
-            📉 Proxima Cobertura (DCA): ${nextCoveragePrice.toFixed(2)} USD (Monto: ${requiredCoverageAmount.toFixed(2)} USDT).
-            🛡️ Cobertura Máxima (L-Coverage): ${lCoveragePrice.toFixed(2)} USD (Órdenes restantes posibles: ${lNOrderMax}).
+            Targets LONG actualizados.
+            💰 PPC: ${lStateData.ppc.toFixed(2)} USD.
+            🎯 TP Venta: ${targetSellPrice.toFixed(2)} USD.
+            📉 DCA Cobertura: ${nextCoveragePrice.toFixed(2)} USD (Monto: ${requiredCoverageAmount.toFixed(2)} USDT).
+            🛡️ Límite de Cobertura: ${lCoveragePrice.toFixed(2)} USD (Órdenes restantes: ${lNOrderMax}).
         `.replace(/\s+/g, ' ').trim();
         log(logSummary, 'warning'); 
-
-    } else if (!lStateData.lastOrder && lStateData.ppc === 0) {
-        log("Posición inicial (AC=0). Targets no calculados. Esperando señal de entrada.", 'info');
-    }
-
+    } 
+    
     // =================================================================
     // === [ 3. EVALUACIÓN DE TRANSICIÓN DE ESTADO/COLOCACIÓN DE ORDEN ] =
     // =================================================================
     
-    // 3A. Transición a SELLING por Take Profit (ltprice alcanzado)
+    // 3A. Transición a SELLING por Take Profit
     if (botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-        log(`[LONG] ¡TARGET DE VENTA (Take Profit) alcanzado! Precio actual: ${currentPrice.toFixed(2)} >= ${botState.ltprice.toFixed(2)}. Transicionando a SELLING.`, 'success');
-        
+        log(`[LONG] ¡TARGET DE VENTA alcanzado! Transicionando a SELLING.`, 'success');
         await updateBotState('SELLING', 'long');
         return;
     }
 
     // 3B. Colocación de ORDEN de COBERTURA (DCA)
-    const requiredAmount = lStateData.requiredCoverageAmount;
+    const requiredAmount = lStateData.requiredCoverageAmount || 0;
 
     if (!lStateData.lastOrder && lStateData.nextCoveragePrice > 0 && currentPrice <= lStateData.nextCoveragePrice) {
         
         if (requiredAmount <= 0) {
-            log(`Error CRÍTICO: El monto requerido para la cobertura es cero (0). Verifique config.long.purchaseUsdt. Transicionando a NO_COVERAGE.`, 'error');
+            log(`Error: Monto de cobertura (${requiredAmount}) no válido. Transicionando a NO_COVERAGE.`, 'error');
             await updateBotState('NO_COVERAGE', 'long'); 
             return; 
         }
 
         if (botState.lbalance >= requiredAmount) {
-            log(`[LONG] ¡Precio de COBERTURA alcanzado! Precio actual: ${currentPrice.toFixed(2)} <= ${lStateData.nextCoveragePrice.toFixed(2)}. Colocando orden de compra.`, 'warning');
+            log(`[LONG] ¡Precio de COBERTURA alcanzado! Colocando orden de compra DCA.`, 'warning');
             
             try {
+                // placeCoverageBuyOrder actualiza lastOrder y lStateData
                 await placeCoverageBuyOrder(botState, requiredAmount, lStateData.nextCoveragePrice, log, updateGeneralBotState, updateBotState);
-                
             } catch (error) {
                 log(`Error CRÍTICO al colocar la orden de COBERTURA: ${error.message}.`, 'error');
             }
-            return; // Esperar el próximo ciclo para monitorear la orden.
+            return; 
 
         } else {
-            log(`Advertencia: Precio de cobertura alcanzado (${lStateData.nextCoveragePrice.toFixed(2)}), pero no hay suficiente capital disponible (${botState.lbalance.toFixed(2)} USDT). Transicionando a NO_COVERAGE.`, 'error');
+            log(`Advertencia: Cobertura alcanzada, pero capital (${botState.lbalance.toFixed(2)} USDT) insuficiente. Transicionando a NO_COVERAGE.`, 'error');
             await updateBotState('NO_COVERAGE', 'long');
             return;
         }
     }
     
-    // 3C. Transición por defecto o Log final (Permanece en BUYING)
-    
-    if (!lStateData.lastOrder && lStateData.ppc > 0) {
-        log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}. Esperando que el precio caiga o suba.`, 'debug');
-        return; // Permanece en el estado BUYING
-    }
-
+    // 3C. Log final (Permanece en BUYING)
     log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
 }
 
