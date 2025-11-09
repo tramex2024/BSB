@@ -8,15 +8,15 @@ const { parseNumber } = require('../../../utils/helpers'); 
 // 💡 NUEVAS IMPORTACIONES REQUERIDAS
 const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../utils/orderManager'); 
 // ✅ NUEVA IMPORTACIÓN DEL MÓDULO CONSOLIDATOR
-const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
+const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 
 
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log,
         updateBotState, updateLStateData, updateGeneralBotState,
-        getBotState, 
-        availableUSDT 
+        getBotState, 
+        availableUSDT 
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -30,7 +30,7 @@ async function run(dependencies) {
     if (lStateData.ppc === 0 && lStateData.orderCountInCycle === 0 && !lStateData.lastOrder) {
         log("Estado de posición inicial detectado. Iniciando lógica de primera compra (Integrada)...", 'warning');
 
-        // 💡 1. RED DE SEGURIDAD 
+        // 💡 1. RED DE SEGURIDAD 
         if (lStateData.orderCountInCycle > 0) {
             log('Red de seguridad activada: orderCountInCycle ya es > 0, cancelando compra duplicada.', 'warning');
             return; 
@@ -70,17 +70,17 @@ async function run(dependencies) {
     // =================================================================
     // === [ 1. MONITOREO Y CONSOLIDACIÓN DE ORDEN PENDIENTE ] =========
     // =================================================================
-    
+    
     const orderIsPendingOrProcessed = await monitorAndConsolidate(
         botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState
     );
-    
+    
     if (orderIsPendingOrProcessed) {
-        // Si el consolidator encuentra una orden (pendiente, fallida o exitosa), 
+        // Si el consolidator encuentra una orden (pendiente, fallida o exitosa), 
         // él maneja el flujo de estado (RUNNING, BUYING, etc.). Salimos del ciclo 'run'.
-        return; 
+        return; 
     }
-    
+    
     // Si no hay orden pendiente (lastOrder es null), procedemos a calcular los targets.
     
     // =================================================================
@@ -93,7 +93,7 @@ async function run(dependencies) {
             targetSellPrice, 
             nextCoveragePrice, 
             requiredCoverageAmount, 
-            lCoveragePrice,      
+            lCoveragePrice,      
             lNOrderMax           
         } = calculateLongTargets(
             lStateData.ppc, 
@@ -102,13 +102,14 @@ async function run(dependencies) {
             config.long.size_var,
             config.long.purchaseUsdt,
             lStateData.orderCountInCycle,
-            botState.lbalance 
+            botState.lbalance,            
+            lStateData.ai 
         );
 
         // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
         const targetsUpdate = {
             ltprice: targetSellPrice,
-            lcoverage: lCoveragePrice, 
+            lcoverage: lCoveragePrice, 
             lnorder: lNOrderMax,         
             // Campos de lStateData
             'lStateData.requiredCoverageAmount': requiredCoverageAmount,

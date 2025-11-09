@@ -73,7 +73,7 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const baseAmount = parseNumber(basePurchaseUsdt);
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
-    const ai = parseNumber(amountInvested); // <-- NUEVO CAMPO PARSEADO
+    const ai = parseNumber(amountInvested); 
 
     // 🛑 AUDITORÍA CRÍTICA
     console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
