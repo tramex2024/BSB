@@ -3,7 +3,7 @@
 // 🛑 Importaciones Esenciales
 const { 
     calculateLongTargets 
-} = require('../../managers/longDataManager');
+} = require('../../autobotCalculations');
 const { parseNumber } = require('../../../utils/helpers'); 
 // 💡 NUEVAS IMPORTACIONES REQUERIDAS
 const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 

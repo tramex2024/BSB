@@ -3,13 +3,12 @@
 const Autobot = require('../../models/Autobot');
 // Importar solo el handler del estado LSelling
 const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
-const { log } = require('../../autobotLogic'); // Asumiendo que puedes obtener 'log' de botLogic
 
 /**
  * Maneja una compra exitosa (total o parcial), actualiza la posición del bot Long
  * (PPC, AC, AI, LBalance, lastExecutionPrice), y pasa al estado de gestión de posición (BUYING).
  */
-async function handleSuccessfulBuy(botState, orderDetails) { // Ya no necesita log ni updateGeneralBotState si usamos Autobot.findOne/findOneAndUpdate
+async function handleSuccessfulBuy(botState, orderDetails, log) { // Ya no necesita log ni updateGeneralBotState si usamos Autobot.findOne/findOneAndUpdate
     // --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS DE LA ORDEN ---
     
     const executedQty = parseFloat(orderDetails.filledSize || 0);      
@@ -97,7 +96,7 @@ async function handleSuccessfulBuy(botState, orderDetails) { // Ya no necesita l
  * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
  * Delega la lógica de cálculo de ganancia y reseteo a LSelling.js (el estado).
  */
-async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
+async function handleSuccessfulSell(botStateObj, orderDetails, dependencies, log) {
     // LSellingHandler ya está importado en la parte superior.
     await LSellingHandler(botStateObj, orderDetails, dependencies);
 }
