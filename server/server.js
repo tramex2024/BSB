@@ -72,6 +72,17 @@ const connectDB = async () => {
 
 connectDB();
 
+// 🛑 1. DEFINIR LA FUNCIÓN DE LECTURA DE ESTADO
+async function getBotState() {
+    return await Autobot.findOne({});
+}
+
+// 🛑 2. CREAR LAS CREDENCIALES/DEPENDENCIAS BASE
+const botDependencies = {
+    getBotState: getBotState, // <--- FUNCIÓN NECESARIA PARA LA PRUEBA DE AI
+    // Aquí puedes añadir otras funciones que se usen globalmente, si es necesario.
+};
+
 let currentMarketPrice = 'N/A';
 
 // **FUNCIÓN CORREGIDA: Ahora usa findOneAndUpdate para la actualización atómica y parcial.**
@@ -170,6 +181,9 @@ function setupWebSocket(io) {
 
 		// Disparar el ciclo de la estrategia en tiempo real (debe ser el último paso)
         await autobotLogic.botCycle(currentMarketPrice);
+                
+                // 🛑 CAMBIO CLAVE: Pasar las dependencias al botCycle
+        await autobotLogic.botCycle(currentMarketPrice, botDependencies);
             }
         } catch (error) {
             console.error("Error al procesar el mensaje de WebSocket:", error);

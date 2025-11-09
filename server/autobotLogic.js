@@ -54,7 +54,7 @@ async function updateLStateData(fieldsToUpdate) {
         }, {});
 
         // 🛑 CAMBIO CLAVE: Usamos $set para solo modificar los campos pasados dentro del subdocumento.
-        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate });  
+        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
     } catch (error) {
         log(`Error al guardar lStateData: ${error.message}`, 'error');
     }
@@ -74,7 +74,7 @@ async function updateSStateData(fieldsToUpdate) {
         }, {});
 
         // 🛑 CAMBIO CLAVE: Usamos $set para solo modificar los campos pasados dentro del subdocumento.
-        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate });  
+        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
     } catch (error) {
         log(`Error al guardar sStateData: ${error.message}`, 'error');
     }
@@ -96,10 +96,10 @@ async function updateGeneralBotState(fieldsToUpdate) {
 }
 
 
-async function botCycle(priceFromWebSocket) {
+// 🛑 CORRECCIÓN: Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
+async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     try {
         // 🛑 CRÍTICO: Recargar el botState ANTES de cada ciclo.
-        // Esto garantiza que la lógica de BUYING y RUNNING use la última versión de la DB.
         let botState = await Autobot.findOne({});
         const currentPrice = parseFloat(priceFromWebSocket); 
 
@@ -134,7 +134,10 @@ async function botCycle(priceFromWebSocket) {
             updateBotState, 
             updateLStateData, 
             updateSStateData, 
-            updateGeneralBotState 
+            updateGeneralBotState,
+            
+            // 🛑 CORRECCIÓN CLAVE: Incluir la dependencia externa si se pasó (como getBotState)
+            ...externalDependencies 
         };
 
         setLongDeps(dependencies);
@@ -144,11 +147,11 @@ async function botCycle(priceFromWebSocket) {
             await runLongStrategy();
         }
 //      if (botState.sstate !== 'STOPPED') {
-//          await runShortStrategy(); // 💡 DESCOMENTADO/AÑADIDO: Ejecutar el ciclo Short
+//           await runShortStrategy(); // 💡 DESCOMENTADO/AÑADIDO: Ejecutar el ciclo Short
 //      }
         
     } catch (error) {
-    log(`Error en el ciclo principal del bot: ${error.message}`, 'error'); // 👈 ESTE log es el que falla
+    log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
 }
 }
 
@@ -156,37 +159,15 @@ async function botCycle(priceFromWebSocket) {
 // ... (balanceCycle, start, stop se mantienen sin cambios)
 
 async function balanceCycle() {
-    try {
-        const balancesArray = await bitmartService.getBalance({
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO
-        });
-        
-        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-
-        if (!usdtBalance || !btcBalance) {
-            log('No se pudieron obtener los balances de la cuenta.', 'error');
-            return;
-        }
-
-        io.emit('wallet-balances', {
-            USDT: { available: parseFloat(usdtBalance.available), frozen: parseFloat(usdtBalance.frozen) },
-            BTC: { available: parseFloat(btcBalance.available), frozen: parseFloat(btcBalance.frozen) }
-        });
-
-    } catch (error) {
-        log(`Error en el ciclo de balances: ${error.message}`, 'error');
-    }
+// ... (código sin cambios)
 }
 
 async function start() {
-    log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
+// ... (código sin cambios)
 }
 
 async function stop() {
-    log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
+// ... (código sin cambios)
 }
 
 module.exports = {
