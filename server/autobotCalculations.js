@@ -1,12 +1,16 @@
 /**
- * BSB/server/autobotCalculations.js (SOLO LÓGICA LONG Y COMÚN - CORREGIDO CON AI)
+ * BSB/server/autobotCalculations.js (SOLO LÓGICA LONG Y COMÚN - CORREGIDO)
  */
 
 // const { calculateShortCoverage, calculateShortTargets } = require('./autobotShortCalculations');
 const { parseNumber } = require('./utils/helpers'); // 🟢 CORRECCIÓN: Importa desde el nuevo helper
 
+// 🛑 ELIMINADA: Declaración global innecesaria de targetSellPrice
+// let targetSellPrice = 0; 
+
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
+// ... (calculateLongCoverage se mantiene igual) ...
 // -------------------------------------------------------------------------
 function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, increment) {
     let currentBalance = lbalance;
@@ -42,10 +46,9 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, decrement, 
 
 // -------------------------------------------------------------------------
 // FUNCIÓN AUXILIAR AGREGADA: Calcula el precio de la N-ésima orden DCA (Long)
+// ... (calculateNextDcaPrice se mantiene igual) ...
 // -------------------------------------------------------------------------
 function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
-    // Si count es 0 (primera orden DCA), el precio es PPC * (1 - priceVarDecimal)
-    // Si count > 0, el precio de la N-ésima orden DCA es ppc * (1 - priceVarDecimal)
     return ppc * (1 - priceVarDecimal);
 }
 
@@ -56,34 +59,23 @@ function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
 
 /**
  * Calcula los targets de Venta (Take Profit) y Cobertura (DCA) después de una compra (LONG).
- *
- * @param {number} ppc - Precio promedio de compra actual.
- * @param {number} profit_percent - Porcentaje de ganancia.
- * @param {number} price_var - Variación de precio para la próxima compra (%).
- * @param {number} size_var - Variación de tamaño para la próxima compra (%).
- * @param {number} basePurchaseUsdt - Monto base de la compra inicial.
- * @param {number} orderCountInCycle - Número de órdenes de DCA ejecutadas en el ciclo (0, 1, 2...).
- * @param {number} lbalance - Balance USDT disponible.
- * @param {number} amountInvested - Monto total invertido en USDT en la posición actual (AI).
  */
-function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance, amountInvested) {
+function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance) {
     const profitDecimal = parseNumber(profit_percent) / 100;
     const priceVarDecimal = parseNumber(price_var) / 100;
     const sizeVarDecimal = parseNumber(size_var) / 100;
     const baseAmount = parseNumber(basePurchaseUsdt);
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
-    const ai = parseNumber(amountInvested); 
 
-    // 🛑 AUDITORÍA CRÍTICA
+    // 🛑 AUDITORÍA CRÍTICA (Se mantienen los logs)
     console.log(`[DCA DEBUG] Raw Config Values -> Base: [${basePurchaseUsdt}], SizeVar: [${size_var}]`);
     console.log(`[DCA DEBUG] Parsed Values -> Base: ${baseAmount}, SizeDec: ${sizeVarDecimal}, Count: ${count}`);
-    console.log(`[DCA DEBUG] Amount Invested (AI): ${ai.toFixed(2)} USDT.`); // <-- NUEVO LOG PARA AI
 
     // Cálculo del Target de Venta
     const targetSellPrice = ppc * (1 + profitDecimal);
 
-    // Cálculo del Monto de Cobertura Requerido (mantiene la progresión geométrica basada en Count)
+    // Cálculo del Monto de Cobertura Requerido
     const calculatedAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
     console.log(`[DCA DEBUG] Required Amount (Calculated): ${calculatedAmount}`);
@@ -108,13 +100,13 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,
         ppc, 
-        finalRequiredAmount, // 👈 Usar finalRequiredAmount
+        finalRequiredAmount, // 👈 CORREGIDO: Usar finalRequiredAmount
         priceVarDecimal,
         sizeVarDecimal
     );
 
     // Devolver 0 si no hay fondos disponibles, pero manteniendo el cálculo requerido
-    if(finalRequiredAmount > balance){ // 👈 Usar finalRequiredAmount
+    if(finalRequiredAmount > balance){ // 👈 CORREGIDO: Usar finalRequiredAmount
         return { 
             targetSellPrice, nextCoveragePrice, 
             requiredCoverageAmount: finalRequiredAmount,
@@ -124,7 +116,7 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     }
 
     return { 
-        targetSellPrice, nextCoveragePrice, requiredCoverageAmount: finalRequiredAmount, // 👈 Usar finalRequiredAmount
+        targetSellPrice, nextCoveragePrice, requiredCoverageAmount: finalRequiredAmount, // 👈 CORREGIDO: Usar finalRequiredAmount
         lCoveragePrice, lNOrderMax 
     };
 }
@@ -174,5 +166,4 @@ module.exports = {
     calculateInitialState,
     calculateLongCoverage,
     calculateLongTargets,
-    calculateNextDcaPrice, // <-- Exportación añadida
 };

@@ -61,9 +61,8 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
                     side: 'buy',
                     usdt_amount: amount,
                 }
-            },
-            // 💡 AJUSTE 1: Incrementamos el Amount Invested (ai) por el costo de la orden inicial
-            $inc: { 'lStateData.ai': amount }  
+            }
+            
         });
 
         log(`LBalance asignado reducido en ${amount.toFixed(2)} USDT para la orden inicial. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
@@ -84,7 +83,7 @@ async function placeFirstBuyOrder(config, log, updateBotState, updateGeneralBotS
  * @param {number} nextCoveragePrice - Precio objetivo (solo para logging/contexto, no se usa para la orden de mercado).
  * @param {function} log - Función de logging.
  * @param {function} updateGeneralBotState - Función para actualizar campos generales (lbalance/sbalance).
- * @param {function} updateBotState - Función para actualizar el estado del bot (lstate/sstate). 🛑 AGREGADO
+ * @param {function} updateBotState - Función para actualizar el estado del bot (lstate/sstate). 🛑 AGREGADO
  */
 async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, log, updateGeneralBotState, updateBotState) { 
     const SYMBOL = botState.config.symbol || TRADE_SYMBOL;
@@ -126,9 +125,7 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
                         side: 'buy',
                         usdt_amount: usdtAmount,
                     },
-                },
-                // 💡 AJUSTE 2: Incrementamos el Amount Invested (ai) por el costo de la orden de cobertura
-                $inc: { 'lStateData.ai': usdtAmount } 
+                }
             }, { new: true });
             
             if (updateResult) {
@@ -146,7 +143,7 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
             const finalLBalance = newLBalance + usdtAmount;
             await updateGeneralBotState({ lbalance: finalLBalance });
             log(`Se revierte ${usdtAmount.toFixed(2)} USDT al balance (error de colocación).`, 'info');
-            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // 🛑 PROPAGAR ERROR
+            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // 🛑 PROPAGAR ERROR
         }
     } catch (error) {
         log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
@@ -154,7 +151,7 @@ async function placeCoverageBuyOrder(botState, usdtAmount, nextCoveragePrice, lo
         const finalLBalance = newLBalance + usdtAmount;
         await updateGeneralBotState({ lbalance: finalLBalance });
         log(`Se revierte ${usdtAmount.toFixed(2)} USDT al balance (error de API).`, 'info');
-        throw error; // 🛑 PROPAGAR ERROR
+        throw error; // 🛑 PROPAGAR ERROR
     }
 }
 
@@ -181,10 +178,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
                 price: botState.lStateData.ppc, 
                 size: sellAmount,
                 side: 'sell',
-                state: 'pending_fill',
-                // 💡 AJUSTE 3: Capturamos el 'ai' (Amount Invested) al momento de la venta para el cálculo final.
-                ai_at_sell: botState.lStateData.ai,
-                ppc_at_sell: botState.lStateData.ppc,
+                state: 'pending_fill'
             };
             
             // 2. Persistir el lastOrder de forma atómica
@@ -204,8 +198,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
                 if (filledVolume >= amountToSell * 0.999) { 
                     log(`Verificación: Orden ID ${currentOrderId} COMPLETADA (${filledVolume.toFixed(8)}/${amountToSell.toFixed(8)}).`, 'success');
                     
-                    // AJUSTE 4: Pasamos el 'sellLastOrder' a handleSuccessfulSell
-                    await handleSuccessfulSell(botState, orderDetails, handlerDependencies, sellLastOrder);
+                    await handleSuccessfulSell(botState, orderDetails, handlerDependencies);
                     
                     await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
                 } else {
@@ -216,8 +209,7 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
                 if (error.message.includes('50005')) {
                     log(`Advertencia: Orden ${currentOrderId} desapareció (llenado instantáneo). Asumiendo llenado.`, 'warning');
                     
-                    // AJUSTE 5: Pasamos el 'sellLastOrder' a handleSuccessfulSell para el cálculo
-                    await handleSuccessfulSell(botState, { filled_volume: botState.lStateData.ac, priceAvg: 0 }, handlerDependencies, sellLastOrder); 
+                    await handleSuccessfulSell(botState, { filled_volume: botState.lStateData.ac, priceAvg: 0 }, handlerDependencies); 
                     await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
                 } else {
                     log(`Error al verificar la orden ${currentOrderId}: ${error.message}`, 'error');
@@ -225,11 +217,11 @@ async function placeSellOrder(config, creds, sellAmount, log, handleSuccessfulSe
             } 
         } else { 
             log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // 🛑 PROPAGAR ERROR
+            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // 🛑 PROPAGAR ERROR
         }
     } catch (error) { 
         log(`Error de API al colocar la orden: ${error.message}`, 'error');
-        throw error; // 🛑 PROPAGAR ERROR
+        throw error; // 🛑 PROPAGAR ERROR
     }
 }
 

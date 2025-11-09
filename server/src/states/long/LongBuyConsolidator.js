@@ -1,3 +1,5 @@
+// BSB/server/src/states/long/LongBuyConsolidator.js
+
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 // Importamos la función atómica para consolidar la compra
 const { handleSuccessfulBuy } = require('../../utils/dataManager');
@@ -55,14 +57,11 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
             log(`[CONSOLIDATOR] Orden ${orderIdString} confirmada. Iniciando consolidación atómica...`, 'success');
             
             // LLAMADA A LA FUNCIÓN ATÓMICA EN DATA MANAGER
-            // handleSuccessfulBuy es la función que debe actualizar PPC, AC y el nuevo 'ai'.
             await handleSuccessfulBuy(botState, finalDetails, updateGeneralBotState, log); 
             
-            // 🛑 CORRECCIÓN CRÍTICA: MANTENEMOS EL ESTADO EN 'BUYING'.
-            // Esto asegura que en el próximo ciclo se ejecuten las secciones 2 y 3 de LBuying 
-            // (Cálculo de Targets y Evaluación de Transición/Nueva Orden de Cobertura).
-            await updateBotState('BUYING', 'long'); 
-            log(`[CONSOLIDATOR] Corrección: Se mantiene en BUYING para reevaluar targets.`, 'debug');
+            // Transición a RUNNING, ya que después de consolidar una compra, el bot está listo para reevaluar targets.
+            await updateBotState('RUNNING', 'long'); 
+            log(`[CONSOLIDATOR] Transición a RUNNING para reevaluar targets.`, 'debug');
 
             return true; // Se procesó una orden
 
@@ -76,7 +75,7 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
             log(`[CONSOLIDATOR] La orden ${orderIdString} falló/se canceló sin ejecución. Limpiando lastOrder.`, 'error');
             await updateLStateData({ 'lastOrder': null });
             
-            // Transición correcta: Si falla, vuelve a BUYING para intentar la lógica de targets de nuevo.
+            // ✅ CORRECCIÓN: Si falla, regresa a BUYING (gestión de posición)
             await updateBotState('BUYING', 'long'); 
             
             return true; // Se procesó (falló) una orden, no proceder al resto de LBuying

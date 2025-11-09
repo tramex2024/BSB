@@ -20,30 +20,24 @@ const TRAILING_STOP_PERCENTAGE = 0.4;
  * @param {object} botStateObj - Estado del bot antes de la venta.
  * @param {object} orderDetails - Detalles de la orden de BitMart completada.
  * @param {object} dependencies - Dependencias inyectadas (incluye config, log, updateGeneralBotState, etc.).
- * @param {object} lastOrderData - Datos del lastOrder que contiene 'ai_at_sell' (Amount Invested al momento de vender).
  */
-async function handleSuccessfulSell(botStateObj, orderDetails, dependencies, lastOrderData = {}) {
+async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 	// Aseguramos la extracción de todas las dependencias necesarias
 	const { config, log, updateBotState, updateLStateData, updateGeneralBotState, creds } = dependencies;
 	
 	try {
 		// 1. CÁLCULO DE CAPITAL Y GANANCIA
+		const { ac: totalBtcSold, ppc } = botStateObj.lStateData;
 		
-		// 💡 AJUSTE CRÍTICO: Usamos el Amount Invested (ai) que se capturó justo antes de la venta (ai_at_sell).
-		// Si lastOrderData no existe (ej: caso 50005 de recuperación que no pasó los datos), 
-		// usamos el valor actual del botState.lStateData.ai.
-		const amountInvested = parseFloat(lastOrderData.ai_at_sell || botStateObj.lStateData.ai || 0);
-
 		// Usamos filledSize y priceAvg (o price) para asegurar precisión en la venta.
 		const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
-		const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || botStateObj.lStateData.ac || 0);
+		// Nota: Si la venta fue asumida (Error 50005), usamos totalBtcSold como filledSize para el cálculo.
+		const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || totalBtcSold || 0);
 		
 		const totalUsdtRecovered = filledSize * sellPrice;
+		const totalUsdtSpent = totalBtcSold * ppc;
+		const profit = totalUsdtRecovered - totalUsdtSpent;
 		
-		// ✅ CÁLCULO DE PROFIT CORREGIDO: Ganancia es el monto total recuperado MENOS el monto total invertido (AI).
-		const profit = totalUsdtRecovered - amountInvested;
-		
-
 		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
 		// Sumamos el monto total de USDT recuperado (Capital original + Profit)
 		const newLBalance = botStateObj.lbalance + totalUsdtRecovered;
@@ -51,8 +45,8 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies, las
 		// --- 2a. UPDATE DE ESTADO GENERAL (Punto 1 de Persistencia) ---
 		await updateGeneralBotState({
 			lbalance: newLBalance,
-			// ✅ CORRECCIÓN: Ahora sumamos la ganancia neta (profit).
-			total_profit: (botStateObj.total_profit || 0) + profit, 
+			// ✅ CORRECCIÓN: Usamos total_profit para la actualización en la DB.
+			total_profit: (botStateObj.total_profit || 0) + profit, // 💡 CAMPO DE BENEFICIO ACUMULADO
 			
 			// 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
 			ltprice: 0,
@@ -61,14 +55,12 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies, las
 			lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
 		});
 
-		log(`Cierre de Ciclo Long Exitoso! Ganancia: ${profit.toFixed(2)} USDT (Recuperado: ${totalUsdtRecovered.toFixed(2)} USDT - Invertido: ${amountInvested.toFixed(2)} USDT).`, 'success');
+		log(`Cierre de Ciclo Long Exitoso! Ganancia: ${profit.toFixed(2)} USDT.`, 'success');
 		log(`LBalance actualizado. Capital operativo disponible: ${newLBalance.toFixed(2)} USDT.`, 'info');
 
 		// 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
 		const resetLStateData = {
 			ac: 0, ppc: 0,
-			// ✅ CRÍTICO: Resetear el Amount Invested (ai) para el nuevo ciclo.
-			ai: 0, 
 			orderCountInCycle: 0, 
 			lastOrder: null, // <--- ESTO ES CRÍTICO
 			pm: 0, pc: 0, pv: 0
@@ -83,6 +75,10 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies, las
 			await updateBotState('STOPPED', LSTATE);
 		} else {
 			// Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
+			
+			// 🛑 CAMBIO CRÍTICO DE ETAPA 1: ELIMINAMOS la llamada a placeFirstBuyOrder
+			// y la importación, forzando la transición a BUYING.
+			
 			log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
 			
 			// 🎯 FORZAMOS LA TRANSICIÓN AL ESTADO CORRECTO
@@ -134,8 +130,7 @@ async function run(dependencies) {
 				const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
 				
 				// 2. Procesar la venta exitosa (cierra ciclo, recupera capital, resetea estado)
-				// NOTA: Pasamos el lastOrder (que contiene 'ai_at_sell') para el cálculo preciso.
-				await handleSuccessfulSell(botState, orderDetails, handlerDependencies, lastOrder); 
+				await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
 				
 				return; // Finaliza la ejecución, el ciclo se ha cerrado.
 
@@ -163,8 +158,7 @@ async function run(dependencies) {
 			
 			// 2. Ejecutar el handler de éxito para cerrar el ciclo
 			const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
-			// NOTA: Pasamos el lastOrder (que contiene 'ai_at_sell') para el cálculo preciso.
-			await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies, lastOrder); 
+			await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies); 
 			
 			return; // Finaliza la ejecución para el siguiente ciclo.
 		}
@@ -213,7 +207,6 @@ async function run(dependencies) {
 		log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
 		
 		// LLAMADA: placeSellOrder coloca la orden y luego llama a handleSuccessfulSell al llenarse.
-		// NOTA: 'handlerDependencies' se pasa para que orderManager pueda usarlo en la llamada a handleSuccessfulSell
 		await placeSellOrder(config, creds, acSelling, log, handleSuccessfulSell, botState, handlerDependencies);
 
 		// Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED (monitoreo superior).
