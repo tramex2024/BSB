@@ -1,6 +1,6 @@
 // BSB/server/src/states/long/LSelling.js (ETAPA 1: Delega el reinicio a BUYING)
 
-const { placeSellOrder } = require('../managers/longOrderManager');
+const { placeSellOrder } = require('../../managers/longOrderManager');
 const { getOrderDetail } = require('../../../services/bitmartService'); 
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
