@@ -25,32 +25,6 @@ async function run(dependencies) {
     log("Estado Long: BUYING. Verificando el estado de la última orden de compra o gestionando targets...", 'info');
 
     // =================================================================
-    // === [ 🛑 FRAGMENTO DE PRUEBA TEMPORAL PARA AI ] ===================
-    // =================================================================
-    
-    // 1. Definir un valor de prueba (ej. $10.50)
-    const TEST_AI_VALUE = 10.50; 
-    
-    // 2. Escribir el valor de prueba en la base de datos
-    log(`[TEST AI] Intentando ESCRIBIR el valor de prueba (${TEST_AI_VALUE.toFixed(2)} USDT) en lStateData.ai...`, 'warning');
-    await updateLStateData({ ai: TEST_AI_VALUE });
-
-    // 3. Leer el estado actual de la base de datos para verificar la escritura
-    const updatedState = await getBotState();
-    const readAiValue = updatedState?.lStateData?.ai || 0;
-
-    // 4. Mostrar el resultado de la lectura
-    if (parseFloat(readAiValue).toFixed(2) === TEST_AI_VALUE.toFixed(2)) {
-        log(`[TEST AI] ✅ ÉXITO DE LECTURA/ESCRITURA. AI leído de la DB: ${readAiValue.toFixed(2)} USDT.`, 'success');
-    } else {
-        log(`[TEST AI] ❌ FALLO DE LECTURA/ESCRITURA. Valor esperado: ${TEST_AI_VALUE.toFixed(2)}, Valor leído: ${readAiValue.toFixed(2)} USDT.`, 'error');
-    }
-
-    // =================================================================
-    // === [ 🛑 FIN DEL FRAGMENTO DE PRUEBA TEMPORAL ] ===================
-    // =================================================================
-
-    // =================================================================
     // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
     // =================================================================
     if (lStateData.ppc === 0 && lStateData.orderCountInCycle === 0 && !lStateData.lastOrder) {
