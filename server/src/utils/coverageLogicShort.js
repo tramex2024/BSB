@@ -1,6 +1,6 @@
 // BSB/server/src/utils/coverageLogicShort.js (CORREGIDO - Bloqueo de Órdenes Duplicadas y manejo de fallos)
 
-const { placeCoverageSellOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManagerShort');
+const { placeCoverageSellOrder, MIN_USDT_VALUE_FOR_BITMART } = require('../managers/shortOrderManager');
 const Autobot = require('../../models/Autobot'); 
 const AutobotCore = require('../../autobotLogic'); // Para updateGeneralBotState
 

@@ -1,6 +1,6 @@
 // BSB/server/src/utils/coverageLogic.js (CORREGIDO - Lógica de Escalamiento GEOMÉTRICO)
 
-const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('./orderManager');
+const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('../managers/longOrderManager');
 const Autobot = require('../../models/Autobot'); 
 
 /**

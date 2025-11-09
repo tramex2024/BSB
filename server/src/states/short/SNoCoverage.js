@@ -1,7 +1,7 @@
 // BSB/server/src/states/short/SNoCoverage.js (Espera Fondos BTC o Precio de Cierre)
 
 // Importamos la constante del mínimo de BTC para operar en BitMart.
-const { MIN_BTC_SIZE_FOR_BITMART } = require('../../utils/orderManagerShort'); 
+const { MIN_BTC_SIZE_FOR_BITMART } = require('../managers/shortOrderManager'); 
 // No se necesita importar cancelActiveOrders ya que no hay orden pendiente que cancelar.
 
 async function run(dependencies) {

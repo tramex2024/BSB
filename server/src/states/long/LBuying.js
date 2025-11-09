@@ -3,10 +3,10 @@
 // 🛑 Importaciones Esenciales
 const { 
     calculateLongTargets 
-} = require('../../utils/dataManager');
+} = require('../managers/longDataManager');
 const { parseNumber } = require('../../../utils/helpers'); 
 // 💡 NUEVAS IMPORTACIONES REQUERIDAS
-const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../utils/orderManager'); 
+const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../managers/longOrderManager'); 
 // ✅ NUEVA IMPORTACIÓN DEL MÓDULO CONSOLIDATOR
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 

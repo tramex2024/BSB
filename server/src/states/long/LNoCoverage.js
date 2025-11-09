@@ -1,8 +1,8 @@
 // BSB/server/src/states/long/LNoCoverage.js (AJUSTADO)
 
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/orderManager');
-const { calculateLongTargets } = require('../../utils/dataManager');
-// const { cancelActiveOrders } = require('../../utils/orderManager');
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../managers/longOrderManager');
+const { calculateLongTargets } = require('../managers/longDataManager');
+// const { cancelActiveOrders } = require('../managers/longOrderManager');
 
 async function run(dependencies) {
     // Extraemos las funciones y el estado de las dependencias

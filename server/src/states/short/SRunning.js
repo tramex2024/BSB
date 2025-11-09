@@ -1,7 +1,7 @@
 // BSB/server/src/states/short/SRunning.js (Monitoreo de Targets Short)
 
 const { calculateInitialShortState } = require('../../../autobotShortCalculations');
-const { MIN_BTC_SIZE_FOR_BITMART } = require('../../utils/orderManagerShort'); // Usamos la constante Short
+const { MIN_BTC_SIZE_FOR_BITMART } = require('../managers/shortOrderManager'); // Usamos la constante Short
 
 const SSTATE = 'short';
 

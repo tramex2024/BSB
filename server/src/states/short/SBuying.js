@@ -7,7 +7,7 @@ const { 
 } = require('../../../autobotShortCalculations');
 // NOTA: placeInitialSellOrder usa BTC para la venta inicial (lado short)
 // NOTA: placeCoverageBuyOrder usa USDT para la compra de cobertura (lado short)
-const { placeInitialSellOrder, placeCoverageBuyOrder } = require('../../utils/orderManagerShort'); // Usar orderManagerShort
+const { placeInitialSellOrder, placeCoverageBuyOrder } = require('../managers/shortOrderManager'); 
 
 const SSTATE = 'short';
 

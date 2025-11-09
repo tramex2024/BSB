@@ -2,7 +2,7 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 // Importamos la función atómica para consolidar la compra
-const { handleSuccessfulBuy } = require('../../utils/dataManager');
+const { handleSuccessfulBuy } = require('../managers/longDataManager');
 
 /**
  * Monitorea una orden pendiente, consolida la posición si la orden se llena,
