@@ -9,6 +9,8 @@ const MIN_SELL_AMOUNT_BTC = 0.00005;
 const LSTATE = 'long'; 
 // 💡 VALOR DEFINIDO POR EL USUARIO PARA EL TRAILING STOP (0.4%)
 const TRAILING_STOP_PERCENTAGE = 0.4; 
+// 💡 NUEVA CONSTANTE: Comisión de venta
+const SELL_FEE_PERCENT = 0.001; // 0.1%
 
 
 // =========================================================================
@@ -26,27 +28,35 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 	const { config, log, updateBotState, updateLStateData, updateGeneralBotState, creds } = dependencies;
 	
 	try {
-		// 1. CÁLCULO DE CAPITAL Y GANANCIA
-		const { ac: totalBtcSold, ppc } = botStateObj.lStateData;
+		// 1. CÁLCULO DE CAPITAL Y GANANCIA (CORREGIDO PARA USAR AI Y FEE NETO)
+		const { ac: totalBtcSold } = botStateObj.lStateData; // Ya no usamos ppc
+        // 💡 MONTO TOTAL INVERTIDO REAL (incluye fees de compra)
+        const totalUsdtSpent = botStateObj.lStateData.ai;
 		
 		// Usamos filledSize y priceAvg (o price) para asegurar precisión en la venta.
 		const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
 		// Nota: Si la venta fue asumida (Error 50005), usamos totalBtcSold como filledSize para el cálculo.
 		const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || totalBtcSold || 0);
 		
-		const totalUsdtRecovered = filledSize * sellPrice;
-		const totalUsdtSpent = totalBtcSold * ppc;
-		const profit = totalUsdtRecovered - totalUsdtSpent;
+		// MONTO DE VENTA BRUTO (antes de comisión)
+		const totalUsdtRecoveredBRUTO = filledSize * sellPrice;
+        
+        // 🛑 CÁLCULO DE COMISIÓN DE VENTA Y PROFIT NETO
+        const sellFeeUsdt = totalUsdtRecoveredBRUTO * SELL_FEE_PERCENT; 
+        const totalUsdtRecoveredNETO = totalUsdtRecoveredBRUTO - sellFeeUsdt;
+        
+        // PROFIT REAL (Neto)
+		const profitNETO = totalUsdtRecoveredNETO - totalUsdtSpent;
 		
 		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
-		// Sumamos el monto total de USDT recuperado (Capital original + Profit)
-		const newLBalance = botStateObj.lbalance + totalUsdtRecovered;
+		// Sumamos el monto NETO total de USDT recuperado
+		const newLBalance = botStateObj.lbalance + totalUsdtRecoveredNETO;
 		
 		// --- 2a. UPDATE DE ESTADO GENERAL (Punto 1 de Persistencia) ---
 		await updateGeneralBotState({
 			lbalance: newLBalance,
-			// ✅ CORRECCIÓN: Usamos total_profit para la actualización en la DB.
-			total_profit: (botStateObj.total_profit || 0) + profit, // 💡 CAMPO DE BENEFICIO ACUMULADO
+			// ✅ CORRECCIÓN: Usamos el profit NETO
+			total_profit: (botStateObj.total_profit || 0) + profitNETO, // 💡 CAMPO DE BENEFICIO ACUMULADO NETO
 			
 			// 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
 			ltprice: 0,
@@ -55,12 +65,12 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 			lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
 		});
 
-		log(`Cierre de Ciclo Long Exitoso! Ganancia: ${profit.toFixed(2)} USDT.`, 'success');
+		log(`Cierre de Ciclo Long Exitoso! Ganancia NETA: ${profitNETO.toFixed(2)} USDT. Comisión de Venta deducida: ${sellFeeUsdt.toFixed(5)} USDT.`, 'success');
 		log(`LBalance actualizado. Capital operativo disponible: ${newLBalance.toFixed(2)} USDT.`, 'info');
 
 		// 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
 		const resetLStateData = {
-			ac: 0, ppc: 0,
+			ac: 0, ppc: 0, ai: 0, // 🛑 Resetear AI a 0
 			orderCountInCycle: 0, 
 			lastOrder: null, // <--- ESTO ES CRÍTICO
 			pm: 0, pc: 0, pv: 0
@@ -69,25 +79,24 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 		await updateLStateData(resetLStateData);
 
 		// 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
-		if (config.long.stopAtCycle) {
-			// Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
-			log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
-			await updateBotState('STOPPED', LSTATE);
-		} else {
-			// Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
-			
-			// 🛑 CAMBIO CRÍTICO DE ETAPA 1: ELIMINAMOS la llamada a placeFirstBuyOrder
-			// y la importación, forzando la transición a BUYING.
-			
-			log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
-			
-			// 🎯 FORZAMOS LA TRANSICIÓN AL ESTADO CORRECTO
-			await updateBotState('BUYING', LSTATE);
-		}
+		// ... (código sin cambios)
+        if (config.long.stopAtCycle) {
+            // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
+            log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
+            await updateBotState('STOPPED', LSTATE);
+        } else {
+            // Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
+            
+            log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
+            
+            // 🎯 FORZAMOS LA TRANSICIÓN AL ESTADO CORRECTO
+            await updateBotState('BUYING', LSTATE);
+        }
 
 	} catch (error) {
 		// ⚠️ BLOQUE DE RECUPERACIÓN AUTÓNOMA (Sustituye 'ERROR')
-		log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
+		// ... (código sin cambios)
+        log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
 		log('Intentando limpieza de lastOrder y permitiendo reintento en el próximo ciclo.', 'warning');
 		
 		try {
