@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LNoCoverage.js (FINAL CORREGIDO CON RECARGA DE ESTADO)
+// BSB/server/src/states/long/LNoCoverage.js (Modificado para Logging Detallado)
 
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../managers/longOrderManager');
 const { calculateLongTargets } = require('../../../autobotCalculations');
@@ -90,10 +90,12 @@ async function run(dependencies) {
         await updateBotState('BUYING', 'long'); 
     } else {
         let reason = '';
+        // 🛑 MODIFICACIÓN DEL LOG 🛑
         if (currentLBalance < requiredAmount) {
             reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
         } else {
-            reason = `Esperando reposición de Fondos Reales. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${availableUSDT.toFixed(2)})`;
+            // Log modificado para incluir el LBalance
+            reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
         }
         log(reason, 'info'); // Logear para mostrar qué está esperando
     }
