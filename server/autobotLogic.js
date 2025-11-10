@@ -1,9 +1,10 @@
-// BSB/server/autobotLogic.js (FINALIZADO - Soporte Short y Long Completo)
+// BSB/server/autobotLogic.js (Sintaxis Corregida - Versión Final)
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
-const { runShortStrategy, setDependencies: setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
+// 🛑 CORRECCIÓN DE SINTAXIS: Se elimina el duplicado ': setDependencies'
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
 
 // 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
