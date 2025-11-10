@@ -5,6 +5,10 @@ const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
 
+// 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
+const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
+const { monitorAndConsolidateShort: monitorShortSell } = require('./src/states/short/ShortSellConsolidator');
+
 let io;
 
 function setIo(socketIo) {
@@ -143,31 +147,96 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         setLongDeps(dependencies);
         setShortDeps(dependencies); // 💡 AÑADIDO: Inyectar dependencias en el flujo Short
 
+        // ==========================================================
+        // 1. FASE DE CONSOLIDACIÓN (CHECK DE ÓRDENES PENDIENTES)
+        // ==========================================================
+        
+        // Ejecutar Consolidación Long (Monitorea órdenes BUY)
+        if (botState.lStateData.lastOrder?.side === 'buy') {
+            const orderProcessed = await monitorLongBuy(
+                dependencies.botState, 
+                dependencies.config.symbol, 
+                dependencies.log, 
+                dependencies.updateLStateData, 
+                dependencies.updateBotState, 
+                dependencies.updateGeneralBotState
+            );
+            // 🛑 CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
+            if (orderProcessed) {
+                botState = await Autobot.findOne({});
+                dependencies.botState = botState; // Actualizar dependencias
+            }
+        }
+        
+        // 🛑 NUEVO: Ejecutar Consolidación Short (Monitorea órdenes SELL para apertura/cobertura)
+        if (botState.sStateData.lastOrder?.side === 'sell') {
+            const orderProcessed = await monitorShortSell(
+                dependencies.botState, 
+                dependencies.config.symbol, 
+                dependencies.log, 
+                dependencies.updateSStateData, 
+                dependencies.updateBotState, 
+                dependencies.updateGeneralBotState
+            );
+            // 🛑 CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
+            if (orderProcessed) {
+                botState = await Autobot.findOne({});
+                dependencies.botState = botState; // Actualizar dependencias
+            }
+        }
+
+
+        // ==========================================================
+        // 2. FASE DE EJECUCIÓN DE ESTRATEGIAS
+        // ==========================================================
+
         if (botState.lstate !== 'STOPPED') {
+            // 🛑 Ejecutar la lógica Long (Evalúa DCA o TP Sell)
             await runLongStrategy();
         }
-//      if (botState.sstate !== 'STOPPED') {
-//           await runShortStrategy(); // 💡 DESCOMENTADO/AÑADIDO: Ejecutar el ciclo Short
-//      }
+        
+        if (botState.sstate !== 'STOPPED') {
+            // 🛑 DESCOMENTADO/AÑADIDO: Ejecutar la lógica Short (Evalúa DCA o TP Buy)
+            await runShortStrategy(); 
+        }
         
     } catch (error) {
-    log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
+        log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
+    }
 }
-}
-
-
-// ... (balanceCycle, start, stop se mantienen sin cambios)
 
 async function balanceCycle() {
-// ... (código sin cambios)
+    try {
+        const balancesArray = await bitmartService.getBalance({
+            apiKey: process.env.BITMART_API_KEY,
+            secretKey: process.env.BITMART_SECRET_KEY,
+            apiMemo: process.env.BITMART_API_MEMO
+        });
+        
+        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
+        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+
+        if (!usdtBalance || !btcBalance) {
+            log('No se pudieron obtener los balances de la cuenta.', 'error');
+            return;
+        }
+
+        io.emit('wallet-balances', {
+            USDT: { available: parseFloat(usdtBalance.available), frozen: parseFloat(usdtBalance.frozen) },
+            BTC: { available: parseFloat(btcBalance.available), frozen: parseFloat(btcBalance.frozen) }
+        });
+
+    } catch (error) {
+        log(`Error en el ciclo de balances: ${error.message}`, 'error');
+    }
 }
 
 async function start() {
-// ... (código sin cambios)
+    log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
 }
 
 async function stop() {
-// ... (código sin cambios)
+    log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
 }
 
 module.exports = {

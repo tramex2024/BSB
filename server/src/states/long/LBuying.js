@@ -1,15 +1,11 @@
 // BSB/server/src/states/long/LBuying.js (REFACTORIZADO PARA USAR CONSOLIDATOR)
 
-// 🛑 Importaciones Esenciales
-const { 
-    calculateLongTargets 
-} = require('../../../autobotCalculations');
+const { calculateLongTargets } = require('../../../autobotCalculations');
 const { parseNumber } = require('../../../utils/helpers'); 
 // 💡 NUEVAS IMPORTACIONES REQUERIDAS
 const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 
 // ✅ NUEVA IMPORTACIÓN DEL MÓDULO CONSOLIDATOR
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
-
 
 async function run(dependencies) {
     const {
