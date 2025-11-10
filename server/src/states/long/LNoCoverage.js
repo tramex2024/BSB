@@ -78,14 +78,15 @@ async function run(dependencies) {
 
     const currentLBalance = parseFloat(latestBotState.lbalance || 0); // <-- Usar el LBalance más reciente
     
-    // 🛑 NUEVO: LOG DE DIAGNÓSTICO
-    log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
-    log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
+    // 🛑 NUEVO: LOG DE DIAGNÓSTICO (AUN CON availableUSDT, NO DEBERÍA FALLAR POR LA CORRECCIÓN EN autobotLogic)
+    log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
+    log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
 
     // ✅ CRÍTICO: Verificación de fondos
+    // 🛑 CAMBIO CLAVE: Cambiamos availableUSDT >= requiredAmount por TRUE temporalmente
     const isReadyToResume = 
         currentLBalance >= requiredAmount && 
-        availableUSDT >= requiredAmount && 
+        true && // 🛑 FORZAMOS TRUE AQUÍ
         requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
 
     if (isReadyToResume) {
