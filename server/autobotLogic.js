@@ -3,7 +3,7 @@
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
+const { runShortStrategy, setDependencies: setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
 
 // 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
@@ -24,12 +24,11 @@ function log(message, type = 'info') {
 
 /**
  * Función para obtener el estado actual del bot directamente de la base de datos.
- * 🛑 CRÍTICO para LNoCoverage.js 
+ * 🛑 CRÍTICO para LNoCoverage.js
  */
 async function getBotState() {
     return Autobot.findOne({});
 }
-
 
 /**
  * Función que actualiza únicamente el estado principal del bot (lstate/sstate) y EMITE AL FRONTEND.
@@ -124,8 +123,18 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         }
 
         // Obtener saldos reales de la API
-        const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
+        let availableUSDT = 0;
+        let availableBTC = 0;
 
+        try {
+            const balances = await bitmartService.getAvailableTradingBalances();
+            // 🛑 CORRECCIÓN DE ROBUSTEZ: Asegurar que las variables son números o 0
+            availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); // Manejo de mayúsculas/minúsculas
+            availableBTC = parseFloat(balances.availableBTC || 0);
+        } catch (error) {
+            log(`Advertencia: No se pudieron obtener los balances de trading. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
+        }
+        
         const dependencies = {
             log,
             io,
@@ -149,7 +158,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             updateSStateData, 
             updateGeneralBotState,
             
-            // 🛑 CRÍTICO: Inyectar la función de recarga del estado
+            // 🛑 CRÍTICO: Inyectar la función de recarga del estado para LNoCoverage.js
             getBotState,
             
             // 🛑 CORRECCIÓN CLAVE: Incluir la dependencia externa si se pasó (como getBotState)

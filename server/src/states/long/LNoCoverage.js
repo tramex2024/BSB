@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LNoCoverage.js (Modificado para Logging Detallado)
+// BSB/server/src/states/long/LNoCoverage.js (FINAL CORREGIDO CON RECARGA Y LOGS DETALLADOS)
 
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../managers/longOrderManager');
 const { calculateLongTargets } = require('../../../autobotCalculations');
@@ -27,15 +27,14 @@ async function run(dependencies) {
     // --- 2. VERIFICACIÓN DE TRANSICIÓN A COMPRA (Fondos recuperados) ---
     
     // 🛑 RECUPERACIÓN DE ESTADO MÁS RECIENTE
-    // Recargamos el estado para obtener el lbalance más actual, en caso de que el usuario lo haya modificado
-    // o haya habido un cierre de ciclo justo antes.
+    // Recargamos el estado para obtener el lbalance más actual (tu 25 USDT)
     let latestBotState = botState;
     if (getBotState) {
         try {
             // Se realiza la recarga de la DB
             latestBotState = await getBotState();
         } catch (error) {
-            log(`ERROR CRÍTICO: No se pudo recargar el estado de la DB. Usando estado obsoleto. Causa: ${error.message}`, 'error');
+            log(`ERROR CRÍTICO: No se pudo recargar el estado de la DB. Usando estado inyectado. Causa: ${error.message}`, 'error');
             // Continúa usando el 'botState' inyectado (obsoleto) si la recarga falla.
         }
     }
@@ -94,11 +93,11 @@ async function run(dependencies) {
         await updateBotState('BUYING', 'long'); 
     } else {
         let reason = '';
-        // 🛑 MODIFICACIÓN DEL LOG 🛑
+        // 🛑 LOG MODIFICADO para ser más informativo y robusto
         if (currentLBalance < requiredAmount) {
             reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
         } else {
-            // Log modificado para incluir el LBalance
+            // Ahora availableUSDT está garantizado de ser un número (o 0) gracias a la corrección en autobotLogic.js
             reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
         }
         log(reason, 'info'); // Logear para mostrar qué está esperando
