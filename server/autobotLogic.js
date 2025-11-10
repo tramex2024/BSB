@@ -103,7 +103,7 @@ async function updateGeneralBotState(fieldsToUpdate) {
 // 🛑 CORRECCIÓN: Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     try {
-        // 🛑 CRÍTICO: Recargar el botState ANTES de cada ciclo.
+        // 🛑 CRÍTICO: Recargar el botState ANTES de cada ciclo. (CORRECTO)
         let botState = await Autobot.findOne({});
         const currentPrice = parseFloat(priceFromWebSocket); 
 
@@ -190,14 +190,27 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         // 2. FASE DE EJECUCIÓN DE ESTRATEGIAS
         // ==========================================================
 
+        let strategyExecuted = false;
+
         if (botState.lstate !== 'STOPPED') {
-            // 🛑 Ejecutar la lógica Long (Evalúa DCA o TP Sell)
             await runLongStrategy();
+            strategyExecuted = true;
         }
         
+        // 🛑 BLOQUE DE RECARGA ELIMINADO DE AQUÍ
+
         if (botState.sstate !== 'STOPPED') {
             // 🛑 DESCOMENTADO/AÑADIDO: Ejecutar la lógica Short (Evalúa DCA o TP Buy)
             await runShortStrategy(); 
+            strategyExecuted = true;
+        }
+        
+        // ✅ AÑADIDO: Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
+        // Esto captura la actualización de lastOrder hecha en LongOrderManager.js o ShortOrderManager.js
+        if (strategyExecuted) {
+            botState = await Autobot.findOne({});
+            dependencies.botState = botState; // Actualizar la referencia
+            log('Estado del bot recargado tras ejecución de estrategia para sincronización.', 'debug');
         }
         
     } catch (error) {

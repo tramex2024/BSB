@@ -25,7 +25,7 @@ const SELL_FEE_PERCENT = 0.001; // 0.1%
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 	// Aseguramos la extracción de todas las dependencias necesarias
-	const { config, log, updateBotState, updateLStateData, updateGeneralBotState, creds } = dependencies;
+	const { config, log, updateBotState, updateLStateData, updateGeneralBotState } = dependencies;
 	
 	try {
 		// 1. CÁLCULO DE CAPITAL Y GANANCIA (CORREGIDO PARA USAR AI Y FEE NETO)
@@ -79,7 +79,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 		await updateLStateData(resetLStateData);
 
 		// 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
-		// ... (código sin cambios)
         if (config.long.stopAtCycle) {
             // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
             log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
@@ -95,7 +94,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 
 	} catch (error) {
 		// ⚠️ BLOQUE DE RECUPERACIÓN AUTÓNOMA (Sustituye 'ERROR')
-		// ... (código sin cambios)
         log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
 		log('Intentando limpieza de lastOrder y permitiendo reintento en el próximo ciclo.', 'warning');
 		
@@ -117,6 +115,8 @@ async function run(dependencies) {
 	// =================================================================
 	// === [ BLOQUE CRÍTICO DE RECUPERACIÓN DE SERVIDOR ] ================
 	// =================================================================
+    // 🛑 Nota: El Consolidator para la VENTA NO existe, por lo que esta lógica
+    // de recuperación aquí es CRÍTICA. Mantenemos el bloque.
 	const lastOrder = botState.lStateData.lastOrder;
 	const SYMBOL = config.symbol || 'BTC_USDT';
 
@@ -125,6 +125,7 @@ async function run(dependencies) {
 
 		try {
 			// 1. Consultar el estado real de la orden en BitMart
+			// 🛑 CORRECCIÓN: getOrderDetail necesita creds explícitamente si no está en el service. Asumo que está en el service y no necesita creds.
 			const orderDetails = await getOrderDetail(SYMBOL, lastOrder.order_id);
 
 			// Verifica si la orden fue llenada, incluso si luego fue cancelada (parcial)
@@ -136,7 +137,7 @@ async function run(dependencies) {
 				log(`Recuperación exitosa: La orden ID ${lastOrder.order_id} se completó durante el tiempo de inactividad.`, 'success');
 				
 				// Las dependencias necesarias para handleSuccessfulSell
-				const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
+				const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
 				
 				// 2. Procesar la venta exitosa (cierra ciclo, recupera capital, resetea estado)
 				await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
@@ -166,7 +167,7 @@ async function run(dependencies) {
 			await updateLStateData({ 'lastOrder': null }); 
 			
 			// 2. Ejecutar el handler de éxito para cerrar el ciclo
-			const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState };
+			const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState }; // Creds ya no son necesarios
 			await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies); 
 			
 			return; // Finaliza la ejecución para el siguiente ciclo.
@@ -183,8 +184,9 @@ async function run(dependencies) {
 	// El código de abajo es la Lógica Normal de Trailing Stop
 
 	// Se definen las dependencias que necesitará el handler al ejecutarse (al llenar la orden de venta)
-	const handlerDependencies = { config, creds, log, updateBotState, updateLStateData, updateGeneralBotState, botState };
-
+	// 🛑 Nota: Ya no se pasa `handleSuccessfulSell` como argumento a `placeSellOrder` porque esa función fue simplificada.
+	// La lógica de cierre debe hacerse en el Consolidator (si existiera) o en este bloque de recuperación.
+	
 	const { ac: acSelling, pm } = botState.lStateData;
 
 	log("Estado Long: SELLING. Gestionando ventas...", 'info');
@@ -215,10 +217,12 @@ async function run(dependencies) {
 	if (currentPrice <= newPc) {
 		log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
 		
-		// LLAMADA: placeSellOrder coloca la orden y luego llama a handleSuccessfulSell al llenarse.
-		await placeSellOrder(config, creds, acSelling, log, handleSuccessfulSell, botState, handlerDependencies);
+		// 🛑 LLAMADA CORREGIDA a placeSellOrder (solo necesita config, botState, sellAmount, log)
+		// Ya no pasamos el handler, ya que la orden solo debe BLOQUEAR el ciclo.
+		await placeSellOrder(config, botState, acSelling, log); 
 
-		// Nota: El estado PERMANECE en SELLING hasta que la orden se confirme como FILLED (monitoreo superior).
+		// Nota: El estado PERMANECE en SELLING, pero con lastOrder activo, el BLOQUE CRÍTICO de arriba
+		// se encargará de monitorear y llamar a handleSuccessfulSell en el próximo ciclo.
 	}
 } else if (acSelling > 0 && acSelling < MIN_SELL_AMOUNT_BTC) {
 	// Caso de advertencia: Si tenemos BTC pero es muy poco para vender.
