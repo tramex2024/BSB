@@ -129,11 +129,17 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 
         try {
             const balances = await bitmartService.getAvailableTradingBalances();
-            // 🛑 CORRECCIÓN DE ROBUSTEZ: Asegurar que las variables son números o 0
-            availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); // Manejo de mayúsculas/minúsculas
-            availableBTC = parseFloat(balances.availableBTC || 0);
+            // 🛑 CORRECCIÓN DE ROBUSTEZ MEJORADA: Verificamos si balances es un objeto antes de acceder a sus propiedades
+            if (balances && typeof balances === 'object') {
+                // Aseguramos que las variables son números o 0, manejando diferentes casos de escritura
+                availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); 
+                availableBTC = parseFloat(balances.availableBTC || 0);
+            } else {
+                log(`Advertencia: La API de BitMart devolvió balances inválidos. Usando 0.00 como saldo real.`, 'warning');
+            }
         } catch (error) {
-            log(`Advertencia: No se pudieron obtener los balances de trading. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
+            // 🛑 CRÍTICO: Si falla la llamada a la API, availableUSDT y availableBTC permanecen en 0
+            log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
         }
         
         const dependencies = {
