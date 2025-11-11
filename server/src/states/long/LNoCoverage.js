@@ -81,17 +81,14 @@ async function run(dependencies) {
 
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL
-    // Condición simplificada y validada
-    if (currentLBalance >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
-        try {
-            // 🛑 CRÍTICO 3: Transición ULTRA-SILENCIOSA para evitar interrupción
-            await updateBotState('BUYING', 'long');
-            
-            // log de éxito ELIMINADO
-
-        } catch (error) {
-            log(`ERROR CRÍTICO: Fallo al actualizar el estado a BUYING. Causa: ${error.message}`, 'error');
-        }
+    // CÓDIGO CORREGIDO PARA TRANSICIÓN ROBUSTA
+if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+    try {
+        log(`Balance suficiente (${currentLBalance} asignado, ${availableUSDT} real). Transicionando a BUYING.`, 'success');
+        await updateBotState('BUYING', 'long');
+    } catch (error) {
+        log(`ERROR CRÍTICO: Fallo al actualizar el estado a BUYING. Causa: ${error.message}`, 'error');
+    }
     } else {
         // 🛑 LÓGICA DE ESPERA
         let reason = '';
