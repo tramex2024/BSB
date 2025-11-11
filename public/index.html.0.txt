@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="/images/bsb-logo.png" type="image/png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSB - Bitmart Spot Bots</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for order list */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: #374151; /* gray-700 */
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: #6b7280; /* gray-500 */
+            border-radius: 4px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af; /* gray-400 */
+        }
+
+        /* Active tab style for main navigation (DASHBOARD, TESTBOT, etc.) */
+        .header-middle .nav-tab.active {
+            border-bottom: 2px solid white;
+        }
+        .nav-tab {
+            padding: 10px 15px;
+            text-decoration: none;
+            color: #ccc;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tab:hover {
+            color: white;
+        }
+
+        /* Active tab style for order history tabs (Opened, Filled, Cancelled, All) */
+        .autobot-tabs button.active-tab {
+            border-color: white !important;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Modal styles */
+        .modal, #logout-modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content, #logout-modal > div {
+            background-color: #1f2937; /* gray-800 */
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 90%;
+            position: relative;
+        }
+
+        .close-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: white;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body class="dark-mode bg-gray-900 text-white">
+    <header class="fixed-header">
+        <div class="header-left">
+            <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
+            <span class="app-name">Bitmart Spot Bot</span>
+        </div>
+        <nav class="header-middle">
+            <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
+            <a href="#testbot" class="nav-tab" data-tab="testbot">TESTBOT</a>
+            <a href="#autobot" class="nav-tab" data-tab="autobot">AUTOBOT</a>
+            <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
+        </nav>
+        <div class="header-right">
+            <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i>
+            <i class="fas fa-globe icon" title="Language"></i>
+            <i class="fas fa-users icon" title="Users"></i>
+            <i class="fas fa-cog icon" title="Settings"></i>
+            <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
+            <i class="fas fa-key icon" id="api-key-icon" title="API"></i>
+            <i class="fas fa-envelope icon" title="Contact"></i>
+        </div>
+    </header>
+
+    <div id="log-bar" class="log-bar">
+        <p id="log-message">Waiting for bot actions...</p>
+    </div>
+
+    <main id="main-content" class="content">
+	<div id="logged-out-view" class="tab-content active p-6 text-center">
+        	<h2 class="text-2xl font-bold mb-4">Welcome to Bitmart Spot Bot</h2>
+        	<p class="text-gray-400 mb-6">Please log in to manage your trading bots and view your dashboard.</p>
+        	<button id="login-cta-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition duration-150 ease-in-out">
+            Log In Now
+        	</button>
+    	</div>
+    </main>
+
+    <div id="auth-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h3>Sign In / Sign Up</h3>
+            
+            <form id="auth-form">
+                <div id="email-section">
+                    <input type="email" id="email" placeholder="Email" required>
+                </div>
+                
+                <div id="token-section" style="display: none;">
+                    <input type="text" id="token" name="token" placeholder="Token (from email)">
+                </div>
+                
+                <button type="submit" id="auth-button">Continue</button>
+            </form>
+            <p id="auth-message"></p>
+        </div>
+    </div>
+
+    <div id="api-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>BitMart API Configuration</h2>
+            <form id="api-form">
+                <label for="api-key">API Key:</label>
+                <input type="text" id="api-key" placeholder="Your API Key" required>
+
+                <label for="secret-key">Secret Key:</label>
+                <input type="password" id="secret-key" placeholder="Your Secret Key" required>
+
+                <label for="api-memo">API Memo (Optional):</label>
+                <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
+
+                <button type="submit" id="validate-api-button">VALIDATE</button>
+                <p id="api-status-message" class="message-text"></p>
+                <div id="connection-indicator" class="indicator-circle"></div>
+                <span id="connection-text" class="indicator-text"></span>
+            </form>
+        </div>
+    </div>
+	
+    <div id="logout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background-color: rgba(0, 0, 0, 0.5);">
+        <div class="bg-gray-800 rounded-lg shadow-lg p-6 max-w-sm w-full text-white">
+            <h2 class="text-xl font-bold mb-4 text-center">Confirm Logout</h2>
+            <p class="text-gray-400 text-center mb-6">Are you sure you want to log out?</p>
+            <div class="flex justify-around">
+                <button id="confirm-logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+                    Logout
+                </button>
+                <button id="cancel-logout-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="/js/main.js"></script>
+</body>
+</html>
