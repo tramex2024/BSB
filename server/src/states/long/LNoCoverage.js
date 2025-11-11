@@ -4,15 +4,14 @@ const { MIN_USDT_VALUE_FOR_BITMART } = require('../../managers/longOrderManager'
 const { calculateLongTargets } = require('../../../autobotCalculations');
 
 async function run(dependencies) {
-    // Extraemos las funciones y el estado de las dependencias
+    // 🛑 CORRECCIÓN: Quitamos availableUSDT de la desestructuración para evitar errores de undefined
     const { 
         botState, currentPrice, config, log, 
         updateBotState, updateLStateData,
-        getBotState 
+        getBotState 
     } = dependencies;
-
-   // 🛑 CORRECCIÓN CRÍTICA: Se define localmente para asegurar que es un número (o 0)
-    // Esto previene el error 'toFixed' si el ciclo principal falló al obtener el balance real.
+    
+    // ✅ CORRECCIÓN ROBUSTA: Garantizamos que availableUSDT siempre es un número
     const availableUSDT = parseFloat(dependencies.availableUSDT || 0);
 
     log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
@@ -31,24 +30,20 @@ async function run(dependencies) {
     // --- 2. VERIFICACIÓN DE TRANSICIÓN A COMPRA (Fondos recuperados) ---
     
     // 🛑 RECUPERACIÓN DE ESTADO MÁS RECIENTE
-    // Recargamos el estado para obtener el lbalance más actual (tu 25 USDT)
     let latestBotState = botState;
     if (getBotState) {
         try {
-            // Se realiza la recarga de la DB
             latestBotState = await getBotState();
         } catch (error) {
             log(`ERROR CRÍTICO: No se pudo recargar el estado de la DB. Usando estado inyectado. Causa: ${error.message}`, 'error');
-            // Continúa usando el 'botState' inyectado (obsoleto) si la recarga falla.
         }
     }
     
-    // ✅ NUEVO LOG DE VERIFICACIÓN CRÍTICA (Tu sugerencia)
-    log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${latestBotState.lbalance} | Req. Amount: ${requiredAmount}`, 'info');
-    
     // INICIO DE LA LÓGICA DE RECALCULO FORZADO
-    // Usamos latestBotState para obtener la información más reciente
-    let requiredAmount = latestBotState.lStateData.requiredCoverageAmount || 0;
+    
+    // ✅ CORRECCIÓN CRÍTICA: Inicialización ÚNICA y SEGURA de requiredAmount.
+    // Lo inicializamos con el valor guardado o, si es la primera vez, con el purchaseUsdt configurado.
+    let requiredAmount = latestBotState.lStateData.requiredCoverageAmount || config.long.purchaseUsdt || 0;
     
     // Forzamos el recalculo si hay una posición abierta (ac > 0). 
     if (ac > 0 && latestBotState.lStateData.orderCountInCycle >= 0) { 
@@ -61,7 +56,7 @@ async function run(dependencies) {
             config.long.size_var,
             config.long.purchaseUsdt,
             latestBotState.lStateData.orderCountInCycle,
-            latestBotState.lbalance // <-- Usar el lbalance más reciente
+            latestBotState.lbalance 
         );
         
         // Actualizamos la variable local con el valor recalculado
@@ -76,21 +71,20 @@ async function run(dependencies) {
         
         log(`Required Amount corregido/verificado a ${requiredAmount.toFixed(2)} USDT.`, 'warning');
     }
-    // === LÓGICA AGREGADA: CORRECCIÓN DEL ESTADO INICIAL (ac = 0) ===
-    else if (ac === 0) {
-        requiredAmount = config.long.purchaseUsdt;
-        log(`Posición reseteada (AC=0). Monto Requerido forzado a: ${requiredAmount.toFixed(2)} USDT (Primera Compra).`, 'info');
-    }
+    // 🛑 ELIMINACIÓN DE: else if (ac === 0) ya que la inicialización lo cubre.
     // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
-
+    
     const currentLBalance = parseFloat(latestBotState.lbalance || 0); // <-- Usar el LBalance más reciente
-        
-    // 🛑 LOG DE DIAGNÓSTICO (Ya no fallará por toFixed)
+    
+    // ✅ TU LOG DE DIAGNÓSTICO (Aparecerá ANTES de cualquier error)
+    log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${requiredAmount.toFixed(2)}`, 'info');
+
+    // 🛑 NUEVO: LOG DE DIAGNÓSTICO DETALLADO (Ya no fallará por toFixed)
     log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
     log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
 
     // ✅ CRÍTICO: Verificación de fondos
-    // 🛑 CAMBIO CLAVE: Cambiamos availableUSDT >= requiredAmount por TRUE temporalmente
+    // 🛑 availableUSDT se ha forzado a TRUE temporalmente
     const isReadyToResume = 
         currentLBalance >= requiredAmount && 
         true && // 🛑 FORZAMOS TRUE AQUÍ para saltar el requisito de BitMart
@@ -101,11 +95,11 @@ async function run(dependencies) {
         await updateBotState('BUYING', 'long'); 
     } else {
         let reason = '';
-        // 🛑 LOG MODIFICADO para ser más informativo y robusto
+        // 🛑 LOG MODIFICADO para ser más informativo y robusto
         if (currentLBalance < requiredAmount) {
             reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
         } else {
-            // Ahora availableUSDT está garantizado de ser un número (o 0) gracias a la corrección en autobotLogic.js
+            // availableUSDT ahora está garantizado de ser un número (o 0)
             reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
         }
         log(reason, 'info'); // Logear para mostrar qué está esperando
