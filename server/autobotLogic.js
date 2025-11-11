@@ -135,6 +135,9 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
         }
         
+        // 🛑 INSERTAR ESTE LOG DE DIAGNÓSTICO AQUÍ
+log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la API: ${availableUSDT.toFixed(2)}`, 'info');
+
         const dependencies = {
             log,
             io,
