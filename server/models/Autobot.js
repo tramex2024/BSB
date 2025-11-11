@@ -4,16 +4,10 @@ const mongoose = require('mongoose');
 
 // =========================================================================
 // ESQUEMA DE DATOS DE ESTRATEGIA (ÚNICO para Long y Short)
-// * ppc: Precio Promedio de Compra (Long)
-// * pps: Precio Promedio de Venta (Short)
-// * ac: Cantidad Acumulada de BTC/Activo
-// * pm: Price Maximum (Long) / Price Minimum (Short)
-// * pc: Price Cover/Cutoff (Trailing Stop/Protection)
-// * ai: Amount Invested
 // =========================================================================
 const strategyDataSchema = new mongoose.Schema({
     ppc: { type: Number, default: 0 }, // Long: Precio Promedio de Compra (PPC) | Short: Precio Promedio de Short (PPS)
-    ac: { type: Number, default: 0 }, // Cantidad Acumulada de BTC/Activo    
+    ac: { type: Number, default: 0 }, // Cantidad Acumulada de BTC/Activo    
     ai: { type: Number, default: 0 }, // Monto de usdt invertido en compras activas para calcular ganancias.
     orderCountInCycle: { type: Number, default: 0 },
     lastOrder: { type: Object, default: null },
@@ -52,13 +46,19 @@ const configSchema = new mongoose.Schema({
 // ESQUEMA PRINCIPAL DE AUTOBOT
 // =========================================================================
 const autobotSchema = new mongoose.Schema({
-    
+    
     total_profit: { type: Number, default: 0.00 },
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
-    lbalance: { type: Number, default: 0.00 },
-    sbalance: { type: Number, default: 0.00 },
+    lbalance: { type: Number, default: 0.00 }, // Balance Asignado (Lógica del Bot)
+    sbalance: { type: Number, default: 0.00 }, // Balance Asignado (Lógica del Bot)
     
+    // 💡 CAMPOS DE CACHÉ DE BALANCE REAL DE EXCHANGE (PASO 1)
+    lastAvailableUSDT: { type: Number, default: 0.00 },
+    lastAvailableBTC: { type: Number, default: 0.00 },
+    lastBalanceCheck: { type: Date, default: Date.now },
+    // ----------------------------------------------------
+
     ltprice: { type: Number, default: 0.00 }, 
     stprice: { type: Number, default: 0.00 }, 
 

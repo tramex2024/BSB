@@ -99,6 +99,48 @@ async function updateGeneralBotState(fieldsToUpdate) {
     }
 }
 
+/**
+ * [CICLO LENTO - API] Llama a la API de BitMart (una vez cada 30-60s) 
+ * y actualiza los balances reales de USDT y BTC en la base de datos (cache).
+ * ESTE DEBE SER EL ÚNICO LUGAR DONDE SE LLAMA A bitmartService.getBalances().
+ */
+async function slowBalanceCacheUpdate() {
+    try {
+        // La única llamada a la API de BitMart
+        const balances = await bitmartService.getBalances();
+        
+        // 1. Extraer balances (asumiendo estructura: { USDT: { available: x }, BTC: { available: y } })
+        const availableUSDT = parseFloat(balances.USDT?.available || 0);
+        const availableBTC = parseFloat(balances.BTC?.available || 0);
+
+        // 2. Guardar el valor en los campos de caché de la base de datos
+        const updatedBotState = await Autobot.findOneAndUpdate(
+            {}, 
+            {
+                $set: { 
+                    lastAvailableUSDT: availableUSDT, 
+                    lastAvailableBTC: availableBTC,
+                    lastBalanceCheck: new Date() 
+                }
+            },
+            { new: true, upsert: true } // new: true devuelve el doc actualizado; upsert: true crea si no existe
+        );
+
+        // 3. Emitir los nuevos balances reales a la UI a través de Socket.IO (Ciclo LENTO)
+        // Esto le da al usuario una actualización de balance real cada 30-60 segundos.
+        if (updatedBotState && io) {
+             io.sockets.emit('balance-real-update', { 
+                lastAvailableUSDT: updatedBotState.lastAvailableUSDT,
+                lastAvailableBTC: updatedBotState.lastAvailableBTC,
+                lastBalanceCheck: updatedBotState.lastBalanceCheck
+            });
+        }
+        
+    } catch (error) {
+        // Si hay un error 429, solo registramos. La lógica del bot usará el valor VECES de la DB.
+        console.error("[SLOW BALANCE CACHE] Error al obtener o guardar balances de BitMart (429 esperado):", error.message);
+    }
+}
 
 // Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
@@ -283,5 +325,6 @@ module.exports = {
     updateBotState,
     updateLStateData,
     updateSStateData,
-    updateGeneralBotState
+    updateGeneralBotState,
+    slowBalanceCacheUpdate
 };

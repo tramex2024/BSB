@@ -221,12 +221,20 @@ io.on('connection', (socket) => {
     });
 });
 
-// 🛑 CORRECCIÓN #2: Aumentamos el intervalo de polling para evitar HTTP 429
+// 🛑 MODIFICACIÓN DEL BUCLE LENTO: Llama a la API solo para actualizar la CACHÉ en DB
+// Frecuencia segura para BitMart: 45 segundos (45000ms)
+setInterval(async () => {
+    // ESTA ES LA ÚNICA LLAMADA A LA API DE BITMART
+    await autobotLogic.slowBalanceCacheUpdate();
+}, 15000);
+
+/* // 🛑 CORRECCIÓN #2: Aumentamos el intervalo de polling para evitar HTTP 429
 setInterval(async () => {
     // LLama al nuevo ciclo lento para obtener y emitir balances a la UI.
     await autobotLogic.balanceCycle();
 }, 15000); // 15,000ms = 15 segundos. Intervalo más seguro.
 // --------------------------------------------------------------------------
+*/
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
