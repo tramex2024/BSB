@@ -8,13 +8,14 @@ async function run(dependencies) {
     const { 
         botState, currentPrice, config, log, 
         updateBotState, updateLStateData,
-        getBotState // <-- CRÍTICO: Inyectar la función de recarga
+        getBotState 
     } = dependencies;
 
-   // 🛑 CORRECCIÓN CRÍTICA: Asegurar que availableUSDT es un número o 0
-    const availableUSDT = parseFloat(dependencies.availableUSDT || 0);    
+   // 🛑 CORRECCIÓN CRÍTICA: Se define localmente para asegurar que es un número (o 0)
+    // Esto previene el error 'toFixed' si el ciclo principal falló al obtener el balance real.
+    const availableUSDT = parseFloat(dependencies.availableUSDT || 0);
 
-log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
+    log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
 
     const { ac } = botState.lStateData;
     
