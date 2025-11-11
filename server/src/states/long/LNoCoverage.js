@@ -74,33 +74,31 @@ async function run(dependencies) {
     // 🛑 ELIMINACIÓN DE: else if (ac === 0) ya que la inicialización lo cubre.
     // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
     
-    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // <-- Usar el LBalance más reciente
+    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // 11.00
     
-    // 🛑 SE ELIMINAN LAS LÍNEAS DE LOG DE DIAGNÓSTICO DETALLADO QUE CAUSAN EL ERROR 'toFixed'
-    // log(`DIAGNOSTICO NO_COVERAGE: LBal=...
-    // log(`Condiciones: LBalOK: ...
-
-    // ✅ CRÍTICO: Verificación de fondos
-    // availableUSDT se ha forzado a TRUE temporalmente
-    const isReadyToResume = 
-        currentLBalance >= requiredAmount && 
-        true && // 🛑 FORZAMOS TRUE AQUÍ para saltar el requisito de BitMart
-        requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
-
-    if (isReadyToResume) {
-        log(`Fondos (LBalance) disponibles. Monto requerido (${requiredAmount.toFixed(2)} USDT). Volviendo a BUYING.`, 'success');
-        await updateBotState('BUYING', 'long');
+    // 🛑 ATENCIÓN: Esta es la condición COMPLETA y CORRECTA.
+    // Si esta condición es TRUE, el bot debe transicionar.
+    if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+        
+        log(`Fondos (LBalance: ${currentLBalance.toFixed(2)} y Real: ${availableUSDT.toFixed(2)}) recuperados/disponibles. Monto requerido (${requiredAmount.toFixed(2)} USDT). Volviendo a BUYING.`, 'success');
+        
+        // ✅ TRANSICIÓN: Ejecutamos el estado de transición
+        await updateBotState('BUYING', 'long'); 
     } else {
+        // 🛑 LOG DE ESPERA: Solo se ejecuta si la condición de arriba es FALSE.
         let reason = '';
-        // 🛑 LOG MODIFICADO para ser más informativo y robusto
+        
         if (currentLBalance < requiredAmount) {
             reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
-        } else {
-            // availableUSDT ahora está garantizado de ser un número (o 0)
+        } else if (availableUSDT < requiredAmount) {
             reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
-        }
-        log(reason, 'info'); // Logear para mostrar qué está esperando
+        } else {
+             // Si no es LBalance ni Real, el problema es el valor MÍNIMO.
+             reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${requiredAmount.toFixed(2)}`;
+         }
+        log(reason, 'info'); 
     }
-}
+    // 🛑 REMOVER la variable isReadyToResume si aún existe en tu código.
 
+}
 module.exports = { run };
