@@ -76,15 +76,12 @@ async function run(dependencies) {
     
     const currentLBalance = parseFloat(latestBotState.lbalance || 0); // <-- Usar el LBalance más reciente
     
-    // ✅ TU LOG DE DIAGNÓSTICO (Aparecerá ANTES de cualquier error)
-    log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${requiredAmount.toFixed(2)}`, 'info');
-
-    // 🛑 NUEVO: LOG DE DIAGNÓSTICO DETALLADO (Ya no fallará por toFixed)
-    log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
-    log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
+    // 🛑 SE ELIMINAN LAS LÍNEAS DE LOG DE DIAGNÓSTICO DETALLADO QUE CAUSAN EL ERROR 'toFixed'
+    // log(`DIAGNOSTICO NO_COVERAGE: LBal=...
+    // log(`Condiciones: LBalOK: ...
 
     // ✅ CRÍTICO: Verificación de fondos
-    // 🛑 availableUSDT se ha forzado a TRUE temporalmente
+    // availableUSDT se ha forzado a TRUE temporalmente
     const isReadyToResume = 
         currentLBalance >= requiredAmount && 
         true && // 🛑 FORZAMOS TRUE AQUÍ para saltar el requisito de BitMart
@@ -92,7 +89,7 @@ async function run(dependencies) {
 
     if (isReadyToResume) {
         log(`Fondos (LBalance) disponibles. Monto requerido (${requiredAmount.toFixed(2)} USDT). Volviendo a BUYING.`, 'success');
-        await updateBotState('BUYING', 'long'); 
+        await updateBotState('BUYING', 'long');
     } else {
         let reason = '';
         // 🛑 LOG MODIFICADO para ser más informativo y robusto
