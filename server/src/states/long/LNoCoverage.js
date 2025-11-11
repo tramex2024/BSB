@@ -1,17 +1,15 @@
-// BSB/server/src/states/long/LNoCoverage.js (FINAL CORREGIDO CON RECARGA Y LOGS DETALLADOS)
-
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../managers/longOrderManager');
 const { calculateLongTargets } = require('../../../autobotCalculations');
 
 async function run(dependencies) {
-    // 🛑 CORRECCIÓN: Quitamos availableUSDT de la desestructuración para evitar errores de undefined
+    // 🛑 CORRECCIÓN: Quitamos availableUSDT de la desestructuración y lo definimos localmente
     const { 
         botState, currentPrice, config, log, 
         updateBotState, updateLStateData,
         getBotState 
     } = dependencies;
     
-    // ✅ CORRECCIÓN ROBUSTA: Garantizamos que availableUSDT siempre es un número
+    // ✅ CRÍTICO: Garantizamos que availableUSDT siempre es un número (0 si falla la API)
     const availableUSDT = parseFloat(dependencies.availableUSDT || 0);
 
     log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
@@ -29,7 +27,7 @@ async function run(dependencies) {
 
     // --- 2. VERIFICACIÓN DE TRANSICIÓN A COMPRA (Fondos recuperados) ---
     
-    // 🛑 RECUPERACIÓN DE ESTADO MÁS RECIENTE
+    // 🛑 RECUPERACIÓN DE ESTADO MÁS RECIENTE (Para ver el 11 USDT inyectado)
     let latestBotState = botState;
     if (getBotState) {
         try {
@@ -42,7 +40,7 @@ async function run(dependencies) {
     // INICIO DE LA LÓGICA DE RECALCULO FORZADO
     
     // ✅ CORRECCIÓN CRÍTICA: Inicialización ÚNICA y SEGURA de requiredAmount.
-    // Lo inicializamos con el valor guardado o, si es la primera vez, con el purchaseUsdt configurado.
+    // Inicializamos con el valor guardado o el valor de la primera compra (config.long.purchaseUsdt).
     let requiredAmount = latestBotState.lStateData.requiredCoverageAmount || config.long.purchaseUsdt || 0;
     
     // Forzamos el recalculo si hay una posición abierta (ac > 0). 
@@ -71,21 +69,26 @@ async function run(dependencies) {
         
         log(`Required Amount corregido/verificado a ${requiredAmount.toFixed(2)} USDT.`, 'warning');
     }
-    // 🛑 ELIMINACIÓN DE: else if (ac === 0) ya que la inicialización lo cubre.
     // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
     
-    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // 11.00
+    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // <-- Usar el LBalance más reciente
     
-    // 🛑 ATENCIÓN: Esta es la condición COMPLETA y CORRECTA.
+    // ✅ Log de diagnóstico (Tu sugerencia, ahora funcional)
+    log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${requiredAmount.toFixed(2)}`, 'info');
+
+    // 🛑 Log de diagnóstico detallado (Funcional gracias a la corrección de availableUSDT)
+    log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
+    log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
+
+    // ✅ LÓGICA DE TRANSICIÓN FINAL
     // Si esta condición es TRUE, el bot debe transicionar.
     if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
         
         log(`Fondos (LBalance: ${currentLBalance.toFixed(2)} y Real: ${availableUSDT.toFixed(2)}) recuperados/disponibles. Monto requerido (${requiredAmount.toFixed(2)} USDT). Volviendo a BUYING.`, 'success');
         
-        // ✅ TRANSICIÓN: Ejecutamos el estado de transición
         await updateBotState('BUYING', 'long'); 
     } else {
-        // 🛑 LOG DE ESPERA: Solo se ejecuta si la condición de arriba es FALSE.
+        // 🛑 LÓGICA DE ESPERA
         let reason = '';
         
         if (currentLBalance < requiredAmount) {
@@ -93,12 +96,10 @@ async function run(dependencies) {
         } else if (availableUSDT < requiredAmount) {
             reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
         } else {
-             // Si no es LBalance ni Real, el problema es el valor MÍNIMO.
              reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${requiredAmount.toFixed(2)}`;
          }
         log(reason, 'info'); 
     }
-    // 🛑 REMOVER la variable isReadyToResume si aún existe en tu código.
-
 }
+
 module.exports = { run };
