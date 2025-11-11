@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LNoCoverage.js
+// BSB/server/src/states/long/LNoCoverage.js (Versión Final Sintácticamente Correcta)
 
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../managers/longOrderManager');
 const { calculateLongTargets } = require('../../../autobotCalculations');
@@ -77,49 +77,41 @@ async function run(dependencies) {
     // ✅ Log de diagnóstico (Tu sugerencia, ahora funcional)
     log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${requiredAmount.toFixed(2)}`, 'info');
 
-    // 🛑 LAS LÍNEAS DE LOG QUE CAUSABAN EL ERROR 'toFixed' HAN SIDO ELIMINADAS.
-    
+    // 🛑 LAS LÍNEAS DE LOG QUE CAUSABAN EL ERROR 'toFixed' HAN SIDO ELIMINADAS.
+    
     // ✅ LÓGICA DE TRANSICIÓN FINAL
-// availableUSDT se chequea aquí, y si es UNDEFINED, esta condición será FALSE. 
-// Pero si la condición se cumple, la variable es válida (aunque puede ser 0).
-if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
-    try {
-        // 🛑 CRÍTICO: Usamos el operador ternario para formatear variables posiblemente UNDEFINED o NULL.
-        const safeLBalance = currentLBalance ? currentLBalance.toFixed(2) : 'N/A';
-        const safeRealBalance = availableUSDT ? availableUSDT.toFixed(2) : 'N/A';
-        const safeRequired = requiredAmount ? requiredAmount.toFixed(2) : 'N/A';
-
-        log(`Fondos (LBalance: ${safeLBalance} y Real: ${safeRealBalance}) recuperados/disponibles. Monto requerido (${safeRequired} USDT). Volviendo a BUYING.`, 'success');
+    if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+        try {
+            // 🛑 CRÍTICO: Eliminar logs para minimizar el tiempo de ejecución y la posibilidad de error.
+            // Forzamos la transición con el log mínimo
+            await updateBotState('BUYING', 'long');
+            log(`TRANSICIÓN FORZADA: Fondos disponibles (${currentLBalance} >= ${requiredAmount}). Estado actualizado a BUYING.`, 'success');
+            
+        } catch (error) {
+            // En caso de fallo de persistencia, lo logeamos, pero ya hicimos el intento.
+            log(`ERROR CRÍTICO DE TRANSICIÓN: Fallo al actualizar el estado a BUYING. Causa: ${error.message}`, 'error');
+        }
+    } else { // 🛑 ESTE ELSE AHORA ESTÁ EN LA POSICIÓN CORRECTA
+        // 🛑 LÓGICA DE ESPERA
+        let reason = '';
         
-    } catch (logError) {
-        // Atrapa el error de toFixed en el log, pero permite continuar.
-        log(`Advertencia: Falló el log de éxito (Causa: ${logError.message}), pero la condición de fondos se cumplió. Forzando transición a BUYING.`, 'success');
-        
-    } finally {
-        // 🚀 LÍNEA DE ÉXITO: Esto siempre se ejecuta después del try/catch.
-        await updateBotState('BUYING', 'long'); 
-    }
-} else {
-    // 🛑 LÓGICA DE ESPERA
-    let reason = '';
-    
-    // Formateo seguro para los logs del bloque ELSE
-    const safeRequired = requiredAmount.toFixed(2);
-    const safeLBalance = currentLBalance.toFixed(2);
-    // 🛑 CORRECCIÓN: Usar operador ternario para el saldo real
-    const safeAvailableUSDT = availableUSDT ? availableUSDT.toFixed(2) : 'N/A';
+        // Formateo seguro para los logs del bloque ELSE
+        const safeRequired = requiredAmount.toFixed(2);
+        const safeLBalance = currentLBalance.toFixed(2);
+        // 🛑 CRÍTICO: Usar operador ternario para el saldo real
+        const safeAvailableUSDT = availableUSDT ? availableUSDT.toFixed(2) : 'N/A'; // Evita toFixed en undefined
 
-    if (currentLBalance < requiredAmount) {
-        reason = `Esperando reposición de LBalance asignado. (Requiere: ${safeRequired}, Actual: ${safeLBalance})`;
-    } else if (availableUSDT < requiredAmount) {
-        // Usar la variable formateada con seguridad
-        reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${safeRequired}, Actual Real: ${safeAvailableUSDT} | LBalance: ${safeLBalance})`;
-    } else {
-        // Usar la variable formateada con seguridad
-        reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${safeRequired}`;
-    }
-    log(reason, 'info'); 
-  }
-}
+        if (currentLBalance < requiredAmount) {
+            reason = `Esperando reposición de LBalance asignado. (Requiere: ${safeRequired}, Actual: ${safeLBalance})`;
+        } else if (availableUSDT < requiredAmount) {
+            // Usar la variable formateada con seguridad
+            reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${safeRequired}, Actual Real: ${safeAvailableUSDT} | LBalance: ${safeLBalance})`;
+        } else {
+            // Usar la variable formateada con seguridad
+            reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${safeRequired}`;
+        }
+        log(reason, 'info'); 
+    } // 🛑 CIERRA EL BLOQUE ELSE
+} // 🛑 CIERRA LA FUNCIÓN ASYNC RUN
 
 module.exports = { run };
