@@ -62,20 +62,21 @@ async function handleSuccessfulBuy(botState, orderDetails, log) { // Ya no neces
     // --- 4. ACTUALIZACIÓN ATÓMICA DE ESTADO EN LA BASE DE DATOS (CRÍTICO) ---
 
     const atomicUpdate = {
-        $set: {
-            'lbalance': finalLBalance,
-            'lstate': 'BUYING', 
-            'lStateData.ac': newTotalQty,
-            'lStateData.ai': newAI, // 🛑 ACTUALIZACIÓN CLAVE: AI
-            'lStateData.ppc': newPPC,
-            'lStateData.lastExecutionPrice': finalExecutionPrice,
-            'lStateData.lastOrder': null, 
-            'lnorder': (botState.lnorder || 0) + 1,
-        },
-        $inc: {
-            'lStateData.orderCountInCycle': 1, 
-        }
-    };
+    $set: {
+        'lbalance': finalLBalance,
+        // ELIMINAMOS 'lstate': 'BUYING' - La transición la maneja el consolidador (Solución 1)
+        'lStateData.ac': newTotalQty,
+        'lStateData.ai': newAI, 
+        'lStateData.ppc': newPPC,
+        'lStateData.lastExecutionPrice': finalExecutionPrice,
+        'lStateData.lastOrder': null, 
+        // Si lnorder es un campo de lStateData (ajusta la clave si es necesario)
+        'lStateData.lNOrderMax': (botState.lStateData.lNOrderMax || 0) + 1,
+    },
+    $inc: {
+        'lStateData.orderCountInCycle': 1, // ✅ ÚNICO INCREMENTO (Correcto aquí)
+    }
+};
     
     log(`[AUDITORÍA LDM 1/3] -> ANTES de la actualización atómica. PPC: ${newPPC.toFixed(2)}, AC: ${newTotalQty.toFixed(8)}, AI: ${newAI.toFixed(2)}`, 'debug');
 

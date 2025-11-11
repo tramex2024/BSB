@@ -1,8 +1,7 @@
 // BSB/server/src/states/long/LongBuyConsolidator.js
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
-// Importamos la función atómica para consolidar la compra
-const { handleSuccessfulBuy } = require('../../managers/longDataManager');
+const { handleSuccessfulBuy } = require('../../managers/longDataManager'); // Se asume que no necesita updateGeneralBotState
 
 /**
  * Monitorea una orden pendiente, consolida la posición si la orden se llena,
@@ -13,7 +12,7 @@ const { handleSuccessfulBuy } = require('../../managers/longDataManager');
  * @param {function} log - Función de logging.
  * @param {function} updateLStateData - Función para actualizar solo lStateData.
  * @param {function} updateBotState - Función para actualizar el estado principal.
- * @param {function} updateGeneralBotState - Función para actualizar el botState (para handleSuccessfulBuy).
+ * @param {function} updateGeneralBotState - Función para actualizar el botState (para handleSuccessfulBuy). // YA NO SE USA EN LA LLAMADA
  * @returns {boolean} true si se procesó una orden, false si sigue pendiente o no hay orden.
  */
 async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
@@ -21,7 +20,6 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
     const lastOrder = lStateData.lastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
-        // No hay orden de compra pendiente para monitorear
         return false;
     }
 
@@ -40,7 +38,7 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
             filledVolume > 0
         );
 
-        // Lógica de Respaldo (Búsqueda en el historial si la consulta directa falla)
+        // Lógica de Respaldo
         if (!isOrderProcessed) {
             log(`[CONSOLIDATOR] Fallo en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'info');
             const recentOrders = await getRecentOrders(SYMBOL);
@@ -56,34 +54,32 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
             // === ORDEN PROCESADA CON ÉXITO (TOTAL O PARCIAL) ===
             log(`[CONSOLIDATOR] Orden ${orderIdString} confirmada. Iniciando consolidación atómica...`, 'success');
             
-            // LLAMADA A LA FUNCIÓN ATÓMICA EN DATA MANAGER
-            await handleSuccessfulBuy(botState, finalDetails, updateGeneralBotState, log); 
+            // 🛑 CORRECCIÓN DE LA FIRMA (Argumentos): handleSuccessfulBuy solo necesita 3 argumentos.
+            await handleSuccessfulBuy(botState, finalDetails, log); 
             
-            // Transición a RUNNING, ya que después de consolidar una compra, el bot está listo para reevaluar targets.
-            await updateBotState('RUNNING', 'long'); 
-            log(`[CONSOLIDATOR] Transición a RUNNING para reevaluar targets.`, 'debug');
+            // 🎯 CORRECCIÓN DE LA TRANSICIÓN: Regresar a BUYING (gestión de posición).
+            await updateBotState('BUYING', 'long'); 
+            log(`[CONSOLIDATOR] Transición a BUYING para reevaluar targets.`, 'debug');
 
-            return true; // Se procesó una orden
+            return true; 
 
         } else if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
             // === ORDEN PENDIENTE ===
             log(`[CONSOLIDATOR] La orden ${orderIdString} sigue activa (${finalDetails.state}). Esperando ejecución.`, 'info');
-            return true; // Hay una orden pendiente, no proceder
+            return true; 
             
         } else {
             // === ORDEN FALLIDA SIN VOLUMEN LLENADO ===
             log(`[CONSOLIDATOR] La orden ${orderIdString} falló/se canceló sin ejecución. Limpiando lastOrder.`, 'error');
             await updateLStateData({ 'lastOrder': null });
             
-            // ✅ CORRECCIÓN: Si falla, regresa a BUYING (gestión de posición)
             await updateBotState('BUYING', 'long'); 
             
-            return true; // Se procesó (falló) una orden, no proceder al resto de LBuying
+            return true; 
         }
 
     } catch (error) {
         log(`[CONSOLIDATOR] Error de API/lógica al consultar la orden ${orderIdString}: ${error.message}. Persistiendo.`, 'error');
-        // Si hay error de API, retornamos true para no intentar colocar nuevas órdenes.
         return true; 
     }
 }
