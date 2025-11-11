@@ -74,7 +74,8 @@ async function placeFirstBuyOrder(config, botState, log, updateBotState, updateG
 
 
 /**
- * Coloca una orden de compra de cobertura (a Mercado).
+ * Coloca una orden de compra de cobertura (a Mercado) usando un BLOQUEO TEMPORAL.
+ * Esto previene la carrera de órdenes al bloquear lStateData.lastOrder ANTES de la llamada a la API.
  */
 async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
     const SYMBOL = botState.config.symbol;
@@ -92,7 +93,6 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
         return;
     }
     
-    // 🛑 Descontar el COSTO REAL del balance.
     const newLBalance = currentLBalance - amountRealCost; 
 
     if (newLBalance < 0) {
@@ -105,7 +105,13 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
     await updateGeneralBotState({ lbalance: newLBalance });
     log(`LBalance asignado reducido en ${amountRealCost.toFixed(2)} USDT (costo real) para la orden de cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
 
-
+    // --- 2. BLOQUEO TEMPORAL CRÍTICO (Anti-Carrera) ---
+    // Colocamos un 'lastOrder' temporal para que si otro ciclo arranca, vea que ya hay una orden pendiente.
+    const tempOrderId = `BLOCK_${Date.now()}`;
+    const tempOrderObject = { order_id: tempOrderId, side: 'buy', usdt_amount: amountNominal };
+    await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': tempOrderObject } });
+    log(`¡BLOQUEO TEMPORAL '${tempOrderId}' ACTIVO! Ciclo concurrente bloqueado.`, 'warning');
+    
     log(`Colocando orden de cobertura a MERCADO por ${amountNominal.toFixed(2)} USDT.`, 'info');
     
     try {
@@ -114,27 +120,29 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
         if (order && order.order_id) {
             const currentOrderId = order.order_id; 
 
-            // --- 2. ACTUALIZACIÓN ATÓMICA DE ESTADO PENDIENTE (BLOQUEO) ---
+            // --- 3. REEMPLAZO DEL BLOQUEO TEMPORAL CON EL ID REAL ---
             const updateResult = await Autobot.findOneAndUpdate({}, { 
                 $set: {
                     'lStateData.lastOrder': {
                         order_id: currentOrderId,
                         side: 'buy',
                         usdt_amount: amountNominal,
-                        usdt_cost_real: amountRealCost, // NUEVO CAMPO
+                        usdt_cost_real: amountRealCost, 
                     },
                 }
             }, { new: true });
             
             if (updateResult) {
-                log(`Orden de cobertura colocada. ID: ${currentOrderId}. Bloqueo de ciclo activo.`, 'success');
+                log(`Orden de cobertura colocada. ID: ${currentOrderId}. Bloqueo de ciclo actualizado.`, 'success');
             } else {
                 log(`Advertencia: Orden colocada (${currentOrderId}), pero no se pudo actualizar la DB. Revisar manualmente.`, 'error');
             }
             
         } else { 
             log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            // 🛑 Revertir el COSTO REAL
+            
+            // 🛑 Revertir el COSTO REAL y LIMPIAR EL BLOQUEO
+            await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
             const finalLBalance = newLBalance + amountRealCost; 
             await updateGeneralBotState({ lbalance: finalLBalance });
             log(`Se revierte ${amountRealCost.toFixed(2)} USDT (costo real) al balance (error de colocación).`, 'info');
@@ -142,7 +150,9 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
         }
     } catch (error) {
         log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
-        // 🛑 Revertir el COSTO REAL
+        
+        // 🛑 Revertir el COSTO REAL y LIMPIAR EL BLOQUEO
+        await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
         const finalLBalance = newLBalance + amountRealCost; 
         await updateGeneralBotState({ lbalance: finalLBalance });
         log(`Se revierte ${amountRealCost.toFixed(2)} USDT (costo real) al balance (error de API).`, 'info');

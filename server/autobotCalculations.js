@@ -58,7 +58,7 @@ function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
 // -------------------------------------------------------------------------
 // LÓGICA DE TARGETS POST-COMPRA (LONG)
 // -------------------------------------------------------------------------
-function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance) {
+function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurchaseUsdt, orderCountInCycle, lbalance, lastExecutionPrice) {
     const profitDecimal = parseNumber(profit_percent) / 100;
     const priceVarDecimal = parseNumber(price_var) / 100;
     const sizeVarDecimal = parseNumber(size_var) / 100;
@@ -77,7 +77,9 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     // if (finalRequiredAmount === 0 && count > 0) { ... }
 
 
-    const nextCoveragePrice = calculateNextDcaPrice(ppc, priceVarDecimal, count); 
+    const referencePrice = (count > 0 && lastExecutionPrice > 0) ? lastExecutionPrice : ppc;
+
+    const nextCoveragePrice = calculateNextDcaPrice(referencePrice, priceVarDecimal, count); 
 
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,

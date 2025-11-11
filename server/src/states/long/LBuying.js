@@ -99,7 +99,8 @@ async function run(dependencies) {
             config.long.size_var,
             config.long.purchaseUsdt,
             lStateData.orderCountInCycle,
-            botState.lbalance 
+            botState.lbalance,
+            lStateData.lastExecutionPrice 
         );
 
         // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS

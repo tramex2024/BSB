@@ -1,7 +1,8 @@
 // BSB/server/src/utils/coverageLogic.js (CORREGIDO - Lógica de Escalamiento GEOMÉTRICO)
 
-const { placeCoverageBuyOrder, MIN_USDT_VALUE_FOR_BITMART } = require('../managers/longOrderManager');
-const Autobot = require('../../models/Autobot'); 
+const { placeCoverageBuyOrder } = require('../managers/longOrderManager');
+const Autobot = require('../../models/Autobot');
+const { MIN_USDT_VALUE_FOR_BITMART } = require('./tradeConstants'); // Asumo que MIN_USDT_VALUE_FOR_BITMART se mueve aquí o se importa correctamente
 
 /**
  * Verifica las condiciones de cobertura y, si es necesario y hay fondos, coloca la orden.
@@ -9,7 +10,7 @@ const Autobot = require('../../models/Autobot');
  * @param {object} botState - Objeto de estado del bot (de la DB).
  * @param {number} availableUSDT - USDT disponible en la cuenta.
  * @param {number} currentPrice - Precio actual del mercado.
- * @param {object} creds - Credenciales de la API.
+ * @param {object} creds - Credenciales de la API. // Nota: placeCoverageBuyOrder en longOrderManager.js ya no recibe creds
  * @param {object} config - Configuración del bot.
  * @param {function} log - Función de logging inyectada.
  * @param {function} updateBotState - Función para cambiar el estado inyectada.
@@ -18,30 +19,39 @@ const Autobot = require('../../models/Autobot');
  */
 async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice, creds, config, log, updateBotState, updateLStateData, updateGeneralBotState) {
     
-    // Obtenemos los datos necesarios para la lógica geométrica (basada en la orden anterior)
-    const { ppc, ac, lastOrder } = botState.lStateData;
+    // Obtenemos los datos necesarios
+    const { ppc, ac, lastOrder, nextCoveragePrice: dbNextCoveragePrice, requiredCoverageAmount } = botState.lStateData;
     const { price_var, size_var, purchaseUsdt } = config.long;
 
-    if (ppc <= 0 || !lastOrder || !lastOrder.price) {
-        log("Lógica de cobertura: Posición no inicializada o incompleta.", 'warning');
+    // Si el bot está en la primera orden o no tiene targets calculados
+    if (ppc <= 0 || !dbNextCoveragePrice || dbNextCoveragePrice <= 0) {
+        log("Lógica de cobertura: Posición no inicializada o targets no calculados. Esperando estado BUYING.", 'warning');
         return;
     }
 
-    const lastOrderPrice = parseFloat(lastOrder.price); // Precio de la última compra
-    
-    // 💡 CRÍTICO: Usamos el monto en USDT de la última orden para el escalamiento.
-    // Usamos 'purchaseUsdt' como fallback si por alguna razón no está registrado.
-    const lastOrderUsdtAmount = parseFloat(lastOrder.usdt_amount || config.long.purchaseUsdt);
+    // 💡 USAMOS EL VALOR PERSISTIDO (Fuente única de la verdad, calculado en autobotCalculations.js)
+    const nextCoveragePrice = parseFloat(dbNextCoveragePrice);
 
-    // 1. CÁLCULO DEL PRÓXIMO PRECIO DE COBERTURA (Referencia al precio de la ORDEN ANTERIOR)
-    // Formula: Precio Anterior * (1 - (Decremento / 100))
-    const nextCoveragePrice = lastOrderPrice * (1 - (price_var / 100));
-
-    // 2. CÁLCULO DEL MONTO REQUERIDO ESCALADO (Referencia al monto de la ORDEN ANTERIOR)
-    // Formula: Monto Anterior * (1 + (Incremento / 100))
-    const baseAmount = lastOrderUsdtAmount; 
-    const nextUSDTAmount = baseAmount * (1 + (size_var / 100));
+    // 2. CÁLCULO DEL MONTO REQUERIDO ESCALADO
+    // El monto debe ser el *requerido* para la siguiente orden, que ya fue calculado
+    // en autobotCalculations.js y guardado como requiredCoverageAmount
     
+    // Usamos requiredCoverageAmount como el monto a usar. 
+    // Si no existe, usamos la lógica de escalamiento aquí como FALLBACK.
+    let nextUSDTAmount = parseFloat(requiredCoverageAmount || 0);
+
+    if (nextUSDTAmount === 0) {
+        // Lógica FALLBACK o Primera Orden (Debería venir de requiredCoverageAmount, pero por seguridad...)
+        const lastOrderUsdtAmount = parseFloat(lastOrder?.usdt_amount || config.long.purchaseUsdt);
+        const baseAmount = lastOrderUsdtAmount;
+        nextUSDTAmount = baseAmount * (1 + (size_var / 100));
+        
+        if (nextUSDTAmount === 0) {
+             log("Error crítico: nextUSDTAmount es cero. Cancelando cobertura.", 'error');
+             return;
+        }
+    }
+
     // 3. Condición de Disparo y Colocación
     if (currentPrice <= nextCoveragePrice) {
         log(`Disparo de cobertura Long activado. Precio objetivo: ${nextCoveragePrice.toFixed(2)} vs Precio actual: ${currentPrice.toFixed(2)}. Monto: ${nextUSDTAmount.toFixed(2)} USDT.`, 'info');
@@ -54,23 +64,17 @@ async function checkAndPlaceCoverageOrder(botState, availableUSDT, currentPrice,
 
         if (isSufficient) {
             
-            // 5. RESTA DE CAPITAL ASIGNADO (LBalance)
-            const newLBalance = currentLBalance - nextUSDTAmount;
-            await updateGeneralBotState({ lbalance: newLBalance });
-            log(`LBalance asignado reducido en ${nextUSDTAmount.toFixed(2)} USDT para cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
-
+            // 🛑 NOTA: La deducción atómica del LBalance ahora DEBE ocurrir dentro de placeCoverageBuyOrder
+            // para el mecanismo Anti-Carrera (Vimos esto en longOrderManager.js).
+            // Si la deducción ocurre aquí, se duplica o se rompe la lógica de reversión.
+            
             // 6. Colocar la orden de cobertura
-            await placeCoverageBuyOrder(botState, creds, nextUSDTAmount, nextCoveragePrice, log); 
+            // 🛑 LÍNEA CORREGIDA para la firma simplificada y el mecanismo anti-carrera
+            await placeCoverageBuyOrder(botState, nextUSDTAmount, log, updateGeneralBotState, updateBotState); 
+            
+            // ELIMINAMOS la lógica de updateGeneralBotState con lastLongOrderId, ya que
+            // placeCoverageBuyOrder actualiza lStateData.lastOrder directamente de forma atómica.
 
-            // === [ CAMBIO CLAVE: Almacenar el ID de la orden ] ===
-if (orderId) {
-    // ASUMO que updateGeneralBotState puede actualizar un campo llamado lastLongOrderId
-    await updateGeneralBotState({ lastLongOrderId: orderId }); 
-    log(`ID de orden de cobertura capturado: ${orderId}`, 'info');
-} else {
-    log('Advertencia: placeCoverageBuyOrder no devolvió un ID de orden. Riesgo de inconsistencia.', 'warning');
-}
-// ======================================================   
         } else {
             // FONDOS INSUFICIENTES: Transición a NO_COVERAGE
 
@@ -81,11 +85,9 @@ if (orderId) {
                 reason = `Fondos REALES (${availableUSDT.toFixed(2)} USDT) insuficientes.`;
             }
             
-            // 7. Persistir los datos de la orden fallida para el Front-End
-            botState.lStateData.requiredCoverageAmount = nextUSDTAmount;
-            botState.lStateData.nextCoveragePrice = nextCoveragePrice; 
-            await updateLStateData(botState.lStateData); 
-
+            // 7. Persistir los datos de la orden fallida para el Front-End (ya están en lStateData)
+            // Solo logeamos y transicionamos.
+            
             // 8. Transicionar a NO_COVERAGE.
             log(`No se puede colocar la orden. ${reason} Cambiando a NO_COVERAGE.`, 'warning');
             await updateBotState('NO_COVERAGE', 'long');
