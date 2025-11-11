@@ -1,14 +1,13 @@
 // public/js/modules/autobot.js (VERSIÓN FINAL CON VALIDACIÓN DE FONDOS Y FIX CONEXIÓN)
 
 import { getBalances, fetchAvailableBalancesForValidation } from './balance.js'; 
-// ELIMINADO: import { checkBitMartConnectionAndData } from './network.js';
 import { initializeChart } from './chart.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
 
-const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
+const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com'; 
 
 // Constantes de mínimos de BitMart
 const MIN_USDT_AMOUNT = 5.00;
@@ -17,35 +16,6 @@ const MIN_BTC_AMOUNT = 0.00005;
 // NUEVAS VARIABLES GLOBALES PARA LOS LÍMITES REALES
 let maxUsdtBalance = 0;
 let maxBtcBalance = 0;
-
-/**
- * 💡 FUNCIÓN AÑADIDA: Actualiza el estado visual de la conexión (la "bolita").
- * Esta función es un placeholder y asume un elemento con ID 'bitmart-connection-status'.
- * @param {string} source - 'API_SUCCESS' (verde) o 'CACHE_FALLBACK' (amarillo).
- */
-function updateConnectionStatusBall(source) {
-    // Asegúrate de que este ID coincida con el elemento de la bolita en tu HTML
-    const statusBall = document.getElementById('bitmart-connection-status');
-    if (!statusBall) return;
-    
-    // Eliminamos clases viejas
-    statusBall.classList.remove('status-red', 'status-yellow', 'status-green');
-
-    if (source === 'API_SUCCESS') {
-        // Verde: Conexión exitosa y datos actualizados.
-        statusBall.classList.add('status-green');
-        statusBall.title = 'Conectado a BitMart (Datos recientes de la API)';
-    } else if (source === 'CACHE_FALLBACK') {
-        // Amarillo: Falló la API (e.g., rate limit), usando la caché anterior.
-        statusBall.classList.add('status-yellow');
-        statusBall.title = 'Advertencia: Fallo de conexión o Rate Limit. Usando datos en caché.';
-    } else {
-        // Rojo: Estado desconocido o error grave.
-        statusBall.classList.add('status-red');
-        statusBall.title = 'Error de conexión con BitMart.';
-    }
-}
-
 
 /**
  * Muestra el límite real disponible junto a los inputs.
@@ -179,9 +149,6 @@ export async function initializeAutobotView() {
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
     
-    // ELIMINADO: checkBitMartConnectionAndData(); 
-    // Ahora la conexión se monitorea con el listener del socket 'balance-real-update'
-
     window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
 
     // Lógica para el botón START/STOP
@@ -222,20 +189,10 @@ export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     fetchOrders(currentTab, auOrderList);
     
-    // 3. 💡 CONEXIÓN SOCKET Y LISTENER PARA EL ESTADO DE CONEXIÓN REAL
     const socket = io(SOCKET_SERVER_URL);
     
-    // Listener que actualiza la "bolita" de conexión usando el nuevo evento del backend
-    socket.on('balance-real-update', (data) => {
-        updateConnectionStatusBall(data.source);
-        // Opcional: También se pueden actualizar los límites de balance aquí si la caché cambia
-        // maxUsdtBalance = data.lastAvailableUSDT;
-        // maxBtcBalance = data.lastAvailableBTC;
-        // updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-        // updateMaxBalanceDisplay('BTC', maxBtcBalance);
-    });
-    // -------------------------------------------------------------
-    
+    // ELIMINADO: Listener 'balance-real-update', movido a main.js
+
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
     });
