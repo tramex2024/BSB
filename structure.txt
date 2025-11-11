@@ -47,7 +47,8 @@ BSB/			    # Bitmart Spot Bots
      ├── server.js
      ├── autobotLogic.js
      ├── autobotCalculations.js
-     ├── autobotShortCalculations.js      
+     ├── calculateShortTargets.js 
+     ├── autobotShortCalculations.js     
      ├── models/
      │   └── Order.js
      │   └── Autobot.js
@@ -78,6 +79,7 @@ BSB/			    # Bitmart Spot Bots
      ├── utils/
      │   └── encryption.js
      │   └── cryptoUtils.js
+     │   └── helpers.js
      ├── seeders/
      │   └── seed.js
      ├── src/
@@ -86,15 +88,17 @@ BSB/			    # Bitmart Spot Bots
           ├── longStrategy.js
           ├── shortStrategy.js
           ├── logger.js
+          ├── managers/
+          │    └── longDataManager.js
+          │    └── longOrderManager.js          
+	  │    └── shortDataManager.js
+          │    └── shortOrderManager.js
           ├── utils/
-          │    └── dataManager.js
-          │    └── orderManager.js
           │    └── coverageLogic.js
-	  │    └── dataManagerShort.js
-          │    └── orderManagerShort.js
           │    └── coverageLogicShort.js
+          │    └── tradeConstants.js
           │    └── cleanState.js
-          │    └── helpers.js
+          │    └── botUtilities.js
           ├── states/
 	       ├── long/
 	       │   └── LStopped.js
@@ -102,9 +106,11 @@ BSB/			    # Bitmart Spot Bots
 	       │   └── LRunning.js
 	       │   └── LNoCoverage.js
 	       │   └── LBuying.js
+               │   └── LongBuyConsolidator.js
 	       ├── short/	
                	    └── SStopped.js
 		    └── SSelling.js
 		    └── SRunning.js
 		    └── SNoCoverage.js
-		    └── SBuying.js	
+		    └── SBuying.js
+	            └── ShortSellConsolidator.js
