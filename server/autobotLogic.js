@@ -223,13 +223,13 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         let strategyExecuted = false;
 
         if (botState.lstate !== 'STOPPED') {
-    try { // <-- ENVOLVER LA EJECUCIÓN DEL ESTADO
+    try { 
         await runLongStrategy();
         strategyExecuted = true;
-    } catch (strategyError) {
-        log(`Advertencia: Error interno en la estrategia Long, pero el ciclo continúa. Causa: ${strategyError.message}`, 'warning');
+ //   } catch (strategyError) {
+ //       log(`Advertencia: Error interno en la estrategia Long, pero el ciclo continúa. Causa: ${strategyError.message}`, 'warning');
     }
-}
+  }
         
         // 🛑 BLOQUE DE RECARGA ELIMINADO DE AQUÍ
 

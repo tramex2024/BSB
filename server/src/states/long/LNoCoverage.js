@@ -87,7 +87,7 @@ if (currentLBalance >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BI
         await updateBotState('BUYING', 'long');
         
         // Log solo después del éxito, para no interferir con el await
-        log(`TRANSICIÓN EXITOSA: El LBalance (${currentLBalance}) es suficiente. Estado actualizado a BUYING.`, 'success');
+        log(`TRANSICIÓN EXITOSA: Fondos disponibles (${currentLBalance} >= ${requiredAmount}). Estado actualizado a BUYING.`, 'success');
         
     } catch (error) {
         log(`ERROR CRÍTICO: Fallo al actualizar el estado a BUYING. Causa: ${error.message}`, 'error');
