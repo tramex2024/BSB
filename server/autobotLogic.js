@@ -128,19 +128,21 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         let availableBTC = 0;
 
         try {
-            const balances = await bitmartService.getAvailableTradingBalances();
-            // 🛑 CORRECCIÓN DE ROBUSTEZ MEJORADA: Verificamos si balances es un objeto antes de acceder a sus propiedades
-            if (balances && typeof balances === 'object') {
-                // Aseguramos que las variables son números o 0, manejando diferentes casos de escritura
-                availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); 
-                availableBTC = parseFloat(balances.availableBTC || 0);
-            } else {
-                log(`Advertencia: La API de BitMart devolvió balances inválidos. Usando 0.00 como saldo real.`, 'warning');
-            }
-        } catch (error) {
-            // 🛑 CRÍTICO: Si falla la llamada a la API, availableUSDT y availableBTC permanecen en 0
-            log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
-        }
+            const balances = await bitmartService.getAvailableTradingBalances();
+            // 🛑 CORRECCIÓN DE ROBUSTEZ MEJORADA: Verificamos si balances es un objeto antes de acceder a sus propiedades
+            if (balances && typeof balances === 'object') {
+                // Aseguramos que las variables son números o 0, manejando diferentes casos de escritura
+                availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); 
+                availableBTC = parseFloat(balances.availableBTC || 0);
+            } else {
+                log(`Advertencia: La API de BitMart devolvió balances inválidos. Usando 0.00 como saldo real.`, 'warning');
+            }
+        } catch (error) {
+            // 🛑 AÑADIDO CRÍTICO: Si el catch se ejecuta, disponibleUSDT debe ser 0.00 (ya está inicializado, pero lo reforzamos)
+            availableUSDT = 0.00; 
+            availableBTC = 0.00;
+            log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
+        }
         
         const dependencies = {
             log,
