@@ -95,21 +95,20 @@ if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requ
         
         // Formateo seguro para los logs del bloque ELSE (Ya corregido anteriormente)
         const safeRequired = requiredAmount.toFixed(2);
-        const safeLBalance = currentLBalance.toFixed(2);
-        // 🛑 CRÍTICO 4: Usar operador ternario para el saldo real
-        const safeAvailableUSDT = availableUSDT ? availableUSDT.toFixed(2) : 'N/A'; // Evita toFixed en undefined
+    const safeLBalance = currentLBalance.toFixed(2);
+    // 🛑 CRÍTICO 4: Usar operador ternario para el saldo real
+    const safeAvailableUSDT = availableUSDT ? availableUSDT.toFixed(2) : 'N/A'; // <-- ¡Este es el sospechoso!
 
-        if (currentLBalance < requiredAmount) {
-            reason = `Esperando reposición de LBalance asignado. (Requiere: ${safeRequired}, Actual: ${safeLBalance})`;
-        } else if (availableUSDT < requiredAmount) {
-            // Usar la variable formateada con seguridad
-            reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${safeRequired}, Actual Real: ${safeAvailableUSDT} | LBalance: ${safeLBalance})`;
-        } else {
-            // Usar la variable formateada con seguridad
-            reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${safeRequired}`;
-        }
-        log(reason, 'info'); 
-    } 
-} 
+    if (currentLBalance < requiredAmount) {
+        reason = `Esperando reposición de LBalance asignado. (Requiere: ${safeRequired}, Actual: ${safeLBalance})`;
+    } else if (availableUSDT < requiredAmount) {
+        // Usar la variable formateada con seguridad
+        reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${safeRequired}, Actual Real: ${safeAvailableUSDT} | LBalance: ${safeLBalance})`;
+    } else {
+        // Usar la variable formateada con seguridad
+        reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${safeRequired}`;
+    }
+    log(reason, 'info'); 
+}
 
 module.exports = { run };
