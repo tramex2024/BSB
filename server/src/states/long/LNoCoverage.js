@@ -111,6 +111,7 @@ if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requ
         reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${requiredAmount.toFixed(2)}`;
     }
     log(reason, 'info'); 
+  }
 }
 
 module.exports = { run };
