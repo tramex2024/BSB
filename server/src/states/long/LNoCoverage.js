@@ -75,10 +75,10 @@ async function run(dependencies) {
     // ✅ Log de diagnóstico (Tu sugerencia, ahora funcional)
     log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${requiredAmount.toFixed(2)}`, 'info');
 
-    // 🛑 SE ELIMINA LA LÍNEA DE LOG QUE ESTABA CAUSANDO EL ERROR 'toFixed'
+    // 🛑 LAS LÍNEAS DE LOG QUE CAUSABAN EL ERROR 'toFixed' HAN SIDO ELIMINADAS.
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL
-    // Si esta condición es TRUE, el bot debe transicionar.
+    // Si esta condición es TRUE, el bot debe transicionar. (11 >= 10 es TRUE)
     if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
         
         log(`Fondos (LBalance: ${currentLBalance.toFixed(2)} y Real: ${availableUSDT.toFixed(2)}) recuperados/disponibles. Monto requerido (${requiredAmount.toFixed(2)} USDT). Volviendo a BUYING.`, 'success');
