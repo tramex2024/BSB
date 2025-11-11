@@ -100,17 +100,25 @@ if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requ
         await updateBotState('BUYING', 'long'); 
     }
 } else {
-    // 🛑 LÓGICA DE ESPERA (Se mantiene sin cambios)
+    // 🛑 LÓGICA DE ESPERA
     let reason = '';
-    
-    if (currentLBalance < requiredAmount) {
-        reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
-    } else if (availableUSDT < requiredAmount) {
-        reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
-    } else {
-        reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${requiredAmount.toFixed(2)}`;
-    }
-    log(reason, 'info'); 
+    
+    // Formateo seguro para los logs del bloque ELSE
+    const safeRequired = requiredAmount.toFixed(2);
+    const safeLBalance = currentLBalance.toFixed(2);
+    // 🛑 CORRECCIÓN: Usar operador ternario para el saldo real
+    const safeAvailableUSDT = availableUSDT ? availableUSDT.toFixed(2) : 'N/A';
+
+    if (currentLBalance < requiredAmount) {
+        reason = `Esperando reposición de LBalance asignado. (Requiere: ${safeRequired}, Actual: ${safeLBalance})`;
+    } else if (availableUSDT < requiredAmount) {
+        // Usar la variable formateada con seguridad
+        reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${safeRequired}, Actual Real: ${safeAvailableUSDT} | LBalance: ${safeLBalance})`;
+    } else {
+        // Usar la variable formateada con seguridad
+        reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${safeRequired}`;
+    }
+    log(reason, 'info'); 
   }
 }
 
