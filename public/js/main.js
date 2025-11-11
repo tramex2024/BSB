@@ -7,6 +7,9 @@ import { initializeTestbotView } from './modules/testbot.js';
 import { initializeAutobotView } from './modules/autobot.js';
 import { initializeAibotView } from './modules/aibot.js';
 
+// Importa io desde la biblioteca de Socket.io (deberías tenerlo cargado en el HTML)
+// const io = window.io; 
+
 // --- Constantes y variables globales (EXPORTADAS) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
@@ -20,10 +23,10 @@ let lastPrice = 0;
 
 // Mapa de funciones de inicialización
 const views = {
-    dashboard: initializeDashboardView,
-    testbot: initializeTestbotView,
-    autobot: initializeAutobotView,
-    aibot: initializeAibotView
+    dashboard: initializeDashboardView,
+    testbot: initializeTestbotView,
+    autobot: initializeAutobotView,
+    aibot: initializeAibotView
 };
 
 /**
@@ -33,9 +36,12 @@ const views = {
  * @param {string} source - 'API_SUCCESS' (verde) o 'CACHE_FALLBACK' (amarillo).
  */
 function updateConnectionStatusBall(source) {
-    // Asegúrate de que este ID coincida con el elemento de la bolita en tu HTML
-    const statusBall = document.getElementById('bitmart-connection-status');
-    if (!statusBall) return;
+    // 💥 CORRECCIÓN IMPORTANTE: Cambiado el ID a 'au-connection-status' para que coincida con el HTML.
+    const statusBall = document.getElementById('au-connection-status');
+    if (!statusBall) {
+        console.warn("Elemento 'au-connection-status' no encontrado. Verifique la ID en el HTML.");
+        return;
+    }
     
     // Eliminamos clases viejas
     statusBall.classList.remove('status-red', 'status-yellow', 'status-green');
@@ -46,7 +52,6 @@ function updateConnectionStatusBall(source) {
         statusBall.title = 'Conectado a BitMart (Datos recientes de la API)';
     } else if (source === 'CACHE_FALLBACK') {
         // Amarillo: Falló la API (e.g., rate limit), usando la caché anterior.
-        // Mantenemos el color por defecto (rojo, que se añade por CSS) para indicar que no hay datos frescos.
         statusBall.classList.add('status-yellow');
         statusBall.title = 'Advertencia: Fallo de conexión o Rate Limit. Usando datos en caché.';
     } else {
@@ -58,42 +63,43 @@ function updateConnectionStatusBall(source) {
 
 
 /**
- * Función central para inicializar la pestaña seleccionada.
- * Se llama desde navigation.js después de cargar el contenido HTML.
- * @param {string} tabName - El nombre de la pestaña a inicializar.
- */
+ * Función central para inicializar la pestaña seleccionada.
+ * Se llama desde navigation.js después de cargar el contenido HTML.
+ * @param {string} tabName - El nombre de la pestaña a inicializar.
+ */
 export function initializeTab(tabName) {
-    // Limpia los intervalos de la pestaña anterior
-    Object.values(intervals).forEach(clearInterval);
-    intervals = {};
-    
-    // Remueve el gráfico si existe
-    if (currentChart && typeof currentChart.remove === 'function') {
-        currentChart.remove();
-        currentChart = null;
-    }
-    
-    // Llama a la función de inicialización del módulo de vista correspondiente
-    if (views[tabName]) {
-        views[tabName]();
-    }
+    // Limpia los intervalos de la pestaña anterior
+    Object.values(intervals).forEach(clearInterval);
+    intervals = {};
+    
+    // Remueve el gráfico si existe
+    if (currentChart && typeof currentChart.remove === 'function') {
+        currentChart.remove();
+        currentChart = null;
+    }
+    
+    // Llama a la función de inicialización del módulo de vista correspondiente
+    if (views[tabName]) {
+        views[tabName]();
+    }
 }
 
 /**
- * Función que inicializa la aplicación completa después de un login exitoso.
- */
+ * Función que inicializa la aplicación completa después de un login exitoso.
+ */
 export function initializeFullApp() {
-    console.log("Token de autenticación encontrado. Inicializando la aplicación...");
-    
-    // Conexión del socket (ÚNICA CONEXIÓN)
-    const socket = io(BACKEND_URL, {
-        path: '/socket.io'
-    });
+    console.log("Token de autenticación encontrado. Inicializando la aplicación...");
+    
+    // Conexión del socket (ÚNICA CONEXIÓN)
+    // Asumimos que 'io' está disponible globalmente si no hay un import explícito
+    const socket = io(BACKEND_URL, {
+        path: '/socket.io'
+    });
 
     // 💡 LISTENER PARA DATOS DE MERCADO (Actualiza precio y color)
-    socket.on('marketData', (data) => {
-        const newPrice = parseFloat(data.price);
-        if (isNaN(newPrice)) return;
+    socket.on('marketData', (data) => {
+        const newPrice = parseFloat(data.price);
+        if (isNaN(newPrice)) return;
 
         const priceElements = document.querySelectorAll('.price-display');
         
@@ -108,7 +114,7 @@ export function initializeFullApp() {
         }
         
         // Actualizar todos los elementos del precio
-        priceElements.forEach(el => {
+        priceElements.forEach(el => {
             // Limpiar clases de color anteriores (solo colores, no layout)
             el.classList.remove('text-green-500', 'text-red-500', 'text-white');
             
@@ -116,47 +122,48 @@ export function initializeFullApp() {
             el.classList.add(priceColorClass);
 
             // Actualizar el valor del texto
-            el.textContent = `$${newPrice.toFixed(2)}`;
-        });
+            el.textContent = `$${newPrice.toFixed(2)}`;
+        });
 
         // Actualizar el último precio para la próxima comparación
         lastPrice = newPrice;
-    });
+    });
     // --------------------------------------------------------
 
-    socket.on('bot-log', (log) => {
-        const logMessageElement = document.getElementById('log-message');
-        if (logMessageElement) {
-            logMessageElement.textContent = log.message;
-            logMessageElement.className = `log-message log-${log.type}`;
-        }
-    });
+    socket.on('bot-log', (log) => {
+        const logMessageElement = document.getElementById('log-message');
+        if (logMessageElement) {
+            logMessageElement.textContent = log.message;
+            logMessageElement.className = `log-message log-${log.type}`;
+        }
+    });
 
     // 💡 LISTENER GLOBAL PARA EL ESTADO DE CONEXIÓN (BOLITA)
+    // Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
     socket.on('balance-real-update', (data) => {
+        // Aquí es donde se llama a la función corregida.
         updateConnectionStatusBall(data.source);
     });
     // --------------------------------------------------------
 
-    // Carga la pestaña inicial y configura la navegación
-    setupNavTabs(initializeTab);
+    // Carga la pestaña inicial y configura la navegación
+    setupNavTabs(initializeTab);
 }
 
 // --- LÓGICA PRINCIPAL AL CARGAR LA PÁGINA ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Configura los eventos globales y el comportamiento del login/logout
-    initializeAppEvents(initializeFullApp); // Pasamos la función como callback
-    updateLoginIcon();
-    
-    // Verifica si ya existe un token de autenticación.
-    const token = localStorage.getItem('token');
-    if (token) {
-        // Si hay token, inicializa la aplicación completa.
-        initializeFullApp();
-    } else {
-        // Si no hay token, la navegación ya se encargará de restringir el acceso.
-        // Solo necesitamos que el dashboard se cargue inicialmente.
-        console.log("No se encontró un token de autenticación. La navegación está restringida.");
-        setupNavTabs(initializeTab); // Carga la navegación y la pestaña del dashboard
-    }
+    // Configura los eventos globales y el comportamiento del login/logout
+    initializeAppEvents(initializeFullApp); // Pasamos la función como callback
+    updateLoginIcon();
+    
+    // Verifica si ya existe un token de autenticación.
+    const token = localStorage.getItem('token');
+    if (token) {
+        // Si hay token, inicializa la aplicación completa.
+        initializeFullApp();
+    } else {
+        // Si no hay token, la navegación ya se encargará de restringir el acceso.
+        console.log("No se encontró un token de autenticación. La navegación está restringida.");
+        setupNavTabs(initializeTab); // Carga la navegación y la pestaña del dashboard
+    }
 });
