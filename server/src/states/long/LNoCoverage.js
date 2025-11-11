@@ -78,21 +78,22 @@ async function run(dependencies) {
     // 🛑 LAS LÍNEAS DE LOG QUE CAUSABAN EL ERROR 'toFixed' HAN SIDO ELIMINADAS.
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL
-if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+    if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
     try {
         // 🛑 CRÍTICO: Usamos formateo seguro para availableUSDT en el log
         const safeLBalance = currentLBalance ? currentLBalance.toFixed(2) : 'N/A';
+        // Note que availableUSDT DEBE ser parseado como flotante en autobotLogic.js
         const safeRealBalance = availableUSDT ? availableUSDT.toFixed(2) : 'N/A';
         const safeRequired = requiredAmount ? requiredAmount.toFixed(2) : 'N/A';
 
         log(`Fondos (LBalance: ${safeLBalance} y Real: ${safeRealBalance}) recuperados/disponibles. Monto requerido (${safeRequired} USDT). Volviendo a BUYING.`, 'success');
         
-        // 🚀 LINEA DE ÉXITO: Forzamos la transición DESPUÉS del log.
-        await updateBotState('BUYING', 'long'); 
-        
     } catch (logError) {
         // Si el log falla, aún forzamos la transición para salir de NO_COVERAGE
         log(`Advertencia: Falló el log de éxito (Causa: ${logError.message}), pero la condición de fondos se cumplió. Forzando transición a BUYING.`, 'success');
+        
+    } finally {
+        // 🚀 LÍNEA DE ÉXITO: Forzamos la transición. Esto siempre se ejecuta.
         await updateBotState('BUYING', 'long'); 
     }
 } else {
