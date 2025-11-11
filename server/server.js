@@ -1,3 +1,5 @@
+//BSB/server/server.js
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -37,6 +39,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
+// Configuración de Socket.IO
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -47,9 +50,28 @@ const io = new Server(server, {
 
 autobotLogic.setIo(io);
 
-// Configuración de Express y Middlewares
-app.use(cors());
-app.use(express.json());
+// 🛑 CORRECCIÓN #1: Configuración de CORS para solicitudes HTTP/REST
+const allowedOrigins = [
+    'https://bsb-lime.vercel.app', // Dominio de tu Front-end
+    'http://localhost:3000'        // Desarrollo local
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error(`CORS no permite el acceso desde el Origen: ${origin}`), false);
+        }
+    },
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+    credentials: true,
+    optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions)); // Aplicamos la configuración de CORS
+app.use(express.json()); // El parser JSON
+// -------------------------------------------------------------
 
 // Definición de Rutas
 app.use('/api/auth', authRoutes);
@@ -74,13 +96,13 @@ connectDB();
 
 // 🛑 1. DEFINIR LA FUNCIÓN DE LECTURA DE ESTADO
 async function getBotState() {
-    return await Autobot.findOne({});
+    return await Autobot.findOne({});
 }
 
 // 🛑 2. CREAR LAS CREDENCIALES/DEPENDENCIAS BASE
 const botDependencies = {
-    getBotState: getBotState, // <--- FUNCIÓN NECESARIA PARA LA PRUEBA DE AI
-    // Aquí puedes añadir otras funciones que se usen globalmente, si es necesario.
+    getBotState: getBotState, // <--- FUNCIÓN NECESARIA PARA LA PRUEBA DE AI
+    // Aquí puedes añadir otras funciones que se usen globalmente, si es necesario.
 };
 
 let currentMarketPrice = 'N/A';
@@ -99,16 +121,6 @@ async function updateBotStateWithPrice(price) {
                 botState.config.long.price_var / 100,
                 botState.config.long.size_var / 100
             );
-
-            /*// Recalcula scoverage y snorder
- //           const { coveragePrice: scoverage, numberOfOrders: snorder } = calculateShortCoverage(
- //               botState.sbalance,
- //               parseFloat(price),
- //               botState.config.short.sellBtc,
- //               botState.config.short.price_var / 100,
-//                botState.config.short.size_var / 100
-//            );
-            */
 
             // 🟢 CORRECCIÓN: Inicializar scoverage y snorder al valor actual de la DB
             const scoverage = botState.scoverage;
@@ -181,8 +193,8 @@ function setupWebSocket(io) {
 
 		// Disparar el ciclo de la estrategia en tiempo real (debe ser el último paso)
         await autobotLogic.botCycle(currentMarketPrice);
-                
-                // 🛑 CAMBIO CLAVE: Pasar las dependencias al botCycle
+                
+                // 🛑 CAMBIO CLAVE: Pasar las dependencias al botCycle
         await autobotLogic.botCycle(currentMarketPrice, botDependencies);
             }
         } catch (error) {
@@ -209,11 +221,12 @@ io.on('connection', (socket) => {
     });
 });
 
-// Bucle para actualizar balances (Ciclo LENTO: cada 5 segundos)
+// 🛑 CORRECCIÓN #2: Aumentamos el intervalo de polling para evitar HTTP 429
 setInterval(async () => {
     // LLama al nuevo ciclo lento para obtener y emitir balances a la UI.
     await autobotLogic.balanceCycle();
-}, 5000);
+}, 15000); // 15,000ms = 15 segundos. Intervalo más seguro.
+// --------------------------------------------------------------------------
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
