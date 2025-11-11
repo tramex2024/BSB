@@ -80,18 +80,19 @@ async function run(dependencies) {
     // 🛑 LAS LÍNEAS DE LOG QUE CAUSABAN EL ERROR 'toFixed' HAN SIDO ELIMINADAS.
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL
-    if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
-        try {
-            // 🛑 CRÍTICO: Eliminar logs para minimizar el tiempo de ejecución y la posibilidad de error.
-            // Forzamos la transición con el log mínimo
-            await updateBotState('BUYING', 'long');
-            log(`TRANSICIÓN FORZADA: Fondos disponibles (${currentLBalance} >= ${requiredAmount}). Estado actualizado a BUYING.`, 'success');
-            
-        } catch (error) {
-            // En caso de fallo de persistencia, lo logeamos, pero ya hicimos el intento.
-            log(`ERROR CRÍTICO DE TRANSICIÓN: Fallo al actualizar el estado a BUYING. Causa: ${error.message}`, 'error');
-        }
-    } else { // 🛑 ESTE ELSE AHORA ESTÁ EN LA POSICIÓN CORRECTA
+// 🛑 CRÍTICO: Simplificamos la condición a solo el LBalance y el mínimo de BitMart.
+if (currentLBalance >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+    try {
+        // Ejecutamos la transición sin logs previos
+        await updateBotState('BUYING', 'long');
+        
+        // Log solo después del éxito, para no interferir con el await
+        log(`TRANSICIÓN EXITOSA: El LBalance (${currentLBalance}) es suficiente. Estado actualizado a BUYING.`, 'success');
+        
+    } catch (error) {
+        log(`ERROR CRÍTICO: Fallo al actualizar el estado a BUYING. Causa: ${error.message}`, 'error');
+    }
+} else {
         // 🛑 LÓGICA DE ESPERA
         let reason = '';
         
