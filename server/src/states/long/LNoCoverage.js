@@ -48,14 +48,14 @@ async function run(dependencies) {
         log("Forzando recalculo de RequiredAmount en NO_COVERAGE para asegurar la consistencia del estado.", 'warning');
         
         const recalculation = calculateLongTargets(
-            latestBotState.lStateData.ppc, 
-            config.long.profit_percent, 
-            config.long.price_var, 
-            config.long.size_var,
-            config.long.purchaseUsdt,
-            latestBotState.lStateData.orderCountInCycle,
-            latestBotState.lbalance 
-        );
+            latestBotState.lStateData.ppc || 0, // ✅ AÑADIR || 0
+            config.long.profit_percent || 0, // ✅ AÑADIR || 0
+            config.long.price_var || 0, // ✅ AÑADIR || 0
+            config.long.size_var || 0, // ✅ AÑADIR || 0
+            config.long.purchaseUsdt || 0, // ✅ AÑADIR || 0
+            latestBotState.lStateData.orderCountInCycle || 0, // ✅ AÑADIR || 0
+            latestBotState.lbalance || 0 // ✅ CRÍTICO: AÑADIR || 0
+        );
         
         // Actualizamos la variable local con el valor recalculado
         requiredAmount = recalculation.requiredCoverageAmount;
