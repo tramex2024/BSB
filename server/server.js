@@ -226,13 +226,13 @@ io.on('connection', (socket) => {
 setInterval(async () => {
     // ESTA ES LA ÚNICA LLAMADA A LA API DE BITMART
     await autobotLogic.slowBalanceCacheUpdate();
-}, 30000);
+}, 10000);
 
 /* // 🛑 CORRECCIÓN #2: Aumentamos el intervalo de polling para evitar HTTP 429
 setInterval(async () => {
     // LLama al nuevo ciclo lento para obtener y emitir balances a la UI.
     await autobotLogic.balanceCycle();
-}, 15000); // 15,000ms = 15 segundos. Intervalo más seguro.
+}, 10000); // 15,000ms = 15 segundos. Intervalo más seguro.
 // --------------------------------------------------------------------------
 */
 
