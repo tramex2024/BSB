@@ -3,8 +3,7 @@
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
-// 🛑 CORRECCIÓN DE SINTAXIS: Se elimina el duplicado ': setDependencies'
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy'); // 💡 AÑADIDO
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
 
 // 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
@@ -24,11 +23,10 @@ function log(message, type = 'info') {
 }
 
 /**
- * Función para obtener el estado actual del bot directamente de la base de datos.
- * 🛑 CRÍTICO para LNoCoverage.js
- */
+ * Función para obtener el estado actual del bot directamente de la base de datos.
+ */
 async function getBotState() {
-    return Autobot.findOne({});
+    return Autobot.findOne({});
 }
 
 /**
@@ -55,8 +53,6 @@ async function updateBotState(newState, strategy) {
 
 /**
  * Función que actualiza PARCIALMENTE los datos del ciclo Long (lStateData) en la base de datos.
- * Utiliza notación de punto y $set para no sobrescribir todo el subdocumento.
- * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... } (ej: { ppc: 120000, ac: 0.0001 })
  */
 async function updateLStateData(fieldsToUpdate) {
     try {
@@ -66,7 +62,7 @@ async function updateLStateData(fieldsToUpdate) {
             return acc;
         }, {});
 
-        // 🛑 CAMBIO CLAVE: Usamos $set para solo modificar los campos pasados dentro del subdocumento.
+        // Usamos $set para solo modificar los campos pasados dentro del subdocumento.
         await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
     } catch (error) {
         log(`Error al guardar lStateData: ${error.message}`, 'error');
@@ -75,8 +71,6 @@ async function updateLStateData(fieldsToUpdate) {
 
 /**
  * Función que actualiza PARCIALMENTE los datos del ciclo Short (sStateData) en la base de datos.
- * Utiliza notación de punto y $set para no sobrescribir todo el subdocumento.
- * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... }
  */
 async function updateSStateData(fieldsToUpdate) {
     try {
@@ -86,7 +80,7 @@ async function updateSStateData(fieldsToUpdate) {
             return acc;
         }, {});
 
-        // 🛑 CAMBIO CLAVE: Usamos $set para solo modificar los campos pasados dentro del subdocumento.
+        // Usamos $set para solo modificar los campos pasados dentro del subdocumento.
         await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
     } catch (error) {
         log(`Error al guardar sStateData: ${error.message}`, 'error');
@@ -94,14 +88,11 @@ async function updateSStateData(fieldsToUpdate) {
 }
 
 /**
- * Función genérica para actualizar campos top-level en el modelo Autobot (usado para LBalance/SBalance, etc.).
- * Esta función AHORA también acepta campos con notación de punto para subdocumentos.
- * @param {object} fieldsToUpdate - Objeto con { campo: nuevoValor, ... } o { 'subdocumento.campo': nuevoValor, ... }
+ * Función genérica para actualizar campos top-level y subdocumentos en el modelo Autobot.
  */
 async function updateGeneralBotState(fieldsToUpdate) {
     try {
-        // Al usar $set, podemos pasar campos de primer nivel Y campos con notación de punto
-        // (ej: { ltprice: 100, 'lStateData.pc': 50 })
+        // Usamos $set, podemos pasar campos de primer nivel Y campos con notación de punto
         await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate });
     } catch (error) {
         log(`Error al actualizar campos generales del estado del bot: ${error.message}`, 'error');
@@ -109,10 +100,10 @@ async function updateGeneralBotState(fieldsToUpdate) {
 }
 
 
-// 🛑 CORRECCIÓN: Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
+// Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     try {
-        // 🛑 CRÍTICO: Recargar el botState ANTES de cada ciclo. (CORRECTO)
+        // CRÍTICO: Recargar el botState ANTES de cada ciclo.
         let botState = await Autobot.findOne({});
         const currentPrice = parseFloat(priceFromWebSocket); 
 
@@ -129,21 +120,21 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 
         try {
             const balances = await bitmartService.getAvailableTradingBalances();
-            // 🛑 CORRECCIÓN DE ROBUSTEZ MEJORADA: Verificamos si balances es un objeto antes de acceder a sus propiedades
+            // CORRECCIÓN DE ROBUSTEZ MEJORADA: Verificamos si balances es un objeto
             if (balances && typeof balances === 'object') {
-                // Aseguramos que las variables son números o 0, manejando diferentes casos de escritura
+                // Aseguramos que las variables son números o 0
                 availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); 
                 availableBTC = parseFloat(balances.availableBTC || 0);
             } else {
                 log(`Advertencia: La API de BitMart devolvió balances inválidos. Usando 0.00 como saldo real.`, 'warning');
             }
         } catch (error) {
-            // 🛑 AÑADIDO CRÍTICO: Si el catch se ejecuta, disponibleUSDT debe ser 0.00 (ya está inicializado, pero lo reforzamos)
-            availableUSDT = 0.00; 
+            // Si el catch se ejecuta, disponibleUSDT debe ser 0.00
+            availableUSDT = 0.00; 
             availableBTC = 0.00;
             log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
         }
-        
+        
         const dependencies = {
             log,
             io,
@@ -152,7 +143,6 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             currentPrice, 
             availableUSDT, 
             availableBTC, 
-            // 🛑 Usar el botState recién cargado
             botState,
             
             config: botState.config,
@@ -166,16 +156,16 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             updateLStateData, 
             updateSStateData, 
             updateGeneralBotState,
-            
-            // 🛑 CRÍTICO: Inyectar la función de recarga del estado para LNoCoverage.js
-            getBotState,
             
-            // 🛑 CORRECCIÓN CLAVE: Incluir la dependencia externa si se pasó (como getBotState)
+            // CRÍTICO: Inyectar la función de recarga del estado para LNoCoverage.js
+            getBotState,
+            
+            // Incluir la dependencia externa
             ...externalDependencies 
         };
 
         setLongDeps(dependencies);
-        setShortDeps(dependencies); // 💡 AÑADIDO: Inyectar dependencias en el flujo Short
+        setShortDeps(dependencies); 
 
         // ==========================================================
         // 1. FASE DE CONSOLIDACIÓN (CHECK DE ÓRDENES PENDIENTES)
@@ -191,14 +181,14 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
                 dependencies.updateBotState, 
                 dependencies.updateGeneralBotState
             );
-            // 🛑 CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
+            // CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
             if (orderProcessed) {
                 botState = await Autobot.findOne({});
                 dependencies.botState = botState; // Actualizar dependencias
             }
         }
         
-        // 🛑 NUEVO: Ejecutar Consolidación Short (Monitorea órdenes SELL para apertura/cobertura)
+        // Ejecutar Consolidación Short (Monitorea órdenes SELL para apertura/cobertura)
         if (botState.sStateData.lastOrder?.side === 'sell') {
             const orderProcessed = await monitorShortSell(
                 dependencies.botState, 
@@ -208,7 +198,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
                 dependencies.updateBotState, 
                 dependencies.updateGeneralBotState
             );
-            // 🛑 CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
+            // CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
             if (orderProcessed) {
                 botState = await Autobot.findOne({});
                 dependencies.botState = botState; // Actualizar dependencias
@@ -223,24 +213,17 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         let strategyExecuted = false;
 
         if (botState.lstate !== 'STOPPED') {
-    try { 
-        await runLongStrategy();
-        strategyExecuted = true;
- //   } catch (strategyError) {
- //       log(`Advertencia: Error interno en la estrategia Long, pero el ciclo continúa. Causa: ${strategyError.message}`, 'warning');
-    }
-  }
+            // ✅ CORRECCIÓN DE SINTAXIS: Eliminamos el try/catch que estaba causando el error.
+            await runLongStrategy();
+            strategyExecuted = true;
+        }
         
-        // 🛑 BLOQUE DE RECARGA ELIMINADO DE AQUÍ
-
         if (botState.sstate !== 'STOPPED') {
-            // 🛑 DESCOMENTADO/AÑADIDO: Ejecutar la lógica Short (Evalúa DCA o TP Buy)
             await runShortStrategy(); 
             strategyExecuted = true;
         }
         
-        // ✅ AÑADIDO: Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
-        // Esto captura la actualización de lastOrder hecha en LongOrderManager.js o ShortOrderManager.js
+        // Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
         if (strategyExecuted) {
             botState = await Autobot.findOne({});
             dependencies.botState = botState; // Actualizar la referencia
@@ -248,6 +231,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         }
         
     } catch (error) {
+        // Este catch ahora capturará el error toFixed, pero la lógica en LNoCoverage debe forzar la transición.
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
 }
