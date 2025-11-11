@@ -6,12 +6,15 @@ const { calculateLongTargets } = require('../../../autobotCalculations');
 async function run(dependencies) {
     // Extraemos las funciones y el estado de las dependencias
     const { 
-        botState, currentPrice, availableUSDT, config, log, 
+        botState, currentPrice, config, log, 
         updateBotState, updateLStateData,
         getBotState // <-- CRÍTICO: Inyectar la función de recarga
     } = dependencies;
 
-    log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
+   // 🛑 CORRECCIÓN CRÍTICA: Asegurar que availableUSDT es un número o 0
+    const availableUSDT = parseFloat(dependencies.availableUSDT || 0);    
+
+log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
 
     const { ac } = botState.lStateData;
     
@@ -77,8 +80,8 @@ async function run(dependencies) {
     // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
 
     const currentLBalance = parseFloat(latestBotState.lbalance || 0); // <-- Usar el LBalance más reciente
-    
-    // 🛑 NUEVO: LOG DE DIAGNÓSTICO
+        
+    // 🛑 LOG DE DIAGNÓSTICO (Ya no fallará por toFixed)
     log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
     log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
 
