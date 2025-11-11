@@ -34,14 +34,17 @@ async function run(dependencies) {
     // Recargamos el estado para obtener el lbalance más actual (tu 25 USDT)
     let latestBotState = botState;
     if (getBotState) {
-        try {
-            // Se realiza la recarga de la DB
-            latestBotState = await getBotState();
-        } catch (error) {
-            log(`ERROR CRÍTICO: No se pudo recargar el estado de la DB. Usando estado inyectado. Causa: ${error.message}`, 'error');
-            // Continúa usando el 'botState' inyectado (obsoleto) si la recarga falla.
-        }
+        try {
+            // Se realiza la recarga de la DB
+            latestBotState = await getBotState();
+        } catch (error) {
+            log(`ERROR CRÍTICO: No se pudo recargar el estado de la DB. Usando estado inyectado. Causa: ${error.message}`, 'error');
+            // Continúa usando el 'botState' inyectado (obsoleto) si la recarga falla.
+        }
     }
+    
+    // ✅ NUEVO LOG DE VERIFICACIÓN CRÍTICA (Tu sugerencia)
+    log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${latestBotState.lbalance} | Req. Amount: ${requiredAmount}`, 'info');
     
     // INICIO DE LA LÓGICA DE RECALCULO FORZADO
     // Usamos latestBotState para obtener la información más reciente
