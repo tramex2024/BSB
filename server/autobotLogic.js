@@ -100,67 +100,67 @@ async function updateGeneralBotState(fieldsToUpdate) {
 }
 
 /**
- * [CICLO LENTO - API] Llama a la API de BitMart (una vez cada 30-60s) 
- * y actualiza los balances reales de USDT y BTC en la base de datos (cache).
- * ESTE DEBE SER EL ÚNICO LUGAR DONDE SE LLAMA A bitmartService.getBalances().
- */
+ * [CICLO LENTO - API] Llama a la API de BitMart (una vez cada 30-60s) 
+ * y actualiza los balances reales de USDT y BTC en la base de datos (cache).
+ * ESTE DEBE SER EL ÚNICO LUGAR DONDE SE LLAMA A bitmartService.getBalances().
+ */
 async function slowBalanceCacheUpdate() {
-    let availableUSDT = 0;
-    let availableBTC = 0;
-    let apiSuccess = false;
+    let availableUSDT = 0;
+    let availableBTC = 0;
+    let apiSuccess = false;
 
-    try {
-        // La única llamada a la API de BitMart
-        const balances = await bitmartService.getBalances();
-        
-        // 1. Extraer balances (asumiendo estructura: { USDT: { available: x }, BTC: { available: y } })
-        availableUSDT = parseFloat(balances.USDT?.available || 0);
-        availableBTC = parseFloat(balances.BTC?.available || 0);
-        apiSuccess = true; // La API respondió con éxito
-        
-    } catch (error) {
-        // Si hay un error 429, solo registramos. Usamos los valores iniciales (0).
-        console.error("[SLOW BALANCE CACHE] Error al obtener balances de BitMart (Usando caché anterior/default):", error.message);
-        
-        // Si falla, leemos los valores anteriores de la DB para la emisión RÁPIDA (si existen)
-        const currentBotState = await Autobot.findOne({});
-        if (currentBotState) {
-            availableUSDT = currentBotState.lastAvailableUSDT || 0;
-            availableBTC = currentBotState.lastAvailableBTC || 0;
-        }
-    }
+    try {
+        // La única llamada a la API de BitMart
+        const balances = await bitmartService.getBalances();
+        
+        // 1. Extraer balances (asumiendo estructura: { USDT: { available: x }, BTC: { available: y } })
+        availableUSDT = parseFloat(balances.USDT?.available || 0);
+        availableBTC = parseFloat(balances.BTC?.available || 0);
+        apiSuccess = true; // La API respondió con éxito
+        
+    } catch (error) {
+        // Si hay un error 429, solo registramos. Usamos los valores iniciales (0).
+        console.error("[SLOW BALANCE CACHE] Error al obtener balances de BitMart (Usando caché anterior/default):", error.message);
+        
+        // Si falla, leemos los valores anteriores de la DB para la emisión RÁPIDA (si existen)
+        const currentBotState = await Autobot.findOne({});
+        if (currentBotState) {
+            availableUSDT = currentBotState.lastAvailableUSDT || 0;
+            availableBTC = currentBotState.lastAvailableBTC || 0;
+        }
+    }
 
-    try {
-        // 2. Guardar el valor en los campos de caché de la base de datos
-        // NOTA: Usamos el valor obtenido de la API si fue exitoso, o 0 si falló.
-        const updatedBotState = await Autobot.findOneAndUpdate(
-            {}, 
-            {
-                $set: { 
-                    lastAvailableUSDT: availableUSDT, 
-                    lastAvailableBTC: availableBTC,
-                    lastBalanceCheck: new Date() 
-                }
-            },
-            // 'upsert: true' garantiza que si no hay documento, se crea uno.
-            // Esto también fuerza la adición de los campos al documento existente.
-            { new: true, upsert: true } 
-        );
+    try {
+        // 2. Guardar el valor en los campos de caché de la base de datos
+        // NOTA: Usamos el valor obtenido de la API si fue exitoso, o 0 si falló.
+        const updatedBotState = await Autobot.findOneAndUpdate(
+            {}, 
+            {
+                $set: { 
+                    lastAvailableUSDT: availableUSDT, 
+                    lastAvailableBTC: availableBTC,
+                    lastBalanceCheck: new Date() 
+                }
+            },
+            // 'upsert: true' garantiza que si no hay documento, se crea uno.
+            // Esto también fuerza la adición de los campos al documento existente.
+            { new: true, upsert: true } 
+        );
 
-        // 3. Emitir los balances a la UI a través de Socket.IO
-        if (updatedBotState && io) {
-             io.sockets.emit('balance-real-update', { 
-                lastAvailableUSDT: updatedBotState.lastAvailableUSDT,
-                lastAvailableBTC: updatedBotState.lastAvailableBTC,
-                lastBalanceCheck: updatedBotState.lastBalanceCheck,
-                // Indicamos si la actualización fue de la API o de la caché (fallida)
-                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK' 
-            });
-        }
-        
-    } catch (dbError) {
-        console.error("[SLOW BALANCE CACHE] Error crítico al guardar en la DB:", dbError.message);
-    }
+        // 3. Emitir los balances a la UI a través de Socket.IO
+        if (updatedBotState && io) {
+             io.sockets.emit('balance-real-update', { 
+                lastAvailableUSDT: updatedBotState.lastAvailableUSDT,
+                lastAvailableBTC: updatedBotState.lastAvailableBTC,
+                lastBalanceCheck: updatedBotState.lastBalanceCheck,
+                // Indicamos si la actualización fue de la API o de la caché (fallida)
+                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK' 
+            });
+        }
+        
+    } catch (dbError) {
+        console.error("[SLOW BALANCE CACHE] Error crítico al guardar en la DB:", dbError.message);
+    }
 }
 
 // Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
@@ -177,29 +177,31 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             return;
         }
 
-        // Obtener saldos reales de la API
-        let availableUSDT = 0;
-        let availableBTC = 0;
-
+        // -------------------------------------------------------------
+        // 💡 CAMBIO CRÍTICO: Leer saldos REALES de la CACHÉ de la DB
+        // -------------------------------------------------------------
+        const availableUSDT = parseFloat(botState.lastAvailableUSDT || 0);
+        const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
+        
+        // Código original eliminado:
+        /*
         try {
             const balances = await bitmartService.getAvailableTradingBalances();
-            // CORRECCIÓN DE ROBUSTEZ MEJORADA: Verificamos si balances es un objeto
             if (balances && typeof balances === 'object') {
-                // Aseguramos que las variables son números o 0
                 availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); 
                 availableBTC = parseFloat(balances.availableBTC || 0);
             } else {
                 log(`Advertencia: La API de BitMart devolvió balances inválidos. Usando 0.00 como saldo real.`, 'warning');
             }
         } catch (error) {
-            // Si el catch se ejecuta, disponibleUSDT debe ser 0.00
             availableUSDT = 0.00; 
             availableBTC = 0.00;
             log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
         }
+        */
         
-        // 🛑 INSERTAR ESTE LOG DE DIAGNÓSTICO AQUÍ
-log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la API: ${availableUSDT.toFixed(2)}`, 'info');
+        // El log de diagnóstico ahora reporta la lectura de la caché
+        log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la CACHÉ: ${availableUSDT.toFixed(2)}`, 'info');
 
         const dependencies = {
             log,
@@ -207,8 +209,8 @@ log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la API: ${availableUSDT.t
             bitmartService,
             Autobot,
             currentPrice, 
-            availableUSDT, 
-            availableBTC, 
+            availableUSDT,  // Este es el valor de la caché
+            availableBTC,  // Este es el valor de la caché
             botState,
             
             config: botState.config,
@@ -231,7 +233,7 @@ log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la API: ${availableUSDT.t
         };
 
         setLongDeps(dependencies);
-        setShortDeps(dependencies); 
+        setShortDeps(dependencies); 
 
         // ==========================================================
         // 1. FASE DE CONSOLIDACIÓN (CHECK DE ÓRDENES PENDIENTES)
@@ -302,31 +304,12 @@ log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la API: ${availableUSDT.t
     }
 }
 
+// ❌ FUNCIÓN ELIMINADA: balanceCycle ya no es necesaria y llamaba directamente a la API.
+/*
 async function balanceCycle() {
-    try {
-        const balancesArray = await bitmartService.getBalance({
-            apiKey: process.env.BITMART_API_KEY,
-            secretKey: process.env.BITMART_SECRET_KEY,
-            apiMemo: process.env.BITMART_API_MEMO
-        });
-        
-        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-
-        if (!usdtBalance || !btcBalance) {
-            log('No se pudieron obtener los balances de la cuenta.', 'error');
-            return;
-        }
-
-        io.emit('wallet-balances', {
-            USDT: { available: parseFloat(usdtBalance.available), frozen: parseFloat(usdtBalance.frozen) },
-            BTC: { available: parseFloat(btcBalance.available), frozen: parseFloat(btcBalance.frozen) }
-        });
-
-    } catch (error) {
-        log(`Error en el ciclo de balances: ${error.message}`, 'error');
-    }
+    // ... código eliminado ...
 }
+*/
 
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
@@ -342,10 +325,10 @@ module.exports = {
     stop,
     log,
     botCycle,    
-    balanceCycle, 
+    // ❌ Eliminada la exportación de balanceCycle
     updateBotState,
     updateLStateData,
     updateSStateData,
     updateGeneralBotState,
-    slowBalanceCacheUpdate
+    slowBalanceCacheUpdate
 };
