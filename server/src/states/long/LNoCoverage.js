@@ -1,3 +1,5 @@
+// BSB/server/src/states/long/LNoCoverage.js
+
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../../managers/longOrderManager');
 const { calculateLongTargets } = require('../../../autobotCalculations');
 
@@ -78,37 +80,37 @@ async function run(dependencies) {
     // 🛑 LAS LÍNEAS DE LOG QUE CAUSABAN EL ERROR 'toFixed' HAN SIDO ELIMINADAS.
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL
-    if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+// availableUSDT se chequea aquí, y si es UNDEFINED, esta condición será FALSE. 
+// Pero si la condición se cumple, la variable es válida (aunque puede ser 0).
+if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
     try {
-        // 🛑 CRÍTICO: Usamos formateo seguro para availableUSDT en el log
+        // 🛑 CRÍTICO: Usamos el operador ternario para formatear variables posiblemente UNDEFINED o NULL.
         const safeLBalance = currentLBalance ? currentLBalance.toFixed(2) : 'N/A';
-        // Note que availableUSDT DEBE ser parseado como flotante en autobotLogic.js
         const safeRealBalance = availableUSDT ? availableUSDT.toFixed(2) : 'N/A';
         const safeRequired = requiredAmount ? requiredAmount.toFixed(2) : 'N/A';
 
         log(`Fondos (LBalance: ${safeLBalance} y Real: ${safeRealBalance}) recuperados/disponibles. Monto requerido (${safeRequired} USDT). Volviendo a BUYING.`, 'success');
         
     } catch (logError) {
-        // Si el log falla, aún forzamos la transición para salir de NO_COVERAGE
+        // Atrapa el error de toFixed en el log, pero permite continuar.
         log(`Advertencia: Falló el log de éxito (Causa: ${logError.message}), pero la condición de fondos se cumplió. Forzando transición a BUYING.`, 'success');
         
     } finally {
-        // 🚀 LÍNEA DE ÉXITO: Forzamos la transición. Esto siempre se ejecuta.
+        // 🚀 LÍNEA DE ÉXITO: Esto siempre se ejecuta después del try/catch.
         await updateBotState('BUYING', 'long'); 
     }
 } else {
-        // 🛑 LÓGICA DE ESPERA
-        let reason = '';
-        
-        if (currentLBalance < requiredAmount) {
-            reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
-        } else if (availableUSDT < requiredAmount) {
-            reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
-        } else {
-             reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${requiredAmount.toFixed(2)}`;
-         }
-        log(reason, 'info'); 
+    // 🛑 LÓGICA DE ESPERA (Se mantiene sin cambios)
+    let reason = '';
+    
+    if (currentLBalance < requiredAmount) {
+        reason = `Esperando reposición de LBalance asignado. (Requiere: ${requiredAmount.toFixed(2)}, Actual: ${currentLBalance.toFixed(2)})`;
+    } else if (availableUSDT < requiredAmount) {
+        reason = `Esperando reposición de Fondos Reales. (Requiere Real: ${requiredAmount.toFixed(2)}, Actual Real: ${availableUSDT.toFixed(2)} | LBalance: ${currentLBalance.toFixed(2)})`;
+    } else {
+        reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}). Requerido: ${requiredAmount.toFixed(2)}`;
     }
+    log(reason, 'info'); 
 }
 
 module.exports = { run };
