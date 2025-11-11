@@ -110,16 +110,21 @@ async function slowBalanceCacheUpdate() {
     let apiSuccess = false;
 
     try {
+        // 💡 CORRECCIÓN CRÍTICA: Cambiado de getBalances() a getBalance() (singular)
         // La única llamada a la API de BitMart
-        const balances = await bitmartService.getBalances();
+        const balancesArray = await bitmartService.getBalance();
         
-        // 1. Extraer balances (asumiendo estructura: { USDT: { available: x }, BTC: { available: y } })
-        availableUSDT = parseFloat(balances.USDT?.available || 0);
-        availableBTC = parseFloat(balances.BTC?.available || 0);
+        // 1. Extraer balances asumiendo que devuelve un ARRAY de objetos
+        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
+        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+
+        availableUSDT = parseFloat(usdtBalance?.available || 0);
+        availableBTC = parseFloat(btcBalance?.available || 0);
+
         apiSuccess = true; // La API respondió con éxito
         
     } catch (error) {
-        // Si hay un error 429, solo registramos. Usamos los valores iniciales (0).
+        // Si hay un error (incluyendo el 429), usamos la caché anterior.
         console.error("[SLOW BALANCE CACHE] Error al obtener balances de BitMart (Usando caché anterior/default):", error.message);
         
         // Si falla, leemos los valores anteriores de la DB para la emisión RÁPIDA (si existen)
@@ -132,7 +137,6 @@ async function slowBalanceCacheUpdate() {
 
     try {
         // 2. Guardar el valor en los campos de caché de la base de datos
-        // NOTA: Usamos el valor obtenido de la API si fue exitoso, o 0 si falló.
         const updatedBotState = await Autobot.findOneAndUpdate(
             {}, 
             {
@@ -142,8 +146,6 @@ async function slowBalanceCacheUpdate() {
                     lastBalanceCheck: new Date() 
                 }
             },
-            // 'upsert: true' garantiza que si no hay documento, se crea uno.
-            // Esto también fuerza la adición de los campos al documento existente.
             { new: true, upsert: true } 
         );
 
@@ -178,27 +180,10 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         }
 
         // -------------------------------------------------------------
-        // 💡 CAMBIO CRÍTICO: Leer saldos REALES de la CACHÉ de la DB
+        // LECTURA DE LA CACHÉ
         // -------------------------------------------------------------
         const availableUSDT = parseFloat(botState.lastAvailableUSDT || 0);
         const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
-        
-        // Código original eliminado:
-        /*
-        try {
-            const balances = await bitmartService.getAvailableTradingBalances();
-            if (balances && typeof balances === 'object') {
-                availableUSDT = parseFloat(balances.availableUSDT || balances.availableUsdt || 0); 
-                availableBTC = parseFloat(balances.availableBTC || 0);
-            } else {
-                log(`Advertencia: La API de BitMart devolvió balances inválidos. Usando 0.00 como saldo real.`, 'warning');
-            }
-        } catch (error) {
-            availableUSDT = 0.00; 
-            availableBTC = 0.00;
-            log(`Advertencia: Falló la llamada a la API para obtener balances. Usando 0.00 como saldo real. Causa: ${error.message}`, 'warning');
-        }
-        */
         
         // El log de diagnóstico ahora reporta la lectura de la caché
         log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la CACHÉ: ${availableUSDT.toFixed(2)}`, 'info');
@@ -281,7 +266,6 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         let strategyExecuted = false;
 
         if (botState.lstate !== 'STOPPED') {
-            // ✅ CORRECCIÓN DE SINTAXIS: Eliminamos el try/catch que estaba causando el error.
             await runLongStrategy();
             strategyExecuted = true;
         }
@@ -299,17 +283,10 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         }
         
     } catch (error) {
-        // Este catch ahora capturará el error toFixed, pero la lógica en LNoCoverage debe forzar la transición.
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
 }
 
-// ❌ FUNCIÓN ELIMINADA: balanceCycle ya no es necesaria y llamaba directamente a la API.
-/*
-async function balanceCycle() {
-    // ... código eliminado ...
-}
-*/
 
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
@@ -325,7 +302,6 @@ module.exports = {
     stop,
     log,
     botCycle,    
-    // ❌ Eliminada la exportación de balanceCycle
     updateBotState,
     updateLStateData,
     updateSStateData,
