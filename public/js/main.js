@@ -55,9 +55,11 @@ function updateConnectionStatusBall(source) {
         statusBall.classList.add('status-yellow');
         statusBall.title = 'Advertencia: Fallo de conexión o Rate Limit. Usando datos en caché.';
     } else {
-        // Rojo: Estado desconocido o error grave.
+        // 🛑 CAMBIO CLAVE: Definimos el estado ROJO cuando el 'source' es desconocido o nulo.
+        // Esto captura la primera llamada de inicialización (donde 'source' es undefined) 
+        // y cualquier desconexión que no sea manejada.
         statusBall.classList.add('status-red');
-        statusBall.title = 'Error de conexión con BitMart.';
+        statusBall.title = 'Desconectado: Error de conexión con BitMart o inicialización pendiente.';
     }
 }
 
@@ -90,10 +92,21 @@ export function initializeTab(tabName) {
 export function initializeFullApp() {
     console.log("Token de autenticación encontrado. Inicializando la aplicación...");
     
+    // 🛑 CAMBIO CLAVE 1: Inicializamos el estado a ROJO/Desconectado al iniciar la app, 
+    // antes de que el socket intente conectarse.
+    updateConnectionStatusBall(); 
+
     // Conexión del socket (ÚNICA CONEXIÓN)
     // Asumimos que 'io' está disponible globalmente si no hay un import explícito
     const socket = io(BACKEND_URL, {
         path: '/socket.io'
+    });
+
+    // Añadir listener para la desconexión del socket
+    socket.on('disconnect', () => {
+        console.warn('Socket.IO desconectado. Forzando estado de conexión a rojo.');
+        // Forzamos el estado a rojo si el socket se desconecta
+        updateConnectionStatusBall('DISCONNECTED'); 
     });
 
     // 💡 LISTENER PARA DATOS DE MERCADO (Actualiza precio y color)
@@ -142,6 +155,7 @@ export function initializeFullApp() {
     // Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
     socket.on('balance-real-update', (data) => {
         // Aquí es donde se llama a la función corregida.
+        console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
         updateConnectionStatusBall(data.source);
     });
     // --------------------------------------------------------

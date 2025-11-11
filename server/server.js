@@ -226,32 +226,38 @@ io.on('connection', (socket) => {
  * autenticación (getBalance), y emite el resultado al frontend.
  * También llama a la lógica de actualización lenta después de un check exitoso.
  */
-async function checkBitmartStatusAndEmit() {
+async function checkBitmartStatusAndEmit(socket) {
+    // Definimos el ID del usuario para el log
+    const userId = socket.userId; 
+
     try {
-        // Llama a una función que requiere credenciales. Si falla, va al catch.
+        // La llamada que está fallando y lanzando una excepción
         const balances = await bitmartService.getBalance();
         
-        // La llamada a la API fue exitosa (código 200 o similar).
-        io.emit('balance-real-update', {
+        // Si tiene éxito, emitimos verde
+        socket.emit('balance-real-update', {
+            data: balances,
             source: 'API_SUCCESS',
-            // Opcional: balances: balances // Si el frontend necesita los datos reales
+            timestamp: Date.now()
         });
+        // console.log(`[${userId}] Balance actualizado. Estado: API_SUCCESS`);
         
-        console.log('✅ BitMart API status check successful (API_SUCCESS).');
-        
-        // Si la conexión es exitosa, disparamos la actualización lenta de la caché del bot.
-        // Asumimos que slowBalanceCacheUpdate usa los balances obtenidos o hace otra llamada.
-        await autobotLogic.slowBalanceCacheUpdate();
+        return balances;
 
     } catch (error) {
-        // La llamada falló (credenciales incorrectas, rate limit, BitMart caído).
-        io.emit('balance-real-update', {
-            // Usamos 'CACHE_FALLBACK' para que el frontend lo marque como Advertencia/Amarillo
-            source: 'CACHE_FALLBACK', 
+        // 🚨 CAMBIO CRUCIAL: Añadimos un console.error detallado
+        console.error(`[${userId}] ❌ ERROR de Conexión a BitMart/API Key:`, error.message);
+        
+        // Si falla la conexión con la API, emitimos la caída a CACHÉ (amarillo)
+        socket.emit('balance-real-update', {
+            data: null, // No hay datos nuevos
+            source: 'CACHE_FALLBACK', // El frontend lo interpretará como amarillo
+            timestamp: Date.now(),
+            message: 'Error al conectar con BitMart. Usando caché.'
         });
         
-        // Nota: En caso de fallo, NO llamamos a slowBalanceCacheUpdate para evitar más errores.
-        console.error('❌ BitMart API status check failed (CACHE_FALLBACK/Error):', error.message);
+        // Importante: Lanzamos el error para que el polling general (si existe) lo maneje.
+        throw error;
     }
 }
 
