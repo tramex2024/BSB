@@ -105,15 +105,34 @@ async function updateGeneralBotState(fieldsToUpdate) {
  * ESTE DEBE SER EL ÚNICO LUGAR DONDE SE LLAMA A bitmartService.getBalances().
  */
 async function slowBalanceCacheUpdate() {
+    let availableUSDT = 0;
+    let availableBTC = 0;
+    let apiSuccess = false;
+
     try {
         // La única llamada a la API de BitMart
         const balances = await bitmartService.getBalances();
         
         // 1. Extraer balances (asumiendo estructura: { USDT: { available: x }, BTC: { available: y } })
-        const availableUSDT = parseFloat(balances.USDT?.available || 0);
-        const availableBTC = parseFloat(balances.BTC?.available || 0);
+        availableUSDT = parseFloat(balances.USDT?.available || 0);
+        availableBTC = parseFloat(balances.BTC?.available || 0);
+        apiSuccess = true; // La API respondió con éxito
+        
+    } catch (error) {
+        // Si hay un error 429, solo registramos. Usamos los valores iniciales (0).
+        console.error("[SLOW BALANCE CACHE] Error al obtener balances de BitMart (Usando caché anterior/default):", error.message);
+        
+        // Si falla, leemos los valores anteriores de la DB para la emisión RÁPIDA (si existen)
+        const currentBotState = await Autobot.findOne({});
+        if (currentBotState) {
+            availableUSDT = currentBotState.lastAvailableUSDT || 0;
+            availableBTC = currentBotState.lastAvailableBTC || 0;
+        }
+    }
 
+    try {
         // 2. Guardar el valor en los campos de caché de la base de datos
+        // NOTA: Usamos el valor obtenido de la API si fue exitoso, o 0 si falló.
         const updatedBotState = await Autobot.findOneAndUpdate(
             {}, 
             {
@@ -123,22 +142,24 @@ async function slowBalanceCacheUpdate() {
                     lastBalanceCheck: new Date() 
                 }
             },
-            { new: true, upsert: true } // new: true devuelve el doc actualizado; upsert: true crea si no existe
+            // 'upsert: true' garantiza que si no hay documento, se crea uno.
+            // Esto también fuerza la adición de los campos al documento existente.
+            { new: true, upsert: true } 
         );
 
-        // 3. Emitir los nuevos balances reales a la UI a través de Socket.IO (Ciclo LENTO)
-        // Esto le da al usuario una actualización de balance real cada 30-60 segundos.
+        // 3. Emitir los balances a la UI a través de Socket.IO
         if (updatedBotState && io) {
              io.sockets.emit('balance-real-update', { 
                 lastAvailableUSDT: updatedBotState.lastAvailableUSDT,
                 lastAvailableBTC: updatedBotState.lastAvailableBTC,
-                lastBalanceCheck: updatedBotState.lastBalanceCheck
+                lastBalanceCheck: updatedBotState.lastBalanceCheck,
+                // Indicamos si la actualización fue de la API o de la caché (fallida)
+                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK' 
             });
         }
         
-    } catch (error) {
-        // Si hay un error 429, solo registramos. La lógica del bot usará el valor VECES de la DB.
-        console.error("[SLOW BALANCE CACHE] Error al obtener o guardar balances de BitMart (429 esperado):", error.message);
+    } catch (dbError) {
+        console.error("[SLOW BALANCE CACHE] Error crítico al guardar en la DB:", dbError.message);
     }
 }
 
