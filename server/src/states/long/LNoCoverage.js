@@ -76,10 +76,6 @@ async function run(dependencies) {
     // ✅ Log de diagnóstico (Tu sugerencia, ahora funcional)
     log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${requiredAmount.toFixed(2)}`, 'info');
 
-    // 🛑 Log de diagnóstico detallado (Funcional gracias a la corrección de availableUSDT)
-    log(`DIAGNOSTICO NO_COVERAGE: LBal=${currentLBalance.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | RealBal=${availableUSDT.toFixed(2)} (Req=${requiredAmount.toFixed(2)}) | MinVal=${MIN_USDT_VALUE_FOR_BITMART.toFixed(2)}`, 'debug');
-    log(`Condiciones: LBalOK: ${currentLBalance >= requiredAmount} | RealOK: ${availableUSDT >= requiredAmount} | MinOK: ${requiredAmount >= MIN_USDT_VALUE_FOR_BITMART}`, 'debug');
-
     // ✅ LÓGICA DE TRANSICIÓN FINAL
     // Si esta condición es TRUE, el bot debe transicionar.
     if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
