@@ -98,6 +98,8 @@ router.post('/stop', async (req, res) => {
             // ✅ APLICAR LA LIMPIEZA DE ROOT: Targets de venta y reinicio de ciclos
             botState.ltprice = CLEAN_ROOT_FIELDS.ltprice; 
             botState.stprice = CLEAN_ROOT_FIELDS.stprice;
+            botState.lsprice = CLEAN_ROOT_FIELDS.lsprice; 
+            botState.sbprice = CLEAN_ROOT_FIELDS.sbprice;
             botState.lcycle = CLEAN_ROOT_FIELDS.lcycle;
             botState.scycle = CLEAN_ROOT_FIELDS.scycle;
 

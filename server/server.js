@@ -158,6 +158,8 @@ async function updateBotStateWithPrice(price) {
                 sbalance: updatedBotState.sbalance || 0,
                 ltprice: updatedBotState.ltprice || 0,
                 stprice: updatedBotState.stprice || 0,
+                lsprice: updatedBotState.lsprice || 0,
+                sbprice: updatedBotState.sbprice || 0,
                 lcycle: updatedBotState.lcycle || 0,
                 scycle: updatedBotState.scycle || 0,
                 lcoverage: updatedBotState.lcoverage || 0,

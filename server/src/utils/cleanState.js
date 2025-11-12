@@ -23,8 +23,10 @@ const CLEAN_STRATEGY_DATA = {
  * NOTA: lstate/sstate NO se incluyen, ya que se gestionan por separado (RUNNING o STOPPED).
  */
 const CLEAN_ROOT_FIELDS = {
-    ltprice: 0,    // Target de Venta Long
-    stprice: 0,    // Target de Venta Short
+    ltprice: 0,    // Target de Gestion de Venta Long
+    stprice: 0,    // Target de Gestion de Compra Short
+    lsprice: 0,    // Precio de Venta Long
+    sbprice: 0,    // Precio de Compra Short
     lcycle: 0,     // Contador de ciclos Long (Reiniciar si es un RESET completo)
     scycle: 0,     // Contador de ciclos Short (Reiniciar si es un RESET completo)
     // lcoverage y lnorder se mantienen con su valor calculado de capacidad

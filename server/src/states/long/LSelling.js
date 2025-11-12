@@ -60,6 +60,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 			
 			// 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
 			ltprice: 0,
+                        lsprice: 0,
 			lcoverage: 0,
 			lnorder: 0,
 			lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!

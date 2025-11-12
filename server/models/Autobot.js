@@ -62,16 +62,21 @@ const autobotSchema = new mongoose.Schema({
     ltprice: { type: Number, default: 0.00 }, 
     stprice: { type: Number, default: 0.00 }, 
 
+    lsprice: { type: Number, default: 0.00 }, 
+    sbprice: { type: Number, default: 0.00 }, 
+
     lcycle: { type: Number, default: 0 },
     scycle: { type: Number, default: 0 },
     
     lcoverage: { type: Number, default: 0.00 }, 
-    scoverage: { type: Number, default: 0.00 }, 
+    scoverage: { type: Number, default: 0.00 },
+ 
     lnorder: { type: Number, default: 0 }, 
     snorder: { type: Number, default: 0 }, 
     
     lStateData: { type: strategyDataSchema, default: {} },
     sStateData: { type: strategyDataSchema, default: {} },
+
     config: { type: configSchema, default: {} },
     lastUpdateTime: { type: Date, default: Date.now }
 });

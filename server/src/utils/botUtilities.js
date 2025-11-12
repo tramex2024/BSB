@@ -24,8 +24,8 @@ async function resetAndInitializeBot() {
         "sbalance": config.short.amountBtc || 0, 
         "lStateData": { "ppc": 0, "ac": 0, "ai": 0, "orderCountInCycle": 0, "lastOrder": null, "pm": 0, "pc": 0, "requiredCoverageAmount": 0, "nextCoveragePrice": 0 },
         "sStateData": { "ppc": 0, "ac": 0, "ai": 0, "orderCountInCycle": 0, "lastOrder": null, "pm": 0, "pc": 0, "requiredCoverageAmount": 0, "nextCoveragePrice": 0 },
-        "lcycle": 0, "lnorder": 0, "ltprice": 0,
-        "scycle": 0, "snorder": 0, "stprice": 0,
+        "lcycle": 0, "lnorder": 0, "ltprice": 0, "lsprice": 0,
+        "scycle": 0, "snorder": 0, "stprice": 0, "sbprice": 0,
     };
     
     const newAutobot = new Autobot(newBotData);

@@ -27,7 +27,9 @@ export function updateBotUI(state) {
         aulcoverage: 'lcoverage',
         auscoverage: 'scoverage',
         aulnorder: 'lnorder',
-        ausnorder: 'snorder'
+        ausnorder: 'snorder',
+        aulsprice: 'aulsprice',
+        ausbprice: 'ausbprice'
     };
 
     if (lstateElement) {
