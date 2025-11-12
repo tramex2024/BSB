@@ -186,7 +186,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
         
         // El log de diagnóstico ahora reporta la lectura de la caché
-        log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la CACHÉ: ${availableUSDT.toFixed(2)}`, 'info');
+   //     log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la CACHÉ: ${availableUSDT.toFixed(2)}`, 'info');
 
         const dependencies = {
             log,

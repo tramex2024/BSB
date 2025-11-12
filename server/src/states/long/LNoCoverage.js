@@ -102,7 +102,7 @@ async function run(dependencies) {
         } else {
             reason = `Esperando que el Monto Requerido alcance el Mínimo de BitMart (${(MIN_USDT_VALUE_FOR_BITMART || 0).toFixed(2)}). Requerido: ${safeRequired}`;
         }
-        log(reason, 'info'); 
+   //     log(reason, 'info'); 
     } 
 } 
 
