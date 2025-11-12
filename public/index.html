@@ -1,56 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="icon" href="/images/bsb-logo.png" type="image/png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSB - Bitmart Spot Bots</title>
-    <link rel="stylesheet" href="css/style.css">
+    <!-- Use placeholder favicon -->
+    <link rel="icon" href="https://placehold.co/32x32/1f2937/ffffff?text=BSB" type="image/png">
+
+    <!-- Load FontAwesome and Tailwind CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Configure the 'Inter' font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+
         /* Custom scrollbar for order list */
-        .overflow-y-auto::-webkit-scrollbar {
-            width: 8px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-track {
-            background: #374151; /* gray-700 */
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-            background: #6b7280; /* gray-500 */
-            border-radius: 4px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af; /* gray-400 */
+        .overflow-y-auto::-webkit-scrollbar { width: 8px; }
+        .overflow-y-auto::-webkit-scrollbar-track { background: #1f2937; /* gray-800 */ }
+        .overflow-y-auto::-webkit-scrollbar-thumb { background: #6b7280; /* gray-500 */ border-radius: 4px; }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover { background: #9ca3af; /* gray-400 */ }
+
+        /* Header and Nav Styles */
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #111827; /* Darker than body */
+            border-bottom: 1px solid #1f2937;
+            padding: 10px 20px;
         }
 
-        /* Active tab style for main navigation (DASHBOARD, TESTBOT, etc.) */
-        .header-middle .nav-tab.active {
-            border-bottom: 2px solid white;
+        .header-left, .header-right {
+            display: flex;
+            align-items: center;
         }
+
+        .logo { width: 32px; height: 32px; margin-right: 10px; border-radius: 4px; }
+        .app-name { font-size: 1.25rem; font-weight: 700; color: #3b82f6; }
+
         .nav-tab {
             padding: 10px 15px;
             text-decoration: none;
-            color: #ccc;
-            transition: all 0.3s ease;
+            color: #9ca3af; /* gray-400 */
+            transition: all 0.2s ease;
+            font-weight: 500;
         }
 
-        .nav-tab:hover {
+        .nav-tab:hover { color: white; }
+
+        /* Active tab style for main navigation */
+        .header-middle .nav-tab.active {
             color: white;
+            border-bottom: 2px solid #3b82f6; /* Blue indicator */
         }
 
-        /* Active tab style for order history tabs (Opened, Filled, Cancelled, All) */
-        .autobot-tabs button.active-tab {
-            border-color: white !important;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
+        .header-right .icon {
+            margin-left: 15px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            color: #9ca3af;
+            transition: color 0.2s ease;
         }
 
-        /* Modal styles */
+        .header-right .icon:hover { color: #3b82f6; }
+
+        /* Main Content and Log Bar */
+        .log-bar {
+            position: fixed;
+            top: 52px; /* Height of header */
+            left: 0;
+            right: 0;
+            z-index: 40;
+            background-color: #1f2937; /* gray-800 */
+            padding: 5px 20px;
+            font-size: 0.8rem;
+            color: #6ee7b7; /* Green for log success/info */
+            border-bottom: 1px solid #374151;
+        }
+
+        .content {
+            padding-top: 90px; /* Space for fixed header and log bar */
+            min-height: calc(100vh);
+        }
+
+        /* Tab Content Display */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Modal Styles */
         .modal, #logout-modal {
             position: fixed;
             z-index: 1000;
@@ -58,21 +101,40 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
+            background-color: rgba(0, 0, 0, 0.7);
             display: none;
             justify-content: center;
             align-items: center;
+            padding: 1rem; /* Added for mobile safety */
         }
 
         .modal-content, #logout-modal > div {
             background-color: #1f2937; /* gray-800 */
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            width: 90%;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            max-width: 450px;
+            width: 100%;
             position: relative;
         }
+
+        .modal-content input, .modal-content button {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background-color: #0d131e;
+            color: white;
+        }
+
+        .modal-content input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        .modal-content h2 { margin-bottom: 1.5rem; font-size: 1.5rem; font-weight: bold; }
+        .modal-content label { display: block; margin-bottom: 5px; font-size: 0.9rem; color: #9ca3af; }
 
         .close-button {
             position: absolute;
@@ -82,111 +144,540 @@
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
+            transition: color 0.2s ease;
         }
+        .close-button:hover, .close-button:focus { color: white; }
 
-        .close-button:hover,
-        .close-button:focus {
-            color: white;
-            text-decoration: none;
+        /* API Status Indicator */
+        .indicator-circle {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            transition: background-color 0.3s;
+        }
+        .indicator-text { font-weight: 500; font-size: 0.9rem; }
+        .connected { background-color: #10b981; } /* Green */
+        .disconnected { background-color: #ef4444; } /* Red */
+
+        /* Responsive Dashboard Grid */
+        @media (min-width: 640px) {
+            .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (min-width: 1024px) {
+            .dashboard-grid { grid-template-columns: repeat(3, 1fr); }
         }
     </style>
 </head>
-<body class="dark-mode bg-gray-900 text-white">
+<body class="dark-mode bg-gray-900 text-white font-sans">
+    <!-- Fixed Header -->
     <header class="fixed-header">
         <div class="header-left">
-            <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
-            <span class="app-name">Bitmart Spot Bot</span>
+            <!-- Placeholder logo -->
+            <img src="https://placehold.co/32x32/3b82f6/ffffff?text=B" alt="BSB Logo" class="logo">
+            <span class="app-name hidden sm:block">Bitmart Spot Bot</span>
         </div>
-        <nav class="header-middle">
-            <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
+        <nav class="header-middle mx-4">
+            <a href="#dashboard" class="nav-tab" data-tab="dashboard">DASHBOARD</a>
             <a href="#testbot" class="nav-tab" data-tab="testbot">TESTBOT</a>
             <a href="#autobot" class="nav-tab" data-tab="autobot">AUTOBOT</a>
             <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
         </nav>
         <div class="header-right">
             <i class="fas fa-sign-in-alt icon" id="login-logout-icon" title="Login"></i>
-            <i class="fas fa-globe icon" title="Language"></i>
-            <i class="fas fa-users icon" title="Users"></i>
-            <i class="fas fa-cog icon" title="Settings"></i>
+            <i class="fas fa-key icon" id="api-key-icon" title="API Configuration"></i>
+            <i class="fas fa-cog icon hidden sm:block" title="Settings"></i>
             <i class="fas fa-sun dark-mode-toggle icon" title="Toggle Dark/Lite Mode"></i>
-            <i class="fas fa-key icon" id="api-key-icon" title="API"></i>
-            <i class="fas fa-envelope icon" title="Contact"></i>
         </div>
     </header>
 
+    <!-- Log Bar -->
     <div id="log-bar" class="log-bar">
-        <p id="log-message">Waiting for bot actions...</p>
+        <p id="log-message">Initializing application...</p>
     </div>
 
+    <!-- Main Content Area -->
     <main id="main-content" class="content">
-	<div id="logged-out-view" class="tab-content active p-6 text-center">
-        	<h2 class="text-2xl font-bold mb-4">Welcome to Bitmart Spot Bot</h2>
-        	<p class="text-gray-400 mb-6">Please log in to manage your trading bots and view your dashboard.</p>
-        	<button id="login-cta-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition duration-150 ease-in-out">
-            Log In Now
-        	</button>
-    	</div>
+
+        <!-- 1. Logged Out View (Active by default) -->
+        <div id="logged-out-view" class="tab-content p-6 text-center active">
+            <div class="max-w-md mx-auto bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700">
+                <i class="fas fa-robot text-5xl text-blue-500 mb-4"></i>
+                <h2 class="text-3xl font-extrabold mb-4 text-white">Welcome to Bitmart Spot Bot</h2>
+                <p class="text-gray-400 mb-8">
+                    Please log in to manage your trading bots, connect your API keys, and view real-time performance data.
+                </p>
+                <button id="login-cta-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-150 ease-in-out transform hover:scale-105 shadow-lg">
+                    Log In Now
+                </button>
+                <p class="mt-4 text-xs text-gray-500">Secure trading starts with secure login.</p>
+            </div>
+        </div>
+
+        <!-- 2. Dashboard View (Logged In) -->
+        <div id="dashboard-view" class="tab-content p-4 sm:p-6">
+            <h1 class="text-3xl font-bold mb-6 text-white">Dashboard Overview</h1>
+
+            <!-- Key Metrics Grid -->
+            <div class="grid dashboard-grid gap-6 mb-8">
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                    <p class="text-sm text-gray-400">Total P&L (All Time)</p>
+                    <p class="text-3xl font-bold text-green-400 mt-1">$4,521.89 <span class="text-lg text-green-500 ml-2">+12.4%</span></p>
+                </div>
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                    <p class="text-sm text-gray-400">Total Active Bots</p>
+                    <p class="text-3xl font-bold text-white mt-1">4</p>
+                </div>
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                    <p class="text-sm text-gray-400">Estimated Balance (USD)</p>
+                    <p class="text-3xl font-bold text-yellow-400 mt-1">$35,102.55</p>
+                </div>
+            </div>
+
+            <!-- Bot Performance List -->
+            <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                <h2 class="text-xl font-bold mb-4">Live Bot Performance</h2>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
+                        <span class="font-semibold text-blue-300">AUTOBOT: BTC/USDT (Grid)</span>
+                        <span class="text-red-400 font-mono">- $120.50 (24h)</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
+                        <span class="font-semibold text-blue-300">TESTBOT: ETH/USDT (Martingale)</span>
+                        <span class="text-green-400 font-mono">+ $89.15 (24h)</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
+                        <span class="font-semibold text-blue-300">AIBOT: SOL/USDT (AI Strategy)</span>
+                        <span class="text-green-400 font-mono">+ $210.05 (24h)</span>
+                    </div>
+                </div>
+                <button class="mt-6 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm transition">
+                    View All Details
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. TestBot View -->
+        <div id="testbot-view" class="tab-content p-4 sm:p-6">
+            <h1 class="text-3xl font-bold mb-6">TestBot: Manual Trading Simulator</h1>
+            <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                <p class="text-gray-400 mb-4">
+                    Use the TestBot to manually execute trades, test small strategies, and monitor real-time order execution without risk.
+                </p>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2">
+                        <div class="h-96 bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700">
+                            <i class="fas fa-chart-line text-6xl text-gray-600"></i>
+                            <span class="ml-4 text-gray-500">TradingView Chart Integration Mock</span>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-gray-700 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-3">Place Order</h3>
+                        <input type="text" placeholder="Symbol (e.g., BTC_USDT)" class="w-full p-2 mb-3 bg-gray-600 border border-gray-500 rounded-md">
+                        <input type="number" placeholder="Amount (USDT)" class="w-full p-2 mb-3 bg-gray-600 border border-gray-500 rounded-md">
+                        <div class="flex space-x-2">
+                            <button class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">BUY</button>
+                            <button class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg">SELL</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Autobot View -->
+        <div id="autobot-view" class="tab-content p-4 sm:p-6">
+            <h1 class="text-3xl font-bold mb-6">Autobot: Automated Strategy Manager</h1>
+            <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                <p class="text-gray-400 mb-6">
+                    Configure and launch pre-built bot strategies like Grid Trading, DCA, and Arbitrage.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="p-4 bg-gray-700 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-3">Grid Bot Setup</h3>
+                        <label class="block text-sm text-gray-400 mb-1">Pair</label>
+                        <select class="w-full p-2 mb-3 bg-gray-600 border border-gray-500 rounded-md text-white">
+                            <option>BTC/USDT</option>
+                            <option>ETH/USDT</option>
+                        </select>
+                        <label class="block text-sm text-gray-400 mb-1">Lower Price Bound</label>
+                        <input type="number" placeholder="$20,000" class="w-full p-2 mb-3 bg-gray-600 border border-gray-500 rounded-md">
+                        <button class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition">
+                            Launch Grid Bot
+                        </button>
+                    </div>
+                    <div class="p-4 bg-gray-700 rounded-lg">
+                        <h3 class="text-xl font-semibold mb-3">Active Autobots</h3>
+                        <ul class="space-y-2 text-sm text-gray-300">
+                            <li class="flex justify-between"><span>DCA Bot (ADA/USDT)</span> <span class="text-green-400">Running</span></li>
+                            <li class="flex justify-between"><span>Arbitrage Bot</span> <span class="text-yellow-400">Paused</span></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. AIBot View -->
+        <div id="aibot-view" class="tab-content p-4 sm:p-6">
+            <h1 class="text-3xl font-bold mb-6">AIBot: Generative Trading Assistant</h1>
+            <div class="bg-gray-800 p-6 rounded-xl shadow-xl border border-gray-700">
+                <p class="text-gray-400 mb-6">
+                    The AIBot uses advanced models to suggest or execute trades based on market analysis and user input.
+                </p>
+                <textarea rows="4" placeholder="Ask the AIBot for a strategy, e.g., 'Suggest a low-risk strategy for Ethereum over the next week.'"
+                          class="w-full p-3 bg-gray-700 border border-gray-600 rounded-md focus:border-blue-500 text-white mb-4"></textarea>
+                <button class="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-6 rounded-lg transition">
+                    Analyze & Generate
+                </button>
+                <div class="mt-6 p-4 bg-gray-700 rounded-lg border border-gray-600">
+                    <h3 class="font-semibold text-lg text-pink-300 mb-2">AIBot Response</h3>
+                    <p class="text-sm text-gray-300">
+                        [Mock Response]: Based on current volatility metrics, a conservative 10-grid bot on the SOL/USDT pair, spanning $100 to $150, is recommended.
+                    </p>
+                </div>
+            </div>
+        </div>
+
     </main>
 
+    <!-- Modals -->
+
+    <!-- Auth Modal -->
     <div id="auth-modal" class="modal">
         <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h3>Sign In / Sign Up</h3>
-            
-            <form id="auth-form">
+            <span class="close-button" data-modal-target="auth-modal">&times;</span>
+            <h2 class="text-xl font-bold text-center">Sign In / Sign Up</h2>
+
+            <form id="auth-form" class="mt-4">
                 <div id="email-section">
-                    <input type="email" id="email" placeholder="Email" required>
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" placeholder="email@example.com" required>
+                    <button type="submit" id="auth-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 transition">
+                        Send Token
+                    </button>
                 </div>
-                
+
                 <div id="token-section" style="display: none;">
-                    <input type="text" id="token" name="token" placeholder="Token (from email)">
+                    <label for="token">Token (Check your email)</label>
+                    <input type="text" id="token" name="token" placeholder="6-digit token" pattern="\d{6}" required>
+                    <button type="submit" id="verify-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 transition">
+                        Verify & Login
+                    </button>
                 </div>
-                
-                <button type="submit" id="auth-button">Continue</button>
             </form>
-            <p id="auth-message"></p>
+            <p id="auth-message" class="message-text text-sm text-center mt-3 text-red-400"></p>
         </div>
     </div>
 
+    <!-- API Modal -->
     <div id="api-modal" class="modal">
         <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h2>BitMart API Configuration</h2>
-            <form id="api-form">
-                <label for="api-key">API Key:</label>
-                <input type="text" id="api-key" placeholder="Your API Key" required>
+            <span class="close-button" data-modal-target="api-modal">&times;</span>
+            <h2 class="text-xl font-bold text-center">BitMart API Configuration</h2>
+            <form id="api-form" class="mt-4">
+                <label for="api-key">API Key</label>
+                <input type="text" id="api-key-input" placeholder="Your API Key" required>
 
-                <label for="secret-key">Secret Key:</label>
-                <input type="password" id="secret-key" placeholder="Your Secret Key" required>
+                <label for="secret-key">Secret Key</label>
+                <input type="password" id="secret-key-input" placeholder="Your Secret Key" required>
 
-                <label for="api-memo">API Memo (Optional):</label>
-                <input type="text" id="api-memo" placeholder="Your API Memo (if any)">
+                <label for="api-memo">API Memo (Optional)</label>
+                <input type="text" id="api-memo-input" placeholder="Your API Memo (if any)">
 
-                <button type="submit" id="validate-api-button">VALIDATE</button>
-                <p id="api-status-message" class="message-text"></p>
-                <div id="connection-indicator" class="indicator-circle"></div>
-                <span id="connection-text" class="indicator-text"></span>
+                <button type="submit" id="validate-api-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 transition">
+                    SAVE & VALIDATE
+                </button>
+                <div class="flex items-center justify-center mt-4">
+                    <div id="connection-indicator" class="indicator-circle disconnected"></div>
+                    <span id="connection-text" class="indicator-text text-gray-400">Disconnected</span>
+                </div>
+                <p id="api-status-message" class="message-text text-sm text-center mt-3 text-red-400"></p>
             </form>
         </div>
     </div>
-	
-    <div id="logout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background-color: rgba(0, 0, 0, 0.5);">
-        <div class="bg-gray-800 rounded-lg shadow-lg p-6 max-w-sm w-full text-white">
+
+    <!-- Logout Confirmation Modal -->
+    <div id="logout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background-color: rgba(0, 0, 0, 0.7);">
+        <div class="bg-gray-800 rounded-xl shadow-lg p-6 max-w-sm w-full text-white border border-gray-700">
             <h2 class="text-xl font-bold mb-4 text-center">Confirm Logout</h2>
             <p class="text-gray-400 text-center mb-6">Are you sure you want to log out?</p>
             <div class="flex justify-around">
-                <button id="confirm-logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+                <button id="confirm-logout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none transition duration-150 ease-in-out">
                     Logout
                 </button>
-                <button id="cancel-logout-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+                <button id="cancel-logout-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none transition duration-150 ease-in-out">
                     Cancel
                 </button>
             </div>
         </div>
     </div>
 
+    <!-- External Scripts (TradingView/Socket.io kept) -->
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script type="module" src="/js/main.js"></script>
+
+    <!-- Consolidated JavaScript Logic -->
+    <script type="module">
+        // --- MANDATORY FIREBASE PLACEHOLDERS (Required by environment) ---
+        // Since we are not implementing the full Firebase auth/firestore here,
+        // we use placeholders and mock the authentication flow for UI demonstration.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        console.log(`App ID: ${appId}`);
+        // -----------------------------------------------------------------
+
+        // --- UI State Variables ---
+        let isLoggedIn = false;
+        let activeTab = 'dashboard';
+        let apiConnected = false;
+
+        // --- Utility Functions ---
+
+        /** Toggles the dark mode setting */
+        function toggleDarkMode() {
+            const isDark = document.body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            document.body.classList.toggle('bg-gray-900', isDark);
+            document.body.classList.toggle('text-white', isDark);
+            // In a full app, we'd update all background/text classes dynamically.
+        }
+
+        /** Shows a message in the log bar */
+        function logMessage(message, type = 'info') {
+            const logBar = document.getElementById('log-message');
+            logBar.textContent = message;
+            // Simple color coding for mock logging
+            if (type === 'error') logBar.style.color = '#ef4444'; // red-500
+            else if (type === 'success') logBar.style.color = '#10b981'; // green-500
+            else logBar.style.color = '#6ee7b7'; // teal-300
+        }
+
+        /** Updates the UI based on login status */
+        function updateUI(loggedStatus) {
+            isLoggedIn = loggedStatus;
+            const logIcon = document.getElementById('login-logout-icon');
+
+            // 1. Update Auth Icon
+            if (isLoggedIn) {
+                logIcon.classList.replace('fa-sign-in-alt', 'fa-sign-out-alt');
+                logIcon.title = 'Logout';
+                logMessage('Login successful. Welcome back!', 'success');
+                switchTab('dashboard');
+                document.getElementById('logged-out-view').classList.remove('active');
+            } else {
+                logIcon.classList.replace('fa-sign-out-alt', 'fa-sign-in-alt');
+                logIcon.title = 'Login';
+                logMessage('Logged out. Please sign in.', 'info');
+                switchTab('logged-out-view');
+            }
+
+            // 2. Load API status on login
+            loadApiConfig();
+        }
+
+        /** Handles tab switching */
+        function switchTab(newTab) {
+            if (!isLoggedIn && newTab !== 'logged-out-view') {
+                logMessage('Please log in to access trading features.', 'error');
+                newTab = 'logged-out-view';
+            }
+
+            // Deactivate current tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Deactivate all navigation tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Activate new tab content
+            const targetContent = document.getElementById(newTab + '-view');
+            if (targetContent) {
+                targetContent.classList.add('active');
+                activeTab = newTab;
+
+                // Activate navigation tab (if applicable)
+                const targetNav = document.querySelector(`.nav-tab[data-tab="${newTab}"]`);
+                if (targetNav) {
+                    targetNav.classList.add('active');
+                }
+            } else {
+                // If the target view is not found (e.g., 'logged-out-view'), ensure it is shown
+                document.getElementById('logged-out-view').classList.add('active');
+            }
+        }
+
+        /** Opens a modal */
+        function openModal(modalId) {
+            document.getElementById(modalId).style.display = 'flex';
+        }
+
+        /** Closes a modal */
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // --- API & Connection Mock Logic ---
+
+        /** Updates the connection status indicator */
+        function updateApiStatus(connected) {
+            apiConnected = connected;
+            const indicator = document.getElementById('connection-indicator');
+            const text = document.getElementById('connection-text');
+
+            if (connected) {
+                indicator.classList.replace('disconnected', 'connected');
+                text.textContent = 'Connected to BitMart';
+                text.classList.remove('text-red-400');
+                text.classList.add('text-green-400');
+                document.getElementById('api-status-message').textContent = 'API keys verified and saved.';
+            } else {
+                indicator.classList.replace('connected', 'disconnected');
+                text.textContent = 'Disconnected';
+                text.classList.remove('text-green-400');
+                text.classList.add('text-red-400');
+                document.getElementById('api-status-message').textContent = 'Please enter valid API keys.';
+            }
+        }
+
+        /** Loads and populates API config from localStorage (mock persistence) */
+        function loadApiConfig() {
+            const mockApiConfig = localStorage.getItem('bitmartApiConfig');
+            const apiForm = document.getElementById('api-form');
+            if (mockApiConfig) {
+                const config = JSON.parse(mockApiConfig);
+                apiForm['api-key-input'].value = config.key || '';
+                apiForm['secret-key-input'].value = config.secret ? '********' : ''; // Masking mock secret
+                apiForm['api-memo-input'].value = config.memo || '';
+                // Assume keys are connected if they exist
+                updateApiStatus(true);
+            } else {
+                updateApiStatus(false);
+            }
+        }
+
+        /** Handles API form submission (Mock validation) */
+        function handleApiFormSubmit(e) {
+            e.preventDefault();
+            const key = document.getElementById('api-key-input').value;
+            const secret = document.getElementById('secret-key-input').value;
+            const memo = document.getElementById('api-memo-input').value;
+            const statusMessage = document.getElementById('api-status-message');
+
+            if (key.length < 10 || secret.length < 10) {
+                statusMessage.textContent = 'API Key and Secret Key must be at least 10 characters long.';
+                updateApiStatus(false);
+                return;
+            }
+
+            // Mock successful validation and save
+            const newConfig = { key, secret: secret.replace(/[^A-Za-z0-9]/g, ''), memo };
+            localStorage.setItem('bitmartApiConfig', JSON.stringify(newConfig));
+
+            updateApiStatus(true);
+            logMessage('BitMart API Configuration updated successfully.', 'success');
+            // closeModal('api-modal'); // Close after successful save
+        }
+
+
+        // --- Event Listeners and Initialization ---
+
+        window.onload = function() {
+            // 1. Load Initial Theme
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+
+            // 2. Setup Modals
+            document.querySelectorAll('.close-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const modalId = e.target.getAttribute('data-modal-target');
+                    if (modalId) closeModal(modalId);
+                });
+            });
+
+            // 3. Header Icons and CTAs
+            document.querySelector('.dark-mode-toggle').addEventListener('click', toggleDarkMode);
+            document.getElementById('api-key-icon').addEventListener('click', () => {
+                if (!isLoggedIn) {
+                    logMessage('Please log in first to configure your API.', 'error');
+                } else {
+                    openModal('api-modal');
+                }
+            });
+
+            document.getElementById('login-cta-btn').addEventListener('click', () => openModal('auth-modal'));
+
+            // Login/Logout Icon Handler
+            document.getElementById('login-logout-icon').addEventListener('click', () => {
+                if (isLoggedIn) {
+                    openModal('logout-modal');
+                } else {
+                    openModal('auth-modal');
+                }
+            });
+
+            // 4. Logout Modal Actions
+            document.getElementById('confirm-logout-btn').addEventListener('click', () => {
+                updateUI(false);
+                closeModal('logout-modal');
+                // Clear mock API status on logout
+                updateApiStatus(false);
+            });
+            document.getElementById('cancel-logout-btn').addEventListener('click', () => closeModal('logout-modal'));
+
+            // 5. Navigation Tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    switchTab(e.target.getAttribute('data-tab'));
+                });
+            });
+
+            // 6. Auth Modal (Mock Authentication)
+            const authForm = document.getElementById('auth-form');
+            authForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const authButton = document.getElementById('auth-button');
+                const verifyButton = document.getElementById('verify-button');
+                const authMessage = document.getElementById('auth-message');
+
+                if (e.submitter.id === 'auth-button') {
+                    // Step 1: Send Token (Mock)
+                    authMessage.textContent = 'Token sent! Check console for mock token (123456).';
+                    authMessage.style.color = '#34d399'; // green-400
+                    document.getElementById('email-section').style.display = 'none';
+                    document.getElementById('token-section').style.display = 'block';
+                } else if (e.submitter.id === 'verify-button') {
+                    // Step 2: Verify Token (Mock)
+                    const token = document.getElementById('token').value;
+                    if (token === '123456') {
+                        // Mock Successful Login
+                        closeModal('auth-modal');
+                        authMessage.textContent = '';
+                        // Reset form state for next time
+                        document.getElementById('email-section').style.display = 'block';
+                        document.getElementById('token-section').style.display = 'none';
+
+                        updateUI(true); // Switches to dashboard
+                    } else {
+                        authMessage.textContent = 'Invalid token. Please try again.';
+                        authMessage.style.color = '#ef4444'; // red-500
+                    }
+                }
+            });
+
+            // 7. API Modal Submission
+            document.getElementById('api-form').addEventListener('submit', handleApiFormSubmit);
+
+            // 8. Initial View Setup
+            updateUI(false); // Start logged out by default
+        };
+    </script>
 </body>
 </html>
