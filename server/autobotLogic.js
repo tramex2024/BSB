@@ -279,7 +279,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         if (strategyExecuted) {
             botState = await Autobot.findOne({});
             dependencies.botState = botState; // Actualizar la referencia
-            log('Estado del bot recargado tras ejecución de estrategia para sincronización.', 'debug');
+        //    log('Estado del bot recargado tras ejecución de estrategia para sincronización.', 'debug');
         }
         
     } catch (error) {

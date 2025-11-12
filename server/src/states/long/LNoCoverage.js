@@ -45,7 +45,7 @@ async function run(dependencies) {
     
     // Forzamos el recalculo si hay una posición abierta (ac > 0). 
     if (ac > 0 && latestBotState.lStateData.orderCountInCycle >= 0) { 
-        log("Forzando recalculo de RequiredAmount en NO_COVERAGE para asegurar la consistencia del estado.", 'warning');
+ //       log("Forzando recalculo de RequiredAmount en NO_COVERAGE para asegurar la consistencia del estado.", 'warning');
         
         const recalculation = calculateLongTargets(
             latestBotState.lStateData.ppc || 0,
@@ -67,14 +67,14 @@ async function run(dependencies) {
         });
         
         const safeRequiredAmountLog = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-        log(`Required Amount corregido/verificado a ${safeRequiredAmountLog} USDT.`, 'warning');
+   //     log(`Required Amount corregido/verificado a ${safeRequiredAmountLog} USDT.`, 'warning');
     }
     // 🛑 FIN DE LA LÓGICA DE RECALCULO FORZADO
     
     const currentLBalance = parseFloat(latestBotState.lbalance || 0);
     
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-    log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${safeRequiredAmountDiag} (Verificación)`, 'info');
+  //  log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${safeRequiredAmountDiag} (Verificación)`, 'info');
 
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL CORREGIDA
