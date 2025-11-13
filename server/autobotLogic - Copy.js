@@ -93,18 +93,7 @@ async function updateSStateData(fieldsToUpdate) {
 async function updateGeneralBotState(fieldsToUpdate) {
     try {
         // Usamos $set, podemos pasar campos de primer nivel Y campos con notación de punto
-        //await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate });
-        // 1. Aplicar la actualización en la DB
-        const updatedBot = await Autobot.findOneAndUpdate(
-            {}, 
-            { $set: fieldsToUpdate },
-            { new: true } // 💡 CRÍTICO: Usar {new: true} para obtener el documento actualizado
-        );
-        
-        // 2. EMITIR EL ESTADO COMPLETO al FRONTEND
-        if (updatedBot && io) {
-             io.emit('bot-state-update', updatedBot); // Utilizar el mismo evento de sincronización principal
-        }
+        await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate });
     } catch (error) {
         log(`Error al actualizar campos generales del estado del bot: ${error.message}`, 'error');
     }

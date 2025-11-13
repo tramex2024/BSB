@@ -206,8 +206,11 @@ async function run(dependencies) {
 	if (newPm > (pm || 0)) {
 		log(`Trailing Stop: PM actualizado a ${newPm.toFixed(2)}. PC actualizado a ${newPc.toFixed(2)} (${TRAILING_STOP_PERCENTAGE}% caída).`, 'info');
 
-		// Actualización atómica de PM y PC
-		await updateLStateData({ pm: newPm, pc: newPc });
+	// Actualización atómica de PM y PC
+	await updateLStateData({ pm: newPm, pc: newPc });
+        // 💡 CAMBIO CRÍTICO: Actualizar lsprice con el mismo valor que newPc
+        await updateGeneralBotState({ lsprice: newPc });
+        log(`lsprice actualizado al valor de PC: ${newPc.toFixed(2)}.`, 'info');
 	} else {
 		log(`Esperando condiciones para la venta. Precio actual: ${currentPrice.toFixed(2)}, PM: ${newPm.toFixed(2)}, PC: ${newPc.toFixed(2)}`, 'info');
 	}
