@@ -13,6 +13,8 @@ const strategyDataSchema = new mongoose.Schema({
     lastOrder: { type: Object, default: null },
     pm: { type: Number, default: 0 }, // Long: Máximo Alcanzado | Short: Mínimo Alcanzado
     pc: { type: Number, default: 0 }, // Precio de Corte/Cubrimiento (Trailing Stop)
+    // 💡 AÑADIDO: Campo para guardar el precio de la última orden ejecutada
+    lastExecutionPrice: { type: Number, default: 0 },
     // 💡 AÑADIDO: Campos de Contingencia para NO_COVERAGE
     requiredCoverageAmount: { type: Number, default: 0 }, 
     nextCoveragePrice: { type: Number, default: 0 }

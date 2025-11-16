@@ -2,6 +2,7 @@
 
 const { placeSellOrder } = require('../../managers/longOrderManager');
 const { getOrderDetail } = require('../../../services/bitmartService'); 
+const { saveExecutedOrder } = require('../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN DE SERVICIO DE PERSISTENCIA
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
 
@@ -47,7 +48,15 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         
         // PROFIT REAL (Neto)
 		const profitNETO = totalUsdtRecoveredNETO - totalUsdtSpent;
-		
+        
+        // ------------------------------------------------------------------------
+        // 💡 MODIFICACIÓN: PERSISTENCIA HISTÓRICA DE LA ORDEN DE VENTA
+        // ------------------------------------------------------------------------
+        const savedOrder = await saveExecutedOrder(orderDetails, LSTATE); // LSTATE es 'long'
+        if (savedOrder) {
+            log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');
+        }
+
 		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
 		// Sumamos el monto NETO total de USDT recuperado
 		const newLBalance = botStateObj.lbalance + totalUsdtRecoveredNETO;
@@ -60,7 +69,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 			
 			// 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
 			ltprice: 0,
-                        lsprice: 0,
+            lsprice: 0,
 			lcoverage: 0,
 			lnorder: 0,
 			lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
@@ -75,6 +84,8 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 			orderCountInCycle: 0, 
 			lastOrder: null, // <--- ESTO ES CRÍTICO
 			pm: 0, pc: 0, pv: 0
+            // Nota: Aquí no reseteamos nextCoveragePrice/requiredCoverageAmount,
+            // ya que se asume que el proceso de "BUYING" lo calculará antes de la siguiente orden.
 		}
 		// --- 3a. UPDATE DE LSTATEDATA (Punto 2 de Persistencia - CRÍTICO) ---
 		await updateLStateData(resetLStateData);
@@ -169,7 +180,7 @@ async function run(dependencies) {
 			
 			// 2. Ejecutar el handler de éxito para cerrar el ciclo
 			const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState }; // Creds ya no son necesarios
-			await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac }, handlerDependencies); 
+			await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac, orderId: lastOrder.order_id, side: 'sell' }, handlerDependencies); // 💡 PASAR DATOS MÍNIMOS DE LA ORDEN ASUMIDA
 			
 			return; // Finaliza la ejecución para el siguiente ciclo.
 		}

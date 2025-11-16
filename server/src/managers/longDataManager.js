@@ -1,17 +1,18 @@
-// BSB/server/src/managers/longDataManager.js (Anteriormente parte de dataManager.js)
+// BSB/server/src/managers/longDataManager.js
 
 const Autobot = require('../../models/Autobot');
 // Importar solo el handler del estado LSelling
 const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
+const { saveExecutedOrder } = require('../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN
 
 /**
  * Maneja una compra exitosa (total o parcial), actualiza la posición del bot Long
  * (PPC, AC, AI, LBalance, lastExecutionPrice), y pasa al estado de gestión de posición (BUYING).
  */
-async function handleSuccessfulBuy(botState, orderDetails, log) { // Ya no necesita log ni updateGeneralBotState si usamos Autobot.findOne/findOneAndUpdate
+async function handleSuccessfulBuy(botState, orderDetails, log) {
     // --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS DE LA ORDEN ---
     
-    const executedQty = parseFloat(orderDetails.filledSize || 0);      
+    const executedQty = parseFloat(orderDetails.filledSize || 0);    
     const executedAvgPrice = parseFloat(orderDetails.priceAvg || 0); 
 
     const intendedUsdtSpent = parseFloat(botState.lStateData.lastOrder?.usdt_amount || 0); 
@@ -31,21 +32,20 @@ async function handleSuccessfulBuy(botState, orderDetails, log) { // Ya no neces
     }
 
     // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) y AC ---
-    // NOTA: EL PPC DEBERÍA USAR EL AI (INVERSIÓN ACUMULADA CON FEES) EN LA LÓGICA DE COBERTURA.
     
-    const currentTotalQty = parseFloat(botState.lStateData.ac || 0); 
+    const currentTotalQty = parseFloat(botState.lStateData.ac || 0);    
     const currentAI = parseFloat(botState.lStateData.ai || 0); // 🛑 INVERSIÓN ACUMULADA (CON FEES)
     
     const newTotalQty = currentTotalQty + executedQty;
     // 🛑 AGREGAR EL COSTO REAL DE LA ORDEN (el que incluye el fee)
-    const newAI = currentAI + actualRealUsdtCostWithFees; 
+    const newAI = currentAI + actualRealUsdtCostWithFees;    
 
     let newPPC = currentAI; 
     
     if (newTotalQty > 0) {
         // 🛑 El PPC ahora se calcula con la Inversión Acumulada (AI) que ya incluye fees
         newPPC = newAI / newTotalQty;
-        if (isNaN(newPPC)) newPPC = currentAI; 
+        if (isNaN(newPPC)) newPPC = currentAI;  
     }
 
     // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance y Refund) ---
@@ -54,28 +54,57 @@ async function handleSuccessfulBuy(botState, orderDetails, log) { // Ya no neces
     const refundAmount = realUsdtCostWithFees - actualRealUsdtCostWithFees; 
     let finalLBalance = parseFloat(botState.lbalance || 0);
 
-    if (refundAmount > 0.01) { 
+    if (refundAmount > 0.01) {  
         finalLBalance = finalLBalance + refundAmount;
         log(`Devolviendo ${refundAmount.toFixed(2)} USDT al LBalance debido a ejecución parcial/fees bloqueados no usados. Nuevo balance: ${finalLBalance.toFixed(2)} USDT.`, 'info');
     }
+
+    // ------------------------------------------------------------------------
+    // 💡 MODIFICACIÓN 1: PERSISTENCIA HISTÓRICA DE LA ORDEN
+    // ------------------------------------------------------------------------
+    const savedOrder = await saveExecutedOrder(orderDetails, 'long'); 
+    if (savedOrder) {
+        log(`Orden Long ID ${orderDetails.orderId} guardada en el historial de Órdenes.`, 'debug');
+    }
     
+    // ------------------------------------------------------------------------
+    // 💡 MODIFICACIÓN 2: CÁLCULO DE TARGETS DE COBERTURA (Next Coverage)
+    // ------------------------------------------------------------------------
+    const { price_var, size_var, purchaseUsdt } = botState.config.long;
+    
+    // 2.1. Calcular el siguiente Precio de Cobertura (Decremento por price_var)
+    const coveragePercentage = price_var / 100;
+    const newNextCoveragePrice = finalExecutionPrice * (1 - coveragePercentage);
+    
+    // 2.2. Calcular el siguiente Monto Requerido (Escalamiento por size_var)
+    const lastOrderUsdtAmount = parseFloat(botState.lStateData.lastOrder?.usdt_amount || purchaseUsdt);
+    const sizeVariation = size_var / 100;
+    const newRequiredCoverageAmount = lastOrderUsdtAmount * (1 + sizeVariation);
+    
+    log(`Targets calculados. Next Price: ${newNextCoveragePrice.toFixed(2)}, Next Amount: ${newRequiredCoverageAmount.toFixed(2)} USDT.`, 'info');
+
     // --- 4. ACTUALIZACIÓN ATÓMICA DE ESTADO EN LA BASE DE DATOS (CRÍTICO) ---
 
     const atomicUpdate = {
-    $set: {
-        'lbalance': finalLBalance,
-        // ELIMINAMOS 'lstate': 'BUYING' - La transición la maneja el consolidador (Solución 1)
-        'lStateData.ac': newTotalQty,
-        'lStateData.ai': newAI, 
-        'lStateData.ppc': newPPC,
-        'lStateData.lastExecutionPrice': finalExecutionPrice,
-        'lStateData.lastOrder': null, 
+    $set: {
+        'lbalance': finalLBalance,
+        // ELIMINAMOS 'lstate': 'BUYING' - La transición la maneja el consolidador (Solución 1)
+        'lStateData.ac': newTotalQty,
+        'lStateData.ai': newAI,  
+        'lStateData.ppc': newPPC,
+
+        // 💡 MODIFICACIÓN 3: Persistir el precio base y los nuevos targets
+        'lStateData.lastExecutionPrice': finalExecutionPrice,
+        'lStateData.nextCoveragePrice': newNextCoveragePrice, 
+        'lStateData.requiredCoverageAmount': newRequiredCoverageAmount,
+        
+        'lStateData.lastOrder': null,   
         // Si lnorder es un campo de lStateData (ajusta la clave si es necesario)
-        'lStateData.lNOrderMax': (botState.lStateData.lNOrderMax || 0) + 1,
-    },
-    $inc: {
-        'lStateData.orderCountInCycle': 1, // ✅ ÚNICO INCREMENTO (Correcto aquí)
-    }
+        'lStateData.lNOrderMax': (botState.lStateData.lNOrderMax || 0) + 1,
+    },
+    $inc: {
+        'lStateData.orderCountInCycle': 1, // ✅ ÚNICO INCREMENTO (Correcto aquí)
+    }
 };
     
     log(`[AUDITORÍA LDM 1/3] -> ANTES de la actualización atómica. PPC: ${newPPC.toFixed(2)}, AC: ${newTotalQty.toFixed(8)}, AI: ${newAI.toFixed(2)}`, 'debug');

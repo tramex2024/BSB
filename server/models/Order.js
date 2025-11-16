@@ -2,6 +2,11 @@
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
+    strategy: { // Define si pertenece a Long o Short
+        type: String,
+        enum: ['long', 'short'], // Restringe los valores posibles
+        required: true
+    },
     orderId: {
         type: String,
         required: true,
