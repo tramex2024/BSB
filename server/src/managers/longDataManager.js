@@ -3,7 +3,7 @@
 const Autobot = require('../../models/Autobot');
 // Importar solo el handler del estado LSelling
 const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
-const { saveExecutedOrder } = require('../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN
+const { saveExecutedOrder } = require('../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN
 
 /**
  * Maneja una compra exitosa (total o parcial), actualiza la posición del bot Long
