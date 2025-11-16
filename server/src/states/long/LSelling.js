@@ -2,7 +2,7 @@
 
 const { placeSellOrder } = require('../../managers/longOrderManager');
 const { getOrderDetail } = require('../../../services/bitmartService'); 
-const { saveExecutedOrder } = require('../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN DE SERVICIO DE PERSISTENCIA
+const { saveExecutedOrder } = require('../../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN DE SERVICIO DE PERSISTENCIA
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
 
