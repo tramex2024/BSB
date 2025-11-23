@@ -15,7 +15,8 @@ const CLEAN_STRATEGY_DATA = {
     pc: 0,  // Precio de Corte (Trailing Stop/Protección)
     lastExecutionPrice: 0, // Precio de la ultima ejecución se reinicia a 0
     requiredCoverageAmount: 0, // Monto de la próxima orden de cobertura
-    nextCoveragePrice: 0 // Precio de la próxima orden de cobertura
+    nextCoveragePrice: 0, // Precio de la próxima orden de cobertura
+    cycleStartTime: null // 💡 LIMPIAR EL CAMPO START TIME AL HACER SELL O STOP
 };
 
 /**

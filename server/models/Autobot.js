@@ -17,7 +17,8 @@ const strategyDataSchema = new mongoose.Schema({
     lastExecutionPrice: { type: Number, default: 0 },
     // 💡 AÑADIDO: Campos de Contingencia para NO_COVERAGE
     requiredCoverageAmount: { type: Number, default: 0 }, 
-    nextCoveragePrice: { type: Number, default: 0 }
+    nextCoveragePrice: { type: Number, default: 0 },
+    cycleStartTime: { type: Date, default: null } // 💡 NUEVO CAMPO: Marca de tiempo de la primera compra
 });
 
 // =========================================================================

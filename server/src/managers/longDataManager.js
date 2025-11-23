@@ -98,6 +98,14 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
         'lStateData.nextCoveragePrice': newNextCoveragePrice, 
         'lStateData.requiredCoverageAmount': newRequiredCoverageAmount,
         
+        // 🛑 CAMBIO CLAVE: INICIO DEL CICLO
+        // Si es la primera orden del ciclo (el contador antes de $inc era 0), registramos el tiempo actual.
+        // NOTA: Mongoose actualizará este campo si el valor de botState.lStateData.orderCountInCycle es 0.
+        // Usamos el operador ternario para ser atómicos.
+        ...(botState.lStateData.orderCountInCycle === 0 && { 
+            'lStateData.cycleStartTime': new Date() 
+        }),          
+
         'lStateData.lastOrder': null,   
         // Si lnorder es un campo de lStateData (ajusta la clave si es necesario)
         'lStateData.lNOrderMax': (botState.lStateData.lNOrderMax || 0) + 1,
