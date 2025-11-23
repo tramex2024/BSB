@@ -1,3 +1,5 @@
+// BSB/server/routes/autobotRoutes.js 
+
 const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
@@ -105,8 +107,8 @@ router.post('/stop', async (req, res) => {
 
             // ✅ APLICAR LA LIMPIEZA DE ESTRATEGIA: Limpieza profunda de posición
             // Esto asegura que PPC, AC, pm, pc, lastOrder, etc., estén a cero.
-            botState.lStateData = CLEAN_STRATEGY_DATA;
-            botState.sStateData = CLEAN_STRATEGY_DATA;
+            botState.lStateData = Object.assign(botState.lStateData, CLEAN_STRATEGY_DATA);
+            botState.sStateData = Object.assign(botState.sStateData, CLEAN_STRATEGY_DATA);
             
             await botState.save();
 

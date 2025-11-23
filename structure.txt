@@ -4,8 +4,6 @@ BSB/			    # Bitmart Spot Bots
 ├── package-lock.json
 ├── tailwind.config.js
 ├── postcss.config.js
-├── .gitignore
-├── .env
 ├── .git/					# Git directory files
 ├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
 │   ├── index.html
@@ -41,7 +39,6 @@ BSB/			    # Bitmart Spot Bots
 │       	  └── uiManager.js
 │       	  └── chart.js
 │       	  └── appEvents.js
-│       	  └── network.js
 │
 ├── server/                # Backend files - Deployed on Render
      ├── server.js
@@ -59,6 +56,7 @@ BSB/			    # Bitmart Spot Bots
      │   └── bitmartAuthMiddleware.js
      │   └── authMiddleware.js
      ├── services/
+     │   └── orderPersistenceService.js
      │   └── bitmartService.js
      │   └── bitmartClient.js
      │   └── bitmartSpot.js
