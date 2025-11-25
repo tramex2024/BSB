@@ -28,4 +28,9 @@ const tradeCycleSchema = new mongoose.Schema({
     autobotId: { type: mongoose.Schema.Types.ObjectId, ref: 'Autobot', required: true }
 });
 
+// --------------------------------------------------------
+// 💡 Mejora: Añadir Índice Compuesto para Consultas de Dashboard
+// --------------------------------------------------------
+tradeCycleSchema.index({ autobotId: 1, endTime: 1 });
+
 module.exports = mongoose.model('TradeCycle', tradeCycleSchema);

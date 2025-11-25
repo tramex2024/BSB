@@ -107,3 +107,85 @@ export async function toggleBotState(isRunning, config) {
         displayMessage('Failed to connect to backend.', 'error');
     }
 }
+
+// =================================================================
+// 💡 NUEVAS FUNCIONES PARA ANALÍTICAS DEL DASHBOARD
+// =================================================================
+
+/**
+ * Obtiene la serie de datos para la Curva de Crecimiento de Capital (Equity Curve)
+ * del backend. Esto incluye la ganancia neta acumulada por ciclo.
+ * @returns {Promise<Array>} Un array de objetos con { endTime, netProfit, cumulativeProfit }
+ */
+export async function fetchEquityCurveData() {
+    console.log('Solicitando datos de la Curva de Crecimiento...');
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+        console.error('No se encontró el token de autenticación para analíticas.');
+        return [];
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/equity-curve`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error al obtener la Curva de Crecimiento:', errorData.message);
+            displayMessage(`Error al cargar la curva: ${errorData.message}`, 'error');
+            return [];
+        }
+
+        const data = await response.json();
+        console.log('Datos de Curva de Crecimiento recibidos con éxito.');
+        return data; // Debería ser un array de ciclos ordenados
+    } catch (error) {
+        console.error('Error de red al obtener la Curva de Crecimiento:', error);
+        displayMessage('Fallo la conexión con el backend para analíticas.', 'error');
+        return [];
+    }
+}
+
+/**
+ * Obtiene los Key Performance Indicators (KPIs) de los ciclos cerrados,
+ * como el rendimiento promedio por ciclo.
+ * @returns {Promise<object>} Un objeto con averageProfitPercentage y totalCycles.
+ */
+export async function fetchCycleKpis() {
+    console.log('Solicitando KPIs de ciclos cerrados...');
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+        console.error('No se encontró el token de autenticación para KPIs.');
+        return { averageProfitPercentage: 0, totalCycles: 0 };
+    }
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error al obtener los KPIs del ciclo:', errorData.message);
+            return { averageProfitPercentage: 0, totalCycles: 0 };
+        }
+
+        const data = await response.json();
+        // El endpoint devuelve un array, tomamos el primer elemento que contiene los promedios/totales
+        return data[0] || { averageProfitPercentage: 0, totalCycles: 0 }; 
+    } catch (error) {
+        console.error('Error de red al obtener KPIs del ciclo:', error);
+        return { averageProfitPercentage: 0, totalCycles: 0 };
+    }
+}

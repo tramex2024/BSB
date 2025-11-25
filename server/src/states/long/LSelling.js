@@ -58,51 +58,55 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
             log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');        }
 
         // ========================================================================
-        // 🟢 NUEVO BLOQUE: REGISTRO HISTÓRICO DEL CICLO DE TRADING
-        // ========================================================================
+// 🟢 NUEVO BLOQUE: REGISTRO HISTÓRICO DEL CICLO DE TRADING
+// ========================================================================
+ 
+const cycleEndTime = new Date();
+const cycleStartTime = botStateObj.lStateData.cycleStartTime;
+let durationHours = null;
+
+// Cálculo de Duración
+if (cycleStartTime) {
+    const durationMs = cycleEndTime.getTime() - cycleStartTime.getTime();
+    durationHours = durationMs / (1000 * 60 * 60); // Convertir milisegundos a horas
+}
+
+// 🛑 Validar que el ciclo tenga un tiempo de inicio válido para evitar data inconsistente
+if (cycleStartTime) { 
+    const cycleData = {
+        strategy: 'Long',
+        cycleIndex: (botStateObj.lcycle || 0) + 1,
+        symbol: config.symbol,
         
-        const cycleEndTime = new Date();
-        const cycleStartTime = botStateObj.lStateData.cycleStartTime;
-        let durationHours = null;
+        startTime: cycleStartTime, // Usamos el tiempo válido
+        endTime: cycleEndTime,
+        durationHours: durationHours,
+        
+        initialInvestment: totalUsdtSpent,
+        finalRecovery: totalUsdtRecoveredNETO,
+        netProfit: profitNETO,
+        profitPercentage: (profitNETO / totalUsdtSpent) * 100,
+        
+        averagePPC: botStateObj.lStateData.ppc,
+        finalSellPrice: sellPrice,
+        orderCount: botStateObj.lStateData.orderCountInCycle,
+        
+        autobotId: botStateObj._id 
+    };
 
-        // Cálculo de Duración
-        if (cycleStartTime) {
-            const durationMs = cycleEndTime.getTime() - cycleStartTime.getTime();
-            durationHours = durationMs / (1000 * 60 * 60); // Convertir milisegundos a horas
-        }
-
-        const cycleData = {
-            strategy: 'Long',
-            cycleIndex: (botStateObj.lcycle || 0) + 1, // Usar el índice del ciclo que está a punto de completarse
-            symbol: config.symbol,
-            
-            startTime: cycleStartTime || cycleEndTime, // Usar EndTime si StartTime falta (seguridad)
-            endTime: cycleEndTime,
-            durationHours: durationHours,
-            
-            initialInvestment: totalUsdtSpent, // AI antes del reset
-            finalRecovery: totalUsdtRecoveredNETO,
-            netProfit: profitNETO,
-            profitPercentage: (profitNETO / totalUsdtSpent) * 100,
-            
-            averagePPC: botStateObj.lStateData.ppc,
-            finalSellPrice: sellPrice,
-            orderCount: botStateObj.lStateData.orderCountInCycle,
-            
-            // Usamos el _id del documento raíz del bot
-            autobotId: botStateObj._id 
-        };
-
-        const savedCycle = await logSuccessfulCycle(cycleData);
-        if (savedCycle) {
-            log(`Resumen del ciclo Long ${cycleData.cycleIndex} guardado. Ganancia: ${profitNETO.toFixed(2)} USDT.`, 'success');
-        } else {
-             log(`ADVERTENCIA: Falló el registro del ciclo ${cycleData.cycleIndex} en la DB.`, 'warning');
-        }
-
-        // ========================================================================
-        // 🟢 FIN DEL BLOQUE DE REGISTRO
-        // ========================================================================
+    const savedCycle = await logSuccessfulCycle(cycleData);
+    if (savedCycle) {
+        log(`Resumen del ciclo Long ${cycleData.cycleIndex} guardado. Ganancia: ${profitNETO.toFixed(2)} USDT.`, 'success');
+    } else {
+        log(`ADVERTENCIA: Falló el registro del ciclo ${cycleData.cycleIndex} en la DB.`, 'warning');
+    }
+} else {
+    // Si no hay StartTime, solo registramos la ganancia y continuamos.
+    log('ADVERTENCIA: cycleStartTime faltante. No se pudo registrar el ciclo en el historial.', 'warning');
+}
+// ========================================================================
+// 🟢 FIN DEL BLOQUE DE REGISTRO
+// ========================================================================
 
 		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
 		// Sumamos el monto NETO total de USDT recuperado
