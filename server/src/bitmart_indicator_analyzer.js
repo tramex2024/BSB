@@ -32,15 +32,15 @@ async function getCandles(symbol, interval, size = 500) {
         const rawCandlesData = await bitmartService.getKlines(symbol, interval, size);
 
         // --- LÍNEAS DE DEPURACIÓN (Mantenidas temporalmente para confirmar el formato) ---
-        console.log(`[ANALYZER-DEBUG-RAW] Datos crudos de velas recibidos de bitmartService.getKlines. Longitud: ${rawCandlesData?.length}`);
+        //console.log(`[ANALYZER-DEBUG-RAW] Datos crudos de velas recibidos de bitmartService.getKlines. Longitud: ${rawCandlesData?.length}`);
         if (rawCandlesData && rawCandlesData.length > 0) {
-            console.log(`[ANALYZER-DEBUG-RAW] Primer elemento de vela (rawCandlesData[0]):`, rawCandlesData[0]);
-            console.log(`[ANALYZER-DEBUG-RAW] Tipo del primer elemento:`, typeof rawCandlesData[0]);
+          // console.log(`[ANALYZER-DEBUG-RAW] Primer elemento de vela (rawCandlesData[0]):`, rawCandlesData[0]);
+          // console.log(`[ANALYZER-DEBUG-RAW] Tipo del primer elemento:`, typeof rawCandlesData[0]);
             if (rawCandlesData[0] && typeof rawCandlesData[0].close !== 'undefined') {
-                console.log(`[ANALYZER-DEBUG-RAW] Valor del cierre (rawCandlesData[0].close):`, rawCandlesData[0].close);
-                console.log(`[ANALYZER-DEBUG-RAW] Tipo del valor del cierre (rawCandlesData[0].close):`, typeof rawCandlesData[0].close);
+          //      console.log(`[ANALYZER-DEBUG-RAW] Valor del cierre (rawCandlesData[0].close):`, rawCandlesData[0].close);
+          //      console.log(`[ANALYZER-DEBUG-RAW] Tipo del valor del cierre (rawCandlesData[0].close):`, typeof rawCandlesData[0].close);
             } else {
-                console.log(`[ANALYZER-DEBUG-RAW] El primer elemento es un objeto, pero no tiene la propiedad 'close' o es undefined.`);
+          //      console.log(`[ANALYZER-DEBUG-RAW] El primer elemento es un objeto, pero no tiene la propiedad 'close' o es undefined.`);
             }
         }
         // --- FIN DE LÍNEAS DE DEPURACIÓN ---
@@ -110,7 +110,7 @@ function calculateIndicators(candles) {
         candlesWithIndicators.push(candle);
     }
 
-    console.log(`[ANALYZER-DEBUG] calculateIndicators produjo ${candlesWithIndicators.length} velas con indicadores.`);
+    //console.log(`[ANALYZER-DEBUG] calculateIndicators produjo ${candlesWithIndicators.length} velas con indicadores.`);
     return candlesWithIndicators;
 }
 
@@ -243,7 +243,7 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     // incluso después de descartar la última incompleta y el período de calentamiento del RSI.
     const rawCandlesFromAPI = await getCandles(SYMBOL, '1', 500);
 
-    console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
+    //console.log(`[ANALYZER-DEBUG] Se obtuvieron ${rawCandlesFromAPI.length} velas de la API.`);
 
     if (rawCandlesFromAPI.length === 0) {
         console.error("[ANALYZER] No se pudieron obtener velas para el análisis. Devolviendo HOLD.");
@@ -258,7 +258,7 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     // y para asegurar que el `currentPriceFromBotLogic` sea el dato más fresco.
     const candlesForAnalysis = rawCandlesFromAPI.slice(0, -1);
 
-    console.log(`[ANALYZER-DEBUG] Se usarán ${candlesForAnalysis.length} velas para el cálculo de indicadores (última vela de la API ignorada para seguridad).`);
+    //console.log(`[ANALYZER-DEBUG] Se usarán ${candlesForAnalysis.length} velas para el cálculo de indicadores (última vela de la API ignorada para seguridad).`);
 
     // Paso 2: Calcular los indicadores técnicos
     const candlesWithIndicators = calculateIndicators(candlesForAnalysis);
@@ -267,7 +267,7 @@ async function runAnalysis(currentPriceFromBotLogic) { // Acepta el currentPrice
     //console.log("\n[ANALYZER-DEBUG] Últimas velas completas con indicadores (hasta 5):");
     if (candlesWithIndicators.length > 0) {
         candlesWithIndicators.slice(-5).forEach(candle => {
-            console.log(`[ANALYZER-DEBUG]    Cierre: ${parseFloat(candle.close).toFixed(2)}, RSI: ${candle.rsi?.toFixed(2) || 'N/A'}`);
+    //        console.log(`[ANALYZER-DEBUG]    Cierre: ${parseFloat(candle.close).toFixed(2)}, RSI: ${candle.rsi?.toFixed(2) || 'N/A'}`);
         });
     } else {
         console.warn("[ANALYZER-DEBUG] No hay velas completas con indicadores para mostrar. Esto puede ocurrir si no hay suficientes datos para el RSI.");
