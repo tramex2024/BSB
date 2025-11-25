@@ -28,8 +28,8 @@ export function updateBotUI(state) {
         auscoverage: 'scoverage',
         aulnorder: 'lnorder',
         ausnorder: 'snorder',
-        aulsprice: 'lsprice', // ✅ CORREGIDO: Apunta a la clave de datos 'lsprice'
-        ausbprice: 'sbprice'  // ✅ CORREGIDO: Apunta a la clave de datos 'sbprice'
+        aulsprice: 'lsprice',
+        ausbprice: 'sbprice'
     };
 
     if (lstateElement) {
@@ -49,9 +49,8 @@ export function updateBotUI(state) {
         if (element) {
             let value;
 
-            // Usamos el Nullish Coalescing Operator (??) para asegurar que 0 sea un valor válido
             if (state[dataKey] !== undefined && state[dataKey] !== null) {
-                // Intentamos convertir a número. Esto funciona si es '1', 1, o '1.23'.
+                // Intentamos convertir a número. Esto funciona si es '1', 1, o '1.23'.
                 value = Number(state[dataKey]); 
             } else {
                 value = NaN; // Si la clave no existe en el objeto 'state' del socket.
@@ -65,7 +64,7 @@ export function updateBotUI(state) {
                 } else {
                     element.textContent = `$${value.toFixed(2)}`;
                 }
-            // ✅ CORREGIDO: Añadimos 'lsprice' y 'sbprice' a la lista de valores con 2 decimales
+            // Incluimos ltprice y stprice aquí para un formato consistente
             } else if (['lcoverage', 'scoverage', 'lbalance', 'sbalance', 'ltprice', 'stprice', 'lsprice', 'sbprice'].includes(dataKey)) {
                 // Montos de dinero/balance/precios (2 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
@@ -73,9 +72,8 @@ export function updateBotUI(state) {
                 // Contadores (0 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
             } else {
-                // Si no es un número esperado, intentar mostrar el valor original
-                // Usar String(state[dataKey]) asegura que '0' se muestre y no se caiga en la lógica 'falsy'
-                element.textContent = state[dataKey] !== undefined && state[dataKey] !== null ? String(state[dataKey]) : 'N/A';
+                // Valores por defecto
+                element.textContent = state[dataKey] !== undefined ? String(state[dataKey]) : 'N/A';
             }
         }
     }
