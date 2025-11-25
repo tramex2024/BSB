@@ -282,8 +282,8 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         }
         
         if (botState.sstate !== 'STOPPED') {
-            await runShortStrategy(); 
-            strategyExecuted = true;
+        //    await runShortStrategy(); 
+        //    strategyExecuted = true;
         }
         
         // Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
