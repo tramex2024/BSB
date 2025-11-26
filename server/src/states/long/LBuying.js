@@ -128,7 +128,7 @@ async function run(dependencies) {
             📉 Proxima Cobertura (DCA): ${nextCoveragePrice.toFixed(2)} USD (Monto: ${requiredCoverageAmount.toFixed(2)} USDT).
             🛡️ Cobertura Máxima (L-Coverage): ${lCoveragePrice.toFixed(2)} USD (Órdenes restantes posibles: ${lNOrderMax}).
         `.replace(/\s+/g, ' ').trim();
-        log(logSummary, 'warning'); 
+//        log(logSummary, 'warning'); 
 
     } else if (!lStateData.lastOrder && lStateData.ppc === 0) {
         log("Posición inicial (AC=0). Targets no calculados. Esperando señal de entrada.", 'info');
