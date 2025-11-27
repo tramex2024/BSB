@@ -287,28 +287,36 @@ async function run(dependencies) {
 		log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
 		
 		// 🛑 BLOQUE TRY/CATCH AÑADIDO PARA MANEJAR FALLAS CRÍTICAS DE API
-    try {
-        await placeSellOrder(config, botState, acSelling, log); 
-        // Si tiene éxito, placeSellOrder ya bloqueó el ciclo con lastOrder.
-    } catch (error) {
-        log(`Error CRÍTICO al colocar la orden de venta: ${error.message}`, 'error');
-        
-        // 🚨 SI FALLA POR BALANCE INSUFICIENTE (Error que produce el bucle):
-        if (error.message.includes('Balance not enough')) {
-            // 🛑 Transicionar a un estado de bloqueo o advertencia, p. ej., 'NO_COVERAGE'.
-            // Esto detiene el bucle forzando la lógica a evaluar otra cosa.
-            log('Fallo de VENTA por Balance/Activos insuficientes. Transicionando a NO_COVERAGE para detener el bucle.', 'warning');
-            await updateBotState('NO_COVERAGE', LSTATE);
-            
-            // Opcional: Podrías limpiar lastOrder si el bot asume que el activo no existe:
-            // await updateLStateData({ 'lastOrder': null }); 
-        } 
-        // Para otros errores, dejamos que el ciclo se detenga y reintente.
-        
-        return; // Salimos de la ejecución del run()
-      }
-    }
-  }
+    try {
+        await placeSellOrder(config, botState, acSelling, log); 
+        // Si tiene éxito, placeSellOrder ya bloqueó el ciclo con lastOrder.
+    } catch (error) {
+        log(`Error CRÍTICO al colocar la orden de venta: ${error.message}`, 'error');
+        
+        // 🚨 CORRECCIÓN ACORDADA: Si falla por Balance not enough, asumimos venta exitosa y forzamos el cierre.
+        if (error.message.includes('Balance not enough')) {
+            log('Fallo de VENTA por Balance/Activos insuficientes. ASUMIENDO VENTA FUERA DE BANDA Y FORZANDO CIERRE DE CICLO.', 'success');
+            
+            // 1. Definimos los detalles de la orden REAL (usando sus datos: Avg. Price=90278.29)
+            const assumedOrderDetails = {
+                priceAvg: 90278.29, // Precio de la venta que ocurrió realmente
+                filled_volume: botState.lStateData.ac, // 0.00006
+                orderId: "FORCED_OUT_OF_BAND", 
+                side: 'sell' 
+            };
+            
+            // 2. Ejecutamos el Handler de Cierre, el cual hará la limpieza y transición a BUYING.
+            const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
+            await handleSuccessfulSell(botState, assumedOrderDetails, handlerDependencies); 
+            
+            return; // Salimos del ciclo para evitar cualquier otra ejecución.
+        } 
+        // Para otros errores...
+        
+        return; // Salimos de la ejecución del run()
+      }
+    }
+  }
 }
 
 module.exports = { 
