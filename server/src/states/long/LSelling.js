@@ -306,7 +306,9 @@ async function run(dependencies) {
         // Para otros errores, dejamos que el ciclo se detenga y reintente.
         
         return; // Salimos de la ejecución del run()
+      }
     }
+  }
 }
 
 module.exports = { 
