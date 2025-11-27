@@ -286,17 +286,27 @@ async function run(dependencies) {
 	if (currentPrice <= newPc) {
 		log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
 		
-		// 🛑 LLAMADA CORREGIDA a placeSellOrder (solo necesita config, botState, sellAmount, log)
-		// Ya no pasamos el handler, ya que la orden solo debe BLOQUEAR el ciclo.
-		await placeSellOrder(config, botState, acSelling, log); 
-
-		// Nota: El estado PERMANECE en SELLING, pero con lastOrder activo, el BLOQUE CRÍTICO de arriba
-		// se encargará de monitorear y llamar a handleSuccessfulSell en el próximo ciclo.
-	}
-} else if (acSelling > 0 && acSelling < MIN_SELL_AMOUNT_BTC) {
-	// Caso de advertencia: Si tenemos BTC pero es muy poco para vender.
-	log(`Advertencia: La cantidad acumulada para vender (${acSelling.toFixed(8)} BTC) es menor al mínimo de la plataforma (${MIN_SELL_AMOUNT_BTC} BTC). Venta bloqueada.`, 'warning');
-	} 			
+		// 🛑 BLOQUE TRY/CATCH AÑADIDO PARA MANEJAR FALLAS CRÍTICAS DE API
+    try {
+        await placeSellOrder(config, botState, acSelling, log); 
+        // Si tiene éxito, placeSellOrder ya bloqueó el ciclo con lastOrder.
+    } catch (error) {
+        log(`Error CRÍTICO al colocar la orden de venta: ${error.message}`, 'error');
+        
+        // 🚨 SI FALLA POR BALANCE INSUFICIENTE (Error que produce el bucle):
+        if (error.message.includes('Balance not enough')) {
+            // 🛑 Transicionar a un estado de bloqueo o advertencia, p. ej., 'NO_COVERAGE'.
+            // Esto detiene el bucle forzando la lógica a evaluar otra cosa.
+            log('Fallo de VENTA por Balance/Activos insuficientes. Transicionando a NO_COVERAGE para detener el bucle.', 'warning');
+            await updateBotState('NO_COVERAGE', LSTATE);
+            
+            // Opcional: Podrías limpiar lastOrder si el bot asume que el activo no existe:
+            // await updateLStateData({ 'lastOrder': null }); 
+        } 
+        // Para otros errores, dejamos que el ciclo se detenga y reintente.
+        
+        return; // Salimos de la ejecución del run()
+    }
 }
 
 module.exports = { 
