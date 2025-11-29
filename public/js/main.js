@@ -3,7 +3,7 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
-import { initializeTestbotView } from './modules/testbot.js';
+//import { initializeTestbotView } from './modules/testbot.js';
 import { initializeAutobotView } from './modules/autobot.js';
 import { initializeAibotView } from './modules/aibot.js';
 
@@ -24,7 +24,7 @@ let lastPrice = 0;
 // Mapa de funciones de inicialización
 const views = {
     dashboard: initializeDashboardView,
-    testbot: initializeTestbotView,
+    //testbot: initializeTestbotView,
     autobot: initializeAutobotView,
     aibot: initializeAibotView
 };
