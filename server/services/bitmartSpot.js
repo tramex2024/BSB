@@ -83,71 +83,71 @@ else if (response.data && Array.isArray(response.data)) {
     }
 }
 
-/**
- * Obtiene el historial de órdenes para un símbolo y estado.
- * @param {object} options - Opciones de la consulta.
- * @returns {Promise<object[]>} - Un arreglo de objetos con el historial de órdenes.
- */
 async function getHistoryOrders(options = {}) {
-    if (!options.symbol || typeof options.symbol !== 'string') {
-        throw new Error(`${LOG_PREFIX} 'options.symbol' es un parámetro requerido y debe ser una cadena de texto.`);
-    }
+    if (!options.symbol || typeof options.symbol !== 'string') {
+        throw new Error(`${LOG_PREFIX} 'options.symbol' es un parámetro requerido y debe ser una cadena de texto.`);
+    }
 
-    const endpoint = '/spot/v4/query/history-orders';
-    const requestBody = {
-        symbol: options.symbol,
-        orderMode: 'spot',
-        startTime: options.startTime,
-        endTime: options.endTime,
-        limit: options.limit
-    };
+    const endpoint = '/spot/v4/query/history-orders';
+    const requestBody = {
+        symbol: options.symbol,
+        orderMode: 'spot',
+        startTime: options.startTime,
+        endTime: options.endTime,
+        limit: options.limit
+    };
 
-    if (options.status && options.status !== 'all') {
-        const statusCode = orderStatusMap[options.status];
-        if (statusCode !== undefined) {
-            requestBody.status = statusCode;
-        } else {
-            console.warn(`${LOG_PREFIX} Estado de orden no reconocido: ${options.status}`);
-        }
-    }
-    
-    try {
-        const response = await makeRequest('POST', endpoint, {}, requestBody);
-        
-        // Muestra la respuesta completa para depuración (Útil para confirmar nuevos formatos)
-//        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
-        
-        let rawOrders = [];
-        
-        // CORRECCIÓN: Manejo de la estructura de respuesta de BitMart
-        if (response.data && Array.isArray(response.data)) {
-            rawOrders = response.data;
-        } 
-        else if (response.data && response.data.data && Array.isArray(response.data.data.list)) {
-            rawOrders = response.data.data.list;
-        }
+    // 🛑 CORRECCIÓN: Usamos 'order_state' como parámetro de entrada
+    const statusFromController = options.order_state || options.status; // Soporte para ambos, por seguridad
 
-        // 🛠️ NORMALIZACIÓN DE DATOS: Asegura que price y size muestren los valores de ejecución
-        const normalizedOrders = rawOrders.map(order => {
-            
-            // Si la orden se llenó (filledSize > 0 o priceAvg > 0), usamos los datos de ejecución real.
-            // Esto corrige el problema de órdenes de mercado que tienen 'price' y 'size' como '0.00'.
-            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
-            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
+    if (statusFromController && statusFromController !== 'all') { 
+        // Mapeamos el estado de texto (filled, cancelled) al código numérico de BitMart (1, 6)
+        const statusCode = orderStatusMap[statusFromController];
+        if (statusCode !== undefined) {
+            // ✅ CRÍTICO: BitMart v4 usa 'status' en el requestBody (código numérico)
+            requestBody.status = statusCode; 
+        } else {
+            console.warn(`${LOG_PREFIX} Estado de orden no reconocido: ${statusFromController}`);
+        }
+    }
+    
+    try {
+        const response = await makeRequest('POST', endpoint, {}, requestBody);
+        
+        // Muestra la respuesta completa para depuración (Útil para confirmar nuevos formatos)
+//        console.log(`${LOG_PREFIX} Respuesta cruda de BitMart para el historial de órdenes:`, JSON.stringify(response.data, null, 2)); 
+        
+        let rawOrders = [];
+        
+        // CORRECCIÓN: Manejo de la estructura de respuesta de BitMart
+        if (response.data && Array.isArray(response.data)) {
+            rawOrders = response.data;
+        } 
+        else if (response.data && response.data.data && Array.isArray(response.data.data.list)) {
+            rawOrders = response.data.data.list;
+        }
 
-            return {
-                ...order, // Mantiene todos los campos originales
-                // Sobrescribe los campos clave con los valores reales para el frontend
-                price: finalPrice, 
-                size: finalSize,   
-            };
-        });
-        
-        return normalizedOrders;
-    } catch (error) {
-        console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
-        throw error;
-    }
+        // 🛠️ NORMALIZACIÓN DE DATOS: Asegura que price y size muestren los valores de ejecución
+        const normalizedOrders = rawOrders.map(order => {
+            
+            // Si la orden se llenó (filledSize > 0 o priceAvg > 0), usamos los datos de ejecución real.
+            // Esto corrige el problema de órdenes de mercado que tienen 'price' y 'size' como '0.00'.
+            const finalPrice = parseFloat(order.priceAvg) > 0 ? order.priceAvg : order.price;
+            const finalSize = parseFloat(order.filledSize) > 0 ? order.filledSize : order.size;
+
+            return {
+                ...order, // Mantiene todos los campos originales
+                // Sobrescribe los campos clave con los valores reales para el frontend
+                price: finalPrice, 
+                size: finalSize,   
+            };
+        });
+        
+        return normalizedOrders;
+    } catch (error) {
+        console.error(`${LOG_PREFIX} Error al obtener el historial de órdenes:`, error.message);
+        throw error;
+    }
 }
 
 /**
