@@ -102,13 +102,15 @@ router.post('/stop', async (req, res) => {
             botState.stprice = CLEAN_ROOT_FIELDS.stprice;
             botState.lsprice = CLEAN_ROOT_FIELDS.lsprice; 
             botState.sbprice = CLEAN_ROOT_FIELDS.sbprice;
-            botState.lcycle = CLEAN_ROOT_FIELDS.lcycle;
-            botState.scycle = CLEAN_ROOT_FIELDS.scycle;
+            //botState.lcycle = CLEAN_ROOT_FIELDS.lcycle;
+            //botState.scycle = CLEAN_ROOT_FIELDS.scycle;
 
-            // ✅ APLICAR LA LIMPIEZA DE ESTRATEGIA: Limpieza profunda de posición
-            // Esto asegura que PPC, AC, pm, pc, lastOrder, etc., estén a cero.
-            botState.lStateData = Object.assign(botState.lStateData, CLEAN_STRATEGY_DATA);
-            botState.sStateData = Object.assign(botState.sStateData, CLEAN_STRATEGY_DATA);
+            // 🛑 CORRECCIÓN: APLICAR LA LIMPIEZA DE ESTRATEGIA
+            // Usamos Object.assign({}, CLEAN_STRATEGY_DATA) para crear una COPIA limpia y
+            // luego la asignamos para forzar a Mongoose a registrar el cambio completo del subdocumento,
+            // garantizando que AI, PPC, AC, etc., se reinicien a 0.
+            botState.lStateData = Object.assign({}, CLEAN_STRATEGY_DATA);
+            botState.sStateData = Object.assign({}, CLEAN_STRATEGY_DATA);
             
             await botState.save();
 
