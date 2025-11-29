@@ -6,10 +6,13 @@ const nodemailer = require('nodemailer');
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // e.g., 'gmail', 'SendGrid'
+    // Usa host y puerto explícitos para mayor fiabilidad en entornos de nube
+    host: 'smtp.gmail.com', 
+    port: 465, 
+    secure: true, // true para 465, false para otros puertos (como 587)
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS // ¡Asegúrate de que esta sea la contraseña de aplicación de Google!
+        pass: process.env.EMAIL_PASS // ¡Recuerda que debe ser la App Password!
     }
 });
 
