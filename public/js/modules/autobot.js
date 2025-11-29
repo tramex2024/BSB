@@ -124,85 +124,105 @@ function setupConfigListeners() {
     });
 }
 
+/**
+ * Función que obtiene los balances reales y actualiza la UI para los límites.
+ */
+async function loadBalancesAndLimits() {
+    try {
+        const balances = await fetchAvailableBalancesForValidation();
+        maxUsdtBalance = balances.availableUSDT;
+        maxBtcBalance = balances.availableBTC;
+        
+        // 2. Actualizar la interfaz de usuario con los límites (UX)
+        updateMaxBalanceDisplay('USDT', maxUsdtBalance);
+        updateMaxBalanceDisplay('BTC', maxBtcBalance);
+        
+        // Opcional: Establecer el atributo 'max' en los inputs para validación nativa
+        document.getElementById('auamount-usdt')?.setAttribute('max', maxUsdtBalance.toFixed(2));
+        document.getElementById('auamount-btc')?.setAttribute('max', maxBtcBalance.toFixed(5));
+        
+    } catch (error) {
+        console.error("Fallo al cargar los límites de balance para validación:", error);
+        displayMessage('Error: No se pudieron cargar los límites de balance de BitMart.', 'error');
+    }
+}
+
 // --- FUNCIÓN DE INICIALIZACIÓN ---
 export async function initializeAutobotView() {
-    console.log("Inicializando vista del Autobot...");
-    
-    // 1. Obtener y establecer los límites de balance
-    const balances = await fetchAvailableBalancesForValidation();
-    maxUsdtBalance = balances.availableUSDT;
-    maxBtcBalance = balances.availableBTC;
-    
-    // 2. Actualizar la interfaz de usuario con los límites (UX)
-    updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-    updateMaxBalanceDisplay('BTC', maxBtcBalance);
-    
-    // Opcional: Establecer el atributo 'max' en los inputs para validación nativa del navegador
-    document.getElementById('auamount-usdt')?.setAttribute('max', maxUsdtBalance.toFixed(2));
-    document.getElementById('auamount-btc')?.setAttribute('max', maxBtcBalance.toFixed(5));
-
-    setupConfigListeners();
-
-    let currentTab = 'opened';
-    
-    const austartBtn = document.getElementById('austart-btn');
-    const auresetBtn = document.getElementById('aureset-btn');
-    const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    
-    window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-
-    // Lógica para el botón START/STOP
-    if (austartBtn) {
-        austartBtn.addEventListener('click', async () => {
-            const isRunning = austartBtn.textContent === 'STOP';
-            
-            // Re-validación estricta antes de iniciar
-            const usdtValid = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
-            const btcValid = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-
-            if (!isRunning && (!usdtValid || !btcValid)) {
-                displayMessage('No se puede iniciar. Los montos asignados exceden los fondos disponibles.', 'error');
-                return; 
-            }
-            
-            const config = getBotConfiguration();
-            await toggleBotState(isRunning, config);
-        });
-    }
-
-    if (auresetBtn) {
-        auresetBtn.addEventListener('click', () => {
-            // Lógica para el botón reset
-        });
-    }
-    
-    auorderTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            currentTab = tab.id.replace('tab-', '');
-            setOrdersActiveTab(tab.id);
-            const auOrderList = document.getElementById('au-order-list');
-            fetchOrders(currentTab, auOrderList);
-        });
-    });
-
-    setOrdersActiveTab('tab-opened');
-    const auOrderList = document.getElementById('au-order-list');
-    fetchOrders(currentTab, auOrderList);
-    
-    const socket = io(SOCKET_SERVER_URL);
+    console.log("Inicializando vista del Autobot...");
     
-    // ELIMINADO: Listener 'balance-real-update', movido a main.js
+    // 🛑 CORRECCIÓN: 1. Llamada NO BLOQUEANTE para cargar los balances.
+    // Esto se ejecuta en segundo plano. La interfaz carga inmediatamente.
+    loadBalancesAndLimits(); 
 
-    socket.on('bot-state-update', (state) => {
-        updateBotUI(state);
-    });
+    // 2. Configura todos los listeners de los campos de configuración.
+    setupConfigListeners();
 
-    //getBalances();
-    intervals.autobot = setInterval(getBalances, 10000);
-    intervals.orders = setInterval(() => {
-        const auOrderList = document.getElementById('au-order-list');
-        if (auOrderList) {
-            fetchOrders(currentTab, auOrderList);
-        }
-    }, 15000);
+    let currentTab = 'opened';
+    
+    const austartBtn = document.getElementById('austart-btn');
+    const auresetBtn = document.getElementById('aureset-btn');
+    const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
+    
+    // 3. Inicializa el gráfico de TradingView (ya no está bloqueado)
+    window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+
+    // Lógica para el botón START/STOP
+    if (austartBtn) {
+        austartBtn.addEventListener('click', async () => {
+            const isRunning = austartBtn.textContent === 'STOP';
+            
+            // Re-validación estricta antes de iniciar
+            const usdtValid = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+            const btcValid = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+
+            if (!isRunning && (!usdtValid || !btcValid)) {
+                displayMessage('No se puede iniciar. Los montos asignados exceden los fondos disponibles.', 'error');
+                return; 
+            }
+            
+            const config = getBotConfiguration();
+            await toggleBotState(isRunning, config);
+        });
+    }
+
+    if (auresetBtn) {
+        auresetBtn.addEventListener('click', () => {
+            // Lógica para el botón reset
+        });
+    }
+    
+    // 4. Configura los listeners de las pestañas de órdenes
+    auorderTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            currentTab = tab.id.replace('tab-', '');
+            setOrdersActiveTab(tab.id);
+            const auOrderList = document.getElementById('au-order-list');
+            fetchOrders(currentTab, auOrderList);
+        });
+    });
+
+    // 5. Carga inicial de órdenes y configuración de sockets/intervalos
+    setOrdersActiveTab('tab-opened');
+    const auOrderList = document.getElementById('au-order-list');
+    fetchOrders(currentTab, auOrderList);
+    
+    const socket = io(SOCKET_SERVER_URL);
+    
+    // ELIMINADO: Listener 'balance-real-update' (Correcto, movido a main.js)
+
+    socket.on('bot-state-update', (state) => {
+        updateBotUI(state);
+    });
+
+    //getBalances(); // Llamada a getBalances inicial opcional, el intervalo lo hará.
+    
+    // 6. Configura los intervalos de actualización
+    intervals.autobot = setInterval(getBalances, 10000);
+    intervals.orders = setInterval(() => {
+        const auOrderList = document.getElementById('au-order-list');
+        if (auOrderList) {
+            fetchOrders(currentTab, auOrderList);
+        }
+    }, 15000);
 }
