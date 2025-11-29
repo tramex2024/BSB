@@ -1,10 +1,11 @@
 // server/controllers/orderController.js
 
 const bitmartService = require('../services/bitmartService');
-const Order = require('../models/Order');
+// Si estás utilizando el modelo 'Order' para guardar el historial, debería ser importado:
+// const OrderHistory = require('../models/OrderHistory'); 
 
 exports.getOrders = async (req, res) => {
-    // AHORA OBTENEMOS EL TIPO DE ORDEN DE LOS PARÁMETROS DE RUTA
+    // OBTENEMOS EL TIPO DE ORDEN DE LOS PARÁMETROS DE RUTA
     const { status } = req.params;
 
     console.log(`[Backend]: Intentando obtener órdenes de tipo: ${status}`);
@@ -15,15 +16,18 @@ exports.getOrders = async (req, res) => {
 
     try {
         let result;
-        const symbol = 'BTC_USDT';
+        const symbol = 'BTC_USDT'; // Asegúrate de que este sea el símbolo correcto.
 
         switch (status) {
             case 'opened':
+                // Para órdenes abiertas, llamamos al endpoint de órdenes activas (LIVE)
                 result = await bitmartService.getOpenOrders(symbol);
                 break;
+                
             case 'filled':
             case 'cancelled':
             case 'all':
+                // Para el historial, definimos el rango de tiempo (90 días)
                 const endTime = Date.now();
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -36,17 +40,25 @@ exports.getOrders = async (req, res) => {
                     endTime: endTime,
                     limit: 100 
                 };
+                
+                // 🛑 CORRECCIÓN CRÍTICA: Cambiamos 'status' por 'order_state' 
+                // para que BitMart aplique el filtro en su API.
                 if (status !== 'all') {
-                    historyParams.status = status;
+                    historyParams.order_state = status; // ✅ Ahora BitMart filtra por 'filled' o 'cancelled'
                 }
                 
                 result = await bitmartService.getHistoryOrders(historyParams);
                 break;
+                
             default:
-                return res.status(400).json({ success: false, message: 'Invalid order status' });
+                return res.status(400).json({ success: false, message: 'Invalid order status parameter' });
         }
 
-        res.status(200).json(result);
+        // Si la respuesta de BitMart tiene un campo 'data', lo extraemos.
+        // Asumimos que BitMart devuelve un array de órdenes o un objeto con un campo 'data' o similar.
+        const ordersToReturn = result && result.data ? result.data : result;
+
+        res.status(200).json(ordersToReturn);
         
     } catch (error) {
         console.error('Error al obtener órdenes. Detalles:', error.response ? error.response.data : error.message);
