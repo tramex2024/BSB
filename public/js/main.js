@@ -3,7 +3,6 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
-//import { initializeTestbotView } from './modules/testbot.js';
 import { initializeAutobotView } from './modules/autobot.js';
 import { initializeAibotView } from './modules/aibot.js';
 
@@ -24,45 +23,43 @@ let lastPrice = 0;
 // Mapa de funciones de inicialización
 const views = {
     dashboard: initializeDashboardView,
-    //testbot: initializeTestbotView,
     autobot: initializeAutobotView,
     aibot: initializeAibotView
 };
 
 /**
  * Función que actualiza el estado visual de la conexión (la "bolita").
- * Movida aquí para ser global e independiente de la pestaña activa.
- * NOTA: Idealmente, esta función debería estar en 'uiManager.js'.
  * @param {string} source - 'API_SUCCESS' (verde) o 'CACHE_FALLBACK' (amarillo).
  */
 function updateConnectionStatusBall(source) {
-    // 💥 CORRECCIÓN IMPORTANTE: Cambiado el ID a 'au-connection-status' para que coincida con el HTML.
-    const statusBall = document.getElementById('au-connection-status');
-    if (!statusBall) {
-        console.warn("Elemento 'au-connection-status' no encontrado. Verifique la ID en el HTML.");
+    // 🛑 CRÍTICO: Debemos apuntar al span de la bolita (status-dot) para cambiar su color.
+    const statusDot = document.getElementById('status-dot'); 
+    
+    // El contenedor (au-connection-status) solo necesita la etiqueta, no el cambio de color.
+    // Si la bolita no existe, salimos.
+    if (!statusDot) { 
+        console.warn("Elemento 'status-dot' no encontrado. Verifique la ID en el HTML.");
         return;
     }
     
-    // Eliminamos clases viejas
-    statusBall.classList.remove('status-red', 'status-yellow', 'status-green');
+    // 1. Eliminar todas las posibles clases de color de Tailwind
+    statusDot.classList.remove('bg-red-500', 'bg-yellow-500', 'bg-green-500');
 
+    // 2. Definir y aplicar el nuevo color de fondo (bg-*)
     if (source === 'API_SUCCESS') {
         // Verde: Conexión exitosa y datos actualizados.
-        statusBall.classList.add('status-green');
-        statusBall.title = 'Conectado a BitMart (Datos recientes de la API)';
+        statusDot.classList.add('bg-green-500');
+        statusDot.title = 'Conectado a BitMart (Datos recientes de la API)';
     } else if (source === 'CACHE_FALLBACK') {
         // Amarillo: Falló la API (e.g., rate limit), usando la caché anterior.
-        statusBall.classList.add('status-yellow');
-        statusBall.title = 'Advertencia: Fallo de conexión o Rate Limit. Usando datos en caché.';
+        statusDot.classList.add('bg-yellow-500');
+        statusDot.title = 'Advertencia: Fallo de conexión o Rate Limit. Usando datos en caché.';
     } else {
-        // 🛑 CAMBIO CLAVE: Definimos el estado ROJO cuando el 'source' es desconocido o nulo.
-        // Esto captura la primera llamada de inicialización (donde 'source' es undefined) 
-        // y cualquier desconexión que no sea manejada.
-        statusBall.classList.add('status-red');
-        statusBall.title = 'Desconectado: Error de conexión con BitMart o inicialización pendiente.';
+        // Rojo: Desconectado o inicialización pendiente.
+        statusDot.classList.add('bg-red-500');
+        statusDot.title = 'Desconectado: Error de conexión con BitMart o inicialización pendiente.';
     }
 }
-
 
 /**
  * Función central para inicializar la pestaña seleccionada.
