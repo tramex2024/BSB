@@ -3,10 +3,9 @@
 import { fetchFromBackend } from './api.js';
 import { displayLogMessage } from './auth.js';
 import { getBalances } from './balance.js';
-// La función displayOrders fue eliminada de orders.js y su lógica se movió a fetchOrders.
 
 /**
- * Comprueba la conexión a BitMart y obtiene datos consolidados.
+ * Comprueba la conexión a BitMart y obtiene datos consolidados (usando el endpoint de balances).
  */
 export async function checkBitMartConnectionAndData() {
     displayLogMessage('Checking BitMart connection and fetching data...', 'info');
@@ -22,10 +21,17 @@ export async function checkBitMartConnectionAndData() {
     }
 
     try {
-        const data = await fetchFromBackend('/api/bitmart-data');
+        // 🛑 CORRECCIÓN: Cambiamos el endpoint a la ruta de balances que sí existe
+        const result = await fetchFromBackend('/api/v1/balances/available'); 
 
-        if (data.connected) {
-            displayLogMessage('Connected to BitMart. Data fetched successfully.', 'success');
+        // 💡 Asumimos que si la llamada fue exitosa (HTTP 200), el backend pudo 
+        // conectarse a BitMart, o que el backend incluye el estado de conexión
+        // dentro del objeto 'result'. Modificamos la comprobación para ser más robustos.
+        
+        const isConnected = result.success && result.data && result.data.usdt && result.data.btc; // Comprobación más profunda
+        
+        if (isConnected) {
+            displayLogMessage('Connected to BitMart. Balances fetched successfully.', 'success');
             if (connectionIndicator) {
                 connectionIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
                 connectionIndicator.classList.add('bg-green-500');
@@ -34,15 +40,15 @@ export async function checkBitMartConnectionAndData() {
                 connectionText.textContent = 'Connected';
             }
 
-            getBalances(data.balance);
+            // Llamar a getBalances con los datos del backend
+            getBalances(result.data); // result.data es el objeto de balances
             
-            // REMOVED: This logic is now handled directly by the tab click handlers in main.js
-            // if (currentTab === 'tab-opened' && data.openOrders) {
-            //     displayOrders(data.openOrders, 'opened');
-            // }
-
         } else {
-            displayLogMessage(`Failed to connect to BitMart: ${data.message || 'Unknown error'}`, 'error');
+            // Esto podría ocurrir si el backend devuelve success=true pero los datos son incompletos
+            // O si el backend falla en el intento de conexión con BitMart internamente.
+            const message = result.message || 'Error en los datos de BitMart devueltos.';
+            displayLogMessage(`Failed to connect to BitMart: ${message}`, 'error');
+            
             if (connectionIndicator) {
                 connectionIndicator.classList.remove('bg-yellow-500', 'bg-green-500');
                 connectionIndicator.classList.add('bg-red-500');

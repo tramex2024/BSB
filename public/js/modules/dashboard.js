@@ -4,7 +4,7 @@ import { getBalances } from './balance.js';
 import { checkBitMartConnectionAndData } from './network.js';
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
-import { intervals } from '../main.js';
+import { intervals, SOCKET_SERVER_URL } from '../main.js';
 
 // Asumimos que estas constantes están definidas en el scope global o en main.js
 // const SOCKET_SERVER_URL = '...'; 

@@ -11,6 +11,7 @@ import { initializeAibotView } from './modules/aibot.js';
 
 // --- Constantes y variables globales (EXPORTADAS) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
+export const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
