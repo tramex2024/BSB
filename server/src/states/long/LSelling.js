@@ -1,16 +1,16 @@
 // BSB/server/src/states/long/LSelling.js (ETAPA 1: Delega el reinicio a BUYING)
 
 const { placeSellOrder } = require('../../managers/longOrderManager');
-const { getOrderDetail } = require('../../../services/bitmartService'); 
+const { getOrderDetail } = require('../../../services/bitmartService');    
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN DE SERVICIO DE PERSISTENCIA
 const { logSuccessfulCycle } = require('../../../services/cycleLogService'); // 💡 NUEVA IMPORTACIÓN
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
 
 // Se asume que el manejo del Trailing Stop se basa en una caída fija.
-const LSTATE = 'long'; 
+const LSTATE = 'long';    
 // 💡 VALOR DEFINIDO POR EL USUARIO PARA EL TRAILING STOP (0.4%)
-const TRAILING_STOP_PERCENTAGE = 0.4; 
+const TRAILING_STOP_PERCENTAGE = 0.4;    
 // 💡 NUEVA CONSTANTE: Comisión de venta
 const SELL_FEE_PERCENT = 0.001; // 0.1%
 
@@ -20,11 +20,11 @@ const SELL_FEE_PERCENT = 0.001; // 0.1%
 // =========================================================================
 
 /**
- * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
- * @param {object} botStateObj - Estado del bot antes de la venta.
- * @param {object} orderDetails - Detalles de la orden de BitMart completada.
- * @param {object} dependencies - Dependencias inyectadas (incluye config, log, updateGeneralBotState, etc.).
- */
+ * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
+ * @param {object} botStateObj - Estado del bot antes de la venta.
+ * @param {object} orderDetails - Detalles de la orden de BitMart completada.
+ * @param {object} dependencies - Dependencias inyectadas (incluye config, log, updateGeneralBotState, etc.).
+ */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 	// Aseguramos la extracción de todas las dependencias necesarias
 	const { config, log, updateBotState, updateLStateData, updateGeneralBotState } = dependencies;
@@ -32,8 +32,8 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 	try {
 		// 1. CÁLCULO DE CAPITAL Y GANANCIA (CORREGIDO PARA USAR AI Y FEE NETO)
 		const { ac: totalBtcSold } = botStateObj.lStateData; // Ya no usamos ppc
-        // 💡 MONTO TOTAL INVERTIDO REAL (incluye fees de compra)
-        const totalUsdtSpent = botStateObj.lStateData.ai;
+        // 💡 MONTO TOTAL INVERTIDO REAL (incluye fees de compra)
+        const totalUsdtSpent = botStateObj.lStateData.ai;
 		
 		// Usamos filledSize y priceAvg (o price) para asegurar precisión en la venta.
 		const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
@@ -42,20 +42,29 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 		
 		// MONTO DE VENTA BRUTO (antes de comisión)
 		const totalUsdtRecoveredBRUTO = filledSize * sellPrice;
-        
-        // 🛑 CÁLCULO DE COMISIÓN DE VENTA Y PROFIT NETO
-        const sellFeeUsdt = totalUsdtRecoveredBRUTO * SELL_FEE_PERCENT; 
-        const totalUsdtRecoveredNETO = totalUsdtRecoveredBRUTO - sellFeeUsdt;
-        
-        // PROFIT REAL (Neto)
+        
+        // 🛑 CÁLCULO DE COMISIÓN DE VENTA Y PROFIT NETO
+        const sellFeeUsdt = totalUsdtRecoveredBRUTO * SELL_FEE_PERCENT;    
+        const totalUsdtRecoveredNETO = totalUsdtRecoveredBRUTO - sellFeeUsdt;
+        
+        // PROFIT REAL (Neto)
 		const profitNETO = totalUsdtRecoveredNETO - totalUsdtSpent;
-        
-        // ------------------------------------------------------------------------
-        // 💡 MODIFICACIÓN: PERSISTENCIA HISTÓRICA DE LA ORDEN DE VENTA
-        // ------------------------------------------------------------------------
-        const savedOrder = await saveExecutedOrder(orderDetails, LSTATE); // LSTATE es 'long'
-        if (savedOrder) {
-            log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');        }
+        
+        // ------------------------------------------------------------------------
+        // 💡 MODIFICACIÓN: PERSISTENCIA HISTÓRICA DE LA ORDEN DE VENTA
+        // ------------------------------------------------------------------------
+        // 🛑 REFUERZO: Asegurar campos obligatorios que pueden faltar en órdenes asumidas/forzadas
+        const SYMBOL = config.symbol || 'BTC_USDT';
+        const orderToSave = {
+            ...orderDetails,
+            orderTime: new Date(orderDetails.createTime || orderDetails.orderTime || Date.now()),
+            symbol: orderDetails.symbol || SYMBOL,
+            type: orderDetails.type || 'MARKET'
+        };
+
+        const savedOrder = await saveExecutedOrder(orderToSave, LSTATE); // LSTATE es 'long'
+        if (savedOrder) {
+            log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');        }
 
         // ========================================================================
 // 🟢 NUEVO BLOQUE: REGISTRO HISTÓRICO DEL CICLO DE TRADING
@@ -72,7 +81,7 @@ if (cycleStartTime) {
 }
 
 // 🛑 Validar que el ciclo tenga un tiempo de inicio válido para evitar data inconsistente
-if (cycleStartTime) { 
+if (cycleStartTime) {    
     const cycleData = {
         strategy: 'Long',
         cycleIndex: (botStateObj.lcycle || 0) + 1,
@@ -91,7 +100,7 @@ if (cycleStartTime) {
         finalSellPrice: sellPrice,
         orderCount: botStateObj.lStateData.orderCountInCycle,
         
-        autobotId: botStateObj._id 
+        autobotId: botStateObj._id    
     };
 
     const savedCycle = await logSuccessfulCycle(cycleData);
@@ -120,7 +129,7 @@ if (cycleStartTime) {
 			
 			// 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
 			ltprice: 0,
-            lsprice: 0,
+            lsprice: 0,
 			lcoverage: 0,
 			lnorder: 0,
 			lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
@@ -132,7 +141,7 @@ if (cycleStartTime) {
 		// 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
 		const resetLStateData = {
 			ac: 0, ppc: 0, ai: 0, // 🛑 Resetear AI a 0
-			orderCountInCycle: 0, 
+			orderCountInCycle: 0,    
 			lastOrder: null, // <--- ESTO ES CRÍTICO
 			pm: 0, pc: 0, pv: 0,
             // 🛑 NUEVOS CAMPOS A RESETEAR AL CIERRE DEL CICLO
@@ -145,22 +154,22 @@ if (cycleStartTime) {
 		await updateLStateData(resetLStateData);
 
 		// 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
-        if (config.long.stopAtCycle) {
-            // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
-            log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
-            await updateBotState('STOPPED', LSTATE);
-        } else {
-            // Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
-            
-            log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
-            
-            // 🎯 FORZAMOS LA TRANSICIÓN AL ESTADO CORRECTO
-            await updateBotState('BUYING', LSTATE);
-        }
+        if (config.long.stopAtCycle) {
+            // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
+            log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
+            await updateBotState('STOPPED', LSTATE);
+        } else {
+            // Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
+            
+            log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
+            
+            // 🎯 FORZAMOS LA TRANSICIÓN AL ESTADO CORRECTO
+            await updateBotState('BUYING', LSTATE);
+        }
 
 	} catch (error) {
 		// ⚠️ BLOQUE DE RECUPERACIÓN AUTÓNOMA (Sustituye 'ERROR')
-        log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
+        log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
 		log('Intentando limpieza de lastOrder y permitiendo reintento en el próximo ciclo.', 'warning');
 		
 		try {
@@ -181,8 +190,8 @@ async function run(dependencies) {
 	// =================================================================
 	// === [ BLOQUE CRÍTICO DE RECUPERACIÓN DE SERVIDOR ] ================
 	// =================================================================
-    // 🛑 Nota: El Consolidator para la VENTA NO existe, por lo que esta lógica
-    // de recuperación aquí es CRÍTICA. Mantenemos el bloque.
+    // 🛑 Nota: El Consolidator para la VENTA NO existe, por lo que esta lógica
+    // de recuperación aquí es CRÍTICA. Mantenemos el bloque.
 	const lastOrder = botState.lStateData.lastOrder;
 	const SYMBOL = config.symbol || 'BTC_USDT';
 
@@ -195,7 +204,7 @@ async function run(dependencies) {
 			const orderDetails = await getOrderDetail(SYMBOL, lastOrder.order_id);
 
 			// Verifica si la orden fue llenada, incluso si luego fue cancelada (parcial)
-			const isOrderFilled = orderDetails && (orderDetails.state === 'filled' || 
+			const isOrderFilled = orderDetails && (orderDetails.state === 'filled' ||    
 				(orderDetails.state === 'partially_canceled' && parseFloat(orderDetails.filled_volume || 0) > 0));
 
 			if (isOrderFilled) {
@@ -206,7 +215,7 @@ async function run(dependencies) {
 				const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
 				
 				// 2. Procesar la venta exitosa (cierra ciclo, recupera capital, resetea estado)
-				await handleSuccessfulSell(botState, orderDetails, handlerDependencies); 
+				await handleSuccessfulSell(botState, orderDetails, handlerDependencies);    
 				
 				return; // Finaliza la ejecución, el ciclo se ha cerrado.
 
@@ -230,7 +239,7 @@ async function run(dependencies) {
 			log(`Advertencia: Orden ${lastOrder.order_id} desapareció del historial reciente (Error 50005). Asumiendo llenado instantáneo y forzando cierre de ciclo.`, 'warning');
 			
 			// 1. Limpieza inmediata para evitar la doble ejecución en el siguiente ciclo.
-			await updateLStateData({ 'lastOrder': null }); 
+			await updateLStateData({ 'lastOrder': null });    
 			
 			// 2. Ejecutar el handler de éxito para cerrar el ciclo
 			const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState }; // Creds ya no son necesarios
@@ -273,9 +282,9 @@ async function run(dependencies) {
 
 	// Actualización atómica de PM y PC
 	await updateLStateData({ pm: newPm, pc: newPc });
-        // 💡 CAMBIO CRÍTICO: Actualizar lsprice con el mismo valor que newPc
-        await updateGeneralBotState({ lsprice: newPc });
-        log(`lsprice actualizado al valor de PC: ${newPc.toFixed(2)}.`, 'info');
+        // 💡 CAMBIO CRÍTICO: Actualizar lsprice con el mismo valor que newPc
+        await updateGeneralBotState({ lsprice: newPc });
+        log(`lsprice actualizado al valor de PC: ${newPc.toFixed(2)}.`, 'info');
 	} else {
 		log(`Esperando condiciones para la venta. Precio actual: ${currentPrice.toFixed(2)}, PM: ${newPm.toFixed(2)}, PC: ${newPc.toFixed(2)}`, 'info');
 	}
@@ -287,39 +296,29 @@ async function run(dependencies) {
 		log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
 		
 		// 🛑 BLOQUE TRY/CATCH AÑADIDO PARA MANEJAR FALLAS CRÍTICAS DE API
-    try {
-        await placeSellOrder(config, botState, acSelling, log); 
-        // Si tiene éxito, placeSellOrder ya bloqueó el ciclo con lastOrder.
-    } catch (error) {
-        log(`Error CRÍTICO al colocar la orden de venta: ${error.message}`, 'error');
-        
-        // 🚨 CORRECCIÓN ACORDADA: Si falla por Balance not enough, asumimos venta exitosa y forzamos el cierre.
-        if (error.message.includes('Balance not enough')) {
-            log('Fallo de VENTA por Balance/Activos insuficientes. ASUMIENDO VENTA FUERA DE BANDA Y FORZANDO CIERRE DE CICLO.', 'success');
-            
-            // 1. Definimos los detalles de la orden REAL (usando sus datos: Avg. Price=90278.29)
-            const assumedOrderDetails = {
-                priceAvg: 90278.29, // Precio de la venta que ocurrió realmente
-                filled_volume: botState.lStateData.ac, // 0.00006
-                orderId: "FORCED_OUT_OF_BAND", 
-                side: 'sell' 
-            };
-            
-            // 2. Ejecutamos el Handler de Cierre, el cual hará la limpieza y transición a BUYING.
-            const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
-            await handleSuccessfulSell(botState, assumedOrderDetails, handlerDependencies); 
-            
-            return; // Salimos del ciclo para evitar cualquier otra ejecución.
-        } 
-        // Para otros errores...
-        
-        return; // Salimos de la ejecución del run()
-      }
-    }
-  }
+        try {
+            await placeSellOrder(config, botState, acSelling, log);    
+            // Si tiene éxito, placeSellOrder ya bloqueó el ciclo con lastOrder.
+        } catch (error) {
+            log(`Error CRÍTICO al colocar la orden de venta: ${error.message}`, 'error');
+            
+            // 🚨 CORRECCIÓN ACORDADA: Si falla por Balance not enough, NO asumimos venta forzada.
+            if (error.message.includes('Balance not enough') || error.message.includes('volume too small')) {
+                log('Error CRÍTICO: El bot no puede vender el activo (Balance insuficiente/Mínimo de venta). MANTENIENDO AC, deteniendo el trading y transicionando a NO_COVERAGE para investigación.', 'error');
+                
+                // Transicionar a NO_COVERAGE (o STOPPED) para congelar la posición y alertar.
+                await updateBotState('NO_COVERAGE', LSTATE); 
+                
+                return; // Salimos de la ejecución del run()
+            }    
+            
+            return; // Salimos de la ejecución del run() para otros errores.
+        }
+    }
+    }
 }
 
-module.exports = { 
-	run, 
+module.exports = {    
+	run,    
 	handleSuccessfulSell // Exportado para que orderManager.js pueda usarlo.
 };

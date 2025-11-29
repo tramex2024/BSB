@@ -46,11 +46,16 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     let newPPC = currentAI;    
     
     if (newTotalQty > 0) {
-        // 🛑 El PPC ahora se calcula con la Inversión Acumulada (AI) que ya incluye fees
+    // 🛑 CORRECCIÓN: Si es la primera orden, el PPC es simplemente el precio de ejecución
+    if (isFirstOrder) {
+        newPPC = finalExecutionPrice;
+    } else {
+        // Para órdenes de cobertura, se usa la fórmula ponderada (AI / AC)
         newPPC = newAI / newTotalQty;
-        // Si por alguna razón la nueva cantidad total es 0 o NaN (lo cual no debería pasar si executedQty > 0), usar el AI
-        if (isNaN(newPPC) || newTotalQty === 0) newPPC = currentAI;    
     }
+    // Si por alguna razón la nueva cantidad total es 0 o NaN (lo cual no debería pasar si executedQty > 0), usar el AI
+    if (isNaN(newPPC) || newTotalQty === 0) newPPC = currentAI;    
+}
 
     // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance y Refund) ---
 
@@ -66,7 +71,15 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     // ------------------------------------------------------------------------
     // 💡 MODIFICACIÓN 1: PERSISTENCIA HISTÓRICA DE LA ORDEN
     // ------------------------------------------------------------------------
-    const savedOrder = await saveExecutedOrder(orderDetails, 'long');    
+    const SYMBOL = botState.config.symbol || 'BTC_USDT'; // Asumiendo que el símbolo está en config
+    
+    const orderToSave = {    // <-- LÍNEA MODIFICADA
+        ...orderDetails,
+        orderTime: new Date(orderDetails.createTime || Date.now()),
+        symbol: SYMBOL, // 🛑 REFUERZO: Añadir campo obligatorio
+        type: orderDetails.type || 'MARKET' // 🛑 REFUERZO: Añadir campo obligatorio
+    };
+    const savedOrder = await saveExecutedOrder(orderToSave, 'long');    
     if (savedOrder) {
         log(`Orden Long ID ${orderDetails.orderId} guardada en el historial de Órdenes.`, 'debug');
     }
@@ -97,7 +110,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     $set: {
         'lbalance': finalLBalance,
         // ✅ CORRECCIÓN 2: Actualizar el precio de toma de ganancias (ltprice)
-        'ltprice': newLTPrice, 
+        'ltprice': newLTPrice,    
         
         // Actualización de LStateData con los nuevos valores promediados:
         'lStateData.ac': newTotalQty,
@@ -122,7 +135,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     $inc: {
         'lStateData.orderCountInCycle': 1, // ✅ ÚNICO INCREMENTO (Correcto aquí)
         // ✅ CORRECCIÓN 3: Incrementamos el contador de ciclo global (lcycle) si es la primera orden
-        ...(isFirstOrder && { 'lcycle': 1 }), 
+        ...(isFirstOrder && { 'lcycle': 1 }),    
     }
 };
     
