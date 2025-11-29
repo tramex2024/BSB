@@ -1,22 +1,19 @@
-// BSB/server/src/states/long/LSelling.js (ETAPA 1: Delega el reinicio a BUYING)
+// BSB/server/src/states/long/LSelling.js (ETAPA 2: Con Consolidator de Venta)
 
 const { placeSellOrder } = require('../../managers/longOrderManager');
-const { getOrderDetail } = require('../../../services/bitmartService');    
-const { saveExecutedOrder } = require('../../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN DE SERVICIO DE PERSISTENCIA
-const { logSuccessfulCycle } = require('../../../services/cycleLogService'); // 💡 NUEVA IMPORTACIÓN
+const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService'); // 💡 AÑADIDO getRecentOrders
+const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
+const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
 
-// Se asume que el manejo del Trailing Stop se basa en una caída fija.
 const LSTATE = 'long';    
-// 💡 VALOR DEFINIDO POR EL USUARIO PARA EL TRAILING STOP (0.4%)
 const TRAILING_STOP_PERCENTAGE = 0.4;    
-// 💡 NUEVA CONSTANTE: Comisión de venta
 const SELL_FEE_PERCENT = 0.001; // 0.1%
-
 
 // =========================================================================
 // FUNCIÓN HANDLER: LÓGICA DE RECUPERACIÓN DE CAPITAL Y CIERRE DE CICLO
+// (handleSuccessfulSell - SIN CAMBIOS EN ESTE BLOQUE)
 // =========================================================================
 
 /**
@@ -30,148 +27,101 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 	const { config, log, updateBotState, updateLStateData, updateGeneralBotState } = dependencies;
 	
 	try {
-		// 1. CÁLCULO DE CAPITAL Y GANANCIA (CORREGIDO PARA USAR AI Y FEE NETO)
-		const { ac: totalBtcSold } = botStateObj.lStateData; // Ya no usamos ppc
-        // 💡 MONTO TOTAL INVERTIDO REAL (incluye fees de compra)
+		// 1. CÁLCULO DE CAPITAL Y GANANCIA
+		const { ac: totalBtcSold } = botStateObj.lStateData; 
         const totalUsdtSpent = botStateObj.lStateData.ai;
 		
-		// Usamos filledSize y priceAvg (o price) para asegurar precisión en la venta.
 		const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
-		// Nota: Si la venta fue asumida (Error 50005), usamos totalBtcSold como filledSize para el cálculo.
 		const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || totalBtcSold || 0);
 		
-		// MONTO DE VENTA BRUTO (antes de comisión)
 		const totalUsdtRecoveredBRUTO = filledSize * sellPrice;
-        
-        // 🛑 CÁLCULO DE COMISIÓN DE VENTA Y PROFIT NETO
         const sellFeeUsdt = totalUsdtRecoveredBRUTO * SELL_FEE_PERCENT;    
         const totalUsdtRecoveredNETO = totalUsdtRecoveredBRUTO - sellFeeUsdt;
-        
-        // PROFIT REAL (Neto)
-		const profitNETO = totalUsdtRecoveredNETO - totalUsdtSpent;
+        const profitNETO = totalUsdtRecoveredNETO - totalUsdtSpent;
         
         // ------------------------------------------------------------------------
-        // 💡 MODIFICACIÓN: PERSISTENCIA HISTÓRICA DE LA ORDEN DE VENTA
+        // 💡 MODIFICACIÓN: PERSISTENCIA HISTÓRICA DE LA ORDEN DE VENTA (Reforzada)
         // ------------------------------------------------------------------------
-        // 🛑 REFUERZO: Asegurar campos obligatorios que pueden faltar en órdenes asumidas/forzadas
         const SYMBOL = config.symbol || 'BTC_USDT';
         const orderToSave = {
             ...orderDetails,
             orderTime: new Date(orderDetails.createTime || orderDetails.orderTime || Date.now()),
             symbol: orderDetails.symbol || SYMBOL,
-            type: orderDetails.type || 'MARKET'
+            type: orderDetails.type || 'MARKET',
+            side: 'sell' // Asegurar el lado
         };
 
-        const savedOrder = await saveExecutedOrder(orderToSave, LSTATE); // LSTATE es 'long'
+        const savedOrder = await saveExecutedOrder(orderToSave, LSTATE);
         if (savedOrder) {
-            log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');        }
+            log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');
+        }
 
         // ========================================================================
-// 🟢 NUEVO BLOQUE: REGISTRO HISTÓRICO DEL CICLO DE TRADING
-// ========================================================================
- 
-const cycleEndTime = new Date();
-const cycleStartTime = botStateObj.lStateData.cycleStartTime;
-let durationHours = null;
+		// 🟢 BLOQUE: REGISTRO HISTÓRICO DEL CICLO DE TRADING (omito por brevedad, es el mismo)
+		// ========================================================================
+		const cycleEndTime = new Date();
+		const cycleStartTime = botStateObj.lStateData.cycleStartTime;
+		let durationHours = null;
 
-// Cálculo de Duración
-if (cycleStartTime) {
-    const durationMs = cycleEndTime.getTime() - cycleStartTime.getTime();
-    durationHours = durationMs / (1000 * 60 * 60); // Convertir milisegundos a horas
-}
+		if (cycleStartTime) {
+			const durationMs = cycleEndTime.getTime() - cycleStartTime.getTime();
+			durationHours = durationMs / (1000 * 60 * 60); 
 
-// 🛑 Validar que el ciclo tenga un tiempo de inicio válido para evitar data inconsistente
-if (cycleStartTime) {    
-    const cycleData = {
-        strategy: 'Long',
-        cycleIndex: (botStateObj.lcycle || 0) + 1,
-        symbol: config.symbol,
-        
-        startTime: cycleStartTime, // Usamos el tiempo válido
-        endTime: cycleEndTime,
-        durationHours: durationHours,
-        
-        initialInvestment: totalUsdtSpent,
-        finalRecovery: totalUsdtRecoveredNETO,
-        netProfit: profitNETO,
-        profitPercentage: (profitNETO / totalUsdtSpent) * 100,
-        
-        averagePPC: botStateObj.lStateData.ppc,
-        finalSellPrice: sellPrice,
-        orderCount: botStateObj.lStateData.orderCountInCycle,
-        
-        autobotId: botStateObj._id    
-    };
+			const cycleData = {
+				strategy: 'Long', cycleIndex: (botStateObj.lcycle || 0) + 1, symbol: config.symbol,
+				startTime: cycleStartTime, endTime: cycleEndTime, durationHours: durationHours,
+				initialInvestment: totalUsdtSpent, finalRecovery: totalUsdtRecoveredNETO,
+				netProfit: profitNETO, profitPercentage: (profitNETO / totalUsdtSpent) * 100,
+				averagePPC: botStateObj.lStateData.ppc, finalSellPrice: sellPrice,
+				orderCount: botStateObj.lStateData.orderCountInCycle, autobotId: botStateObj._id    
+			};
 
-    const savedCycle = await logSuccessfulCycle(cycleData);
-    if (savedCycle) {
-        log(`Resumen del ciclo Long ${cycleData.cycleIndex} guardado. Ganancia: ${profitNETO.toFixed(2)} USDT.`, 'success');
-    } else {
-        log(`ADVERTENCIA: Falló el registro del ciclo ${cycleData.cycleIndex} en la DB.`, 'warning');
-    }
-} else {
-    // Si no hay StartTime, solo registramos la ganancia y continuamos.
-    log('ADVERTENCIA: cycleStartTime faltante. No se pudo registrar el ciclo en el historial.', 'warning');
-}
-// ========================================================================
-// 🟢 FIN DEL BLOQUE DE REGISTRO
-// ========================================================================
+			const savedCycle = await logSuccessfulCycle(cycleData);
+			if (savedCycle) {
+				log(`Resumen del ciclo Long ${cycleData.cycleIndex} guardado. Ganancia: ${profitNETO.toFixed(2)} USDT.`, 'success');
+			} else {
+				log(`ADVERTENCIA: Falló el registro del ciclo ${cycleData.cycleIndex} en la DB.`, 'warning');
+			}
+		} else {
+			log('ADVERTENCIA: cycleStartTime faltante. No se pudo registrar el ciclo en el historial.', 'warning');
+		}
+		// ========================================================================
+		// 🟢 FIN DEL BLOQUE DE REGISTRO
+		// ========================================================================
 
-		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA (Campos de Nivel Superior)
-		// Sumamos el monto NETO total de USDT recuperado
+		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA
 		const newLBalance = botStateObj.lbalance + totalUsdtRecoveredNETO;
 		
-		// --- 2a. UPDATE DE ESTADO GENERAL (Punto 1 de Persistencia) ---
 		await updateGeneralBotState({
 			lbalance: newLBalance,
-			// ✅ CORRECCIÓN: Usamos el profit NETO
-			total_profit: (botStateObj.total_profit || 0) + profitNETO, // 💡 CAMPO DE BENEFICIO ACUMULADO NETO
-			
-			// 🎯 RESETEO DE DATOS DE ESTADO GENERAL Y CONTADORES
-			ltprice: 0,
-            lsprice: 0,
-			lcoverage: 0,
-			lnorder: 0,
-			lcycle: (botStateObj.lcycle || 0) + 1 // ¡Incrementar el contador de ciclo!
+			total_profit: (botStateObj.total_profit || 0) + profitNETO,
+			ltprice: 0, lsprice: 0, lcoverage: 0, lnorder: 0,
+			lcycle: (botStateObj.lcycle || 0) + 1
 		});
 
-		log(`Cierre de Ciclo Long Exitoso! Ganancia NETA: ${profitNETO.toFixed(2)} USDT. Comisión de Venta deducida: ${sellFeeUsdt.toFixed(5)} USDT.`, 'success');
-		log(`LBalance actualizado. Capital operativo disponible: ${newLBalance.toFixed(2)} USDT.`, 'info');
+		log(`Cierre de Ciclo Long Exitoso! Ganancia NETA: ${profitNETO.toFixed(2)} USDT.`, 'success');
 
 		// 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
 		const resetLStateData = {
-			ac: 0, ppc: 0, ai: 0, // 🛑 Resetear AI a 0
-			orderCountInCycle: 0,    
-			lastOrder: null, // <--- ESTO ES CRÍTICO
-			pm: 0, pc: 0, pv: 0,
-            // 🛑 NUEVOS CAMPOS A RESETEAR AL CIERRE DEL CICLO
-            lastExecutionPrice: 0,
-            nextCoveragePrice: 0,
-            requiredCoverageAmount: 0,
-            cycleStartTime: null // 💡 LIMPIAR EL START TIME
+			ac: 0, ppc: 0, ai: 0, orderCountInCycle: 0, lastOrder: null, pm: 0, pc: 0, pv: 0,
+            lastExecutionPrice: 0, nextCoveragePrice: 0, requiredCoverageAmount: 0,
+            cycleStartTime: null
 		}
-		// --- 3a. UPDATE DE LSTATEDATA (Punto 2 de Persistencia - CRÍTICO) ---
 		await updateLStateData(resetLStateData);
 
-		// 4. TRANSICIÓN DE ESTADO (LÓGICA CRÍTICA DE REINICIO)
+		// 4. TRANSICIÓN DE ESTADO
         if (config.long.stopAtCycle) {
-            // Lógica 1: Si stopAtCycle es TRUE, el bot se DETIENE.
             log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
             await updateBotState('STOPPED', LSTATE);
         } else {
-            // Lógica 2: Si stopAtCycle es FALSE, el bot REINICIA INMEDIATAMENTE.
-            
             log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
-            
-            // 🎯 FORZAMOS LA TRANSICIÓN AL ESTADO CORRECTO
             await updateBotState('BUYING', LSTATE);
         }
 
 	} catch (error) {
-		// ⚠️ BLOQUE DE RECUPERACIÓN AUTÓNOMA (Sustituye 'ERROR')
+        // ... (Error de persistencia)
         log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
 		log('Intentando limpieza de lastOrder y permitiendo reintento en el próximo ciclo.', 'warning');
-		
 		try {
 			await updateLStateData({ 'lastOrder': null });
 		} catch (dbError) {
@@ -185,13 +135,11 @@ if (cycleStartTime) {
 // =========================================================================
 
 async function run(dependencies) {
-	const { botState, currentPrice, config, creds, log, updateLStateData, updateBotState, updateGeneralBotState } = dependencies;
+	const { botState, currentPrice, config, log, updateLStateData, updateBotState, updateGeneralBotState } = dependencies;
 	
 	// =================================================================
-	// === [ BLOQUE CRÍTICO DE RECUPERACIÓN DE SERVIDOR ] ================
+	// === [ BLOQUE CRÍTICO DE RECUPERACIÓN / CONSOLIDATOR DE VENTA ] ====
 	// =================================================================
-    // 🛑 Nota: El Consolidator para la VENTA NO existe, por lo que esta lógica
-    // de recuperación aquí es CRÍTICA. Mantenemos el bloque.
 	const lastOrder = botState.lStateData.lastOrder;
 	const SYMBOL = config.symbol || 'BTC_USDT';
 
@@ -200,89 +148,92 @@ async function run(dependencies) {
 
 		try {
 			// 1. Consultar el estado real de la orden en BitMart
-			// 🛑 CORRECCIÓN: getOrderDetail necesita creds explícitamente si no está en el service. Asumo que está en el service y no necesita creds.
 			const orderDetails = await getOrderDetail(SYMBOL, lastOrder.order_id);
 
-			// Verifica si la orden fue llenada, incluso si luego fue cancelada (parcial)
 			const isOrderFilled = orderDetails && (orderDetails.state === 'filled' ||    
 				(orderDetails.state === 'partially_canceled' && parseFloat(orderDetails.filled_volume || 0) > 0));
 
 			if (isOrderFilled) {
-				// Caso A: ORDEN LLENADA (Ejecución Exitosa después del reinicio)
+				// Caso A: ORDEN LLENADA (Éxito)
 				log(`Recuperación exitosa: La orden ID ${lastOrder.order_id} se completó durante el tiempo de inactividad.`, 'success');
-				
-				// Las dependencias necesarias para handleSuccessfulSell
 				const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
-				
-				// 2. Procesar la venta exitosa (cierra ciclo, recupera capital, resetea estado)
 				await handleSuccessfulSell(botState, orderDetails, handlerDependencies);    
-				
-				return; // Finaliza la ejecución, el ciclo se ha cerrado.
+				return; 
 
 			} else if (orderDetails && (orderDetails.state === 'new' || orderDetails.state === 'partially_filled')) {
 				// Caso B: ORDEN AÚN ACTIVA (Esperar)
 				log(`Recuperación: La orden ID ${lastOrder.order_id} sigue ${orderDetails.state} en BitMart. Esperando ejecución.`, 'info');
-				return; // Detenemos la ejecución.
+				return; 
 
 			} else {
-				// Caso C: ORDEN CANCELADA, FALLIDA o NO ENCONTRADA (y no se llenó)
-				log(`La orden ID ${lastOrder.order_id} no está activa ni completada. Asumiendo fallo y permitiendo una nueva venta. Estado: ${orderDetails ? orderDetails.state : 'No Encontrada'}`, 'error');
+				// Caso C: ORDEN CANCELADA o NO ENCONTRADA (Intentar Consolidar)
+				log(`La orden ID ${lastOrder.order_id} no está activa ni completada. Intentando consolidación de venta...`, 'warning');
 				
-				// 2. Limpiar lastOrder para liberar el ciclo SELLING.
+				// -----------------------------------------------------------
+				// 💡 CONSOLIDATOR DE VENTA: BUSCAR EN EL HISTORIAL
+				// -----------------------------------------------------------
+				const recentOrders = await getRecentOrders(SYMBOL, 10); // Buscar en las últimas 10 órdenes (ajustar si es necesario)
+				const executedOrder = recentOrders.find(o => 
+					o.order_id === lastOrder.order_id && 
+					o.side === 'sell' && 
+					o.status === 'filled'
+				);
+
+				if (executedOrder) {
+					// Caso C.1: ORDEN ENCONTRADA EN EL HISTORIAL (Consolidación Exitosa)
+					log(`Consolidator de Venta: Orden ${lastOrder.order_id} encontrada como 'filled' en el historial. Procediendo al cierre.`, 'success');
+					const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
+					await handleSuccessfulSell(botState, executedOrder, handlerDependencies);
+					return;
+				}
+				// -----------------------------------------------------------
+				// 💡 FIN CONSOLIDATOR
+				// -----------------------------------------------------------
+
+				// Si no se consolidó, asumimos fallo total
+				log(`Consolidator de Venta fallido: La orden ${lastOrder.order_id} no se encontró ejecutada. Limpiando lastOrder.`, 'error');
 				await updateLStateData({ 'lastOrder': null });
-				
 				// 3. Continuar la ejecución del código para intentar colocar la orden de venta de nuevo.
 			}
 		} catch (error) {
-		// 🛑 NUEVO MANEJO DEL ERROR 50005 🛑
+		// 🛑 MANEJO DE ERROR 50005 Y OTROS ERRORES
 		if (error.message.includes('50005')) {
 			log(`Advertencia: Orden ${lastOrder.order_id} desapareció del historial reciente (Error 50005). Asumiendo llenado instantáneo y forzando cierre de ciclo.`, 'warning');
 			
-			// 1. Limpieza inmediata para evitar la doble ejecución en el siguiente ciclo.
 			await updateLStateData({ 'lastOrder': null });    
 			
-			// 2. Ejecutar el handler de éxito para cerrar el ciclo
-			const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState }; // Creds ya no son necesarios
-			await handleSuccessfulSell(botState, { priceAvg: 0, filled_volume: botState.lStateData.ac, orderId: lastOrder.order_id, side: 'sell' }, handlerDependencies); // 💡 PASAR DATOS MÍNIMOS DE LA ORDEN ASUMIDA
+			const handlerDependencies = { config, log, updateBotState, updateLStateData, updateGeneralBotState };
+			// Nota: Aquí estamos asumiendo que el lleno fue total (filled_volume = ac)
+			await handleSuccessfulSell(botState, { priceAvg: currentPrice, filled_volume: botState.lStateData.ac, orderId: lastOrder.order_id, side: 'sell' }, handlerDependencies);
 			
-			return; // Finaliza la ejecución para el siguiente ciclo.
+			return; 
 		}
 
 			log(`Error al consultar orden en BitMart durante la recuperación: ${error.message}`, 'error');
-			return; // Para otros errores (red, autenticación), detenemos la ejecución para reintentar de forma segura.
+			return;
 		}
 	}
 	// =================================================================
-	// === [ FIN DEL BLOQUE DE RECUPERACIÓN ] ============================
+	// === [ FIN DEL BLOQUE DE RECUPERACIÓN / CONSOLIDATOR ] =============
 	// =================================================================
 	
 	// El código de abajo es la Lógica Normal de Trailing Stop
 
-	// Se definen las dependencias que necesitará el handler al ejecutarse (al llenar la orden de venta)
-	// 🛑 Nota: Ya no se pasa `handleSuccessfulSell` como argumento a `placeSellOrder` porque esa función fue simplificada.
-	// La lógica de cierre debe hacerse en el Consolidator (si existiera) o en este bloque de recuperación.
-	
 	const { ac: acSelling, pm } = botState.lStateData;
 
 	log("Estado Long: SELLING. Gestionando ventas...", 'info');
 	
-	// 💡 USAMOS EL VALOR FIJO DE 0.4% PARA EL TRAILING STOP, como se indica en la estrategia.
-	const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100; // Convierte 0.4 a 0.004
+	const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100;
 
 	// 1. CÁLCULO DEL TRAILING STOP
-	// El Precio Máximo (pm) solo debe subir
 	const newPm = Math.max(pm || 0, currentPrice);
-	// El Precio de Caída (pc) es el pm menos el porcentaje fijo de trailing stop
 	const newPc = newPm * (1 - trailingStopPercent);
 
 	// 2. ACTUALIZACIÓN Y PERSISTENCIA DE DATOS (PM y PC)
-	// Solo persistir si el PM realmente subió.
 	if (newPm > (pm || 0)) {
 		log(`Trailing Stop: PM actualizado a ${newPm.toFixed(2)}. PC actualizado a ${newPc.toFixed(2)} (${TRAILING_STOP_PERCENTAGE}% caída).`, 'info');
 
-	// Actualización atómica de PM y PC
-	await updateLStateData({ pm: newPm, pc: newPc });
-        // 💡 CAMBIO CRÍTICO: Actualizar lsprice con el mismo valor que newPc
+		await updateLStateData({ pm: newPm, pc: newPc });
         await updateGeneralBotState({ lsprice: newPc });
         log(`lsprice actualizado al valor de PC: ${newPc.toFixed(2)}.`, 'info');
 	} else {
@@ -290,29 +241,25 @@ async function run(dependencies) {
 	}
 	
 	// 3. CONDICIÓN DE VENTA Y LIQUIDACIÓN
-	// CRÍTICO: Aseguramos que el monto a vender sea igual o mayor al mínimo.
 	if (acSelling >= MIN_SELL_AMOUNT_BTC && !lastOrder) {
 	if (currentPrice <= newPc) {
 		log(`Condiciones de venta por Trailing Stop alcanzadas. Colocando orden de venta a mercado para liquidar ${acSelling.toFixed(8)} BTC.`, 'success');
 		
-		// 🛑 BLOQUE TRY/CATCH AÑADIDO PARA MANEJAR FALLAS CRÍTICAS DE API
         try {
             await placeSellOrder(config, botState, acSelling, log);    
-            // Si tiene éxito, placeSellOrder ya bloqueó el ciclo con lastOrder.
         } catch (error) {
             log(`Error CRÍTICO al colocar la orden de venta: ${error.message}`, 'error');
             
-            // 🚨 CORRECCIÓN ACORDADA: Si falla por Balance not enough, NO asumimos venta forzada.
+            // 🚨 MANEJO DEL BALANCE INSUFICIENTE (Mantiene AC, transiciona a NO_COVERAGE)
             if (error.message.includes('Balance not enough') || error.message.includes('volume too small')) {
-                log('Error CRÍTICO: El bot no puede vender el activo (Balance insuficiente/Mínimo de venta). MANTENIENDO AC, deteniendo el trading y transicionando a NO_COVERAGE para investigación.', 'error');
+                log('Error CRÍTICO: El bot no puede vender el activo. MANTENIENDO AC, deteniendo el trading y transicionando a NO_COVERAGE para investigación.', 'error');
                 
-                // Transicionar a NO_COVERAGE (o STOPPED) para congelar la posición y alertar.
                 await updateBotState('NO_COVERAGE', LSTATE); 
                 
-                return; // Salimos de la ejecución del run()
+                return;
             }    
             
-            return; // Salimos de la ejecución del run() para otros errores.
+            return;
         }
     }
     }
@@ -320,5 +267,5 @@ async function run(dependencies) {
 
 module.exports = {    
 	run,    
-	handleSuccessfulSell // Exportado para que orderManager.js pueda usarlo.
+	handleSuccessfulSell
 };
