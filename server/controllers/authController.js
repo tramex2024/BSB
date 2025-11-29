@@ -6,13 +6,13 @@ const nodemailer = require('nodemailer');
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({
-    // Usa host y puerto explícitos para mayor fiabilidad en entornos de nube
     host: 'smtp.gmail.com', 
-    port: 465, 
-    secure: true, // true para 465, false para otros puertos (como 587)
+    port: 587, // 🛑 CAMBIO: Usamos el puerto 587
+    secure: false, // 🛑 CAMBIO: 'false' para el puerto 587 (usa STARTTLS)
+    requireTLS: true, // 🛑 NUEVO: Forzar el uso de TLS
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS // ¡Recuerda que debe ser la App Password!
+        pass: process.env.EMAIL_PASS // Debe ser la App Password
     }
 });
 
