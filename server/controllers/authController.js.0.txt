@@ -3,7 +3,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-const Autobot = require('../models/Autobot'); // Ya lo tenías, ¡Excelente!
+const Autobot = require('../models/Autobot');
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({
@@ -99,27 +99,9 @@ exports.verifyToken = async (req, res) => {
             return res.status(400).json({ message: 'Invalid or expired token.' });
         }
 
-        // 🛑 INICIO DE LA CORRECCIÓN CLAVE: Asignar un Autobot si no tiene uno
-        if (!user.autobotId) {
-            console.log(`[VERIFY TOKEN] Usuario ${user.email} no tiene autobotId. Creando uno por defecto.`);
-            
-            // 1. Crear un nuevo Autobot. Usamos la ID del usuario como referencia.
-            const newBot = new Autobot({ 
-                userId: user._id, 
-                // Asegúrate de incluir cualquier campo 'required' que tenga tu modelo Autobot.
-                // Por ejemplo, si tiene un campo 'name', pon: name: 'Bot Principal' 
-            });
-            await newBot.save();
-            
-            // 2. Asignar la referencia del nuevo bot al documento del usuario
-            user.autobotId = newBot._id; 
-            // NOTA: await user.save() se hará al final de la función.
-        }
-        // 🛑 FIN DE LA CORRECCIÓN CLAVE
-
         // Generar JWT para la sesión persistente
         const jwtToken = jwt.sign(
-            { id: user._id, email: user.email, autobotId: user.autobotId }, // ¡Ahora tiene valor garantizado!
+            { id: user._id, email: user.email, autobotId: user.autobotId },
             process.env.JWT_SECRET,
             { expiresIn: '365d' } // Token válido por 365 días
         );
@@ -132,13 +114,13 @@ exports.verifyToken = async (req, res) => {
         // user.token = null;
         // user.tokenExpires = null;
         
-        // Guardar el documento actualizado en la base de datos (guarda el jwtToken y el autobotId)
+        // Guardar el documento actualizado en la base de datos
         await user.save();
 
         res.status(200).json({ 
             message: 'Login successful!', 
             token: jwtToken, // Esto envía el token al frontend para que lo guarde
-            user: { id: user._id, email: user.email, autobotId: user.autobotId } // Opcional: enviar el ID del bot al frontend
+            user: { id: user._id, email: user.email } 
         });
 
     } catch (error) {
