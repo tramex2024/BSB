@@ -153,39 +153,45 @@ export async function fetchEquityCurveData() {
 }
 
 /**
- * Obtiene los Key Performance Indicators (KPIs) de los ciclos cerrados,
- * como el rendimiento promedio por ciclo.
- * @returns {Promise<object>} Un objeto con averageProfitPercentage y totalCycles.
- */
+ * Obtiene los Key Performance Indicators (KPIs) de los ciclos cerrados,
+ * como el rendimiento promedio por ciclo.
+ * @returns {Promise<object>} Un objeto con averageProfitPercentage y totalCycles.
+ */
 export async function fetchCycleKpis() {
-    console.log('Solicitando KPIs de ciclos cerrados...');
-    
-    const token = localStorage.getItem('token');
-    if (!token) {
-        console.error('No se encontró el token de autenticación para KPIs.');
-        return { averageProfitPercentage: 0, totalCycles: 0 };
-    }
+    console.log('Solicitando KPIs de ciclos cerrados...');
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+        console.error('No se encontró el token de autenticación para KPIs.');
+        return { averageProfitPercentage: 0, totalCycles: 0 };
+    }
 
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error al obtener los KPIs del ciclo:', errorData.message);
-            return { averageProfitPercentage: 0, totalCycles: 0 };
-        }
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error al obtener los KPIs del ciclo:', errorData.message);
+            return { averageProfitPercentage: 0, totalCycles: 0 };
+        }
 
-        const data = await response.json();
-        // El endpoint devuelve un array, tomamos el primer elemento que contiene los promedios/totales
-        return data[0] || { averageProfitPercentage: 0, totalCycles: 0 }; 
-    } catch (error) {
-        console.error('Error de red al obtener KPIs del ciclo:', error);
-        return { averageProfitPercentage: 0, totalCycles: 0 };
-    }
+        const data = await response.json();
+        
+        // 🎯 CORRECCIÓN: Normalizamos la respuesta para devolver el objeto KPI directamente.
+        // Si el backend devuelve un array [kpiObject], lo desempacamos.
+        // Si devuelve kpiObject directamente, lo usamos.
+        const kpiObject = Array.isArray(data) ? data[0] : data;
+        
+        return kpiObject || { averageProfitPercentage: 0, totalCycles: 0 }; 
+        
+    } catch (error) {
+        console.error('Error de red al obtener KPIs del ciclo:', error);
+        return { averageProfitPercentage: 0, totalCycles: 0 };
+    }
 }
