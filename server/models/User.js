@@ -12,6 +12,12 @@ const userSchema = new mongoose.Schema({
         match: [/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/, 'Please fill a valid email address']
     },
     
+    autobotId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Autobot', // Asegúrate de que 'Autobot' sea el nombre correcto de tu modelo de bot
+        default: null // Puede ser null inicialmente si se asigna después del registro
+    },
+
     jwtToken: {
         type: String,
         default: null,

@@ -97,7 +97,7 @@ exports.verifyToken = async (req, res) => {
 
         // Generar JWT para la sesión persistente
         const jwtToken = jwt.sign(
-            { id: user._id, email: user.email },
+            { id: user._id, email: user.email, autobotId: user.autobotId },
             process.env.JWT_SECRET,
             { expiresIn: '365d' } // Token válido por 365 días
         );

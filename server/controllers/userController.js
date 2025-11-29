@@ -32,7 +32,11 @@ exports.authenticateToken = (req, res, next) => {
             console.error("[AUTH MIDDLEWARE] JWT Verification Error:", err.message);
             return res.status(403).json({ message: 'Invalid or expired authentication token.' });
         }
-        req.user = user;
+        req.user = {
+            id: decodedUser.id,
+            email: decodedUser.email,
+            autobotId: decodedUser.autobotId // ¡Ahora está disponible!
+        };
         next();
     });
 };
