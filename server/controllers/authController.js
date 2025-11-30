@@ -5,16 +5,20 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const Autobot = require('../models/Autobot'); // Ya lo tenías, ¡Excelente!
 
+//LOG TEMPORAL
+
+console.log(`[EMAIL DEBUG] USER: ${process.env.EMAIL_USER}`);
+console.log(`[EMAIL DEBUG] PASS LOADED (First 4 chars): ${process.env.EMAIL_PASS ? process.env.EMAIL_PASS.substring(0, 4) : 'NONE'}`);
+
 // Nodemailer transporter setup (replace with your email service details)
-const transporter = nodemailer.createTransport({
-    // 🛑 CAMBIO CRÍTICO: No uses 'service: gmail'
-    host: 'smtp.gmail.com', // ⬅️ Host de Gmail
-    port: 465,              // ⬅️ Puerto seguro (SSL)
-    secure: true,           // ⬅️ CRÍTICO: Usa SSL/TLS
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
-    }
+const transporter = nodemailer.createTransport({    
+    host: 'smtp.gmail.com', 
+    port: 465, 
+    secure: true, 
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS 
+    }
 });
 
 exports.requestToken = async (req, res) => {
