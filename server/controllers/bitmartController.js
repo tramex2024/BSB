@@ -1,3 +1,5 @@
+// server/controllers/bitmartController.js
+
 // Ejemplo de un controlador simple
 exports.getBitMartStatus = async (req, res) => {
     try {

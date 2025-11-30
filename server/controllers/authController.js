@@ -7,7 +7,10 @@ const Autobot = require('../models/Autobot'); // Ya lo tenías, ¡Excelente!
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // e.g., 'gmail', 'SendGrid'
+    // 🛑 CAMBIO CRÍTICO: No uses 'service: gmail'
+    host: 'smtp.gmail.com', // ⬅️ Host de Gmail
+    port: 465,              // ⬅️ Puerto seguro (SSL)
+    secure: true,           // ⬅️ CRÍTICO: Usa SSL/TLS
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS 
