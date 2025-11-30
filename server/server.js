@@ -115,64 +115,75 @@ let currentMarketPrice = 'N/A';
 async function updateBotStateWithPrice(price) {
     try {
         const botState = await Autobot.findOne({});
-        if (botState) {
+        const currentPrice = parseFloat(price);
+
+        if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
+            return;
+        }
+
+        let updatedBotState = botState;
+
+        // 🛑 LÓGICA DE CORRECCIÓN CLAVE 🛑
+        // Recalcular lcoverage SOLO si el bot no está en un ciclo activo (RUNNING, BUYING, SELLING).
+        // Si el bot está activo, su estado (lcoverage, ltprice) es fijado por la estrategia (LBuying.js) y se usa tal cual.
+        if (botState.lstate === 'STOPPED' || botState.lstate === 'NO_COVERAGE') {
             
-            // Recalcula lcoverage y lnorder con el nuevo precio
+            // Recalcula lcoverage y lnorder con el nuevo precio (basado en el balance y precio actual)
             const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
                 botState.lbalance,
-                parseFloat(price),
+                currentPrice,
                 botState.config.long.purchaseUsdt,
                 botState.config.long.price_var / 100,
                 botState.config.long.size_var / 100
             );
 
-            // 🟢 CORRECCIÓN: Inicializar scoverage y snorder al valor actual de la DB
+            // Inicializar scoverage y snorder (mantener el valor actual si la estrategia short no se ejecuta aquí)
             const scoverage = botState.scoverage;
             const snorder = botState.snorder;
 
-            // 🛑 CAMBIO CLAVE: Usamos findOneAndUpdate para actualizar SOLO los campos de cobertura.
-            // Esto evita sobrescribir lStateData, lbalance, lstate, etc. con datos obsoletos.
-            const updatedBotState = await Autobot.findOneAndUpdate(
+            // Usamos findOneAndUpdate para actualizar SOLO los campos de cobertura de la UI.
+            updatedBotState = await Autobot.findOneAndUpdate(
                 { _id: botState._id },
                 {
                     $set: {
-                        lcoverage: lcoverage,
+                        lcoverage: lcoverage, // 👈 ACTUALIZACIÓN SOLO EN ESTADO DETENIDO
                         lnorder: lnorder,
                         scoverage: scoverage,
-                        snorder: snorder,                                     
+                        snorder: snorder,
                         lastUpdateTime: new Date()
                     }
                 },
                 { new: true } // Devuelve el documento actualizado
             );
-            
-            if (!updatedBotState) {
-                console.error('No se pudo encontrar o actualizar el documento del bot.');
-                return;
-            }
-
-            // === [ Emisión Inmediata de los Datos ] ===
-            // Usamos el documento updatedBotState (que contiene todos los datos, incluyendo lStateData)
-            io.sockets.emit('bot-state-update', {
-                lstate: updatedBotState.lstate,
-                sstate: updatedBotState.sstate,
-                // 🚨 CORRECCIÓN CLAVE: Cambiamos 'profit' por 'total_profit' para que coincida con el front-end.
-                total_profit: updatedBotState.total_profit || 0,
-                lbalance: updatedBotState.lbalance || 0,
-                sbalance: updatedBotState.sbalance || 0,
-                ltprice: updatedBotState.ltprice || 0,
-                stprice: updatedBotState.stprice || 0,
-                lsprice: updatedBotState.lsprice || 0,
-                sbprice: updatedBotState.sbprice || 0,
-                lcycle: updatedBotState.lcycle || 0,
-                scycle: updatedBotState.scycle || 0,
-                lcoverage: updatedBotState.lcoverage || 0,
-                scoverage: updatedBotState.scoverage || 0,
-                lnorder: updatedBotState.lnorder || 0,
-                snorder: updatedBotState.snorder || 0
-            });
-            // ==========================================================
         }
+        
+        // 🚨 CRÍTICO: Asegurarse de que el objeto updatedBotState sea válido para la emisión.
+        if (!updatedBotState) {
+            console.error('No se pudo encontrar o actualizar el documento del bot.');
+            return;
+        }
+
+        // === [ Emisión Inmediata de los Datos ] ===
+        // Emitimos el estado actual (ya sea el recién actualizado o el que estaba en la DB)
+        io.sockets.emit('bot-state-update', {
+            lstate: updatedBotState.lstate,
+            sstate: updatedBotState.sstate,
+            total_profit: updatedBotState.total_profit || 0,
+            lbalance: updatedBotState.lbalance || 0,
+            sbalance: updatedBotState.sbalance || 0,
+            ltprice: updatedBotState.ltprice || 0,
+            stprice: updatedBotState.stprice || 0,
+            lsprice: updatedBotState.lsprice || 0,
+            sbprice: updatedBotState.sbprice || 0,
+            lcycle: updatedBotState.lcycle || 0,
+            scycle: updatedBotState.scycle || 0,
+            lcoverage: updatedBotState.lcoverage || 0, // 👈 Ahora usa el valor fijo de la estrategia cuando está activo
+            scoverage: updatedBotState.scoverage || 0,
+            lnorder: updatedBotState.lnorder || 0,
+            snorder: updatedBotState.snorder || 0
+        });
+        // ==========================================================
+        
     } catch (error) {
         console.error('Error al actualizar el estado del bot con el nuevo precio:', error);
     }

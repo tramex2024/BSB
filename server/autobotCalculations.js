@@ -141,6 +141,5 @@ module.exports = {
     parseNumber,
     calculateInitialState,
     calculateLongCoverage,
-    calculateLongTargets,
-    // 🛑 Ya no exportamos calculateNextDcaPrice a menos que sea necesario fuera
+    calculateLongTargets,    
 };
