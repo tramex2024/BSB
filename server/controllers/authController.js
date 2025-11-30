@@ -7,12 +7,13 @@ const Autobot = require('../models/Autobot'); // Ya lo tenías, ¡Excelente!
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({
-    // Vuelve a usar 'service: gmail'
-    service: 'gmail', 
-    auth: {
-        user: process.env.EMAIL_USER, // Tu info.nexuslabs@gmail.com
-        pass: process.env.EMAIL_PASS  // Tu App Password correcta
-    }
+    host: 'smtp.gmail.com', // ⬅️ Especificar el host
+    port: 465, // ⬅️ Usar el puerto seguro SMTP/SSL
+    secure: true, // ⬅️ Esto es crucial para el puerto 465 (SSL)
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
 });
 
 exports.requestToken = async (req, res) => {
