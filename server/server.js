@@ -16,7 +16,7 @@ const autobotLogic = require('./autobotLogic.js');
 const checkTimeSync = require('./services/check_time');
 
 // Importa las funciones de cálculo
-const { calculateLongCoverage /*, calculateShortCoverage*/ } = require('./autobotCalculations');
+const { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } = require('./autobotCalculations');
 
 // Modelos
 const Order = require('./models/Order');
@@ -122,13 +122,28 @@ async function updateBotStateWithPrice(price) {
         }
 
         let updatedBotState = botState;
+        
+        // Tasa de comisión (ej: 0.1% = 0.001). Asegúrate de que este campo exista en tu config.
+        // Si no existe, usa un valor por defecto seguro (0.001 para 0.1%)
+        const FEE_RATE = botState.config.long.feeRate || 0.001; 
 
-        // 🛑 LÓGICA DE CORRECCIÓN CLAVE 🛑
-        // Recalcular lcoverage SOLO si el bot no está en un ciclo activo (RUNNING, BUYING, SELLING).
-        // Si el bot está activo, su estado (lcoverage, ltprice) es fijado por la estrategia (LBuying.js) y se usa tal cual.
+        // 🎯 1. CALCULAR EL L-PROFIT POTENCIAL (Se calcula en cada tick, independientemente del estado)
+        const lprofit = calculatePotentialProfit(
+            botState.lStateData.ppc, 
+            botState.lStateData.ac, 
+            currentPrice, 
+            FEE_RATE 
+        );
+        
+        const updateData = {
+            lprofit: lprofit, // Siempre actualiza el profit potencial
+            lastUpdateTime: new Date()
+        };
+
+        // 🛑 2. LÓGICA DE ACTUALIZACIÓN DE COBERTURA 🛑
         if (botState.lstate === 'STOPPED' || botState.lstate === 'NO_COVERAGE') {
             
-            // Recalcula lcoverage y lnorder con el nuevo precio (basado en el balance y precio actual)
+            // Recalcula lcoverage y lnorder con el nuevo precio
             const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
                 botState.lbalance,
                 currentPrice,
@@ -137,25 +152,29 @@ async function updateBotStateWithPrice(price) {
                 botState.config.long.size_var / 100
             );
 
-            // Inicializar scoverage y snorder (mantener el valor actual si la estrategia short no se ejecuta aquí)
+            // Inicializar scoverage y snorder (mantener el valor actual)
             const scoverage = botState.scoverage;
             const snorder = botState.snorder;
+            
+            // Combina los datos de lprofit con los datos de cobertura
+            Object.assign(updateData, {
+                lcoverage: lcoverage, // ACTUALIZACIÓN SOLO EN ESTADO DETENIDO
+                lnorder: lnorder,
+                scoverage: scoverage,
+                snorder: snorder,
+            });
 
-            // Usamos findOneAndUpdate para actualizar SOLO los campos de cobertura de la UI.
-            updatedBotState = await Autobot.findOneAndUpdate(
-                { _id: botState._id },
-                {
-                    $set: {
-                        lcoverage: lcoverage, // 👈 ACTUALIZACIÓN SOLO EN ESTADO DETENIDO
-                        lnorder: lnorder,
-                        scoverage: scoverage,
-                        snorder: snorder,
-                        lastUpdateTime: new Date()
-                    }
-                },
-                { new: true } // Devuelve el documento actualizado
-            );
+        } else {
+             // 💡 Si el bot está RUNNING/BUYING/SELLING, SOLO actualiza lprofit y la marca de tiempo.
+             // lcoverage, ltprice, lnorder son gestionados por LBuying.js
         }
+        
+        // 🛑 3. GUARDADO ATÓMICO EN LA DB
+        updatedBotState = await Autobot.findOneAndUpdate(
+            { _id: botState._id },
+            { $set: updateData }, // Usa el objeto de actualización preparado
+            { new: true } // Devuelve el documento actualizado
+        );
         
         // 🚨 CRÍTICO: Asegurarse de que el objeto updatedBotState sea válido para la emisión.
         if (!updatedBotState) {
@@ -177,10 +196,11 @@ async function updateBotStateWithPrice(price) {
             sbprice: updatedBotState.sbprice || 0,
             lcycle: updatedBotState.lcycle || 0,
             scycle: updatedBotState.scycle || 0,
-            lcoverage: updatedBotState.lcoverage || 0, // 👈 Ahora usa el valor fijo de la estrategia cuando está activo
+            lcoverage: updatedBotState.lcoverage || 0, 
             scoverage: updatedBotState.scoverage || 0,
             lnorder: updatedBotState.lnorder || 0,
-            snorder: updatedBotState.snorder || 0
+            snorder: updatedBotState.snorder || 0,
+            lprofit: updatedBotState.lprofit || 0 // ⬅️ NUEVO: Emitir lprofit
         });
         // ==========================================================
         

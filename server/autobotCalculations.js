@@ -137,9 +137,42 @@ function calculateInitialState(config, currentPrice) {
     };
 }
 
+/**
+ * Calcula la ganancia o pérdida potencial en USDT si la posición actual se vendiera al precio de mercado.
+ * @param {number} ppc - Precio Promedio de Costo (PPC) de la posición.
+ * @param {number} ac - Cantidad acumulada de criptomoneda comprada (AC).
+ * @param {number} currentPrice - Precio actual de mercado.
+ * @param {number} feeRate - Tasa de comisión de BitMart (ej: 0.001 para 0.1%).
+ * @returns {number} Ganancia/Pérdida potencial en USDT.
+ */
+function calculatePotentialProfit(ppc, ac, currentPrice, feeRate) {
+    if (ac === 0) {
+        return 0; // No hay posición abierta.
+    }
+
+    // 1. Costo total de adquisición (USD)
+    const totalCostUsdt = ppc * ac;
+
+    // 2. Valor de venta potencial (USD)
+    const potentialSaleValueUsdt = currentPrice * ac;
+
+    // 3. Comisión de venta (se aplica sobre el valor de venta)
+    const saleFeeUsdt = potentialSaleValueUsdt * feeRate;
+
+    // 4. Ganancia Bruta (antes de comisiones de salida)
+    const grossProfit = potentialSaleValueUsdt - totalCostUsdt;
+    
+    // 5. Ganancia Neta (restamos la comisión de la venta final)
+    // Nota: Las comisiones de compra ya están implicitas en el PPC y el totalCost.
+    const netPotentialProfit = grossProfit - saleFeeUsdt;
+
+    return netPotentialProfit;
+}
+
 module.exports = {
     parseNumber,
     calculateInitialState,
     calculateLongCoverage,
-    calculateLongTargets,    
+    calculateLongTargets,
+    calculatePotentialProfit,    
 };

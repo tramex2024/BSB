@@ -28,8 +28,8 @@ export function updateBotUI(state) {
         auscoverage: 'scoverage',
         aulnorder: 'lnorder',
         ausnorder: 'snorder',
-        aulsprice: 'lsprice', // ✅ CORREGIDO: Apunta a la clave de datos 'lsprice'
-        ausbprice: 'sbprice',  // ✅ CORREGIDO: Apunta a la clave de datos 'sbprice'
+        aulsprice: 'lsprice', 
+        ausbprice: 'sbprice',  
         aulprofit: 'lprofit',
         ausprofit: 'sprofit'
     };
@@ -58,15 +58,30 @@ export function updateBotUI(state) {
             } else {
                 value = NaN; // Si la clave no existe en el objeto 'state' del socket.
             }
+            
+            // 🛑 Lógica para limpiar y aplicar color (APLICAR A TODOS LOS ELEMENTOS QUE NECESITEN COLOR)
+            // Primero, removemos las clases de color existentes para evitar conflictos
+            element.classList.remove('text-green-500', 'text-red-500', 'text-gray-400');
 
             // Aplicar formato según el tipo de dato
-            if (dataKey === 'total_profit' || dataKey === 'profit') {
+            if (dataKey === 'total_profit' || dataKey === 'lprofit' || dataKey === 'sprofit') {
                 // Total Profit (2 decimales, con signo $)
                 if (isNaN(value)) {
                     element.textContent = 'N/A';
                 } else {
-                    element.textContent = `$${value.toFixed(2)}`;
-                }
+                    // **APLICAR CLASES DE COLOR**
+                    if (value > 0) {
+                        element.classList.add('text-green-500');
+                    } else if (value < 0) {
+                        element.classList.add('text-red-500');
+                    } else {
+                        // Valor neutral (ej: 0)
+                        element.classList.add('text-gray-400');
+                    }
+                    
+                    // Formato de texto final
+                    element.textContent = `$${value.toFixed(2)}`;
+                }
             // ✅ CORREGIDO: Añadimos 'lsprice' y 'sbprice' a la lista de valores con 2 decimales
             } else if (['lcoverage', 'scoverage', 'lbalance', 'sbalance', 'ltprice', 'stprice', 'lsprice', 'sbprice'].includes(dataKey)) {
                 // Montos de dinero/balance/precios (2 decimales)
