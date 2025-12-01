@@ -7,8 +7,8 @@ const Autobot = require('../models/Autobot'); // Ya lo tenías, ¡Excelente!
 
 //LOG TEMPORAL
 
-console.log(`[EMAIL DEBUG] USER: ${process.env.EMAIL_USER}`);
-console.log(`[EMAIL DEBUG] PASS LOADED (First 4 chars): ${process.env.EMAIL_PASS ? process.env.EMAIL_PASS.substring(0, 4) : 'NONE'}`);
+//console.log(`[EMAIL DEBUG] USER: ${process.env.EMAIL_USER}`);
+//console.log(`[EMAIL DEBUG] PASS LOADED (First 4 chars): ${process.env.EMAIL_PASS ? process.env.EMAIL_PASS.substring(0, 4) : 'NONE'}`);
 
 // Nodemailer transporter setup (replace with your email service details)
 const transporter = nodemailer.createTransport({    
