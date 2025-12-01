@@ -30,8 +30,8 @@ const CLEAN_ROOT_FIELDS = {
     stprice: 0,     // Target de Gestion de Compra Short
     lsprice: 0,     // Precio de Venta Long (Trailing Stop)
     sbprice: 0,     // Precio de Compra Short (Trailing Stop)
-    //lcycle: 0,      // Contador de ciclos Long ()
-    //scycle: 0,      // Contador de ciclos Short ()
+    lprofit: 0,      // Ganancia del ciclo Long ()
+    sprofit: 0,      // Ganancia del ciclo Short ()
     // lcoverage, scoverage, lnorder, snorder, lcycle, y scycle se dejan intactos.
 };
 

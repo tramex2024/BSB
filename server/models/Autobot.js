@@ -12,13 +12,13 @@ const strategyDataSchema = new mongoose.Schema({
     orderCountInCycle: { type: Number, default: 0 },
     lastOrder: { type: Object, default: null },
     pm: { type: Number, default: 0 }, // Long: Máximo Alcanzado | Short: Mínimo Alcanzado
-    pc: { type: Number, default: 0 }, // Precio de Corte/Cubrimiento (Trailing Stop)
-    // 💡 AÑADIDO: Campo para guardar el precio de la última orden ejecutada
+    pc: { type: Number, default: 0 }, // Precio de Corte/Cubrimiento (Trailing Stop)    
     lastExecutionPrice: { type: Number, default: 0 },
     // 💡 AÑADIDO: Campos de Contingencia para NO_COVERAGE
     requiredCoverageAmount: { type: Number, default: 0 }, 
     nextCoveragePrice: { type: Number, default: 0 },
-    cycleStartTime: { type: Date, default: null } // 💡 NUEVO CAMPO: Marca de tiempo de la primera compra
+    // 💡 NUEVO CAMPO: Marca de tiempo de la primera compra
+    cycleStartTime: { type: Date, default: null } 
 });
 
 // =========================================================================
@@ -67,6 +67,9 @@ const autobotSchema = new mongoose.Schema({
 
     lsprice: { type: Number, default: 0.00 }, 
     sbprice: { type: Number, default: 0.00 }, 
+    
+    lprofit: { type: Number, default: 0.00 }, 
+    sprofit: { type: Number, default: 0.00 },
 
     lcycle: { type: Number, default: 0 },
     scycle: { type: Number, default: 0 },

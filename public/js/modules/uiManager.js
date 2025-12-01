@@ -29,7 +29,9 @@ export function updateBotUI(state) {
         aulnorder: 'lnorder',
         ausnorder: 'snorder',
         aulsprice: 'lsprice', // ✅ CORREGIDO: Apunta a la clave de datos 'lsprice'
-        ausbprice: 'sbprice'  // ✅ CORREGIDO: Apunta a la clave de datos 'sbprice'
+        ausbprice: 'sbprice',  // ✅ CORREGIDO: Apunta a la clave de datos 'sbprice'
+        aulprofit: 'lprofit',
+        ausprofit: 'sprofit'
     };
 
     if (lstateElement) {
