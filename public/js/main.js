@@ -4,6 +4,7 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
 import { initializeAutobotView } from './modules/autobot.js';
+import { updateBotBalances } from './modules/balance.js';
 import { initializeAibotView } from './modules/aibot.js';
 
 // Importa io desde la biblioteca de Socket.io (deberías tenerlo cargado en el HTML)
@@ -150,12 +151,22 @@ export function initializeFullApp() {
     });
 
     // 💡 LISTENER GLOBAL PARA EL ESTADO DE CONEXIÓN (BOLITA)
-    // Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
-    socket.on('balance-real-update', (data) => {
-        // Aquí es donde se llama a la función corregida.
-        console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
-        updateConnectionStatusBall(data.source);
-    });
+    // Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
+    socket.on('balance-real-update', (data) => {
+        console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
+        updateConnectionStatusBall(data.source);
+        
+        // 🛑 CORRECCIÓN: Lógica para actualizar el elemento HTML 'aubalance'
+        if (data.exchange) {
+            // Adaptamos la estructura de los datos del socket al formato que espera updateBotBalances
+            const formattedBalances = [
+                { currency: 'USDT', available: data.exchange.availableUSDT },
+                { currency: 'BTC', available: data.exchange.availableBTC }
+            ];
+            updateBotBalances(formattedBalances); // Ahora usa la función importada para escribir en 'aubalance'
+        }
+    });
+
     // --------------------------------------------------------
 
     // Carga la pestaña inicial y configura la navegación
