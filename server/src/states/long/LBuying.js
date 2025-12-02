@@ -84,7 +84,7 @@ async function run(dependencies) {
     // === [ 2. CÁLCULO Y GESTIÓN DE TARGETS ] ===========================
     // =================================================================
     if (!lStateData.lastOrder && lStateData.ppc > 0) { 
-        log("Calculando objetivos iniciales (Venta/Cobertura) y Límite de Cobertura...", 'info');
+    //    log("Calculando objetivos iniciales (Venta/Cobertura) y Límite de Cobertura...", 'info');
     
         const { 
             targetSellPrice, 
