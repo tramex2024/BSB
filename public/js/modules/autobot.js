@@ -154,7 +154,7 @@ export async function initializeAutobotView() {
     
     // 🛑 CORRECCIÓN: 1. Llamada NO BLOQUEANTE para cargar los balances.
     // Esto se ejecuta en segundo plano. La interfaz carga inmediatamente.
-    loadBalancesAndLimits(); 
+    await loadBalancesAndLimits(); 
 
     // 2. Configura todos los listeners de los campos de configuración.
     setupConfigListeners();
