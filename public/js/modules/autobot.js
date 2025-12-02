@@ -1,10 +1,9 @@
 // public/js/modules/autobot.js (VERSIÓN FINAL CON VALIDACIÓN DE FONDOS Y FIX CONEXIÓN)
 
-import { getBalances, fetchAvailableBalancesForValidation } from './balance.js';
-//import { fetchAvailableBalancesForValidation } from './balance.js'; // ⬅️ SOLO DEJAMOS fetchAvailableBalancesForValidation 
+import { getBalances, fetchAvailableBalancesForValidation } from './balance.js'; 
 import { initializeChart } from './chart.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
-import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
+import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals, BACKEND_URL } from '../main.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
 
