@@ -124,7 +124,7 @@ function setupConfigListeners() {
     });
 }
 
-**
+/**
  * Función que obtiene los balances reales y actualiza la UI para los límites.
  */
 async function loadBalancesAndLimits() {
