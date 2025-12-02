@@ -9,7 +9,7 @@ import { BACKEND_URL } from '../main.js';
  * del exchange en el formato "USDT: X | BTC: Y".
  * @param {Array<object>} walletData - Array de objetos de saldo procesados.
  */
-function updateBotBalances(walletData) {
+export function updateBotBalances(walletData) {
     if (!walletData || walletData.length < 2) return;
 
     // Buscamos los balances de USDT y BTC en el array de datos
