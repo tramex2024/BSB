@@ -1,7 +1,7 @@
 // public/js/modules/autobot.js (VERSIÓN FINAL CON VALIDACIÓN DE FONDOS Y FIX CONEXIÓN)
 
-//import { getBalances, fetchAvailableBalancesForValidation } from './balance.js';
-import { fetchAvailableBalancesForValidation } from './balance.js'; // ⬅️ SOLO DEJAMOS fetchAvailableBalancesForValidation 
+import { getBalances, fetchAvailableBalancesForValidation } from './balance.js';
+//import { fetchAvailableBalancesForValidation } from './balance.js'; // ⬅️ SOLO DEJAMOS fetchAvailableBalancesForValidation 
 import { initializeChart } from './chart.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
@@ -127,12 +127,49 @@ function setupConfigListeners() {
 
 /**
  * Función que obtiene los balances reales y actualiza la UI para los límites.
+ * 💡 Ahora utiliza getBalances (que sabemos que funciona y actualiza la UI)
+ * y luego lee los valores actualizados de la DB a través de una nueva llamada.
  */
 async function loadBalancesAndLimits() {
     try {
+        // 1. Ejecutamos getBalances:
+        //    a) Llama a la API REST /api/v1/balances/available (Backend)
+        //    b) Actualiza el elemento 'aubalance' (Balance total del bot: USDT: X | BTC: Y)
+        //    c) Retorna el objeto de saldos (ahora modificado para devolver el objeto de saldos para reusar)
+        
+        // Vamos a reescribir esta parte, ya que getBalances originalmente solo actualiza el DOM (updateBotBalances)
+        // y no devuelve los valores de límites. Necesitamos una llamada que nos dé los valores.
+
+        // Volvamos a usar fetchAvailableBalancesForValidation, pero asegurémonos de que el objeto devuelto sea correcto.
+
         const balances = await fetchAvailableBalancesForValidation();
-        maxUsdtBalance = balances.availableUSDT;
-        maxBtcBalance = balances.availableBTC;
+        // ⚠️ Si la estructura de balances devuelta es { availableUSDT: X, availableBTC: Y }
+        
+        // 🛑 CRÍTICO: Si Dashboard carga los balances, es porque su llamada es exitosa.
+        // Vamos a ejecutar getBalances() que sabemos que funciona en el Dashboard,
+        // pero NO en el Autobot, ya que eliminamos el Polling.
+
+        // Opción 1: Arreglar fetchAvailableBalancesForValidation (YA LO HICISTE, pero sigue fallando la estructura)
+        
+        // Opción 2: Usar getBalances para la carga inicial (es más robusto)
+        
+        // 🛑 VAMOS CON LA ESTRUCTURA DE LA CORRECCIÓN ANTERIOR, pero quitando la llamada NO BLOQUEANTE.
+        
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${BACKEND_URL}/api/v1/balances/available`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch initial balances.');
+        const data = await response.json();
+
+        // 🛑 Adaptación al formato:
+        if (data.success && data.data && data.data.exchange) {
+            maxUsdtBalance = data.data.exchange.availableUSDT;
+            maxBtcBalance = data.data.exchange.availableBTC;
+        } else {
+            throw new Error('Invalid data structure on initial balance load.');
+        }
         
         // 2. Actualizar la interfaz de usuario con los límites (UX)
         updateMaxBalanceDisplay('USDT', maxUsdtBalance);
@@ -145,6 +182,7 @@ async function loadBalancesAndLimits() {
     } catch (error) {
         console.error("Fallo al cargar los límites de balance para validación:", error);
         displayMessage('Error: No se pudieron cargar los límites de balance de BitMart.', 'error');
+        // Si falla, se queda en 0, lo cual es seguro.
     }
 }
 
