@@ -124,7 +124,7 @@ function setupConfigListeners() {
     });
 }
 
-/**
+**
  * Función que obtiene los balances reales y actualiza la UI para los límites.
  */
 async function loadBalancesAndLimits() {
@@ -139,14 +139,14 @@ async function loadBalancesAndLimits() {
         }
         
         const data = await response.json();
-console.log('[BALANCE DEBUG - RAW DATA] Datos recibidos:', JSON.stringify(data));        
-        // 🛑 CRÍTICO: Asegurarse de que el camino de datos es correcto.
-        // La estructura debe ser data.data.exchange
+        
+        // 🛑 LECTURA CRÍTICA: data -> data -> exchange
         if (data.success && data.data && data.data.exchange) {
             
             const exchangeData = data.data.exchange;
             
             // 1. Asignar a las variables globales del Autobot
+            // Utilizamos parseFloat() para asegurar que sean números.
             maxUsdtBalance = parseFloat(exchangeData.availableUSDT) || 0;
             maxBtcBalance = parseFloat(exchangeData.availableBTC) || 0;
             
@@ -159,8 +159,12 @@ console.log('[BALANCE DEBUG - RAW DATA] Datos recibidos:', JSON.stringify(data))
             document.getElementById('auamount-btc')?.setAttribute('max', maxBtcBalance.toFixed(5));
             
         } else {
-            console.error('Estructura de datos de balance inicial incorrecta:', data);
-            throw new Error('Invalid initial balance data structure.');
+            console.error('Estructura de datos de balance inicial incorrecta o faltan claves.', data);
+            // Si la estructura falla, nos aseguramos de que los límites se queden en 0
+            maxUsdtBalance = 0;
+            maxBtcBalance = 0;
+            updateMaxBalanceDisplay('USDT', 0);
+            updateMaxBalanceDisplay('BTC', 0);
         }
 
     } catch (error) {
