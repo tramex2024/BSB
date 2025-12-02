@@ -1,6 +1,7 @@
 // public/js/modules/autobot.js (VERSIÓN FINAL CON VALIDACIÓN DE FONDOS Y FIX CONEXIÓN)
 
-import { getBalances, fetchAvailableBalancesForValidation } from './balance.js'; 
+//import { getBalances, fetchAvailableBalancesForValidation } from './balance.js';
+import { fetchAvailableBalancesForValidation } from './balance.js'; // ⬅️ SOLO DEJAMOS fetchAvailableBalancesForValidation 
 import { initializeChart } from './chart.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals } from '../main.js';
@@ -207,18 +208,32 @@ export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     fetchOrders(currentTab, auOrderList);
     
-    const socket = io(SOCKET_SERVER_URL);
-    
-    // ELIMINADO: Listener 'balance-real-update' (Correcto, movido a main.js)
+    const socket = io(SOCKET_SERVER_URL);    
 
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
-    });
-
-    //getBalances(); // Llamada a getBalances inicial opcional, el intervalo lo hará.
+    });    
     
+    // 💡 NUEVO: Listener de WebSocket para la actualización de Balances
+// Recibe la información del caché de balances del backend
+socket.on('balance-update', (balances) => {
+    // 1. Actualizar las variables globales del frontend con los nuevos valores
+    maxUsdtBalance = balances.lastAvailableUSDT;
+    maxBtcBalance = balances.lastAvailableBTC;
+    
+    // 2. Actualizar la interfaz de usuario
+    updateMaxBalanceDisplay('USDT', maxUsdtBalance);
+    updateMaxBalanceDisplay('BTC', maxBtcBalance);
+
+    // 3. Opcional: Re-validar los campos si el balance ha cambiado y el usuario está en la vista.
+    // Esto es importante para que el botón START/STOP funcione correctamente si el balance cambió
+    // mientras el usuario estaba en la vista.
+    validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+    validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+});
+
     // 6. Configura los intervalos de actualización
-    intervals.autobot = setInterval(getBalances, 10000);
+    //intervals.autobot = setInterval(getBalances, 10000);
     intervals.orders = setInterval(() => {
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {

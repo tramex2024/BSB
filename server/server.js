@@ -256,19 +256,23 @@ io.on('connection', (socket) => {
 });
 
 // 🛑 MODIFICACIÓN DEL BUCLE LENTO: Llama a la API solo para actualizar la CACHÉ en DB
-// Frecuencia segura para BitMart: 45 segundos (45000ms)
+// Frecuencia segura para BitMart: 10,000ms (10 segundos)
 setInterval(async () => {
-    // ESTA ES LA ÚNICA LLAMADA A LA API DE BITMART
+    // 1. Llama a la API de BitMart para actualizar el CACHÉ en DB (campo lastAvailableUSDT/BTC)
     await autobotLogic.slowBalanceCacheUpdate();
-}, 10000);
+    
+    // 2. Lee el documento de la DB actualizado
+    const botState = await Autobot.findOne({});
 
-/* // 🛑 CORRECCIÓN #2: Aumentamos el intervalo de polling para evitar HTTP 429
-setInterval(async () => {
-    // LLama al nuevo ciclo lento para obtener y emitir balances a la UI.
-    await autobotLogic.balanceCycle();
-}, 10000); // 15,000ms = 15 segundos. Intervalo más seguro.
-// --------------------------------------------------------------------------
-*/
+    // 3. Emite los balances a la UI a través de un nuevo evento de Socket.IO
+    if (botState && botState.lastAvailableUSDT !== undefined) {
+        io.sockets.emit('balance-update', { // ⬅️ Nuevo evento 'balance-update'
+            lastAvailableUSDT: botState.lastAvailableUSDT || 0,
+            lastAvailableBTC: botState.lastAvailableBTC || 0,
+        });
+    }
+
+}, 10000); // Mantenemos 10 segundos para el caché de balance.
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
