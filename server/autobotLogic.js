@@ -178,126 +178,131 @@ async function slowBalanceCacheUpdate() {
 
 // Aceptar un segundo parámetro para dependencias inyectadas (como getBotState)
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
-    try {
-        // CRÍTICO: Recargar el botState ANTES de cada ciclo.
-        let botState = await Autobot.findOne({});
-        const currentPrice = parseFloat(priceFromWebSocket); 
+    try {
+        // CRÍTICO: Recargar el botState ANTES de cada ciclo.
+        let botState = await Autobot.findOne({});
+        const currentPrice = parseFloat(priceFromWebSocket); 
+        let needsStateRefresh = false; // 💡 Nueva bandera de optimización
 
-        if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            if (priceFromWebSocket !== 'N/A') { 
-                log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
-            }
-            return;
-        }
+        if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
+            if (priceFromWebSocket !== 'N/A') { 
+                log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
+            }
+            return;
+        }
 
-        // -------------------------------------------------------------
-        // LECTURA DE LA CACHÉ
-        // -------------------------------------------------------------
-        const availableUSDT = parseFloat(botState.lastAvailableUSDT || 0);
-        const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
-        
-        // El log de diagnóstico ahora reporta la lectura de la caché
-   //     log(`[DIAGNÓSTICO AUTOBOT]: availableUSDT leido desde la CACHÉ: ${availableUSDT.toFixed(2)}`, 'info');
+        // -------------------------------------------------------------
+        // LECTURA DE LA CACHÉ Y DEFINICIÓN DE DEPENDENCIAS
+        // -------------------------------------------------------------
+        const availableUSDT = parseFloat(botState.lastAvailableUSDT || 0);
+        const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
+        
+        const dependencies = {
+            log,
+            io,
+            bitmartService,
+            Autobot,
+            currentPrice, 
+            availableUSDT, 
+            availableBTC, 
+            botState,
+            
+            config: botState.config,
+            creds: {
+                apiKey: process.env.BITMART_API_KEY,
+                secretKey: process.env.BITMART_SECRET_KEY,
+                memo: process.env.BITMART_API_MEMO
+            },
+            
+            updateBotState, 
+            updateLStateData, 
+            updateSStateData, 
+            updateGeneralBotState,
+            
+            getBotState,
+            
+            ...externalDependencies 
+        };
 
-        const dependencies = {
-            log,
-            io,
-            bitmartService,
-            Autobot,
-            currentPrice, 
-            availableUSDT,  // Este es el valor de la caché
-            availableBTC,  // Este es el valor de la caché
-            botState,
-            
-            config: botState.config,
-            creds: {
-                apiKey: process.env.BITMART_API_KEY,
-                secretKey: process.env.BITMART_SECRET_KEY,
-                memo: process.env.BITMART_API_MEMO
-            },
-            
-            updateBotState, 
-            updateLStateData, 
-            updateSStateData, 
-            updateGeneralBotState,
-            
-            // CRÍTICO: Inyectar la función de recarga del estado para LNoCoverage.js
-            getBotState,
-            
-            // Incluir la dependencia externa
-            ...externalDependencies 
-        };
+        setLongDeps(dependencies);
+        setShortDeps(dependencies); 
 
-        setLongDeps(dependencies);
-        setShortDeps(dependencies); 
+        // ==========================================================
+        // 1. FASE DE CONSOLIDACIÓN (CHECK DE ÓRDENES PENDIENTES)
+        // ==========================================================
+        
+        // Ejecutar Consolidación Long (Monitorea órdenes BUY)
+        if (botState.lStateData.lastOrder?.side === 'buy') {
+            const orderProcessed = await monitorLongBuy(
+                dependencies.botState, 
+                dependencies.config.symbol, 
+                dependencies.log, 
+                dependencies.updateLStateData, 
+                dependencies.updateBotState, 
+                dependencies.updateGeneralBotState
+            );
+            // 🛑 Mantenemos la bandera si la orden fue procesada.
+            if (orderProcessed) {
+                needsStateRefresh = true; 
+            }
+        }
+        
+        // Ejecutar Consolidación Short (Monitorea órdenes SELL para apertura/cobertura)
+        if (botState.sStateData.lastOrder?.side === 'sell') {
+            const orderProcessed = await monitorShortSell(
+                dependencies.botState, 
+                dependencies.config.symbol, 
+                dependencies.log, 
+                dependencies.updateSStateData, 
+                dependencies.updateBotState, 
+                dependencies.updateGeneralBotState
+            );
+            // 🛑 Mantenemos la bandera si la orden fue procesada.
+            if (orderProcessed) {
+                needsStateRefresh = true; 
+            }
+        }
 
-        // ==========================================================
-        // 1. FASE DE CONSOLIDACIÓN (CHECK DE ÓRDENES PENDIENTES)
-        // ==========================================================
-        
-        // Ejecutar Consolidación Long (Monitorea órdenes BUY)
-        if (botState.lStateData.lastOrder?.side === 'buy') {
-            const orderProcessed = await monitorLongBuy(
-                dependencies.botState, 
-                dependencies.config.symbol, 
-                dependencies.log, 
-                dependencies.updateLStateData, 
-                dependencies.updateBotState, 
-                dependencies.updateGeneralBotState
-            );
-            // CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
-            if (orderProcessed) {
-                botState = await Autobot.findOne({});
-                dependencies.botState = botState; // Actualizar dependencias
-            }
-        }
-        
-        // Ejecutar Consolidación Short (Monitorea órdenes SELL para apertura/cobertura)
-        if (botState.sStateData.lastOrder?.side === 'sell') {
-            const orderProcessed = await monitorShortSell(
-                dependencies.botState, 
-                dependencies.config.symbol, 
-                dependencies.log, 
-                dependencies.updateSStateData, 
-                dependencies.updateBotState, 
-                dependencies.updateGeneralBotState
-            );
-            // CRÍTICO: Recargar el botState si se procesó una orden y hubo una transición
-            if (orderProcessed) {
-                botState = await Autobot.findOne({});
-                dependencies.botState = botState; // Actualizar dependencias
-            }
-        }
+        // 💡 OPTIMIZACIÓN CRÍTICA: Recargar UNA SOLA VEZ si alguna consolidación ocurrió.
+        if (needsStateRefresh) {
+            botState = await Autobot.findOne({});
+            dependencies.botState = botState; // Actualizar dependencias con el nuevo estado
+            needsStateRefresh = false; // Reiniciar la bandera
+            // log('Estado del bot recargado tras Consolidación.', 'debug');
+        }
 
 
-        // ==========================================================
-        // 2. FASE DE EJECUCIÓN DE ESTRATEGIAS
-        // ==========================================================
+        // ==========================================================
+        // 2. FASE DE EJECUCIÓN DE ESTRATEGIAS
+        // ==========================================================
 
-        let strategyExecuted = false;
+        let strategyExecuted = false;
 
-        if (botState.lstate !== 'STOPPED') {
-            await runLongStrategy();
-            strategyExecuted = true;
-        }
-        
-        if (botState.sstate !== 'STOPPED') {
-        //    await runShortStrategy(); 
-        //    strategyExecuted = true;
-        }
-        
-        // Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
-        if (strategyExecuted) {
-            botState = await Autobot.findOne({});
-            dependencies.botState = botState; // Actualizar la referencia
-        //    log('Estado del bot recargado tras ejecución de estrategia para sincronización.', 'debug');
-        }
-        
-    } catch (error) {
-        log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
-    }
+        if (botState.lstate !== 'STOPPED') {
+            await runLongStrategy();
+            strategyExecuted = true;
+        }
+        
+        if (botState.sstate !== 'STOPPED') {
+            // await runShortStrategy(); // Dejado comentado como en el original
+            // strategyExecuted = true;
+        }
+        
+        // Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
+        // Nota: Las estrategias (runLongStrategy/runShortStrategy) deben usar internamente
+        // las funciones update*StateData para escribir. Esta recarga final es solo
+        // si la estrategia necesita datos que otra acaba de escribir, aunque se recomienda
+        // que cada módulo de estrategia use sus funciones update*StateData.
+        if (strategyExecuted) {
+            botState = await Autobot.findOne({});
+            dependencies.botState = botState; // Actualizar la referencia
+        //    log('Estado del bot recargado tras ejecución de estrategia para sincronización.', 'debug');
+        }
+        
+    } catch (error) {
+        log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
+    }
 }
-
 
 async function start() {
     log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');

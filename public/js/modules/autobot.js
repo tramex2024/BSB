@@ -173,24 +173,26 @@ async function loadBalancesAndLimits() {
     }
 }
 
-// --- FUNCIÓN DE INICIALIZACIÓN ---
+// --- FUNCIÓN DE INICIALIZACIÓN (CORREGIDA) ---
 export async function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
-    
-    // 🛑 CORRECCIÓN: 1. Llamada NO BLOQUEANTE para cargar los balances.
-    // Esto se ejecuta en segundo plano. La interfaz carga inmediatamente.
-    await loadBalancesAndLimits(); 
+
+    // 🛑 1. Llamada NO BLOQUEANTE para cargar los balances.
+    await loadBalancesAndLimits();
 
     // 2. Configura todos los listeners de los campos de configuración.
     setupConfigListeners();
 
     let currentTab = 'opened';
     
+    // 💡 Declaraciones ÚNICAS de elementos del DOM
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
     const auorderTabs = document.querySelectorAll('#autobot-section [id^="tab-"]');
-    
-    // 3. Inicializa el gráfico de TradingView (ya no está bloqueado)
+    // Declaración única para el contenedor de órdenes
+    const auOrderList = document.getElementById('au-order-list'); 
+
+    // 3. Inicializa el gráfico de TradingView
     window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
 
     // Lógica para el botón START/STOP
@@ -223,46 +225,38 @@ export async function initializeAutobotView() {
         tab.addEventListener('click', () => {
             currentTab = tab.id.replace('tab-', '');
             setOrdersActiveTab(tab.id);
-            const auOrderList = document.getElementById('au-order-list');
+            // Usamos la variable 'auOrderList' ya declarada
             fetchOrders(currentTab, auOrderList);
         });
     });
 
-    // 5. Carga inicial de órdenes y configuración de sockets/intervalos
+    // 5. Carga inicial de órdenes (solo una vez al cargar la vista)
     setOrdersActiveTab('tab-opened');
-    const auOrderList = document.getElementById('au-order-list');
-    fetchOrders(currentTab, auOrderList);
+    fetchOrders(currentTab, auOrderList); // Usamos la variable 'auOrderList' ya declarada
     
-    const socket = io(SOCKET_SERVER_URL);    
+    // 6. Conexión de Socket.io
+    const socket = io(SOCKET_SERVER_URL); 
 
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
-    });    
+    }); 
     
-    // 💡 NUEVO: Listener de WebSocket para la actualización de Balances
-// Recibe la información del caché de balances del backend
-socket.on('balance-update', (balances) => {
-    // 1. Actualizar las variables globales del frontend con los nuevos valores
-    maxUsdtBalance = balances.lastAvailableUSDT;
-    maxBtcBalance = balances.lastAvailableBTC;
-    
-    // 2. Actualizar la interfaz de usuario
-    updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-    updateMaxBalanceDisplay('BTC', maxBtcBalance);
+    // Listener de WebSocket para la actualización de Balances
+    socket.on('balance-update', (balances) => {
+        // 1. Actualizar las variables globales del frontend con los nuevos valores
+        maxUsdtBalance = balances.lastAvailableUSDT;
+        maxBtcBalance = balances.lastAvailableBTC;
+        
+        // 2. Actualizar la interfaz de usuario
+        updateMaxBalanceDisplay('USDT', maxUsdtBalance);
+        updateMaxBalanceDisplay('BTC', maxBtcBalance);
 
-    // 3. Opcional: Re-validar los campos si el balance ha cambiado y el usuario está en la vista.
-    // Esto es importante para que el botón START/STOP funcione correctamente si el balance cambió
-    // mientras el usuario estaba en la vista.
-    validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
-    validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-});
+        // 3. Re-validar los campos
+        validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+        validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+    });
 
-    // 6. Configura los intervalos de actualización
-    //intervals.autobot = setInterval(getBalances, 10000);
-//    intervals.orders = setInterval(() => {
-        const auOrderList = document.getElementById('au-order-list');
-        if (auOrderList) {
-            fetchOrders(currentTab, auOrderList);
-        }
-//    }, 15000);
+    // 7. Configura los intervalos de actualización
+    // 🛑 Eliminación del Polling de Órdenes: Ya no necesitamos el setInterval para fetchOrders
+    // ya que ahora usamos el socket 'open-orders-update' (configurado en main.js)
 }
