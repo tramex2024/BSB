@@ -1,4 +1,4 @@
-// public/js/modules/orders.js
+// public/js/modules/orders.js (VERSIÓN FINAL CON SOPORTE WS)
 
 import { fetchFromBackend } from './api.js';
 
@@ -70,7 +70,8 @@ function displayOrders(orders, orderListElement, orderType) {
 
     if (orders && orders.length > 0) {
         orders.forEach(order => {
-            const orderHtml = createOrderHtml(order, orderType);
+            // Pasamos 'opened' como tipo para que se muestre el status "Opened"
+            const orderHtml = createOrderHtml(order, orderType === 'opened' ? 'opened' : orderType);
             orderListElement.innerHTML += orderHtml;
         });
     } else {
@@ -79,11 +80,20 @@ function displayOrders(orders, orderListElement, orderType) {
 }
 
 /**
- * Obtiene las órdenes del backend y las muestra.
+ * Obtiene las órdenes del backend y las muestra (USADO SOLO PARA HISTORIAL: filled, cancelled, all).
+ * La pestaña 'opened' ahora usa WebSockets.
  * @param {string} status El estado de la orden a buscar ('opened', 'filled', 'cancelled', 'all').
  * @param {HTMLElement} orderListElement El elemento HTML donde mostrar las órdenes.
  */
 export async function fetchOrders(status, orderListElement) {
+    // 🛑 Para la pestaña 'opened', no hacemos nada ya que esperamos el WS.
+    if (status === 'opened') {
+        console.log("Petición REST para órdenes abiertas ignorada. Usando WebSockets.");
+        // Opcional: mostrar un spinner mientras se esperan los datos del socket
+        orderListElement.innerHTML = `<p class="text-gray-500 text-center py-4">Cargando órdenes abiertas en tiempo real...</p>`;
+        return;
+    }
+    
     const authToken = localStorage.getItem('token');
     if (!authToken) {
         console.error('Error al obtener órdenes: Token de autenticación no encontrado.');
@@ -133,5 +143,20 @@ export function setActiveTab(tabId) {
     const activeTab = document.getElementById(tabId);
     if (activeTab) {
         activeTab.classList.add('active-tab');
+    }
+}
+
+/**
+ * Función para recibir órdenes abiertas desde el WebSocket y mostrarlas.
+ * Esta función es llamada desde main.js cuando se recibe el evento 'open-orders-update'.
+ * @param {Array<object>} openOrders Las órdenes abiertas recibidas del backend via WS.
+ */
+export function updateOpenOrdersTable(openOrders) {
+    const auOrderList = document.getElementById('au-order-list');
+    const currentTab = document.querySelector('#autobot-section [id^="tab-"].active-tab')?.id.replace('tab-', '');
+
+    // 🛑 Solo actualizar si la pestaña 'opened' está activa.
+    if (currentTab === 'opened' || currentTab === undefined) { 
+        displayOrders(openOrders, auOrderList, 'opened');
     }
 }

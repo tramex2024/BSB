@@ -4,6 +4,7 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
 import { initializeAutobotView } from './modules/autobot.js';
+import { updateOpenOrdersTable } from './modules/orders.js';
 import { updateBotBalances } from './modules/balance.js';
 import { initializeAibotView } from './modules/aibot.js';
 
@@ -186,6 +187,14 @@ export function initializeFullApp() {
             logMessageElement.textContent = log.message;
             logMessageElement.className = `log-message log-${log.type}`;
         }
+    });
+
+    // 💡 LISTENER CORREGIDO para ÓRDENES ABIERTAS VÍA WEBSOCKET
+    socket.on('open-orders-update', (openOrders) => {
+        console.log(`[Socket.io] Recibidas ${openOrders.length} órdenes abiertas/actualizadas vía WebSocket.`);
+        
+        // 🛑 Llamamos a la nueva función importada para dibujar la tabla
+        updateOpenOrdersTable(openOrders); 
     });
 
     // 💡 LISTENER GLOBAL PARA EL ESTADO DE CONEXIÓN (BOLITA)
