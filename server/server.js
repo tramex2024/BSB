@@ -51,6 +51,20 @@ const io = new Server(server, {
 
 autobotLogic.setIo(io);
 
+// -------------------------------------------------------------
+// === [ INICIALIZACIÓN DE WEBSOCKETS DE ÓRDENES ] =================
+// -------------------------------------------------------------
+const handleOrderUpdate = (ordersData) => {
+    // ordersData es un array de órdenes (abiertas/llenadas/canceladas)
+    // Usamos 'open-orders-update' para enviar la data al frontend
+    console.log(`[Socket.io] Retransmitiendo ${ordersData.length} órdenes abiertas/actualizadas.`);
+    io.sockets.emit('open-orders-update', ordersData);
+};
+
+// 💡 Conectar con BitMart para el stream de Órdenes de Usuario
+bitmartService.initOrderWebSocket(handleOrderUpdate);
+// -------------------------------------------------------------
+
 // 🛑 CORRECCIÓN #1: Configuración de CORS para solicitudes HTTP/REST
 const allowedOrigins = [
     'https://bsb-lime.vercel.app', // Dominio de tu Front-end

@@ -141,7 +141,45 @@ export function initializeFullApp() {
         lastPrice = newPrice;
     });
     // --------------------------------------------------------
-
+    
+    // 💡 NUEVO: LISTENER PARA ÓRDENES ABIERTAS VÍA WEBSOCKET
+    socket.on('open-orders-update', (openOrders) => {
+        console.log(`[Socket.io] Recibidas ${openOrders.length} órdenes abiertas/actualizadas vía WebSocket.`);
+        const auOrderList = document.getElementById('au-order-list');
+        // Solo actualizamos la lista si la pestaña actualmente visible es 'opened'
+        // fetchOrders debe manejar la actualización de la tabla.
+        if (auOrderList) {
+            // Nota: Debes verificar si fetchOrders puede recibir directamente el array de órdenes
+            // o si necesita la ruta. Si fetchOrders espera la ruta, es mejor crear una función 
+            // más simple para manejar la data del WS. Asumiremos que tenemos una función simple:
+            // updateOpenOrdersTable(openOrders, auOrderList); // <--- Asumiendo esta nueva función
+            
+            // Para mantener tu estructura actual, usaremos un workaround:
+            // Llamamos a fetchOrders solo si la pestaña 'opened' está activa.
+            // Si la data del WS se usa para rellenar la tabla, NO uses fetchOrders, 
+            // usa una función que actualice la tabla directamente.
+            
+            // Dado que no tengo el código de fetchOrders ni updateOpenOrdersTable, 
+            // la solución más limpia es asegurar que la función que dibuja la tabla
+            // pueda ser llamada con los datos del socket:
+            
+            // 🚨 Requerirá una pequeña modificación en autobot.js 🚨
+            // Por ahora, solo emitimos un log:
+            
+            // ----------------------------------------------------------------------------------
+            // **LA SOLUCIÓN MÁS LIMPIA REQUIERE EXPORTAR LA FUNCIÓN DE DIBUJO DE LA TABLA**
+            // ----------------------------------------------------------------------------------
+            
+            // Si el currentTab es 'opened', forzamos la actualización de la tabla
+            const currentTab = document.querySelector('#autobot-section .tab-button.active')?.id.replace('tab-', '');
+            if (currentTab === 'opened') {
+                // Aquí debes pasar el array de órdenes (openOrders) a una función
+                // que sepa cómo dibujar la tabla.
+                // updateOpenOrdersTable(openOrders, auOrderList); // <--- Esta es la función ideal
+            }
+        }
+    });
+    
     socket.on('bot-log', (log) => {
         const logMessageElement = document.getElementById('log-message');
         if (logMessageElement) {

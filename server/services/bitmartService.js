@@ -1,7 +1,7 @@
 // Archivo: BSB/server/services/bitmartService.js
 
 const spotService = require('./bitmartSpot');
-
+const { initOrderWebSocket } = require('./bitmartWs');
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 /**
@@ -156,4 +156,5 @@ module.exports = {
     getAvailableTradingBalances,
     placeMarketOrder, 
     getRecentOrders,
+    initOrderWebSocket,
 };

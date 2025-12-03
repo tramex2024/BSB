@@ -259,10 +259,10 @@ socket.on('balance-update', (balances) => {
 
     // 6. Configura los intervalos de actualización
     //intervals.autobot = setInterval(getBalances, 10000);
-    intervals.orders = setInterval(() => {
+//    intervals.orders = setInterval(() => {
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {
             fetchOrders(currentTab, auOrderList);
         }
-    }, 15000);
+//    }, 15000);
 }

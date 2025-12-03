@@ -20,9 +20,11 @@ exports.getOrders = async (req, res) => {
 
         switch (status) {
             case 'opened':
-                // Para órdenes abiertas, llamamos al endpoint de órdenes activas (LIVE)
-                result = await bitmartService.getOpenOrders(symbol);
-                break;
+                // 🛑 MODIFICACIÓN: Esta ruta ya NO debe llamar a la API REST.
+                console.log('[Backend - OBSOLETO]: La consulta de órdenes abiertas debe usar ahora WebSockets.');
+                return res.status(200).json([]); // Devolvemos un array vacío y status 200.
+                // result = await bitmartService.getOpenOrders(symbol); // ⬅️ ELIMINAR ESTA LÍNEA
+                break; // Ya no necesitamos el break si hacemos return antes.
                 
             case 'filled':
             case 'cancelled':
