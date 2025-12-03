@@ -73,133 +73,118 @@ async function placeFirstBuyOrder(config, botState, log, updateBotState, updateG
 }
 
 
-/**
- * Coloca una orden de compra de cobertura (a Mercado) usando un BLOQUEO TEMPORAL.
- * Esto previene la carrera de órdenes al bloquear lStateData.lastOrder ANTES de la llamada a la API.
- */
-async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
-    const SYMBOL = botState.config.symbol;
-    const currentLBalance = parseFloat(botState.lbalance || 0);
-    
-    const amountNominal = usdtAmount;
-    // CÁLCULO DEL COSTO REAL: Monto Nominal + Comisión (0.1%)
-    const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
+async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
+    const SYMBOL = botState.config.symbol;
+    const currentLBalance = parseFloat(botState.lbalance || 0);
+    
+    const amountNominal = usdtAmount;
+    // CÁLCULO DEL COSTO REAL: Monto Nominal + Comisión (0.1%)
+    const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
 
-    // --- 1. VALIDACIÓN Y PRE-DEDUCCIÓN DEL BALANCE ---
-    
-    if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`Error: La cantidad de cobertura (${amountNominal.toFixed(2)} USDT) es menor al mínimo de BitMart. Transicionando a NO_COVERAGE.`, 'error');
-        await updateBotState('NO_COVERAGE', 'long'); 
-        return;
-    }
-    
-    const newLBalance = currentLBalance - amountRealCost; 
+    // --- 1. VALIDACIÓN Y CÁLCULO DE BALANCE ---
+    
+    if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
+        log(`Error: La cantidad de cobertura (${amountNominal.toFixed(2)} USDT) es menor al mínimo de BitMart. Transicionando a NO_COVERAGE.`, 'error');
+        await updateBotState('NO_COVERAGE', 'long'); 
+        return;
+    }
+    
+    const newLBalance = currentLBalance - amountRealCost; 
 
-    if (newLBalance < 0) {
-        log(`Error: Capital insuficiente para la orden de cobertura de ${amountRealCost.toFixed(2)} USDT (costo real). Transicionando a NO_COVERAGE.`, 'error');
-        await updateBotState('NO_COVERAGE', 'long'); 
-        return; // Detiene la ejecución
-    }
-    
-    // Deducir lbalance antes de la colocación
-    await updateGeneralBotState({ lbalance: newLBalance });
-    log(`LBalance asignado reducido en ${amountRealCost.toFixed(2)} USDT (costo real) para la orden de cobertura. Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+    if (newLBalance < 0) {
+        log(`Error: Capital insuficiente para la orden de cobertura de ${amountRealCost.toFixed(2)} USDT (costo real). Transicionando a NO_COVERAGE.`, 'error');
+        await updateBotState('NO_COVERAGE', 'long'); 
+        return; // Detiene la ejecución
+    }
+    
+    // 🛑 ELIMINAR EL updateGeneralBotState DE LA DEDUCCIÓN DE BALANCE AQUÍ
+    // log(`LBalance asignado reducido en ${amountRealCost.toFixed(2)} USDT ...`);
 
-    // --- 2. BLOQUEO TEMPORAL CRÍTICO (Anti-Carrera) ---
-    // Colocamos un 'lastOrder' temporal para que si otro ciclo arranca, vea que ya hay una orden pendiente.
-    const tempOrderId = `BLOCK_${Date.now()}`;
-    const tempOrderObject = { order_id: tempOrderId, side: 'buy', usdt_amount: amountNominal };
-    await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': tempOrderObject } });
-    log(`¡BLOQUEO TEMPORAL '${tempOrderId}' ACTIVO! Ciclo concurrente bloqueado.`, 'warning');
-    
-    log(`Colocando orden de cobertura a MERCADO por ${amountNominal.toFixed(2)} USDT.`, 'info');
-    
-    try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', amountNominal); 
+    // 🛑 ELIMINAR EL BLOQUEO TEMPORAL CRÍTICO (Anti-Carrera) - NO LO NECESITAMOS
+    // Ya que la verificación en LBuying.js ocurre ANTES, y la actualización de lastOrder se hará atómicamente.
+    // log(`¡BLOQUEO TEMPORAL '${tempOrderId}' ACTIVO! Ciclo concurrente bloqueado.`, 'warning');
+    
+    log(`Colocando orden de cobertura a MERCADO por ${amountNominal.toFixed(2)} USDT.`, 'info');
+    
+    try {
+        // --- 2. COLOCACIÓN DE ORDEN (Aquí es donde ocurre la latencia) ---
+        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', amountNominal); 
 
-        if (order && order.order_id) {
-            const currentOrderId = order.order_id; 
+        if (order && order.order_id) {
+            const currentOrderId = order.order_id; 
 
-            // --- 3. REEMPLAZO DEL BLOQUEO TEMPORAL CON EL ID REAL ---
-            const updateResult = await Autobot.findOneAndUpdate({}, { 
-                $set: {
-                    'lStateData.lastOrder': {
-                        order_id: currentOrderId,
-                        side: 'buy',
-                        usdt_amount: amountNominal,
-                        usdt_cost_real: amountRealCost, 
-                    },
-                }
-            }, { new: true });
-            
-            if (updateResult) {
-                log(`Orden de cobertura colocada. ID: ${currentOrderId}. Bloqueo de ciclo actualizado.`, 'success');
-            } else {
-                log(`Advertencia: Orden colocada (${currentOrderId}), pero no se pudo actualizar la DB. Revisar manualmente.`, 'error');
-            }
-            
-        } else { 
-            log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            
-            // 🛑 Revertir el COSTO REAL y LIMPIAR EL BLOQUEO
-            await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
-            const finalLBalance = newLBalance + amountRealCost; 
-            await updateGeneralBotState({ lbalance: finalLBalance });
-            log(`Se revierte ${amountRealCost.toFixed(2)} USDT (costo real) al balance (error de colocación).`, 'info');
-            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // PROPAGAR ERROR
-        }
-    } catch (error) {
-        log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
-        
-        // 🛑 Revertir el COSTO REAL y LIMPIAR EL BLOQUEO
-        await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
-        const finalLBalance = newLBalance + amountRealCost; 
-        await updateGeneralBotState({ lbalance: finalLBalance });
-        log(`Se revierte ${amountRealCost.toFixed(2)} USDT (costo real) al balance (error de API).`, 'info');
-        throw error; // PROPAGAR ERROR
-    }
+            // --- 3. ACTUALIZACIÓN ATÓMICA DE ESTADO Y BALANCE (Anti-Carrera) ---
+            // Aquí se bloquea la orden de la carrera Y se deduce el saldo en una operación.
+            const updateResult = await Autobot.findOneAndUpdate({}, { 
+                $set: {
+                    'lbalance': newLBalance, // ⬅️ DEDUCCIÓN ATÓMICA AQUÍ
+                    'lStateData.lastOrder': { // ⬅️ BLOQUEO ATÓMICO AQUÍ
+                        order_id: currentOrderId,
+                        side: 'buy',
+                        usdt_amount: amountNominal,
+                        usdt_cost_real: amountRealCost, 
+                    },
+                }
+            }, { new: true });
+            
+            if (updateResult) {
+                log(`Orden de cobertura colocada. ID: ${currentOrderId}. Balance y bloqueo actualizados ATÓMICAMENTE.`, 'success');
+            } else {
+                // Esto es un fallo grave, la orden se colocó pero el estado no se actualizó
+                log(`Advertencia: Orden colocada (${currentOrderId}), pero NO se pudo actualizar la DB. Esto puede causar órdenes en carrera o errores de balance.`, 'error');
+            }
+            
+        } else { 
+            // --- 4. FALLO EN LA API (La orden no se colocó) ---
+            log(`Error al colocar la orden de cobertura. Respuesta API: ${JSON.stringify(order)}`, 'error');
+            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // PROPAGAR ERROR
+        }
+    } catch (error) {
+        // --- 5. FALLO DE CONEXIÓN O EXCEPCIÓN ---
+        log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
+        // 🛑 Como el balance y el lastOrder NO se tocaron antes del try, NO hay nada que revertir ni limpiar.
+        throw error; // PROPAGAR ERROR
+    }
 }
 
 /**
  * Coloca una orden de venta a mercado para cerrar el ciclo Long.
+ * Implementa el BLOQUEO ATÓMICO: Asigna lStateData.lastOrder después de colocar la orden.
  */
-// 🛑 FIRMA SIMPLIFICADA (Eliminamos creds, handleSuccessfulSell, handlerDependencies)
-async function placeSellOrder(config, botState, sellAmount, log) { 
+async function placeSellOrder(config, botState, sellAmount, log) { 
     const SYMBOL = config.symbol;
     const amountToSell = parseFloat(sellAmount);
 
     log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
     try {
-        // 🛑 Nota: Aquí asumo que la función placeOrder en BitMartService no necesita `creds` explícitamente, 
-        // ya que la autenticación está en el servicio. Si lo necesita, la firma debe incluir `creds`.
-        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', amountToSell); 
+        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', amountToSell); 
 
         if (order && order.order_id) {
             const currentOrderId = order.order_id;
             log(`Orden de venta colocada. ID: ${currentOrderId}. Iniciando bloqueo en LSelling...`, 'success');
             
+            // --- BLOQUEO ATÓMICO CRÍTICO ---
             // 1. Crear el objeto lastOrder de venta pendiente
             const sellLastOrder = {
                 order_id: currentOrderId,
-                // price: botState.lStateData.ppc, // Se puede dejar o eliminar, el precio real será el llenado.
+                // price: botState.lStateData.ppc, // Se puede dejar o eliminar
                 size: sellAmount,
                 side: 'sell',
                 state: 'pending_fill' // 🛑 state: 'pending_fill' es crucial para el Consolidator
             };
             
             // 2. Persistir el lastOrder de forma atómica (BLOQUEO)
-            await Autobot.findOneAndUpdate({}, { 
-                $set: { 'lStateData.lastOrder': sellLastOrder } 
+            // Esto garantiza que el ciclo 'run' en LSelling.js no se ejecute dos veces en carrera.
+            await Autobot.findOneAndUpdate({}, { 
+                $set: { 'lStateData.lastOrder': sellLastOrder } 
             });
+            // ------------------------------------
 
-            // 🛑 LÓGICA DE VERIFICACIÓN INMEDIATA (Post-Orden de Mercado) ELIMINADA. 
-            // Esta tarea se traslada al Consolidator o a LSelling.js para evitar errores de carrera.
-
-        } else { 
+        } else { 
             log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
             throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // PROPAGAR ERROR
         }
-    } catch (error) { 
+    } catch (error) { 
         log(`Error de API al colocar la orden: ${error.message}`, 'error');
         throw error; // PROPAGAR ERROR
     }
