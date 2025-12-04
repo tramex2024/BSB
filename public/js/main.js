@@ -189,30 +189,30 @@ export function initializeFullApp() {
         }
     });
 
-    // 💡 LISTENER CORREGIDO para ÓRDENES ABIERTAS VÍA WEBSOCKET
-    socket.on('open-orders-update', (openOrders) => {
-        console.log(`[Socket.io] Recibidas ${openOrders.length} órdenes abiertas/actualizadas vía WebSocket.`);
-        
-        // 🛑 Llamamos a la nueva función importada para dibujar la tabla
-        updateOpenOrdersTable(openOrders); 
-    });
-
     // 💡 LISTENER GLOBAL PARA EL ESTADO DE CONEXIÓN (BOLITA)
-    // Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
-    socket.on('balance-real-update', (data) => {
-        console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
-        updateConnectionStatusBall(data.source);
+// Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
+socket.on('balance-real-update', (data) => {
+    console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
+    updateConnectionStatusBall(data.source);
+    
+    // 🛑 CORRECCIÓN: Lógica para actualizar el elemento HTML 'aubalance'
+    // Los datos (lastAvailableUSDT/BTC) están directamente en el objeto 'data'.
+    // Eliminamos la comprobación "if (data.exchange)" y usamos las propiedades que SÍ existen.
+
+    // Comprobamos que existan las propiedades necesarias antes de intentar formatear
+    if (data.lastAvailableUSDT !== undefined && data.lastAvailableBTC !== undefined) {
         
-        // 🛑 CORRECCIÓN: Lógica para actualizar el elemento HTML 'aubalance'
-        if (data.exchange) {
-            // Adaptamos la estructura de los datos del socket al formato que espera updateBotBalances
-            const formattedBalances = [
-                { currency: 'USDT', available: data.exchange.availableUSDT },
-                { currency: 'BTC', available: data.exchange.availableBTC }
-            ];
-            updateBotBalances(formattedBalances); // Ahora usa la función importada para escribir en 'aubalance'
-        }
-    });
+        // Adaptamos la estructura de los datos del socket al formato que espera updateBotBalances
+        const formattedBalances = [
+            // Usamos las claves que vienen del backend
+            { currency: 'USDT', available: data.lastAvailableUSDT },
+            { currency: 'BTC', available: data.lastAvailableBTC }
+        ];
+        
+        // Ahora llama correctamente a la función para dibujar los balances en el DOM
+        updateBotBalances(formattedBalances); 
+    }
+});
 
     // --------------------------------------------------------
 
