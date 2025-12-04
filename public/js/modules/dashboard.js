@@ -1,13 +1,10 @@
-// public/js/modules/dashboard.js
+// public/js/modules/dashboard.js (Actualizado para el nuevo flujo de Balance/WS)
 
-import { getBalances } from './balance.js';
+// 🛑 ELIMINADA LA IMPORTACIÓN DE getBalances (Ya no se hace polling)
 import { checkBitMartConnectionAndData } from './network.js';
-import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
+import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
-import { intervals, SOCKET_SERVER_URL } from '../main.js';
-
-// Asumimos que estas constantes están definidas en el scope global o en main.js
-// const SOCKET_SERVER_URL = '...'; 
+import { intervals, SOCKET_SERVER_URL } from '../main.js'; // Necesitas importar 'io' si lo usas aquí
 
 /**
  * Mapea los colores para el estado del bot.
@@ -24,9 +21,14 @@ function getStateColorClass(state) {
 
 /**
  * Inicializa los listeners de Socket.IO para el Dashboard.
+ *
+ * NOTA CRÍTICA: Asumimos que la conexión principal del socket y los
+ * listeners de 'balance-real-update' están en main.js o autobot.js,
+ * por lo que solo nos centramos en las métricas específicas del dashboard aquí.
  */
 function setupSocketListeners() {
-    // 🛑 IMPORTANTE: Asegúrate de que 'io' esté cargado globalmente o importado
+    // 🛑 IMPORTANTE: Asumimos que 'io' viene de una fuente global o de main.js
+    // Si la conexión se maneja centralmente en main.js, este socket NO ES NECESARIO aquí.
     const socket = io(SOCKET_SERVER_URL); 
 
     socket.on('connect', () => {
@@ -34,14 +36,13 @@ function setupSocketListeners() {
     });
     
     // 1. Maneja la actualización de Balance Real (USDT/BTC disponible)
+    // 🛑 ESTE LISTENER ES AHORA MANEJADO EN main.js (o un módulo de balance centralizado)
+    // El dashboard ya no necesita replicar el manejo del balance de exchange.
     socket.on('balance-real-update', (data) => {
-        // Esta actualización ya ocurre en balance.js (si está centralizado)
-        // Pero si quieres que se refleje inmediatamente, puedes actualizar aquí:
-        // document.getElementById('aubalance-usdt').textContent = data.usdt.available.toFixed(2);
-        // document.getElementById('aubalance-btc').textContent = data.btc.available.toFixed(8);
+        // Lógica de visualización del balance Real (si aplica)
     });
 
-    // 2. Maneja la actualización de las MÉTRICAS CLAVE del Autobot
+    // 2. Maneja la actualización de las MÉTRICAS CLAVE del Autobot (Lógico/Asignado, Profit, Estados)
     socket.on('autobot-metrics-update', (metrics) => {
         console.log("Métricas del Autobot recibidas:", metrics);
         
@@ -70,8 +71,8 @@ function setupSocketListeners() {
         // Actualización del punto de conexión
         const statusDot = document.getElementById('status-dot');
         if (statusDot) {
-             statusDot.classList.remove('bg-red-500', 'bg-green-500');
-             statusDot.classList.add(metrics.isRunning ? 'bg-green-500' : 'bg-red-500');
+            statusDot.classList.remove('bg-red-500', 'bg-green-500');
+            statusDot.classList.add(metrics.isRunning ? 'bg-green-500' : 'bg-red-500');
         }
     });
 
@@ -102,8 +103,8 @@ function setupSocketListeners() {
         // Actualización del punto de conexión
         const statusDot = document.getElementById('ai-status-dot');
         if (statusDot) {
-             statusDot.classList.remove('bg-red-500', 'bg-green-500');
-             statusDot.classList.add(metrics.isRunning ? 'bg-green-500' : 'bg-red-500');
+            statusDot.classList.remove('bg-red-500', 'bg-green-500');
+            statusDot.classList.add(metrics.isRunning ? 'bg-green-500' : 'bg-red-500');
         }
     });
 
@@ -118,13 +119,13 @@ function setupSocketListeners() {
 export function initializeDashboardView() {
     console.log("Inicializando vista del Dashboard...");
     
-    // 1. Cargar datos básicos y establecer intervalo para balances (menos críticos)
-    getBalances();
-    checkBitMartConnectionAndData();
-    intervals.dashboard = setInterval(getBalances, 10000);
+    // 1. Cargar datos básicos y establecer intervalo para balances (MENOS CRÍTICOS)
+    // 🛑 ELIMINADAS: getBalances() y el setInterval. Ahora todo es por WebSocket.
+    // Solo dejamos la comprobación de conexión/datos que puede ser una llamada REST inicial si es necesario.
+    checkBitMartConnectionAndData(); 
 
     // 2. Establecer los listeners de Socket.IO para las actualizaciones en tiempo real
-    setupSocketListeners(); // 💡 NUEVO
+    setupSocketListeners(); 
 
     // 3. Cargar y renderizar la Curva de Crecimiento
     loadAndRenderEquityCurve();
