@@ -2,8 +2,8 @@
 
 import { getBalances, fetchAvailableBalancesForValidation } from './balance.js'; 
 import { initializeChart } from './chart.js';
-// 🛑 MODIFICACIÓN: Importar la nueva función para manejar la data del Socket.
-import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOrderListFromSocket } from './orders.js';
+// 🛑 CORRECCIÓN: Usar updateOpenOrdersTable importada desde orders.js
+import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOpenOrdersTable } from './orders.js';
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals, BACKEND_URL } from '../main.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
@@ -257,14 +257,11 @@ export async function initializeAutobotView() {
         validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
     });
 
-    // 🛑 NUEVO LISTENER: Actualización en tiempo real de Órdenes Abiertas (WebSocket + Polling)
+    // 🛑 NUEVO LISTENER: Llama a la función correcta sin pasar el elemento DOM.
     socket.on('open-orders-update', (ordersData) => {
-        // Solo actualizamos la lista si la pestaña de 'Abiertas' (opened) está activa
-        if (currentTab === 'opened') {
-            console.log(`[Socket.io] Recibidas ${ordersData ? ordersData.length : 0} órdenes abiertas/actualizadas.`);
-            // Llamamos a la función de orders.js para renderizar el array de órdenes directamente.
-            updateOrderListFromSocket(ordersData, auOrderList); 
-        }
+        // La función updateOpenOrdersTable se encarga de verificar el tab activo y buscar el contenedor.
+        console.log(`[Socket.io] Recibidas ${ordersData ? ordersData.length : 0} órdenes abiertas/actualizadas vía WebSocket.`);
+        updateOpenOrdersTable(ordersData); 
     });
 
     // 7. Configura los intervalos de actualización
