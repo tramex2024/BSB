@@ -154,7 +154,7 @@ async function loadBalancesAndLimits() {
             // 2. Actualizar la interfaz de usuario con los límites (UX)
             updateMaxBalanceDisplay('USDT', maxUsdtBalance);
             updateMaxBalanceDisplay('BTC', maxBtcBalance);
-            
+
             // Opcional: Establecer el atributo 'max' en los inputs
             document.getElementById('auamount-usdt')?.setAttribute('max', maxUsdtBalance.toFixed(2));
             document.getElementById('auamount-btc')?.setAttribute('max', maxBtcBalance.toFixed(5));
@@ -257,10 +257,10 @@ export async function initializeAutobotView() {
         validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
     });
 
-    // 🛑 NUEVO LISTENER: Llama a la función correcta sin pasar el elemento DOM.
+    // 🛑 MEJORA DE DEBUGGING: Muestra el tipo y contenido exacto de la variable ordersData
     socket.on('open-orders-update', (ordersData) => {
         // La función updateOpenOrdersTable se encarga de verificar el tab activo y buscar el contenedor.
-        console.log(`[Socket.io] Recibidas ${ordersData ? ordersData.length : 0} órdenes abiertas/actualizadas vía WebSocket.`);
+        console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas. Tipo de payload: ${typeof ordersData}. Contenido:`, ordersData);
         updateOpenOrdersTable(ordersData); 
     });
 
