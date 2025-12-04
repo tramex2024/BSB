@@ -117,12 +117,37 @@ export async function fetchOrders(status, orderListElement) {
         
         let ordersToDisplay = [];
 
-        // CORRECCIÓN: Unificar el formato de los datos
+        // CORRECCIÓN: Unificar el formato de los datos (el backend a veces los envuelve en un objeto 'orders')
         if (orders && orders.orders) {
             ordersToDisplay = orders.orders;
         } else if (Array.isArray(orders)) {
             ordersToDisplay = orders;
         }
+
+        // 🛑 FILTRO DEFENSIVO: Filtro del lado del cliente para asegurar que solo se muestren 
+        // las órdenes del estado seleccionado ('filled' o 'cancelled'), en caso de que 
+        // el backend devuelva un historial completo sin filtrar.
+        if (status !== 'all' && ordersToDisplay.length > 0) {
+            const targetStatus = status.toLowerCase(); // 'filled' o 'cancelled'
+
+            ordersToDisplay = ordersToDisplay.filter(order => {
+                // Buscamos una propiedad de estado que contenga la palabra clave del target.
+                // Usamos 'state' o 'status' para verificar el estado de la orden histórica.
+                const orderState = String(order.state || order.status || '').toLowerCase();
+                
+                if (targetStatus === 'filled') {
+                    // Estado 'FILLED' (llena) o si la cantidad llenada coincide con la cantidad total (orden completamente llena)
+                    return orderState.includes('fill') || (parseFloat(order.filled_size) > 0 && parseFloat(order.filled_size) === parseFloat(order.size));
+                }
+                
+                if (targetStatus === 'cancelled') {
+                    // Estado 'CANCELED' (cancelada)
+                    return orderState.includes('cancel');
+                }
+                
+                return false; // No mostrar si no coincide con 'filled' o 'cancelled' y el status no es 'all'
+            });
+        }
 
         displayOrders(ordersToDisplay, orderListElement, status);
 
