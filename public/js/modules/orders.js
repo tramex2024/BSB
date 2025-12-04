@@ -149,11 +149,20 @@ export function setActiveTab(tabId) {
 /**
  * Función para recibir órdenes abiertas desde el WebSocket y mostrarlas.
  * Esta función es llamada desde main.js cuando se recibe el evento 'open-orders-update'.
- * @param {Array<object>} openOrders Las órdenes abiertas recibidas del backend via WS.
+ * @param {object | Array<object>} ordersData Las órdenes abiertas recibidas del backend via WS.
  */
-export function updateOpenOrdersTable(openOrders) {
+export function updateOpenOrdersTable(ordersData) {
     const auOrderList = document.getElementById('au-order-list');
     const currentTab = document.querySelector('#autobot-section [id^="tab-"].active-tab')?.id.replace('tab-', '');
+
+    // 🛑 CORRECCIÓN CLAVE: Extraer el array si viene envuelto en un objeto {orders: []}
+    let openOrders = ordersData;
+    if (ordersData && ordersData.orders && Array.isArray(ordersData.orders)) {
+        openOrders = ordersData.orders;
+    } else if (!Array.isArray(ordersData)) {
+        // Manejar el caso de que sea undefined o nulo después de la corrección.
+        openOrders = [];
+    }
 
     // 🛑 Solo actualizar si la pestaña 'opened' está activa.
     if (currentTab === 'opened' || currentTab === undefined) { 
