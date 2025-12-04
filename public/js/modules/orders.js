@@ -30,8 +30,8 @@ function createOrderHtml(order, orderType) {
 
     return `
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div class="flex-1 mb-2 sm:mb-0 text-center"> <!-- AÑADIDO: text-center para alinear Side y Symbol -->
-                <span class="font-semibold text-sm sm:text-base mr-2 ${sideClass}">${order.side.toUpperCase()}</span>
+            <div class="flex-1 mb-2 sm:mb-0 text-center flex flex-col items-center"> <!-- AJUSTE: Usar flex-col y items-center para centrado vertical perfecto -->
+                <span class="font-semibold text-sm sm:text-base mb-1 ${sideClass}">${order.side.toUpperCase()}</span>
                 <span class="text-xs sm:text-sm text-gray-400">${symbol}</span>
             </div>
             <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">

@@ -298,7 +298,7 @@ setInterval(async () => {
         const openOrders = await bitmartService.getOpenOrders(symbol); 
         
         if (openOrders) {
-            console.log(`[Polling] ${openOrders.length} Órdenes abiertas encontradas. Emitiendo.`);
+//            console.log(`[Polling] ${openOrders.length} Órdenes abiertas encontradas. Emitiendo.`);
             // Usamos el mismo evento que el WebSocket para un manejo consistente en el frontend
             io.sockets.emit('open-orders-update', openOrders); 
         }
