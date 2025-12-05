@@ -42,7 +42,7 @@ function setupSocketListeners() {
     });
 
     // 2. Maneja la actualización de las MÉTRICAS CLAVE del Autobot (Lógico/Asignado, Profit, Estados)
-    socket.on('autobot-metrics-update', (metrics) => {
+    socket.on('bot-state-update', (metrics) => {
         console.log("Métricas del Autobot recibidas:", metrics);
         
         // Actualización de balances Lógico/Asignado
