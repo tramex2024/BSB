@@ -4,12 +4,9 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 // Importa todas las funciones de inicialización de las vistas
 import { initializeDashboardView } from './modules/dashboard.js';
 import { initializeAutobotView } from './modules/autobot.js';
-import { updateOpenOrdersTable } from './modules/orders.js';
+import { updateOpenOrdersTable } from './modules/orders.js'; // Necesaria para el WS
 import { updateBotBalances } from './modules/balance.js';
 import { initializeAibotView } from './modules/aibot.js';
-
-// Importa io desde la biblioteca de Socket.io (deberías tenerlo cargado en el HTML)
-// const io = window.io; 
 
 // --- Constantes y variables globales (EXPORTADAS) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -32,14 +29,12 @@ const views = {
 
 /**
  * Función que actualiza el estado visual de la conexión (la "bolita").
- * @param {string} source - 'API_SUCCESS' (verde) o 'CACHE_FALLBACK' (amarillo).
+ * @param {string} source - 'API_SUCCESS' (verde) o 'CACHE_FALLBACK' (amarillo) o 'DISCONNECTED' (rojo).
  */
 function updateConnectionStatusBall(source) {
-    // 🛑 CRÍTICO: Debemos apuntar al span de la bolita (status-dot) para cambiar su color.
+    // 🛑 CRÍTICO: Apuntamos al elemento 'status-dot' que ahora es global en el header.
     const statusDot = document.getElementById('status-dot'); 
     
-    // El contenedor (au-connection-status) solo necesita la etiqueta, no el cambio de color.
-    // Si la bolita no existe, salimos.
     if (!statusDot) { 
         console.warn("Elemento 'status-dot' no encontrado. Verifique la ID en el HTML.");
         return;
@@ -48,7 +43,7 @@ function updateConnectionStatusBall(source) {
     // 1. Eliminar todas las posibles clases de color de Tailwind
     statusDot.classList.remove('bg-red-500', 'bg-yellow-500', 'bg-green-500');
 
-    // 2. Definir y aplicar el nuevo color de fondo (bg-*)
+    // 2. Definir y aplicar el nuevo color de fondo (bg-*) y el tooltip (title)
     if (source === 'API_SUCCESS') {
         // Verde: Conexión exitosa y datos actualizados.
         statusDot.classList.add('bg-green-500');
@@ -58,7 +53,7 @@ function updateConnectionStatusBall(source) {
         statusDot.classList.add('bg-yellow-500');
         statusDot.title = 'Advertencia: Fallo de conexión o Rate Limit. Usando datos en caché.';
     } else {
-        // Rojo: Desconectado o inicialización pendiente.
+        // Rojo: Desconectado o inicialización pendiente (por defecto si no hay source)
         statusDot.classList.add('bg-red-500');
         statusDot.title = 'Desconectado: Error de conexión con BitMart o inicialización pendiente.';
     }
@@ -92,12 +87,10 @@ export function initializeTab(tabName) {
 export function initializeFullApp() {
     console.log("Token de autenticación encontrado. Inicializando la aplicación...");
     
-    // 🛑 CAMBIO CLAVE 1: Inicializamos el estado a ROJO/Desconectado al iniciar la app, 
-    // antes de que el socket intente conectarse.
-    updateConnectionStatusBall(); 
+    // 🛑 Inicializamos el estado a ROJO/Desconectado al iniciar la app.
+    updateConnectionStatusBall('DISCONNECTED'); 
 
     // Conexión del socket (ÚNICA CONEXIÓN)
-    // Asumimos que 'io' está disponible globalmente si no hay un import explícito
     const socket = io(BACKEND_URL, {
         path: '/socket.io'
     });
@@ -141,44 +134,13 @@ export function initializeFullApp() {
         // Actualizar el último precio para la próxima comparación
         lastPrice = newPrice;
     });
-    // --------------------------------------------------------
     
-    // 💡 NUEVO: LISTENER PARA ÓRDENES ABIERTAS VÍA WEBSOCKET
-    socket.on('open-orders-update', (openOrders) => {
-        console.log(`[Socket.io] Recibidas ${openOrders.length} órdenes abiertas/actualizadas vía WebSocket.`);
-        const auOrderList = document.getElementById('au-order-list');
-        // Solo actualizamos la lista si la pestaña actualmente visible es 'opened'
-        // fetchOrders debe manejar la actualización de la tabla.
-        if (auOrderList) {
-            // Nota: Debes verificar si fetchOrders puede recibir directamente el array de órdenes
-            // o si necesita la ruta. Si fetchOrders espera la ruta, es mejor crear una función 
-            // más simple para manejar la data del WS. Asumiremos que tenemos una función simple:
-            // updateOpenOrdersTable(openOrders, auOrderList); // <--- Asumiendo esta nueva función
-            
-            // Para mantener tu estructura actual, usaremos un workaround:
-            // Llamamos a fetchOrders solo si la pestaña 'opened' está activa.
-            // Si la data del WS se usa para rellenar la tabla, NO uses fetchOrders, 
-            // usa una función que actualice la tabla directamente.
-            
-            // Dado que no tengo el código de fetchOrders ni updateOpenOrdersTable, 
-            // la solución más limpia es asegurar que la función que dibuja la tabla
-            // pueda ser llamada con los datos del socket:
-            
-            // 🚨 Requerirá una pequeña modificación en autobot.js 🚨
-            // Por ahora, solo emitimos un log:
-            
-            // ----------------------------------------------------------------------------------
-            // **LA SOLUCIÓN MÁS LIMPIA REQUIERE EXPORTAR LA FUNCIÓN DE DIBUJO DE LA TABLA**
-            // ----------------------------------------------------------------------------------
-            
-            // Si el currentTab es 'opened', forzamos la actualización de la tabla
-            const currentTab = document.querySelector('#autobot-section .tab-button.active')?.id.replace('tab-', '');
-            if (currentTab === 'opened') {
-                // Aquí debes pasar el array de órdenes (openOrders) a una función
-                // que sepa cómo dibujar la tabla.
-                // updateOpenOrdersTable(openOrders, auOrderList); // <--- Esta es la función ideal
-            }
-        }
+    // 💡 LISTENER PARA ÓRDENES ABIERTAS VÍA WEBSOCKET
+    socket.on('open-orders-update', (ordersData) => {
+        console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas vía WebSocket.`);
+        
+        // Llamamos a la función importada de orders.js para actualizar la tabla
+        updateOpenOrdersTable(ordersData); 
     });
     
     socket.on('bot-log', (log) => {
@@ -189,32 +151,24 @@ export function initializeFullApp() {
         }
     });
 
-    // 💡 LISTENER GLOBAL PARA EL ESTADO DE CONEXIÓN (BOLITA)
-// Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
-socket.on('balance-real-update', (data) => {
-    console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
-    updateConnectionStatusBall(data.source);
-    
-    // 🛑 CORRECCIÓN: Lógica para actualizar el elemento HTML 'aubalance'
-    // Los datos (lastAvailableUSDT/BTC) están directamente en el objeto 'data'.
-    // Eliminamos la comprobación "if (data.exchange)" y usamos las propiedades que SÍ existen.
-
-    // Comprobamos que existan las propiedades necesarias antes de intentar formatear
-    if (data.lastAvailableUSDT !== undefined && data.lastAvailableBTC !== undefined) {
+    // 💡 LISTENER GLOBAL PARA EL ESTADO DE CONEXIÓN (BOLITA) y BALANCE
+    // Esto se activa cada vez que se actualiza el balance real, indicando que hay una conexión viva.
+    socket.on('balance-real-update', (data) => {
+        console.log(`[STATUS] Recibido evento 'balance-real-update' con source: ${data.source}`);
+        updateConnectionStatusBall(data.source);
         
         // Adaptamos la estructura de los datos del socket al formato que espera updateBotBalances
-        const formattedBalances = [
-            // Usamos las claves que vienen del backend
-            { currency: 'USDT', available: data.lastAvailableUSDT },
-            { currency: 'BTC', available: data.lastAvailableBTC }
-        ];
-        
-        // Ahora llama correctamente a la función para dibujar los balances en el DOM
-        updateBotBalances(formattedBalances); 
-    }
-});
-
-    // --------------------------------------------------------
+        if (data.lastAvailableUSDT !== undefined && data.lastAvailableBTC !== undefined) {
+            const formattedBalances = [
+                // Usamos las claves que vienen del backend
+                { currency: 'USDT', available: data.lastAvailableUSDT },
+                { currency: 'BTC', available: data.lastAvailableBTC }
+            ];
+            
+            // Ahora llama correctamente a la función para dibujar los balances en el DOM
+            updateBotBalances(formattedBalances);    
+        }
+    });
 
     // Carga la pestaña inicial y configura la navegación
     setupNavTabs(initializeTab);
