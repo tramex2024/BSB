@@ -89,18 +89,88 @@
             color: white;
             text-decoration: none;
         }
+        
+        /* ---------------------------------------------------- */
+        /* CSS PARA LA BOLA DE ESTADO CON ANIMACIÓN DE ONDA */
+        /* ---------------------------------------------------- */
+
+        /* Clase base para la posición y tamaño */
+        .status-ball-container {
+            position: relative;
+            /* Estos valores deben coincidir con h-3 w-3 (12px) de Tailwind,
+               pero se usan para dimensionar el contenedor de la onda */
+            width: 12px;
+            height: 12px;
+            display: inline-block;
+        }
+
+        /* 1. Animaciones Base */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+        }
+
+        @keyframes waveExpand {
+            0% { transform: scale(1); opacity: 0.7; }
+            100% { transform: scale(3.5); opacity: 0; }
+        }
+
+        /* 2. Definición de la Onda (::after) - Se aplica a la clase del estado "Otro Modo" (Morado) */
+        .status-purple::after {
+            content: '';
+            position: absolute;
+            /* Ajustar el offset para que la onda empiece justo en el centro del dot */
+            top: -1px; 
+            left: -1px;
+            width: 14px; /* Un poco más grande para asegurar cobertura */
+            height: 14px;
+            border-radius: 50%;
+            background-color: #c4b5fd; /* Púrpura claro */
+            z-index: -1;
+            /* Animación de expansión: Lenta para un efecto hipnótico */
+            animation: waveExpand 4s ease-out infinite; 
+        }
+
+        /* 3. CLASES DE ESTADO */
+
+        /* Estado VERDE (Conectado): Pulso lento y constante */
+        .status-green {
+            background-color: #10b981; /* Tailwind green-500 */
+            animation: pulse 2s ease-in-out infinite alternate;
+        }
+
+        /* Estado ROJO (Desconectado): Sin animación, color estático */
+        .status-red {
+            background-color: #ef4444; /* Tailwind red-500 */
+        }
+        
+        /* Estado PÚRPURA (Otro Modo): Pulso y Onda Expansiva */
+        .status-purple {
+            background-color: #a855f7; /* Tailwind purple-500 */
+            /* Pulso sutil en la bola principal */
+            animation: pulse 3s ease-in-out infinite alternate;
+            /* La onda expansiva se maneja con ::after */
+        }
+
     </style>
 </head>
 <body class="dark-mode bg-gray-900 text-white">
     <header class="fixed-header">
         <div class="header-left">
             <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
-            <!-- INDICADOR DE CONEXIÓN RESTAURADO: Visible globalmente -->
-            <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500 mr-2" title="BitMart Connection Status (Disconnected)"></span>
+            <!-- INDICADOR DE CONEXIÓN ACTUALIZADO:
+                 - Clase 'status-dot' eliminada.
+                 - Se agrega el contenedor 'status-ball-container' para la animación de onda.
+                 - La bolita interna '#status-dot' recibe las clases de estado (e.g., status-green, status-red, status-purple)
+            -->
+            <div class="status-ball-container mr-2" title="BitMart Connection Status">
+                <!-- Por defecto, la bola es roja (desconectado) hasta que el JS la actualice -->
+                <span id="status-dot" class="h-full w-full rounded-full status-red block"></span>
+            </div>
             <span class="app-name">Bitmart Spot Bot</span>
         </div>
         <nav class="header-middle">
-            <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>           
+            <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>            
             <a href="#autobot" class="nav-tab" data-tab="autobot">AUTOBOT</a>
             <a href="#aibot" class="nav-tab" data-tab="aibot">AIBOT</a>
         </nav>
@@ -159,7 +229,7 @@
                         </div>          
                     </div>
 
-                    <div class="bg-gray-700 p-4 rounded-lg space-y-2">                 
+                    <div class="bg-gray-700 p-4 rounded-lg space-y-2">                
                         <div class="flex justify-between text-sm">
                             <div><strong>LSPrice:</strong> <span id="aulsprice">0.00</span></div>
                             <div><strong>SBPrice:</strong> <span id="ausbprice">0.00</span></div>
@@ -183,7 +253,7 @@
                     </div>
 
                     <div class="space-y-4 text-sm">
-                        <div id="autobot-settings" class="space-y-4 text-sm">    
+                        <div id="autobot-settings" class="space-y-4 text-sm">      
                             <hr class="border-gray-600"/>
                             <div class="flex space-x-4">
                                 <div class="flex-1">
