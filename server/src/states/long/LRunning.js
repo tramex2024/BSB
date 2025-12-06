@@ -14,7 +14,7 @@ async function run(dependencies) {
         return; // Detener la ejecución de RUNNING
     }
 
-    log("Estado Long: RUNNING. Esperando señal de entrada de COMPRA.", 'info');
+    log("[L]: RUNNING. Esperando señal de compra.", 'info');
 
     // Si no hay posición, procedemos con el análisis.
     const analysisResult = await analyzer.runAnalysis(currentPrice);
