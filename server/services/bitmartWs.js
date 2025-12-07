@@ -40,9 +40,26 @@ function initOrderWebSocket(updateCallback) {
             
             // 💡 Filtramos solo los mensajes de actualización de órdenes
             if (message.event === 'update' && message.topic.startsWith('spot/user/order')) {
-                // Aquí, la data.orders es donde están tus órdenes abiertas, llenadas, o canceladas.
-                const updatedOrders = message.data; // Asume que 'message.data' es el array de órdenes
-                updateCallback(updatedOrders);
+                const orders = message.data; // Asume que 'message.data' es el array de órdenes
+
+                // 🛑 CORRECCIÓN Y MEJORA: Filtramos en el backend para enviar solo órdenes ABIERTAS
+                // (incluyendo el estado PENDING) para la tabla de órdenes abiertas.
+                const openOrders = Array.isArray(orders) ? orders.filter(order => {
+                    // Normalizamos el estado para la verificación
+                    const state = String(order.state || order.status || '').toLowerCase().replace(/_/g, ' ');
+                    
+                    // Estados de órdenes que consideramos 'abiertas' en BitMart
+                    const isOpen = state.includes('new') || 
+                                   state.includes('partial') || 
+                                   state.includes('open') || 
+                                   state.includes('pending'); // <--- ¡Esta es la adición clave!
+
+                    return isOpen;
+                }) : [];
+
+
+                console.log(`${LOG_PREFIX} Órdenes abiertas filtradas recibidas: ${openOrders.length}`);
+                updateCallback(openOrders); // Enviamos solo las órdenes abiertas filtradas.
             }
             
             // Si BitMart usa un mecanismo de ping/pong, se debe manejar aquí para mantener viva la conexión
