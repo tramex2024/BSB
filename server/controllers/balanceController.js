@@ -7,7 +7,7 @@ const { log } = require('../autobotLogic'); // Para el registro de errores
 /**
  * @desc Obtiene los balances de trading disponibles (USDT y BTC) de la CACHÉ de la DB
  * y los balances asignados (lbalance, sbalance) del estado interno del bot.
- * @route GET /api/v1/balances
+ * @route GET /api/v1/bot-state/balances // 🎯 RUTA FINAL CORREGIDA
  * @access Private
  */
 async function getAccountBalances(req, res) {

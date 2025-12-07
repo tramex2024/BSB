@@ -28,9 +28,9 @@ export function updateBotUI(state) {
         auscoverage: 'scoverage',
         aulnorder: 'lnorder',
         ausnorder: 'snorder',
-        aulsprice: 'lsprice', 
-        ausbprice: 'sbprice',  
-        aulprofit: 'lprofit',
+        aulsprice: 'lsprice', 
+        ausbprice: 'sbprice',  
+        aulprofit: 'lprofit',
         ausprofit: 'sprofit'
     };
 
@@ -58,10 +58,10 @@ export function updateBotUI(state) {
             } else {
                 value = NaN; // Si la clave no existe en el objeto 'state' del socket.
             }
-            
-            // 🛑 Lógica para limpiar y aplicar color (APLICAR A TODOS LOS ELEMENTOS QUE NECESITEN COLOR)
-            // Primero, removemos las clases de color existentes para evitar conflictos
-            element.classList.remove('text-green-500', 'text-red-500', 'text-gray-400');
+            
+            // 🛑 Lógica para limpiar y aplicar color (APLICAR A TODOS LOS ELEMENTOS QUE NECESITEN COLOR)
+            // Primero, removemos las clases de color existentes para evitar conflictos
+            element.classList.remove('text-green-500', 'text-red-500', 'text-gray-400');
 
             // Aplicar formato según el tipo de dato
             if (dataKey === 'total_profit' || dataKey === 'lprofit' || dataKey === 'sprofit') {
@@ -70,18 +70,18 @@ export function updateBotUI(state) {
                     element.textContent = 'N/A';
                 } else {
                     // **APLICAR CLASES DE COLOR**
-                    if (value > 0) {
-                        element.classList.add('text-green-500');
-                    } else if (value < 0) {
-                        element.classList.add('text-red-500');
-                    } else {
-                        // Valor neutral (ej: 0)
-                        element.classList.add('text-gray-400');
-                    }
-                    
-                    // Formato de texto final
-                    element.textContent = `$${value.toFixed(2)}`;
-                }
+                    if (value > 0) {
+                        element.classList.add('text-green-500');
+                    } else if (value < 0) {
+                        element.classList.add('text-red-500');
+                    } else {
+                        // Valor neutral (ej: 0)
+                        element.classList.add('text-gray-400');
+                    }
+                    
+                    // Formato de texto final
+                    element.textContent = `$${value.toFixed(2)}`;
+                }
             // ✅ CORREGIDO: Añadimos 'lsprice' y 'sbprice' a la lista de valores con 2 decimales
             } else if (['lcoverage', 'scoverage', 'lbalance', 'sbalance', 'ltprice', 'stprice', 'lsprice', 'sbprice'].includes(dataKey)) {
                 // Montos de dinero/balance/precios (2 decimales)
@@ -91,7 +91,7 @@ export function updateBotUI(state) {
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
             } else {
                 // Si no es un número esperado, intentar mostrar el valor original
-                // Usar String(state[dataKey]) asegura que '0' se muestre y no se caiga en la lógica 'falsy'
+                // Usar String(state[dataKey]) asegura que '0' se muestre y no se caiga en la lógica 'falsy'
                 element.textContent = state[dataKey] !== undefined && state[dataKey] !== null ? String(state[dataKey]) : 'N/A';
             }
         }
