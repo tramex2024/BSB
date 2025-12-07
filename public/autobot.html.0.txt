@@ -1,9 +1,14 @@
 <div id="autobot-section" class="flex flex-col md:flex-row h-full md:h-screen">
     <div class="w-full md:w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">            
-            <div class="flex justify-between items-center">
-                <h2 class="text-lg font-bold">AUTOBOT</h2>   
-                <div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>                
+        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
+            <div class="flex justify-between text-sm">
+                <div id="au-connection-status" class="flex items-center space-x-2">
+                    <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
+                    <h2 class="text-lg font-bold">AUTOBOT</h2>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>
+                </div>
             </div>
             <div class="flex justify-between text-sm">
                 <div><strong>Balance:</strong> <span id="aubalance">0.00</span></div>
