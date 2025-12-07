@@ -1,49 +1,38 @@
 // BSB/server/server.js
 
-import express from 'express';
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import cors from 'cors';
-import http from 'http';
-import { Server } from "socket.io"; 
+const express = require('express');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const cors = require('cors');
+const http = require('http');
+const { Server } = require("socket.io");
 
-import WebSocket from 'ws'; 
-import jwt from 'jsonwebtoken'; 
+const WebSocket = require('ws');
+const jwt = require('jsonwebtoken');
 
-// --- Funciones Auxiliares para Importación Adaptativa ---
-// Esta función maneja módulos que pueden ser ES Modules (export default)
-// o CommonJS (module.exports = obj).
-const importModule = async (path) => {
-    const module = await import(path);
-    return module.default || module;
-};
+// Servicios y Lógica del Bot
+const bitmartService = require('./services/bitmartService');
+const autobotLogic = require('./autobotLogic.js');
+const checkTimeSync = require('./services/check_time');
 
-// --- SERVICIOS Y LÓGICA DEL BOT ---
-const bitmartService = await importModule('./services/bitmartService.js');
-const autobotLogic = await importModule('./autobotLogic.js');
-const checkTimeSync = await importModule('./services/check_time.js');
+// Importa las funciones de cálculo
+const { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } = require('./autobotCalculations');
 
-// Importa las funciones de cálculo (estas sí pueden ser Named Imports si el archivo usa 'export const')
-import { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } from './autobotCalculations.js'; 
+// Modelos
+const Order = require('./models/Order');
+const Autobot = require('./models/Autobot');
 
-// --- MODELOS ---
-// Estos archivos usan 'module.exports = Modelo', por lo que necesitamos la importación adaptativa.
-const Order = await importModule('./models/Order.js'); 
-const Autobot = await importModule('./models/Autobot.js'); 
+// Routers
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const ordersRoutes = require('./routes/ordersRoutes');
+const autobotRoutes = require('./routes/autobotRoutes');
+const configRoutes = require('./routes/configRoutes');
+const balanceRoutes = require('./routes/balanceRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes'); // 💡 NUEVAS RUTAS DE ANALÍTICAS
 
-// --- ROUTERS ---
-// Estos archivos usan 'module.exports = router', por lo que también necesitamos la importación adaptativa.
-const authRoutes = await importModule('./routes/authRoutes.js'); 
-const userRoutes = await importModule('./routes/userRoutes.js'); 
-const ordersRoutes = await importModule('./routes/ordersRoutes.js'); 
-const autobotRoutes = await importModule('./routes/autobotRoutes.js'); 
-const configRoutes = await importModule('./routes/configRoutes.js'); 
-const balanceRoutes = await importModule('./routes/balanceRoutes.js'); 
-const analyticsRoutes = await importModule('./routes/analyticsRoutes.js'); 
-
-// --- MIDDLEWARE ---
-const authMiddleware = await importModule('./middleware/authMiddleware.js'); 
-// -------------------------------------------------------------
+// Middleware
+const authMiddleware = require('./middleware/authMiddleware');
 
 dotenv.config();
 
@@ -79,7 +68,7 @@ bitmartService.initOrderWebSocket(handleOrderUpdate);
 // 🛑 CORRECCIÓN #1: Configuración de CORS para solicitudes HTTP/REST
 const allowedOrigins = [
     'https://bsb-lime.vercel.app', // Dominio de tu Front-end
-    'http://localhost:3000',       // Desarrollo local
+    'http://localhost:3000',        // Desarrollo local
 ];
 
 const corsOptions = {
@@ -105,10 +94,7 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/autobot', autobotRoutes);
 app.use('/api/v1/config', configRoutes);
-
-// 🎯 LÍNEA CORREGIDA: Cambiamos la base de /api/v1/balances a /api/v1/bot-state
-// Endpoint resultante: /api/v1/bot-state/balances
-app.use('/api/v1/bot-state', balanceRoutes); 
+app.use('/api/v1/bot-state', balanceRoutes);
 
 // 💡 NUEVAS RUTAS DE ANALÍTICAS
 app.use('/api/v1/analytics', analyticsRoutes); 
@@ -305,27 +291,27 @@ setInterval(async () => {
 // ** NUEVO BUCLE PARA ÓRDENES ABIERTAS (POLLING) **
 // CRÍTICO para sincronizar el estado inicial y como fallback
 setInterval(async () => {
-    try {
-        // Asumimos que el símbolo principal es 'BTC_USDT'
-        const symbol = 'BTC_USDT'; 
-        // Esta función debe existir en bitmartService.js y retornar [orden1, orden2, ...]
-        const openOrders = await bitmartService.getOpenOrders(symbol); 
-        
-        if (openOrders) {
-//          console.log(`[Polling] ${openOrders.length} Órdenes abiertas encontradas. Emitiendo.`);
-            // Usamos el mismo evento que el WebSocket para un manejo consistente en el frontend
-            io.sockets.emit('open-orders-update', openOrders); 
-        }
-        
-    } catch (error) {
-        // Evitamos que un error de polling detenga el servidor
-        console.error('Error al consultar órdenes abiertas por polling:', error.message);
-        // Opcional: Emitir un log de error al frontend
-        io.sockets.emit('bot-log', {
-            type: 'error',
-            message: `Error al sincronizar órdenes abiertas: ${error.message.substring(0, 50)}...`
-        });
-    }
+    try {
+        // Asumimos que el símbolo principal es 'BTC_USDT'
+        const symbol = 'BTC_USDT'; 
+        // Esta función debe existir en bitmartService.js y retornar [orden1, orden2, ...]
+        const openOrders = await bitmartService.getOpenOrders(symbol); 
+        
+        if (openOrders) {
+//            console.log(`[Polling] ${openOrders.length} Órdenes abiertas encontradas. Emitiendo.`);
+            // Usamos el mismo evento que el WebSocket para un manejo consistente en el frontend
+            io.sockets.emit('open-orders-update', openOrders); 
+        }
+        
+    } catch (error) {
+        // Evitamos que un error de polling detenga el servidor
+        console.error('Error al consultar órdenes abiertas por polling:', error.message);
+        // Opcional: Emitir un log de error al frontend
+        io.sockets.emit('bot-log', {
+            type: 'error',
+            message: `Error al sincronizar órdenes abiertas: ${error.message.substring(0, 50)}...`
+        });
+    }
 
 }, 5000); // Consultamos cada 5 segundos
 

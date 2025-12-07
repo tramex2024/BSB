@@ -1,6 +1,6 @@
 // models/Autobot.js (FINALIZADO - Soporte Long y Short Completo)
 
-import mongoose from 'mongoose'; // Usar import
+const mongoose = require('mongoose');
 
 // =========================================================================
 // ESQUEMA DE DATOS DE ESTRATEGIA (ÚNICO para Long y Short)
@@ -87,6 +87,4 @@ const autobotSchema = new mongoose.Schema({
     lastUpdateTime: { type: Date, default: Date.now }
 });
 
-// Exportación por defecto obligatoria para que funcione el import en server.js
-const Autobot = mongoose.model('Autobot', AutobotSchema);
-export default Autobot;
+module.exports = mongoose.model('Autobot', autobotSchema);
