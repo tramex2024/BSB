@@ -40,10 +40,15 @@ function initOrderWebSocket(updateCallback) {
             
             // 💡 Filtramos solo los mensajes de actualización de órdenes
             if (message.event === 'update' && message.topic.startsWith('spot/user/order')) {
-                const orders = message.data; // Asume que 'message.data' es el array de órdenes
+                const orders = message.data; 
 
-                // 🛑 CORRECCIÓN Y MEJORA: Filtramos en el backend para enviar solo órdenes ABIERTAS
-                // (incluyendo el estado PENDING) para la tabla de órdenes abiertas.
+                // 🛑 NUEVO LOG DE DEBUG: Imprimimos la data COMPLETA ANTES de filtrar
+                console.log('\n======================================================');
+                console.log(`${LOG_PREFIX} 🛑 DATA CRUDA RECIBIDA DE BITMART (Antes de filtrar):`);
+                console.log(JSON.stringify(orders, null, 2));
+                console.log('======================================================\n');
+                
+                // 🛑 Filtramos en el backend para enviar solo órdenes ABIERTAS
                 const openOrders = Array.isArray(orders) ? orders.filter(order => {
                     // Normalizamos el estado para la verificación
                     const state = String(order.state || order.status || '').toLowerCase().replace(/_/g, ' ');
@@ -52,13 +57,13 @@ function initOrderWebSocket(updateCallback) {
                     const isOpen = state.includes('new') || 
                                    state.includes('partial') || 
                                    state.includes('open') || 
-                                   state.includes('pending'); // <--- ¡Esta es la adición clave!
+                                   state.includes('pending'); // <--- Aún incluimos 'pending' por si acaso
 
                     return isOpen;
                 }) : [];
 
 
-                console.log(`${LOG_PREFIX} Órdenes abiertas filtradas recibidas: ${openOrders.length}`);
+                console.log(`${LOG_PREFIX} Órdenes abiertas filtradas enviadas al frontend: ${openOrders.length}`);
                 updateCallback(openOrders); // Enviamos solo las órdenes abiertas filtradas.
             }
             
