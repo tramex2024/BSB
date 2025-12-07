@@ -5,36 +5,45 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import http from 'http';
-import { Server } from "socket.io"; // Importación correcta para Socket.IO en ESM
+import { Server } from "socket.io"; 
 
-import WebSocket from 'ws'; // Importación de 'ws'
-import jwt from 'jsonwebtoken'; // Importación de 'jwt'
+import WebSocket from 'ws'; 
+import jwt from 'jsonwebtoken'; 
 
-// Servicios y Lógica del Bot
-import bitmartService from './services/bitmartService.js'; // AÑADIR .js si son archivos locales
-import autobotLogic from './autobotLogic.js'; // AÑADIR .js
-import checkTimeSync from './services/check_time.js'; // AÑADIR .js
+// --- Funciones Auxiliares para Importación Adaptativa ---
+// Esta función maneja módulos que pueden ser ES Modules (export default)
+// o CommonJS (module.exports = obj).
+const importModule = async (path) => {
+    const module = await import(path);
+    return module.default || module;
+};
 
-// Importa las funciones de cálculo
-import { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } from './autobotCalculations.js'; // AÑADIR .js
+// --- SERVICIOS Y LÓGICA DEL BOT ---
+const bitmartService = await importModule('./services/bitmartService.js');
+const autobotLogic = await importModule('./autobotLogic.js');
+const checkTimeSync = await importModule('./services/check_time.js');
 
-// Modelos
-import * as OrderModule from './models/Order.js'; 
-import * as AutobotModule from './models/Autobot.js'; 
-const Order = OrderModule.default || OrderModule;
-const Autobot = AutobotModule.default || AutobotModule;
+// Importa las funciones de cálculo (estas sí pueden ser Named Imports si el archivo usa 'export const')
+import { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } from './autobotCalculations.js'; 
 
-// Routers
-import authRoutes from './routes/authRoutes.js'; // AÑADIR .js
-import userRoutes from './routes/userRoutes.js'; // AÑADIR .js
-import ordersRoutes from './routes/ordersRoutes.js'; // AÑADIR .js
-import autobotRoutes from './routes/autobotRoutes.js'; // AÑADIR .js
-import configRoutes from './routes/configRoutes.js'; // AÑADIR .js
-import balanceRoutes from './routes/balanceRoutes.js'; // AÑADIR .js
-import analyticsRoutes from './routes/analyticsRoutes.js'; // AÑADIR .js
+// --- MODELOS ---
+// Estos archivos usan 'module.exports = Modelo', por lo que necesitamos la importación adaptativa.
+const Order = await importModule('./models/Order.js'); 
+const Autobot = await importModule('./models/Autobot.js'); 
 
-// Middleware
-import authMiddleware from './middleware/authMiddleware.js'; // AÑADIR .js
+// --- ROUTERS ---
+// Estos archivos usan 'module.exports = router', por lo que también necesitamos la importación adaptativa.
+const authRoutes = await importModule('./routes/authRoutes.js'); 
+const userRoutes = await importModule('./routes/userRoutes.js'); 
+const ordersRoutes = await importModule('./routes/ordersRoutes.js'); 
+const autobotRoutes = await importModule('./routes/autobotRoutes.js'); 
+const configRoutes = await importModule('./routes/configRoutes.js'); 
+const balanceRoutes = await importModule('./routes/balanceRoutes.js'); 
+const analyticsRoutes = await importModule('./routes/analyticsRoutes.js'); 
+
+// --- MIDDLEWARE ---
+const authMiddleware = await importModule('./middleware/authMiddleware.js'); 
+// -------------------------------------------------------------
 
 dotenv.config();
 
