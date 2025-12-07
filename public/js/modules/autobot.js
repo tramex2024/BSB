@@ -309,6 +309,4 @@ export async function initializeAutobotView() {
         updateOpenOrdersTable(ordersData); 
     });
 
-    // 7. Configura los intervalos de actualización
-    // 🛑 NO SE REQUIERE NINGÚN INTERVALO PARA BALANCES O ÓRDENES.
 }
