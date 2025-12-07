@@ -19,8 +19,10 @@ import checkTimeSync from './services/check_time.js'; // AÑADIR .js
 import { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } from './autobotCalculations.js'; // AÑADIR .js
 
 // Modelos
-import Order from './models/Order.js'; // AÑADIR .js
-import Autobot from './models/Autobot.js'; // AÑADIR .js
+import * as OrderModule from './models/Order.js'; 
+import * as AutobotModule from './models/Autobot.js'; 
+const Order = OrderModule.default || OrderModule;
+const Autobot = AutobotModule.default || AutobotModule;
 
 // Routers
 import authRoutes from './routes/authRoutes.js'; // AÑADIR .js
