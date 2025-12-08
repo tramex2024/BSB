@@ -1,72 +1,53 @@
-// BSB/server/src/managers/longDataManager.js (CORREGIDO)
+// BSB/server/src/managers/longDataManager.js
 
 const Autobot = require('../../models/Autobot');
-// Importar solo el handler del estado LSelling
-const { handleSuccessfulSell: LSellingHandler } = require('../states/long/LSelling');
-const { saveExecutedOrder } = require('../../services/orderPersistenceService'); // 💡 NUEVA IMPORTACIÓN
+// 🛑 IMPORTACIÓN DE LSellingHandler ELIMINADA. La lógica se mueve aquí.
+const { saveExecutedOrder } = require('../../services/orderPersistenceService');
+// Nuevas importaciones necesarias para la función movida
+const { logSuccessfulCycle } = require('../../services/cycleLogService');
+
+const LSTATE = 'long';
+const SELL_FEE_PERCENT = 0.001; // 0.1% (Constante movida de LSelling.js)
 
 /**
  * Maneja una compra exitosa (total o parcial) y actualiza la posición (PPC, AC, AI).
  */
 async function handleSuccessfulBuy(botState, orderDetails, log) {
-    
     // --- 1. EXTRACCIÓN Y CÁLCULO DE COSTO REAL ---
-    
-    const executedQty = parseFloat(orderDetails.filledSize || 0);  
-    // Usamos priceAvg si está disponible, sino price. Este es el precio por unidad.
-    const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0); 
-    
-    // Costo base de la compra: (Cantidad Ejecutada * Precio de Ejecución)
+    // ... (Cuerpo de handleSuccessfulBuy se mantiene IDÉNTICO)
+    const executedQty = parseFloat(orderDetails.filledSize || 0);
+    const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedCost = executedQty * executedPrice;
-
-    // Asumimos que el fee (comisión) es pagado en USDT y se RESTA del capital o es un costo adicional.
-    const executedFee = parseFloat(orderDetails.fee || 0); 
-    
-    // 🛑 ARREGLO CRÍTICO: El costo total real es el costo base + la comisión.
-    // Esto es el 'notional' si estuviera presente, pero calculado robustamente.
-    // Usamos el notional de la API (si es fiable) o nuestro cálculo.
+    const executedFee = parseFloat(orderDetails.fee || 0);
     const executedNotional = parseFloat(orderDetails.notional || 0);
-
-    // Priorizamos el notional de la API si es > 0, sino usamos el calculado.
     const actualExecutedCost = (executedNotional > 0 ? executedNotional : baseExecutedCost) + executedFee;
-    
+
     if (executedQty <= 0 || executedPrice <= 0) {
         log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución, precio o costo cero. Limpiando lastOrder.', 'error');
         await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
-        return;   
+        return;
     }
 
     // --- 2. CÁLCULO DEL NUEVO PRECIO PROMEDIO DE COMPRA (PPC) y AC ---
-
-    const isFirstOrder = (botState.lStateData.orderCountInCycle || 0) === 0;  
-    
-    // Si es la primera orden, inicializar a 0 para evitar residuos
-    const currentTotalQty = isFirstOrder ? 0 : parseFloat(botState.lStateData.ac || 0);    
-    const currentAI = isFirstOrder ? 0 : parseFloat(botState.lStateData.ai || 0); 
-
-    // Nuevas cantidades acumuladas
+    const isFirstOrder = (botState.lStateData.orderCountInCycle || 0) === 0;
+    const currentTotalQty = isFirstOrder ? 0 : parseFloat(botState.lStateData.ac || 0);
+    const currentAI = isFirstOrder ? 0 : parseFloat(botState.lStateData.ai || 0);
     const newTotalQty = currentTotalQty + executedQty;
-    const newAI = currentAI + actualExecutedCost; // USO DEL COSTO REAL DE LA ORDEN
+    const newAI = currentAI + actualExecutedCost;
 
-    let newPPC = 0;    
-    
+    let newPPC = 0;
+
     if (newTotalQty > 0) {
-        // ✅ ARREGLO PPC: PPC es siempre la Inversión Acumulada entre la Cantidad Acumulada.
         newPPC = newAI / newTotalQty;
-        // Si hay una anomalía, prevenimos errores de división por cero
-        if (isNaN(newPPC) || newPPC === Infinity) newPPC = currentAI;    
+        if (isNaN(newPPC) || newPPC === Infinity) newPPC = currentAI;
     }
 
     // --- 3. GESTIÓN DEL CAPITAL RESTANTE (LBalance y Refund) ---
-
-    // El monto que el bot INTENTÓ bloquear (usado para calcular el reembolso si la orden es parcial)
-    const intendedUsdtCostBlocked = parseFloat(botState.lStateData.lastOrder?.usdt_cost_real || 0);  
-
-    // El monto a reembolsar es el bloqueo inicial menos el costo real ejecutado
-    const refundAmount = intendedUsdtCostBlocked - actualExecutedCost;    
+    const intendedUsdtCostBlocked = parseFloat(botState.lStateData.lastOrder?.usdt_cost_real || 0);
+    const refundAmount = intendedUsdtCostBlocked - actualExecutedCost;
     let finalLBalance = parseFloat(botState.lbalance || 0);
 
-    if (refundAmount > 0.01) {    
+    if (refundAmount > 0.01) {
         finalLBalance = finalLBalance + refundAmount;
         log(`Devolviendo ${refundAmount.toFixed(2)} USDT al LBalance. Nuevo balance: ${finalLBalance.toFixed(2)} USDT.`, 'info');
     }
@@ -75,70 +56,169 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     // 💡 CÁLCULO DE TARGETS DE COBERTURA Y VENTA
     // ------------------------------------------------------------------------
     const { price_var, size_var, purchaseUsdt, profit_percent } = botState.config.long;
-    
+
     const coveragePercentage = price_var / 100;
-    // Usamos el precio ejecutado para calcular el siguiente nivel de cobertura
-    const newNextCoveragePrice = executedPrice * (1 - coveragePercentage); 
-    
+    const newNextCoveragePrice = executedPrice * (1 - coveragePercentage);
+
     const lastOrderUsdtAmount = parseFloat(botState.lStateData.lastOrder?.usdt_amount || purchaseUsdt);
     const sizeVariation = size_var / 100;
     const newRequiredCoverageAmount = lastOrderUsdtAmount * (1 + sizeVariation);
-    
-    // ✅ Calcular el Precio de Venta (LTPrice) con el PPC corregido
+
     const profitPercentage = profit_percent / 100;
-    const newLTPrice = newPPC * (1 + profitPercentage); 
+    const newLTPrice = newPPC * (1 + profitPercentage);
 
     log(`Targets calculados. Sell Price: ${newLTPrice.toFixed(2)}, Next Price: ${newNextCoveragePrice.toFixed(2)}, Next Amount: ${newRequiredCoverageAmount.toFixed(2)} USDT.`, 'info');
 
     // --- 4. ACTUALIZACIÓN ATÓMICA DE ESTADO EN LA BASE DE DATOS (CRÍTICO) ---
-
-    // Antes de actualizar, guardar la orden histórica
     const SYMBOL = botState.config.symbol || 'BTC_USDT';
     await saveExecutedOrder({ ...orderDetails, symbol: SYMBOL }, 'long');
-    
+
     const atomicUpdate = {
         $set: {
             'lbalance': finalLBalance,
-            'ltprice': newLTPrice,  
-            
-            // Actualización de LStateData con los nuevos valores promediados:
+            'ltprice': newLTPrice,
             'lStateData.ac': newTotalQty,
-            'lStateData.ai': newAI,    
-            'lStateData.ppc': newPPC, // Este es el valor clave corregido
-
+            'lStateData.ai': newAI,
+            'lStateData.ppc': newPPC,
             'lStateData.lastExecutionPrice': executedPrice,
-            'lStateData.nextCoveragePrice': newNextCoveragePrice,    
+            'lStateData.nextCoveragePrice': newNextCoveragePrice,
             'lStateData.requiredCoverageAmount': newRequiredCoverageAmount,
-            'lStateData.lastOrder': null,    
+            'lStateData.lastOrder': null,
             'lStateData.lNOrderMax': (botState.lStateData.lNOrderMax || 0) + 1,
-            
-            // Iniciar el ciclo solo si era la primera orden
-            ...(isFirstOrder && {    
-                'lStateData.cycleStartTime': new Date()    
-            }),        
+            ...(isFirstOrder && {
+                'lStateData.cycleStartTime': new Date()
+            }),
         },
         $inc: {
-            'lStateData.orderCountInCycle': 1,    
-            // Incrementamos el contador de ciclo global (lcycle) si es la primera orden
-            ...(isFirstOrder && { 'lcycle': 1 }),    
+            'lStateData.orderCountInCycle': 1,
+            ...(isFirstOrder && { 'lcycle': 1 }),
         }
     };
-    
-    await Autobot.findOneAndUpdate({}, atomicUpdate);    
+
+    await Autobot.findOneAndUpdate({}, atomicUpdate);
 
     log(`[LONG] Transición completa. Nuevo PPC: ${newPPC.toFixed(2)}, Qty Total (AC): ${newTotalQty.toFixed(8)}.`, 'success');
 }
 
+// =========================================================================
+// FUNCIÓN HANDLER: LÓGICA DE RECUPERACIÓN DE CAPITAL Y CIERRE DE CICLO (MOVIDA DE LSelling.js)
+// =========================================================================
+
 /**
- * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
- * Delega la lógica de cálculo de ganancia y reseteo a LSelling.js (el estado).
- */
-async function handleSuccessfulSell(botStateObj, orderDetails, dependencies, log) {
-    // LSellingHandler ya está importado en la parte superior.
-    await LSellingHandler(botStateObj, orderDetails, dependencies);
+ * Lógica para manejar una orden de venta exitosa (cierre de ciclo Long).
+ * @param {object} botStateObj - Estado del bot antes de la venta.
+ * @param {object} orderDetails - Detalles de la orden de BitMart completada.
+ * @param {object} dependencies - Dependencias inyectadas (incluye config, log, updateGeneralBotState, etc.).
+ */
+async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
+	// Aseguramos la extracción de todas las dependencias necesarias
+	const { config, log, updateBotState, updateLStateData, updateGeneralBotState } = dependencies;
+	
+	try {
+		// 1. CÁLCULO DE CAPITAL Y GANANCIA
+		const { ac: totalBtcSold } = botStateObj.lStateData;
+        const totalUsdtSpent = botStateObj.lStateData.ai;
+		
+		const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
+		const filledSize = parseFloat(orderDetails.filled_volume || orderDetails.amount || totalBtcSold || 0);
+		
+		const totalUsdtRecoveredBRUTO = filledSize * sellPrice;
+        const sellFeeUsdt = totalUsdtRecoveredBRUTO * SELL_FEE_PERCENT;    
+        const totalUsdtRecoveredNETO = totalUsdtRecoveredBRUTO - sellFeeUsdt;
+        const profitNETO = totalUsdtRecoveredNETO - totalUsdtSpent;
+        	
+        // ------------------------------------------------------------------------
+        // 💡 MODIFICACIÓN: PERSISTENCIA HISTÓRICA DE LA ORDEN DE VENTA (Reforzada)
+        // ------------------------------------------------------------------------
+        const SYMBOL = config.symbol || 'BTC_USDT';
+        const orderToSave = {
+            ...orderDetails,
+            orderTime: new Date(orderDetails.createTime || orderDetails.orderTime || Date.now()),
+            symbol: orderDetails.symbol || SYMBOL,
+            type: orderDetails.type || 'MARKET',
+            side: 'sell' // Asegurar el lado
+        };
+
+        const savedOrder = await saveExecutedOrder(orderToSave, LSTATE);
+        if (savedOrder) {
+            log(`Orden de VENTA Long ID ${orderDetails.orderId || 'ASUMIDA'} guardada en el historial de Órdenes.`, 'debug');
+        }
+
+        // ========================================================================
+		// 🟢 BLOQUE: REGISTRO HISTÓRICO DEL CICLO DE TRADING
+		// ========================================================================
+		const cycleEndTime = new Date();
+		const cycleStartTime = botStateObj.lStateData.cycleStartTime;
+		let durationHours = null;
+
+		if (cycleStartTime) {
+			const durationMs = cycleEndTime.getTime() - cycleStartTime.getTime();
+			durationHours = durationMs / (1000 * 60 * 60);
+
+			const cycleData = {
+				strategy: 'Long', cycleIndex: (botStateObj.lcycle || 0) + 1, symbol: config.symbol,
+				startTime: cycleStartTime, endTime: cycleEndTime, durationHours: durationHours,
+				initialInvestment: totalUsdtSpent, finalRecovery: totalUsdtRecoveredNETO,
+				netProfit: profitNETO, profitPercentage: (profitNETO / totalUsdtSpent) * 100,
+				averagePPC: botStateObj.lStateData.ppc, finalSellPrice: sellPrice,
+				orderCount: botStateObj.lStateData.orderCountInCycle, autobotId: botStateObj._id    
+			};
+
+			const savedCycle = await logSuccessfulCycle(cycleData);
+			if (savedCycle) {
+				log(`Resumen del ciclo Long ${cycleData.cycleIndex} guardado. Ganancia: ${profitNETO.toFixed(2)} USDT.`, 'success');
+			} else {
+				log(`ADVERTENCIA: Falló el registro del ciclo ${cycleData.cycleIndex} en la DB.`, 'warning');
+			}
+		} else {
+			log('ADVERTENCIA: cycleStartTime faltante. No se pudo registrar el ciclo en el historial.', 'warning');
+		}
+		// ========================================================================
+		// 🟢 FIN DEL BLOQUE DE REGISTRO
+		// ========================================================================
+
+		// 2. RECUPERACIÓN DE CAPITAL OPERATIVO Y GANANCIA
+		const newLBalance = botStateObj.lbalance + totalUsdtRecoveredNETO;
+		
+		await updateGeneralBotState({
+			lbalance: newLBalance,
+			total_profit: (botStateObj.total_profit || 0) + profitNETO,
+			ltprice: 0, lsprice: 0, lcoverage: 0, lnorder: 0,
+			lcycle: (botStateObj.lcycle || 0) + 1
+		});
+
+		log(`Cierre de Ciclo Long Exitoso! Ganancia NETA: ${profitNETO.toFixed(2)} USDT.`, 'success');
+
+		// 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
+		const resetLStateData = {
+			ac: 0, ppc: 0, ai: 0, orderCountInCycle: 0, lastOrder: null, pm: 0, pc: 0, pv: 0,
+            lastExecutionPrice: 0, nextCoveragePrice: 0, requiredCoverageAmount: 0,
+            cycleStartTime: null
+		}
+		await updateLStateData(resetLStateData);
+
+		// 4. TRANSICIÓN DE ESTADO
+        if (config.long.stopAtCycle) {
+            log('Configuración: stopAtCycle activado. Bot Long se detendrá.', 'info');
+            await updateBotState('STOPPED', LSTATE);
+        } else {
+            log('Configuración: stopAtCycle desactivado. Transicionando a BUYING para iniciar la nueva compra.', 'info');
+            await updateBotState('BUYING', LSTATE);
+        }
+
+	} catch (error) {
+        // ... (Error de persistencia)
+        log(`CRITICAL PERSISTENCE ERROR: Falló el reseteo del estado tras venta exitosa/asumida. Causa: ${error.message}`, 'error');
+		log('Intentando limpieza de lastOrder y permitiendo reintento en el próximo ciclo.', 'warning');
+		try {
+			await updateLStateData({ 'lastOrder': null });
+		} catch (dbError) {
+			 log(`FALLA DE RECUPERACIÓN: No se pudo limpiar lastOrder. Revise la conexión/estado de la DB.`, 'error');
+		}
+	}
 }
 
 module.exports = {
-    handleSuccessfulBuy,
-    handleSuccessfulSell
+    handleSuccessfulBuy,
+    handleSuccessfulSell
 };
