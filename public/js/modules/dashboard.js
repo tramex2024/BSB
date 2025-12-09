@@ -1,7 +1,6 @@
-// public/js/modules/dashboard.js (Actualizado para el nuevo flujo de Balance/WS)
+// BSB/public/js/modules/dashboard.js (CORREGIDO)
 
-// 🛑 ELIMINADA LA IMPORTACIÓN DE getBalances (Ya no se hace polling)
-import { checkBitMartConnectionAndData } from './network.js';
+// 🛑 ELIMINADA LA IMPORTACIÓN DE checkBitMartConnectionAndData
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
 import { intervals, SOCKET_SERVER_URL } from '../main.js'; // Necesitas importar 'io' si lo usas aquí
@@ -120,9 +119,7 @@ export function initializeDashboardView() {
     console.log("Inicializando vista del Dashboard...");
     
     // 1. Cargar datos básicos y establecer intervalo para balances (MENOS CRÍTICOS)
-    // 🛑 ELIMINADAS: getBalances() y el setInterval. Ahora todo es por WebSocket.
-    // Solo dejamos la comprobación de conexión/datos que puede ser una llamada REST inicial si es necesario.
-    checkBitMartConnectionAndData(); 
+    // 🛑 LINEA ELIMINADA: checkBitMartConnectionAndData(); 
 
     // 2. Establecer los listeners de Socket.IO para las actualizaciones en tiempo real
     setupSocketListeners(); 
@@ -141,7 +138,7 @@ async function loadAndDisplayKpis() {
     // Aquí es donde se llama a la función importada
     const kpis = await fetchCycleKpis();
     
-    // 🛑 AÑADIR ESTE LOG CRÍTICO
+    // 🛑 Log para verificar si los datos llegan:
     console.log("Datos KPI recibidos:", kpis); 
     console.log("Tipo de totalCycles:", typeof kpis.totalCycles, "Valor:", kpis.totalCycles);
 
@@ -149,18 +146,21 @@ async function loadAndDisplayKpis() {
     const profitPercentageElement = document.getElementById('cycle-avg-profit'); 
     const totalCyclesElement = document.getElementById('total-cycles-closed'); 
 
+    // Asumimos que kpis es un objeto { averageProfitPercentage, totalCycles }
+    const totalCycles = kpis.totalCycles || 0;
+    const avgProfit = kpis.averageProfitPercentage || 0;
+
     if (profitPercentageElement) {
         // Muestra el rendimiento promedio redondeado con el símbolo %
-        // Se asume que kpis.averageProfitPercentage es un número (ej. 0.85)
-        profitPercentageElement.textContent = `${kpis.averageProfitPercentage.toFixed(2)} %`;
+        profitPercentageElement.textContent = `${avgProfit.toFixed(2)} %`;
     }
     
     if (totalCyclesElement) {
         // Muestra el número total de ciclos
-        totalCyclesElement.textContent = kpis.totalCycles;
+        totalCyclesElement.textContent = totalCycles;
     }
 
-    console.log(`KPIs de ciclos cargados. Rendimiento promedio: ${kpis.averageProfitPercentage}%.`);
+    console.log(`KPIs de ciclos cargados. Rendimiento promedio: ${avgProfit}%.`);
 }
 
 /**

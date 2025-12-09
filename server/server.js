@@ -94,7 +94,7 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/autobot', autobotRoutes);
 app.use('/api/v1/config', configRoutes);
-app.use('/api/v1/bot-state', balanceRoutes);
+app.use('/api/v1/bot-state', balanceRoutes);   // cambiar /api/v1/bot-state por /api/v1/balances
 
 // 💡 NUEVAS RUTAS DE ANALÍTICAS
 app.use('/api/v1/analytics', analyticsRoutes); 
