@@ -18,7 +18,7 @@ async function run(dependencies) {
     const SYMBOL = String(config.symbol || 'BTC_USDT');
     const lStateData = botState.lStateData;
 
-    log("Estado Long: BUYING. Verificando el estado de la última orden de compra o gestionando targets...", 'info');
+    //log("Estado Long: BUYING. Verificando el estado de la última orden de compra o gestionando targets...", 'info');
 
     // =================================================================
     // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
@@ -187,11 +187,11 @@ async function run(dependencies) {
     // 3C. Transición por defecto o Log final (Permanece en BUYING)
     
     if (!lStateData.lastOrder && lStateData.ppc > 0) {
-        log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}. Esperando que el precio caiga o suba.`, 'debug');
+        log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
         return; // Permanece en el estado BUYING
     }
 
-    log(`Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
+    log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
 }
 
 module.exports = { run };
