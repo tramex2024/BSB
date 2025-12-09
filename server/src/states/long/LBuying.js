@@ -187,11 +187,11 @@ async function run(dependencies) {
     // 3C. Transición por defecto o Log final (Permanece en BUYING)
     
     if (!lStateData.lastOrder && lStateData.ppc > 0) {
-        log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
+        log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}`, 'debug');
         return; // Permanece en el estado BUYING
     }
 
-    log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
+    log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}`, 'debug');
 }
 
 module.exports = { run };

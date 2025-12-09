@@ -141,6 +141,10 @@ async function loadAndDisplayKpis() {
     // Aquí es donde se llama a la función importada
     const kpis = await fetchCycleKpis();
     
+    // 🛑 AÑADIR ESTE LOG CRÍTICO
+    console.log("Datos KPI recibidos:", kpis); 
+    console.log("Tipo de totalCycles:", typeof kpis.totalCycles, "Valor:", kpis.totalCycles);
+
     // Los IDs ya se adaptaron en el HTML previamente:
     const profitPercentageElement = document.getElementById('cycle-avg-profit'); 
     const totalCyclesElement = document.getElementById('total-cycles-closed'); 
