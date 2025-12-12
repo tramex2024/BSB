@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LBuying.js (CORREGIDO)
+// BSB/server/src/states/long/LBuying.js (REFACTORIZADO PARA USAR CONSOLIDATOR)
 
 const { calculateLongTargets } = require('../../../autobotCalculations');
 const { parseNumber } = require('../../../utils/helpers'); 
@@ -12,23 +12,28 @@ async function run(dependencies) {
         botState, currentPrice, config, log,
         updateBotState, updateLStateData, updateGeneralBotState,
         getBotState, 
-        availableUSDT // ✅ BALANCE REAL DEL EXCHANGE
+        availableUSDT // ✅ BALANCE REAL DEL EXCHANGE
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
     const lStateData = botState.lStateData;
 
+    //log("Estado Long: BUYING. Verificando el estado de la última orden de compra o gestionando targets...", 'info');
+
     // =================================================================
     // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
     // =================================================================
-    // La condición lStateData.ppc === 0 y !lStateData.lastOrder define la entrada al ciclo.
-    if (lStateData.ppc === 0 && !lStateData.lastOrder) {
+    if (lStateData.ppc === 0 && lStateData.orderCountInCycle === 0 && !lStateData.lastOrder) {
         log("Estado de posición inicial detectado. Iniciando lógica de primera compra (Integrada)...", 'warning');
 
-        // 🛑 [Líneas 47-50 ELIMINADAS] - El chequeo de orderCountInCycle > 0 es redundante aquí.
+        // 💡 1. RED DE SEGURIDAD 
+        if (lStateData.orderCountInCycle > 0) {
+            log('Red de seguridad activada: orderCountInCycle ya es > 0, cancelando compra duplicada.', 'warning');
+            return; 
+        }
 
         const purchaseAmount = parseFloat(config.long.purchaseUsdt);
-        const MIN_USDT_VALUE_FOR_BITMART = 5.00;  // Mejor usar la constante importada si existe
+        const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
         
         const currentLBalance = parseFloat(botState.lbalance || 0);
 
@@ -39,6 +44,7 @@ async function run(dependencies) {
             log("Verificaciones de fondos y límite aprobadas. Colocando la primera orden...", 'info');
 
             // 🎯 Coloca la orden, actualiza lastOrder y descuenta lbalance.
+            // 🛑 CORRECCIÓN CRÍTICA: Se añadieron botState y updateGeneralBotState a la llamada
             await placeFirstBuyOrder(config, botState, log, updateBotState, updateGeneralBotState); 
             
             log("Primera orden colocada exitosamente. Esperando al próximo ciclo para monitorear.", 'success');
@@ -67,57 +73,65 @@ async function run(dependencies) {
     );
     
     if (orderIsPendingOrProcessed) {
-        // El consolidator maneja el flujo de estado. Salimos del ciclo 'run'.
+        // Si el consolidator encuentra una orden (pendiente, fallida o exitosa), 
+        // él maneja el flujo de estado (RUNNING, BUYING, etc.). Salimos del ciclo 'run'.
         return; 
     }
     
+    // Si no hay orden pendiente (lastOrder es null), procedemos a calcular los targets.
+    
     // =================================================================
-    // === [ 2. GESTIÓN DE TARGETS: SOLO LOG Y CHEQUEO ] =================
+    // === [ 2. CÁLCULO Y GESTIÓN DE TARGETS ] ===========================
     // =================================================================
-    // 🛑 CORRECCIÓN DE EFICIENCIA: Si el PPC > 0, los targets ya fueron calculados
-    // y actualizados por LongDataManager.js después de la consolidación.
-    // Solo necesitamos loguearlos.
-    
-    if (lStateData.ppc > 0) { 
+    if (!lStateData.lastOrder && lStateData.ppc > 0) { 
+    //    log("Calculando objetivos iniciales (Venta/Cobertura) y Límite de Cobertura...", 'info');
+    
+        const { 
+            targetSellPrice, 
+            nextCoveragePrice, 
+            requiredCoverageAmount, 
+            lCoveragePrice,      
+            lNOrderMax           
+        } = calculateLongTargets(
+            lStateData.ppc, 
+            config.long.profit_percent, 
+            config.long.price_var, 
+            config.long.size_var,
+            config.long.purchaseUsdt,
+            lStateData.orderCountInCycle,
+            botState.lbalance,
+            lStateData.lastExecutionPrice 
+        );
 
-        // Si los targets están vacíos por alguna razón, los re-calculamos como contingencia:
-        if (botState.ltprice === 0 || lStateData.nextCoveragePrice === 0) {
-            log("ADVERTENCIA: Targets están en 0 después de Consolidación. Recalculando targets como contingencia.", 'warning');
+        // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
+        const targetsUpdate = {
+            ltprice: targetSellPrice,
+            lcoverage: lCoveragePrice, 
+            lnorder: lNOrderMax,         
+            // Campos de lStateData
+            'lStateData.requiredCoverageAmount': requiredCoverageAmount,
+            'lStateData.nextCoveragePrice': nextCoveragePrice,
+        };
 
-            const { 
-            targetSellPrice, nextCoveragePrice, requiredCoverageAmount, lCoveragePrice, lNOrderMax            
-            } = calculateLongTargets(
-                lStateData.ppc, config.long.profit_percent, config.long.price_var, config.long.size_var,
-                config.long.purchaseUsdt, lStateData.orderCountInCycle, botState.lbalance,
-                lStateData.lastExecutionPrice 
-            );
+        await updateGeneralBotState(targetsUpdate);
 
-            const targetsUpdate = {
-                ltprice: targetSellPrice, lcoverage: lCoveragePrice, lNOrderMax: lNOrderMax,
-                'lStateData.requiredCoverageAmount': requiredCoverageAmount,
-                'lStateData.nextCoveragePrice': nextCoveragePrice,
-            };
+        // 💡 LUEGO DE ACTUALIZAR LA DB, ACTUALIZAMOS LA REFERENCIA LOCAL
+        lStateData.requiredCoverageAmount = requiredCoverageAmount; 
+        lStateData.nextCoveragePrice = nextCoveragePrice;
 
-            await updateGeneralBotState(targetsUpdate);
-            // Re-hidratamos la referencia local por si el siguiente bloque lo necesita
-            botState.ltprice = targetSellPrice;
-            lStateData.nextCoveragePrice = nextCoveragePrice;
-            lStateData.requiredCoverageAmount = requiredCoverageAmount;
-        }
-
-        // 🟢 LOG RESUMEN DE TARGETS (Usamos los valores ya cargados/recalculados)
+        // 🟢 LOG RESUMEN DE TARGETS
         const logSummary = `
-            Estrategia LONG: Targets activos.
+            Estrategia LONG: Targets y Cobertura actualizados.
             ------------------------------------------
             💰 PPC actual: ${lStateData.ppc.toFixed(2)} USD (AC: ${lStateData.ac.toFixed(8)} BTC).
-            🎯 TP Objetivo (Venta): ${botState.ltprice.toFixed(2)} USD.
-            📉 Proxima Cobertura (DCA): ${lStateData.nextCoveragePrice.toFixed(2)} USD (Monto: ${lStateData.requiredCoverageAmount.toFixed(2)} USDT).
-            🛡️ Cobertura Máxima (L-Coverage): ${botState.lcoverage.toFixed(2)} USD (Órdenes restantes posibles: ${botState.lnorder}).
+            🎯 TP Objetivo (Venta): ${targetSellPrice.toFixed(2)} USD.
+            📉 Proxima Cobertura (DCA): ${nextCoveragePrice.toFixed(2)} USD (Monto: ${requiredCoverageAmount.toFixed(2)} USDT).
+            🛡️ Cobertura Máxima (L-Coverage): ${lCoveragePrice.toFixed(2)} USD (Órdenes restantes posibles: ${lNOrderMax}).
         `.replace(/\s+/g, ' ').trim();
-        log(logSummary, 'debug'); 
+//        log(logSummary, 'warning'); 
 
     } else if (!lStateData.lastOrder && lStateData.ppc === 0) {
-        log("Posición inicial (AC=0). Targets no activos. Esperando señal de entrada.", 'info');
+        log("Posición inicial (AC=0). Targets no calculados. Esperando señal de entrada.", 'info');
     }
 
     // =================================================================
@@ -143,12 +157,12 @@ async function run(dependencies) {
             return; 
         }
 
-        // 🛑 [Verificación de Balance Real y Asignado]
+        // 🛑 [FIX CRÍTICO: Balance Real]
+        // Ahora verificamos: 1. Límite interno (lbalance) y 2. Fondos reales del exchange (availableUSDT)
         if (botState.lbalance >= requiredAmount && availableUSDT >= requiredAmount) {
             log(`[LONG] ¡Precio de COBERTURA alcanzado! Precio actual: ${currentPrice.toFixed(2)} <= ${lStateData.nextCoveragePrice.toFixed(2)}. Colocando orden de compra.`, 'warning');
             
             try {
-                // placeCoverageBuyOrder deduce lbalance y actualiza lastOrder atómicamente.
                 await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState);
                 
             } catch (error) {
@@ -163,7 +177,7 @@ async function run(dependencies) {
             } else {
                 reason = `Fondos reales (Exchange: ${availableUSDT.toFixed(2)} USDT) insuficientes.`;
             }
-            
+            
             log(`Advertencia: Precio de cobertura alcanzado (${lStateData.nextCoveragePrice.toFixed(2)}). ${reason} Transicionando a NO_COVERAGE.`, 'error');
             await updateBotState('NO_COVERAGE', 'long');
             return;
@@ -173,11 +187,11 @@ async function run(dependencies) {
     // 3C. Transición por defecto o Log final (Permanece en BUYING)
     
     if (!lStateData.lastOrder && lStateData.ppc > 0) {
-        // Log ya se hizo arriba, evitamos el log final redundante.
+        log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}`, 'debug');
         return; // Permanece en el estado BUYING
     }
 
-    log(`[L]BUYING: Monitoreando...`, 'debug');
+    log(`[L]BUYING: Monitoreando... Venta: ${botState.ltprice.toFixed(2)}, Cobertura: ${lStateData.nextCoveragePrice.toFixed(2)}`, 'debug');
 }
 
 module.exports = { run };

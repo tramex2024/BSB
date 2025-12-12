@@ -5,71 +5,63 @@ const bitmartService = require('../../services/bitmartService');
 const { MIN_USDT_VALUE_FOR_BITMART, BUY_FEE_PERCENT } = require('../utils/tradeConstants');
 
 /**
- * Coloca la primera orden de compra (o inicial).
- * @param {object} config - Configuración del bot.
- * @param {object} botState - Estado actual del bot (para lbalance).
- * @param {function} log - Función de logging.
- * @param {function} updateBotState - Función para actualizar el estado del bot (lstate/sstate).
- * @param {function} updateGeneralBotState - Función para actualizar campos generales (balance).
- */
+ * Coloca la primera orden de compra (o inicial).
+ */
 async function placeFirstBuyOrder(config, botState, log, updateBotState, updateGeneralBotState) { // 🛑 FIRMA CORREGIDA
-    
-    const { purchaseUsdt } = config.long;
-    const SYMBOL = config.symbol;
-    const amountNominal = parseFloat(purchaseUsdt);
-    
-    // CÁLCULO DEL COSTO REAL: Monto Nominal + Comisión (0.1%)
-    const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
+    
+    const { purchaseUsdt } = config.long;
+    const SYMBOL = config.symbol;
+    const amountNominal = parseFloat(purchaseUsdt);
+    
+    // CÁLCULO DEL COSTO REAL: Monto Nominal + Comisión (0.1%)
+    const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
 
-    // A. Error: Monto menor al mínimo
-    if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
-        await updateBotState('NO_COVERAGE', 'long'); 
-        return;
-    }
-    
-    // 🛑 USAR el botState que se pasó como argumento
-    const currentLBalance = parseFloat(botState.lbalance || 0);
-    const newLBalance = currentLBalance - amountRealCost;
+    // A. Error: Monto menor al mínimo
+    if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
+        log(`Error: La cantidad de compra es menor al mínimo de BitMart ($${MIN_USDT_VALUE_FOR_BITMART}). Cancelando.`, 'error');
+        await updateBotState('NO_COVERAGE', 'long'); 
+        return;
+    }
+    
+    // 🛑 USAR el botState que se pasó como argumento
+    const currentLBalance = parseFloat(botState.lbalance || 0);
+    const newLBalance = currentLBalance - amountRealCost;
 
-    log(`Colocando la primera orden de compra a mercado por ${amountNominal.toFixed(2)} USDT (Costo real: ${amountRealCost.toFixed(2)} USDT).`, 'info'); 
+    log(`Colocando la primera orden de compra a mercado por ${amountNominal.toFixed(2)} USDT (Costo real: ${amountRealCost.toFixed(2)} USDT).`, 'info'); 
 
-    try {
-        const orderResult = await bitmartService.placeOrder(
-            SYMBOL, 
-            'buy', 
-            'market', 
-            amountNominal, // Se envía el monto NOMINAL
-            null 
-        ); 
+    try {
+        const orderResult = await bitmartService.placeOrder(
+            SYMBOL, 
+            'buy', 
+            'market', 
+            amountNominal, // Se envía el monto NOMINAL
+            null 
+        ); 
 
-        const orderId = orderResult.order_id;
-        log(`Orden de compra colocada. ID: ${orderId}. Iniciando bloqueo y monitoreo...`, 'info');
+        const orderId = orderResult.order_id;
+        log(`Orden de compra colocada. ID: ${orderId}. Iniciando bloqueo y monitoreo...`, 'info');
 
-        // --- ACTUALIZACIÓN DE ESTADO Y BALANCE (Persistencia Atómica) ---
-        // 🛑 Lógica de búsqueda de balance eliminada. Usamos el newLBalance calculado.
+        // --- ACTUALIZACIÓN DE ESTADO Y BALANCE (Persistencia Atómica) ---
 
-        // ✅ Actualizar lbalance, lastOrder
-        // Usamos Autobot.findOneAndUpdate directamente ya que es una operación atómica
-        // y evita la carrera con el ciclo principal.
-        await Autobot.findOneAndUpdate({}, {
-            $set: {
-                'lbalance': newLBalance,
-                'lStateData.lastOrder': {
-                    order_id: orderId,
-                    side: 'buy',
-                    usdt_amount: amountNominal,
-                    usdt_cost_real: amountRealCost,
-                }
-            }
-        });
+        // ✅ Actualizar lbalance, lastOrder
+        await Autobot.findOneAndUpdate({}, {
+            $set: {
+                'lbalance': newLBalance,
+                'lStateData.lastOrder': {
+                    order_id: orderId,
+                    side: 'buy',
+                    usdt_amount: amountNominal,
+                    usdt_cost_real: amountRealCost,
+                }
+            }
+        });
 
-        log(`LBalance asignado reducido en ${amountRealCost.toFixed(2)} USDT (costo real). Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
-        
-    } catch (error) {
-        log(`Error CRÍTICO al colocar la primera orden: ${error.message}`, 'error');
-        throw error; // PROPAGAR EL ERROR PARA QUE EL LLAMADOR LO CAPTURE Y DETENGA EL FLUJO
-    }
+        log(`LBalance asignado reducido en ${amountRealCost.toFixed(2)} USDT (costo real). Nuevo balance: ${newLBalance.toFixed(2)} USDT.`, 'info');
+        
+    } catch (error) {
+        log(`Error CRÍTICO al colocar la primera orden: ${error.message}`, 'error');
+        throw error; // PROPAGAR EL ERROR PARA QUE EL LLAMADOR LO CAPTURE Y DETENGA EL FLUJO
+    }
 }
 
 
@@ -96,13 +88,6 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
         await updateBotState('NO_COVERAGE', 'long'); 
         return; // Detiene la ejecución
     }
-    
-    // 🛑 ELIMINAR EL updateGeneralBotState DE LA DEDUCCIÓN DE BALANCE AQUÍ
-    // log(`LBalance asignado reducido en ${amountRealCost.toFixed(2)} USDT ...`);
-
-    // 🛑 ELIMINAR EL BLOQUEO TEMPORAL CRÍTICO (Anti-Carrera) - NO LO NECESITAMOS
-    // Ya que la verificación en LBuying.js ocurre ANTES, y la actualización de lastOrder se hará atómicamente.
-    // log(`¡BLOQUEO TEMPORAL '${tempOrderId}' ACTIVO! Ciclo concurrente bloqueado.`, 'warning');
     
     log(`Colocando orden de cobertura a MERCADO por ${amountNominal.toFixed(2)} USDT.`, 'info');
     
@@ -142,87 +127,85 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
     } catch (error) {
         // --- 5. FALLO DE CONEXIÓN O EXCEPCIÓN ---
         log(`Error de API al colocar la orden de cobertura: ${error.message}`, 'error');
-        // 🛑 Como el balance y el lastOrder NO se tocaron antes del try, NO hay nada que revertir ni limpiar.
         throw error; // PROPAGAR ERROR
     }
 }
 
 /**
- * Coloca una orden de venta a mercado para cerrar el ciclo Long.
- * Implementa el BLOQUEO ATÓMICO: Asigna lStateData.lastOrder después de colocar la orden.
- */
+ * Coloca una orden de venta a mercado para cerrar el ciclo Long.
+ * Implementa el BLOQUEO ATÓMICO: Asigna lStateData.lastOrder después de colocar la orden.
+ */
 async function placeSellOrder(config, botState, sellAmount, log) { 
-    const SYMBOL = config.symbol;
-    const amountToSell = parseFloat(sellAmount);
+    const SYMBOL = config.symbol;
+    const amountToSell = parseFloat(sellAmount);
 
-    log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
-    try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'SELL', 'market', amountToSell); 
+    log(`Colocando orden de venta a mercado por ${sellAmount.toFixed(8)} BTC.`, 'info');
+    try {
+        // 💡 CORRECCIÓN: Cambiar 'SELL' a 'sell' por consistencia con 'buy'
+        const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', amountToSell); 
 
-        if (order && order.order_id) {
-            const currentOrderId = order.order_id;
-            log(`Orden de venta colocada. ID: ${currentOrderId}. Iniciando bloqueo en LSelling...`, 'success');
-            
-            // --- BLOQUEO ATÓMICO CRÍTICO ---
-            // 1. Crear el objeto lastOrder de venta pendiente
-            const sellLastOrder = {
-                order_id: currentOrderId,
-                // price: botState.lStateData.ppc, // Se puede dejar o eliminar
-                size: sellAmount,
-                side: 'sell',
-                state: 'pending_fill' // 🛑 state: 'pending_fill' es crucial para el Consolidator
-            };
-            
-            // 2. Persistir el lastOrder de forma atómica (BLOQUEO)
-            // Esto garantiza que el ciclo 'run' en LSelling.js no se ejecute dos veces en carrera.
-            await Autobot.findOneAndUpdate({}, { 
-                $set: { 'lStateData.lastOrder': sellLastOrder } 
-            });
-            // ------------------------------------
+        if (order && order.order_id) {
+            const currentOrderId = order.order_id;
+            log(`Orden de venta colocada. ID: ${currentOrderId}. Iniciando bloqueo en LSelling...`, 'success');
+            
+            // --- BLOQUEO ATÓMICO CRÍTICO ---
+            // 1. Crear el objeto lastOrder de venta pendiente
+            const sellLastOrder = {
+                order_id: currentOrderId,
+                size: sellAmount,
+                side: 'sell',
+                // 💡 LIMPIEZA: Eliminar state: 'pending_fill'. Solo necesitamos order_id y side.
+            };
+            
+            // 2. Persistir el lastOrder de forma atómica (BLOQUEO)
+            await Autobot.findOneAndUpdate({}, { 
+                $set: { 'lStateData.lastOrder': sellLastOrder } 
+            });
+            // ------------------------------------
 
-        } else { 
-            log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
-            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // PROPAGAR ERROR
-        }
-    } catch (error) { 
-        log(`Error de API al colocar la orden: ${error.message}`, 'error');
-        throw error; // PROPAGAR ERROR
-    }
+        } else { 
+            log(`Error al colocar la orden de venta. Respuesta API: ${JSON.stringify(order)}`, 'error');
+            throw new Error(`Fallo en colocación de orden. ${JSON.stringify(order)}`); // PROPAGAR ERROR
+        }
+    } catch (error) { 
+        log(`Error de API al colocar la orden: ${error.message}`, 'error');
+        throw error; // PROPAGAR ERROR
+    }
 }
 
 /**
- * Cancela la última orden activa del bot (Solo Long).
- */
+ * Cancela la última orden activa del bot (Solo Long).
+ */
 async function cancelActiveLongOrder(botState, log) {
-    if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
-        log("No hay una orden Long para cancelar registrada.", 'info');
-        return;
-    }
+    if (!botState.lStateData.lastOrder || !botState.lStateData.lastOrder.order_id) {
+        log("No hay una orden Long para cancelar registrada.", 'info');
+        return;
+    }
 
-    const SYMBOL = botState.config.symbol;
-    const orderId = botState.lStateData.lastOrder.order_id;
-    
-    try {
-        log(`Intentando cancelar orden Long ID: ${orderId}...`, 'warning');
-        
-        const result = await bitmartService.cancelOrder(SYMBOL, orderId); 
-        
-        if (result && result.code === 1000) {
-            log(`Orden Long ${orderId} cancelada exitosamente.`, 'success');
-        } else {
-            log(`No se pudo cancelar la orden Long ${orderId}. Razón: ${JSON.stringify(result)}`, 'error');
-        }
-        
-        await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
+    const SYMBOL = botState.config.symbol;
+    const orderId = botState.lStateData.lastOrder.order_id;
+    
+    try {
+        log(`Intentando cancelar orden Long ID: ${orderId}...`, 'warning');
+        
+        const result = await bitmartService.cancelOrder(SYMBOL, orderId); 
+        
+        if (result && result.code === 1000) {
+            log(`Orden Long ${orderId} cancelada exitosamente.`, 'success');
+        } else {
+            log(`No se pudo cancelar la orden Long ${orderId}. Razón: ${JSON.stringify(result)}`, 'error');
+        }
+        
+        await Autobot.findOneAndUpdate({}, { $set: { 'lStateData.lastOrder': null } });
 
-    } catch (error) {
-        log(`Error de API al intentar cancelar la orden ${orderId}: ${error.message}`, 'error');
-    }
+    } catch (error) {
+        log(`Error de API al intentar cancelar la orden ${orderId}: ${error.message}`, 'error');
+    }
 }
 
 module.exports = {
-    placeFirstBuyOrder,
-    placeCoverageBuyOrder,
-    placeSellOrder,
-    cancelActiveLongOrder
+    placeFirstBuyOrder,
+    placeCoverageBuyOrder,
+    placeSellOrder,
+    cancelActiveLongOrder
 };
