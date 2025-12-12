@@ -107,8 +107,7 @@ async function run(dependencies) {
 
         // 🟢 LOG RESUMEN DE TARGETS (Usamos los valores ya cargados/recalculados)
         const logSummary = `
-            Estrategia LONG: Targets activos.
-            ------------------------------------------
+            [L] BUYING:            
             💰 PPC actual: ${lStateData.ppc.toFixed(2)} USD (AC: ${lStateData.ac.toFixed(8)} BTC).
             🎯 TP Objetivo (Venta): ${botState.ltprice.toFixed(2)} USD.
             📉 Proxima Cobertura (DCA): ${lStateData.nextCoveragePrice.toFixed(2)} USD (Monto: ${lStateData.requiredCoverageAmount.toFixed(2)} USDT).
