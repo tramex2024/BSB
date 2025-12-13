@@ -17,7 +17,9 @@ exports.getCycleKpis = async (req, res) => {
     // 💡 Ajuste: Usar la estrategia 'Long' y 'Short' si quieres incluirlas, o dejar solo 'Long'
     const strategyFilter = req.query.strategy || 'Long'; 
     const botId = req.user.autobotId; 
-
+    // 🚨 DEBUGGING CRÍTICO: Imprime los valores que usarás en el filtro
+    console.log(`[KPI DEBUG] Bot ID from Token: ${botId}`);
+    console.log(`[KPI DEBUG] Strategy Filter: ${strategyFilter}`);
     if (!botId) {
         // En un entorno de usuario único (single-user), puedes buscar el ID del bot aquí
         // O simplemente asumir que si el middleware authMiddleware funciona, el botId existe.
@@ -53,7 +55,7 @@ exports.getCycleKpis = async (req, res) => {
                 }
             }
         ]);
-
+        console.log(`[KPI DEBUG] Results Count: ${kpis.length}`); // 🚨 Muestra si encuentra algo
         // Aseguramos que el resultado es un array con el objeto KPI, como espera el frontend
         if (kpis.length === 0) {
             // ✅ CORRECCIÓN: Devolver un OBJETO, no un Array.
