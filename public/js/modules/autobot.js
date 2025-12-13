@@ -1,15 +1,13 @@
 // public/js/modules/autobot.js (VERSIÓN FINAL CON VALIDACIÓN DE FONDOS Y FIX CONEXIÓN)
 
-// 🛑 ELIMINADAS: getBalances y fetchAvailableBalancesForValidation ya no se necesitan.
-// Los balances iniciales se cargarán desde la DB del backend (más rápido),
-// y las actualizaciones serán por WebSocket.
 import { initializeChart } from './chart.js';
 // 🛑 CORRECCIÓN: Usar updateOpenOrdersTable importada desde orders.js
 import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOpenOrdersTable } from './orders.js';
-import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals, BACKEND_URL } from '../main.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
-import { ..., socket } from '../main.js'; // Asegúrate de importar 'socket'
+
+// 🛑 ¡CORRECCIÓN CRÍTICA DE SINTAXIS! Se listan todas las importaciones necesarias de main.js, separadas por coma.
+import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals, BACKEND_URL, socket } from '../main.js';
 
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 
@@ -146,7 +144,7 @@ function setupConfigListeners() {
             
             // Añadir un listener 'blur' para re-validar cuando el usuario sale del campo (mejor UX)
             input.addEventListener('blur', () => {
-                 validateAmountInput(id, currency === 'USDT' ? maxUsdtBalance : maxBtcBalance, currency);
+                validateAmountInput(id, currency === 'USDT' ? maxUsdtBalance : maxBtcBalance, currency);
             });
         }
     });
@@ -168,7 +166,6 @@ async function loadBalancesAndLimits() {
     try {
         const token = localStorage.getItem('token');
         // 🚀 NUEVO ENDPOINT ASUMIDO: Llama a una ruta que devuelve el último balance conocido guardado en la DB del bot.
-        // El backend debe asegurar que esta ruta es barata y no llama al exchange.
         const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
