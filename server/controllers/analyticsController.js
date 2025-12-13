@@ -14,69 +14,67 @@ const TradeCycle = require('../models/TradeCycle'); // ✅ Modelo Correcto: Trad
  * @param {object} res - Objeto de respuesta (response).
  */
 exports.getCycleKpis = async (req, res) => {
-    // 💡 Ajuste: Usar la estrategia 'Long' y 'Short' si quieres incluirlas, o dejar solo 'Long'
-    const strategyFilter = req.query.strategy || 'Long'; 
-    const botId = req.user.autobotId; 
-    // 🚨 DEBUGGING CRÍTICO: Imprime los valores que usarás en el filtro
-    console.log(`[KPI DEBUG] Bot ID from Token: ${botId}`);
-    console.log(`[KPI DEBUG] Strategy Filter: ${strategyFilter}`);
-    if (!botId) {
-        // En un entorno de usuario único (single-user), puedes buscar el ID del bot aquí
-        // O simplemente asumir que si el middleware authMiddleware funciona, el botId existe.
-        return res.status(400).json({ success: false, message: 'Autobot ID no proporcionado en el token de usuario.' });
+    const strategyFilter = req.query.strategy || 'Long'; 
+    const botId = req.user.autobotId; 
+    let botObjectId;
+
+    // 💡 Intenta crear el ObjectId, si falla, es un ID inválido.
+    try {
+        botObjectId = new mongoose.Types.ObjectId(botId);
+    } catch (e) {
+        // Esto captura si el ID del token no es una cadena válida de 24 caracteres.
+        console.error(`[KPI DEBUG] ID de bot inválido en token: ${botId}`, e);
+        return res.json({ averageProfitPercentage: 0, totalCycles: 0 }); 
     }
 
     try {
         const kpis = await TradeCycle.aggregate([
             {
-                // 1. Filtrar solo por el bot específico y la estrategia (Long)
                 $match: {
-                    autobotId: new mongoose.Types.ObjectId(botId),
-                    strategy: strategyFilter
+                    // 1. Usar el ObjectId ya creado
+                    autobotId: botObjectId, 
+                    strategy: strategyFilter,
+                    
+                    // 2. 🛑 CONDICIÓN DE CICLO CERRADO (CRÍTICO)
+                    endTime: { $exists: true, $ne: null },
+                    profitPercentage: { $exists: true, $ne: null, $gt: -100 } // profitPercentage > -100 (para evitar errores de cálculo extremos)
                 }
             },
             {
-                // 2. Agrupar todos los documentos filtrados en un solo resultado
                 $group: {
                     _id: null,
                     totalCycles: { $sum: 1 }, 
-                    totalProfitPercentage: { $sum: '$profitPercentage' },
+                    // 💡 Simplificamos el cálculo del promedio aquí
+                    averageProfitPercentage: { $avg: '$profitPercentage' }, 
                 }
             },
             {
-                // 3. Proyectar el resultado final y calcular el promedio
+                // 3. Proyectar el resultado final y limpiar
                 $project: {
                     _id: 0,
                     totalCycles: 1,
-                    // Calcular el promedio
-                    averageProfitPercentage: {
-                        $divide: ['$totalProfitPercentage', '$totalCycles']
-                    }
+                    averageProfitPercentage: 1
                 }
             }
         ]);
-        console.log(`[KPI DEBUG] Results Count: ${kpis.length}`); // 🚨 Muestra si encuentra algo
-        // Aseguramos que el resultado es un array con el objeto KPI, como espera el frontend
+
+        // 4. Formato de Respuesta
         if (kpis.length === 0) {
-            // ✅ CORRECCIÓN: Devolver un OBJETO, no un Array.
             return res.json({ averageProfitPercentage: 0, totalCycles: 0 });
         }
 
-        // ✅ CORRECCIÓN: Devolver directamente el objeto calculado
-        // No crees un array "finalKpis", solo crea el objeto.
+        // Devolver un OBJETO ÚNICO, no un array de objetos
         const result = {
             averageProfitPercentage: parseFloat(kpis[0].averageProfitPercentage.toFixed(4)),
             totalCycles: kpis[0].totalCycles
         };
 
-        res.json(result); // Envías el objeto { averageProfitPercentage: X, totalCycles: Y }
-
+        res.json(result); 
     } catch (error) {
         console.error('Error al calcular KPIs del ciclo:', error);
-        res.status(500).json({ success: false, message: 'Error interno del servidor al calcular KPIs.' });
+        res.status(500).json({ averageProfitPercentage: 0, totalCycles: 0 });
     }
 };
-
 
 // =========================================================================
 // 2. OBTENER SERIE DE DATOS PARA CURVA DE CRECIMIENTO
@@ -90,20 +88,18 @@ exports.getCycleKpis = async (req, res) => {
  */
 exports.getEquityCurveData = async (req, res) => {
     const botId = req.user.autobotId;
-    const strategyFilter = req.query.strategy || 'Long'; 
+    const strategyFilter = req.query.strategy || 'Long'; 
 
-    if (!botId) {
-        return res.status(400).json({ success: false, message: 'Autobot ID no proporcionado.' });
-    }
-
-    try {        
+    try {
         const cycles = await TradeCycle.find({
-            autobotId: botId,
+            // 🛑 Usar el botId como string es válido en .find() si Mongoose lo permite. 
+            // Para asegurar, lo mejor es usar new mongoose.Types.ObjectId(botId)
+            autobotId: new mongoose.Types.ObjectId(botId),
             strategy: strategyFilter,
-            // 🛑 CRÍTICO: Agregar la condición de ciclo cerrado.
+            // 🛑 Condición de ciclo cerrado
             endTime: { $exists: true, $ne: null } 
         })
-        .sort({ endTime: 1 }) // Ordenar por tiempo de finalización (ascendente)
+        .sort({ endTime: 1 })// Ordenar por tiempo de finalización (ascendente)
         .select('endTime netProfit initialInvestment finalRecovery')
         .lean(); // Usar .lean() para documentos más ligeros
 
