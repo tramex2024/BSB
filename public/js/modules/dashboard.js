@@ -118,17 +118,19 @@ function setupSocketListeners() {
 export function initializeDashboardView() {
     console.log("Inicializando vista del Dashboard...");
     
-    // 1. Cargar datos básicos y establecer intervalo para balances (MENOS CRÍTICOS)
-    // 🛑 LINEA ELIMINADA: checkBitMartConnectionAndData(); 
-
-    // 2. Establecer los listeners de Socket.IO para las actualizaciones en tiempo real
-    setupSocketListeners(); 
-
-    // 3. Cargar y renderizar la Curva de Crecimiento
-    loadAndRenderEquityCurve();
-
-    // 4. Cargar y mostrar los KPIs
-    loadAndDisplayKpis(); 
+    // 1. Establecer los listeners de Socket.IO para las actualizaciones en tiempo real
+    setupSocketListeners(); // Asegúrate de que esta función usa el socket de main.js
+    
+    // 2. Ejecuta la carga de datos pesados en PARALELO para ahorrar tiempo
+    // Usamos Promise.all para esperar que ambos se completen antes de continuar (aunque no hay más código a esperar).
+    Promise.all([
+        loadAndRenderEquityCurve(),
+        loadAndDisplayKpis() 
+    ]).then(() => {
+        console.log('Dashboard: Curva y KPIs cargados en paralelo.');
+    }).catch(error => {
+        console.error('Error al cargar datos del Dashboard:', error);
+    });
 }
 
 /**

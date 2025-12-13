@@ -21,11 +21,11 @@ export let socket = null; // 💡 ¡NUEVO! Declaramos y exportamos el socket
 // 💡 Variable para rastrear el último precio conocido de BTC/USDT
 let lastPrice = 0;
 
+// Mapa de funciones de inicialización
 const views = {
-    // La clave es el nombre del módulo. El valor es una función que importa la vista.
-    dashboard: () => import('./modules/dashboard.js'),
-    autobot: () => import('./modules/autobot.js'),
-    aibot: () => import('./modules/aibot.js')
+    dashboard: initializeDashboardView,
+    autobot: initializeAutobotView,
+    aibot: initializeAibotView
 };
 
 /**
@@ -76,22 +76,10 @@ export function initializeTab(tabName) {
         currentChart = null;
     }
     
-    // Llama a la función de inicialización de la vista, cargándola bajo demanda.
-    if (views[tabName]) {
-        // Ejecutar la función para obtener la Promesa de importación dinámica
-        const modulePromise = views[tabName](); 
-        
-        // Esperar la carga del módulo
-        const module = await modulePromise; 
-        
-        // Llamar a la función de inicialización exportada del módulo
-        // Asume que la función de inicialización se llama initialize[ViewName]View
-        const initFunctionName = 'initialize' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'View';
-
-        if (module[initFunctionName]) {
-            module[initFunctionName]();
-        }
-    }
+    // Llama a la función de inicialización del módulo de vista correspondiente
+    if (views[tabName]) {
+        views[tabName]();
+    }
 }
 
 /**

@@ -9,6 +9,7 @@ import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOpenOrdersTable 
 import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, currentChart, intervals, BACKEND_URL } from '../main.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
+import { ..., socket } from '../main.js'; // Asegúrate de importar 'socket'
 
 const SOCKET_SERVER_URL = 'https://bsb-ppex.onrender.com';
 
@@ -214,11 +215,12 @@ async function loadBalancesAndLimits() {
     }
 }
 
-// --- FUNCIÓN DE INICIALIZACIÓN (CORREGIDA) ---
+// --- FUNCIÓN DE INICIALIZACIÓN (CORREGIDA Y OPTIMIZADA) ---
 export async function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
 
-    // 🛑 1. Llamada NO BLOQUEANTE para cargar los balances. Ahora usa la DB, no el Exchange.
+    // 1. Cargar balances y límites (usa la caché de la DB para la carga inicial más rápida)
+    // Se ejecuta con await porque los límites (maxUsdtBalance/maxBtcBalance) son necesarios para la validación del bot.
     await loadBalancesAndLimits();
 
     // 2. Configura todos los listeners de los campos de configuración.
@@ -272,41 +274,48 @@ export async function initializeAutobotView() {
     });
 
     // 5. Carga inicial de órdenes (solo una vez al cargar la vista)
+    // 💡 Nota: Ejecutamos sin 'await' para no bloquear la renderización de la vista.
     setOrdersActiveTab('tab-opened');
-    fetchOrders(currentTab, auOrderList); // Usamos la variable 'auOrderList' ya declarada
+    fetchOrders(currentTab, auOrderList); 
     
-    // 6. Conexión de Socket.io
-    const socket = io(SOCKET_SERVER_URL); 
-
-    socket.on('bot-state-update', (state) => {
-        updateBotUI(state);
-    }); 
+    // 6. Conexión de Socket.io (USANDO EL SOCKET GLOBAL DE main.js)
+    // 🛑 ¡IMPORTANTE! Eliminamos la línea: const socket = io(SOCKET_SERVER_URL);
+    // Y asumimos que la variable 'socket' se importa de '../main.js' y ya está conectada.
     
-    // Listener de WebSocket para la actualización de Balances (ELIMINA EL POLLING HTTP)
-    socket.on('balance-update', (balances) => {
-        console.log('[Socket.io] Balance en tiempo real recibido:', balances);
+    if (socket) {
+        // Listener para la actualización del estado del Bot (RUNNING/STOPPED)
+        socket.on('bot-state-update', (state) => {
+            updateBotUI(state);
+        }); 
         
-        // 1. Actualizar las variables globales del frontend con los nuevos valores
-        maxUsdtBalance = balances.lastAvailableUSDT;
-        maxBtcBalance = balances.lastAvailableBTC;
-        
-        // 2. Actualizar la interfaz de usuario con los límites (Max: X)
-        updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-        updateMaxBalanceDisplay('BTC', maxBtcBalance);
+        // Listener de WebSocket para la actualización de Balances (ELIMINA EL POLLING HTTP)
+        // Este evento 'balance-update' es específico de Autobot, diferente a 'balance-real-update' de main.js
+        socket.on('balance-update', (balances) => {
+            console.log('[Socket.io] Balance en tiempo real recibido:', balances);
+            
+            // 1. Actualizar las variables globales del frontend con los nuevos valores
+            maxUsdtBalance = balances.lastAvailableUSDT;
+            maxBtcBalance = balances.lastAvailableBTC;
+            
+            // 2. Actualizar la interfaz de usuario con los límites (Max: X)
+            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
+            updateMaxBalanceDisplay('BTC', maxBtcBalance);
 
-        // 3. Actualizar el balance general (USDT: X | BTC: Y)
-        updateMainBalanceDisplay(maxUsdtBalance, maxBtcBalance);
+            // 3. Actualizar el balance general (USDT: X | BTC: Y)
+            updateMainBalanceDisplay(maxUsdtBalance, maxBtcBalance);
 
-        // 4. Re-validar los campos
-        validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
-        validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-    });
+            // 4. Re-validar los campos
+            validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+            validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+        });
 
-    // 🛑 MEJORA DE DEBUGGING: Muestra el tipo y contenido exacto de la variable ordersData
-    socket.on('open-orders-update', (ordersData) => {
-        // La función updateOpenOrdersTable se encarga de verificar el tab activo y buscar el contenedor.
-        console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas. Tipo de payload: ${typeof ordersData}. Contenido:`, ordersData);
-        updateOpenOrdersTable(ordersData); 
-    });
-
+        // Listener de WebSocket para la actualización de Órdenes Abiertas
+        socket.on('open-orders-update', (ordersData) => {
+            // La función updateOpenOrdersTable se encarga de verificar el tab activo y buscar el contenedor.
+            console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas.`);
+            updateOpenOrdersTable(ordersData); 
+        });
+    } else {
+        console.error("El socket principal no está disponible. No se pueden recibir actualizaciones en tiempo real.");
+    }
 }
