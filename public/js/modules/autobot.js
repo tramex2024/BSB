@@ -219,9 +219,14 @@ async function loadBalancesAndLimits() {
 export async function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
 
-    // 1. Cargar balances y límites (usa la caché de la DB para la carga inicial más rápida)
-    // Se ejecuta con await porque los límites (maxUsdtBalance/maxBtcBalance) son necesarios para la validación del bot.
-    await loadBalancesAndLimits();
+    // 1. CARGA DE BALANCES Y LÍMITES (Protegida, usa la caché de la DB para ser rápida)
+    try {
+        // La validación del bot depende de estos datos, por eso usamos await.
+        await loadBalancesAndLimits();
+    } catch (error) {
+        console.error("CRÍTICO: Fallo en la carga inicial de límites del bot. Continuamos con límites a 0.", error);
+        // Si falla, los límites globales se mantendrán en 0 o el valor por defecto.
+    }
 
     // 2. Configura todos los listeners de los campos de configuración.
     setupConfigListeners();
@@ -235,9 +240,17 @@ export async function initializeAutobotView() {
     // Declaración única para el contenedor de órdenes
     const auOrderList = document.getElementById('au-order-list'); 
 
-    // 3. Inicializa el gráfico de TradingView
-    window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-
+    // 3. INICIALIZACIÓN DEL GRÁFICO (Protegida)
+    try {
+        // Asumiendo que 'au-tvchart' es el ID del contenedor del gráfico en el HTML de la vista Autobot
+        window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+        if (!window.currentChart) {
+             console.warn("initializeChart no devolvió un objeto de gráfico válido. Verifique 'chart.js'.");
+        }
+    } catch (error) {
+        console.error("CRÍTICO: Fallo al inicializar el gráfico de TradingView. ¿Está cargada la librería de gráficos?", error);
+    }
+    
     // Lógica para el botón START/STOP
     if (austartBtn) {
         austartBtn.addEventListener('click', async () => {
@@ -273,15 +286,11 @@ export async function initializeAutobotView() {
         });
     });
 
-    // 5. Carga inicial de órdenes (solo una vez al cargar la vista)
-    // 💡 Nota: Ejecutamos sin 'await' para no bloquear la renderización de la vista.
+    // 5. Carga inicial de órdenes (solo una vez al cargar la vista, sin bloquear)
     setOrdersActiveTab('tab-opened');
     fetchOrders(currentTab, auOrderList); 
     
-    // 6. Conexión de Socket.io (USANDO EL SOCKET GLOBAL DE main.js)
-    // 🛑 ¡IMPORTANTE! Eliminamos la línea: const socket = io(SOCKET_SERVER_URL);
-    // Y asumimos que la variable 'socket' se importa de '../main.js' y ya está conectada.
-    
+    // 6. Configuración de Socket.io (Usando el socket principal de main.js)
     if (socket) {
         // Listener para la actualización del estado del Bot (RUNNING/STOPPED)
         socket.on('bot-state-update', (state) => {
@@ -289,7 +298,6 @@ export async function initializeAutobotView() {
         }); 
         
         // Listener de WebSocket para la actualización de Balances (ELIMINA EL POLLING HTTP)
-        // Este evento 'balance-update' es específico de Autobot, diferente a 'balance-real-update' de main.js
         socket.on('balance-update', (balances) => {
             console.log('[Socket.io] Balance en tiempo real recibido:', balances);
             
@@ -311,11 +319,10 @@ export async function initializeAutobotView() {
 
         // Listener de WebSocket para la actualización de Órdenes Abiertas
         socket.on('open-orders-update', (ordersData) => {
-            // La función updateOpenOrdersTable se encarga de verificar el tab activo y buscar el contenedor.
             console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas.`);
             updateOpenOrdersTable(ordersData); 
         });
     } else {
-        console.error("El socket principal no está disponible. No se pueden recibir actualizaciones en tiempo real.");
+        console.error("El socket principal no está disponible. No se pueden recibir actualizaciones en tiempo real del Autobot.");
     }
 }
