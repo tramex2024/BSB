@@ -56,16 +56,19 @@ exports.getCycleKpis = async (req, res) => {
 
         // Aseguramos que el resultado es un array con el objeto KPI, como espera el frontend
         if (kpis.length === 0) {
-             return res.json([{ averageProfitPercentage: 0, totalCycles: 0 }]);
+            // ✅ CORRECCIÓN: Devolver un OBJETO, no un Array.
+            return res.json({ averageProfitPercentage: 0, totalCycles: 0 });
         }
 
-        // ✅ Corregido: Aplicamos redondeo antes de enviar
-        const finalKpis = [{
+        // ✅ CORRECCIÓN: Devolver directamente el objeto calculado
+        // No crees un array "finalKpis", solo crea el objeto.
+        const result = {
             averageProfitPercentage: parseFloat(kpis[0].averageProfitPercentage.toFixed(4)),
             totalCycles: kpis[0].totalCycles
-        }];
+        };
 
-        res.json(finalKpis); 
+        res.json(result); // Envías el objeto { averageProfitPercentage: X, totalCycles: Y }
+
     } catch (error) {
         console.error('Error al calcular KPIs del ciclo:', error);
         res.status(500).json({ success: false, message: 'Error interno del servidor al calcular KPIs.' });
@@ -91,12 +94,12 @@ exports.getEquityCurveData = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Autobot ID no proporcionado.' });
     }
 
-    try {
-        // 🛑 CRÍTICO: Obtenemos solo los datos brutos ordenados para calcular el acumulado en Node.js.
-        // Esto es mucho más eficiente y seguro que intentar calcularlo con $window o $group/$reduce.
+    try {        
         const cycles = await TradeCycle.find({
             autobotId: botId,
-            strategy: strategyFilter
+            strategy: strategyFilter,
+            // 🛑 CRÍTICO: Agregar la condición de ciclo cerrado.
+            endTime: { $exists: true, $ne: null } 
         })
         .sort({ endTime: 1 }) // Ordenar por tiempo de finalización (ascendente)
         .select('endTime netProfit initialInvestment finalRecovery')
