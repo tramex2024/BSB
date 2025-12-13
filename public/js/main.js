@@ -1,12 +1,10 @@
-import { setupNavTabs } from './modules/navigation.js';
-import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
+// public/js/main.js (CORREGIDO)
 
-// Importa todas las funciones de inicialización de las vistas
-import { initializeDashboardView } from './modules/dashboard.js';
-import { initializeAutobotView } from './modules/autobot.js';
+// 1. SOLO IMPORTACIONES ESENCIALES
+import { setupNavTabs } from './modules/navigation.js';
+import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js'; // Usa la versión refactorizada
 import { updateOpenOrdersTable } from './modules/orders.js'; // Necesaria para el WS
-import { updateBotBalances } from './modules/balance.js';
-import { initializeAibotView } from './modules/aibot.js';
+import { updateBotBalances } from './modules/balance.js'; // Necesaria para el WS
 
 // --- Constantes y variables globales (EXPORTADAS) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -16,16 +14,16 @@ export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
 export let currentChart = null;
 export let intervals = {};
-export let socket = null; // 💡 ¡NUEVO! Declaramos y exportamos el socket
+export let socket = null; 
 
 // 💡 Variable para rastrear el último precio conocido de BTC/USDT
 let lastPrice = 0;
 
+// MAPA DE VISTAS CON IMPORTACIONES DINÁMICAS (Lazy Loading)
 const views = {
-    // La clave es el nombre del módulo. El valor es una función que importa la vista.
-    dashboard: () => import('./modules/dashboard.js'),
-    autobot: () => import('./modules/autobot.js'),
-    aibot: () => import('./modules/aibot.js')
+    dashboard: () => import('./modules/dashboard.js'),
+    autobot: () => import('./modules/autobot.js'),
+    aibot: () => import('./modules/aibot.js')
 };
 
 /**
@@ -61,11 +59,11 @@ function updateConnectionStatusBall(source) {
 }
 
 /**
- * Función central para inicializar la pestaña seleccionada.
- * Se llama desde navigation.js después de cargar el contenido HTML.
- * @param {string} tabName - El nombre de la pestaña a inicializar.
- */
-export function initializeTab(tabName) {
+ * Función central para inicializar la pestaña seleccionada.
+ * 🛑 CRÍTICO: Ahora es ASÍNCRONA para usar 'await'.
+ * @param {string} tabName - El nombre de la pestaña a inicializar.
+ */
+export async function initializeTab(tabName) {
     // Limpia los intervalos de la pestaña anterior
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
@@ -77,21 +75,26 @@ export function initializeTab(tabName) {
     }
     
     // Llama a la función de inicialización de la vista, cargándola bajo demanda.
-    if (views[tabName]) {
-        // Ejecutar la función para obtener la Promesa de importación dinámica
-        const modulePromise = views[tabName](); 
-        
-        // Esperar la carga del módulo
-        const module = await modulePromise; 
-        
-        // Llamar a la función de inicialización exportada del módulo
-        // Asume que la función de inicialización se llama initialize[ViewName]View
-        const initFunctionName = 'initialize' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'View';
+    if (views[tabName]) {
+        try {
+            // Ejecutar la función para obtener la Promesa de importación dinámica
+            const modulePromise = views[tabName](); 
+            
+            // 🛑 AWAIT: Esperar la carga del módulo
+            const module = await modulePromise; 
+            
+            // Llamar a la función de inicialización exportada del módulo
+            const initFunctionName = 'initialize' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'View';
 
-        if (module[initFunctionName]) {
-            module[initFunctionName]();
-        }
-    }
+            if (module[initFunctionName]) {
+                await module[initFunctionName](); // Se usa await si la inicialización es asíncrona (ej: Autobot)
+            } else {
+                console.error(`Función de inicialización ${initFunctionName} no encontrada en el módulo ${tabName}.js`);
+            }
+        } catch (error) {
+            console.error(`Error al cargar el módulo ${tabName}:`, error);
+        }
+    }
 }
 
 /**
