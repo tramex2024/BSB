@@ -1,10 +1,10 @@
-// BSB/public/js/modules/dashboard.js (CORREGIDO CON SELECTOR)
+// BSB/public/js/modules/dashboard.js (FINAL)
 
 // 🛑 ELIMINADA LA IMPORTACIÓN DE checkBitMartConnectionAndData
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
-// Asegúrate de que 'io' esté disponible globalmente si no lo importas desde main.js
-import { intervals, SOCKET_SERVER_URL, socket } from '../main.js'; // Usamos el socket principal
+// Usamos el socket principal y otras variables de main.js
+import { intervals, SOCKET_SERVER_URL, socket } from '../main.js'; 
 
 // 🛑 NUEVA VARIABLE GLOBAL para almacenar los datos brutos de la curva
 let cycleHistoryData = []; 
@@ -23,12 +23,11 @@ function getStateColorClass(state) {
 }
 
 // =========================================================================
-// 🛑 NUEVA FUNCIÓN: Manejo del Selector de Parámetros de la Gráfica
+// 🛑 FUNCIÓN: Manejo del Selector de Parámetros de la Gráfica
 // =========================================================================
 
 /**
  * Configura el listener para el selector de parámetros de la Curva de Crecimiento.
- * Este listener llama a renderEquityCurve con los datos almacenados y el nuevo parámetro.
  */
 function setupChartSelectorListener() {
     const selector = document.getElementById('chart-param-selector');
@@ -36,7 +35,7 @@ function setupChartSelectorListener() {
         selector.addEventListener('change', (event) => {
             currentChartParameter = event.target.value;
             if (cycleHistoryData.length > 0) {
-                // 🛑 Llama a la función de renderizado con el parámetro seleccionado
+                // Llama a la función de renderizado con el parámetro seleccionado
                 renderEquityCurve(cycleHistoryData, currentChartParameter); 
             } else {
                 console.warn("Datos de historial de ciclos aún no disponibles para renderizar el gráfico.");
@@ -47,12 +46,11 @@ function setupChartSelectorListener() {
 
 
 // =========================================================================
-// FIN NUEVA FUNCIÓN
+// 🚀 FUNCIÓN: LISTENERS DE SOCKET.IO
 // =========================================================================
 
-
 /**
- * Inicializa los listeners de Socket.IO para el Dashboard.
+ * Inicializa los listeners de Socket.IO para el Dashboard y actualiza las métricas.
  */
 function setupSocketListeners() {
     if (!socket) {
@@ -64,33 +62,47 @@ function setupSocketListeners() {
         console.log("Conectado al Socket.IO para actualizaciones del Dashboard.");
     });
     
-    // 1. Maneja la actualización de las MÉTRICAS CLAVE del Autobot (Lógico/Asignado, Profit, Estados)
+    // 1. Maneja la actualización de las MÉTRICAS CLAVE del AUTOBOT
     socket.on('autobot-metrics-update', (metrics) => {
         console.log("Métricas del Autobot recibidas:", metrics);
         
-        // Actualización de balances Lógico/Asignado
-        document.getElementById('aubalance').textContent = metrics.totalAssignedBalance.toFixed(2);
-        document.getElementById('aulbalance').textContent = metrics.longBalance.toFixed(2);
-        document.getElementById('ausbalance').textContent = metrics.shortBalance.toFixed(2);
-        
         // Actualización de Profit y Precio
-        document.getElementById('auprofit').textContent = metrics.unrealizedProfit.toFixed(2);
-        document.getElementById('auprice').textContent = metrics.currentPrice.toFixed(2);
+        const profitEl = document.getElementById('auprofit');
+        if (profitEl && metrics.unrealizedProfit !== undefined) {
+             const profitValue = parseFloat(metrics.unrealizedProfit).toFixed(2);
+             profitEl.textContent = profitValue;
+             profitEl.className = `${profitValue >= 0 ? 'text-green-400' : 'text-red-400'}`;
+        }
+        document.getElementById('auprice').textContent = parseFloat(metrics.currentPrice || 0).toFixed(2);
         
+        // Actualización de Balances Lógico/Asignado (El balance principal 'aubalance' necesita más contexto)
+        // Usamos totalAssignedBalance si existe, sino mantenemos lo que el balance-update envió
+        const totalBalanceEl = document.getElementById('aubalance');
+        if (totalBalanceEl && metrics.totalAssignedBalance !== undefined) {
+             totalBalanceEl.textContent = parseFloat(metrics.totalAssignedBalance).toFixed(2);
+        }
+
+        document.getElementById('aulbalance').textContent = parseFloat(metrics.longBalance || 0).toFixed(2);
+        document.getElementById('ausbalance').textContent = parseFloat(metrics.shortBalance || 0).toFixed(2);
+        
+        // Actualización de Ciclos (asumiendo LCycle y SCycle vienen en el payload)
+        document.getElementById('aulcycle').textContent = metrics.LCycle || 0;
+        document.getElementById('auscycle').textContent = metrics.SCycle || 0;
+
         // Actualización de estados del Bot
         const lstateEl = document.getElementById('aubot-lstate');
         const sstateEl = document.getElementById('aubot-sstate');
         
         if (lstateEl) {
-            lstateEl.textContent = metrics.longState.toUpperCase();
-            lstateEl.className = getStateColorClass(metrics.longState);
+            lstateEl.textContent = (metrics.longState || 'STOPPED').toUpperCase();
+            lstateEl.className = getStateColorClass(metrics.longState || 'STOPPED');
         }
         if (sstateEl) {
-            sstateEl.textContent = metrics.shortState.toUpperCase();
-            sstateEl.className = getStateColorClass(metrics.shortState);
+            sstateEl.textContent = (metrics.shortState || 'STOPPED').toUpperCase();
+            sstateEl.className = getStateColorClass(metrics.shortState || 'STOPPED');
         }
 
-        // Actualización del punto de conexión
+        // Actualización del punto de conexión (asumiendo 'isRunning' es el estado general del bot)
         const statusDot = document.getElementById('status-dot');
         if (statusDot) {
             statusDot.classList.remove('bg-red-500', 'bg-green-500');
@@ -98,36 +110,22 @@ function setupSocketListeners() {
         }
     });
 
-    // 2. Maneja la actualización de las MÉTRICAS CLAVE del AIBot
-    socket.on('aibot-metrics-update', (metrics) => {
-        console.log("Métricas del AIBot recibidas:", metrics);
-        
-        // Actualización de Profit
-        document.getElementById('aiprofit').textContent = metrics.unrealizedProfit.toFixed(2);
-        
-        // Actualización de estados del Bot
-        const lstateEl = document.getElementById('aibot-lstate');
-        const sstateEl = document.getElementById('aibot-sstate');
-        
-        if (lstateEl) {
-            lstateEl.textContent = metrics.longState.toUpperCase();
-            lstateEl.className = getStateColorClass(metrics.longState);
+    // Listener para Balances Generales (si es necesario actualizar aubalance con más detalle)
+    socket.on('balance-update', (balances) => {
+        const totalBalanceEl = document.getElementById('aubalance');
+        if (totalBalanceEl) {
+            // Esto actualiza el balance general del exchange
+            const usdtValue = parseFloat(balances.lastAvailableUSDT || 0).toFixed(2);
+            const btcValue = parseFloat(balances.lastAvailableBTC || 0).toFixed(5);
+            totalBalanceEl.textContent = `USDT: ${usdtValue} | BTC: ${btcValue}`;
         }
-        if (sstateEl) {
-            sstateEl.textContent = metrics.shortState.toUpperCase();
-            sstateEl.className = getStateColorClass(metrics.shortState);
-        }
+    });
 
-        // Actualización de Balances
-        document.getElementById('ailbalance').textContent = metrics.longBalance.toFixed(2);
-        document.getElementById('aisbalance').textContent = metrics.shortBalance.toFixed(2);
-        
-        // Actualización del punto de conexión
-        const statusDot = document.getElementById('ai-status-dot');
-        if (statusDot) {
-            statusDot.classList.remove('bg-red-500', 'bg-green-500');
-            statusDot.classList.add(metrics.isRunning ? 'bg-green-500' : 'bg-red-500');
-        }
+
+    // 2. Maneja la actualización de las MÉTRICAS CLAVE del AIBot (Deshabilitado, pero con estructura)
+    socket.on('aibot-metrics-update', (metrics) => {
+        // console.log("Métricas del AIBot recibidas:", metrics);
+        // Implementación pendiente para AIBot (usando aiprofit, ailbalance, aibot-lstate, etc.)
     });
 
     // 3. Actualización de Curva (Si se cierra un ciclo)
@@ -137,6 +135,10 @@ function setupSocketListeners() {
         loadAndDisplayKpis();
     });
 }
+
+// =========================================================================
+// 🚀 FUNCIÓN: INICIALIZACIÓN DE VISTA Y CARGA DE DATOS
+// =========================================================================
 
 export function initializeDashboardView() {
     console.log("Inicializando vista del Dashboard...");
@@ -161,39 +163,43 @@ export function initializeDashboardView() {
  * Carga y muestra los KPIs del ciclo en las tarjetas del dashboard.
  */
 async function loadAndDisplayKpis() {
-    const kpis = await fetchCycleKpis();
-    
-    console.log("Datos KPI recibidos:", kpis); 
+    try {
+        const kpis = await fetchCycleKpis();
+        
+        console.log("Datos KPI recibidos:", kpis); 
 
-    const profitPercentageElement = document.getElementById('cycle-avg-profit'); 
-    const totalCyclesElement = document.getElementById('total-cycles-closed'); 
+        const profitPercentageElement = document.getElementById('cycle-avg-profit'); 
+        const totalCyclesElement = document.getElementById('total-cycles-closed'); 
 
-    // Asumimos que kpis es un objeto { averageProfitPercentage, totalCycles }
-    const totalCycles = kpis.totalCycles || 0;
-    const avgProfit = kpis.averageProfitPercentage || 0;
+        // Asumimos que kpis es un objeto { averageProfitPercentage, totalCycles }
+        const totalCycles = kpis.totalCycles || 0;
+        const avgProfit = kpis.averageProfitPercentage || 0;
 
-    if (profitPercentageElement) {
-        // Muestra el rendimiento promedio redondeado con el símbolo %
-        profitPercentageElement.textContent = `${avgProfit.toFixed(2)} %`;
+        if (profitPercentageElement) {
+            // Muestra el rendimiento promedio redondeado con el símbolo %
+            profitPercentageElement.textContent = `${avgProfit.toFixed(2)} %`;
+        }
+        
+        if (totalCyclesElement) {
+            // Muestra el número total de ciclos
+            totalCyclesElement.textContent = totalCycles;
+        }
+
+        console.log(`KPIs de ciclos cargados. Rendimiento promedio: ${avgProfit}%.`);
+    } catch (error) {
+        console.error("Error en la carga y renderizado de KPIs:", error);
     }
-    
-    if (totalCyclesElement) {
-        // Muestra el número total de ciclos
-        totalCyclesElement.textContent = totalCycles;
-    }
-
-    console.log(`KPIs de ciclos cargados. Rendimiento promedio: ${avgProfit}%.`);
 }
 
 /**
  * Orquesta la obtención y el renderizado de la Curva de Crecimiento.
- * 🛑 MODIFICADO: Almacena los datos y usa el parámetro de la gráfica actual.
+ * MODIFICADO: Almacena los datos y usa el parámetro de la gráfica actual.
  */
 async function loadAndRenderEquityCurve() {
     try {
         const curveData = await fetchEquityCurveData();
         
-        if (curveData.length > 0) {
+        if (curveData && curveData.length > 0) {
             // 🛑 1. ALMACENAR DATOS GLOBALES
             cycleHistoryData = curveData; 
 
@@ -206,7 +212,6 @@ async function loadAndRenderEquityCurve() {
             }
         } else {
             console.warn('No hay datos suficientes de ciclos cerrados para renderizar la Curva de Crecimiento.');
-            // Aquí puedes mostrar un mensaje en el canvas o gráfico.
         }
     } catch (error) {
         console.error("Error en la carga y renderizado de la curva:", error);
