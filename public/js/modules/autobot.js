@@ -212,10 +212,19 @@ async function loadBalancesAndLimits() {
     }
 }
 
+/**
+ * Función que obtiene los balances (últimos conocidos de la DB) y actualiza la UI para los límites.
+ * 🛑 MODIFICADO: Ahora llama a un endpoint DB-backed, eliminando la llamada innecesaria al Exchange.
+ */
+// ... (loadBalancesAndLimits aquí si fuera necesario)
+
 // --- FUNCIÓN DE INICIALIZACIÓN (CORREGIDA Y OPTIMIZADA) ---
 export async function initializeAutobotView() {
     console.log("Inicializando vista del Autobot...");
 
+    // La variable 'currentTab' es necesaria para el listener de órdenes.
+    let currentTab = 'opened';
+    
     // 1. CARGA DE BALANCES Y LÍMITES (Protegida, usa la caché de la DB para ser rápida)
     try {
         // La validación del bot depende de estos datos, por eso usamos await.
@@ -228,8 +237,6 @@ export async function initializeAutobotView() {
     // 2. Configura todos los listeners de los campos de configuración.
     setupConfigListeners();
 
-    let currentTab = 'opened';
-    
     // 💡 Declaraciones ÚNICAS de elementos del DOM
     const austartBtn = document.getElementById('austart-btn');
     const auresetBtn = document.getElementById('aureset-btn');
@@ -274,18 +281,20 @@ export async function initializeAutobotView() {
     }
     
     // 4. Configura los listeners de las pestañas de órdenes
-    auorderTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            currentTab = tab.id.replace('tab-', '');
-            setOrdersActiveTab(tab.id);
-            // Usamos la variable 'auOrderList' ya declarada
-            fetchOrders(currentTab, auOrderList);
+    if (auorderTabs.length > 0) {
+        auorderTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                currentTab = tab.id.replace('tab-', '');
+                setOrdersActiveTab(tab.id);
+                // Usamos la variable 'auOrderList' ya declarada
+                fetchOrders(currentTab, auOrderList);
+            });
         });
-    });
+    }
 
     // 5. Carga inicial de órdenes (solo una vez al cargar la vista, sin bloquear)
     setOrdersActiveTab('tab-opened');
-    fetchOrders(currentTab, auOrderList); 
+    fetchOrders(currentTab, auOrderList);    
     
     // 6. Configuración de Socket.io (Usando el socket principal de main.js)
     if (socket) {
@@ -315,9 +324,10 @@ export async function initializeAutobotView() {
         });
 
         // Listener de WebSocket para la actualización de Órdenes Abiertas
+        // 🛑 LÍNEA CORREGIDA: Se pasan el ID de la tabla y la pestaña actual
         socket.on('open-orders-update', (ordersData) => {
-            console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas.`);
-            updateOpenOrdersTable(ordersData); 
+            console.log(`[Socket.io] Recibidas órdenes abiertas/actualizadas para Autobot.`);
+            updateOpenOrdersTable(ordersData, 'au-order-list', currentTab);
         });
     } else {
         console.error("El socket principal no está disponible. No se pueden recibir actualizaciones en tiempo real del Autobot.");

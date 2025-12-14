@@ -1,14 +1,9 @@
-// BSB/public/js/modules/dashboard.js (CORREGIDO CON SELECTOR)
+// BSB/public/js/modules/dashboard.js (CORREGIDO)
 
 // 🛑 ELIMINADA LA IMPORTACIÓN DE checkBitMartConnectionAndData
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
-// Asegúrate de que 'io' esté disponible globalmente si no lo importas desde main.js
-import { intervals, SOCKET_SERVER_URL, socket } from '../main.js'; // Usamos el socket principal
-
-// 🛑 NUEVA VARIABLE GLOBAL para almacenar los datos brutos de la curva
-let cycleHistoryData = []; 
-let currentChartParameter = 'accumulatedProfit'; // Parámetro inicial por defecto
+import { intervals, SOCKET_SERVER_URL } from '../main.js'; // Necesitas importar 'io' si lo usas aquí
 
 /**
  * Mapea los colores para el estado del bot.
@@ -22,49 +17,31 @@ function getStateColorClass(state) {
     return 'text-red-400';
 }
 
-// =========================================================================
-// 🛑 NUEVA FUNCIÓN: Manejo del Selector de Parámetros de la Gráfica
-// =========================================================================
-
-/**
- * Configura el listener para el selector de parámetros de la Curva de Crecimiento.
- * Este listener llama a renderEquityCurve con los datos almacenados y el nuevo parámetro.
- */
-function setupChartSelectorListener() {
-    const selector = document.getElementById('chart-param-selector');
-    if (selector) {
-        selector.addEventListener('change', (event) => {
-            currentChartParameter = event.target.value;
-            if (cycleHistoryData.length > 0) {
-                // 🛑 Llama a la función de renderizado con el parámetro seleccionado
-                renderEquityCurve(cycleHistoryData, currentChartParameter); 
-            } else {
-                console.warn("Datos de historial de ciclos aún no disponibles para renderizar el gráfico.");
-            }
-        });
-    }
-}
-
-
-// =========================================================================
-// FIN NUEVA FUNCIÓN
-// =========================================================================
-
 
 /**
  * Inicializa los listeners de Socket.IO para el Dashboard.
+ *
+ * NOTA CRÍTICA: Asumimos que la conexión principal del socket y los
+ * listeners de 'balance-real-update' están en main.js o autobot.js,
+ * por lo que solo nos centramos en las métricas específicas del dashboard aquí.
  */
 function setupSocketListeners() {
-    if (!socket) {
-        console.error("El socket principal no está disponible en dashboard.js.");
-        return;
-    }
+    // 🛑 IMPORTANTE: Asumimos que 'io' viene de una fuente global o de main.js
+    // Si la conexión se maneja centralmente en main.js, este socket NO ES NECESARIO aquí.
+    const socket = io(SOCKET_SERVER_URL); 
 
     socket.on('connect', () => {
         console.log("Conectado al Socket.IO para actualizaciones del Dashboard.");
     });
     
-    // 1. Maneja la actualización de las MÉTRICAS CLAVE del Autobot (Lógico/Asignado, Profit, Estados)
+    // 1. Maneja la actualización de Balance Real (USDT/BTC disponible)
+    // 🛑 ESTE LISTENER ES AHORA MANEJADO EN main.js (o un módulo de balance centralizado)
+    // El dashboard ya no necesita replicar el manejo del balance de exchange.
+    socket.on('balance-real-update', (data) => {
+        // Lógica de visualización del balance Real (si aplica)
+    });
+
+    // 2. Maneja la actualización de las MÉTRICAS CLAVE del Autobot (Lógico/Asignado, Profit, Estados)
     socket.on('autobot-metrics-update', (metrics) => {
         console.log("Métricas del Autobot recibidas:", metrics);
         
@@ -98,7 +75,7 @@ function setupSocketListeners() {
         }
     });
 
-    // 2. Maneja la actualización de las MÉTRICAS CLAVE del AIBot
+    // 3. Maneja la actualización de las MÉTRICAS CLAVE del AIBot
     socket.on('aibot-metrics-update', (metrics) => {
         console.log("Métricas del AIBot recibidas:", metrics);
         
@@ -130,7 +107,7 @@ function setupSocketListeners() {
         }
     });
 
-    // 3. Actualización de Curva (Si se cierra un ciclo)
+    // 4. Actualización de Curva (Si se cierra un ciclo)
     socket.on('cycle-closed', () => {
         // Cuando un ciclo se cierra, recargamos la curva y los KPIs
         loadAndRenderEquityCurve();
@@ -142,16 +119,15 @@ export function initializeDashboardView() {
     console.log("Inicializando vista del Dashboard...");
     
     // 1. Establecer los listeners de Socket.IO para las actualizaciones en tiempo real
-    setupSocketListeners(); 
+    setupSocketListeners(); // Asegúrate de que esta función usa el socket de main.js
     
     // 2. Ejecuta la carga de datos pesados en PARALELO para ahorrar tiempo
+    // Usamos Promise.all para esperar que ambos se completen antes de continuar (aunque no hay más código a esperar).
     Promise.all([
         loadAndRenderEquityCurve(),
         loadAndDisplayKpis() 
     ]).then(() => {
         console.log('Dashboard: Curva y KPIs cargados en paralelo.');
-        // 🛑 Importante: Configurar el listener del selector una vez que los datos iniciales se hayan intentado cargar
-        setupChartSelectorListener(); 
     }).catch(error => {
         console.error('Error al cargar datos del Dashboard:', error);
     });
@@ -161,10 +137,14 @@ export function initializeDashboardView() {
  * Carga y muestra los KPIs del ciclo en las tarjetas del dashboard.
  */
 async function loadAndDisplayKpis() {
+    // Aquí es donde se llama a la función importada
     const kpis = await fetchCycleKpis();
     
+    // 🛑 Log para verificar si los datos llegan:
     console.log("Datos KPI recibidos:", kpis); 
+    console.log("Tipo de totalCycles:", typeof kpis.totalCycles, "Valor:", kpis.totalCycles);
 
+    // Los IDs ya se adaptaron en el HTML previamente:
     const profitPercentageElement = document.getElementById('cycle-avg-profit'); 
     const totalCyclesElement = document.getElementById('total-cycles-closed'); 
 
@@ -187,19 +167,15 @@ async function loadAndDisplayKpis() {
 
 /**
  * Orquesta la obtención y el renderizado de la Curva de Crecimiento.
- * 🛑 MODIFICADO: Almacena los datos y usa el parámetro de la gráfica actual.
  */
 async function loadAndRenderEquityCurve() {
     try {
         const curveData = await fetchEquityCurveData();
         
         if (curveData.length > 0) {
-            // 🛑 1. ALMACENAR DATOS GLOBALES
-            cycleHistoryData = curveData; 
-
-            // 🛑 2. USAR EL PARÁMETRO ACTUAL
+            // Aseguramos que los datos de la curva existen
             if (typeof renderEquityCurve === 'function') {
-                renderEquityCurve(cycleHistoryData, currentChartParameter); 
+                renderEquityCurve(curveData); 
                 console.log('Curva de Crecimiento renderizada.');
             } else {
                 console.error("La función renderEquityCurve no está definida en chart.js o no fue importada correctamente.");
