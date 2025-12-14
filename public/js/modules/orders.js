@@ -166,7 +166,8 @@ export async function fetchOrders(status, orderListElement) {
  * @param {string} tabId El ID de la pestaña activa.
  */
 export function setActiveTab(tabId) {
-    const tabs = document.querySelectorAll('.autobot-tabs button');
+    // Asume que los tabs de las órdenes son globales o los busca dentro de la sección activa.
+    const tabs = document.querySelectorAll('[id^="tab-"]'); 
     tabs.forEach(tab => tab.classList.remove('active-tab'));
     
     const activeTab = document.getElementById(tabId);
@@ -178,11 +179,15 @@ export function setActiveTab(tabId) {
 /**
  * Función para recibir órdenes abiertas desde el WebSocket y mostrarlas.
  * Esta función es llamada desde main.js cuando se recibe el evento 'open-orders-update'.
- * @param {object | Array<object>} ordersData Las órdenes abiertas recibidas del backend via WS.
+ * * 🛑 MODIFICACIÓN: Ahora recibe explícitamente el ID del contenedor de órdenes
+ * y la pestaña activa del módulo llamador para evitar el error de DOM no encontrado.
+ * * @param {object | Array<object>} ordersData Las órdenes abiertas recibidas del backend via WS.
+ * @param {string} listElementId El ID del elemento HTML donde se deben mostrar las órdenes (ej. 'au-order-list').
+ * @param {string} activeOrderTab El estado de la pestaña activa del módulo llamador (ej. 'opened', 'filled').
  */
-export function updateOpenOrdersTable(ordersData) {
-    const auOrderList = document.getElementById('au-order-list');
-    const currentTab = document.querySelector('#autobot-section [id^="tab-"].active-tab')?.id.replace('tab-', '');
+export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
+    // 🛑 Modificación: Obtener el elemento usando el ID pasado como argumento.
+    const orderListElement = document.getElementById(listElementId);
 
     // 🛑 CORRECCIÓN CLAVE 2: Extraer el array y establecer un filtro defensivo.
     let openOrders = ordersData;
@@ -204,8 +209,10 @@ export function updateOpenOrdersTable(ordersData) {
         return validOpenStatuses.some(status => orderState.includes(status));
     });
 
-    // 🛑 Solo actualizar si la pestaña 'opened' está activa.
-    if (currentTab === 'opened' || currentTab === undefined) { 
-        displayOrders(openOrders, auOrderList, 'opened');
+    // 🛑 Solo actualizar si la pestaña 'opened' está activa en el módulo llamador.
+    // Usamos el nuevo parámetro 'activeOrderTab'
+    if (activeOrderTab === 'opened') { 
+        // El elemento de la lista ahora es el que se pasó por argumento.
+        displayOrders(openOrders, orderListElement, 'opened');
     }
 }
