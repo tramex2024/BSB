@@ -111,7 +111,7 @@ exports.getEquityCurveData = async (req, res) => {
         .select('endTime netProfit initialInvestment finalRecovery')
         .lean(); // Usar .lean() para documentos más ligeros
         
-        / 🚨 LOG DE DEBUGGING CRÍTICO 2
+        // 🚨 LOG DE DEBUGGING CRÍTICO 2
     console.log(`\n------------------------------------------------------`);
     console.log(`[CURVE DEBUG] Consulta Final: ${cycles.length} ciclos encontrados.`);
     if (cycles.length > 0) {
