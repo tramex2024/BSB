@@ -36,8 +36,8 @@ exports.getCycleKpis = async (req, res) => {
                     strategy: strategyFilter,
                     
                     // 2. 🛑 CONDICIÓN DE CICLO CERRADO (CRÍTICO)
-                    endTime: { $exists: true, $ne: null },
-                    profitPercentage: { $exists: true, $ne: null, $gt: -100 } // profitPercentage > -100 (para evitar errores de cálculo extremos)
+                    //endTime: { $exists: true, $ne: null },
+                    //profitPercentage: { $exists: true, $ne: null, $gt: -100 } // profitPercentage > -100 (para evitar errores de cálculo extremos)
                 }
             },
             {
@@ -97,7 +97,7 @@ exports.getEquityCurveData = async (req, res) => {
             autobotId: new mongoose.Types.ObjectId(botId),
             strategy: strategyFilter,
             // 🛑 Condición de ciclo cerrado
-            endTime: { $exists: true, $ne: null } 
+            //endTime: { $exists: true, $ne: null } 
         })
         .sort({ endTime: 1 })// Ordenar por tiempo de finalización (ascendente)
         .select('endTime netProfit initialInvestment finalRecovery')
