@@ -57,6 +57,14 @@ exports.getCycleKpis = async (req, res) => {
                 }
             }
         ]);
+        
+        // 🚨 LOG DE DEBUGGING CRÍTICO 1
+    console.log(`\n======================================================`);
+    console.log(`[KPI DEBUG] Consulta Final: ${kpis.length} documentos encontrados.`);
+    if (kpis.length > 0) {
+        console.log(`[KPI DEBUG] Resultado de la Agregación KPI:`, kpis[0]);
+    }
+    console.log(`======================================================\n`);
 
         // 4. Formato de Respuesta
         if (kpis.length === 0) {
@@ -102,6 +110,15 @@ exports.getEquityCurveData = async (req, res) => {
         .sort({ endTime: 1 })// Ordenar por tiempo de finalización (ascendente)
         .select('endTime netProfit initialInvestment finalRecovery')
         .lean(); // Usar .lean() para documentos más ligeros
+        
+        / 🚨 LOG DE DEBUGGING CRÍTICO 2
+    console.log(`\n------------------------------------------------------`);
+    console.log(`[CURVE DEBUG] Consulta Final: ${cycles.length} ciclos encontrados.`);
+    if (cycles.length > 0) {
+        // Muestra el primer ciclo encontrado para verificar la estructura
+        console.log(`[CURVE DEBUG] Primer Ciclo (Muestra):`, cycles[0]);
+    }
+    console.log(`------------------------------------------------------\n`);
 
         if (!cycles || cycles.length === 0) {
             return res.json([]);
