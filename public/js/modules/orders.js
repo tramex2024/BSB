@@ -179,9 +179,9 @@ export function setActiveTab(tabId) {
 /**
  * Función para recibir órdenes abiertas desde el WebSocket y mostrarlas.
  * Esta función es llamada desde main.js cuando se recibe el evento 'open-orders-update'.
- * * 🛑 MODIFICACIÓN: Ahora recibe explícitamente el ID del contenedor de órdenes
+ * 🛑 MODIFICACIÓN: Ahora recibe explícitamente el ID del contenedor de órdenes
  * y la pestaña activa del módulo llamador para evitar el error de DOM no encontrado.
- * * @param {object | Array<object>} ordersData Las órdenes abiertas recibidas del backend via WS.
+ * @param {object | Array<object>} ordersData Las órdenes abiertas recibidas del backend via WS.
  * @param {string} listElementId El ID del elemento HTML donde se deben mostrar las órdenes (ej. 'au-order-list').
  * @param {string} activeOrderTab El estado de la pestaña activa del módulo llamador (ej. 'opened', 'filled').
  */
@@ -198,7 +198,6 @@ export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab)
     }
 
     // 🛑 FILTRO CLAVE: Aseguramos que solo se muestren los estados que consideramos "abiertos".
-    // Esto incluye 'pending', 'new', 'partial_fill', etc., solucionando el problema reportado.
     const validOpenStatuses = ['new', 'partially_filled', 'open', 'pending'];
     
     openOrders = openOrders.filter(order => {
@@ -209,10 +208,14 @@ export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab)
         return validOpenStatuses.some(status => orderState.includes(status));
     });
 
-    // 🛑 Solo actualizar si la pestaña 'opened' está activa en el módulo llamador.
-    // Usamos el nuevo parámetro 'activeOrderTab'
-    if (activeOrderTab === 'opened') { 
-        // El elemento de la lista ahora es el que se pasó por argumento.
-        displayOrders(openOrders, orderListElement, 'opened');
+    // 🛑 CORRECCIÓN CRÍTICA DE FLUJO: Solo actualizar si la pestaña 'opened' está activa y si el elemento existe.
+    if (activeOrderTab === 'opened') {
+        if (orderListElement) {
+            // El elemento de la lista ahora es el que se pasó por argumento.
+            displayOrders(openOrders, orderListElement, 'opened');
+        } else {
+            // Muestra el error con el ID faltante
+             console.error(`Error de DOM: El contenedor con ID "${listElementId}" no fue encontrado al actualizar órdenes abiertas.`);
+        }
     }
 }

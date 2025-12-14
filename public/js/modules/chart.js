@@ -53,7 +53,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     }
 
     // 🛑 1. PREPARACIÓN DE DATOS DINÁMICA
-    const labels = data.map(cycle => `Ciclo ${cycle.cycleNumber}`); // Etiqueta: Ciclo 1, Ciclo 2, etc.
+    const labels = data.map((cycle, index) => `Cycle ${index + 1}`); // Etiqueta: Ciclo 1, Ciclo 2, etc.
 
     let datasetLabel = '';
     let dataPoints = [];
