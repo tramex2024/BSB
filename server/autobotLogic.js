@@ -206,25 +206,23 @@ async function slowBalanceCacheUpdate() {
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
     try {
+        // Desestructuración de variables
         const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
         const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
         
         // Solo proceder si la estrategia Long está activa
         if (botState.lstate === 'STOPPED') return;
 
-        // 🛑 LÓGICA DE RESPETO ORIGINAL: Si el lbalance es muy bajo (< 0.01) o la config es inválida (<= 0), reseteamos.
-        // Se mantiene esta lógica de seguridad.
+        // 1. Verificación de seguridad (Capital muy bajo o configuración inválida)
         if (parseFloat(lbalance) <= 0.01 || purchaseUsdt <= 0) {
             if (lnorder !== 0 || lcoverage !== 0) {
-                // Usamos updateGeneralBotState, pero no necesitamos el resultado
                 await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
                 log('[LONG] Capital muy bajo (< 0.01) o configuración inválida. Cobertura dinámica reseteada a 0.', 'warning');
             }
             return;
         }
 
-        // 🎯 CORRECCIÓN APLICADA: Si el lbalance no alcanza para la primera orden (purchaseUsdt),
-        // forzamos el reseteo a 0, ya que no se puede colocar ninguna cobertura.
+        // 2. CORRECCIÓN DE ROBUSTEZ (Si el capital no alcanza la orden base)
         if (parseFloat(lbalance) < purchaseUsdt) {
             if (lnorder !== 0 || lcoverage !== 0) {
                 await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
@@ -233,29 +231,33 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
             return;
         }
 
-        // Usar PPC como punto de ancla para el cálculo de caída, o el currentPrice si es la primera orden.
+        // 3. Preparación de parámetros para el cálculo
         const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
         
         const priceVarDecimal = parseNumber(config.long.price_var) / 100;
         const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
         
 
+        // 4. Ejecución del cálculo de cobertura
         const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-            lbalance,      // Capital disponible
-            referencePrice, // Precio de ancla (PPC o Precio Actual)
-            purchaseUsdt,   // Monto base de la primera orden
+            lbalance,      
+            referencePrice, 
+            purchaseUsdt,  
             priceVarDecimal,
             sizeVarDecimal
         );
+        
+        // 🎯 LOG DE AUDITORÍA CRÍTICO 🎯
+        log(`[AUDITORÍA CÁLCULO] Entrada: lbalance=${lbalance.toFixed(2)}, refPrice=${referencePrice.toFixed(2)}, purchaseUsdt=${purchaseUsdt.toFixed(2)}. Salida: newLNOrder=${newLNOrder}, newLCoverage=${newLCoverage.toFixed(2)}`, 'debug');
+        // -----------------------------
 
-        // Actualizar la DB solo si hay un cambio significativo en el número de órdenes o precio de cobertura.
+        // 5. Persistencia (Actualizar la DB solo si hay un cambio significativo)
         if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
-            // Usamos updateGeneralBotState, pero no necesitamos el resultado
             await updateGeneralBotState({
                 lcoverage: newLCoverage,
                 lnorder: newLNOrder,
             });
-            log(`[LONG] Cobertura dinámica actualizada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
+            log(`[LONG] Cobertura dinámica guardada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
         }
     } catch (error) {
         log(`Error al recalcular cobertura dinámica: ${error.message}`, 'error');
