@@ -200,20 +200,35 @@ async function slowBalanceCacheUpdate() {
 /**
  * Recalcula lcoverage y lnorder en cada ciclo para reflejar el capital restante
  * y la variación del precio de mercado (afectando el costo futuro de las órdenes).
+ *
+ * NOTA: Esta función requiere que Autobot.js cargue:
+ * const { calculateLongCoverage, parseNumber } = require('./autobotCalculations');
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
     try {
         const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
+        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
         
         // Solo proceder si la estrategia Long está activa
         if (botState.lstate === 'STOPPED') return;
 
-        // Si el lbalance es muy bajo o el purchaseUsdt es cero, reseteamos la cobertura
-        if (parseFloat(lbalance) <= 0.01 || parseFloat(config.long.purchaseUsdt) <= 0) {
+        // 🛑 LÓGICA DE RESPETO ORIGINAL: Si el lbalance es muy bajo (< 0.01) o la config es inválida (<= 0), reseteamos.
+        // Se mantiene esta lógica de seguridad.
+        if (parseFloat(lbalance) <= 0.01 || purchaseUsdt <= 0) {
             if (lnorder !== 0 || lcoverage !== 0) {
                 // Usamos updateGeneralBotState, pero no necesitamos el resultado
                 await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-                log('[LONG] Capital insuficiente o configuración inválida. Cobertura dinámica reseteada a 0.', 'warning');
+                log('[LONG] Capital muy bajo (< 0.01) o configuración inválida. Cobertura dinámica reseteada a 0.', 'warning');
+            }
+            return;
+        }
+
+        // 🎯 CORRECCIÓN APLICADA: Si el lbalance no alcanza para la primera orden (purchaseUsdt),
+        // forzamos el reseteo a 0, ya que no se puede colocar ninguna cobertura.
+        if (parseFloat(lbalance) < purchaseUsdt) {
+            if (lnorder !== 0 || lcoverage !== 0) {
+                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
+                log(`[LONG] Capital asignado (${lbalance.toFixed(2)} USDT) insuficiente para la orden base (${purchaseUsdt.toFixed(2)} USDT). Cobertura reseteada a 0.`, 'warning');
             }
             return;
         }
@@ -223,12 +238,12 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         
         const priceVarDecimal = parseNumber(config.long.price_var) / 100;
         const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
-        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
+        
 
         const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-            lbalance,      
-            referencePrice, 
-            purchaseUsdt,
+            lbalance,      // Capital disponible
+            referencePrice, // Precio de ancla (PPC o Precio Actual)
+            purchaseUsdt,   // Monto base de la primera orden
             priceVarDecimal,
             sizeVarDecimal
         );
@@ -240,13 +255,12 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
                 lcoverage: newLCoverage,
                 lnorder: newLNOrder,
             });
-             log(`[LONG] Cobertura dinámica actualizada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
+            log(`[LONG] Cobertura dinámica actualizada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
         }
     } catch (error) {
         log(`Error al recalcular cobertura dinámica: ${error.message}`, 'error');
     }
 }
-
 
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     try {
