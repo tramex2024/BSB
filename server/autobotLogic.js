@@ -6,7 +6,7 @@ const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStr
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
 
 // 🛑 NUEVAS IMPORTACIONES: Cálculo de Cobertura
-const { calculateLongCoverage, parseNumber } = require('../autobotCalculations'); // Asumiendo que está un nivel arriba
+const { calculateLongCoverage, parseNumber } = require('./autobotCalculations'); // Asumiendo que está un nivel arriba
 
 // 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
