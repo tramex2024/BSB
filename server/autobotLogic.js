@@ -27,6 +27,24 @@ function log(message, type = 'info') {
 }
 
 /**
+ * Función genérica para emitir el estado actual del bot, incluyendo el precio
+ * actual del WebSocket, para sincronizar la interfaz de usuario.
+ */
+async function syncFrontendState(currentPrice, botState) {
+    if (io && botState) {
+        // Obtenemos el estado más fresco de la DB si botState es null/viejo
+        const stateToEmit = botState || await getBotState();
+        
+        // Emitimos el objeto completo, incluyendo el precio actual
+        io.emit('full-state-sync', {
+            botState: stateToEmit,
+            currentPrice: currentPrice,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+/**
  * Función para obtener el estado actual del bot directamente de la base de datos.
  */
 async function getBotState() {
@@ -43,10 +61,10 @@ async function updateBotState(newState, strategy) {
         // Usamos $set para actualizar solo el campo de estado
         await Autobot.findOneAndUpdate({}, { $set: { [updateField]: newState } });
         
-        // Emitimos el estado completo para sincronizar el Front-End.
+        // La emisión se maneja ahora principalmente a través de syncFrontendState en botCycle
         const updatedBotState = await Autobot.findOne({});
         if (io) {
-            io.emit('bot-state-update', updatedBotState); 
+             io.emit('bot-state-update', updatedBotState); // Se mantiene esta emisión para eventos específicos de cambio de estado
         }
         
         log(`Estado de la estrategia ${strategy} actualizado a: ${newState}`, 'info');
@@ -104,10 +122,9 @@ async function updateGeneralBotState(fieldsToUpdate) {
             { new: true } // 💡 CRÍTICO: Usar {new: true} para obtener el documento actualizado
         );
         
-        // 2. EMITIR EL ESTADO COMPLETO al FRONTEND
-        if (updatedBot && io) {
-             io.emit('bot-state-update', updatedBot); // Utilizar el mismo evento de sincronización principal
-        }
+        // 🛑 Eliminamos la emisión 'bot-state-update' de aquí. La sincronización completa 
+        // se hará al final del botCycle mediante syncFrontendState.
+        return updatedBot;
     } catch (error) {
         log(`Error al actualizar campos generales del estado del bot: ${error.message}`, 'error');
     }
@@ -178,7 +195,7 @@ async function slowBalanceCacheUpdate() {
 }
 
 // ====================================================================
-// FUNCIÓN DE RECALCULO DINÁMICO (NUEVA)
+// FUNCIÓN DE RECALCULO DINÁMICO
 // ====================================================================
 /**
  * Recalcula lcoverage y lnorder en cada ciclo para reflejar el capital restante
@@ -194,7 +211,8 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         // Si el lbalance es muy bajo o el purchaseUsdt es cero, reseteamos la cobertura
         if (parseFloat(lbalance) <= 0.01 || parseFloat(config.long.purchaseUsdt) <= 0) {
             if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
+                // Usamos updateGeneralBotState, pero no necesitamos el resultado
+                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
                 log('[LONG] Capital insuficiente o configuración inválida. Cobertura dinámica reseteada a 0.', 'warning');
             }
             return;
@@ -217,6 +235,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
 
         // Actualizar la DB solo si hay un cambio significativo en el número de órdenes o precio de cobertura.
         if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
+            // Usamos updateGeneralBotState, pero no necesitamos el resultado
             await updateGeneralBotState({
                 lcoverage: newLCoverage,
                 lnorder: newLNOrder,
@@ -240,6 +259,8 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             if (priceFromWebSocket !== 'N/A') { 
                 log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
             }
+            // 🛑 Aún si fallan las validaciones, sincronizamos el frontend para mostrar el precio (si existe).
+            await syncFrontendState(currentPrice, botState);
             return;
         }
 
@@ -257,6 +278,8 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
                 apiKey: process.env.BITMART_API_KEY, secretKey: process.env.BITMART_SECRET_KEY, memo: process.env.BITMART_API_MEMO
             },
             updateBotState, updateLStateData, updateSStateData, updateGeneralBotState, getBotState,
+            // 🛑 Añadimos la nueva función de sincronización a las dependencias
+            syncFrontendState,
             ...externalDependencies 
         };
 
@@ -271,7 +294,6 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             
             // CRÍTICO: Recargamos el estado para obtener los nuevos lcoverage/lnorder
             // antes de la consolidación y la ejecución, si es que cambiaron.
-            // Si el Recálculo fue exitoso y modificó la DB, necesitamos los nuevos valores.
             botState = await Autobot.findOne({});
             dependencies.botState = botState;
         }
@@ -356,6 +378,12 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             dependencies.botState = botState; // Actualizar la referencia
         }
         
+        // ==========================================================
+        // 3. FASE DE SINCRONIZACIÓN FINAL
+        // ==========================================================
+        // 🛑 Emitir el estado FINAL del ciclo, incluyendo el precio, al frontend.
+        await syncFrontendState(currentPrice, botState);
+        
     } catch (error) {
         log(`Error en el ciclo principal del bot: ${error.message}`, 'error');
     }
@@ -380,6 +408,6 @@ module.exports = {
     updateSStateData,
     updateGeneralBotState,
     slowBalanceCacheUpdate,
-    // Exportamos la función de recálculo si es necesaria en otras partes (opcional)
-    recalculateDynamicCoverageLong 
+    recalculateDynamicCoverageLong,
+    syncFrontendState
 };
