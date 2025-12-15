@@ -1,9 +1,10 @@
-// public/js/main.js (CORREGIDO PARA SINCRONIZACIÓN COMPLETA DEL ESTADO)
+// public/js/main.js (CORREGIDO)
 
 // 1. SOLO IMPORTACIONES ESENCIALES
 import { setupNavTabs } from './modules/navigation.js';
-import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { updateBotBalances } from './modules/balance.js';
+import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js'; // Usa la versión refactorizada
+// 🛑 updateOpenOrdersTable ya NO se llama directamente aquí.
+import { updateBotBalances } from './modules/balance.js'; // Necesaria para el WS
 
 // --- Constantes y variables globales (EXPORTADAS) ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -97,40 +98,6 @@ export async function initializeTab(tabName) {
 }
 
 /**
- * Función que actualiza el precio en la interfaz (global en el header/navbar).
- * @param {number} newPrice - El precio actual.
- */
-function updatePriceDisplay(newPrice) {
-    const priceElements = document.querySelectorAll('.price-display');
-    
-    // Determinar el cambio de precio y la clase de color
-    let priceColorClass = '';
-    if (lastPrice > 0 && newPrice > lastPrice) {
-        priceColorClass = 'text-green-500'; // Precio sube
-    } else if (lastPrice > 0 && newPrice < lastPrice) {
-        priceColorClass = 'text-red-500'; // Precio baja
-    } else {
-        priceColorClass = 'text-white'; // Precio inicial o sin cambios
-    }
-    
-    // Actualizar todos los elementos del precio
-    priceElements.forEach(el => {
-        // Limpiar clases de color anteriores (solo colores, no layout)
-        el.classList.remove('text-green-500', 'text-red-500', 'text-white');
-        
-        // Aplicar nueva clase de color
-        el.classList.add(priceColorClass);
-
-        // Actualizar el valor del texto
-        el.textContent = `$${newPrice.toFixed(2)}`;
-    });
-
-    // Actualizar el último precio para la próxima comparación
-    lastPrice = newPrice;
-}
-
-
-/**
  * Función que inicializa la aplicación completa después de un login exitoso.
  */
 export function initializeFullApp() {
@@ -152,21 +119,42 @@ export function initializeFullApp() {
         updateConnectionStatusBall('DISCONNECTED'); 
     });
 
-    // 💡 NUEVO LISTENER CRÍTICO: Sincronización completa del estado del bot y el precio.
-    socket.on('full-state-sync', (data) => {
-        const newPrice = parseFloat(data.currentPrice);
+    // 💡 LISTENER PARA DATOS DE MERCADO (Actualiza precio y color)
+    socket.on('marketData', (data) => {
+        const newPrice = parseFloat(data.price);
+        if (isNaN(newPrice)) return;
 
-        if (!isNaN(newPrice) && newPrice > 0) {
-            // 1. Actualizar el precio global
-            updatePriceDisplay(newPrice);
+        const priceElements = document.querySelectorAll('.price-display');
+        
+        // Determinar el cambio de precio y la clase de color
+        let priceColorClass = '';
+        if (lastPrice > 0 && newPrice > lastPrice) {
+            priceColorClass = 'text-green-500'; // Precio sube
+        } else if (lastPrice > 0 && newPrice < lastPrice) {
+            priceColorClass = 'text-red-500'; // Precio baja
+        } else {
+            priceColorClass = 'text-white'; // Precio inicial o sin cambios
         }
         
-        // 2. Aquí se puede retransmitir el botState a los módulos específicos (autobot/aibot)
-        // Por ahora, solo nos aseguramos de que el precio global esté sincronizado.
-    });
+        // Actualizar todos los elementos del precio
+        priceElements.forEach(el => {
+            // Limpiar clases de color anteriores (solo colores, no layout)
+            el.classList.remove('text-green-500', 'text-red-500', 'text-white');
+            
+            // Aplicar nueva clase de color
+            el.classList.add(priceColorClass);
 
-    // 🛑 ELIMINADO: Listener 'marketData'
-    // 🛑 ELIMINADO: Listener 'bot-state-update' (Ahora se maneja en 'full-state-sync' o en el módulo específico)
+            // Actualizar el valor del texto
+            el.textContent = `$${newPrice.toFixed(2)}`;
+        });
+
+        // Actualizar el último precio para la próxima comparación
+        lastPrice = newPrice;
+    });
+    
+    // 🛑 ELIMINADO: Listener 'open-orders-update'. 
+    // Ahora, los módulos 'autobot.js' y 'aibot.js' son responsables de escuchar este evento 
+    // y pasar el 'listElementId' y 'activeOrderTab' correctos a updateOpenOrdersTable.
     
     socket.on('bot-log', (log) => {
         const logMessageElement = document.getElementById('log-message');
