@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LBuying.js (CORREGIDO - Eliminación de Recalculo Redundante)
+// BSB/server/src/states/long/LBuying.js (CORREGIDO)
 
 const { calculateLongTargets } = require('../../../autobotCalculations');
 const { parseNumber } = require('../../../utils/helpers'); 
@@ -21,12 +21,14 @@ async function run(dependencies) {
     // =================================================================
     // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
     // =================================================================
-    // La condición lStateData.ppc === 0 y !lStateData.lastOrder define la entrada al ciclo.
+    // La condición lStateData.ppc === 0 y !lStateData.lastOrder define la entrada al ciclo.
     if (lStateData.ppc === 0 && !lStateData.lastOrder) {
         log("Estado de posición inicial detectado. Iniciando lógica de primera compra (Integrada)...", 'warning');
 
+        // 🛑 [Líneas 47-50 ELIMINADAS] - El chequeo de orderCountInCycle > 0 es redundante aquí.
+
         const purchaseAmount = parseFloat(config.long.purchaseUsdt);
-        const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
+        const MIN_USDT_VALUE_FOR_BITMART = 5.00;  // Mejor usar la constante importada si existe
         
         const currentLBalance = parseFloat(botState.lbalance || 0);
 
@@ -72,15 +74,40 @@ async function run(dependencies) {
     // =================================================================
     // === [ 2. GESTIÓN DE TARGETS: SOLO LOG Y CHEQUEO ] =================
     // =================================================================
-    
+    // 🛑 CORRECCIÓN DE EFICIENCIA: Si el PPC > 0, los targets ya fueron calculados
+    // y actualizados por LongDataManager.js después de la consolidación.
+    // Solo necesitamos loguearlos.
+    
     if (lStateData.ppc > 0) { 
-        
-        // 🛑 [BLOQUE DE CONTINGENCIA ELIMINADO]
-        // Se asume que handleSuccessfulBuy ya actualizó ltprice y nextCoveragePrice
+
+        // Si los targets están vacíos por alguna razón, los re-calculamos como contingencia:
+        if (botState.ltprice === 0 || lStateData.nextCoveragePrice === 0) {
+            log("ADVERTENCIA: Targets están en 0 después de Consolidación. Recalculando targets como contingencia.", 'warning');
+
+            const { 
+            targetSellPrice, nextCoveragePrice, requiredCoverageAmount, lCoveragePrice, lNOrderMax            
+            } = calculateLongTargets(
+                lStateData.ppc, config.long.profit_percent, config.long.price_var, config.long.size_var,
+                config.long.purchaseUsdt, lStateData.orderCountInCycle, botState.lbalance,
+                lStateData.lastExecutionPrice 
+            );
+
+            const targetsUpdate = {
+                ltprice: targetSellPrice, lcoverage: lCoveragePrice, lNOrderMax: lNOrderMax,
+                'lStateData.requiredCoverageAmount': requiredCoverageAmount,
+                'lStateData.nextCoveragePrice': nextCoveragePrice,
+            };
+
+            await updateGeneralBotState(targetsUpdate);
+            // Re-hidratamos la referencia local por si el siguiente bloque lo necesita
+            botState.ltprice = targetSellPrice;
+            lStateData.nextCoveragePrice = nextCoveragePrice;
+            lStateData.requiredCoverageAmount = requiredCoverageAmount;
+        }
 
         // 🟢 LOG RESUMEN DE TARGETS (Usamos los valores ya cargados/recalculados)
         const logSummary = `
-            [L] BUYING:            
+            [L] BUYING:            
             💰 PPC actual: ${lStateData.ppc.toFixed(2)} USD (AC: ${lStateData.ac.toFixed(8)} BTC).
             🎯 TP Objetivo (Venta): ${botState.ltprice.toFixed(2)} USD.
             📉 Proxima Cobertura (DCA): ${lStateData.nextCoveragePrice.toFixed(2)} USD (Monto: ${lStateData.requiredCoverageAmount.toFixed(2)} USDT).
@@ -145,6 +172,7 @@ async function run(dependencies) {
     // 3C. Transición por defecto o Log final (Permanece en BUYING)
     
     if (!lStateData.lastOrder && lStateData.ppc > 0) {
+        // Log ya se hizo arriba, evitamos el log final redundante.
         return; // Permanece en el estado BUYING
     }
 
