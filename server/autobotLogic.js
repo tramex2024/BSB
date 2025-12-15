@@ -206,10 +206,13 @@ async function slowBalanceCacheUpdate() {
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
     try {
-        // Desestructuración de variables
         const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
         const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
         
+        // 🎯 NUEVO LOG DE INICIO PARA CONFIRMAR LA EJECUCIÓN 🎯
+        log(`[AUDITORÍA INICIO] Ejecutando Recálculo Dinámico. LBalance actual: ${lbalance.toFixed(2)}`, 'debug');
+        // ----------------------------------------------------
+
         // Solo proceder si la estrategia Long está activa
         if (botState.lstate === 'STOPPED') return;
 
@@ -226,6 +229,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         if (parseFloat(lbalance) < purchaseUsdt) {
             if (lnorder !== 0 || lcoverage !== 0) {
                 await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
+                // 🛑 ESTE ES EL LOG QUE DEBERÍAS VER CON TU ESTADO ACTUAL (1.034 < 6)
                 log(`[LONG] Capital asignado (${lbalance.toFixed(2)} USDT) insuficiente para la orden base (${purchaseUsdt.toFixed(2)} USDT). Cobertura reseteada a 0.`, 'warning');
             }
             return;
@@ -247,11 +251,11 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
             sizeVarDecimal
         );
         
-        // 🎯 LOG DE AUDITORÍA CRÍTICO 🎯
+        // 5. Log de Auditoría (Solo se alcanza si las condiciones de retorno no se cumplen)
         log(`[AUDITORÍA CÁLCULO] Entrada: lbalance=${lbalance.toFixed(2)}, refPrice=${referencePrice.toFixed(2)}, purchaseUsdt=${purchaseUsdt.toFixed(2)}. Salida: newLNOrder=${newLNOrder}, newLCoverage=${newLCoverage.toFixed(2)}`, 'debug');
         // -----------------------------
 
-        // 5. Persistencia (Actualizar la DB solo si hay un cambio significativo)
+        // 6. Persistencia
         if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
             await updateGeneralBotState({
                 lcoverage: newLCoverage,
