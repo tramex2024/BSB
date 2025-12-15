@@ -4,7 +4,7 @@ const Autobot = require('../../models/Autobot');
 const { saveExecutedOrder } = require('../../services/orderPersistenceService');
 const { logSuccessfulCycle } = require('../../services/cycleLogService');
 // 🛑 IMPORTACIÓN CORREGIDA
-const { calculateLongCoverage, parseNumber } = require('../../../autobotCalculations'); 
+const { calculateLongCoverage, parseNumber } = require('../../autobotCalculations'); 
 
 const LSTATE = 'long';
 const SELL_FEE_PERCENT = 0.001; // 0.1%
