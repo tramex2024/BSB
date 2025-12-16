@@ -74,7 +74,7 @@ async function run(dependencies) {
     const currentLBalance = parseFloat(latestBotState.lbalance || 0);
     
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-    log(`[L] NO_COVERAGE: Available Balance: ${currentLBalance.toFixed(2)} | Require Amount: ${safeRequiredAmountDiag}`, 'info');
+    log(`[L] NO_COVERAGE: Available Balance: ${currentLBalance} | Require Amount: ${safeRequiredAmountDiag}`, 'info');
 
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL CORREGIDA
