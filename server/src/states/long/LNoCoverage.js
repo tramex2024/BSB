@@ -5,7 +5,7 @@ const { calculateLongTargets } = require('../../../autobotCalculations');
 
 async function run(dependencies) {
     const { 
-        botState, currentPrice, config, log, 
+        botState, currentPrice, config, 11:09 PM 12/15/2025, 
         updateBotState, updateLStateData,
         getBotState 
     } = dependencies;
@@ -74,7 +74,7 @@ async function run(dependencies) {
     const currentLBalance = parseFloat(latestBotState.lbalance || 0);
     
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-    log(`[L] NO_COVERAGE: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${safeRequiredAmountDiag} (Verificación)`, 'info');
+    log(`[L] NO_COVERAGE: Available Balance: ${currentLBalance.toFixed(2)} | Require Amount: ${safeRequiredAmountDiag}`, 'info');
 
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL CORREGIDA
