@@ -14,7 +14,7 @@ async function run(dependencies) {
     // o el valor real si la API funciona correctamente - 65.94 en tu caso).
     const availableUSDT = parseFloat(dependencies.availableUSDT || 0);
 
-    log("Estado Long: NO_COVERAGE. Esperando fondos o precio de venta.", 'warning');
+    //log("[L] NO_COVERAGE: Esperando fondos o precio de venta.", 'warning');
 
     const { ac } = botState.lStateData;
     
@@ -74,7 +74,7 @@ async function run(dependencies) {
     const currentLBalance = parseFloat(latestBotState.lbalance || 0);
     
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-  //  log(`[DIAGNÓSTICO BALANCE]: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${safeRequiredAmountDiag} (Verificación)`, 'info');
+    log(`[L] NO_COVERAGE: Estado LBalance después de recarga: ${currentLBalance} | Req. Amount: ${safeRequiredAmountDiag} (Verificación)`, 'info');
 
     
     // ✅ LÓGICA DE TRANSICIÓN FINAL CORREGIDA
