@@ -274,15 +274,20 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         const currentPrice = parseFloat(priceFromWebSocket); 
         let needsStateRefresh = false; // 💡 Nueva bandera de optimización
 
+        // 🛑 BLOQUE CORREGIDO: Verificación inicial y salida (CRÍTICO)
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
             if (priceFromWebSocket !== 'N/A') { 
-                // 🛑 CORRECCIÓN: Usamos console.log como alternativa si log es el problema inicial.
-                if (typeof log === 'function') {
-                    log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
-                } else {
-                    console.log(`[BOT LOG (WARNING)]: Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`);
-                }
+                // Usamos console.log como alternativa si log es el problema inicial.
+                if (typeof log === 'function') {
+                    log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
+                } else {
+                    console.log(`[BOT LOG (WARNING)]: Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`);
+                }
             }
+            // 🛑 Sincronización final y SALIDA del ciclo.
+            await syncFrontendState(currentPrice, botState);
+            return; 
+        } // 🛑 LLAVE DE CIERRE FALTANTE
 
         // -------------------------------------------------------------
         // LECTURA DE LA CACHÉ Y DEFINICIÓN DE DEPENDENCIAS
@@ -405,7 +410,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         await syncFrontendState(currentPrice, botState);
         
     } catch (error) {
-        // 🛑 CORRECCIÓN DE BLINDAJE: Usar console.error directamente
+        // 🛑 BLINDAJE: Usar console.error directamente
         console.error(`[ERROR FATAL EN BOTCYCLE] El bot falló: ${error.message}`);
     }
 }
