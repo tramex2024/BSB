@@ -5,10 +5,10 @@ const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
 
-// 🛑 IMPORTACIONES: Cálculo de Cobertura
+// 🛑 NUEVAS IMPORTACIONES: Cálculo de Cobertura
 const { calculateLongCoverage, parseNumber } = require('./autobotCalculations'); // Asumiendo que está un nivel arriba
 
-// 🛑 IMPORTACIONES: Consolidadores para órdenes que bloquean el ciclo
+// 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
 const { monitorAndConsolidateSell } = require('./src/states/long/LongSellConsolidator'); 
 const { monitorAndConsolidateShort: monitorShortSell } = require('./src/states/short/ShortSellConsolidator');
@@ -19,6 +19,7 @@ function setIo(socketIo) {
     io = socketIo;
 }
 
+// 🛑 Mantén la función log aquí, es la forma correcta si está en el mismo archivo.
 function log(message, type = 'info') {
     if (io) {
         io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
@@ -262,7 +263,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
             log(`[LONG] Cobertura dinámica guardada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
         }
     } catch (error) {
-        log(`Error al recalcular cobertura dinámica: ${error.message}`, 'error');
+        console.error(`[CALCULO ERROR] Error al recalcular cobertura dinámica: ${error.message}`);
     }
 }
 
@@ -275,12 +276,13 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
             if (priceFromWebSocket !== 'N/A') { 
-                log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
+                // 🛑 CORRECCIÓN: Usamos console.log como alternativa si log es el problema inicial.
+                if (typeof log === 'function') {
+                    log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
+                } else {
+                    console.log(`[BOT LOG (WARNING)]: Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`);
+                }
             }
-            // 🛑 Aún si fallan las validaciones, sincronizamos el frontend para mostrar el precio (si existe).
-            await syncFrontendState(currentPrice, botState);
-            return;
-        }
 
         // -------------------------------------------------------------
         // LECTURA DE LA CACHÉ Y DEFINICIÓN DE DEPENDENCIAS
