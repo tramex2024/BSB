@@ -7,7 +7,8 @@ async function run(dependencies) {
     const { 
         botState, currentPrice, config, 
         updateBotState, updateLStateData,
-        getBotState 
+        getBotState,
+        log // 🛑 ¡CRÍTICO: AÑADIR LOG AQUÍ!
     } = dependencies;
     
     // ✅ CRÍTICO: Garantizamos que availableUSDT siempre es un número (0 si falla la API, 
