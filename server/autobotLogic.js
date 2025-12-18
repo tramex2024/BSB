@@ -203,68 +203,63 @@ async function slowBalanceCacheUpdate() {
 // FUNCIÓN DE RECALCULO DINÁMICO
 // ====================================================================
 
+/**
+ * FUNCIÓN DE RECALCULO DINÁMICO (CORREGIDA)
+ * Calcula la capacidad de cobertura real basándose en el nivel actual del ciclo.
+ */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    try {
-        const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
-        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
-        
-        // 🎯 LOG DE INICIO PARA CONFIRMAR LA EJECUCIÓN 🎯
-        log(`[AUDITORÍA INICIO] Ejecutando Recálculo Dinámico. LBalance actual: ${lbalance.toFixed(2)}`, 'debug');
-        // ----------------------------------------------------
+    try {
+        const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
+        
+        // Solo proceder si la estrategia Long está activa
+        if (botState.lstate === 'STOPPED') return;
 
-        // Solo proceder si la estrategia Long está activa
-        if (botState.lstate === 'STOPPED') return;
+        // 1. Preparación de parámetros
+        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
+        const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
+        const priceVarDecimal = parseNumber(config.long.price_var) / 100;
+        const orderCount = lStateData.orderCountInCycle || 0;
 
-        // 1. Verificación de seguridad (Capital muy bajo o configuración inválida)
-        if (parseFloat(lbalance) <= 0.01 || purchaseUsdt <= 0) {
-            if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-                log('[LONG] Capital muy bajo (< 0.01) o configuración inválida. Cobertura dinámica reseteada a 0.', 'warning');
-            }
-            return;
-        }
+        // 2. 🎯 CÁLCULO CRÍTICO: ¿Cuánto cuesta la PRÓXIMA orden que toca?
+        // Fórmula: Base * (1 + Incremento)^OrdenesRealizadas
+        // En tu caso: 6 * (1 + 1)^3 = 6 * 8 = 48 USDT
+        const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVarDecimal), orderCount);
 
-        // 2. CORRECCIÓN DE ROBUSTEZ (Si el capital no alcanza la orden base)
-        if (parseFloat(lbalance) < purchaseUsdt) {
-            if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-                // 🛑 ESTE ES EL LOG QUE DEBERÍAS VER CON TU ESTADO ACTUAL (1.034 < 6)
-                log(`[LONG] Capital asignado (${lbalance.toFixed(2)} USDT) insuficiente para la orden base (${purchaseUsdt.toFixed(2)} USDT). Cobertura reseteada a 0.`, 'warning');
-            }
-            return;
-        }
+        // 3. VERIFICACIÓN DE SEGURIDAD (Si el capital no alcanza para la orden que SIGUE)
+        if (parseFloat(lbalance) < nextOrderAmount) {
+            // Si el balance (8.03) es menor que la orden que sigue (48), lnorder DEBE SER 0.
+            if (lnorder !== 0) {
+                await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 }); 
+                log(`[LONG] Capacidad agotada. Balance (${lbalance.toFixed(2)}) insuficiente para orden #${orderCount + 1} (${nextOrderAmount.toFixed(2)}). LNOrder reseteado a 0.`, 'warning');
+            }
+            return;
+        }
 
-        // 3. Preparación de parámetros para el cálculo
-        const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
-        
-        const priceVarDecimal = parseNumber(config.long.price_var) / 100;
-        const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
-        
+        // 4. Determinar precio de referencia (PPC o Precio Actual)
+        const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
 
-        // 4. Ejecución del cálculo de cobertura
-        const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-            lbalance,      
-            referencePrice, 
-            purchaseUsdt,  
-            priceVarDecimal,
-            sizeVarDecimal
-        );
-        
-        // 5. Log de Auditoría (Solo se alcanza si las condiciones de retorno no se cumplen)
-        log(`[AUDITORÍA CÁLCULO] Entrada: lbalance=${lbalance.toFixed(2)}, refPrice=${referencePrice.toFixed(2)}, purchaseUsdt=${purchaseUsdt.toFixed(2)}. Salida: newLNOrder=${newLNOrder}, newLCoverage=${newLCoverage.toFixed(2)}`, 'debug');
-        // -----------------------------
+        // 5. Ejecución del cálculo de cobertura proyectada
+        // Le pasamos 'nextOrderAmount' para que empiece a simular desde el costo real actual.
+        const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
+            lbalance,       
+            referencePrice, 
+            nextOrderAmount,  
+            priceVarDecimal,
+            sizeVarDecimal
+        );
+        
+        // 6. Persistencia si hubo cambios
+        if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
+            await updateGeneralBotState({
+                lcoverage: newLCoverage,
+                lnorder: newLNOrder,
+            });
+            log(`[LONG] Recálculo: Capacidad para ${newLNOrder} órdenes más. Cobertura hasta: ${newLCoverage.toFixed(2)}`, 'debug');
+        }
 
-        // 6. Persistencia
-        if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
-            await updateGeneralBotState({
-                lcoverage: newLCoverage,
-                lnorder: newLNOrder,
-            });
-            log(`[LONG] Cobertura dinámica guardada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
-        }
-    } catch (error) {
-        console.error(`[CALCULO ERROR] Error al recalcular cobertura dinámica: ${error.message}`);
-    }
+    } catch (error) {
+        console.error(`[CALCULO ERROR] Error en el recálculo dinámico: ${error.message}`);
+    }
 }
 
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
