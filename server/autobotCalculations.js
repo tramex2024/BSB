@@ -9,40 +9,33 @@ const { parseNumber } = require('./utils/helpers'); // Importa el helper
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
 // -------------------------------------------------------------------------
-function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVarDecimal, sizeVarDecimal) {
+function calculateLongCoverage(lbalance, currentPrice, nextOrderAmount, priceVarDecimal, sizeVarDecimal) {
     let currentBalance = lbalance;
-    let nextOrderPrice = currentPrice;
-    let nextOrderAmount = purchaseUsdt;
+    let nextPrice = currentPrice;
+    let nextAmount = nextOrderAmount; // Ya viene calculado como 48 desde el logic
     let numberOfOrders = 0;
     let coveragePrice = currentPrice;
-    
-    // Convertir porcentajes a decimales (asumiendo que los parámetros de entrada son decimales aquí)
-    const decrement = priceVarDecimal; 
-    const increment = sizeVarDecimal;
 
-    if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-        // ... (cuerpo de la función calculateLongCoverage - se mantiene la lógica) ...
-        currentBalance -= nextOrderAmount;
-        numberOfOrders++;
-        coveragePrice = nextOrderPrice * (1 - decrement);
-        
-        while (true) {
-            nextOrderPrice = nextOrderPrice * (1 - decrement);
-            nextOrderAmount = nextOrderAmount * (1 + increment);
-
-            if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-                currentBalance -= nextOrderAmount;
-                numberOfOrders++;
-                coveragePrice = nextOrderPrice * (1 - decrement);
-            } else {
-                coveragePrice = nextOrderPrice; 
-                break;
-            }
+    // Bucle de simulación pura
+    while (true) {
+        // ¿Tengo suficiente para la orden que toca?
+        if (currentBalance >= nextAmount && nextAmount > 0) {
+            currentBalance -= nextAmount;
+            numberOfOrders++;
+            
+            // Calculamos cómo sería la SIGUIENTE después de esta
+            nextPrice = nextPrice * (1 - priceVarDecimal);
+            nextAmount = nextAmount * (1 + sizeVarDecimal);
+            
+            // Actualizamos el precio de cobertura alcanzado
+            coveragePrice = nextPrice;
+        } else {
+            // Si no alcanzó ni para la primera, el bucle se rompe
+            // y numberOfOrders se queda en 0.
+            break;
         }
-    } else {
-        return { coveragePrice: currentPrice, numberOfOrders: 0 };
     }
-    
+
     return { coveragePrice, numberOfOrders };
 }
 
