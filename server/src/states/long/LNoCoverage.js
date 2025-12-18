@@ -7,7 +7,7 @@ async function run(dependencies) {
     const { 
         botState, currentPrice, config, 
         updateBotState, updateLStateData,
-        getBotState, updateGeneralBotState, 
+        getBotState, updateGeneralBotState, // 🛑 Añadido aquí también
         log 
     } = dependencies;
     
@@ -32,9 +32,8 @@ async function run(dependencies) {
         }
     }
     
-    // --- 3. RECALCULO DE REQUERIMIENTOS Y LNORDER ---
+    // --- 3. RECALCULO DE REQUERIMIENTOS ---
     let requiredAmount = latestBotState.lStateData.requiredCoverageAmount || config.long.purchaseUsdt || 0;
-    let calculatedLNOrder = latestBotState.lnorder; // Por defecto el actual
     
     if (ac > 0 && latestBotState.lStateData.orderCountInCycle >= 0) { 
         const recalculation = calculateLongTargets(
@@ -46,32 +45,25 @@ async function run(dependencies) {
             latestBotState.lStateData.orderCountInCycle || 0,
             latestBotState.lbalance || 0
         );
-        
         requiredAmount = recalculation.requiredCoverageAmount;
-        calculatedLNOrder = recalculation.lNOrderMax; // Capturamos el LNorder real
-
-        // Actualizamos lStateData y sincronizamos LNorder en la misma llamada
-        await updateGeneralBotState({ 
-            "lStateData.requiredCoverageAmount": requiredAmount, 
-            "lStateData.nextCoveragePrice": recalculation.nextCoveragePrice,
-            "lnorder": calculatedLNOrder 
+        await updateLStateData({ 
+            requiredCoverageAmount: requiredAmount, 
+            nextCoveragePrice: recalculation.nextCoveragePrice 
         });
     }
 
-    // --- 4. 🛑 RESETEO CRÍTICO DE LNORDER (CORREGIDO) ---
-    const currentLBalance = parseFloat(latestBotState.lbalance || 0);
+    // --- 4. 🛑 RESETEO CRÍTICO DE LNORDER (Tu petición) ---
+    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // Definida antes de usarla
 
-    // Eliminada la restricción de ac <= 0 para permitir el reseteo si el balance es insuficiente
-    if (currentLBalance < requiredAmount && latestBotState.lnorder !== 0) {
+    if (ac <= 0 && currentLBalance < requiredAmount && latestBotState.lnorder !== 0) {
         await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
         log(`[LONG] RESET: lnorder a 0. Balance (${currentLBalance.toFixed(2)}) < Requerido (${requiredAmount.toFixed(2)})`, 'warning');
-        // Actualizamos la variable local para el log de abajo
-        calculatedLNOrder = 0;
+        return; 
     }
     
     // --- 5. LOG DE ESTADO Y TRANSICIÓN ---
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-    log(`[L] NO_COVERAGE: Bal: ${currentLBalance.toFixed(2)} | Req: ${safeRequiredAmountDiag} | LNorder: ${calculatedLNOrder}`, 'info');
+    log(`[L] NO_COVERAGE: Bal: ${currentLBalance.toFixed(2)} | Req: ${safeRequiredAmountDiag}`, 'info');
 
     if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
         try {
