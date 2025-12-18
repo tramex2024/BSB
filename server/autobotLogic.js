@@ -224,15 +224,24 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
             return;
         }
 
-        // 2. CORRECCIÓN DE ROBUSTEZ (Si el capital no alcanza la orden base)
-        if (parseFloat(lbalance) < purchaseUsdt) {
-            if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-                // 🛑 ESTE ES EL LOG QUE DEBERÍAS VER CON TU ESTADO ACTUAL (1.034 < 6)
-                log(`[LONG] Capital asignado (${lbalance.toFixed(2)} USDT) insuficiente para la orden base (${purchaseUsdt.toFixed(2)} USDT). Cobertura reseteada a 0.`, 'warning');
-            }
-            return;
-        }
+        // 2. CORRECCIÓN DE ROBUSTEZ (Validación dinámica de saldo restante)
+        const currentOrderCount = lStateData.orderCountInCycle || 0;
+        let nextOrderAmount = purchaseUsdt;
+
+        // Si ya hay órdenes ejecutadas, calculamos cuánto costaría la SIGUIENTE
+        if (currentOrderCount > 0) {
+        // Ejemplo: Si hay 3 órdenes, la siguiente es la 4ta. 
+        // Monto = purchaseUsdt * (sizeVarDecimal + 1)^(currentOrderCount)
+        nextOrderAmount = purchaseUsdt * Math.pow((sizeVarDecimal + 1), currentOrderCount);
+    }
+
+        if (parseFloat(lbalance) < nextOrderAmount) {
+        if (lnorder !== 0 || lcoverage !== 0) {
+            await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
+            log(`[LONG] Saldo insuficiente (${lbalance.toFixed(2)} USDT) para la siguiente orden de cobertura (${nextOrderAmount.toFixed(2)} USDT). LNorder reseteado.`, 'warning');
+    }
+    return;
+}
 
         // 3. Preparación de parámetros para el cálculo
         const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
