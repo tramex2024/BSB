@@ -204,76 +204,61 @@ async function slowBalanceCacheUpdate() {
 // ====================================================================
 
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    try {
-        const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
-        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
-        
-        // 🎯 LOG DE INICIO PARA CONFIRMAR LA EJECUCIÓN 🎯
-        log(`[AUDITORÍA INICIO] Ejecutando Recálculo Dinámico. LBalance actual: ${lbalance.toFixed(2)}`, 'debug');
-        // ----------------------------------------------------
-
-        // Solo proceder si la estrategia Long está activa
-        if (botState.lstate === 'STOPPED') return;
-
-        // 1. Verificación de seguridad (Capital muy bajo o configuración inválida)
-        if (parseFloat(lbalance) <= 0.01 || purchaseUsdt <= 0) {
-            if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-                log('[LONG] Capital muy bajo (< 0.01) o configuración inválida. Cobertura dinámica reseteada a 0.', 'warning');
-            }
-            return;
-        }
-
-        // 2. CORRECCIÓN DE ROBUSTEZ (Validación dinámica de saldo restante)
+    try {
+        const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
+        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
+        const priceVarDecimal = parseNumber(config.long.price_var) / 100;
+        const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
         const currentOrderCount = lStateData.orderCountInCycle || 0;
-        let nextOrderAmount = purchaseUsdt;
 
-        // Si ya hay órdenes ejecutadas, calculamos cuánto costaría la SIGUIENTE
-        if (currentOrderCount > 0) {
-        // Ejemplo: Si hay 3 órdenes, la siguiente es la 4ta. 
-        // Monto = purchaseUsdt * (sizeVarDecimal + 1)^(currentOrderCount)
-        nextOrderAmount = purchaseUsdt * Math.pow((sizeVarDecimal + 1), currentOrderCount);
-    }
+        // Solo proceder si la estrategia Long está activa
+        if (botState.lstate === 'STOPPED') return;
 
+        // 1. Verificación de seguridad
+        if (parseFloat(lbalance) <= 0.01 || purchaseUsdt <= 0) {
+            if (lnorder !== 0 || lcoverage !== 0) {
+                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
+            }
+            return;
+        }
+
+        // 2. Cálculo del monto de la SIGUIENTE orden real
+        // Si hay 3 órdenes, la siguiente es la 4ta (potencia 3)
+        const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVarDecimal), currentOrderCount);
+
+        // 3. Verificación de saldo para la SIGUIENTE orden
         if (parseFloat(lbalance) < nextOrderAmount) {
-        if (lnorder !== 0 || lcoverage !== 0) {
-            await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-            log(`[LONG] Saldo insuficiente (${lbalance.toFixed(2)} USDT) para la siguiente orden de cobertura (${nextOrderAmount.toFixed(2)} USDT). LNorder reseteado.`, 'warning');
+            if (lnorder !== 0 || lcoverage !== 0) {
+                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
+                log(`[LONG] Saldo insuficiente (${lbalance.toFixed(2)} USDT) para la orden #${currentOrderCount + 1} (${nextOrderAmount.toFixed(2)} USDT). LNorder: 0`, 'warning');
+            }
+            return;
+        }
+
+        // 4. Preparación de precio de referencia
+        const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
+
+        // 5. Ejecución del cálculo de cobertura PASANDO EL CICLO ACTUAL
+        const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
+            lbalance,      
+            referencePrice, 
+            purchaseUsdt,  
+            priceVarDecimal,
+            sizeVarDecimal,
+            currentOrderCount // 🎯 CRÍTICO: Ahora sí pasamos la profundidad del ciclo
+        );
+        
+        // 6. Persistencia si hay cambios
+        if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
+            await updateGeneralBotState({
+                lcoverage: newLCoverage,
+                lnorder: newLNOrder,
+            });
+            log(`[LONG] Cobertura recalculada. Disponibles: ${newLNOrder} órdenes más.`, 'debug');
+        }
+    } catch (error) {
+        console.error(`[CALCULO ERROR] Error en recalculateDynamicCoverageLong: ${error.message}`);
     }
-    return;
-}
-
-        // 3. Preparación de parámetros para el cálculo
-        const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
-        
-        const priceVarDecimal = parseNumber(config.long.price_var) / 100;
-        const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
-        
-
-        // 4. Ejecución del cálculo de cobertura
-        const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-            lbalance,      
-            referencePrice, 
-            purchaseUsdt,  
-            priceVarDecimal,
-            sizeVarDecimal
-        );
-        
-        // 5. Log de Auditoría (Solo se alcanza si las condiciones de retorno no se cumplen)
-        log(`[AUDITORÍA CÁLCULO] Entrada: lbalance=${lbalance.toFixed(2)}, refPrice=${referencePrice.toFixed(2)}, purchaseUsdt=${purchaseUsdt.toFixed(2)}. Salida: newLNOrder=${newLNOrder}, newLCoverage=${newLCoverage.toFixed(2)}`, 'debug');
-        // -----------------------------
-
-        // 6. Persistencia
-        if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
-            await updateGeneralBotState({
-                lcoverage: newLCoverage,
-                lnorder: newLNOrder,
-            });
-            log(`[LONG] Cobertura dinámica guardada. LNOrder: ${lnorder} -> ${newLNOrder}, LCoverage: ${newLCoverage.toFixed(2)} USD.`, 'debug');
-        }
-    } catch (error) {
-        console.error(`[CALCULO ERROR] Error al recalcular cobertura dinámica: ${error.message}`);
-    }
 }
 
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {

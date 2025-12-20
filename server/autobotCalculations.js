@@ -9,27 +9,28 @@ const { parseNumber } = require('./utils/helpers'); // Importa el helper
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
 // -------------------------------------------------------------------------
-function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVarDecimal, sizeVarDecimal) {
+function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVarDecimal, sizeVarDecimal, orderCountInCycle = 0) {
     let currentBalance = lbalance;
     let nextOrderPrice = currentPrice;
-    let nextOrderAmount = purchaseUsdt;
+    
+    // 🎯 CORRECCIÓN: Calcular el monto de la "siguiente" orden real según el ciclo actual
+    // Si orderCountInCycle es 3, la siguiente orden es la 4ta.
+    let nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVarDecimal), orderCountInCycle);
+    
     let numberOfOrders = 0;
     let lastCoveragePrice = currentPrice;
 
     // Ajuste: El ciclo debe validar ANTES de contar la orden
     while (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-        // Ejecutamos la "simulación" de la compra
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
         
-        // El precio de cobertura es el precio de esta orden
         lastCoveragePrice = nextOrderPrice;
 
         // Preparamos los datos para la SIGUIENTE orden
         nextOrderPrice = nextOrderPrice * (1 - priceVarDecimal);
         nextOrderAmount = nextOrderAmount * (1 + sizeVarDecimal);
         
-        // Seguridad para evitar bucles infinitos si size_var es 0
         if (numberOfOrders > 50) break; 
     }
 
@@ -47,7 +48,6 @@ function calculateNextDcaPrice(ppc, priceVarDecimal, count) {
     return ppc * (1 - priceVarDecimal);
 }
 
-
 // -------------------------------------------------------------------------
 // LÓGICA DE TARGETS POST-COMPRA (LONG)
 // -------------------------------------------------------------------------
@@ -61,37 +61,25 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
 
     const targetSellPrice = ppc * (1 + profitDecimal);
     
-    // 1. Calculamos cuánto dinero se necesita para la SIGUIENTE orden (Orden N + 1)
-    // Si count es 3, necesitamos saber cuánto cuesta la 4ta orden.
-    const finalRequiredAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
-
+    // Determinamos el precio de referencia para la siguiente caída
     const referencePrice = (count > 0 && lastExecutionPrice > 0) ? lastExecutionPrice : ppc;
     const nextCoveragePrice = referencePrice * (1 - priceVarDecimal);
 
-    // 2. Si el balance no alcanza ni para la siguiente orden, LNOrder es 0
-    if (balance < finalRequiredAmount) {
-        return { 
-            targetSellPrice, 
-            nextCoveragePrice, 
-            requiredCoverageAmount: finalRequiredAmount,
-            lCoveragePrice: nextCoveragePrice, // No hay más cobertura que la inmediata fallida
-            lNOrderMax: 0 
-        };
-    }
-
-    // 3. Si alcanza, calculamos cuántas MÁS puede cubrir
+    // 🎯 LLAMADA ÚNICA Y LIMPIA:
+    // Dejamos que calculateLongCoverage decida si el balance alcanza para la orden 'count'
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,
-        nextCoveragePrice, // Empezamos a calcular desde el precio de la siguiente
-        finalRequiredAmount, 
+        nextCoveragePrice,
+        baseAmount, // Pasamos el BASE, la función se encarga de elevarlo a la potencia 'count'
         priceVarDecimal,
-        sizeVarDecimal
+        sizeVarDecimal,
+        count       // Pasamos el ciclo actual
     );
 
     return { 
         targetSellPrice, 
         nextCoveragePrice, 
-        requiredCoverageAmount: finalRequiredAmount,
+        requiredCoverageAmount: baseAmount * Math.pow((1 + sizeVarDecimal), count),
         lCoveragePrice, 
         lNOrderMax 
     };

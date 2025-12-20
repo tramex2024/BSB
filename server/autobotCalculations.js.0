@@ -14,36 +14,29 @@ function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVarDec
     let nextOrderPrice = currentPrice;
     let nextOrderAmount = purchaseUsdt;
     let numberOfOrders = 0;
-    let coveragePrice = currentPrice;
-    
-    // Convertir porcentajes a decimales (asumiendo que los parámetros de entrada son decimales aquí)
-    const decrement = priceVarDecimal; 
-    const increment = sizeVarDecimal;
+    let lastCoveragePrice = currentPrice;
 
-    if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-        // ... (cuerpo de la función calculateLongCoverage - se mantiene la lógica) ...
+    // Ajuste: El ciclo debe validar ANTES de contar la orden
+    while (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
+        // Ejecutamos la "simulación" de la compra
         currentBalance -= nextOrderAmount;
         numberOfOrders++;
-        coveragePrice = nextOrderPrice * (1 - decrement);
         
-        while (true) {
-            nextOrderPrice = nextOrderPrice * (1 - decrement);
-            nextOrderAmount = nextOrderAmount * (1 + increment);
+        // El precio de cobertura es el precio de esta orden
+        lastCoveragePrice = nextOrderPrice;
 
-            if (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-                currentBalance -= nextOrderAmount;
-                numberOfOrders++;
-                coveragePrice = nextOrderPrice * (1 - decrement);
-            } else {
-                coveragePrice = nextOrderPrice; 
-                break;
-            }
-        }
-    } else {
-        return { coveragePrice: currentPrice, numberOfOrders: 0 };
+        // Preparamos los datos para la SIGUIENTE orden
+        nextOrderPrice = nextOrderPrice * (1 - priceVarDecimal);
+        nextOrderAmount = nextOrderAmount * (1 + sizeVarDecimal);
+        
+        // Seguridad para evitar bucles infinitos si size_var es 0
+        if (numberOfOrders > 50) break; 
     }
-    
-    return { coveragePrice, numberOfOrders };
+
+    return { 
+        coveragePrice: lastCoveragePrice, 
+        numberOfOrders: numberOfOrders 
+    };
 }
 
 // -------------------------------------------------------------------------
@@ -66,41 +59,41 @@ function calculateLongTargets(ppc, profit_percent, price_var, size_var, basePurc
     const count = orderCountInCycle || 0;
     const balance = parseNumber(lbalance);
 
-    // ... (Logs de auditoría y lógica de cálculo) ...
-
     const targetSellPrice = ppc * (1 + profitDecimal);
-    const calculatedAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
-    let finalRequiredAmount = calculatedAmount;
-
-    // 🛑 Eliminar o comentar las LÓGICAS DE PRUEBA Y DE FALLO CRÍTICO una vez resuelto
-    // if (calculatedAmount === 0 && count > 0) { ... }
-    // if (finalRequiredAmount === 0 && count > 0) { ... }
-
+    
+    // 1. Calculamos cuánto dinero se necesita para la SIGUIENTE orden (Orden N + 1)
+    // Si count es 3, necesitamos saber cuánto cuesta la 4ta orden.
+    const finalRequiredAmount = baseAmount * Math.pow((1 + sizeVarDecimal), count); 
 
     const referencePrice = (count > 0 && lastExecutionPrice > 0) ? lastExecutionPrice : ppc;
+    const nextCoveragePrice = referencePrice * (1 - priceVarDecimal);
 
-    const nextCoveragePrice = calculateNextDcaPrice(referencePrice, priceVarDecimal, count); 
+    // 2. Si el balance no alcanza ni para la siguiente orden, LNOrder es 0
+    if (balance < finalRequiredAmount) {
+        return { 
+            targetSellPrice, 
+            nextCoveragePrice, 
+            requiredCoverageAmount: finalRequiredAmount,
+            lCoveragePrice: nextCoveragePrice, // No hay más cobertura que la inmediata fallida
+            lNOrderMax: 0 
+        };
+    }
 
+    // 3. Si alcanza, calculamos cuántas MÁS puede cubrir
     const { coveragePrice: lCoveragePrice, numberOfOrders: lNOrderMax } = calculateLongCoverage(
         balance,
-        ppc, 
+        nextCoveragePrice, // Empezamos a calcular desde el precio de la siguiente
         finalRequiredAmount, 
         priceVarDecimal,
         sizeVarDecimal
     );
 
-    if(finalRequiredAmount > balance){
-        return { 
-            targetSellPrice, nextCoveragePrice, 
-            requiredCoverageAmount: finalRequiredAmount,
-            lCoveragePrice: nextCoveragePrice, 
-            lNOrderMax
-        };
-    }
-
     return { 
-        targetSellPrice, nextCoveragePrice, requiredCoverageAmount: finalRequiredAmount,
-        lCoveragePrice, lNOrderMax 
+        targetSellPrice, 
+        nextCoveragePrice, 
+        requiredCoverageAmount: finalRequiredAmount,
+        lCoveragePrice, 
+        lNOrderMax 
     };
 }
 

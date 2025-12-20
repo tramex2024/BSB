@@ -158,14 +158,14 @@ async function updateBotStateWithPrice(price) {
         // 🛑 2. LÓGICA DE ACTUALIZACIÓN DE COBERTURA 🛑
         if (botState.lstate === 'STOPPED' || botState.lstate === 'NO_COVERAGE') {            
 
-            // Recalcula lcoverage y lnorder con el nuevo precio
-            const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
-                botState.lbalance,
-                currentPrice,
-                botState.config.long.purchaseUsdt,
-                botState.config.long.price_var / 100,
-                botState.config.long.size_var / 100
-            );
+    		const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
+        		botState.lbalance,
+        		currentPrice,
+        		botState.config.long.purchaseUsdt,
+        		botState.config.long.price_var / 100,
+        		botState.config.long.size_var / 100,
+        		botState.lStateData.orderCountInCycle // <--- AGREGAR ESTE PARÁMETRO
+    	);
 
             // Inicializar scoverage y snorder (mantener el valor actual)
             const scoverage = botState.scoverage;
