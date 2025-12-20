@@ -87,14 +87,15 @@ export function updateBotUI(state) {
                 // Montos de dinero/balance/precios (2 decimales)
                 element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
             } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
-                // Contadores (0 decimales)
-                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
-            } else {
-                // Si no es un número esperado, intentar mostrar el valor original
-                // Usar String(state[dataKey]) asegura que '0' se muestre y no se caiga en la lógica 'falsy'
-                element.textContent = state[dataKey] !== undefined && state[dataKey] !== null ? String(state[dataKey]) : 'N/A';
-            }
-        }
+    		// 🛑 MEJORA CRÍTICA: Forzamos la visualización real de los contadores
+    		if (state[dataKey] === 0 || state[dataKey] === "0") {
+        	element.textContent = "0";
+        	if (dataKey === 'lnorder') element.classList.add('text-red-500'); // Alerta visual de sin capital
+    	        } else {
+        	element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
+        	element.classList.remove('text-red-500');
+    }
+}
     }
     
     const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';

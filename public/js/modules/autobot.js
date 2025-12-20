@@ -67,10 +67,13 @@ function updateDynamicBotMetrics(botState) {
 
     // 2. Actualizar LNORDER
     const lnorderEl = document.getElementById('au-lnorder');
-    const lnorder = parseInt(botState.lnorder || 0, 10);
+    // Forzamos que si es undefined o null sea 0, no 1.
+    const lnorder = botState.lnorder !== undefined ? parseInt(botState.lnorder, 10) : 0;
 
     if (lnorderEl) {
         lnorderEl.textContent = lnorder;
+        // Tip visual: Si es 0, ponlo en rojo para saber que no hay cobertura
+        lnorderEl.style.color = lnorder === 0 ? '#ff4d4d' : '#00ff88';
     }
     
     // 3. Actualizar PPC (Precio Promedio de Compra, si está disponible)
@@ -368,6 +371,13 @@ export async function initializeAutobotView() {
             updateOpenOrdersTable(ordersData, 'au-order-list', currentTab);
         });
         
+        socket.on('full-state-sync', (data) => {
+    	console.log("Dato real del servidor -> LNOrder:", data.botState.lnorder); // <--- MIRA ESTO
+    	const botState = data.botState;
+    	updateBotUI(botState);
+    	updateDynamicBotMetrics(botState);
+	}); 
+
         // 🛑 ELIMINADO: Listener 'bot-state-update'. Ahora se usa 'full-state-sync'.
         
     } else {
