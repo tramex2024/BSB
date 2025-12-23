@@ -63,7 +63,7 @@ async function run(dependencies) {
     
     // --- 5. LOG DE ESTADO Y TRANSICIÓN ---
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-    log(`[L] NO_COVERAGE: Bal: ${currentLBalance.toFixed(2)} | Req: ${safeRequiredAmountDiag}`, 'info');
+    log(`[L] NO_COVERAGE: Balance: ${currentLBalance.toFixed(2)} | Require: ${safeRequiredAmountDiag}`, 'info');
 
     if (currentLBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
         try {
