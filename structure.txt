@@ -7,7 +7,6 @@ BSB/			    # Bitmart Spot Bots
 ├── .git/					# Git directory files
 ├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
 │   ├── index.html
-│   ├── testbot.html
 │   ├── autobot.html
 │   ├── aibot.html
 │   ├── dashboard.html
@@ -24,13 +23,11 @@ BSB/			    # Bitmart Spot Bots
 │        	  └── logout.js
 │       	  └── auth.js
 │        	  └── orders.js
-│       	  └── tecalculations.js
 │       	  └── aicalculations.js
 │       	  └── navigation.js
 │       	  └── bot.js
 │       	  └── autobot.js
 │       	  └── aibot.js
-│       	  └── testbot.js
 │       	  └── dashboard.js
 │       	  └── network.js
 │       	  └── balance.js
@@ -52,14 +49,17 @@ BSB/			    # Bitmart Spot Bots
      │   └── AutobotMock.js
      │   └── User.js
      │   └── BotState.js
+     │   └── TradeCycle.js
      ├── middleware/
      │   └── bitmartAuthMiddleware.js
      │   └── authMiddleware.js
      ├── services/
      │   └── orderPersistenceService.js
+     │   └── cycleLogService.js
      │   └── bitmartService.js
      │   └── bitmartClient.js
      │   └── bitmartSpot.js
+     │   └── bitmartWs.js
      │   └── check_time.js
      │   └── test_sign.js
      ├── routes/
@@ -76,7 +76,8 @@ BSB/			    # Bitmart Spot Bots
      │   └── orderController.js
      │   └── balanceController.js
      │   └── bitmartController.js
-     │   └── analyticsController.js 
+     │   └── analyticsController.js
+     │   └── configController.js
      ├── utils/
      │   └── encryption.js
      │   └── cryptoUtils.js
@@ -108,10 +109,12 @@ BSB/			    # Bitmart Spot Bots
 	       │   └── LNoCoverage.js
 	       │   └── LBuying.js
                │   └── LongBuyConsolidator.js
+               │   └── LongSellConsolidator.js
 	       ├── short/	
                	    └── SStopped.js
 		    └── SSelling.js
 		    └── SRunning.js
 		    └── SNoCoverage.js
 		    └── SBuying.js
-	            └── ShortSellConsolidator.js
+	            └── ShortBuyConsolidator.js
+                    └── ShortSellConsolidator.js
