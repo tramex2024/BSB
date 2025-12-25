@@ -425,6 +425,20 @@ body.lite-mode .log-bar {
     color: #333;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
 }
+
+/* Nueva animación de parpadeo para el estado rojo */
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+/* Estado ROJO actualizado con parpadeo */
+.status-red {
+    background-color: #ef4444; /* Rojo de Tailwind */
+    animation: blink 2s ease-in-out infinite;
+}
+
 /* --- ESTILOS PARA LOS CONTENEDORES DE GRÁFICOS --- */
 /* Aseguramos que los divs del gráfico tengan una altura para que TradingView sepa dónde renderizar */
 #te-tvchart,
