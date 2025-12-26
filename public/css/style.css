@@ -3,13 +3,13 @@
     --dark-header-bg: #16213e;
     --dark-text: #e0e0e0;
     --dark-accent: #0f3460;
-    --dark-border: #007bff; /* Blue for highlights/borders */
+    --dark-border: #007bff;
     --input-bg: #2b3a55;
     --button-bg: #007bff;
     --button-text: #ffffff;
-    --modal-bg: #2b3a55; /* Keep this variable, but override specifically for modal-content */
-    --log-bar-bg: #2c3e50; /* Un color oscuro para la barra de logs */
-    --log-text-color: #ecf0f1; /* Color de texto claro para los logs */
+    --modal-bg: #2b3a55;
+    --log-bar-bg: #2c3e50;
+    --log-text-color: #ecf0f1;
 }
 
 body.dark-mode {
@@ -17,11 +17,11 @@ body.dark-mode {
     color: var(--dark-text);
     font-family: 'Arial', sans-serif;
     margin: 0;
-    padding-top: 0; /* Aseguramos que el body no tenga padding superior */
+    padding-top: 0;
     overflow-x: hidden;
 }
 
-/* Header Styles */
+/* --- HEADER STYLES --- */
 .fixed-header {
     position: sticky;
     top: 0;
@@ -40,17 +40,18 @@ body.dark-mode {
 .header-left {
     display: flex;
     align-items: center;
+    gap: 10px; /* Espacio uniforme entre logo y elementos */
 }
 
 .logo {
     height: 40px;
-    margin-right: 10px;
 }
 
 .app-name {
     font-size: 1.5em;
     font-weight: bold;
     color: var(--dark-text);
+    margin-right: 12px; /* Espacio entre texto y bolita */
 }
 
 .header-middle {
@@ -93,48 +94,10 @@ body.dark-mode {
     color: var(--dark-border);
 }
 
-/* --- ESTILOS RESPONSIVOS PARA EL HEADER --- */
-@media (max-width: 768px) {
-    .fixed-header {
-        flex-wrap: wrap;
-        height: auto;
-        padding: 10px;
-        justify-content: center;
-        text-align: center;
-    }
-
-    .header-middle {
-        width: 100%;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 10px;
-        margin-bottom: 5px;
-    }
-
-    .header-right {
-        width: 100%;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 15px;
-        margin-top: 5px;
-    }
-
-    .app-name {
-        font-size: 1.2em;
-    }
-
-    .logo {
-        height: 30px;
-    }
-
-
-}
-
-/* --- NUEVOS ESTILOS PARA LA FRANJA DE LOGS --- */
+/* --- LOG BAR --- */
 .log-bar {
     position: sticky;
-    top: 60px; /* Justo debajo del header de 60px */
+    top: 60px;
     left: 0;
     width: 100%;
     height: 30px;
@@ -145,92 +108,114 @@ body.dark-mode {
     padding: 0 20px;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
     z-index: 999;
-    /* 🛑 CAMBIO AQUÍ: Reducimos el tamaño de la fuente */
     font-size: 0.8em; 
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* Ajuste para pantallas pequeñas: la log-bar ya no será sticky sino relativa en móvil */
-@media (max-width: 768px) {
-    .log-bar {
-        position: relative; /* Cambiado a relative para fluir en móvil */
-        top: auto; /* Desactivar el top fijo */
-        padding: 5px 10px;
-        font-size: 0.8em;
-        height: auto; /* Permitir que la altura se ajuste al contenido */
-    }
-}
-
-/* * ============================================
-
-💡 ESTILOS PARA LA BOLITA DE ESTADO (au-connection-status)
-
-============================================
-*/
-#au-connection-status {
+/* --- ESTILOS DE LA BOLITA DE ESTADO --- */
+#status-dot {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    transition: all 0.3s ease;
+    display: block;
+    transition: background-color 0.3s ease;
 }
 
-/* ESTADO 1: ÉXITO (API_SUCCESS) */
 .status-green {
-    background-color: #4CAF50; /* Un verde sólido y visible */
-    box-shadow: 0 0 6px #4CAF50;
+    background-color: #10b981;
+    animation: pulse 2s ease-in-out infinite;
 }
 
-/* ESTADO 2: ADVERTENCIA (CACHE_FALLBACK) */
 .status-yellow {
-    background-color: #FFC107; /* Un amarillo sólido */
-    box-shadow: 0 0 6px #FFC107;
+    background-color: #f59e0b;
+    animation: blink-slow 3s ease-in-out infinite;
 }
 
-/* ESTADO 3: ERROR/DESCONEXIÓN (Desconocido / Disconnected) */
 .status-red {
-    background-color: #F44336; /* Un rojo sólido */
-    box-shadow: 0 0 6px #F44336;
+    background-color: #ef4444;
+    animation: blink-fast 1.5s ease-in-out infinite;
 }
 
-/* Content Area */
+/* --- ANIMACIONES --- */
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+}
+
+@keyframes blink-fast {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+
+@keyframes blink-slow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* --- RESPONSIVE --- */
+@media (max-width: 768px) {
+    .fixed-header {
+        flex-direction: column;
+        height: auto;
+        padding: 15px 10px;
+    }
+
+    .header-left {
+        margin-bottom: 10px;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .header-middle {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 15px;
+    }
+
+    .header-right {
+        width: 100%;
+        justify-content: center;
+        gap: 15px;
+    }
+
+    .app-name {
+        font-size: 1.1em;
+        margin-right: 8px;
+    }
+
+    .logo {
+        height: 30px;
+    }
+
+    .log-bar {
+        position: relative;
+        top: 0;
+        height: auto;
+        padding: 8px 15px;
+        text-align: center;
+        justify-content: center;
+    }
+}
+
+/* --- CONTENT & MODALS --- */
 .content {
     padding: 20px;
-    /* Eliminamos el margin-top por defecto aquí para desktop */
-    margin-top: 0;
     box-sizing: border-box;
 }
 
-/* Ajuste para móviles: el content necesita un margin-top solo cuando el header/log-bar no son sticky */
-@media (max-width: 768px) {
-    .content {
-        /* En móvil, los elementos superiores son relative y ocupan su espacio normalmente. */
-        /* Sumamos la altura estimada del header colapsado (aprox. 120-140px si se envuelve)
-        más la altura de la log-bar (aprox. 30px) y un pequeño extra. */
-        /* Ajusta este valor si aún ves un pequeño solapamiento o espacio. */
-        margin-top: 10px; /* Un pequeño margen para separar del flujo normal */
-        padding-top: 0; /* Quitar padding-top si ya se usa margin-top */
-    }
-}
-
-/* Resto de estilos del modal y otros sin cambios */
 .tab-content {
     display: none;
-    min-height: calc(100vh - 90px); /* Ajuste: 90px (header+log-bar) es lo que queda "fixed" en desktop */
-}
-
-@media (max-width: 768px) {
-    .tab-content {
-        min-height: auto;
-    }
+    min-height: calc(100vh - 90px);
 }
 
 .tab-content.active {
     display: block;
 }
 
-/* --- Consolidated Modal Styles (for both Auth and API modals) --- */
 .modal {
     display: none;
     position: fixed;
@@ -239,7 +224,6 @@ body.dark-mode {
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
     background-color: rgba(0, 0, 0, 0.7);
     justify-content: center;
     align-items: center;
@@ -248,70 +232,15 @@ body.dark-mode {
 
 .modal-content {
     background-color: #2d3748;
-    margin: auto;
     padding: 30px;
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    text-align: center;
     width: 90%;
     max-width: 400px;
     color: white;
     position: relative;
 }
 
-.modal-content h3, .modal-content h2 {
-    margin-bottom: 20px;
-    color: #4CAF50;
-    text-align: center;
-}
-
-.modal-content label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: bold;
-    color: var(--dark-text);
-}
-
-.modal-content input[type="email"],
-.modal-content input[type="text"],
-.modal-content input[type="password"] {
-    width: calc(100% - 20px);
-    padding: 12px;
-    margin-bottom: 15px;
-    border: 1px solid #4a5568;
-    border-radius: 5px;
-    background-color: #1a202c;
-    color: white;
-    font-size: 1em;
-}
-
-.modal-content input::placeholder {
-    color: #999;
-}
-
-.modal-content button {
-    background-color: #4CAF50;
-    color: white;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 1.1em;
-    width: 100%;
-    transition: background-color 0.3s ease;
-}
-
-.modal-content button:hover {
-    background-color: #45a049;
-}
-
-.message-text {
-    margin-top: 15px;
-    font-size: 0.9rem;
-    text-align: center;
-}
-
-/* Close button for modals */
 .close-button {
     color: #aaa;
     font-size: 28px;
@@ -322,131 +251,11 @@ body.dark-mode {
     cursor: pointer;
 }
 
-.close-button:hover,
-.close-button:focus {
-    color: white;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-/* Connection Indicator Styles (for API modal, but can be general) */
-.indicator-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 20px;
-}
-
-.indicator-circle {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: #6b7280;
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 8px;
-}
-
-.indicator-circle.bg-red-500 {
-    background-color: #ef4444;
-}
-
-.indicator-circle.bg-green-500 {
-    background-color: #22c55e;
-}
-
-.indicator-circle.bg-yellow-500 {
-    background-color: #eab308;
-}
-
-.indicator-circle.bg-gray-500 {
-    background-color: #6b7280;
-}
-
-.indicator-text {
-    display: inline-block;
-    vertical-align: middle;
-    color: #9ca3af;
-    font-weight: bold;
-}
-
-/* Lite Mode - Add these if you implement the toggle */
-body.lite-mode {
-    background-color: #f0f2f5;
-    color: #333;
-}
-
-body.lite-mode .fixed-header {
-    background-color: #ffffff;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-body.lite-mode .app-name,
-body.lite-mode .nav-tab,
-body.lite-mode .header-right .icon {
-    color: #333;
-}
-
-body.lite-mode .nav-tab:hover {
-    background-color: #e0e0e0;
-}
-
-body.lite-mode .nav-tab.active {
-    background-color: #e0e0e0;
-    border-bottom: 2px solid #007bff;
-}
-
-body.lite-mode .modal-content {
-    background-color: #ffffff;
-    color: #333;
-}
-
-body.lite-mode .modal-content h3, body.lite-mode .modal-content h2 {
-    color: #4CAF50;
-}
-
-body.lite-mode .modal-content input {
-    background-color: #f9f9f9;
-    border: 1px solid #ccc;
-    color: #333;
-}
-
-body.lite-mode .modal-content button {
-    background-color: #27ae60;
-    color: white;
-}
-
-body.lite-mode .modal-content button:hover {
-    background-color: #2ecc71;
-}
-
-body.lite-mode .log-bar {
-    background-color: #dcdcdc;
-    color: #333;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
-}
-
-/* Nueva animación de parpadeo para el estado rojo */
-@keyframes blink {
-    0% { opacity: 1; }
-    50% { opacity: 0.3; }
-    100% { opacity: 1; }
-}
-
-/* Estado ROJO actualizado con parpadeo */
-.status-red {
-    background-color: #ef4444; /* Rojo de Tailwind */
-    animation: blink 2s ease-in-out infinite;
-}
-
-/* --- ESTILOS PARA LOS CONTENEDORES DE GRÁFICOS --- */
-/* Aseguramos que los divs del gráfico tengan una altura para que TradingView sepa dónde renderizar */
-#te-tvchart,
-#au-tvchart,
-#ai-tvchart {
+/* Gráficos */
+#te-tvchart, #au-tvchart, #ai-tvchart {
     width: 100%;
-    height: 500px; /* Puedes ajustar esta altura según tus preferencias */
-    background-color: var(--dark-header-bg); /* Un color de fondo para que no se vea vacío */
+    height: 500px;
+    background-color: var(--dark-header-bg);
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }

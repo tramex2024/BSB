@@ -20,23 +20,27 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
+/**
+ * Actualiza visualmente la bolita de estado en el header
+ */
 function updateConnectionStatusBall(source) {
     const statusDot = document.getElementById('status-dot'); 
     if (!statusDot) return;
     
-    // 1. Limpiamos todas las clases posibles (Tailwind y personalizadas)
+    // 1. Limpiamos todas las clases de estado pero mantenemos las de forma y tamaño
+    // Usamos className para resetear por completo y evitar residuos
     statusDot.className = 'h-full w-full rounded-full block'; 
 
-    // 2. Aplicamos la lógica de estados
+    // 2. Aplicamos la lógica de estados según la fuente de datos
     if (source === 'API_SUCCESS') {
-        statusDot.classList.add('status-green'); // Pulso verde
+        statusDot.classList.add('status-green'); // Pulso verde (CSS)
         statusDot.title = 'Conectado a BitMart';
     } else if (source === 'CACHE_FALLBACK') {
-        statusDot.classList.add('bg-yellow-500'); // Amarillo estático (o puedes crear status-yellow)
+        statusDot.classList.add('status-yellow'); // Parpadeo lento amarillo (CSS)
         statusDot.title = 'Usando datos en caché';
     } else {
-        // source === 'DISCONNECTED' o error
-        statusDot.classList.add('status-red'); // Parpadeo rojo
+        // DISCONNECTED o errores
+        statusDot.classList.add('status-red'); // Parpadeo rápido rojo (CSS)
         statusDot.title = 'Desconectado';
     }
 }
@@ -67,6 +71,7 @@ export async function initializeTab(tabName) {
 }
 
 export function initializeFullApp() {
+    // Estado inicial al conectar
     updateConnectionStatusBall('DISCONNECTED'); 
 
     socket = io(BACKEND_URL, { path: '/socket.io' });
@@ -90,6 +95,7 @@ export function initializeFullApp() {
     });
 
     socket.on('balance-real-update', (data) => {
+        // Aquí es donde recibimos el estado de la conexión desde el backend
         updateConnectionStatusBall(data.source);
         if (data.lastAvailableUSDT !== undefined) {
             updateBotBalances([
