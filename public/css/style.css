@@ -231,6 +231,11 @@ body {
     transition: color 0.3s ease;
 }
 
+// Versión con "ajuste de línea" por seguridad
+<p class="text-gray-600 text-[9px] font-mono break-all max-w-[150px] ml-auto">
+    ID: ${orderId}
+</p>
+
 /* --- TRADINGVIEW --- */
 .chart-container {
     background: var(--dark-header-bg);
