@@ -5,31 +5,31 @@ import { BACKEND_URL } from '../main.js';
 // --- FUNCIONES INTERNAS ---
 
 /**
- * Actualiza el elemento con el ID 'aubalance' con el saldo real de USDT y BTC
- * del exchange en el formato "USDT: X | BTC: Y".
- * @param {Array<object>} walletData - Array de objetos de saldo procesados.
+ * Actualiza los elementos de balance USDT y BTC por separado
+ * @param {Array<object>} walletData - Array de objetos [{currency: 'USDT', available: 10}, ...]
  */
 export function updateBotBalances(walletData) {
-    if (!walletData || walletData.length < 2) return;
+    if (!walletData || !Array.isArray(walletData)) return;
 
-    // Buscamos los balances de USDT y BTC en el array de datos
-    const usdtBalance = walletData.find(w => w.currency === 'USDT');
-    const btcBalance = walletData.find(w => w.currency === 'BTC');
+    // Buscamos los balances en el array
+    const usdtData = walletData.find(w => w.currency === 'USDT');
+    const btcData = walletData.find(w => w.currency === 'BTC');
 
-    // Extraemos el saldo disponible ('available') y lo formateamos
-    // USDT: 2 decimales
-    const usdtValue = usdtBalance ? parseFloat(usdtBalance.available).toFixed(2) : '0.00';
-    // BTC: 5 decimales
-    const btcValue = btcBalance ? parseFloat(btcBalance.available).toFixed(5) : '0.00000';
-    
-    // CONSTRUIR EL FORMATO REQUERIDO
-    const formattedBalance = `USDT: ${usdtValue} | BTC: ${btcValue}`;
+    // Referencias a los elementos del HTML
+    const usdtEl = document.getElementById('aubalance-usdt');
+    const btcEl = document.getElementById('aubalance-btc');
 
-    // ASIGNAR AL ID DEL FRONTEND
-    const totalBalanceEl = document.getElementById('aubalance');
-        
-    if (totalBalanceEl) {
-        totalBalanceEl.textContent = formattedBalance; 
+    // Actualizamos USDT (2 decimales)
+    if (usdtEl && usdtData) {
+        usdtEl.textContent = parseFloat(usdtData.available).toLocaleString(undefined, { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
+    }
+
+    // Actualizamos BTC (6 decimales para mayor precisión)
+    if (btcEl && btcData) {
+        btcEl.textContent = parseFloat(btcData.available).toFixed(6);
     }
 }
 
