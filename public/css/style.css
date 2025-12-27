@@ -227,6 +227,10 @@ body {
     }
 }
 
+#price-percent, #price-icon, #profit-percent, #profit-icon {
+    transition: color 0.3s ease;
+}
+
 /* --- TRADINGVIEW --- */
 .chart-container {
     background: var(--dark-header-bg);

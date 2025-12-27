@@ -99,6 +99,7 @@ export function initializeFullApp() {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
 
+        // 1. Actualizar el precio principal (clase .price-display)
         const priceElements = document.querySelectorAll('.price-display');
         let priceColorClass = (lastPrice > 0 && newPrice > lastPrice) ? 'text-green-500' : 
                              (lastPrice > 0 && newPrice < lastPrice) ? 'text-red-500' : 'text-white';
@@ -108,9 +109,45 @@ export function initializeFullApp() {
             el.classList.add(priceColorClass);
             el.textContent = `$${newPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         });
+
+        // 2. NUEVO: Actualizar el porcentaje y la flecha (Datos provistos por el backend)
+        // Asumiendo que el backend ahora envía 'priceChangePercent'
+        if (data.priceChangePercent !== undefined) {
+            const percentEl = document.getElementById('price-percent');
+            const iconEl = document.getElementById('price-icon');
+            
+            if (percentEl && iconEl) {
+                const isUp = data.priceChangePercent >= 0;
+                percentEl.textContent = `${Math.abs(data.priceChangePercent).toFixed(2)}%`;
+                
+                // Aplicar colores y cambiar icono
+                percentEl.className = isUp ? 'text-green-400' : 'text-red-400';
+                iconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'} ${isUp ? 'text-green-400' : 'text-red-400'}`;
+            }
+        }
+
         lastPrice = newPrice;
     });
+    
+    // Escuchar estadísticas del bot (Profit y rendimiento)
+    socket.on('bot-stats', (data) => {
+        const profitEl = document.getElementById('auprofit');
+        const profitPercentEl = document.getElementById('profit-percent');
+        const profitIconEl = document.getElementById('profit-icon');
 
+        if (profitEl) {
+            profitEl.textContent = parseFloat(data.totalProfit || 0).toFixed(2);
+            profitEl.className = (data.totalProfit >= 0) ? 'text-green-400' : 'text-red-400';
+        }
+
+        if (profitPercentEl && profitIconEl) {
+            const isUp = data.profitChangePercent >= 0;
+            profitPercentEl.textContent = `${Math.abs(data.profitChangePercent || 0).toFixed(2)}%`;
+            profitPercentEl.className = isUp ? 'text-green-400' : 'text-red-400';
+            profitIconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'} ${isUp ? 'text-green-400' : 'text-red-400'}`;
+        }
+    });
+ 
     // Actualización de balances y estado de conexión API
     socket.on('balance-real-update', (data) => {
         // Actualiza la bolita de estado según 'source' (API_SUCCESS o CACHE_FALLBACK)

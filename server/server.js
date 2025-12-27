@@ -61,9 +61,16 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB Connected...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
-// --- LÓGICA DE EMISIÓN DE ESTADO (MEJORADA PARA DASHBOARD) ---
+// --- LÓGICA DE EMISIÓN DE ESTADO (MEJORADA) ---
 const emitBotState = (io, state) => {
-    // Este evento alimenta directamente a tu dashboard.js
+    // 1. Cálculo de porcentaje de Profit para las flechas del frontend
+    // Usamos el balance acumulado para determinar el rendimiento porcentual
+    const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
+    const profitPercent = totalCurrentBalance > 0 
+        ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
+        : 0;
+
+    // 2. Evento para Dashboard (Mantiene compatibilidad con tu código actual)
     io.sockets.emit('bot-state-update', {
         lstate: state.lstate || 'STOPPED',
         sstate: state.sstate || 'STOPPED',
@@ -77,8 +84,13 @@ const emitBotState = (io, state) => {
         lnorder: state.lnorder || 0,
         snorder: state.snorder || 0,
         lprofit: state.lprofit || 0,
-        // Agregamos datos extra para que el frontend no tenga que pedirlos por separado
         lastAvailableUSDT: state.lastAvailableUSDT || 0
+    });
+
+    // 3. NUEVO: Evento para activar flechas y porcentajes en "auprofit"
+    io.sockets.emit('bot-stats', {
+        totalProfit: state.total_profit || 0,
+        profitChangePercent: profitPercent 
     });
 };
 
@@ -99,7 +111,6 @@ async function updateBotStateWithPrice(price) {
 
         const updateData = { lprofit, lastUpdateTime: new Date() };
 
-        // Recalcular cobertura dinámicamente
         if (['STOPPED', 'NO_COVERAGE'].includes(botState.lstate)) {            
             const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
                 botState.lbalance,
@@ -125,7 +136,7 @@ async function updateBotStateWithPrice(price) {
     }
 }
 
-// --- WEBSOCKET BITMART (PRECIOS) ---
+// --- WEBSOCKET BITMART (PRECIOS Y MARKET DATA) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 function setupMarketWS(io) {
     const ws = new WebSocket(bitmartWsUrl);
@@ -139,13 +150,22 @@ function setupMarketWS(io) {
         try {
             const parsed = JSON.parse(data);
             if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
-                const price = parsed.data[0].last_price;
-                // Emitir precio para el display "auprice"
-                io.emit('marketData', { price });
+                const ticker = parsed.data[0];
+                const price = parseFloat(ticker.last_price);
+                
+                // --- NUEVO: Cálculo de cambio porcentual del mercado (24h) ---
+                const open24h = parseFloat(ticker.open_24h);
+                const priceChangePercent = open24h > 0 
+                    ? ((price - open24h) / open24h) * 100 
+                    : 0;
+
+                // Emitir precio Y porcentaje de cambio de mercado para "auprice"
+                io.emit('marketData', { 
+                    price, 
+                    priceChangePercent 
+                });
                 
                 await updateBotStateWithPrice(price);
-                
-                // Ejecutar ciclo lógico principal
                 await autobotLogic.botCycle(price);
             }
         } catch (e) { console.error("Error Market WS Message:", e); }
@@ -165,7 +185,6 @@ bitmartService.initOrderWebSocket((ordersData) => {
 
 // --- BUCLES DE SINCRONIZACIÓN (INTERVALS) ---
 
-// 1. Sincronización de Balances Reales (Cada 10s)
 setInterval(async () => {
     try {
         const apiSuccess = await autobotLogic.slowBalanceCacheUpdate();
@@ -181,7 +200,6 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// 2. Polling de Seguridad para Órdenes Abiertas (Cada 5s)
 setInterval(async () => {
     try {
         const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
@@ -195,7 +213,6 @@ setupMarketWS(io);
 io.on('connection', (socket) => {
     console.log(`👤 Usuario conectado: ${socket.id}`);
     
-    // Al conectarse, enviamos el estado actual inmediatamente
     Autobot.findOne({}).lean().then(state => {
         if (state) emitBotState(io, state);
     });
