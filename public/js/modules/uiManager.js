@@ -87,11 +87,15 @@ function formatProfit(element, value) {
         return;
     }
     
+    // Colores: usamos las mismas clases que en el resto de la app
     if (value > 0) element.classList.add('text-green-500');
     else if (value < 0) element.classList.add('text-red-500');
     else element.classList.add('text-gray-400');
     
-    element.textContent = `${value >= 0 ? '+' : ''}$${value.toFixed(2)}`;
+    // FORMATO UNIFICADO: Signo ($) Valor Absoluto
+    // Esto evita que aparezca "$-5.00" y lo convierte en "-$5.00"
+    const sign = value >= 0 ? '+' : '-';
+    element.textContent = `${sign}$${Math.abs(value).toFixed(2)}`;
 }
 
 /**

@@ -136,13 +136,18 @@ export function initializeFullApp() {
         const profitIconEl = document.getElementById('profit-icon');
 
         if (profitEl) {
-            profitEl.textContent = parseFloat(data.totalProfit || 0).toFixed(2);
-            profitEl.className = (data.totalProfit >= 0) ? 'text-green-400' : 'text-red-400';
+            const value = parseFloat(data.totalProfit || 0);
+            // Mantenemos el orden: Signo (+/-) seguido de $ y el valor
+            const sign = value >= 0 ? '+' : '-';
+            profitEl.textContent = `${sign}$${Math.abs(value).toFixed(2)}`;
+            profitEl.className = value >= 0 ? 'text-green-400' : 'text-red-400';
         }
 
         if (profitPercentEl && profitIconEl) {
-            const isUp = data.profitChangePercent >= 0;
-            profitPercentEl.textContent = `${Math.abs(data.profitChangePercent || 0).toFixed(2)}%`;
+            const pValue = parseFloat(data.profitChangePercent || 0);
+            const isUp = pValue >= 0;
+            const pSign = isUp ? '+' : '-';
+            profitPercentEl.textContent = `${pSign}${Math.abs(pValue).toFixed(2)}%`;
             profitPercentEl.className = isUp ? 'text-green-400' : 'text-red-400';
             profitIconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'} ${isUp ? 'text-green-400' : 'text-red-400'}`;
         }
