@@ -1,0 +1,47 @@
+<div class="w-full md:w-1/3 bg-gray-800 p-6 h-full flex flex-col"> 
+    
+    <div class="bg-gray-700 p-4 rounded-lg space-y-2 mb-4">                     
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-bold">AUTOBOT</h2>
+                <div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>
+            </div>        
+            <div class="flex justify-between text-sm">
+                <div><strong>Balance:</strong> <span id="aubalance">0.00</span></div>
+                <div><strong>Profit:</strong> <span id="auprofit" class="text-green-400">0.00</span></div>                
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LBalance:</strong> <span id="aulbalance">0.00</span></div>
+                <div><strong>SBalance:</strong> <span id="ausbalance">0.00</span></div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LCycle:</strong> <span id="aulcycle">0</span></div>
+                <div><strong>SCycle:</strong> <span id="auscycle">0</span></div>
+            </div>
+            <div class="flex justify-between text-sm">
+                <div><strong>LState:</strong> <span id="aubot-lstate" class="text-red-400">STOPPED</span></div>
+                <div><strong>SState:</strong> <span id="aubot-sstate" class="text-red-400">STOPPED</span></div>
+            </div> 
+    </div>
+
+    <div class="bg-gray-700 p-4 rounded-lg space-y-2 mb-4"> 
+        <h3 class="text-sm font-semibold text-gray-400 mb-2">Métricas de Ciclo (AUTOBOT)</h3>
+        <div class="flex justify-between text-sm">
+            <div>
+                <strong>Rend. Prom. Ciclo:</strong>
+                <span id="cycle-avg-profit" class="text-yellow-400">N/A</span>
+            </div>
+            <div>
+                <strong>Ciclos Cerrados:</strong>
+                <span id="total-cycles-closed" class="text-indigo-400">0</span>
+            </div>
+        </div>
+    </div> 
+
+    <div class="bg-gray-900 p-4 rounded-lg shadow-xl flex-grow flex flex-col overflow-y-auto"> 
+        <h3 class="text-lg font-semibold text-gray-100 mb-2">Curva de Crecimiento de Capital</h3>
+        <div class="flex-grow">
+            <canvas id="equityCurveChart"></canvas>
+        </div>
+    </div>
+        
+</div>
