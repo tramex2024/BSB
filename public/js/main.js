@@ -21,34 +21,40 @@ const views = {
 };
 
 /**
- * Actualiza visualmente la bolita de estado en el header
+ * Actualiza visualmente la bolita de estado en el header con animaciones CSS
  */
 function updateConnectionStatusBall(source) {
     const statusDot = document.getElementById('status-dot'); 
     if (!statusDot) return;
     
-    // 1. Limpiamos todas las clases de estado pero mantenemos las de forma y tamaño
-    // Usamos className para resetear por completo y evitar residuos
-    statusDot.className = 'h-full w-full rounded-full block'; 
+    // Limpieza total de clases de estado previas
+    statusDot.classList.remove('status-green', 'status-red', 'status-purple');
 
-    // 2. Aplicamos la lógica de estados según la fuente de datos
-    if (source === 'API_SUCCESS') {
-        statusDot.classList.add('status-green'); // Pulso verde (CSS)
-        statusDot.title = 'Conectado a BitMart';
-    } else if (source === 'CACHE_FALLBACK') {
-        statusDot.classList.add('status-yellow'); // Parpadeo lento amarillo (CSS)
-        statusDot.title = 'Usando datos en caché';
-    } else {
-        // DISCONNECTED o errores
-        statusDot.classList.add('status-red'); // Parpadeo rápido rojo (CSS)
-        statusDot.title = 'Desconectado';
+    // Lógica de estados según la fuente de datos recibida del backend/socket
+    switch (source) {
+        case 'API_SUCCESS':
+            statusDot.classList.add('status-green');
+            statusDot.title = 'Conectado a BitMart (Tiempo Real)';
+            break;
+        case 'CACHE_FALLBACK':
+            // Usamos púrpura para el efecto de onda expansiva cuando no es tiempo real puro
+            statusDot.classList.add('status-purple');
+            statusDot.title = 'Usando datos en caché (Reconectando...)';
+            break;
+        case 'DISCONNECTED':
+        default:
+            statusDot.classList.add('status-red');
+            statusDot.title = 'Desconectado del servidor';
+            break;
     }
 }
 
 export async function initializeTab(tabName) {
+    // Limpiar todos los intervalos activos de la pestaña anterior
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
     
+    // Eliminar gráfico de TradingView si existe para liberar memoria
     if (currentChart && typeof currentChart.remove === 'function') {
         currentChart.remove();
         currentChart = null;
@@ -62,7 +68,7 @@ export async function initializeTab(tabName) {
             if (module[initFunctionName]) {
                 await module[initFunctionName]();
             } else {
-                console.error(`Función ${initFunctionName} no encontrada.`);
+                console.error(`Función ${initFunctionName} no encontrada en el módulo.`);
             }
         } catch (error) {
             console.error(`Error al cargar el módulo ${tabName}:`, error);
@@ -71,13 +77,24 @@ export async function initializeTab(tabName) {
 }
 
 export function initializeFullApp() {
-    // Estado inicial al conectar
+    // Estado inicial: Rojo hasta recibir confirmación del socket
     updateConnectionStatusBall('DISCONNECTED'); 
 
-    socket = io(BACKEND_URL, { path: '/socket.io' });
+    socket = io(BACKEND_URL, { 
+        path: '/socket.io',
+        reconnectionAttempts: 5,
+        timeout: 10000 
+    });
 
-    socket.on('disconnect', () => updateConnectionStatusBall('DISCONNECTED'));
+    socket.on('connect', () => {
+        console.log('Socket conectado al backend');
+    });
 
+    socket.on('disconnect', () => {
+        updateConnectionStatusBall('DISCONNECTED');
+    });
+
+    // Actualización de precio en tiempo real (Header y vistas)
     socket.on('marketData', (data) => {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
@@ -89,14 +106,16 @@ export function initializeFullApp() {
         priceElements.forEach(el => {
             el.classList.remove('text-green-500', 'text-red-500', 'text-white');
             el.classList.add(priceColorClass);
-            el.textContent = `$${newPrice.toFixed(2)}`;
+            el.textContent = `$${newPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         });
         lastPrice = newPrice;
     });
 
+    // Actualización de balances y estado de conexión API
     socket.on('balance-real-update', (data) => {
-        // Aquí es donde recibimos el estado de la conexión desde el backend
+        // Actualiza la bolita de estado según 'source' (API_SUCCESS o CACHE_FALLBACK)
         updateConnectionStatusBall(data.source);
+
         if (data.lastAvailableUSDT !== undefined) {
             updateBotBalances([
                 { currency: 'USDT', available: data.lastAvailableUSDT },
@@ -105,11 +124,13 @@ export function initializeFullApp() {
         }
     });
 
+    // Logs del Bot para la barra superior
     socket.on('bot-log', (log) => {
         const logEl = document.getElementById('log-message');
         if (logEl) {
             logEl.textContent = log.message;
-            logEl.className = `log-message log-${log.type}`;
+            // Asegúrate de tener clases .log-info, .log-error, .log-success en su CSS
+            logEl.className = `log-message log-${log.type || 'info'}`;
         }
     });
 
@@ -117,8 +138,15 @@ export function initializeFullApp() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Inicializar eventos de Login/Modal
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-    if (localStorage.getItem('token')) initializeFullApp();
-    else setupNavTabs(initializeTab);
+
+    // Si hay sesión iniciada, arrancar la App completa
+    if (localStorage.getItem('token')) {
+        initializeFullApp();
+    } else {
+        // Si no, solo permitir navegación básica (vistas de "Logged Out")
+        setupNavTabs(initializeTab);
+    }
 });

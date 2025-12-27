@@ -105,18 +105,18 @@
         
         <div id="au-tvchart" class="bg-gray-800 rounded p-2 h-[500px] flex-grow"></div>
 
-        <div class="bg-gray-700 p-4 rounded-lg flex-grow flex flex-col">
-            <h3 class="text-lg font-semibold mb-2">Order History</h3>
-            <div class="flex border-b border-gray-600 mb-4 autobot-tabs">
-                <button id="tab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
-                <button id="tab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
-                <button id="tab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
-                <button id="tab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
-            </div>
+        <div class="bg-gray-700 p-4 rounded-lg flex-grow flex flex-col min-h-[350px]"> <h3 class="text-lg font-semibold mb-2">Order History</h3>
+    
+        <div class="flex flex-wrap border-b border-gray-600 mb-4 autobot-tabs">
+            <button id="tab-opened" class="flex-1 min-w-[70px] px-2 py-2 text-xs md:text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
+            <button id="tab-filled" class="flex-1 min-w-[70px] px-2 py-2 text-xs md:text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
+            <button id="tab-cancelled" class="flex-1 min-w-[70px] px-2 py-2 text-xs md:text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Canceled</button>
+            <button id="tab-all" class="flex-1 min-w-[70px] px-2 py-2 text-xs md:text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
+        </div>
 
-            <div id="au-order-list" class="overflow-y-auto text-sm space-y-2 flex-grow h-0">
-                <p class="text-gray-400">Loading orders...</p>
-            </div>
+        <div id="au-order-list" class="overflow-y-auto text-sm space-y-2 flex-grow h-[200px] md:h-[250px]">
+            <p class="text-gray-400">Loading orders...</p>
         </div>
     </div>
+  </div>
 </div>

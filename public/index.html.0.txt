@@ -158,16 +158,17 @@
     <header class="fixed-header">
         <div class="header-left">
             <img src="images/bsb-logo.png" alt="BSB Logo" class="logo">
+            <span class="app-name mr-3">Bitmart Spot Bots</span>
+
             <!-- INDICADOR DE CONEXIÓN ACTUALIZADO:
                  - Clase 'status-dot' eliminada.
                  - Se agrega el contenedor 'status-ball-container' para la animación de onda.
                  - La bolita interna '#status-dot' recibe las clases de estado (e.g., status-green, status-red, status-purple)
             -->
-            <div class="status-ball-container mr-2" title="BitMart Connection Status">
+            <div class="status-ball-container" title="BitMart Connection Status">
                 <!-- Por defecto, la bola es roja (desconectado) hasta que el JS la actualice -->
                 <span id="status-dot" class="h-full w-full rounded-full status-red block"></span>
-            </div>
-            <span class="app-name">Bitmart Spot Bot</span>
+            </div>            
         </div>
         <nav class="header-middle">
             <a href="#dashboard" class="nav-tab active" data-tab="dashboard">DASHBOARD</a>            
@@ -388,6 +389,7 @@
 
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

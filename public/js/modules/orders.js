@@ -1,221 +1,144 @@
-// public/js/modules/orders.js (VERSIÓN FINAL CON SOPORTE WS)
-
+// public/js/modules/orders.js
 import { fetchFromBackend } from './api.js';
 
-// URL base de tu backend en Render
 const RENDER_BACKEND_URL = 'https://bsb-ppex.onrender.com';
 
 /**
- * Función para crear un elemento HTML para una sola orden.
- * @param {object} order La orden a renderizar.
- * @param {string} orderType El tipo de orden ('opened', 'filled', 'cancelled', 'all').
- * @returns {string} El HTML para la orden.
+ * Crea el HTML de una orden con un diseño de "Card" optimizado
  */
 function createOrderHtml(order, orderType) {
-    const isBuy = order.side.toLowerCase() === 'buy';
-    const sideClass = isBuy ? 'text-green-500' : 'text-red-500';
+    const side = (order.side || 'buy').toLowerCase();
+    const isBuy = side === 'buy';
+    const sideClass = isBuy ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10';
     
-    // CORRECCIÓN CLAVE 1: Mostrar el estado real de la orden (NEW, PENDING, FILLED, etc.).
-    const actualStatus = order.state || order.status || orderType;
-    const statusText = actualStatus.replace(/_/g, ' ').toUpperCase(); // Muestra PENDING, NEW, PARTIALLY FILLED, etc.
-    
-    // CORRECCIÓN: Usar 'order_id' o 'orderId' para mayor compatibilidad
+    // Normalización de datos para evitar errores de undefined
+    const actualStatus = (order.state || order.status || orderType || 'UNKNOWN').replace(/_/g, ' ').toUpperCase();
     const orderId = order.orderId || order.order_id || 'N/A';
+    const timestamp = order.createTime || order.create_time || Date.now();
+    const date = new Date(Number(timestamp)).toLocaleString();
     
-    // CORRECCIÓN: Usar 'create_time' o 'createTime'
-    const date = new Date(order.createTime || order.create_time).toLocaleString();
-    
-    // Convertir el precio y la cantidad a números para un formato limpio.
-    const price = parseFloat(order.price || order.filled_price).toFixed(2);
-    // Usar 'size' para órdenes abiertas y 'filledSize' para el historial
-    const quantity = parseFloat(order.filled_size || order.size).toFixed(8);
-    const symbol = order.symbol;
+    const price = parseFloat(order.price || order.filled_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+    const quantity = parseFloat(order.filled_size || order.size || 0).toFixed(6);
+    const symbol = (order.symbol || 'BTC_USDT').replace('_', '/');
 
     return `
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div class="flex-1 mb-2 sm:mb-0 text-center flex flex-col items-center">
-                <span class="font-semibold text-sm sm:text-base mb-1 ${sideClass}">${order.side.toUpperCase()}</span>
-                <span class="text-xs sm:text-sm text-gray-400">${symbol}</span>
+        <div class="bg-gray-800/50 border border-gray-700 p-4 rounded-xl mb-3 flex flex-wrap md:flex-nowrap justify-between items-center hover:border-gray-600 transition-colors">
+            <div class="w-full md:w-auto flex items-center gap-3 mb-3 md:mb-0">
+                <div class="px-3 py-1 rounded-lg font-bold text-xs ${sideClass}">
+                    ${side.toUpperCase()}
+                </div>
+                <div>
+                    <p class="text-white font-medium text-sm">${symbol}</p>
+                    <p class="text-gray-500 text-[10px] uppercase tracking-wider">${date}</p>
+                </div>
             </div>
-            <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">
-                <p class="text-gray-400 text-xs sm:text-sm">Precio</p>
-                <span class="text-sm sm:text-base">${price} USDT</span>
+
+            <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 px-0 md:px-6">
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase">Precio</p>
+                    <p class="text-gray-200 font-mono text-sm">${price} <span class="text-[10px] text-gray-500">USDT</span></p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-[10px] uppercase">Cantidad</p>
+                    <p class="text-gray-200 font-mono text-sm">${quantity} <span class="text-[10px] text-gray-500">BTC</span></p>
+                </div>
+                <div class="hidden md:block">
+                    <p class="text-gray-500 text-[10px] uppercase">Estado</p>
+                    <p class="text-blue-400 font-medium text-sm">${actualStatus}</p>
+                </div>
             </div>
-            <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">
-                <p class="text-gray-400 text-xs sm:text-sm">Cantidad</p>
-                <span class="text-sm sm:text-base">${quantity} BTC</span>
-            </div>
-            <div class="flex-1 text-left sm:text-center mb-2 sm:mb-0">
-                <p class="text-gray-400 text-xs sm:text-sm">Estado</p>
-                <span class="text-sm sm:text-base">${statusText}</span>
-            </div>
-            <div class="flex-1 text-right sm:text-center text-xs sm:text-sm text-gray-500">
-                <p>ID: ${orderId}</p>
-                <p>${date}</p>
+
+            <div class="w-full md:w-auto mt-3 md:mt-0 text-right">
+                <p class="text-gray-600 text-[9px] font-mono">ID: ${orderId.toString().slice(-8)}...</p>
+                <div class="md:hidden mt-1 px-2 py-0.5 inline-block rounded bg-gray-700 text-blue-300 text-[10px]">
+                    ${actualStatus}
+                </div>
             </div>
         </div>
     `;
 }
 
 /**
- * Muestra las órdenes en el contenedor del DOM.
- * @param {Array<object>} orders Las órdenes a mostrar.
- * @param {HTMLElement} orderListElement El elemento HTML para mostrar la lista.
- * @param {string} orderType El tipo de orden ('opened', 'filled', 'cancelled').
+ * Renderiza la lista en el DOM
  */
 function displayOrders(orders, orderListElement, orderType) {
-    if (!orderListElement) {
-        console.error("No se proporcionó un elemento de lista de órdenes.");
+    if (!orderListElement) return;
+
+    if (!orders || orders.length === 0) {
+        orderListElement.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-10 opacity-40">
+                <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <p class="text-sm">Sin órdenes ${orderType}</p>
+            </div>`;
         return;
     }
 
-    orderListElement.innerHTML = ''; // Limpiar la lista actual
-
-    if (orders && orders.length > 0) {
-        orders.forEach(order => {
-            // Pasamos 'opened' como tipo para que se muestre el status "Opened"
-            // Ahora createOrderHtml toma el estado real si está disponible.
-            const orderHtml = createOrderHtml(order, orderType); 
-            orderListElement.innerHTML += orderHtml;
-        });
-    } else {
-        orderListElement.innerHTML = `<p class="text-gray-500 text-center py-4">No hay órdenes de tipo "${orderType}" para mostrar.</p>`;
-    }
+    orderListElement.innerHTML = orders.map(order => createOrderHtml(order, orderType)).join('');
 }
 
 /**
- * Obtiene las órdenes del backend y las muestra (USADO SOLO PARA HISTORIAL: filled, cancelled, all).
- * La pestaña 'opened' ahora usa WebSockets.
- * @param {string} status El estado de la orden a buscar ('opened', 'filled', 'cancelled', 'all').
- * @param {HTMLElement} orderListElement El elemento HTML donde mostrar las órdenes.
+ * Fetch para historial (Filled/Cancelled)
  */
 export async function fetchOrders(status, orderListElement) {
-    // 🛑 Para la pestaña 'opened', no hacemos nada ya que esperamos el WS.
     if (status === 'opened') {
-        console.log("Petición REST para órdenes abiertas ignorada. Usando WebSockets.");
-        // Opcional: mostrar un spinner mientras se esperan los datos del socket
-        orderListElement.innerHTML = `<p class="text-gray-500 text-center py-4">Cargando órdenes abiertas en tiempo real...</p>`;
+        orderListElement.innerHTML = `
+            <div class="flex items-center justify-center py-10">
+                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mr-3"></div>
+                <p class="text-gray-400 text-sm">Escuchando mercado en tiempo real...</p>
+            </div>`;
         return;
     }
     
     const authToken = localStorage.getItem('token');
-    if (!authToken) {
-        console.error('Error al obtener órdenes: Token de autenticación no encontrado.');
-        orderListElement.innerHTML = `<p class="text-red-500">Error: Not authenticated. Please log in.</p>`;
-        return;
-    }
+    if (!authToken) return;
 
     try {
         const response = await fetch(`${RENDER_BACKEND_URL}/api/orders/${status}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
+            headers: { 'Authorization': `Bearer ${authToken}` }
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
-        }
+        if (!response.ok) throw new Error(`Error: ${response.status}`);
 
-        const orders = await response.json();
-        
-        let ordersToDisplay = [];
+        const data = await response.json();
+        let ordersToDisplay = Array.isArray(data) ? data : (data.orders || []);
 
-        // CORRECCIÓN: Unificar el formato de los datos (el backend a veces los envuelve en un objeto 'orders')
-        if (orders && orders.orders) {
-            ordersToDisplay = orders.orders;
-        } else if (Array.isArray(orders)) {
-            ordersToDisplay = orders;
-        }
-
-        // 🛑 FILTRO DEFENSIVO: Filtro del lado del cliente para asegurar que solo se muestren 
-        // las órdenes del estado seleccionado ('filled' o 'cancelled'), en caso de que 
-        // el backend devuelva un historial completo sin filtrar.
-        if (status !== 'all' && ordersToDisplay.length > 0) {
-            const targetStatus = status.toLowerCase(); // 'filled' o 'cancelled'
-
-            ordersToDisplay = ordersToDisplay.filter(order => {
-                // Buscamos una propiedad de estado que contenga la palabra clave del target.
-                // Usamos 'state' o 'status' para verificar el estado de la orden histórica.
-                const orderState = String(order.state || order.status || '').toLowerCase();
-                
-                if (targetStatus === 'filled') {
-                    // Estado 'FILLED' (llena) o si la cantidad llenada coincide con la cantidad total (orden completamente llena)
-                    return orderState.includes('fill') || (parseFloat(order.filled_size) > 0 && parseFloat(order.filled_size) === parseFloat(order.size));
-                }
-                
-                if (targetStatus === 'cancelled') {
-                    // Estado 'CANCELED' (cancelada)
-                    return orderState.includes('cancel');
-                }
-                
-                return false; // No mostrar si no coincide con 'filled' o 'cancelled' y el status no es 'all'
+        // Filtrado preventivo por si el backend manda todo el historial
+        if (status !== 'all') {
+            const target = status.toLowerCase();
+            ordersToDisplay = ordersToDisplay.filter(o => {
+                const s = String(o.state || o.status || '').toLowerCase();
+                return target === 'filled' ? s.includes('fill') : s.includes('cancel');
             });
         }
 
         displayOrders(ordersToDisplay, orderListElement, status);
-
     } catch (error) {
-        console.error('Error al obtener órdenes:', error);
-        orderListElement.innerHTML = `<p class="text-red-500">Error: Failed to fetch orders. Please try again.</p>`;
+        console.error('Error fetchOrders:', error);
+        orderListElement.innerHTML = `<p class="text-red-500 text-center py-4 text-xs">Error de conexión con el historial</p>`;
     }
 }
 
 /**
- * Establece la pestaña de órdenes activa.
- * @param {string} tabId El ID de la pestaña activa.
- */
-export function setActiveTab(tabId) {
-    // Asume que los tabs de las órdenes son globales o los busca dentro de la sección activa.
-    const tabs = document.querySelectorAll('[id^="tab-"]'); 
-    tabs.forEach(tab => tab.classList.remove('active-tab'));
-    
-    const activeTab = document.getElementById(tabId);
-    if (activeTab) {
-        activeTab.classList.add('active-tab');
-    }
-}
-
-/**
- * Función para recibir órdenes abiertas desde el WebSocket y mostrarlas.
- * Esta función es llamada desde main.js cuando se recibe el evento 'open-orders-update'.
- * 🛑 MODIFICACIÓN: Ahora recibe explícitamente el ID del contenedor de órdenes
- * y la pestaña activa del módulo llamador para evitar el error de DOM no encontrado.
- * @param {object | Array<object>} ordersData Las órdenes abiertas recibidas del backend via WS.
- * @param {string} listElementId El ID del elemento HTML donde se deben mostrar las órdenes (ej. 'au-order-list').
- * @param {string} activeOrderTab El estado de la pestaña activa del módulo llamador (ej. 'opened', 'filled').
+ * Actualiza la tabla de órdenes abiertas vía WebSocket
  */
 export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
-    // 🛑 Modificación: Obtener el elemento usando el ID pasado como argumento.
     const orderListElement = document.getElementById(listElementId);
+    if (!orderListElement || activeOrderTab !== 'opened') return;
 
-    // 🛑 CORRECCIÓN CLAVE 2: Extraer el array y establecer un filtro defensivo.
-    let openOrders = ordersData;
-    if (ordersData && ordersData.orders && Array.isArray(ordersData.orders)) {
-        openOrders = ordersData.orders;
-    } else if (!Array.isArray(ordersData)) {
-        openOrders = [];
-    }
+    let openOrders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
 
-    // 🛑 FILTRO CLAVE: Aseguramos que solo se muestren los estados que consideramos "abiertos".
+    // Filtro estricto de órdenes activas
     const validOpenStatuses = ['new', 'partially_filled', 'open', 'pending'];
-    
     openOrders = openOrders.filter(order => {
-        // Usamos 'state' o 'status' para verificar el estado de la orden.
-        const orderState = String(order.state || order.status || '').toLowerCase().replace(/_/g, ' ');
-
-        // Verificamos si el estado contiene alguna palabra clave de orden abierta.
+        const orderState = String(order.state || order.status || '').toLowerCase();
         return validOpenStatuses.some(status => orderState.includes(status));
     });
 
-    // 🛑 CORRECCIÓN CRÍTICA DE FLUJO: Solo actualizar si la pestaña 'opened' está activa y si el elemento existe.
-    if (activeOrderTab === 'opened') {
-        if (orderListElement) {
-            // El elemento de la lista ahora es el que se pasó por argumento.
-            displayOrders(openOrders, orderListElement, 'opened');
-        } else {
-            // Muestra el error con el ID faltante
-             console.error(`Error de DOM: El contenedor con ID "${listElementId}" no fue encontrado al actualizar órdenes abiertas.`);
-        }
-    }
+    displayOrders(openOrders, orderListElement, 'abiertas');
+}
+
+export function setActiveTab(tabId) {
+    const tabs = document.querySelectorAll('[id^="tab-"]'); 
+    tabs.forEach(tab => tab.classList.remove('active-tab'));
+    document.getElementById(tabId)?.classList.add('active-tab');
 }

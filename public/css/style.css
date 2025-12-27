@@ -1,270 +1,196 @@
+/* --- VARIABLES Y RESET --- */
 :root {
-    --dark-bg: #1a1a2e;
-    --dark-header-bg: #16213e;
+    --dark-bg: #0a0a12;
+    --dark-header-bg: #121220;
     --dark-text: #e0e0e0;
-    --dark-accent: #0f3460;
-    --dark-border: #007bff;
-    --input-bg: #2b3a55;
-    --button-bg: #007bff;
-    --button-text: #ffffff;
-    --modal-bg: #2b3a55;
-    --log-bar-bg: #2c3e50;
-    --log-text-color: #ecf0f1;
+    --dark-accent: #1e1e3f;
+    --dark-border: #3b82f6;
+    --input-bg: #1f2937;
+    --log-bar-bg: #111827;
+    --log-text-color: #9ca3af;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --special: #a855f7; /* Púrpura para CACHE_FALLBACK */
 }
 
-body.dark-mode {
+body {
     background-color: var(--dark-bg);
     color: var(--dark-text);
-    font-family: 'Arial', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     margin: 0;
-    padding-top: 0;
+    padding: 0;
     overflow-x: hidden;
 }
 
-/* --- HEADER STYLES --- */
+/* --- HEADER --- */
 .fixed-header {
     position: sticky;
     top: 0;
-    left: 0;
     width: 100%;
-    height: 60px;
+    height: 64px;
     background-color: var(--dark-header-bg);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-    z-index: 1000; /* Siempre por encima de todo */
-}
-
-.header-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.logo {
-    height: 40px;
-}
-
-.app-name {
-    font-size: 1.5em;
-    font-weight: bold;
-    color: var(--dark-text);
-    margin-right: 12px;
-}
-
-.header-middle {
-    display: flex;
-    gap: 25px;
+    padding: 0 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    z-index: 1000;
 }
 
 .nav-tab {
-    color: var(--dark-text);
+    color: #94a3b8;
     text-decoration: none;
-    padding: 8px 15px;
-    border-radius: 5px;
-    transition: background-color 0.3s ease;
-    font-weight: bold;
-    text-transform: uppercase;
+    padding: 10px 16px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+    font-weight: 600;
 }
 
 .nav-tab:hover {
+    color: white;
     background-color: var(--dark-accent);
 }
 
 .nav-tab.active {
-    background-color: var(--dark-accent);
-    border-bottom: 2px solid var(--dark-border);
-}
-
-.header-right {
-    display: flex;
-    gap: 20px;
-}
-
-.header-right .icon {
-    color: var(--dark-text);
-    font-size: 1.3em;
-    cursor: pointer;
-    transition: color 0.3s ease;
-}
-
-.header-right .icon:hover {
-    color: var(--dark-border);
+    color: white;
+    background-color: rgba(59, 130, 246, 0.1);
+    box-shadow: inset 0 0 0 1px var(--dark-border);
 }
 
 /* --- LOG BAR --- */
 .log-bar {
     position: sticky;
-    top: 60px; /* Se pega justo debajo del header en desktop */
-    left: 0;
+    top: 64px;
     width: 100%;
-    height: 30px;
+    height: 32px;
     background-color: var(--log-bar-bg);
-    color: var(--log-text-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     align-items: center;
-    padding: 0 20px;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+    padding: 0 24px;
+    font-size: 0.75rem;
     z-index: 999;
-    font-size: 0.8em; 
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
-/* --- ESTILOS DE LA BOLITA DE ESTADO --- */
+.log-message {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.log-success { color: var(--success); }
+.log-error { color: var(--danger); }
+.log-info { color: var(--dark-border); }
+
+/* --- ESTADOS DE CONEXIÓN (BOLITA) --- */
 #status-dot {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    display: block;
-    transition: background-color 0.3s ease;
+    position: relative;
 }
 
 .status-green {
-    background-color: #10b981;
-    animation: pulse 2s ease-in-out infinite;
-}
-
-.status-yellow {
-    background-color: #f59e0b;
-    animation: blink-slow 3s ease-in-out infinite;
+    background-color: var(--success);
+    box-shadow: 0 0 8px var(--success);
 }
 
 .status-red {
-    background-color: #ef4444;
-    animation: blink-fast 1.5s ease-in-out infinite;
+    background-color: var(--danger);
+    animation: blink-fast 1s infinite;
+}
+
+.status-purple {
+    background-color: var(--special);
+}
+
+/* Efecto de onda para la bolita púrpura (Cache) */
+.status-purple::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-color: var(--special);
+    animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* --- BOTONES DE ACCIÓN --- */
+.start-btn {
+    background-color: var(--success);
+    color: white;
+    transition: transform 0.1s, background-color 0.2s;
+    cursor: pointer;
+}
+
+.start-btn:hover {
+    background-color: #059669;
+    transform: translateY(-1px);
+}
+
+.stop-btn {
+    background-color: var(--danger);
+    color: white;
+    cursor: pointer;
+}
+
+.stop-btn:hover {
+    background-color: #dc2626;
+}
+
+.start-btn:active, .stop-btn:active {
+    transform: scale(0.98);
+}
+
+/* --- TABLAS DE ÓRDENES --- */
+.active-tab {
+    border-bottom: 2px solid var(--dark-border);
+    color: white !important;
+    background-color: rgba(59, 130, 246, 0.05);
 }
 
 /* --- ANIMACIONES --- */
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.3); }
+@keyframes pulse-ring {
+    0% { transform: scale(.33); }
+    80%, 100% { opacity: 0; }
 }
 
 @keyframes blink-fast {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.2; }
+    50% { opacity: 0.3; }
 }
 
-@keyframes blink-slow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-/* --- RESPONSIVE (MÓVIL) --- */
+/* --- RESPONSIVE --- */
 @media (max-width: 768px) {
     .fixed-header {
+        height: auto;
+        padding: 12px;
         flex-direction: column;
-        height: auto; /* El header crece según su contenido en móvil */
-        padding: 10px 10px;
+        gap: 12px;
     }
-
-    .header-left {
-        margin-bottom: 8px;
-        justify-content: center;
-        width: 100%;
-    }
-
+    
     .header-middle {
         width: 100%;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 5px;
-        margin-bottom: 10px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+    }
+    
+    .nav-tab {
+        text-align: center;
+        padding: 8px 4px;
+        font-size: 0.75rem;
     }
 
-    .header-right {
-        width: 100%;
-        justify-content: center;
-        gap: 15px;
-        margin-bottom: 5px;
-    }
-
-    .app-name {
-        font-size: 1.1em;
-        margin-right: 8px;
-    }
-
-    .logo {
-        height: 30px;
-    }
-
-    /* BARRA DE LOGS FIJA EN MÓVIL */
     .log-bar {
-        position: sticky;
-        /* IMPORTANTE: Este valor 'top' debe ser igual a la altura total del header en móvil */
-        /* Si notas que se solapa, ajusta este número ligeramente */
-        top: 135px; 
-        height: 35px;
-        font-size: 0.75em;
-        justify-content: center;
-        padding: 0 10px;
-    }
-
-    .content {
-        /* Evita que el contenido principal se meta debajo de las barras fijas */
-        margin-top: 10px;
+        top: 130px; /* Ajustar según altura del header móvil */
     }
 }
 
-/* --- CONTENT & MODALS --- */
-.content {
-    padding: 20px;
-    box-sizing: border-box;
-}
-
-.tab-content {
-    display: none;
-    min-height: calc(100vh - 90px);
-}
-
-.tab-content.active {
-    display: block;
-}
-
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 1001;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-}
-
-.modal-content {
-    background-color: #2d3748;
-    padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    max-width: 400px;
-    color: white;
-    position: relative;
-}
-
-.close-button {
-    color: #aaa;
-    font-size: 28px;
-    font-weight: bold;
-    position: absolute;
-    top: 10px;
-    right: 20px;
-    cursor: pointer;
-}
-
-/* Gráficos */
-#te-tvchart, #au-tvchart, #ai-tvchart {
-    width: 100%;
-    height: 500px;
-    background-color: var(--dark-header-bg);
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+/* --- TRADINGVIEW --- */
+.chart-container {
+    background: var(--dark-header-bg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    overflow: hidden;
 }

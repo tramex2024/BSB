@@ -1,4 +1,8 @@
+// public/js/modules/navigation.js
+
 import { displayLogMessage } from './auth.js';
+
+// Importamos la función para mostrar el modal de autenticación.
 import { toggleAuthModal } from './login.js';
 
 export function setupNavTabs(callback) {
@@ -8,56 +12,49 @@ export function setupNavTabs(callback) {
     async function loadContent(tabName) {
         // --- LÓGICA DE CONTROL DE ACCESO ---
         const token = localStorage.getItem('token');
-        
         if (tabName !== 'dashboard' && !token) {
             console.warn('Acceso denegado. El usuario no está autenticado.');
             
-            // 1. Revertir la clase active a la pestaña anterior o a dashboard
-            navTabs.forEach(t => t.classList.remove('active'));
-            const dashboardTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
-            if (dashboardTab) dashboardTab.classList.add('active');
-
-            // 2. Mostrar modal y mensaje
+            // Muestra el modal de autenticación
             toggleAuthModal(true);
+            
+            // Muestra un mensaje al usuario en la barra de logs
             displayLogMessage('Acceso denegado. Por favor, inicia sesión.', 'error', document.getElementById('log-message'));
             
-            // Si el dashboard no estaba cargado, cargarlo por defecto
-            if (mainContent.innerHTML === '') loadContent('dashboard');
-            return; 
+            return; // Detiene la ejecución para no cargar la pestaña
         }
 
         try {
-            // Limpiar contenido actual
-            mainContent.innerHTML = '<div class="p-10 text-center">Loading...</div>';
+            // Limpiar el contenido actual antes de cargar el nuevo para evitar conflictos
+            mainContent.innerHTML = '';
             
             const response = await fetch(`/${tabName}.html`);
-            if (!response.ok) throw new Error(`Failed to load ${tabName}.html`);
-            
+            if (!response.ok) {
+                throw new Error(`Failed to load ${tabName}.html`);
+            }
             const htmlContent = await response.text();
             mainContent.innerHTML = htmlContent;
-            
-            // Actualizar URL sin recargar
-            const newUrl = `${window.location.origin}${window.location.pathname}?#${tabName}`;
+            displayLogMessage(`Switched to ${tabName} tab.`, 'info');
+
+            const newUrl = window.location.origin + window.location.pathname + `?#${tabName}`;
             window.history.pushState({ path: newUrl }, '', newUrl);
 
-            // Callback para inicializar lógica específica (JS de cada pestaña)
+            // Se ejecuta un callback después de cargar el contenido
             if (callback) {
                 callback(tabName);
             }
         } catch (error) {
             console.error('Error loading content:', error);
-            mainContent.innerHTML = `<p class="text-red-500 p-4">Error loading page content. Please try again.</p>`;
+            mainContent.innerHTML = `<p class="text-red-500">Error loading page content. Please try again.</p>`;
             displayLogMessage(`Error loading content for ${tabName}.`, 'error', document.getElementById('log-message'));
         }
     }
 
-    // Event Listeners para los clics en el menú
     navTabs.forEach(tab => {
         tab.addEventListener('click', function(event) {
             event.preventDefault();
             const tabName = this.dataset.tab;
 
-            // Gestión visual de la pestaña activa
             navTabs.forEach(t => t.classList.remove('active'));
             this.classList.add('active');
             
@@ -65,14 +62,16 @@ export function setupNavTabs(callback) {
         });
     });
 
-    // --- CARGA INICIAL AL REFRESCAR ---
-    const hash = window.location.hash.replace('#', '') || 'dashboard';
-    const initialTab = document.querySelector(`.nav-tab[data-tab="${hash}"]`) || 
-                       document.querySelector('.nav-tab[data-tab="dashboard"]');
-
-    if (initialTab) {
-        navTabs.forEach(t => t.classList.remove('active'));
-        initialTab.classList.add('active');
-        loadContent(initialTab.dataset.tab);
+    // Cargar la pestaña inicial
+    const initialActiveTab = document.querySelector('.nav-tab.active');
+    if (initialActiveTab) {
+        loadContent(initialActiveTab.dataset.tab);
+    } else {
+        const defaultTab = 'dashboard'; 
+        const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
+        if (defaultTabElement) {
+            defaultTabElement.classList.add('active');
+            loadContent(defaultTab);
+        }
     }
 }
