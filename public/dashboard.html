@@ -1,31 +1,51 @@
 <div class="w-full md:w-1/3 bg-gray-800 p-6 h-full flex flex-col"> 
     
-    <div class="bg-gray-700 p-4 rounded-lg space-y-2 mb-4">                     
-            <div class="flex justify-between items-center">
-                <h2 class="text-lg font-bold">AUTOBOT</h2>
-                <div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>
-            </div>        
-            <div class="flex justify-between text-sm">
-                <div><strong>Balance:</strong> <span id="aubalance">0.00</span></div>
-                <div><strong>Profit:</strong> <span id="auprofit" class="text-green-400">0.00</span></div>                
+    <div class="bg-gray-700 p-4 rounded-lg space-y-3">            
+            <div class="flex justify-between items-start">
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Market Price</span>
+                    <div class="flex items-baseline gap-2">
+                        <span id="auprice" class="text-xl font-mono font-bold price-display text-white">$0.00</span>
+                        <span id="price-change-container" class="text-[10px] flex items-center font-bold">
+                            <i id="price-icon" class="fas fa-caret-up mr-0.5"></i>
+                            <span id="price-percent">0.00%</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col text-right">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Total Profit</span>
+                    <div class="flex items-baseline justify-end gap-2">
+                        <span id="auprofit" class="text-xl font-mono font-bold text-green-400">0.00</span>
+                        <span id="profit-change-container" class="text-[10px] flex items-center font-bold">
+                            <i id="profit-icon" class="fas fa-caret-up mr-0.5"></i>
+                            <span id="profit-percent">0.00%</span>
+                        </span>
+                    </div>
+                </div>                                
             </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LBalance:</strong> <span id="aulbalance">0.00</span></div>
-                <div><strong>SBalance:</strong> <span id="ausbalance">0.00</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LCycle:</strong> <span id="aulcycle">0</span></div>
-                <div><strong>SCycle:</strong> <span id="auscycle">0</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LState:</strong> <span id="aubot-lstate" class="text-red-400">STOPPED</span></div>
-                <div><strong>SState:</strong> <span id="aubot-sstate" class="text-red-400">STOPPED</span></div>
+
+            <div class="flex justify-between border-t border-gray-600 pt-2">
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">Balance USDT</span>
+                    <span id="aubalance-usdt" class="font-mono text-white text-base">0.00</span>
+                </div>
+                <div class="flex flex-col text-right">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">Balance BTC</span>
+                    <span id="aubalance-btc" class="font-mono text-white text-base">0.000000</span>
+                </div>              
             </div> 
-            <div class="flex space-x-2">
-                    <button id="austart-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
-                    <button id="aureset-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button>
-            </div>
-    </div>
+
+            <div class="flex justify-between text-sm bg-gray-800/50 p-2 rounded">
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">LState:</span>
+                    <span id="aubot-lstate" class="text-xs font-bold text-red-400">STOPPED</span>
+                </div>
+             <div class="flex items-center gap-2 text-right">
+                 <span class="text-[10px] text-gray-400 uppercase font-bold">SState:</span>
+                 <span id="aubot-sstate" class="text-xs font-bold text-red-400">STOPPED</span>
+             </div>              
+         </div>   
 
     <div class="bg-gray-700 p-4 rounded-lg space-y-2 mb-4"> 
         <h3 class="text-sm font-semibold text-gray-400 mb-2">Métricas de Ciclo (AUTOBOT)</h3>
