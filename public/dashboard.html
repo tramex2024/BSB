@@ -21,6 +21,51 @@
                 <div><strong>LState:</strong> <span id="aubot-lstate" class="text-red-400">STOPPED</span></div>
                 <div><strong>SState:</strong> <span id="aubot-sstate" class="text-red-400">STOPPED</span></div>
             </div> 
+            <div class="flex justify-between items-start">
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Market Price</span>
+                    <div class="flex items-baseline gap-2">
+                        <span id="auprice" class="text-xl font-mono font-bold price-display text-white">$0.00</span>
+                        <span id="price-change-container" class="text-[10px] flex items-center font-bold">
+                            <i id="price-icon" class="fas fa-caret-up mr-0.5"></i>
+                            <span id="price-percent">0.00%</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col text-right">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Total Profit</span>
+                    <div class="flex items-baseline justify-end gap-2">
+                        <span id="auprofit" class="text-xl font-mono font-bold text-green-400">0.00</span>
+                        <span id="profit-change-container" class="text-[10px] flex items-center font-bold">
+                            <i id="profit-icon" class="fas fa-caret-up mr-0.5"></i>
+                            <span id="profit-percent">0.00%</span>
+                        </span>
+                    </div>
+                </div>                                
+            </div>
+
+            <div class="flex justify-between border-t border-gray-600 pt-2">
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">Balance USDT</span>
+                    <span id="aubalance-usdt" class="font-mono text-white text-base">0.00</span>
+                </div>
+                <div class="flex flex-col text-right">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">Balance BTC</span>
+                    <span id="aubalance-btc" class="font-mono text-white text-base">0.000000</span>
+                </div>              
+            </div> 
+
+            <div class="flex justify-between text-sm bg-gray-800/50 p-2 rounded">
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">LState:</span>
+                    <span id="aubot-lstate" class="text-xs font-bold text-red-400">STOPPED</span>
+                </div>
+                <div class="flex items-center gap-2 text-right">
+                    <span class="text-[10px] text-gray-400 uppercase font-bold">SState:</span>
+                    <span id="aubot-sstate" class="text-xs font-bold text-red-400">STOPPED</span>
+                </div>              
+            </div>
     </div>
 
     <div class="bg-gray-700 p-4 rounded-lg space-y-2 mb-4"> 
