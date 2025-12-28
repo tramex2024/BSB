@@ -61,33 +61,46 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB Connected...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
-// --- LÓGICA DE EMISIÓN DE ESTADO (MEJORADA) ---
+// --- LÓGICA DE EMISIÓN DE ESTADO (CORREGIDA PARA VER TODOS LOS DATOS) ---
 const emitBotState = (io, state) => {
-    // 1. Cálculo de porcentaje de Profit para las flechas del frontend
-    // Usamos el balance acumulado para determinar el rendimiento porcentual
+    if (!state) return;
+
+    // 1. Cálculo de rendimiento para las flechas
     const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
     const profitPercent = totalCurrentBalance > 0 
         ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
         : 0;
 
-    // 2. Evento para Dashboard (Mantiene compatibilidad con tu código actual)
+    // 2. ENVIAR TODO (Esto quita los ceros del Dashboard)
     io.sockets.emit('bot-state-update', {
-        lstate: state.lstate || 'STOPPED',
-        sstate: state.sstate || 'STOPPED',
-        total_profit: state.total_profit || 0,
-        lbalance: state.lbalance || 0,
-        sbalance: state.sbalance || 0,
-        lcycle: state.lcycle || 0,
-        scycle: state.scycle || 0,
-        lcoverage: state.lcoverage || 0, 
-        scoverage: state.scoverage || 0,
-        lnorder: state.lnorder || 0,
-        snorder: state.snorder || 0,
-        lprofit: state.lprofit || 0,
-        lastAvailableUSDT: state.lastAvailableUSDT || 0
+        // Estados
+        lstate: state.lstate,
+        sstate: state.sstate,
+        
+        // Dinero
+        total_profit: state.total_profit,
+        lbalance: state.lbalance,
+        sbalance: state.sbalance,
+        lprofit: state.lprofit,
+        sprofit: state.sprofit,
+        lastAvailableUSDT: state.lastAvailableUSDT,
+
+        // Precios Objetivo (Los que estaban en 0)
+        ltprice: state.ltprice, // Target Price Long
+        stprice: state.stprice, // Target Price Short
+        lsprice: state.lsprice, // Stop/Trailing Price Long
+        sbprice: state.sbprice, // Stop/Trailing Price Short
+        
+        // Ciclos y Cobertura
+        lcycle: state.lcycle,
+        scycle: state.scycle,
+        lcoverage: state.lcoverage,
+        scoverage: state.scoverage,
+        lnorder: state.lnorder,
+        snorder: state.snorder
     });
 
-    // 3. NUEVO: Evento para activar flechas y porcentajes en "auprofit"
+    // 3. Mantener bot-stats para compatibilidad
     io.sockets.emit('bot-stats', {
         totalProfit: state.total_profit || 0,
         profitChangePercent: profitPercent 

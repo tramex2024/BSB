@@ -1,4 +1,5 @@
 // public/js/modules/autobot.js
+
 import { initializeChart } from './chart.js';
 import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';

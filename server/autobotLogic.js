@@ -37,11 +37,11 @@ function log(message, type = 'info') {
  */
 async function syncFrontendState(currentPrice, botState) {
     if (io && botState) {
-        io.emit('full-state-sync', {
-            botState,
-            currentPrice,
-            timestamp: new Date().toISOString()
-        });
+        // Usamos el mismo nombre de evento que el server.js para que el frontend lo entienda
+        io.emit('bot-state-update', botState); 
+        
+        // Opcional: enviamos el precio por separado si el gráfico lo necesita
+        io.emit('marketData', { price: currentPrice });
     }
 }
 
