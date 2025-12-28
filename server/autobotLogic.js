@@ -131,31 +131,41 @@ async function slowBalanceCacheUpdate() {
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
     const { lbalance, config, lStateData, lnorder } = botState;
-    if (botState.lstate === 'STOPPED' || !config.long.enabled) return;
+    
+    // Si el bot está apagado o no hay capital asignado, ponemos todo en 0
+    if (botState.lstate === 'STOPPED' || !config.long.enabled || lbalance <= 0) {
+        if (lnorder !== 0) await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
+        return;
+    }
 
     const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
     const sizeVar = parseNumber(config.long.size_var) / 100;
     const currentOrderCount = lStateData.orderCountInCycle || 0;
 
-    // Cálculo del costo de la siguiente orden
+    // 1. Calculamos cuánto costaría la PRÓXIMA orden que el bot intentaría abrir
     const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
 
+    // 2. Si no tenemos ni para la siguiente orden, cobertura es 0
     if (lbalance < nextOrderAmount) {
         if (lnorder !== 0) await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
         return;
     }
 
+    // 3. Calculamos la cobertura total basada en el precio promedio (PPC) o el actual
+    const basePrice = (lStateData.ppc > 0) ? lStateData.ppc : currentPrice;
+
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
         lbalance, 
-        (lStateData.ppc || currentPrice), 
+        basePrice, 
         purchaseUsdt, 
-        parseNumber(config.long.price_var)/100, 
+        parseNumber(config.long.price_var) / 100, 
         sizeVar, 
         currentOrderCount
     );
     
-    // Solo guardamos si el número de órdenes permitidas cambió
-    if (newN !== lnorder) {
+    // 4. ACTUALIZACIÓN INTELIGENTE: 
+    // Guardamos si cambió el número de órdenes O si el precio de cobertura varió significativamente
+    if (newN !== lnorder || Math.abs(newCov - botState.lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
 }

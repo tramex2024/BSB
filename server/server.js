@@ -114,6 +114,7 @@ async function updateBotStateWithPrice(price) {
         const currentPrice = parseFloat(price);
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) return;
 
+        // Solo calculamos el profit potencial para que el usuario lo vea en tiempo real
         const FEE_RATE = botState.config?.long?.feeRate || 0.001; 
         const lprofit = calculatePotentialProfit(
             botState.lStateData?.ppc || 0, 
@@ -122,24 +123,11 @@ async function updateBotStateWithPrice(price) {
             FEE_RATE 
         );       
 
-        const updateData = { lprofit, lastUpdateTime: new Date() };
-
-        if (['STOPPED', 'NO_COVERAGE'].includes(botState.lstate)) {            
-            const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
-                botState.lbalance,
-                currentPrice,
-                botState.config.long.purchaseUsdt,
-                botState.config.long.price_var / 100,
-                botState.config.long.size_var / 100,
-                botState.lStateData?.orderCountInCycle || 0
-            );
-            updateData.lcoverage = lcoverage;
-            updateData.lnorder = lnorder;
-        }
-
+        // Actualizamos la base de datos SOLO con el profit y la hora
+        // Quitamos el cálculo de cobertura de aquí para no saturar la DB
         const updatedBotState = await Autobot.findOneAndUpdate(
             { _id: botState._id },
-            { $set: updateData },
+            { $set: { lprofit, lastUpdateTime: new Date() } },
             { new: true, lean: true }
         );       
 
