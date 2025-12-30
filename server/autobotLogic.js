@@ -130,18 +130,20 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. EXTRAER Y DEFINIR (Aquí estaba el fallo: faltaba currentLBalance)
+    // 1. DEFINICIÓN DE VARIABLES (Aquí estaba el error)
     const { lbalance, config, lnorder, lcoverage } = botState;
-    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTA ES LA LÍNEA QUE FALTA
     
-    // Si el bot está detenido o no hay configuración, salimos
+    // Extraemos el balance y lo convertimos a número para evitar errores
+    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTO ARREGLA EL ERROR CRÍTICO
+    
+    // Si el bot está detenido o no hay configuración, salimos sin error
     if (botState.lstate === 'STOPPED' || !config || !config.long.enabled) return;
 
     const purchaseUsdt = parseFloat(config.long.purchaseUsdt || 5);
     const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
     const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
     
-    // 2. VALIDACIÓN DE SALDO MÍNIMO
+    // 2. VALIDACIÓN DE SALDO
     if (currentLBalance < purchaseUsdt) {
         if (lnorder !== 0) {
             await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 });
@@ -149,7 +151,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         return;
     }
 
-    // 3. CÁLCULO (Asegúrate de que la función reciba currentLBalance)
+    // 3. CÁLCULO (Ahora currentLBalance ya existe y se puede pasar a la función)
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
         currentLBalance, 
         currentPrice,
