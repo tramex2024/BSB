@@ -130,29 +130,26 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. DESESTRUCTURACIÓN Y DEFINICIÓN (Aquí estaba el fallo)
-    const { lbalance, config, lnorder, lcoverage } = botState;
-    
-    // Declaramos explícitamente currentLBalance extrayéndolo de lbalance
-    const currentLBalance = parseFloat(lbalance || 0); 
-    
-    // Si el bot está detenido o la config no existe, salimos silenciosamente
+    // 1. DECLARACIÓN INDEPENDIENTE (A prueba de fallos)
+    // Extraemos el valor directamente del objeto para evitar que la desestructuración falle
+    const rawLBalance = botState.lbalance; 
+    const currentLBalance = parseFloat(rawLBalance || 0); 
+
+    // 2. EXTRAER EL RESTO
+    const { config, lnorder, lcoverage } = botState;
+
+    // 3. VALIDACIÓN DE SEGURIDAD
     if (botState.lstate === 'STOPPED' || !config || !config.long.enabled) return;
 
     const purchaseUsdt = parseFloat(config.long.purchaseUsdt || 5);
     const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
     const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
     
-    // 2. VALIDACIÓN DE SALDO
-    if (currentLBalance < purchaseUsdt) {
-        if (lnorder !== 0) {
-            await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 });
-        }
-        return;
-    }
+    // 4. LOG DE DEPURACIÓN (Solo para confirmar en Render que esto corre)
+    // console.log(`[DEBUG] Ejecutando cobertura con balance: ${currentLBalance}`);
 
-    // 3. CÁLCULO (Ahora la variable ya existe y tiene valor)
-    const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
+    // 5. LLAMADA AL CÁLCULO
+    const resultados = calculateLongCoverage(
         currentLBalance, 
         currentPrice,
         purchaseUsdt, 
@@ -161,7 +158,10 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         0
     );
     
-    // 4. ACTUALIZACIÓN DE BASE DE DATOS Y FRONTEND
+    const newCov = resultados.coveragePrice;
+    const newN = resultados.numberOfOrders;
+
+    // 6. ACTUALIZACIÓN
     if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
