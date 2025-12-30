@@ -10,43 +10,37 @@ const { parseNumber } = require('./utils/helpers'); // Importa el helper
 // LÓGICA DE COBERTURA (LONG)
 // -------------------------------------------------------------------------
 /**
- * Calcula la cobertura Long siguiendo la lógica de incremento de precio y monto
+ * Calcula la cobertura de forma recursiva pero optimizada.
+ * @param {number} balance - Saldo disponible para compras (lbalance)
+ * @param {number} currentPrice - Precio actual de mercado
+ * @param {number} purchaseAmount - Tamaño de la orden base (USDT)
+ * @param {number} priceVar - Porcentaje de caída para la siguiente orden (decimal)
+ * @param {number} sizeVar - Porcentaje de incremento del tamaño de orden (decimal)
+ * @param {number} orderCount - Índice de la orden
  */
-function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVar, sizeVar, currentOrderCount) {
-    let remainingBalance = parseFloat(lbalance);
-    let lastPrice = parseFloat(currentPrice);
-    
-    // Calculamos el monto de la PRÓXIMA orden a colocar
-    let nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
-    let ordersPossible = 0;
-    let coveragePrice = lastPrice;
+function calculateLongCoverage(balance, currentPrice, purchaseAmount, priceVar, sizeVar, orderCount = 0) {
+    let totalCost = 0;
+    let tempPrice = currentPrice;
+    let tempPurchase = purchaseAmount;
+    let orders = 0;
 
-    // Empezamos el decremento desde el siguiente nivel
-    let iteration = currentOrderCount + 1; 
-
-    // IMPORTANTE: Si no hay saldo ni para la primera orden
-    if (remainingBalance < nextOrderAmount) {
-        return { numberOfOrders: 0, coveragePrice: lastPrice };
-    }
-
-    while (remainingBalance >= nextOrderAmount) {
-        // 1. Aplicamos el decremento ANTES de simular la orden
-        let currentDecrement = iteration * priceVar;
-        lastPrice = lastPrice * (1 - currentDecrement);
+    // Simulamos la cascada de órdenes hacia abajo hasta agotar el balance
+    while (totalCost + tempPurchase <= balance) {
+        totalCost += tempPurchase;
+        orders++;
         
-        // 2. Si todavía tenemos saldo, "colocamos" la orden en este nuevo precio
-        remainingBalance -= nextOrderAmount;
-        ordersPossible++;
-        coveragePrice = lastPrice;
-
-        // 3. Preparamos valores para el siguiente nivel
-        nextOrderAmount = nextOrderAmount * (1 + sizeVar);
-        iteration++;
+        // El precio de la siguiente orden es un % más bajo que la anterior
+        tempPrice = tempPrice * (1 - priceVar);
+        // El tamaño de la siguiente orden es un % más grande que la anterior
+        tempPurchase = tempPurchase * (1 + sizeVar);
+        
+        // Límite de seguridad para evitar bucles infinitos en configuraciones erróneas
+        if (orders > 100) break;
     }
 
     return {
-        numberOfOrders: ordersPossible,
-        coveragePrice: parseFloat(coveragePrice.toFixed(2))
+        coveragePrice: tempPrice, // Este es el precio al que llegaría el bot con tu saldo
+        numberOfOrders: orders    // Cuántas balas tienes en la recámara
     };
 }
 

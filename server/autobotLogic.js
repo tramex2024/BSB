@@ -130,7 +130,9 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
+    // 1. Extraemos lbalance (aquí estaba el problema, se usaba abajo como currentLBalance)
     const { lbalance, config, lnorder, lcoverage } = botState;
+    const currentLBalance = parseFloat(lbalance || 0); // <--- DECLARACIÓN NECESARIA
     
     // Si el bot está detenido, no calculamos nada
     if (botState.lstate === 'STOPPED' || !config.long.enabled) return;
@@ -139,15 +141,10 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
     const sizeVar = parseNumber(config.long.size_var) / 100;
     const priceVar = parseNumber(config.long.price_var) / 100;
     
-    // IMPORTANTE: El conteo de órdenes para el cálculo de cobertura 
-    // siempre empieza desde 0 porque es una simulación desde "ahora"
     const simulationOrderCount = 0; 
 
-    // 1. Calculamos el costo de la primera orden de la simulación
-    const firstOrderAmount = purchaseUsdt;
-
-    // --- ESCENARIO: SIN SALDO PARA LA PRIMERA ORDEN ---
-    if (lbalance < firstOrderAmount) {
+    // 2. Usamos currentLBalance para la validación
+    if (currentLBalance < purchaseUsdt) {
         if (lnorder !== 0 || Math.abs(lcoverage - currentPrice) > 0.01) {
             await updateGeneralBotState({ 
                 lcoverage: currentPrice, 
@@ -157,20 +154,18 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         return;
     }
 
-    // --- ESCENARIO: CÁLCULO DINÁMICO DESDE EL PRECIO ACTUAL ---
-    // Eliminamos el PPC. Solo importa el currentPrice.
+    // 3. Cálculo dinámico
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
-        lbalance, 
-        currentPrice, // <--- Única base posible
+        currentLBalance, // <--- Usamos la variable declarada
+        currentPrice,
         purchaseUsdt, 
         priceVar, 
         sizeVar, 
         simulationOrderCount
     );
     
-    // Actualizamos la base de datos siempre que el precio cambie (Tiempo Real)
-    // Usamos un margen pequeño (ej: 0.10 USDT) para no saturar la DB con micro-centavos
-    if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.10) {
+    // 4. Actualización con margen mínimo para evitar saturar DB
+    if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
 }
