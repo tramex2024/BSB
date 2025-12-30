@@ -130,18 +130,18 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // Definición directa y segura
+    // 1. Declaración directa. Sin desestructuración para evitar errores de referencia.
     const currentLBalance = parseFloat(botState.lbalance || 0); 
     
-    // Si no hay balance o el bot está apagado, salimos
-    if (botState.lstate === 'STOPPED' || !botState.config?.long?.enabled) return;
+    // 2. Si el bot está detenido o no hay config, salir.
+    if (!botState.config || botState.lstate === 'STOPPED' || !botState.config.long.enabled) return;
 
-    // Usamos los datos de la config directamente
+    // 3. Extraer valores de configuración de forma segura
     const pUsdt = parseFloat(botState.config.long.purchaseUsdt || 5);
     const sVar = (parseFloat(botState.config.long.size_var) || 0) / 100;
     const pVar = (parseFloat(botState.config.long.price_var) || 0) / 100;
 
-    // Llamada al cálculo
+    // 4. Ejecutar el cálculo (Asegúrate de pasar currentLBalance)
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
         currentLBalance, 
         currentPrice,
@@ -151,8 +151,8 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         0
     );
 
-    // Actualizar si hay cambios significativos
-    if (numberOfOrders !== botState.lnorder || Math.abs(coveragePrice - botState.lcoverage) > 0.1) {
+    // 5. Solo actualizar si los valores cambiaron
+    if (numberOfOrders !== botState.lnorder || Math.abs(coveragePrice - botState.lcoverage) > 0.01) {
         await updateGeneralBotState({ 
             lcoverage: coveragePrice, 
             lnorder: numberOfOrders 

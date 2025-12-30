@@ -13,7 +13,7 @@ const autobotLogic = require('./autobotLogic.js');
 const checkTimeSync = require('./services/check_time');
 
 // Importa las funciones de cálculo
-//const { calculateLongCoverage, calculatePotentialProfit } = require('./autobotCalculations');
+const { calculateLongCoverage, calculatePotentialProfit } = require('./autobotCalculations');
 
 // Modelos
 const Autobot = require('./models/Autobot');
