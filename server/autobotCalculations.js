@@ -9,34 +9,41 @@ const { parseNumber } = require('./utils/helpers'); // Importa el helper
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
 // -------------------------------------------------------------------------
-function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVarDecimal, sizeVarDecimal, orderCountInCycle = 0) {
-    let currentBalance = lbalance;
-    let nextOrderPrice = currentPrice;
-    
-    // 🎯 CORRECCIÓN: Calcular el monto de la "siguiente" orden real según el ciclo actual
-    // Si orderCountInCycle es 3, la siguiente orden es la 4ta.
-    let nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVarDecimal), orderCountInCycle);
-    
-    let numberOfOrders = 0;
-    let lastCoveragePrice = currentPrice;
+/**
+ * Calcula la cobertura Long siguiendo la lógica de incremento de precio y monto
+ */
+function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVar, sizeVar, currentOrderCount) {
+    let remainingBalance = parseFloat(lbalance);
+    let lastPrice = parseFloat(currentPrice);
+    let nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
+    let ordersPossible = 0;
+    let coveragePrice = lastPrice;
 
-    // Ajuste: El ciclo debe validar ANTES de contar la orden
-    while (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-        currentBalance -= nextOrderAmount;
-        numberOfOrders++;
-        
-        lastCoveragePrice = nextOrderPrice;
+    // priceVar es el "Decrement %" inicial (ej: 0.01 para 1%)
+    // Usamos un contador para aumentar el decremento en cada orden
+    let iteration = currentOrderCount + 1; 
 
-        // Preparamos los datos para la SIGUIENTE orden
-        nextOrderPrice = nextOrderPrice * (1 - priceVarDecimal);
-        nextOrderAmount = nextOrderAmount * (1 + sizeVarDecimal);
+    while (remainingBalance >= nextOrderAmount) {
+        // 1. Restamos el costo de la orden al balance
+        remainingBalance -= nextOrderAmount;
+        ordersPossible++;
+
+        // 2. Calculamos el precio de esta orden
+        // El decremento aumenta según la iteración: iteration * priceVar
+        // Ejemplo: 1*1%, luego 2*1%, luego 3*1%...
+        let currentDecrement = iteration * priceVar;
+        lastPrice = lastPrice * (1 - currentDecrement);
         
-        if (numberOfOrders > 50) break; 
+        coveragePrice = lastPrice;
+
+        // 3. Preparamos los valores para la siguiente vuelta
+        nextOrderAmount = nextOrderAmount * (1 + sizeVar);
+        iteration++;
     }
 
-    return { 
-        coveragePrice: lastCoveragePrice, 
-        numberOfOrders: numberOfOrders 
+    return {
+        numberOfOrders: ordersPossible,
+        coveragePrice: parseFloat(coveragePrice.toFixed(2))
     };
 }
 
