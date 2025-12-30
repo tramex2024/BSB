@@ -130,41 +130,36 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. EXTRAER VALORES (Aquí faltaba definir currentLBalance)
+    // 1. EXTRAER Y DEFINIR (Aquí estaba el fallo: faltaba currentLBalance)
     const { lbalance, config, lnorder, lcoverage } = botState;
-    const currentLBalance = parseFloat(lbalance || 0); // <--- LÍNEA CRÍTICA PARA EL FIX
+    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTA ES LA LÍNEA QUE FALTA
     
-    // Si el bot está detenido, no calculamos nada
-    if (botState.lstate === 'STOPPED' || !config.long.enabled) return;
+    // Si el bot está detenido o no hay configuración, salimos
+    if (botState.lstate === 'STOPPED' || !config || !config.long.enabled) return;
 
-    const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
+    const purchaseUsdt = parseFloat(config.long.purchaseUsdt || 5);
     const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
     const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
     
-    const simulationOrderCount = 0; 
-
-    // 2. VALIDACIÓN DE SALDO
+    // 2. VALIDACIÓN DE SALDO MÍNIMO
     if (currentLBalance < purchaseUsdt) {
-        if (lnorder !== 0 || Math.abs(lcoverage - currentPrice) > 0.01) {
-            await updateGeneralBotState({ 
-                lcoverage: currentPrice, 
-                lnorder: 0 
-            });
+        if (lnorder !== 0) {
+            await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 });
         }
         return;
     }
 
-    // 3. LLAMADA AL CÁLCULO (Usando la variable ya definida)
+    // 3. CÁLCULO (Asegúrate de que la función reciba currentLBalance)
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
-        currentLBalance, // <--- Aquí es donde fallaba antes
+        currentLBalance, 
         currentPrice,
         purchaseUsdt, 
         priceVar, 
         sizeVar, 
-        simulationOrderCount
+        0
     );
     
-    // 4. ACTUALIZAR DB Y FRONTEND
+    // 4. ACTUALIZACIÓN DINÁMICA
     if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
