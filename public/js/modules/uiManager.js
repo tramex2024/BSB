@@ -25,20 +25,24 @@ export function updateBotUI(state) {
     // 2. Mapeo de Elementos Numéricos
     const elementsToUpdate = {
         auprofit: 'total_profit',
-        aulbalance: 'lbalance',
-        ausbalance: 'sbalance',
-        aultprice: 'ltprice',
-        austprice: 'stprice',
-        aulcycle: 'lcycle',
-        auscycle: 'scycle',
-        aulcoverage: 'lcoverage',
-        auscoverage: 'scoverage',
-        aulnorder: 'lnorder',
-        ausnorder: 'snorder',
-        aulsprice: 'lsprice',
-        ausbprice: 'sbprice',
-        aulprofit: 'lprofit',
-        ausprofit: 'sprofit'
+    aulbalance: 'lbalance',
+    ausbalance: 'sbalance',
+    aultprice: 'ltprice',
+    austprice: 'stprice',
+    aulcycle: 'lcycle',
+    auscycle: 'scycle',
+    
+    // CORRECCIÓN AQUÍ:
+    // El ID en tu HTML es 'aulcoverage', pero el dato del bot es 'lcoverage'
+    aulcoverage: 'lcoverage', 
+    auscoverage: 'scoverage',
+    aulnorder: 'lnorder',
+    ausnorder: 'snorder',
+    
+    aulsprice: 'lsprice',
+    ausbprice: 'sbprice',
+    aulprofit: 'lprofit',
+    ausprofit: 'sprofit'
     };
 
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {

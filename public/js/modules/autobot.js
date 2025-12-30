@@ -149,21 +149,25 @@ export async function initializeAutobotView() {
 
     // 6. Listeners de Socket para actualizaciones en tiempo real
     if (socket) {
-        // Estado del bot (START/STOP/PAUSED)
-        socket.on('bot-state-update', (state) => updateBotUI(state));
+    socket.on('bot-state-update', (state) => {
+        // 1. Llamada normal a la UI general
+        updateBotUI(state);
 
-        // Balances disponibles para límites
-        socket.on('balance-update', (balances) => {
-            maxUsdtBalance = balances.lastAvailableUSDT;
-            maxBtcBalance = balances.lastAvailableBTC;
-            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-            updateMaxBalanceDisplay('BTC', maxBtcBalance);
-            updateMainBalanceDisplay(maxUsdtBalance, maxBtcBalance);
-        });
+        // 2. FORZAR ACTUALIZACIÓN DE COBERTURA (El parche de tiempo real)
+        const lCoverageEl = document.getElementById('lcoverage'); // Asegúrate que el ID sea este
+        const lNorderEl = document.getElementById('lnorder');
 
-        // Actualización de la lista de órdenes abiertas
-        socket.on('open-orders-update', (ordersData) => {
-            updateOpenOrdersTable(ordersData, 'au-order-list', currentTab);
-        });
+        if (lCoverageEl && state.lcoverage !== undefined) {
+            lCoverageEl.textContent = `$${parseFloat(state.lcoverage).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            
+            // Efecto visual opcional: un pequeño destello cuando cambie
+            lCoverageEl.classList.add('price-update-flash');
+            setTimeout(() => lCoverageEl.classList.remove('price-update-flash'), 500);
+        }
+
+        if (lNorderEl && state.lnorder !== undefined) {
+            lNorderEl.textContent = state.lnorder;
+        }
+    });
     }
 }

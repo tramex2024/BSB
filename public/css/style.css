@@ -231,6 +231,14 @@ body {
     transition: color 0.3s ease;
 }
 
+/* Añade un efecto de parpadeo suave cuando el valor cambie */
+#aulcoverage, #aulnorder {
+    transition: color 0.3s ease;
+}
+.text-update-flash {
+    color: #60a5fa; /* Un azul brillante temporal */
+}
+
 // Versión con "ajuste de línea" por seguridad
 <p class="text-gray-600 text-[9px] font-mono break-all max-w-[150px] ml-auto">
     ID: ${orderId}
