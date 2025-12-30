@@ -130,40 +130,33 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. DECLARACIÓN INDEPENDIENTE (A prueba de fallos)
-    // Extraemos el valor directamente del objeto para evitar que la desestructuración falle
-    const rawLBalance = botState.lbalance; 
-    const currentLBalance = parseFloat(rawLBalance || 0); 
-
-    // 2. EXTRAER EL RESTO
-    const { config, lnorder, lcoverage } = botState;
-
-    // 3. VALIDACIÓN DE SEGURIDAD
-    if (botState.lstate === 'STOPPED' || !config || !config.long.enabled) return;
-
-    const purchaseUsdt = parseFloat(config.long.purchaseUsdt || 5);
-    const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
-    const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
+    // Definición directa y segura
+    const currentLBalance = parseFloat(botState.lbalance || 0); 
     
-    // 4. LOG DE DEPURACIÓN (Solo para confirmar en Render que esto corre)
-    // console.log(`[DEBUG] Ejecutando cobertura con balance: ${currentLBalance}`);
+    // Si no hay balance o el bot está apagado, salimos
+    if (botState.lstate === 'STOPPED' || !botState.config?.long?.enabled) return;
 
-    // 5. LLAMADA AL CÁLCULO
-    const resultados = calculateLongCoverage(
+    // Usamos los datos de la config directamente
+    const pUsdt = parseFloat(botState.config.long.purchaseUsdt || 5);
+    const sVar = (parseFloat(botState.config.long.size_var) || 0) / 100;
+    const pVar = (parseFloat(botState.config.long.price_var) || 0) / 100;
+
+    // Llamada al cálculo
+    const { coveragePrice, numberOfOrders } = calculateLongCoverage(
         currentLBalance, 
         currentPrice,
-        purchaseUsdt, 
-        priceVar, 
-        sizeVar, 
+        pUsdt, 
+        pVar, 
+        sVar, 
         0
     );
-    
-    const newCov = resultados.coveragePrice;
-    const newN = resultados.numberOfOrders;
 
-    // 6. ACTUALIZACIÓN
-    if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
-        await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
+    // Actualizar si hay cambios significativos
+    if (numberOfOrders !== botState.lnorder || Math.abs(coveragePrice - botState.lcoverage) > 0.1) {
+        await updateGeneralBotState({ 
+            lcoverage: coveragePrice, 
+            lnorder: numberOfOrders 
+        });
     }
 }
 
