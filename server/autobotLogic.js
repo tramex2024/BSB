@@ -130,21 +130,25 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    const { lbalance, config, lStateData, lnorder } = botState;
+    const { lbalance, config, lnorder, lcoverage } = botState;
     
+    // Si el bot está detenido, no calculamos nada
     if (botState.lstate === 'STOPPED' || !config.long.enabled) return;
 
     const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
     const sizeVar = parseNumber(config.long.size_var) / 100;
-    const currentOrderCount = lStateData.orderCountInCycle || 0;
+    const priceVar = parseNumber(config.long.price_var) / 100;
+    
+    // IMPORTANTE: El conteo de órdenes para el cálculo de cobertura 
+    // siempre empieza desde 0 porque es una simulación desde "ahora"
+    const simulationOrderCount = 0; 
 
-    // Calculamos el costo de la PRÓXIMA orden
-    const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
+    // 1. Calculamos el costo de la primera orden de la simulación
+    const firstOrderAmount = purchaseUsdt;
 
-    // --- ESCENARIO: SIN SALDO PARA LA SIGUIENTE ORDEN ---
-    if (lbalance < nextOrderAmount) {
-        // Si el precio de cobertura guardado es distinto al actual, actualizamos
-        if (botState.lcoverage !== currentPrice || lnorder !== 0) {
+    // --- ESCENARIO: SIN SALDO PARA LA PRIMERA ORDEN ---
+    if (lbalance < firstOrderAmount) {
+        if (lnorder !== 0 || Math.abs(lcoverage - currentPrice) > 0.01) {
             await updateGeneralBotState({ 
                 lcoverage: currentPrice, 
                 lnorder: 0 
@@ -153,20 +157,20 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         return;
     }
 
-    // --- ESCENARIO: CON SALDO (Cálculo normal) ---
-    const basePrice = (lStateData.ppc > 0) ? lStateData.ppc : currentPrice;
-
+    // --- ESCENARIO: CÁLCULO DINÁMICO DESDE EL PRECIO ACTUAL ---
+    // Eliminamos el PPC. Solo importa el currentPrice.
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
         lbalance, 
-        basePrice, 
+        currentPrice, // <--- Única base posible
         purchaseUsdt, 
-        parseNumber(config.long.price_var) / 100, 
+        priceVar, 
         sizeVar, 
-        currentOrderCount
+        simulationOrderCount
     );
     
-    // Actualizamos solo si hubo cambios significativos
-    if (newN !== lnorder || Math.abs(newCov - botState.lcoverage) > 0.01) {
+    // Actualizamos la base de datos siempre que el precio cambie (Tiempo Real)
+    // Usamos un margen pequeño (ej: 0.10 USDT) para no saturar la DB con micro-centavos
+    if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.10) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
 }

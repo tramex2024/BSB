@@ -15,28 +15,31 @@ const { parseNumber } = require('./utils/helpers'); // Importa el helper
 function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVar, sizeVar, currentOrderCount) {
     let remainingBalance = parseFloat(lbalance);
     let lastPrice = parseFloat(currentPrice);
+    
+    // Calculamos el monto de la PRÓXIMA orden a colocar
     let nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
     let ordersPossible = 0;
     let coveragePrice = lastPrice;
 
-    // priceVar es el "Decrement %" inicial (ej: 0.01 para 1%)
-    // Usamos un contador para aumentar el decremento en cada orden
+    // Empezamos el decremento desde el siguiente nivel
     let iteration = currentOrderCount + 1; 
 
-    while (remainingBalance >= nextOrderAmount) {
-        // 1. Restamos el costo de la orden al balance
-        remainingBalance -= nextOrderAmount;
-        ordersPossible++;
+    // IMPORTANTE: Si no hay saldo ni para la primera orden
+    if (remainingBalance < nextOrderAmount) {
+        return { numberOfOrders: 0, coveragePrice: lastPrice };
+    }
 
-        // 2. Calculamos el precio de esta orden
-        // El decremento aumenta según la iteración: iteration * priceVar
-        // Ejemplo: 1*1%, luego 2*1%, luego 3*1%...
+    while (remainingBalance >= nextOrderAmount) {
+        // 1. Aplicamos el decremento ANTES de simular la orden
         let currentDecrement = iteration * priceVar;
         lastPrice = lastPrice * (1 - currentDecrement);
         
+        // 2. Si todavía tenemos saldo, "colocamos" la orden en este nuevo precio
+        remainingBalance -= nextOrderAmount;
+        ordersPossible++;
         coveragePrice = lastPrice;
 
-        // 3. Preparamos los valores para la siguiente vuelta
+        // 3. Preparamos valores para el siguiente nivel
         nextOrderAmount = nextOrderAmount * (1 + sizeVar);
         iteration++;
     }
