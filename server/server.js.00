@@ -1,4 +1,4 @@
-// BSB/server/server.js
+/// BSB/server/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -114,7 +114,6 @@ async function updateBotStateWithPrice(price) {
         const currentPrice = parseFloat(price);
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) return;
 
-        // Solo calculamos el profit potencial para que el usuario lo vea en tiempo real
         const FEE_RATE = botState.config?.long?.feeRate || 0.001; 
         const lprofit = calculatePotentialProfit(
             botState.lStateData?.ppc || 0, 
@@ -123,17 +122,13 @@ async function updateBotStateWithPrice(price) {
             FEE_RATE 
         );       
 
-        // Actualizamos la base de datos SOLO con el profit y la hora
-        // Quitamos el cálculo de cobertura de aquí para no saturar la DB
-        const updatedBotState = await Autobot.findOneAndUpdate(
+        // ACTUALIZACIÓN SILENCIOSA: Solo guardamos, NO emitimos (emitBotState eliminado de aquí)
+        await Autobot.updateOne(
             { _id: botState._id },
-            { $set: { lprofit, lastUpdateTime: new Date() } },
-            { new: true, lean: true }
-        );       
-
-        if (updatedBotState) emitBotState(io, updatedBotState);
+            { $set: { lprofit, lastUpdateTime: new Date() } }
+        );
     } catch (error) {
-        console.error('Error al actualizar con precio:', error);
+        console.error('Error al actualizar profit:', error);
     }
 }
 

@@ -9,34 +9,38 @@ const { parseNumber } = require('./utils/helpers'); // Importa el helper
 // -------------------------------------------------------------------------
 // LÓGICA DE COBERTURA (LONG)
 // -------------------------------------------------------------------------
-function calculateLongCoverage(lbalance, currentPrice, purchaseUsdt, priceVarDecimal, sizeVarDecimal, orderCountInCycle = 0) {
-    let currentBalance = lbalance;
-    let nextOrderPrice = currentPrice;
-    
-    // 🎯 CORRECCIÓN: Calcular el monto de la "siguiente" orden real según el ciclo actual
-    // Si orderCountInCycle es 3, la siguiente orden es la 4ta.
-    let nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVarDecimal), orderCountInCycle);
-    
-    let numberOfOrders = 0;
-    let lastCoveragePrice = currentPrice;
+/**
+ * Calcula la cobertura de forma recursiva pero optimizada.
+ * @param {number} balance - Saldo disponible para compras (lbalance)
+ * @param {number} currentPrice - Precio actual de mercado
+ * @param {number} purchaseAmount - Tamaño de la orden base (USDT)
+ * @param {number} priceVar - Porcentaje de caída para la siguiente orden (decimal)
+ * @param {number} sizeVar - Porcentaje de incremento del tamaño de orden (decimal)
+ * @param {number} orderCount - Índice de la orden
+ */
+function calculateLongCoverage(balance, currentPrice, purchaseAmount, priceVar, sizeVar, orderCount = 0) {
+    let totalCost = 0;
+    let tempPrice = currentPrice;
+    let tempPurchase = purchaseAmount;
+    let orders = 0;
 
-    // Ajuste: El ciclo debe validar ANTES de contar la orden
-    while (currentBalance >= nextOrderAmount && nextOrderAmount > 0) {
-        currentBalance -= nextOrderAmount;
-        numberOfOrders++;
+    // Simulamos la cascada de órdenes hacia abajo hasta agotar el balance
+    while (totalCost + tempPurchase <= balance) {
+        totalCost += tempPurchase;
+        orders++;
         
-        lastCoveragePrice = nextOrderPrice;
-
-        // Preparamos los datos para la SIGUIENTE orden
-        nextOrderPrice = nextOrderPrice * (1 - priceVarDecimal);
-        nextOrderAmount = nextOrderAmount * (1 + sizeVarDecimal);
+        // El precio de la siguiente orden es un % más bajo que la anterior
+        tempPrice = tempPrice * (1 - priceVar);
+        // El tamaño de la siguiente orden es un % más grande que la anterior
+        tempPurchase = tempPurchase * (1 + sizeVar);
         
-        if (numberOfOrders > 50) break; 
+        // Límite de seguridad para evitar bucles infinitos en configuraciones erróneas
+        if (orders > 100) break;
     }
 
-    return { 
-        coveragePrice: lastCoveragePrice, 
-        numberOfOrders: numberOfOrders 
+    return {
+        coveragePrice: tempPrice, // Este es el precio al que llegaría el bot con tu saldo
+        numberOfOrders: orders    // Cuántas balas tienes en la recámara
     };
 }
 

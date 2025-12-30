@@ -130,102 +130,128 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    const { lbalance, config, lStateData, lnorder } = botState;
-    
-    // Si el bot está apagado o no hay capital asignado, ponemos todo en 0
-    if (botState.lstate === 'STOPPED' || !config.long.enabled || lbalance <= 0) {
-        if (lnorder !== 0) await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
-        return;
-    }
+    try {
+        // 1. Extraer el balance de forma aislada
+        const lbalanceRaw = botState.lbalance || 0;
+        const currentLBalance = parseFloat(lbalanceRaw);
 
-    const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
-    const sizeVar = parseNumber(config.long.size_var) / 100;
-    const currentOrderCount = lStateData.orderCountInCycle || 0;
+        // 2. Validaciones básicas de seguridad
+        if (!botState.config || !botState.config.long) return;
+        if (botState.lstate === 'STOPPED' || !botState.config.long.enabled) return;
 
-    // 1. Calculamos cuánto costaría la PRÓXIMA orden que el bot intentaría abrir
-    const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
+        // 3. Extraer configuración
+        const conf = botState.config.long;
+        const pUsdt = parseFloat(conf.purchaseUsdt || 5);
+        const pVar = (parseFloat(conf.price_var) || 0) / 100;
+        const sVar = (parseFloat(conf.size_var) || 0) / 100;
 
-    // 2. Si no tenemos ni para la siguiente orden, cobertura es 0
-    if (lbalance < nextOrderAmount) {
-        if (lnorder !== 0) await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
-        return;
-    }
+        // 4. Llamada al cálculo (Asegúrate de que los nombres coincidan)
+        const result = calculateLongCoverage(
+            currentLBalance, 
+            currentPrice,
+            pUsdt, 
+            pVar, 
+            sVar, 
+            0
+        );
 
-    // 3. Calculamos la cobertura total basada en el precio promedio (PPC) o el actual
-    const basePrice = (lStateData.ppc > 0) ? lStateData.ppc : currentPrice;
+        // 5. Solo actualizamos si hay cambios reales
+        const newCov = result.coveragePrice;
+        const newN = result.numberOfOrders;
 
-    const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
-        lbalance, 
-        basePrice, 
-        purchaseUsdt, 
-        parseNumber(config.long.price_var) / 100, 
-        sizeVar, 
-        currentOrderCount
-    );
-    
-    // 4. ACTUALIZACIÓN INTELIGENTE: 
-    // Guardamos si cambió el número de órdenes O si el precio de cobertura varió significativamente
-    if (newN !== lnorder || Math.abs(newCov - botState.lcoverage) > 0.01) {
-        await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
+        if (newN !== botState.lnorder || Math.abs(newCov - botState.lcoverage) > 0.01) {
+            await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
+        }
+    } catch (err) {
+        console.error("[ERROR INTERNO RECALCULATE]:", err.message);
     }
 }
 
 /**
- * EL CORAZÓN DEL BOT: Se ejecuta con cada cambio de precio de Bitcoin
+ * EL CORAZÓN DEL BOT: Se ejecuta con cada cambio de precio de Bitcoin.
+ * Centraliza el flujo: Recalcular -> Consolidar -> Ejecutar -> Sincronizar.
  */
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     try {
+        // 1. Carga inicial del estado y validación de precio
         let botState = await Autobot.findOne({}).lean();
         const currentPrice = parseFloat(priceFromWebSocket);
         
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            await syncFrontendState(currentPrice, botState);
+            if (botState) await syncFrontendState(currentPrice, botState);
             return;
         }
 
-        // Preparamos las herramientas para las estrategias
+        // 2. RECALCULO DINÁMICO (Dinamismo en tiempo real)
+        // Calculamos la cobertura ANTES de cualquier otra lógica
+        if (botState.config.long.enabled) {
+            await recalculateDynamicCoverageLong(currentPrice, botState);
+            
+            // 🔥 REFRESH VITAL: Volvemos a leer de la DB para que las estrategias 
+            // vean el nuevo lcoverage y lnorder actualizados.
+            botState = await Autobot.findOne({}).lean(); 
+        }
+
+        // 3. PREPARACIÓN DE DEPENDENCIAS
+        // Ahora las dependencias llevan el botState con el lcoverage RECIÉN calculado
         const dependencies = {
-            log, io, bitmartService, Autobot, currentPrice,
+            log, 
+            io, 
+            bitmartService, 
+            Autobot, 
+            currentPrice,
             availableUSDT: botState.lastAvailableUSDT,
             availableBTC: botState.lastAvailableBTC,
-            botState, config: botState.config,
-            updateBotState, updateLStateData, updateGeneralBotState,
-            syncFrontendState, ...externalDependencies
+            botState, 
+            config: botState.config,
+            updateBotState, 
+            updateLStateData, 
+            updateGeneralBotState,
+            syncFrontendState, 
+            ...externalDependencies
         };
 
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. Recalcular cobertura (¿Cuánto dinero nos queda para promediar?)
-        if (botState.config.long.enabled) {
-            await recalculateDynamicCoverageLong(currentPrice, botState);
-            botState = await Autobot.findOne({}).lean(); // Refrescar datos
-            dependencies.botState = botState;
-        }
-
-        // 2. Consolidación (¿Se llenó la orden que enviamos hace un momento?)
+        // 4. CONSOLIDACIÓN (Verificar órdenes en el Exchange)
         let needsRefresh = false;
         const lastOrder = botState.lStateData?.lastOrder;
 
         if (lastOrder?.side === 'buy') {
-            if (await monitorLongBuy(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+            if (await monitorLongBuy(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) {
+                needsRefresh = true;
+            }
         }
         if (lastOrder?.side === 'sell') {
-            if (await monitorAndConsolidateSell(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+            if (await monitorAndConsolidateSell(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) {
+                needsRefresh = true;
+            }
         }
 
-        if (needsRefresh) botState = await Autobot.findOne({}).lean();
+        // Si una orden se completó, refrescamos el estado antes de la estrategia
+        if (needsRefresh) {
+            botState = await Autobot.findOne({}).lean();
+            dependencies.botState = botState;
+        }
 
-        // 3. Ejecución de Estrategia (Decidir si comprar o vender ahora)
+        // 5. EJECUCIÓN DE ESTRATEGIA (Decidir compras/ventas)
         if (botState.lstate !== 'STOPPED') {
             await runLongStrategy();
         }
 
-        // Finalizar informando a la web
-        await syncFrontendState(currentPrice, await Autobot.findOne({}).lean());
+        if (botState.sstate !== 'STOPPED') {
+            await runShortStrategy();
+        }
+
+        // 6. SINCRONIZACIÓN FINAL CON EL FRONTEND
+        // Hacemos una última lectura para enviar la "foto" final de este ciclo a la web
+        const finalState = await Autobot.findOne({}).lean();
+        await syncFrontendState(currentPrice, finalState);
         
     } catch (error) {
         console.error(`[ERROR CRÍTICO] Fallo en el ciclo del bot: ${error.message}`);
+        log(`Error en ciclo: ${error.message}`, 'error');
     }
 }
 
