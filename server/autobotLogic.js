@@ -130,20 +130,18 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. DEFINICIÓN DE VARIABLES (Aquí estaba el error)
+    // 1. EL FIX: Extraer lbalance y definir currentLBalance
     const { lbalance, config, lnorder, lcoverage } = botState;
+    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTO ES LO QUE FALTA
     
-    // Extraemos el balance y lo convertimos a número para evitar errores
-    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTO ARREGLA EL ERROR CRÍTICO
-    
-    // Si el bot está detenido o no hay configuración, salimos sin error
+    // Si el bot está detenido o la config no existe, salimos silenciosamente
     if (botState.lstate === 'STOPPED' || !config || !config.long.enabled) return;
 
     const purchaseUsdt = parseFloat(config.long.purchaseUsdt || 5);
     const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
     const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
     
-    // 2. VALIDACIÓN DE SALDO
+    // 2. VALIDACIÓN
     if (currentLBalance < purchaseUsdt) {
         if (lnorder !== 0) {
             await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 });
@@ -151,7 +149,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         return;
     }
 
-    // 3. CÁLCULO (Ahora currentLBalance ya existe y se puede pasar a la función)
+    // 3. CÁLCULO (Ahora currentLBalance ya existe para ser procesada)
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
         currentLBalance, 
         currentPrice,
@@ -161,7 +159,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         0
     );
     
-    // 4. ACTUALIZACIÓN DINÁMICA
+    // 4. ACTUALIZACIÓN DE BASE DE DATOS
     if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
