@@ -130,33 +130,32 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. Extraemos lbalance (aquí estaba el problema, se usaba abajo como currentLBalance)
+    // 1. EXTRAER Y DEFINIR (Aquí estaba el fallo)
     const { lbalance, config, lnorder, lcoverage } = botState;
-    const currentLBalance = parseFloat(lbalance || 0); // <--- DECLARACIÓN NECESARIA
+    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTA LÍNEA ES LA SOLUCIÓN
     
-    // Si el bot está detenido, no calculamos nada
+    // Si el bot está detenido o la estrategia long desactivada, no hacemos nada
     if (botState.lstate === 'STOPPED' || !config.long.enabled) return;
 
     const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
-    const sizeVar = parseNumber(config.long.size_var) / 100;
-    const priceVar = parseNumber(config.long.price_var) / 100;
+    const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
+    const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
     
     const simulationOrderCount = 0; 
 
-    // 2. Usamos currentLBalance para la validación
+    // 2. VALIDACIÓN DE SALDO MÍNIMO
     if (currentLBalance < purchaseUsdt) {
-        if (lnorder !== 0 || Math.abs(lcoverage - currentPrice) > 0.01) {
-            await updateGeneralBotState({ 
-                lcoverage: currentPrice, 
-                lnorder: 0 
-            });
+        // Si no hay saldo, ponemos lnorder en 0 para avisar al usuario
+        if (lnorder !== 0) {
+            await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 });
         }
         return;
     }
 
-    // 3. Cálculo dinámico
+    // 3. CÁLCULO DINÁMICO
+    // Asegúrate de que calculateLongCoverage use 'currentLBalance'
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
-        currentLBalance, // <--- Usamos la variable declarada
+        currentLBalance, 
         currentPrice,
         purchaseUsdt, 
         priceVar, 
@@ -164,7 +163,8 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         simulationOrderCount
     );
     
-    // 4. Actualización con margen mínimo para evitar saturar DB
+    // 4. ACTUALIZACIÓN DE BASE DE DATOS
+    // Usamos un margen de 0.01 para que cualquier cambio de precio se guarde y se envíe al socket
     if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
