@@ -130,23 +130,40 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // Definimos con un nombre único que no choque con nada
-    const balanceParaCalculo = parseFloat(botState.lbalance || 0); 
-    
-    if (botState.lstate === 'STOPPED' || !botState.config?.long?.enabled) return;
+    try {
+        // 1. Extraer el balance de forma aislada
+        const lbalanceRaw = botState.lbalance || 0;
+        const currentLBalance = parseFloat(lbalanceRaw);
 
-    // Usamos balanceParaCalculo directamente en la llamada
-    const { coveragePrice, numberOfOrders } = calculateLongCoverage(
-        balanceParaCalculo, 
-        currentPrice,
-        parseFloat(botState.config.long.purchaseUsdt || 5), 
-        (parseFloat(botState.config.long.price_var) || 0) / 100, 
-        (parseFloat(botState.config.long.size_var) || 0) / 100, 
-        0
-    );
+        // 2. Validaciones básicas de seguridad
+        if (!botState.config || !botState.config.long) return;
+        if (botState.lstate === 'STOPPED' || !botState.config.long.enabled) return;
 
-    if (numberOfOrders !== botState.lnorder || Math.abs(coveragePrice - botState.lcoverage) > 0.1) {
-        await updateGeneralBotState({ lcoverage: coveragePrice, lnorder: numberOfOrders });
+        // 3. Extraer configuración
+        const conf = botState.config.long;
+        const pUsdt = parseFloat(conf.purchaseUsdt || 5);
+        const pVar = (parseFloat(conf.price_var) || 0) / 100;
+        const sVar = (parseFloat(conf.size_var) || 0) / 100;
+
+        // 4. Llamada al cálculo (Asegúrate de que los nombres coincidan)
+        const result = calculateLongCoverage(
+            currentLBalance, 
+            currentPrice,
+            pUsdt, 
+            pVar, 
+            sVar, 
+            0
+        );
+
+        // 5. Solo actualizamos si hay cambios reales
+        const newCov = result.coveragePrice;
+        const newN = result.numberOfOrders;
+
+        if (newN !== botState.lnorder || Math.abs(newCov - botState.lcoverage) > 0.01) {
+            await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
+        }
+    } catch (err) {
+        console.error("[ERROR INTERNO RECALCULATE]:", err.message);
     }
 }
 
