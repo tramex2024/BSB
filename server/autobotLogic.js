@@ -130,9 +130,11 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. EL FIX: Extraer lbalance y definir currentLBalance
+    // 1. DESESTRUCTURACIÓN Y DEFINICIÓN (Aquí estaba el fallo)
     const { lbalance, config, lnorder, lcoverage } = botState;
-    const currentLBalance = parseFloat(lbalance || 0); // <--- ESTO ES LO QUE FALTA
+    
+    // Declaramos explícitamente currentLBalance extrayéndolo de lbalance
+    const currentLBalance = parseFloat(lbalance || 0); 
     
     // Si el bot está detenido o la config no existe, salimos silenciosamente
     if (botState.lstate === 'STOPPED' || !config || !config.long.enabled) return;
@@ -141,7 +143,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
     const sizeVar = (parseFloat(config.long.size_var) || 0) / 100;
     const priceVar = (parseFloat(config.long.price_var) || 0) / 100;
     
-    // 2. VALIDACIÓN
+    // 2. VALIDACIÓN DE SALDO
     if (currentLBalance < purchaseUsdt) {
         if (lnorder !== 0) {
             await updateGeneralBotState({ lcoverage: currentPrice, lnorder: 0 });
@@ -149,7 +151,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         return;
     }
 
-    // 3. CÁLCULO (Ahora currentLBalance ya existe para ser procesada)
+    // 3. CÁLCULO (Ahora la variable ya existe y tiene valor)
     const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
         currentLBalance, 
         currentPrice,
@@ -159,7 +161,7 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
         0
     );
     
-    // 4. ACTUALIZACIÓN DE BASE DE DATOS
+    // 4. ACTUALIZACIÓN DE BASE DE DATOS Y FRONTEND
     if (newN !== lnorder || Math.abs(newCov - lcoverage) > 0.01) {
         await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
     }
