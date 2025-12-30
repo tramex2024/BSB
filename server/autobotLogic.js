@@ -176,61 +176,90 @@ async function recalculateDynamicCoverageLong(currentPrice, botState) {
 }
 
 /**
- * EL CORAZÓN DEL BOT: Se ejecuta con cada cambio de precio de Bitcoin
+ * EL CORAZÓN DEL BOT: Se ejecuta con cada cambio de precio de Bitcoin.
+ * Centraliza el flujo: Recalcular -> Consolidar -> Ejecutar -> Sincronizar.
  */
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     try {
+        // 1. Carga inicial del estado y validación de precio
         let botState = await Autobot.findOne({}).lean();
         const currentPrice = parseFloat(priceFromWebSocket);
         
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            await syncFrontendState(currentPrice, botState);
+            if (botState) await syncFrontendState(currentPrice, botState);
             return;
         }
 
-        // Preparamos las herramientas para las estrategias
+        // 2. RECALCULO DINÁMICO (Dinamismo en tiempo real)
+        // Calculamos la cobertura ANTES de cualquier otra lógica
+        if (botState.config.long.enabled) {
+            await recalculateDynamicCoverageLong(currentPrice, botState);
+            
+            // 🔥 REFRESH VITAL: Volvemos a leer de la DB para que las estrategias 
+            // vean el nuevo lcoverage y lnorder actualizados.
+            botState = await Autobot.findOne({}).lean(); 
+        }
+
+        // 3. PREPARACIÓN DE DEPENDENCIAS
+        // Ahora las dependencias llevan el botState con el lcoverage RECIÉN calculado
         const dependencies = {
-            log, io, bitmartService, Autobot, currentPrice,
+            log, 
+            io, 
+            bitmartService, 
+            Autobot, 
+            currentPrice,
             availableUSDT: botState.lastAvailableUSDT,
             availableBTC: botState.lastAvailableBTC,
-            botState, config: botState.config,
-            updateBotState, updateLStateData, updateGeneralBotState,
-            syncFrontendState, ...externalDependencies
+            botState, 
+            config: botState.config,
+            updateBotState, 
+            updateLStateData, 
+            updateGeneralBotState,
+            syncFrontendState, 
+            ...externalDependencies
         };
 
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. Recalcular cobertura (¿Cuánto dinero nos queda para promediar?)
-        if (botState.config.long.enabled) {
-            await recalculateDynamicCoverageLong(currentPrice, botState);
-            botState = await Autobot.findOne({}).lean(); // Refrescar datos
-            dependencies.botState = botState;
-        }
-
-        // 2. Consolidación (¿Se llenó la orden que enviamos hace un momento?)
+        // 4. CONSOLIDACIÓN (Verificar órdenes en el Exchange)
         let needsRefresh = false;
         const lastOrder = botState.lStateData?.lastOrder;
 
         if (lastOrder?.side === 'buy') {
-            if (await monitorLongBuy(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+            if (await monitorLongBuy(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) {
+                needsRefresh = true;
+            }
         }
         if (lastOrder?.side === 'sell') {
-            if (await monitorAndConsolidateSell(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+            if (await monitorAndConsolidateSell(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) {
+                needsRefresh = true;
+            }
         }
 
-        if (needsRefresh) botState = await Autobot.findOne({}).lean();
+        // Si una orden se completó, refrescamos el estado antes de la estrategia
+        if (needsRefresh) {
+            botState = await Autobot.findOne({}).lean();
+            dependencies.botState = botState;
+        }
 
-        // 3. Ejecución de Estrategia (Decidir si comprar o vender ahora)
+        // 5. EJECUCIÓN DE ESTRATEGIA (Decidir compras/ventas)
         if (botState.lstate !== 'STOPPED') {
             await runLongStrategy();
         }
 
-        // Finalizar informando a la web
-        await syncFrontendState(currentPrice, await Autobot.findOne({}).lean());
+        if (botState.sstate !== 'STOPPED') {
+            await runShortStrategy();
+        }
+
+        // 6. SINCRONIZACIÓN FINAL CON EL FRONTEND
+        // Hacemos una última lectura para enviar la "foto" final de este ciclo a la web
+        const finalState = await Autobot.findOne({}).lean();
+        await syncFrontendState(currentPrice, finalState);
         
     } catch (error) {
         console.error(`[ERROR CRÍTICO] Fallo en el ciclo del bot: ${error.message}`);
+        log(`Error en ciclo: ${error.message}`, 'error');
     }
 }
 

@@ -53,14 +53,14 @@ async function run(dependencies) {
     }
 
     // --- 4. 🛑 RESETEO CRÍTICO DE LNORDER (Tu petición) ---
-    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // Definida antes de usarla
+/*    const currentLBalance = parseFloat(latestBotState.lbalance || 0); // Definida antes de usarla
 
     if (ac <= 0 && currentLBalance < requiredAmount && latestBotState.lnorder !== 0) {
         await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
         log(`[LONG] RESET: lnorder a 0. Balance (${currentLBalance.toFixed(2)}) < Requerido (${requiredAmount.toFixed(2)})`, 'warning');
         return; 
     }
-    
+*/    
     // --- 5. LOG DE ESTADO Y TRANSICIÓN ---
     const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
     log(`[L] NO_COVERAGE: Balance: ${currentLBalance.toFixed(2)} | Require: ${safeRequiredAmountDiag}`, 'info');
