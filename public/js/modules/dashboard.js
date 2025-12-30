@@ -49,12 +49,12 @@ function setupSocketListeners() {
     socket.on('bot-state-update', (state) => {
         
         // Actualizar Profit y color
-        const profitEl = document.getElementById('auprofit');
-        if (profitEl) {
-            const val = parseFloat(state.lprofit || 0).toFixed(2);
-            profitEl.textContent = val;
-            profitEl.className = val >= 0 ? 'text-green-400' : 'text-red-400';
-        }
+     //   const profitEl = document.getElementById('auprofit');
+     //   if (profitEl) {
+     //       const val = parseFloat(state.lprofit || 0).toFixed(2);
+     //       profitEl.textContent = val;
+      //      profitEl.className = val >= 0 ? 'text-green-400' : 'text-red-400';
+      //  }
 
         // Actualizar Balances de Estrategia
         if (document.getElementById('aulbalance')) 
