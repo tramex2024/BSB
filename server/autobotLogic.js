@@ -130,33 +130,23 @@ async function slowBalanceCacheUpdate() {
  * Calcula cuántas órdenes de seguridad puedes pagar con tu saldo actual
  */
 async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    // 1. Declaración directa. Sin desestructuración para evitar errores de referencia.
-    const currentLBalance = parseFloat(botState.lbalance || 0); 
+    // Definimos con un nombre único que no choque con nada
+    const balanceParaCalculo = parseFloat(botState.lbalance || 0); 
     
-    // 2. Si el bot está detenido o no hay config, salir.
-    if (!botState.config || botState.lstate === 'STOPPED' || !botState.config.long.enabled) return;
+    if (botState.lstate === 'STOPPED' || !botState.config?.long?.enabled) return;
 
-    // 3. Extraer valores de configuración de forma segura
-    const pUsdt = parseFloat(botState.config.long.purchaseUsdt || 5);
-    const sVar = (parseFloat(botState.config.long.size_var) || 0) / 100;
-    const pVar = (parseFloat(botState.config.long.price_var) || 0) / 100;
-
-    // 4. Ejecutar el cálculo (Asegúrate de pasar currentLBalance)
+    // Usamos balanceParaCalculo directamente en la llamada
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
-        currentLBalance, 
+        balanceParaCalculo, 
         currentPrice,
-        pUsdt, 
-        pVar, 
-        sVar, 
+        parseFloat(botState.config.long.purchaseUsdt || 5), 
+        (parseFloat(botState.config.long.price_var) || 0) / 100, 
+        (parseFloat(botState.config.long.size_var) || 0) / 100, 
         0
     );
 
-    // 5. Solo actualizar si los valores cambiaron
-    if (numberOfOrders !== botState.lnorder || Math.abs(coveragePrice - botState.lcoverage) > 0.01) {
-        await updateGeneralBotState({ 
-            lcoverage: coveragePrice, 
-            lnorder: numberOfOrders 
-        });
+    if (numberOfOrders !== botState.lnorder || Math.abs(coveragePrice - botState.lcoverage) > 0.1) {
+        await updateGeneralBotState({ lcoverage: coveragePrice, lnorder: numberOfOrders });
     }
 }
 
