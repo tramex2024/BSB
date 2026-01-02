@@ -108,8 +108,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
             }),
         },
         $inc: {
-            'lStateData.orderCountInCycle': 1,
-            ...(isFirstOrder && { 'lcycle': 1 }),
+            'lStateData.orderCountInCycle': isFirstOrder ? 1 : (botState.lStateData.orderCountInCycle + 1),            
         }
     };
 
@@ -216,23 +215,32 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         );
         
 		await updateGeneralBotState({
-			lbalance: newLBalance,
-			total_profit: (botStateObj.total_profit || 0) + profitNETO,
-			ltprice: 0, 
-            lsprice: 0, 
-            lcoverage: newLCoverageReset, // 🛑 Resetear lcoverage al valor inicial
-            lnorder: newLNOrderReset,     // 🛑 Resetear lnorder al valor inicial
-			lcycle: (botStateObj.lcycle || 0) + 1
-		});
+    lbalance: newLBalance,
+    total_profit: (botStateObj.total_profit || 0) + profitNETO,
+    ltprice: 0, 
+    lsprice: 0, 
+    lcoverage: newLCoverageReset,
+    lnorder: newLNOrderReset,     
+    lcycle: (botStateObj.lcycle || 0) + 1
+});
 
 		log(`Cierre de Ciclo Long Exitoso! Ganancia NETA: ${profitNETO.toFixed(2)} USDT.`, 'success');
 
 		// 3. RESETEO DE DATOS DE CICLO ESPECÍFICOS (lStateData)
 		const resetLStateData = {
-			ac: 0, ppc: 0, ai: 0, orderCountInCycle: 0, lastOrder: null, pm: 0, pc: 0, pv: 0,
-            lastExecutionPrice: 0, nextCoveragePrice: 0, requiredCoverageAmount: 0,
-            cycleStartTime: null
-		}
+    ac: 0, 
+    ppc: 0, 
+    ai: 0, 
+    orderCountInCycle: 0, 
+    lastOrder: null, 
+    pm: 0, 
+    pc: 0, 
+    pv: 0,
+    lastExecutionPrice: 0, 
+    nextCoveragePrice: 0, 
+    requiredCoverageAmount: 0,
+    cycleStartTime: null
+};
 		await updateLStateData(resetLStateData);
 
 		// 4. TRANSICIÓN DE ESTADO
