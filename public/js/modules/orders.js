@@ -71,7 +71,7 @@ function displayOrders(orders, orderListElement, orderType) {
                 <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                 </svg>
-                <p class="text-sm">Sin órdenes ${orderType}</p>
+                <p class="text-sm">Without orders ${orderType}</p>
             </div>`;
         return;
     }
@@ -87,7 +87,7 @@ export async function fetchOrders(status, orderListElement) {
         orderListElement.innerHTML = `
             <div class="flex items-center justify-center py-10">
                 <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mr-3"></div>
-                <p class="text-gray-400 text-sm">Escuchando mercado en tiempo real...</p>
+                <p class="text-gray-400 text-sm">Loading orders...</p>
             </div>`;
         return;
     }
@@ -117,7 +117,7 @@ export async function fetchOrders(status, orderListElement) {
         displayOrders(ordersToDisplay, orderListElement, status);
     } catch (error) {
         console.error('Error fetchOrders:', error);
-        orderListElement.innerHTML = `<p class="text-red-500 text-center py-4 text-xs">Error de conexión con el historial</p>`;
+        orderListElement.innerHTML = `<p class="text-red-500 text-center py-4 text-xs">Disconnected from history</p>`;
     }
 }
 
