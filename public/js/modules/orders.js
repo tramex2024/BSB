@@ -28,6 +28,7 @@ function createOrderHtml(order, orderType) {
                     ${side.toUpperCase()}
                 </div>
                 <div>
+                    <p class="text-gray-500 text-[10px] uppercase">Currency</p>
                     <p class="text-white font-medium text-sm">${symbol}</p>                    
                 </div>
             </div>
