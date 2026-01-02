@@ -15,12 +15,12 @@ const SELL_FEE_PERCENT = 0.001; // 0.1%
 async function handleSuccessfulBuy(botState, orderDetails, log) {
     // --- 1. EXTRACCIÓN Y CÁLCULO DE COSTO REAL ---
     const executedQty = parseFloat(orderDetails.filledSize || 0);
-    const executedPrice = parseFloat(orderDetails.price_avg || orderDetails.priceAvg || orderDetails.price || 0);
+    const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedCost = executedQty * executedPrice;
     const executedFee = parseFloat(orderDetails.fee || 0);
     const executedNotional = parseFloat(orderDetails.notional || 0);
     // Costo real pagado incluyendo fee
-    const actualExecutedCost = baseExecutedCost + executedFee;
+    const actualExecutedCost = (executedNotional > 0 ? executedNotional : baseExecutedCost) + executedFee; 
 
     if (executedQty <= 0 || executedPrice <= 0) {
         log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución, precio o costo cero. Limpiando lastOrder.', 'error');
@@ -34,7 +34,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     const currentAI = isFirstOrder ? 0 : parseFloat(botState.lStateData.ai || 0);
     
     const newTotalQty = currentTotalQty + executedQty;
-    const newAI = currentAI + (executedQty * executedPrice);
+    const newAI = currentAI + actualExecutedCost;
 
     let newPPC = 0;
 
