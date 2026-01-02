@@ -20,7 +20,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log) {
     const executedFee = parseFloat(orderDetails.fee || 0);
     const executedNotional = parseFloat(orderDetails.notional || 0);
     // Costo real pagado incluyendo fee
-    const actualExecutedCost = baseExecutedCost + executedFee;
+    const actualExecutedCost = baseExecutedCost;
 
     if (executedQty <= 0 || executedPrice <= 0) {
         log('Error de procesamiento de compra: handleSuccessfulBuy llamado con ejecución, precio o costo cero. Limpiando lastOrder.', 'error');
