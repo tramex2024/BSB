@@ -48,8 +48,8 @@ function createOrderHtml(order, orderType) {
             </div>
 
             <div class="w-full md:w-auto mt-3 md:mt-0 text-right">
-                <p class="text-gray-500 text-[10px] font-mono">ID: ${orderId}</p>
                 <p class="text-gray-500 text-[10px] uppercase tracking-wider">${date}</p>
+                <p class="text-gray-500 text-[10px] font-mono">ID: ${orderId}</p>                
                 <div class="md:hidden mt-1 px-2 py-0.5 inline-block rounded bg-gray-700 text-blue-300 text-[10px]">
         ${actualStatus}
             </div>
