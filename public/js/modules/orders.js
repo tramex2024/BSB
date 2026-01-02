@@ -34,21 +34,21 @@ function createOrderHtml(order, orderType) {
 
             <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 px-0 md:px-6">
                 <div>
-                    <p class="text-gray-500 text-[10px] uppercase">Precio</p>
+                    <p class="text-gray-500 text-[10px] uppercase">Price</p>
                     <p class="text-gray-200 font-mono text-sm">${price} <span class="text-[10px] text-gray-500">USDT</span></p>
                 </div>
                 <div>
-                    <p class="text-gray-500 text-[10px] uppercase">Cantidad</p>
+                    <p class="text-gray-500 text-[10px] uppercase">Amount</p>
                     <p class="text-gray-200 font-mono text-sm">${quantity} <span class="text-[10px] text-gray-500">BTC</span></p>
                 </div>
                 <div class="hidden md:block">
-                    <p class="text-gray-500 text-[10px] uppercase">Estado</p>
+                    <p class="text-gray-500 text-[10px] uppercase">Status</p>
                     <p class="text-blue-400 font-medium text-sm">${actualStatus}</p>
                 </div>
             </div>
 
             <div class="w-full md:w-auto mt-3 md:mt-0 text-right">
-                <p class="text-gray-500 text-[10px] uppercase tracking-wider">${date}</p>
+                <p class="text-gray-500 text-[10px] uppercase tracking-wider">Date: ${date}</p>
                 <p class="text-gray-500 text-[10px] font-mono">ID: ${orderId}</p>                
                 <div class="md:hidden mt-1 px-2 py-0.5 inline-block rounded bg-gray-700 text-blue-300 text-[10px]">
         ${actualStatus}
