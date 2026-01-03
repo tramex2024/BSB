@@ -133,3 +133,30 @@ function updateStatusLabel(id, status) {
     el.textContent = status;
     el.className = `font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
+
+/**
+ * Muestra notificaciones temporales en pantalla (Toasts)
+ */
+export function displayMessage(message, type = 'info') {
+    const container = document.getElementById('message-container');
+    if (!container) {
+        console.warn("No se encontró el contenedor 'message-container' para mostrar el mensaje:", message);
+        return;
+    }
+
+    // Actualizar contenido y clases
+    container.textContent = message;
+    
+    // Limpiar clases previas de tipo
+    container.classList.remove('bg-blue-500', 'bg-red-500', 'bg-emerald-500', 'hidden');
+    
+    // Asignar color según tipo (Ejemplo con Tailwind)
+    const bgClass = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500');
+    container.classList.add(bgClass, 'active');
+
+    // Auto-ocultar después de 4 segundos
+    setTimeout(() => {
+        container.classList.remove('active');
+        container.classList.add('hidden');
+    }, 4000);
+}
