@@ -1,34 +1,42 @@
 // src/server/utils/email.js
 
-// src/server/utils/email.js
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+
+// La librería buscará automáticamente la API Key en process.env.RESEND_API_KEY
+// o puedes pasarla directamente si prefieres, pero lo ideal es el panel de Render.
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function sendTokenEmail(email, token) {
-    const user = process.env.EMAIL_USER;
-    const pass = process.env.EMAIL_PASS;
     const target = 'tramex2024@gmail.com'; 
 
-    console.log("--- 🏁 Intento PASO 1.4 (Modo Service) ---");
+    console.log("--- 🏁 Intento PASO 1.5 (Librería Resend Oficial) ---");
+    console.log("- Destinatario fijo:", target);
 
-    // Usamos la configuración de 'service' que es un atajo interno de Nodemailer
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: user,
-            pass: pass
-        },
-        // Eliminamos verify() para ir directo al envío
-    });
+    try {
+        const { data, error } = await resend.emails.send({
+            from: 'BSB Bot <onboarding@resend.dev>',
+            to: target,
+            subject: '🚀 Tu Token de BSB',
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2>Código de Verificación</h2>
+                    <p style="font-size: 18px;">Tu token es: <strong>${token}</strong></p>
+                    <p style="color: #888; font-size: 12px;">Enviado vía API HTTP (Resend Library)</p>
+                </div>
+            `
+        });
 
-    const mailOptions = {
-        from: user, 
-        to: target, 
-        subject: '🚀 PRUEBA FINAL - BSB',
-        text: `Token: ${token}. Enviado por modo Service.`
-    };
+        if (error) {
+            throw new Error(error.message);
+        }
 
-    console.log("Intentando envío directo sin verificación previa...");
-    return transporter.sendMail(mailOptions);
+        console.log("✅ ¡ÉXITO TOTAL! Correo enviado. ID:", data.id);
+        return data;
+
+    } catch (error) {
+        console.error("❌ Error en la API de Resend:", error.message);
+        throw error;
+    }
 }
 
 module.exports = { sendTokenEmail };
