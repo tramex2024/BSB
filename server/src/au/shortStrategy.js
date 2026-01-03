@@ -1,50 +1,40 @@
-// BSB/server/src/au/shortStrategy.js (Espejo de longStrategy.js)
+// BSB/server/src/au/shortStrategy.js (ESPEJO DE longStrategy.js)
 
-// Importa los módulos de cada estado Short
-const SRunning = require('./states/short/SRunning');
-const SSelling = require('./states/short/SSelling'); // 🛑 DCA/Cobertura Short (Espejo de LBuying)
-const SBuying = require('./states/short/SBuying');   // 🛑 Cierre/TP Short (Espejo de LSelling)
-// 💡 Asumimos que los estados NO_COVERAGE y STOPPED son compartidos o tienen versiones Short
-const SNoCoverage = require('./states/short/SNoCoverage'); 
-const SStopped = require('./states/short/SStopped'); 
+// Importa los módulos de cada estado para SHORT
+const SRunning = require('./states/short/SRunning'); // Vigilante de señal
+const SSelling = require('./states/short/SSelling'); // Entrando/Promediando Short (Venta)
+const SBuying = require('./states/short/SBuying');   // Cerrando Short con ganancia (Compra)
+const SNoCoverage = require('./states/short/SNoCoverage');
+const SStopped = require('./states/short/SStopped');
 
 let dependencies = {};
 
-/**
- * Asigna las dependencias (botState, price, logs, managers, balances, etc.)
- * @param {object} deps - Objeto de dependencias.
- */
 function setDependencies(deps) {
     dependencies = deps;
 }
 
-/**
- * Ejecuta la lógica de la estrategia Short basándose en el estado actual (sstate).
- */
 async function runShortStrategy() {
-    // 💡 Aquí se usan las dependencias, que incluyen botState, currentPrice, availableUSDT/BTC, etc.
     const { botState } = dependencies;
 
-    // Selecciona la función a ejecutar basándose en el estado actual del bot
+    // Selecciona la función a ejecutar basándose en el estado sstate (Short State)
     switch (botState.sstate) {
         case 'RUNNING':
-            // 🛑 RUNNING: Espera la señal de VENTA (Short)
             await SRunning.run(dependencies);
             break;
-        case 'SELLING':
-            // 🛑 SELLING: Gestiona la posición Short (DCA Venta/Cobertura)
+        case 'SELLING': 
+            // 💡 En Short, SELLING es el equivalente a BUYING en Long: 
+            // Es donde abrimos la posición y hacemos DCA (Vender más caro).
             await SSelling.run(dependencies);
             break;
         case 'BUYING':
-            // 🛑 BUYING: Gestiona el cierre del Short (Trailing Stop/Take Profit Compra)
+            // 💡 En Short, BUYING es el equivalente a SELLING en Long:
+            // Es donde recompramos barato para cerrar el ciclo y tomar ganancias.
             await SBuying.run(dependencies);
             break;
         case 'NO_COVERAGE':
-            // 🛑 NO_COVERAGE: Falta de capital BTC para continuar la cobertura Short
             await SNoCoverage.run(dependencies);
             break;
         case 'STOPPED':
-            // 🛑 STOPPED: Detención del ciclo Short
             await SStopped.run(dependencies);
             break;
         default:

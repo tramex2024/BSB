@@ -1,57 +1,81 @@
-// BSB/server/src/au/states/short/SNoCoverage.js (Espera Fondos BTC o Precio de Cierre)
+// BSB/server/src/au/states/short/SNoCoverage.js (ESPEJO DE LNoCoverage.js)
 
-// Importamos la constante del mínimo de BTC para operar en BitMart.
-const { MIN_BTC_SIZE_FOR_BITMART } = require('../../managers/shortOrderManager'); 
-// No se necesita importar cancelActiveOrders ya que no hay orden pendiente que cancelar.
+const MIN_USDT_VALUE_FOR_BITMART = 5.0;
+const { calculateShortTargets } = require('../../../../autobotCalculations');
 
 async function run(dependencies) {
-    // Extraemos las funciones y el estado de las dependencias
-    // Nota: Usamos availableBTC ya que el Short necesita BTC para la cobertura.
-    const { botState, currentPrice, availableBTC, config, creds, log, updateBotState } = dependencies;
+    const { 
+        botState, currentPrice, config, 
+        updateBotState, updateSStateData,
+        getBotState, updateGeneralBotState, 
+        log 
+    } = dependencies;
+    
+    const availableUSDT = parseFloat(dependencies.availableUSDT || 0);
+    const { ac } = botState.sStateData;
+    
+    // --- 1. VERIFICACIÓN DE VENTA (Take Profit en Short es COMPRA) ---
+    // En Short, el TP está por DEBAJO del precio actual.
+    const targetBuyPrice = botState.stprice || 0; 
+    if (currentPrice <= targetBuyPrice && ac > 0 && targetBuyPrice > 0) {
+        log(`[S] Precio alcanzó objetivo de recompra (${targetBuyPrice.toFixed(2)}) desde NO_COVERAGE.`, 'success');
+        await updateBotState('BUYING', 'short'); // Transiciona al estado de cierre (SBuying)
+        return;
+    }
 
-    log("Estado Short: NO_COVERAGE. Esperando fondos BTC o precio de cierre (TP).", 'warning');
+    // --- 2. RECUPERACIÓN DE ESTADO ---
+    let latestBotState = botState;
+    if (getBotState) {
+        try {
+            latestBotState = await getBotState();
+        } catch (error) {
+            console.error(`[S-DB ERROR] No se pudo recargar estado: ${error.message}`);
+        }
+    }
+    
+    // --- 3. RECALCULO DE REQUERIMIENTOS ---
+    let requiredAmount = latestBotState.sStateData.requiredCoverageAmount || config.short.purchaseUsdt || 0;
+    
+    if (ac > 0 && latestBotState.sStateData.orderCountInCycle >= 0) { 
+        // Espejamos el cálculo usando las funciones de Short
+        const recalculation = calculateShortTargets(
+            latestBotState.sStateData.ppc || 0,
+            config.short.profit_percent || 0,
+            config.short.price_var || 0,
+            config.short.size_var || 0,
+            config.short.purchaseUsdt || 0,
+            latestBotState.sStateData.orderCountInCycle || 0,
+            latestBotState.sbalance || 0
+        );
+        requiredAmount = recalculation.requiredCoverageAmount;
+        await updateSStateData({ 
+            requiredCoverageAmount: requiredAmount, 
+            nextCoveragePrice: recalculation.nextCoveragePrice 
+        });
+    }
 
-    const { ac } = botState.sStateData; // AC es la cantidad total de BTC vendida (posición abierta)
-    
-    // --- 1. VERIFICACIÓN DE TRANSICIÓN A CIERRE (Ganancia alcanzada) ---
-    // En Short, el TP es el target de COMPRA (STPrice) y se alcanza cuando el precio CAE.
-    const targetBuyPrice = botState.sStateData.STPrice || 0; 
+    // --- 4. RESETEO CRÍTICO DE SNORDER ---
+    const currentSBalance = parseFloat(latestBotState.sbalance || 0);
 
-    if (currentPrice <= targetBuyPrice && ac > 0 && targetBuyPrice > 0) {
-        log(`[SHORT] Precio actual alcanzó el objetivo de cierre (${targetBuyPrice.toFixed(2)}) desde NO_COVERAGE.`, 'success');
-        
-        // Transición al estado de Cierre (SSelling).
-        await updateBotState('SELLING', 'short'); 
-        return;
-    }
+    if (ac <= 0 && currentSBalance < requiredAmount && latestBotState.snorder !== 0) {
+        await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
+        log(`[SHORT] RESET: snorder a 0. Balance (${currentSBalance.toFixed(2)}) < Requerido (${requiredAmount.toFixed(2)})`, 'warning');
+        return; 
+    }
+    
+    // --- 5. LOG DE ESTADO Y TRANSICIÓN ---
+    const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
+    log(`[S] NO_COVERAGE: Balance Short: ${currentSBalance.toFixed(2)} | Requerido: ${safeRequiredAmountDiag}`, 'info');
 
-    // --- 2. VERIFICACIÓN DE TRANSICIÓN A COBERTURA (Fondos BTC recuperados) ---
-    
-    // Monto de BTC requerido para la próxima orden de DCA (Venta).
-    const requiredAmount = botState.sStateData.requiredCoverageAmount || 0; 
-    // Balance de BTC asignado al Short.
-    const currentSBalance = parseFloat(botState.sbalance || 0);
-    
-    // ✅ CRÍTICO: Debe tener SBalance y Saldo Real de BTC para poder VENDER (DCA UP).
-    const isReadyToResume = 
-        currentSBalance >= requiredAmount && 
-        availableBTC >= requiredAmount && 
-        requiredAmount >= MIN_BTC_SIZE_FOR_BITMART;
-
-    if (isReadyToResume) {
-        log(`[SHORT] Fondos (SBalance y Real BTC) recuperados/disponibles. Monto requerido (${requiredAmount.toFixed(8)} BTC). Volviendo a BUYING.`, 'success');
-        
-        // Transición al estado de gestión de DCA (SBuying) para colocar la orden de VENTA DCA.
-        await updateBotState('BUYING', 'short'); 
-    } else {
-         let reason = '';
-         if (currentSBalance < requiredAmount) {
-             reason = `[SHORT] Esperando reposición de SBalance asignado (BTC). (Requiere: ${requiredAmount.toFixed(8)}, Actual: ${currentSBalance.toFixed(8)})`;
-         } else {
-             reason = `[SHORT] Esperando reposición de Fondos Reales (BTC) en el Exchange. (Requiere: ${requiredAmount.toFixed(8)}, Actual: ${availableBTC.toFixed(8)})`;
-         }
-         log(reason, 'info'); // Logear para mostrar qué está esperando
-    }
-}
+    // Si recuperamos balance (por depósito o transferencia), volvemos a SELLING (donde se abren/cubren shorts)
+    if (currentSBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
+        try {
+            log(`[S] ¡Fondos Short restaurados! Pasando a SELLING. (Real: ${availableUSDT.toFixed(2)})`, 'success');
+            await updateBotState('SELLING', 'short');
+        } catch (error) {
+            log(`[S] Error al pasar a SELLING: ${error.message}`, 'error');
+        }
+    } 
+} 
 
 module.exports = { run };

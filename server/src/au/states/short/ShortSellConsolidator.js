@@ -1,39 +1,30 @@
-// BSB/server/src/states/short/ShortSellConsolidator.js (Espejo de LongBuyConsolidator.js)
+// BSB/server/src/au/states/short/ShortSellConsolidator.js (ESPEJO DE LongBuyConsolidator.js)
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
-// 🛑 Importamos la función atómica para consolidar la VENTA Short
-const { handleSuccessfulSellShort } = require('../../managers/shortDataManager');
+const { handleSuccessfulShortSell } = require('../../managers/shortDataManager'); 
 
 /**
- * Monitorea una orden de VENTA Short pendiente, consolida la posición si la orden se llena,
+ * Monitorea una orden de VENTA pendiente (Short), consolida la posición si se llena,
  * o limpia el lastOrder si la orden falla.
- *
- * @param {object} botState - Estado actual del bot.
- * @param {string} SYMBOL - Símbolo de trading.
- * @param {function} log - Función de logging.
- * @param {function} updateSStateData - Función para actualizar solo sStateData.
- * @param {function} updateBotState - Función para actualizar el estado principal.
- * @param {function} updateGeneralBotState - Función para actualizar el botState (para handleSuccessfulSellShort).
- * @returns {boolean} true si se procesó una orden, false si sigue pendiente o no hay orden.
  */
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
     const sStateData = botState.sStateData;
     const lastOrder = sStateData.lastOrder;
 
-    // 🛑 Validar que haya una orden pendiente y que sea de VENTA
+    // Solo actuamos si hay una orden de VENTA (short) bloqueada
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
-        // No hay orden de VENTA Short pendiente para monitorear
         return false;
     }
 
     const orderIdString = String(lastOrder.order_id);
-    log(`[CONSOLIDATOR SHORT] Orden de VENTA pendiente ${orderIdString} detectada. Consultando BitMart...`, 'warning');
+    log(`[S-CONSOLIDATOR] Orden de venta pendiente ${orderIdString} detectada. Consultando BitMart...`, 'warning');
 
     try {
         let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
         let finalDetails = orderDetails;
-        // 🛑 Cantidad llenada (en BTC/Asset)
-        let filledVolume = parseFloat(finalDetails?.filledSize || 0);
+        
+        // Consolidación de campos de volumen (BitMart varía nombres según el endpoint)
+        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
         
         let isOrderProcessed = (
             finalDetails?.state === 'filled' ||
@@ -42,52 +33,53 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
             filledVolume > 0
         );
 
-        // Lógica de Respaldo (Búsqueda en el historial si la consulta directa falla)
+        // Lógica de Respaldo (Historial)
         if (!isOrderProcessed) {
-            log(`[CONSOLIDATOR SHORT] Fallo en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'info');
+            log(`[S-CONSOLIDATOR] Buscando orden ${orderIdString} en el historial de respaldo...`, 'info');
             const recentOrders = await getRecentOrders(SYMBOL);
-            finalDetails = recentOrders.find(order => order.orderId === orderIdString || order.order_id === orderIdString);
+            
+            finalDetails = recentOrders.find(order => 
+                String(order.orderId) === orderIdString || String(order.order_id) === orderIdString
+            );
             
             if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.filled_volume || 0);
                 isOrderProcessed = filledVolume > 0;
             }
         }
 
         if (isOrderProcessed && filledVolume > 0) {
-            // === ORDEN PROCESADA CON ÉXITO (TOTAL O PARCIAL) ===
-            log(`[CONSOLIDATOR SHORT] Orden ${orderIdString} confirmada. Iniciando consolidación atómica...`, 'success');
+            // === VENTA PROCESADA (APERTURA O COBERTURA) ===
+            log(`[S-CONSOLIDATOR] Venta ${orderIdString} confirmada. Consolidando Short...`, 'success');
             
-            // 🛑 LLAMADA A LA FUNCIÓN ATÓMICA EN SHORT DATA MANAGER
-            await handleSuccessfulSellShort(botState, finalDetails, log); 
+            // handleSuccessfulShortSell calcula PPC, actualiza deuda BTC (AC) y limpia lastOrder
+            await handleSuccessfulShortSell(botState, finalDetails, log); 
             
-            // 🛑 Transición a RUNNING, ya que después de consolidar una venta Short (apertura/cobertura), el bot está listo para reevaluar targets.
-            await updateBotState('RUNNING', 'short'); 
-            log(`[CONSOLIDATOR SHORT] Transición a RUNNING para reevaluar targets.`, 'debug');
+            // Transicionamos de vuelta a SELLING para que el bot reevalúe targets de cobertura y TP
+            await updateBotState('SELLING', 'short'); 
+            log(`[S-CONSOLIDATOR] Transición a SELLING para reevaluar targets Short.`, 'debug');
 
-            return true; // Se procesó una orden
+            return true; 
 
         } else if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
-            // === ORDEN PENDIENTE ===
-            log(`[CONSOLIDATOR SHORT] La orden ${orderIdString} sigue activa (${finalDetails.state}). Esperando ejecución.`, 'info');
-            return true; // Hay una orden pendiente, no proceder
+            // === ORDEN PENDIENTE EN LIBRO ===
+            log(`[S-CONSOLIDATOR] Orden ${orderIdString} aún activa (${finalDetails.state}).`, 'info');
+            return true; 
             
         } else {
-            // === ORDEN FALLIDA SIN VOLUMEN LLENADO ===
-            log(`[CONSOLIDATOR SHORT] La orden ${orderIdString} falló/se canceló sin ejecución. Limpiando lastOrder.`, 'error');
-            // 🛑 Limpiar lastOrder en sStateData
-            await updateSStateData({ 'lastOrder': null }); 
+            // === ORDEN FALLIDA / CANCELADA SIN LLENAR ===
+            log(`[S-CONSOLIDATOR] Orden ${orderIdString} falló sin ejecución. Liberando bloqueo.`, 'error');
+            await updateSStateData({ 'lastOrder': null });
             
-            // 🛑 CORRECCIÓN: Si falla, regresa a SELLING (gestión de posición Short)
+            // Volvemos a SELLING para que el ciclo intente colocar la orden de nuevo si el precio sigue ahí
             await updateBotState('SELLING', 'short'); 
             
-            return true; // Se procesó (falló) una orden, no proceder al resto del estado
+            return true; 
         }
 
     } catch (error) {
-        log(`[CONSOLIDATOR SHORT] Error de API/lógica al consultar la orden ${orderIdString}: ${error.message}. Persistiendo.`, 'error');
-        // Si hay error de API, retornamos true para no intentar colocar nuevas órdenes.
-        return true; 
+        log(`[S-CONSOLIDATOR] Error al consultar orden ${orderIdString}: ${error.message}`, 'error');
+        return true; // Retornamos true para no romper el ciclo del bot
     }
 }
 

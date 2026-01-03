@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
+const MarketSignal = require('../models/MarketSignal'); // <--- Importamos el nuevo modelo
 const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
@@ -16,12 +17,10 @@ router.use(authMiddleware);
 
 /**
  * Función mejorada para emitir el estado.
- * Asegura que los nombres de los campos coincidan con lo que el dashboard.js espera.
  */
 const emitBotState = (autobot, io) => {
     const botData = autobot.toObject();
     
-    // Mapeo explícito para asegurar compatibilidad con el Dashboard corregido
     const payload = {
         lstate: botData.lstate || 'STOPPED',
         sstate: botData.sstate || 'STOPPED',
@@ -65,7 +64,6 @@ router.post('/start', async (req, res) => {
             autobot.config = { ...autobot.config, ...config, ...initialState };
         }
 
-        // Activamos los estados
         autobot.lstate = 'RUNNING';
         autobot.sstate = 'RUNNING';
         autobot.config.long.enabled = true;
@@ -87,19 +85,16 @@ router.post('/stop', async (req, res) => {
     try {
         const botState = await Autobot.findOne({});
         if (botState) {
-            // Detener estados
             botState.lstate = 'STOPPED';
             botState.sstate = 'STOPPED';
             botState.config.long.enabled = false;
             botState.config.short.enabled = false;
 
-            // Limpieza de campos raíz
             botState.ltprice = CLEAN_ROOT_FIELDS.ltprice; 
             botState.stprice = CLEAN_ROOT_FIELDS.stprice;
             botState.lsprice = CLEAN_ROOT_FIELDS.lsprice; 
             botState.sbprice = CLEAN_ROOT_FIELDS.sbprice;
 
-            // Limpieza de datos de estrategia (posición actual, promedios)
             botState.lStateData = Object.assign({}, CLEAN_STRATEGY_DATA);
             botState.sStateData = Object.assign({}, CLEAN_STRATEGY_DATA);
             
@@ -124,7 +119,6 @@ router.post('/update-config', async (req, res) => {
         const { config } = req.body;
         const symbol = config.symbol || 'BTC_USDT';
 
-        // Mapeo de profit_percent
         if (config.long?.trigger !== undefined) {
             config.long.profit_percent = config.long.trigger;
             delete config.long.trigger; 
@@ -150,6 +144,24 @@ router.post('/update-config', async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error al actualizar configuración.' });
+    }
+});
+
+// --- NUEVA RUTA: SEÑAL DE MERCADO ---
+/**
+ * GET /api/autobot/market-signal
+ * Retorna el último análisis (RSI, señal) guardado en la DB por el servidor.
+ */
+router.get('/market-signal', async (req, res) => {
+    try {
+        const signal = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+        if (!signal) {
+            return res.status(404).json({ success: false, message: 'No hay señales disponibles.' });
+        }
+        res.json({ success: true, data: signal });
+    } catch (error) {
+        console.error('Error en ruta market-signal:', error);
+        res.status(500).json({ success: false, message: 'Error al obtener señal.' });
     }
 });
 

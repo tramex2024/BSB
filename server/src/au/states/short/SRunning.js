@@ -1,32 +1,47 @@
-// BSB/server/src/au/states/short/SRunning.js (Espejo de LRunning.js)
+// BSB/server/src/au/states/short/SRunning.js (ESPEJO de LRunning.js)
 
-const analyzer = require('../../../bitmart_indicator_analyzer');
+// Importamos el modelo de la señal global para poder leer la DB
+const MarketSignal = require('../../../../models/MarketSignal');
 
 async function run(dependencies) {
-    const { botState, currentPrice, config, log, updateBotState } = dependencies;
+    const { botState, log, updateBotState } = dependencies;
     
-    // 💡 1. VERIFICACIÓN DE POSICIÓN (Candado de Entrada Short)
-    if (botState.sStateData.orderCountInCycle > 0) {
-        log("Posición Short detectada (orderCountInCycle > 0). Transicionando a SELLING.", 'info');
-        // Transición directa a SELLING para que maneje la posición existente.
+    // 💡 1. VERIFICACIÓN DE POSICIÓN (Candado de Seguridad)
+    // Si ya tenemos órdenes en el ciclo de Short, transicionamos a SELLING
+    // Recuerda: En Short, SELLING es el estado de gestión de órdenes/cobertura.
+    if (botState.sStateData && botState.sStateData.orderCountInCycle > 0) {
+        log("[S]: Posición Short detectada. Transicionando a SELLING para gestionar cobertura.", 'info');
         await updateBotState('SELLING', 'short'); 
-        return; // Detener la ejecución de RUNNING
+        return; 
     }
 
-    log("Estado Short: RUNNING. Esperando señal de entrada de VENTA (Short).", 'info');
+    // 💡 2. CONSULTA A LA "PIZARRA" GLOBAL (MongoDB)
+    try {
+        const globalSignal = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
 
-    // Si no hay posición, procedemos con el análisis.
-    const analysisResult = await analyzer.runAnalysis(currentPrice);
+        if (!globalSignal) {
+            log("[S]: Esperando señal de mercado inicial en DB...", 'warning');
+            return; 
+        }
 
-    if (analysisResult.action === 'SELL') { 
-        log(`¡Señal de VENTA detectada! Razón: ${analysisResult.reason}`, 'success');
-        
-        // Simplemente transicionamos a SELLING para que este estado inicie el proceso de venta.
-        log('Señal de VENTA recibida. Transicionando a SELLING para iniciar la orden Short.', 'info');
-        await updateBotState('SELLING', 'short'); 
-        
-        // CRÍTICO: Detener este ciclo para que el bot pase a SELLING en la siguiente iteración.
-        return; 
+        // Monitoreo del RSI desde la perspectiva del Short
+        log(`[S]: Vigilando... RSI: ${globalSignal.currentRSI.toFixed(2)} | Señal: ${globalSignal.signal}`, 'info');
+
+        // 💡 3. LÓGICA DE ACTIVACIÓN PARA SHORT
+        // El analizador emite 'SELL' cuando el RSI está en sobrecompra (ej: > 70)
+        if (globalSignal.signal === 'SELL') { 
+            log(`¡ALERTA! Señal de VENTA (Short) detectada en DB. Razón: ${globalSignal.reason}`, 'success');
+            
+            log('[S]: Iniciando ciclo Short. Transicionando a SELLING (Apertura)...', 'info');
+            
+            // Cambiamos el estado del bot para que SSelling.js tome el control
+            // En Short: RUNNING -> SELLING (Apertura) -> BUYING (Cierre/Profit)
+            await updateBotState('SELLING', 'short'); 
+            return; 
+        }
+
+    } catch (error) {
+        log(`[S]: ❌ Error al consultar la señal global en DB: ${error.message}`, 'error');
     }
 }
 
