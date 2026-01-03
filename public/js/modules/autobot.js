@@ -1,5 +1,3 @@
-// public/js/modules/autobot.js
-
 import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
@@ -13,9 +11,12 @@ let maxBtcBalance = 0;
 let currentTab = 'opened';
 
 /**
- * Actualiza los balances máximos en la UI (labels de los inputs)
+ * Actualiza los balances máximos en la UI y las variables de validación
  */
 function updateMaxBalanceDisplay(currency, balance) {
+    if (currency === 'USDT') maxUsdtBalance = balance;
+    if (currency === 'BTC') maxBtcBalance = balance;
+
     const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
     if (displayElement) {
         displayElement.textContent = `(Max: ${balance.toFixed(currency === 'USDT' ? 2 : 6)} ${currency})`;
@@ -46,10 +47,6 @@ function validateAmountInput(inputId, maxLimit, currency) {
     return !errorMsg;
 }
 
-/**
- * Listeners para guardar configuración automáticamente
- * Se incluyen todos los campos necesarios para la estrategia DCA
- */
 function setupConfigListeners() {
     const configIds = [
         'auamount-usdt', 'auamount-btc', 'aupurchase-usdt', 
@@ -64,24 +61,15 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
-            // Validaciones específicas de saldo si el input es de monto inicial
             if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
             if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
             
-            // Log para depuración del Stop at cycle end
-            if (id === 'au-stop-at-cycle-end') {
-                console.log("Stop at cycle end cambiado:", el.checked);
-            }
-
-            // Guardado automático en el backend (envía toda la config actual)
+            // Guardado automático
             sendConfigToBackend();
         });
     });
 }
 
-/**
- * Carga inicial de saldos reales del exchange desde el backend
- */
 async function loadBalancesAndLimits() {
     try {
         const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
@@ -89,54 +77,45 @@ async function loadBalancesAndLimits() {
         });
         const data = await response.json();
         if (data.success && data.data) {
-            maxUsdtBalance = parseFloat(data.data.lastAvailableUSDT) || 0;
-            maxBtcBalance = parseFloat(data.data.lastAvailableBTC) || 0;
-            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-            updateMaxBalanceDisplay('BTC', maxBtcBalance);
+            updateMaxBalanceDisplay('USDT', parseFloat(data.data.lastAvailableUSDT) || 0);
+            updateMaxBalanceDisplay('BTC', parseFloat(data.data.lastAvailableBTC) || 0);
         }
     } catch (error) {
         console.error("Error cargando límites iniciales:", error);
     }
 }
 
-/**
- * Inicialización principal de la vista Autobot
- */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
-    // 1. Cargar balances e inicializar listeners de inputs
     await loadBalancesAndLimits();
     setupConfigListeners();
 
-    // 2. Gráfico TradingView (CORRECCIÓN: Añadido pequeño retardo para asegurar tamaño)
-    try {
-        setTimeout(() => {
+    // Gráfico con delay para renderizado correcto
+    setTimeout(() => {
+        try {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-        }, 200);
-    } catch (e) { console.error("Error al inicializar TV:", e); }
+        } catch (e) { console.error("Error al inicializar TV:", e); }
+    }, 200);
 
-    // 3. Lógica del botón START / STOP
+    // Botón START / STOP
     const startBtn = document.getElementById('austart-btn');
     startBtn?.addEventListener('click', async () => {
         const isRunning = startBtn.textContent.includes('STOP');
         
         if (!isRunning) {
-            // Validar montos antes de intentar arrancar el Bot
             const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
             const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
             if (!isUsdtOk || !isBtcOk) return displayMessage('Verifica los saldos configurados', 'error');
         }
         
-        // Ejecuta el cambio de estado pasando la configuración completa actual
         await toggleBotState(isRunning, getBotConfiguration());
     });
 
-    // 4. Navegación de Pestañas (Historial de órdenes)
+    // Pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // Estética de pestañas
             orderTabs.forEach(t => {
                 t.classList.remove('text-emerald-500', 'bg-gray-800');
                 t.classList.add('text-gray-500');
@@ -144,31 +123,25 @@ export async function initializeAutobotView() {
             tab.classList.add('text-emerald-500', 'bg-gray-800');
             tab.classList.remove('text-gray-500');
 
-            // Actualizar estado de pestaña actual y cargar órdenes vía API
             currentTab = tab.id.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
         });
     });
 
-    // 5. Carga inicial de órdenes (por defecto muestra 'opened')
     fetchOrders('opened', auOrderList);
 
-    // 6. Configuración de Sockets para actualizaciones en tiempo real
+    // Sockets específicos de la vista
     if (socket) {
-        // Actualización de balances máximos (disponible para operar)
+        // Sincronizar balances internos con el socket global
         socket.on('balance-real-update', (data) => {
-            maxUsdtBalance = parseFloat(data.lastAvailableUSDT) || 0;
-            maxBtcBalance = parseFloat(data.lastAvailableBTC) || 0;
-            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-            updateMaxBalanceDisplay('BTC', maxBtcBalance);
+            updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
+            updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
         });
 
-        // Actualización de estado general (Precios, Profits, Estados de Ciclo)
         socket.on('bot-state-update', (state) => {
             updateBotUI(state); 
         });
 
-        // Actualización de tabla de órdenes abierta
         socket.on('open-orders-update', (data) => {
             if (currentTab === 'opened') {
                 updateOpenOrdersTable(data, 'au-order-list', currentTab);
