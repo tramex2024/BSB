@@ -5,36 +5,41 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const Autobot = require('../models/Autobot');
-const { sendTokenEmail } = require('../utils/email'); // <-- PASO 2: Llamamos a tu nuevo archivo
+const { sendTokenEmail } = require('../utils/email'); // Mantenemos tu nuevo util
 
 exports.requestToken = async (req, res) => {
     const { email } = req.body;
     try {
-        let user = await User.findOne({ email });
+        // 1. Buscamos o generamos el usuario y el token
         const token = Math.floor(100000 + Math.random() * 900000).toString();
         const tokenExpires = Date.now() + 10 * 60 * 1000;
 
-        if (!user) {
-            user = new User({ email, token, tokenExpires });
-        } else {
-            user.token = token;
-            user.tokenExpires = tokenExpires;
-        }
-        await user.save(); 
+        await User.findOneAndUpdate(
+            { email },
+            { token, tokenExpires },
+            { upsert: true, new: true }
+        );
 
-        // PASO 3: Respuesta inmediata al frontend
-        res.status(200).json({ success: true, message: 'Token generated' });
+        // 2. AHORA SÍ ESPERAMOS: El await asegura que no pase de aquí hasta que el mail se envíe
+        console.log(`Intentando enviar email a ${email}...`);
+        await sendTokenEmail(email, token); 
+        
+        console.log('✅ Correo enviado con éxito. Respondiendo al cliente.');
 
-        // PASO 4: Usar el nuevo archivo utils/email.js para enviar el correo
-        sendTokenEmail(email, token)
-            .then(() => console.log('✅ Correo enviado con el nuevo util/email.js'))
-            .catch(err => console.error('❌ Error en el nuevo util/email.js:', err.message));
+        // 3. Solo si el await de arriba fue exitoso, enviamos el OK al frontend
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Token sent to your email!' 
+        });
 
     } catch (error) {
-        console.error('❌ Error crítico en requestToken:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Database error' });
-        }
+        // Si sendTokenEmail falla, caerá aquí y el frontend recibirá el error 500
+        console.error('❌ Error en el proceso de requestToken:', error.message);
+        
+        return res.status(500).json({ 
+            error: 'Failed to send email. Please check server logs.',
+            details: error.message 
+        });
     }
 };
 
