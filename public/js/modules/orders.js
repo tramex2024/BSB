@@ -81,7 +81,19 @@ function displayOrders(orders, orderListElement, orderType) {
 export async function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
 
-    // Mostrar Loading State
+    // --- CORRECCIÓN AQUÍ ---
+    // Si el status es 'opened', no llamamos a la API de historial.
+    // Simplemente limpiamos el contenedor y dejamos que el WebSocket lo llene.
+    if (status === 'opened') {
+        orderListElement.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-10 opacity-40">
+                <i class="fas fa-sync fa-spin mb-2"></i>
+                <p class="text-sm uppercase tracking-widest">Esperando órdenes en tiempo real...</p>
+            </div>`;
+        return; 
+    }
+    // -----------------------
+
     orderListElement.innerHTML = `
         <div class="flex items-center justify-center py-12">
             <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-500"></div>
@@ -104,11 +116,7 @@ export async function fetchOrders(status, orderListElement) {
         displayOrders(ordersToDisplay, orderListElement, status);
     } catch (error) {
         console.error('Error fetchOrders:', error);
-        orderListElement.innerHTML = `
-            <div class="text-center py-10">
-                <p class="text-red-500 text-xs font-bold uppercase tracking-widest mb-1">Error de Conexión</p>
-                <p class="text-gray-600 text-[10px]">No se pudo obtener el historial de Bitmart.</p>
-            </div>`;
+        orderListElement.innerHTML = `<p class="text-red-500 text-center py-4 text-xs">Error al cargar historial</p>`;
     }
 }
 
