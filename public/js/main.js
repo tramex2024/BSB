@@ -234,17 +234,17 @@ export function initializeFullApp() {
 
 // Iniciar aplicación al cargar el DOM
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Activamos los eventos de los iconos SIEMPRE
-    initializeAppEvents(initializeFullApp); 
+    // 1. Iniciamos los eventos (esto conecta los botones)
+    initializeAppEvents(initializeFullApp);
     
-    // 2. Ponemos el icono correcto
+    // 2. Dibujamos el icono correcto (Login o Logout)
     updateLoginIcon();
 
-    // 3. Si ya estaba logueado, arrancamos el bot automáticamente
+    // 3. Lógica de arranque
     if (localStorage.getItem('token')) {
-        initializeFullApp();
+        initializeFullApp(); // Si hay sesión, conecta sockets
     } else {
-        // Si no, al menos activamos las pestañas para que pueda navegar
-        setupNavTabs(initializeTab);
+        // Si no hay sesión, cargamos el dashboard vacío o splash
+        initializeTab('dashboard'); 
     }
 });

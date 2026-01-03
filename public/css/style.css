@@ -11,7 +11,7 @@
     --success: #10b981;
     --danger: #ef4444;
     --warning: #f59e0b;
-    --special: #a855f7; /* Púrpura para CACHE_FALLBACK */
+    --special: #a855f7; /* Púrpura para CACHE_FALLBACK y Shorts */
 }
 
 * {
@@ -48,18 +48,11 @@ body {
     gap: 12px;
 }
 
-/* CORRECCIÓN LOGO */
 .logo {
     width: 38px;
     height: 38px;
     object-fit: contain;
     border-radius: 4px;
-}
-
-.app-name {
-    font-weight: 700;
-    font-size: 1.1rem;
-    white-space: nowrap;
 }
 
 .nav-tab {
@@ -70,6 +63,7 @@ body {
     transition: all 0.2s ease;
     font-size: 0.875rem;
     font-weight: 600;
+    cursor: pointer;
 }
 
 .nav-tab:hover {
@@ -78,173 +72,69 @@ body {
 }
 
 .nav-tab.active {
-    color: white;
+    color: white !important;
     background-color: rgba(59, 130, 246, 0.1);
     box-shadow: inset 0 0 0 1px var(--dark-border);
+    border-bottom: 2px solid var(--success) !important;
 }
 
-/* --- LOG BAR (Optimizado y Fino) --- */
+/* --- MODALES (NUEVO) --- */
+.modal {
+    display: none; /* Controlado por JS */
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(5px);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.modal-content {
+    background-color: var(--dark-header-bg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 400px;
+    padding: 30px;
+    position: relative;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- LOG BAR --- */
 .log-bar {
     position: sticky;
-    top: 64px; /* Justo debajo del header */
+    top: 64px;
     width: 100%;
-    height: 28px; /* Altura reducida de 32px a 28px */
+    height: 28px;
     background-color: var(--log-bar-bg);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
     padding: 0 16px;
-    font-size: 0.7rem; /* Texto un poco más pequeño para que quepa bien */
+    font-size: 0.7rem;
     z-index: 999;
-    overflow: hidden; /* Evita que el contenido ensanche la barra */
-    line-height: 1;
+    overflow: hidden;
 }
 
 #log-message {
     margin: 0;
-    padding: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis; /* Si el mensaje es muy largo, pone "..." */
     font-family: 'JetBrains Mono', monospace;
     letter-spacing: 0.02em;
+    transition: opacity 0.3s ease;
 }
 
 .log-success { color: var(--success); }
 .log-error { color: var(--danger); }
-.log-info { color: var(--dark-border); }
 
-/* --- ESTADOS DE CONEXIÓN (BOLITA) --- */
-.status-ball-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    position: relative;
-}
-
-.status-green {
-    background-color: var(--success);
-    box-shadow: 0 0 8px var(--success);
-}
-
-.status-red {
-    background-color: var(--danger);
-    animation: blink-fast 1.5s infinite;
-}
-
-.status-purple {
-    background-color: var(--special);
-}
-
-/* Efecto de onda para la bolita púrpura (Cache) */
-.status-purple::after {
-    content: '';
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    top: 0;
-    left: 0;
-    border-radius: 50%;
-    background-color: var(--special);
-    animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-}
-
-/* --- BOTONES DE ACCIÓN --- */
-.start-btn {
-    background-color: var(--success);
-    color: white;
-    transition: transform 0.1s, background-color 0.2s;
-    cursor: pointer;
-}
-
-.start-btn:hover {
-    background-color: #059669;
-    transform: translateY(-1px);
-}
-
-.stop-btn {
-    background-color: var(--danger);
-    color: white;
-    cursor: pointer;
-}
-
-.stop-btn:hover {
-    background-color: #dc2626;
-}
-
-.start-btn:active, .stop-btn:active {
-    transform: scale(0.98);
-}
-
-/* --- TABLAS DE ÓRDENES --- */
-.active-tab {
-    border-bottom: 2px solid var(--dark-border) !important;
-    color: white !important;
-    background-color: rgba(59, 130, 246, 0.05);
-}
-
-/* --- ANIMACIONES --- */
-@keyframes pulse-ring {
-    0% { transform: scale(.33); opacity: 0.8; }
-    80%, 100% { transform: scale(3); opacity: 0; }
-}
-
-@keyframes blink-fast {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-/* --- RESPONSIVE --- */
-@media (max-width: 768px) {
-    .fixed-header {
-        height: auto;
-        padding: 12px;
-        flex-direction: column;
-        gap: 12px;
-    }
-    
-    .header-middle {
-        width: 100%;
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 4px;
-    }
-    
-    .nav-tab {
-        text-align: center;
-        padding: 8px 4px;
-        font-size: 0.75rem;
-    }
-
-    .log-bar {
-        top: 130px; /* Ajustado para el header móvil expandido */
-    }
-}
-
-#price-percent, #price-icon, #profit-percent, #profit-icon {
-    transition: color 0.3s ease;
-}
-
-/* Añade un efecto de parpadeo suave cuando el valor cambie */
-#aulcoverage, #aulnorder {
-    transition: color 0.3s ease;
-}
-.text-update-flash {
-    color: #60a5fa; /* Un azul brillante temporal */
-}
-
-// Versión con "ajuste de línea" por seguridad
-<p class="text-gray-600 text-[9px] font-mono break-all max-w-[150px] ml-auto">
-    ID: ${orderId}
-</p>
-
-/* Animaciones para la bolita de estado en el Header */
+/* --- ESTADOS DE CONEXIÓN --- */
 #status-dot {
     width: 10px;
     height: 10px;
@@ -253,47 +143,37 @@ body {
     transition: all 0.3s ease;
 }
 
-.status-green { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
-.status-red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
-.status-purple { 
-    background-color: #a855f7; 
-    animation: pulse-purple 2s infinite; 
+.status-green { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
+.status-red { background-color: var(--danger); box-shadow: 0 0 8px var(--danger); animation: blink-fast 1.5s infinite; }
+.status-purple { background-color: var(--special); animation: pulse-purple 2s infinite; }
+
+/* --- BOTONES Y UI --- */
+button {
+    cursor: pointer;
+    transition: all 0.2s;
 }
 
+button:active { transform: scale(0.97); }
+
+.start-btn { background-color: var(--success); color: white; }
+.start-btn:hover { background-color: #059669; }
+
+.stop-btn { background-color: var(--danger); color: white; }
+.stop-btn:hover { background-color: #dc2626; }
+
+/* --- ANIMACIONES --- */
 @keyframes pulse-purple {
     0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
     70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); }
     100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
 }
 
-/* Color para identificar métricas de Short en la tabla */
-.short-accent {
-    color: #a855f7; /* Púrpura suave */
+@keyframes blink-fast {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
-/* Hover y estados para los inputs de BTC */
-#auamount-btc:focus, #aupurchase-btc:focus {
-    border-color: #a855f7;
-    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
-    outline: none;
-}
-
-/* Ajuste para el historial de órdenes: Borde izquierdo según tipo */
-.order-item-long { border-left: 4px solid var(--success); }
-.order-item-short { border-left: 4px solid #a855f7; }
-
-.log-bar i {
-    font-size: 0.8rem;
-    margin-right: 6px;
-    vertical-align: middle;
-}
-
-#auprice {
-    color: #ffffff; /* Color inicial */
-    transition: none !important; /* Eliminamos cualquier transición molesta */
-}
-
-/* --- TRADINGVIEW --- */
+/* --- TRADINGVIEW & TABLAS --- */
 .chart-container {
     background: var(--dark-header-bg);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -301,40 +181,19 @@ body {
     overflow: hidden;
 }
 
-/* --- CORRECCIONES CRÍTICAS DE COLOR --- */
+.font-mono { font-family: 'JetBrains Mono', monospace !important; }
 
-/* Forzamos que el precio tenga color blanco por defecto si no hay tendencia */
-#auprice {
-    color: #ffffff !important;
-    display: inline-block;
-    min-width: 50px;
-}
+/* Forzar colores de texto específicos */
+.text-emerald-400 { color: #34d399 !important; }
+.text-red-400 { color: #f87171 !important; }
 
-/* Clases de utilidad con !important para vencer cualquier conflicto de Tailwind */
-.text-emerald-400 {
-    color: #34d399 !important; /* Verde Esmeralda */
-}
+/* Scrollbar personalizado */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--dark-bg); }
+::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
 
-.text-red-400 {
-    color: #f87171 !important; /* Rojo */
-}
-
-.text-white {
-    color: #ffffff !important;
-}
-
-/* Animación sutil para cuando el precio cambie */
-.price-update-anim {
-    animation: pulse-price 0.3s ease-out;
-}
-
-@keyframes pulse-price {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-}
-
-/* Asegurar visibilidad en el dashboard */
-.font-mono {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+/* --- RESPONSIVE --- */
+@media (max-width: 768px) {
+    .fixed-header { height: auto; padding: 12px; flex-direction: column; gap: 12px; }
+    .nav-tab { padding: 8px 4px; font-size: 0.75rem; }
 }

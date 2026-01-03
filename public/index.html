@@ -91,5 +91,31 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     
     <script type="module" src="/js/main.js"></script>
+    <div id="auth-modal" class="modal">
+    <div class="modal-content animate-fadeIn">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">Acceso de Usuario</h2>
+            <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-auth-modal"></i>
+        </div>
+        <form id="auth-form" class="space-y-4">
+            <div id="email-section">
+                <label class="text-xs text-gray-400 block mb-1">Correo Electrónico</label>
+                <input type="email" id="email" placeholder="tu@email.com" required
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
+            </div>
+            <div id="token-section" style="display: none;">
+                <label class="text-xs text-gray-400 block mb-1">Código de Verificación</label>
+                <input type="text" id="token" placeholder="Ingresa el código" 
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
+            </div>
+            
+            <button type="submit" id="auth-button" 
+                class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">
+                CONTINUAR
+            </button>
+            <p id="auth-message" class="text-xs text-center"></p>
+        </form>
+    </div>
+</div>
 </body>
 </html>
