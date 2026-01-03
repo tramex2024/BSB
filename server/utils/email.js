@@ -12,13 +12,12 @@ async function sendTokenEmail(email, token) {
 
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 587,         // Puerto alternativo más compatible con Render
-        secure: false,      // Debe ser false para el puerto 587 (usa STARTTLS)
+        port: 587,         
+        secure: false,      
         auth: {
             user: user,
             pass: pass
         },
-        // Añadimos un límite de tiempo real para que no se quede congelado
         connectionTimeout: 10000, 
         greetingTimeout: 10000
     });
@@ -37,4 +36,5 @@ async function sendTokenEmail(email, token) {
     return transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendTokenEmail };il };
+// CORREGIDO: Eliminado el texto basura del final
+module.exports = { sendTokenEmail };
