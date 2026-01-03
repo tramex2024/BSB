@@ -1,19 +1,20 @@
-// public/js/modules/orders.js
-import { fetchFromBackend } from './api.js';
-
-const RENDER_BACKEND_URL = 'https://bsb-ppex.onrender.com';
+import { BACKEND_URL } from '../main.js';
 
 /**
- * Crea el HTML de una orden con un diseño de "Card" optimizado
+ * Crea el HTML de una orden con diseño de "Card" Emerald-Style
  */
 function createOrderHtml(order, orderType) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
-    const sideClass = isBuy ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10';
     
-    // Normalización de datos para evitar errores de undefined
-    const actualStatus = (order.state || order.status || orderType || 'UNKNOWN').replace(/_/g, ' ').toUpperCase();
-    const orderId = order.orderId || order.order_id || 'N/A';
+    // Colores y flechas según el tipo de orden
+    const sideClass = isBuy 
+        ? 'text-emerald-400 bg-emerald-500/10' 
+        : 'text-red-400 bg-red-500/10';
+    const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
+    
+    const actualStatus = (order.state || order.status || orderType || 'N/A').replace(/_/g, ' ').toUpperCase();
+    const orderId = order.orderId || order.order_id || '---';
     const timestamp = order.createTime || order.create_time || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString();
     
@@ -22,57 +23,51 @@ function createOrderHtml(order, orderType) {
     const symbol = (order.symbol || 'BTC_USDT').replace('_', '/');
 
     return `
-        <div class="bg-gray-800/50 border border-gray-700 p-4 rounded-xl mb-3 flex flex-wrap md:flex-nowrap justify-between items-center hover:border-gray-600 transition-colors">
-            <div class="w-full md:w-auto flex items-center gap-3 mb-3 md:mb-0">
-                <div class="px-3 py-1 rounded-lg font-bold text-xs ${sideClass}">
-                    ${side.toUpperCase()}
+        <div class="bg-gray-900/40 border border-gray-700/50 p-4 rounded-2xl mb-3 flex flex-wrap md:flex-nowrap justify-between items-center hover:border-emerald-500/30 transition-all animate-fadeIn">
+            <div class="w-full md:w-auto flex items-center gap-4 mb-3 md:mb-0">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center ${sideClass}">
+                    <i class="fas ${icon} text-lg"></i>
                 </div>
                 <div>
-                    <p class="text-gray-500 text-[10px] uppercase">Currency</p>
-                    <p class="text-white font-medium text-sm">${symbol}</p>                    
+                    <p class="text-white font-bold text-sm tracking-tight">${symbol}</p>
+                    <p class="text-[10px] ${isBuy ? 'text-emerald-500' : 'text-red-500'} font-bold uppercase tracking-widest">${side}</p>
                 </div>
             </div>
 
-            <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 px-0 md:px-6">
+            <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-6 px-0 md:px-10">
                 <div>
-                    <p class="text-gray-500 text-[10px] uppercase">Price</p>
-                    <p class="text-gray-200 font-mono text-sm">${price} <span class="text-[10px] text-gray-500">USDT</span></p>
+                    <p class="text-gray-500 text-[9px] uppercase font-bold mb-0.5">Precio</p>
+                    <p class="text-gray-200 font-mono text-sm font-bold">${price} <span class="text-[10px] text-gray-500 font-normal">USDT</span></p>
                 </div>
                 <div>
-                    <p class="text-gray-500 text-[10px] uppercase">Amount</p>
-                    <p class="text-gray-200 font-mono text-sm">${quantity} <span class="text-[10px] text-gray-500">BTC</span></p>
+                    <p class="text-gray-500 text-[9px] uppercase font-bold mb-0.5">Cantidad</p>
+                    <p class="text-gray-200 font-mono text-sm font-bold">${quantity} <span class="text-[10px] text-gray-500 font-normal">BTC</span></p>
                 </div>
                 <div class="hidden md:block">
-                    <p class="text-gray-500 text-[10px] uppercase">Status</p>
-                    <p class="text-blue-400 font-medium text-sm">${actualStatus}</p>
+                    <p class="text-gray-500 text-[9px] uppercase font-bold mb-0.5">Estado</p>
+                    <p class="text-blue-400 font-bold text-xs">${actualStatus}</p>
                 </div>
             </div>
 
-            <div class="w-full md:w-auto mt-3 md:mt-0 text-right">
-                <p class="text-gray-500 text-[10px] uppercase tracking-wider">Date: ${date}</p>
-                <p class="text-gray-500 text-[10px] font-mono">ID: ${orderId}</p>                
-                <div class="md:hidden mt-1 px-2 py-0.5 inline-block rounded bg-gray-700 text-blue-300 text-[10px]">
-        ${actualStatus}
+            <div class="w-full md:w-auto mt-3 md:mt-0 text-right border-t md:border-t-0 border-gray-800 pt-2 md:pt-0">
+                <p class="text-gray-500 text-[10px] font-mono mb-1 leading-none">#${orderId.slice(-8)}</p>
+                <p class="text-gray-500 text-[9px] font-medium italic">${date}</p>
             </div>
-          </div>
         </div>
     `;
 }
 
 /**
- * Renderiza la lista en el DOM
+ * Renderiza la lista en el contenedor especificado
  */
 function displayOrders(orders, orderListElement, orderType) {
     if (!orderListElement) return;
 
     if (!orders || orders.length === 0) {
-        // CORRECCIÓN LÍNEA 68: SVG Limpio con atributos explícitos
         orderListElement.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-10 opacity-40">
-                <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                </svg>
-                <p class="text-sm">Without orders ${orderType}</p>
+            <div class="flex flex-col items-center justify-center py-12 opacity-30">
+                <i class="fas fa-folder-open text-4xl mb-3"></i>
+                <p class="text-xs uppercase tracking-widest font-bold">Sin órdenes ${orderType}</p>
             </div>`;
         return;
     }
@@ -81,49 +76,44 @@ function displayOrders(orders, orderListElement, orderType) {
 }
 
 /**
- * Fetch para historial (Filled/Cancelled)
+ * Obtiene historial desde el Backend (Filled/Cancelled)
  */
 export async function fetchOrders(status, orderListElement) {
-    if (status === 'opened') {
-        orderListElement.innerHTML = `
-            <div class="flex items-center justify-center py-10">
-                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mr-3"></div>
-                <p class="text-gray-400 text-sm">Loading orders...</p>
-            </div>`;
-        return;
-    }
-    
+    if (!orderListElement) return;
+
+    // Mostrar Loading State
+    orderListElement.innerHTML = `
+        <div class="flex items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-500"></div>
+            <span class="ml-3 text-xs text-gray-500 font-bold uppercase tracking-widest">Consultando API...</span>
+        </div>`;
+
     const authToken = localStorage.getItem('token');
     if (!authToken) return;
 
     try {
-        const response = await fetch(`${RENDER_BACKEND_URL}/api/orders/${status}`, {
+        const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/orders/${status}`, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
 
-        if (!response.ok) throw new Error(`Error: ${response.status}`);
+        if (!response.ok) throw new Error(`Status: ${response.status}`);
 
         const data = await response.json();
-        let ordersToDisplay = Array.isArray(data) ? data : (data.orders || []);
-
-        // Filtrado preventivo por si el backend manda todo el historial
-        if (status !== 'all') {
-            const target = status.toLowerCase();
-            ordersToDisplay = ordersToDisplay.filter(o => {
-                const s = String(o.state || o.status || '').toLowerCase();
-                return target === 'filled' ? s.includes('fill') : s.includes('cancel');
-            });
-        }
+        let ordersToDisplay = Array.isArray(data) ? data : (data.data?.orders || data.orders || []);
 
         displayOrders(ordersToDisplay, orderListElement, status);
     } catch (error) {
         console.error('Error fetchOrders:', error);
-        orderListElement.innerHTML = `<p class="text-red-500 text-center py-4 text-xs">Disconnected from history</p>`;
+        orderListElement.innerHTML = `
+            <div class="text-center py-10">
+                <p class="text-red-500 text-xs font-bold uppercase tracking-widest mb-1">Error de Conexión</p>
+                <p class="text-gray-600 text-[10px]">No se pudo obtener el historial de Bitmart.</p>
+            </div>`;
     }
 }
 
 /**
- * Actualiza la tabla de órdenes abiertas vía WebSocket
+ * Actualiza órdenes abiertas (Generalmente usado con WebSockets)
  */
 export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
     const orderListElement = document.getElementById(listElementId);
@@ -131,18 +121,28 @@ export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab)
 
     let openOrders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
 
-    // Filtro estricto de órdenes activas
     const validOpenStatuses = ['new', 'partially_filled', 'open', 'pending', 'active'];
     openOrders = openOrders.filter(order => {
         const orderState = String(order.state || order.status || '').toLowerCase();
         return validOpenStatuses.some(status => orderState.includes(status));
     });
 
-    displayOrders(openOrders, orderListElement, 'abiertas');
+    displayOrders(openOrders, orderListElement, 'activas');
 }
 
+/**
+ * Manejo visual de botones de pestañas
+ */
 export function setActiveTab(tabId) {
-    const tabs = document.querySelectorAll('[id^="tab-"]'); 
-    tabs.forEach(tab => tab.classList.remove('active-tab'));
-    document.getElementById(tabId)?.classList.add('active-tab');
+    const tabs = document.querySelectorAll('.autobot-tabs button'); 
+    tabs.forEach(tab => {
+        tab.classList.remove('text-emerald-500', 'bg-gray-800');
+        tab.classList.add('text-gray-500');
+    });
+    
+    const activeTab = document.getElementById(tabId);
+    if (activeTab) {
+        activeTab.classList.add('text-emerald-500', 'bg-gray-800');
+        activeTab.classList.remove('text-gray-500');
+    }
 }

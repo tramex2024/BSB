@@ -18,31 +18,25 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
 
-    // 1. Actualización de Estados (Largo y Corto)
     updateStatusLabel('aubot-lstate', state.lstate);
     updateStatusLabel('aubot-sstate', state.sstate);
 
-    // 2. Mapeo de Elementos Numéricos
     const elementsToUpdate = {
         auprofit: 'total_profit',
-    aulbalance: 'lbalance',
-    ausbalance: 'sbalance',
-    aultprice: 'ltprice',
-    austprice: 'stprice',
-    aulcycle: 'lcycle',
-    auscycle: 'scycle',
-    
-    // CORRECCIÓN AQUÍ:
-    // El ID en tu HTML es 'aulcoverage', pero el dato del bot es 'lcoverage'
-    aulcoverage: 'lcoverage', 
-    auscoverage: 'scoverage',
-    aulnorder: 'lnorder',
-    ausnorder: 'snorder',
-    
-    aulsprice: 'lsprice',
-    ausbprice: 'sbprice',
-    aulprofit: 'lprofit',
-    ausprofit: 'sprofit'
+        aulbalance: 'lbalance',
+        ausbalance: 'sbalance',
+        aultprice: 'ltprice',
+        austprice: 'stprice',
+        aulcycle: 'lcycle',
+        auscycle: 'scycle',
+        aulcoverage: 'lcoverage', 
+        auscoverage: 'scoverage',
+        aulnorder: 'lnorder',
+        ausnorder: 'snorder',
+        aulsprice: 'lsprice',
+        ausbprice: 'sbprice',
+        aulprofit: 'lprofit',
+        ausprofit: 'sprofit'
     };
 
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
@@ -52,21 +46,29 @@ export function updateBotUI(state) {
         const rawValue = state[dataKey];
         const value = (rawValue !== undefined && rawValue !== null) ? Number(rawValue) : NaN;
 
-        // Limpiar colores previos de profit
         element.classList.remove('text-green-500', 'text-red-500', 'text-gray-400');
 
-        // Lógica de formateo según el tipo de dato
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
         } else if (['lnorder', 'snorder', 'lcycle', 'scycle'].includes(dataKey)) {
             element.textContent = isNaN(value) ? '0' : value.toFixed(0);
         } else {
-            // Precios y Balances: 2 decimales para USDT, 6 para BTC si fuera necesario
-            element.textContent = isNaN(value) ? '0.00' : value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            // LÓGICA DE PRECISIÓN DINÁMICA
+            // Si el ID contiene 'btc' o es el balance de BTC real, usamos 6 decimales.
+            const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
+            const decimals = isBtcField ? 6 : 2;
+            
+            element.textContent = isNaN(value) 
+                ? (isBtcField ? '0.000000' : '0.00') 
+                : value.toLocaleString(undefined, { 
+                    minimumFractionDigits: decimals, 
+                    maximumFractionDigits: decimals 
+                });
         }
     }
 
-    // 3. Control de Botón e Inputs (Bloqueo de seguridad)
+    // 3. Control de Botón e Inputs
+    // El botón debe permitir detener el bot si CUALQUIERA de los dos está corriendo
     const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     updateControlsState(isStopped);
 }

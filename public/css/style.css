@@ -244,6 +244,50 @@ body {
     ID: ${orderId}
 </p>
 
+/* Animaciones para la bolita de estado en el Header */
+#status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+.status-green { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+.status-red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+.status-purple { 
+    background-color: #a855f7; 
+    animation: pulse-purple 2s infinite; 
+}
+
+@keyframes pulse-purple {
+    0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+}
+
+/* Color para identificar métricas de Short en la tabla */
+.short-accent {
+    color: #a855f7; /* Púrpura suave */
+}
+
+/* Hover y estados para los inputs de BTC */
+#auamount-btc:focus, #aupurchase-btc:focus {
+    border-color: #a855f7;
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+    outline: none;
+}
+
+/* Ajuste para el historial de órdenes: Borde izquierdo según tipo */
+.order-item-long { border-left: 4px solid var(--success); }
+.order-item-short { border-left: 4px solid #a855f7; }
+
+.log-bar i {
+    font-size: 0.8rem;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
 /* --- TRADINGVIEW --- */
 .chart-container {
     background: var(--dark-header-bg);

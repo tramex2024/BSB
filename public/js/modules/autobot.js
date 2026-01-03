@@ -1,29 +1,17 @@
-// public/js/modules/autobot.js
-
 import { initializeChart } from './chart.js';
-import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOpenOrdersTable } from './orders.js';
+import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
-import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, BACKEND_URL, socket } from '../main.js';
+import { TRADE_SYMBOL_TV, BACKEND_URL, socket } from '../main.js';
 
 const MIN_USDT_AMOUNT = 5.00;
 const MIN_BTC_AMOUNT = 0.00005;
 let maxUsdtBalance = 0;
 let maxBtcBalance = 0;
-let currentTab = 'opened'; // Variable persistente en el módulo
+let currentTab = 'opened';
 
 /**
- * Actualiza el texto del balance total en la interfaz
- */
-function updateMainBalanceDisplay(usdt, btc) {
-    const totalBalanceEl = document.getElementById('aubalance');
-    if (totalBalanceEl) {
-        totalBalanceEl.innerHTML = `<span class="text-gray-400">USDT:</span> ${parseFloat(usdt || 0).toFixed(2)} | <span class="text-gray-400">BTC:</span> ${parseFloat(btc || 0).toFixed(6)}`;
-    }
-}
-
-/**
- * Muestra el balance máximo permitido al lado de la etiqueta del input
+ * Actualiza los balances máximos en la UI (labels de los inputs)
  */
 function updateMaxBalanceDisplay(currency, balance) {
     const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
@@ -33,7 +21,7 @@ function updateMaxBalanceDisplay(currency, balance) {
 }
 
 /**
- * Valida si el monto ingresado es correcto antes de enviar al backend
+ * Validación visual y lógica de montos
  */
 function validateAmountInput(inputId, maxLimit, currency) {
     const input = document.getElementById(inputId);
@@ -44,9 +32,9 @@ function validateAmountInput(inputId, maxLimit, currency) {
     const minBitmart = currency === 'USDT' ? MIN_USDT_AMOUNT : MIN_BTC_AMOUNT;
     
     let errorMsg = '';
-    if (isNaN(value) || value <= 0) errorMsg = `Monto de ${currency} inválido.`;
-    else if (value < minBitmart) errorMsg = `Mínimo BitMart: ${minBitmart} ${currency}.`;
-    else if (value > maxLimit) errorMsg = `Excede saldo disponible.`;
+    if (isNaN(value) || value <= 0) errorMsg = `Monto inválido.`;
+    else if (value < minBitmart) errorMsg = `Min: ${minBitmart} ${currency}`;
+    else if (value > maxLimit) errorMsg = `Saldo insuficiente.`;
 
     if (errorElement) {
         errorElement.textContent = errorMsg;
@@ -57,28 +45,34 @@ function validateAmountInput(inputId, maxLimit, currency) {
 }
 
 /**
- * Escucha cambios en los inputs para sincronizar con el backend
+ * Listeners para guardar configuración automáticamente
  */
 function setupConfigListeners() {
-    ['auamount-usdt', 'auamount-btc'].forEach(id => {
-        const input = document.getElementById(id);
-        const curr = id.includes('usdt') ? 'USDT' : 'BTC';
-        input?.addEventListener('input', () => {
-            const limit = curr === 'USDT' ? maxUsdtBalance : maxBtcBalance;
-            if (validateAmountInput(id, limit, curr)) {
-                sendConfigToBackend();
-            }
+    // Inputs que disparan guardado inmediato al cambiar
+    const configIds = [
+        'auamount-usdt', 'auamount-btc', 'aupurchase-usdt', 
+        'aupurchase-btc', 'auincrement', 'audecrement', 
+        'autrigger', 'au-stop-at-cycle-end'
+    ];
+
+    configIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const eventType = el.type === 'checkbox' || el.type === 'number' ? 'change' : 'input';
+        
+        el.addEventListener(eventType, () => {
+            // Si es un monto principal, validamos antes de enviar
+            if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
+            if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
+            
+            sendConfigToBackend();
         });
-    });
-    
-    // Checkbox y otros inputs numéricos
-    ['aupurchase-usdt', 'aupurchase-btc', 'auincrement', 'audecrement', 'autrigger', 'au-stop-at-cycle-end'].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', sendConfigToBackend);
     });
 }
 
 /**
- * Carga inicial de balances para establecer los límites de los inputs
+ * Carga de balances desde el API para límites
  */
 async function loadBalancesAndLimits() {
     try {
@@ -91,83 +85,109 @@ async function loadBalancesAndLimits() {
             maxBtcBalance = parseFloat(data.data.lastAvailableBTC) || 0;
             updateMaxBalanceDisplay('USDT', maxUsdtBalance);
             updateMaxBalanceDisplay('BTC', maxBtcBalance);
-            updateMainBalanceDisplay(maxUsdtBalance, maxBtcBalance);
         }
     } catch (error) {
-        console.error("Error cargando límites:", error);
+        console.error("Error límites:", error);
     }
 }
 
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
-    // 1. Cargar datos iniciales
+    // 1. Cargar datos base
     await loadBalancesAndLimits();
     setupConfigListeners();
 
-    // 2. Inicialización del gráfico de TradingView
+    // 2. Gráfico TradingView
     try {
         window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-    } catch (e) { 
-        console.error("Error al cargar TradingView:", e); 
-    }
+    } catch (e) { console.error("TV Error:", e); }
 
-    // 3. Control del botón START/STOP
+    // 3. START / STOP Logic
     const startBtn = document.getElementById('austart-btn');
     startBtn?.addEventListener('click', async () => {
-        const isRunning = startBtn.textContent === 'STOP';
+        const isRunning = startBtn.textContent.includes('STOP');
         
-        // Solo validar si vamos a arrancar el bot
         if (!isRunning) {
             const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
             const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-            if (!isUsdtOk || !isBtcOk) {
-                return displayMessage('Revisa los límites de inversión', 'error');
-            }
+            if (!isUsdtOk || !isBtcOk) return displayMessage('Verifica saldos', 'error');
         }
         
         await toggleBotState(isRunning, getBotConfiguration());
     });
 
-    // 4. Manejo de Pestañas del Historial de Órdenes
+    // 4. Manejo de Pestañas (Historial de Órdenes)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // Actualización visual de la pestaña
-            orderTabs.forEach(t => t.classList.remove('active-tab'));
-            tab.classList.add('active-tab');
+            orderTabs.forEach(t => {
+                t.classList.remove('text-emerald-500', 'bg-gray-800');
+                t.classList.add('text-gray-500');
+            });
+            tab.classList.add('text-emerald-500', 'bg-gray-800');
+            tab.classList.remove('text-gray-500');
 
-            // Carga de datos
             currentTab = tab.id.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
         });
     });
 
-    // 5. Carga inicial de órdenes por defecto (Opened)
-    setOrdersActiveTab('tab-opened');
+    // 5. Estado Inicial de Órdenes
     fetchOrders('opened', auOrderList);
 
-    // 6. Listeners de Socket para actualizaciones en tiempo real
+    // 6. Socket Listeners (Actualizaciones de tiempo real)
     if (socket) {
-    socket.on('bot-state-update', (state) => {
-        // 1. Llamada normal a la UI general
-        updateBotUI(state);
+        // Actualización de balances reales (vía socket)
+        socket.on('balance-real-update', (data) => {
+            maxUsdtBalance = parseFloat(data.lastAvailableUSDT) || 0;
+            maxBtcBalance = parseFloat(data.lastAvailableBTC) || 0;
+            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
+            updateMaxBalanceDisplay('BTC', maxBtcBalance);
+        });
 
-        // 2. FORZAR ACTUALIZACIÓN DE COBERTURA (El parche de tiempo real)
-        const lCoverageEl = document.getElementById('lcoverage'); // Asegúrate que el ID sea este
-        const lNorderEl = document.getElementById('lnorder');
+        // Actualización integral de la estrategia
+        socket.on('bot-state-update', (state) => {
+            updateBotUI(state); // Maneja el botón START/STOP y Profit Total
 
-        if (lCoverageEl && state.lcoverage !== undefined) {
-            lCoverageEl.textContent = `$${parseFloat(state.lcoverage).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            
-            // Efecto visual opcional: un pequeño destello cuando cambie
-            lCoverageEl.classList.add('price-update-flash');
-            setTimeout(() => lCoverageEl.classList.remove('price-update-flash'), 500);
-        }
+            const fields = {
+                'aubalance-usdt': state.lastAvailableUSDT?.toFixed(2),
+                'aubalance-btc': state.lastAvailableBTC?.toFixed(6),
+                'aulbalance': state.lbalance?.toFixed(2),
+                'aulcycle': state.lcycle,
+                'aulsprice': state.lsprice?.toFixed(2),
+                'aulprofit': state.lprofit?.toFixed(4),
+                'aulcoverage': state.lcoverage?.toFixed(2),
+                'aulnorder': state.lnorder,
+                'ausbalance': state.sbalance?.toFixed(2),
+                'auscycle': state.scycle,
+                'ausbprice': state.sbprice?.toFixed(2),
+                'ausprofit': state.sprofit?.toFixed(4),
+                'auscoverage': state.scoverage?.toFixed(2),
+                'ausnorder': state.snorder
+            };
 
-        if (lNorderEl && state.lnorder !== undefined) {
-            lNorderEl.textContent = state.lnorder;
-        }
-    });
+            Object.entries(fields).forEach(([id, value]) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.textContent = value ?? '0.00';
+                    if (id.includes('profit')) {
+                        el.className = parseFloat(value) >= 0 ? 'text-emerald-400' : 'text-red-400';
+                    }
+                }
+            });
+
+            // Actualizar etiquetas de estado Long/Short
+            const lStateEl = document.getElementById('aubot-lstate');
+            const sStateEl = document.getElementById('aubot-sstate');
+            if (lStateEl) {
+                lStateEl.textContent = state.lstate;
+                lStateEl.className = `text-xs font-bold ${state.lstate === 'STOPPED' ? 'text-red-400' : 'text-emerald-400'}`;
+            }
+            if (sStateEl) {
+                sStateEl.textContent = state.sstate;
+                sStateEl.className = `text-xs font-bold ${state.sstate === 'STOPPED' ? 'text-red-400' : 'text-emerald-400'}`;
+            }
+        });
     }
 }

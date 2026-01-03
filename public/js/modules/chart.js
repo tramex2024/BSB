@@ -1,141 +1,130 @@
 // public/js/modules/chart.js
 
+let equityChartInstance = null;
+
+/**
+ * Gráfico de TradingView (Precios en vivo)
+ */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
-    if (!container) {
-        console.error(`Contenedor del gráfico con ID "${containerId}" no encontrado.`);
-        return;
-    }
+    if (!container) return;
 
-    // Limpia el contenedor antes de añadir un nuevo gráfico
     container.innerHTML = '';
 
-    // Crea el nuevo widget de TradingView con la propiedad 'autosize'
     new TradingView.widget({
         "container_id": containerId,
-        "autosize": true, // <-- ¡Esta es la clave para el redimensionamiento!
-        "symbol": `BITMART:${symbol}`, // Ajustado para ser coherente con BitMart
+        "autosize": true,
+        "symbol": `BITMART:${symbol}`,
         "interval": "60",
         "timezone": "Etc/UTC",
         "theme": "dark",
         "style": "1",
         "locale": "es",
-        "toolbar_bg": "#1f2937", // Color del fondo de la toolbar, para que coincida con tu diseño
+        "toolbar_bg": "#111827",
         "enable_publishing": false,
         "withdateranges": true,
         "hide_side_toolbar": false,
         "allow_symbol_change": true,
-        "hotlist": false,
-        "calendar": false,
         "support_host": "https://www.tradingview.com",
     });
-
-    console.log("Gráfico de TradingView inicializado para el símbolo:", symbol);
 }
 
-let equityChartInstance = null; // Variable para mantener la instancia del gráfico
-
 /**
- * Renderiza la curva de crecimiento de capital usando Chart.js.
- * @param {Array<object>} data - Los datos de los ciclos cerrados.
- * @param {string} parameter - El parámetro a mostrar ('accumulatedProfit', 'durationHours', etc.).
+ * Gráfico de Curva de Capital (Chart.js)
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
-    const ctx = document.getElementById('equityCurveChart');
-    if (!ctx) {
-        console.error("Contenedor del gráfico 'equityCurveChart' no encontrado.");
+    const canvas = document.getElementById('equityCurveChart');
+    if (!canvas) {
+        console.error("Canvas 'equityCurveChart' no encontrado.");
         return;
     }
 
-    // Si ya existe una instancia, destrúyela antes de crear una nueva.
+    const ctx = canvas.getContext('2d');
+
+    // Destruir instancia previa para evitar superposición de tooltips
     if (equityChartInstance) {
         equityChartInstance.destroy();
     }
 
-    // 🛑 1. PREPARACIÓN DE DATOS DINÁMICA
-    const labels = data.map((cycle, index) => `Cycle ${index + 1}`); // Etiqueta: Ciclo 1, Ciclo 2, etc.
-
-    let datasetLabel = '';
-    let dataPoints = [];
-    let yAxisTitle = '';
-
-    switch (parameter) {
-        case 'durationHours':
-            dataPoints = data.map(cycle => (cycle.durationHours || 0).toFixed(2));
-            datasetLabel = 'Duración de Ciclo (Horas)';
-            yAxisTitle = 'Duración (h)';
-            break;
-        case 'initialInvestment':
-            // Asumo que tienes una propiedad 'initialInvestment' en tus datos
-            dataPoints = data.map(cycle => (cycle.initialInvestment || 0).toFixed(2));
-            datasetLabel = 'Inversión Inicial';
-            yAxisTitle = 'USDT';
-            break;
-        case 'accumulatedProfit':
-        default:
-            // 🛑 Lógica para el rendimiento acumulado (la curva original)
-            dataPoints = data.map(cycle => (cycle.accumulatedProfit || 0).toFixed(2));
-            datasetLabel = 'Rendimiento Neto Acumulado';
-            yAxisTitle = 'USDT';
-            break;
+    // 🛑 VALIDACIÓN Y NORMALIZACIÓN DE DATOS
+    // Si no hay datos, mostramos un estado vacío
+    if (!data || data.length === 0) {
+        console.warn("No hay datos para graficar.");
+        return;
     }
 
-    // 🛑 2. CREACIÓN/ACTUALIZACIÓN DEL GRÁFICO
+    const labels = data.map((_, i) => `Ciclo ${i + 1}`);
+    let dataPoints = [];
+    let labelText = '';
+    let color = '#10b981'; // Verde por defecto
+
+    // Mapeo dinámico según el parámetro seleccionado
+    switch (parameter) {
+        case 'durationHours':
+            dataPoints = data.map(c => parseFloat(c.durationHours || 0));
+            labelText = 'Duración (Horas)';
+            color = '#f59e0b'; // Naranja
+            break;
+        case 'initialInvestment':
+            dataPoints = data.map(c => parseFloat(c.initialInvestment || 0));
+            labelText = 'Inversión Inicial (USDT)';
+            color = '#3b82f6'; // Azul
+            break;
+        default:
+            // Asegúrate de que el backend envíe 'accumulatedProfit' o ajusta el nombre aquí
+            dataPoints = data.map(c => parseFloat(c.accumulatedProfit || c.netProfit || 0));
+            labelText = 'Capital Acumulado (USDT)';
+            color = '#10b981'; // Esmeralda
+    }
+
+    // Crear Gradiente para el fondo
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, color.replace(')', ', 0.4)').replace('rgb', 'rgba'));
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
     equityChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: datasetLabel,
+                label: labelText,
                 data: dataPoints,
-                borderColor: parameter === 'accumulatedProfit' ? 'rgb(75, 192, 192)' : 'rgb(255, 159, 64)', // Cambia el color para diferenciar
-                backgroundColor: parameter === 'accumulatedProfit' ? 'rgba(75, 192, 192, 0.2)' : 'rgba(255, 159, 64, 0.2)',
-                borderWidth: 2,
-                tension: 0.3,
-                fill: parameter === 'accumulatedProfit' ? 'start' : false
+                borderColor: color,
+                backgroundColor: gradient,
+                borderWidth: 3,
+                pointBackgroundColor: color,
+                pointBorderColor: '#fff',
+                pointHoverRadius: 6,
+                tension: 0.4, // Curva suave
+                fill: true,
+                pointRadius: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: yAxisTitle,
-                        color: '#9ca3af' // gray-400
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#9ca3af'
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Ciclos Cerrados',
-                        color: '#9ca3af'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#9ca3af'
+            plugins: {
+                legend: { display: false }, // Ocultamos leyenda para un look más limpio
+                tooltip: {
+                    backgroundColor: '#1f2937',
+                    titleColor: '#9ca3af',
+                    bodyColor: '#fff',
+                    borderColor: color,
+                    borderWidth: 1,
+                    displayColors: false,
+                    callbacks: {
+                        label: (context) => ` ${context.parsed.y.toLocaleString()} USDT`
                     }
                 }
             },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#f3f4f6' // gray-100
-                    }
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#9ca3af', font: { size: 10 } }
                 },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#9ca3af', font: { size: 10 } }
                 }
             }
         }

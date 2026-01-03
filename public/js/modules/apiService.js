@@ -7,24 +7,30 @@ const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 
 /**
  * Recopila todos los datos de los campos de configuración.
- * @returns {object} Un objeto con la configuración del bot.
  */
 export function getBotConfiguration() {
+    // Capturamos valores comunes
+    const priceVar = parseFloat(document.getElementById('auincrement').value); // Distancia entre órdenes DCA (%)
+    const sizeVar = parseFloat(document.getElementById('audecrement').value);  // Multiplicador de volumen DCA
+    const profitTrigger = parseFloat(document.getElementById('autrigger').value); // % Objetivo de salida
+
     const config = {
         symbol: TRADE_SYMBOL_BITMART,
         long: {
+            enabled: true, // Siempre true si se le da a START, o mapear a un checkbox si lo deseas
             amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
             purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
-            price_var: parseFloat(document.getElementById('audecrement').value),
-            size_var: parseFloat(document.getElementById('auincrement').value),
-            trigger: parseFloat(document.getElementById('autrigger').value),
+            price_var: priceVar,
+            size_var: sizeVar,
+            trigger: profitTrigger,
         },
         short: {
+            enabled: true,
             amountBtc: parseFloat(document.getElementById('auamount-btc').value),
             sellBtc: parseFloat(document.getElementById('aupurchase-btc').value),
-            price_var: parseFloat(document.getElementById('audecrement').value),
-            size_var: parseFloat(document.getElementById('auincrement').value),
-            trigger: parseFloat(document.getElementById('autrigger').value),
+            price_var: priceVar,
+            size_var: sizeVar,
+            trigger: profitTrigger,
         },
         options: {
             stopAtCycleEnd: document.getElementById('au-stop-at-cycle-end').checked,
