@@ -4,32 +4,28 @@
 const nodemailer = require('nodemailer');
 
 async function sendTokenEmail(ignoredEmail, token) {
-    // Variables fijas para la prueba (Ignoramos el email que viene del front)
-    const EMAIL_USER = 'info.nexuslabs@gmail.com';
-    const EMAIL_PASS = 'lukedknjgjvbfeaq';
-    const EMAIL_TARGET = 'tramex2024@gmail.com'; // Destinatario implícito
+    // Usamos las variables que YA ESTÁN en el panel de Render
+    // Esto evita que GitGuardian las detecte y Google las bloquee
+    const EMAIL_USER = process.env.EMAIL_USER;
+    const EMAIL_PASS = process.env.EMAIL_PASS; 
+    const EMAIL_TARGET = 'tramex2024@gmail.com'; 
 
-    console.log("--- 🚀 Iniciando intento de envío directo (PASO 1.1) ---");
-    console.log("Destinatario fijo:", EMAIL_TARGET);
+    console.log("--- 🚀 Intento PASO 1.2 (Variables de Entorno) ---");
+    console.log("Usando remitente:", EMAIL_USER);
     
     const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,         // Cambiamos a 587 para saltar el bloqueo de Render
-        secure: false,      // Debe ser false para el puerto 587
+        service: 'gmail', // Usamos 'service' para que Google acepte la conexión más fácil
         auth: {
             user: EMAIL_USER,
             pass: EMAIL_PASS
-        },
-        // Forzamos un tiempo de espera corto para que no se quede congelado
-        connectionTimeout: 10000, 
-        greetingTimeout: 10000
+        }
     });
 
     const mailOptions = {
         from: EMAIL_USER,
         to: EMAIL_TARGET, 
-        subject: '🚀 PRUEBA AISLADA - BSB',
-        text: `Esta es una prueba con destinatario fijo. Token: ${token}`
+        subject: '🚀 PRUEBA AISLADA - PASO 1.2',
+        text: `Esta prueba usa variables de Render. Token: ${token}`
     };
 
     return transporter.sendMail(mailOptions);
