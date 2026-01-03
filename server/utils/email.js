@@ -3,45 +3,38 @@
 // src/server/utils/email.js
 const nodemailer = require('nodemailer');
 
-// Importante: No ponemos dotenv aquí para que use las variables de Render directamente
 async function sendTokenEmail(email, token) {
-    // Usamos exactamente los nombres de variables que tienes en el test
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
-    // Para esta fase de prueba, seguimos usando el target fijo como pediste
     const target = 'tramex2024@gmail.com'; 
 
-    console.log("--- 🏁 Iniciando utilidad basada en test-mail.js ---");
-    console.log("- De:", user);
-    console.log("- Para:", target);
+    console.log("--- 🏁 Intento PASO 1.3 (Puerto 587) ---");
 
-    // Configuración IDÉNTICA a tu test-mail.js
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true, 
+        port: 587,         // Puerto alternativo más compatible con Render
+        secure: false,      // Debe ser false para el puerto 587 (usa STARTTLS)
         auth: {
             user: user,
             pass: pass
-        }
+        },
+        // Añadimos un límite de tiempo real para que no se quede congelado
+        connectionTimeout: 10000, 
+        greetingTimeout: 10000
     });
 
     const mailOptions = {
         from: `"Nexus Labs Test" <${user}>`, 
         to: target, 
-        subject: '🚀 Prueba de Envío BSB (Desde Aplicación)',
-        html: `
-            <div style="font-family: Arial, sans-serif; border: 1px solid #3b82f6; padding: 20px; border-radius: 10px;">
-                <h2 style="color: #3b82f6;">Verificación desde el Util</h2>
-                <p>Token generado: <strong>${token}</strong></p>
-                <p>Si recibes esto, la integración del util funciona.</p>
-            </div>
-        `
+        subject: '🚀 Prueba PASO 1.3 - BSB',
+        text: `Si recibes esto en Render, el puerto 587 es la solución. Token: ${token}`
     };
 
-    // Verificación y envío igual que en el test
+    console.log("1. Verificando conexión (STARTTLS)...");
     await transporter.verify();
+    
+    console.log("2. Enviando correo...");
     return transporter.sendMail(mailOptions);
 }
 
-module.exports = { sendTokenEmail };
+module.exports = { sendTokenEmail };il };
