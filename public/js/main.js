@@ -1,4 +1,4 @@
-//public/js/main.js
+// public/js/main.js
 
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -12,8 +12,10 @@ export let currentChart = null;
 export let intervals = {};
 export let socket = null;
 
-// Variable global para rastrear la tendencia del precio
+// Variables globales para lógica de UI
 let lastPrice = 0;
+let logQueue = [];
+let isProcessingLog = false;
 
 // Registro de módulos para carga dinámica
 const views = {
@@ -29,7 +31,7 @@ function updateConnectionStatusBall(source) {
     const statusDot = document.getElementById('status-dot'); 
     if (!statusDot) return;
     
-    statusDot.className = 'status-dot transition-all duration-500'; 
+    statusDot.className = 'status-dot transition-all duration-500 h-full w-full rounded-full block'; 
 
     switch (source) {
         case 'API_SUCCESS':
@@ -43,6 +45,45 @@ function updateConnectionStatusBall(source) {
         default:
             statusDot.classList.add('status-red');
             statusDot.title = 'Servidor Offline';
+    }
+}
+
+/**
+ * Sistema de gestión de Logs con retardo (Anti-Spam)
+ */
+function processNextLog() {
+    if (logQueue.length === 0) {
+        isProcessingLog = false;
+        return;
+    }
+
+    isProcessingLog = true;
+    const log = logQueue.shift();
+    const logEl = document.getElementById('log-message');
+
+    if (logEl) {
+        // Aplicar texto
+        logEl.textContent = log.message;
+        
+        // Determinar color
+        const colors = {
+            success: 'text-emerald-400',
+            error: 'text-red-400',
+            warning: 'text-yellow-400',
+            info: 'text-blue-400'
+        };
+        
+        // Limpiar y aplicar clases
+        logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+        logEl.style.opacity = '1';
+
+        // Esperar 2.5 segundos antes de pasar al siguiente
+        setTimeout(() => {
+            logEl.style.opacity = '0.5';
+            processNextLog();
+        }, 2500);
+    } else {
+        isProcessingLog = false;
     }
 }
 
@@ -90,6 +131,8 @@ export async function initializeTab(tabName) {
  * Inicialización completa de la App (Sockets y Eventos Globales)
  */
 export function initializeFullApp() {
+    if (socket) return; // Evitar duplicar conexiones
+
     updateConnectionStatusBall('DISCONNECTED'); 
 
     socket = io(BACKEND_URL, { 
@@ -105,17 +148,13 @@ export function initializeFullApp() {
 
     socket.on('disconnect', () => updateConnectionStatusBall('DISCONNECTED'));
 
-    // --- MANEJO DE PRECIO EN TIEMPO REAL (LÓGICA UNIFICADA) ---
-    // --- MANEJO DE PRECIO EN TIEMPO REAL ---
+    // --- PRECIO EN TIEMPO REAL ---
     socket.on('marketData', (data) => {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
 
-        // BUSCAMOS EL ELEMENTO EN CADA EJECUCIÓN (Vital para HTML dinámico)
         const auPriceEl = document.getElementById('auprice');
-        
         if (auPriceEl) {
-            // 1. Formato: $60,000.00 (Coma para miles, punto para decimales)
             const formatter = new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: 'USD',
@@ -125,36 +164,30 @@ export function initializeFullApp() {
             
             auPriceEl.textContent = formatter.format(newPrice);
 
-            // 2. Aplicar color directamente al estilo (Ignora CSS y Tailwind)
             if (lastPrice > 0) {
                 if (newPrice > lastPrice) {
-                    auPriceEl.style.setProperty('color', '#34d399', 'important'); // Esmeralda
+                    auPriceEl.style.setProperty('color', '#34d399', 'important');
                 } else if (newPrice < lastPrice) {
-                    auPriceEl.style.setProperty('color', '#f87171', 'important'); // Rojo
+                    auPriceEl.style.setProperty('color', '#f87171', 'important');
                 }
-                // Si es igual, se queda con el color que ya tenía
             } else {
-                auPriceEl.style.color = '#ffffff'; // Blanco inicial
+                auPriceEl.style.color = '#ffffff';
             }
         }
 
-        // Actualizar porcentaje y flecha (si existen en el DOM)
         const percentEl = document.getElementById('price-percent');
         const iconEl = document.getElementById('price-icon');
         
         if (percentEl && data.priceChangePercent !== undefined) {
             const change = parseFloat(data.priceChangePercent);
             const isUp = change >= 0;
-            
             percentEl.textContent = `${Math.abs(change).toFixed(2)}%`;
             percentEl.style.color = isUp ? '#34d399' : '#f87171';
-            
             if (iconEl) {
                 iconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'}`;
                 iconEl.style.color = isUp ? '#34d399' : '#f87171';
             }
         }
-
         lastPrice = newPrice;
     });
 
@@ -164,14 +197,13 @@ export function initializeFullApp() {
         if (profitEl) {
             const val = parseFloat(data.totalProfit || 0);
             profitEl.textContent = `${val >= 0 ? '+' : '-'}$${Math.abs(val).toFixed(2)}`;
-            profitEl.className = `text-xl font-mono font-bold ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+            profitEl.style.setProperty('color', val >= 0 ? '#34d399' : '#f87171', 'important');
         }
     });
 
     // --- BALANCES ---
     socket.on('balance-real-update', (data) => {
         updateConnectionStatusBall(data.source);
-
         updateBotBalances([
             { currency: 'USDT', available: data.lastAvailableUSDT },
             { currency: 'BTC', available: data.lastAvailableBTC }
@@ -190,13 +222,11 @@ export function initializeFullApp() {
         });
     });
 
-    // --- LOGS DEL SISTEMA ---
+    // --- LOGS DEL SISTEMA (COLA DE ESPERA) ---
     socket.on('bot-log', (log) => {
-        const logEl = document.getElementById('log-message');
-        if (logEl) {
-            logEl.textContent = log.message;
-            logEl.className = `log-message text-xs font-medium animate-pulse log-${log.type || 'info'}`;
-        }
+        logQueue.push(log);
+        if (logQueue.length > 20) logQueue.shift(); // Evitar colas infinitas
+        if (!isProcessingLog) processNextLog();
     });
 
     setupNavTabs(initializeTab);
