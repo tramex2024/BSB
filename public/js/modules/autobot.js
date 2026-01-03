@@ -109,9 +109,11 @@ export async function initializeAutobotView() {
     await loadBalancesAndLimits();
     setupConfigListeners();
 
-    // 2. Gráfico TradingView
+    // 2. Gráfico TradingView (CORRECCIÓN: Añadido pequeño retardo para asegurar tamaño)
     try {
-        window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+        setTimeout(() => {
+            window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+        }, 200);
     } catch (e) { console.error("Error al inicializar TV:", e); }
 
     // 3. Lógica del botón START / STOP
@@ -168,8 +170,6 @@ export async function initializeAutobotView() {
 
         // Actualización de tabla de órdenes abierta
         socket.on('open-orders-update', (data) => {
-            // CORRECCIÓN: Solo actualizamos si el usuario está viendo 'opened'
-            // Esto evita que el socket borre el historial cargado por API en 'all' o 'filled'
             if (currentTab === 'opened') {
                 updateOpenOrdersTable(data, 'au-order-list', currentTab);
             }

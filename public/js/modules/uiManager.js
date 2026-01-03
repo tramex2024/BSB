@@ -1,8 +1,13 @@
 // public/js/modules/uiManager.js
-let lastPrice = 0; // Variable persistente para comparar el precio
 
 /**
- * Mapeo de estados a clases CSS
+ * Variable global para comparar el precio anterior con el nuevo
+ * y poder cambiar el color (verde si sube, rojo si baja).
+ */
+let lastPrice = 0;
+
+/**
+ * Mapeo de estados a clases CSS de Tailwind
  */
 const STATUS_COLORS = {
     RUNNING: 'text-emerald-400',
@@ -14,34 +19,32 @@ const STATUS_COLORS = {
 };
 
 /**
- * Actualiza la UI de forma estable
+ * Actualiza la UI de forma estable con los datos del Socket
  */
 export function updateBotUI(state) {
     if (!state) return;
 
-    // --- NUEVA LÓGICA: ACTUALIZACIÓN DE PRECIO CON COLORES ---
+    // --- 1. ACTUALIZACIÓN DE PRECIO CON COLORES ---
     const priceElement = document.getElementById('auprice');
     if (priceElement && state.price !== undefined && state.price !== null) {
         const currentPrice = Number(state.price);
         
+        // Solo actualizar si el precio ha cambiado
         if (currentPrice !== lastPrice) {
-            // Eliminar clases de color previas
             priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
             
-            // Determinar color según tendencia
             if (lastPrice !== 0) {
                 if (currentPrice > lastPrice) {
-                    priceElement.classList.add('text-emerald-400'); // Sube -> Verde
+                    priceElement.classList.add('text-emerald-400'); // Sube
                 } else if (currentPrice < lastPrice) {
-                    priceElement.classList.add('text-red-400');    // Baja -> Rojo
+                    priceElement.classList.add('text-red-400');    // Baja
                 } else {
-                    priceElement.classList.add('text-white');      // Igual -> Blanco
+                    priceElement.classList.add('text-white');      // Igual
                 }
             } else {
-                priceElement.classList.add('text-white'); // Primer precio cargado
+                priceElement.classList.add('text-white');
             }
 
-            // Actualizar el texto del precio
             priceElement.textContent = `$${currentPrice.toLocaleString(undefined, { 
                 minimumFractionDigits: 2, 
                 maximumFractionDigits: 2 
@@ -51,10 +54,11 @@ export function updateBotUI(state) {
         }
     }
 
-    // 1. Actualización de estados (solo si cambian)
+    // --- 2. ACTUALIZACIÓN DE ESTADOS LONG/SHORT ---
     updateStatusLabel('aubot-lstate', state.lstate);
     updateStatusLabel('aubot-sstate', state.sstate);
 
+    // --- 3. ACTUALIZACIÓN DE VALORES NUMÉRICOS ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
@@ -79,20 +83,21 @@ export function updateBotUI(state) {
 
         const rawValue = state[dataKey];
         
-        // --- FILTRO DE INTEGRIDAD MANTENIDO ---
+        // Filtro de integridad: no borrar datos si el socket manda un nulo
         if (rawValue === undefined || rawValue === null) continue;
 
         const value = Number(rawValue);
         if (isNaN(value)) continue;
 
-        // 2. Lógica de renderizado según tipo de dato
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
         } else if (['lnorder', 'snorder', 'lcycle', 'scycle'].includes(dataKey)) {
+            // Enteros
             if (element.textContent !== value.toString()) {
                 element.textContent = value.toFixed(0);
             }
         } else {
+            // Decimales (BTC 6, USDT 2)
             const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
             const decimals = isBtcField ? 6 : 2;
             const formatted = value.toLocaleString(undefined, { 
@@ -106,69 +111,56 @@ export function updateBotUI(state) {
         }
     }
 
-    // 3. Control de Botones e Inputs
+    // --- 4. CONTROL DE BOTONES E INPUTS ---
     const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     updateControlsState(isStopped);
 }
 
 /**
- * Formatea el beneficio de forma que el ancho sea predecible
+ * Formatea el profit con signo y colores
  */
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '-';
     const formatted = `${sign}$${Math.abs(value).toFixed(2)}`;
     
-    // Solo actualizar si el valor cambió
     if (element.textContent === formatted) return;
 
     element.textContent = formatted;
-
-    // Gestión de colores Emerald/Red
     element.classList.remove('text-emerald-400', 'text-red-400', 'text-gray-400');
+    
     if (value > 0) element.classList.add('text-emerald-400');
     else if (value < 0) element.classList.add('text-red-400');
     else element.classList.add('text-gray-400');
 }
 
 /**
- * Bloquea/Desbloquea ajustes sin impedir que se detenga el bot.
+ * Bloquea los ajustes mientras el bot corre, pero permite darle a STOP
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
     const autobotSettings = document.getElementById('autobot-settings');
     
-    // 1. Actualización visual del botón
     if (startStopButton) {
         const newText = isStopped ? 'START BOT' : 'STOP BOT';
         if (startStopButton.textContent !== newText) {
             startStopButton.textContent = newText;
-            
-            // Cambiamos colores: Emerald para Start, Red/Orange para Stop
             startStopButton.className = isStopped 
                 ? 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm' 
                 : 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm';
         }
     }
 
-    // 2. Bloqueo selectivo de inputs
     if (autobotSettings) {
-        // Buscamos todos los inputs y selects dentro del panel de configuración
         const inputs = autobotSettings.querySelectorAll('input, select');
         inputs.forEach(input => {
-            // El checkbox de "Stop at cycle end" DEBE quedar habilitado siempre
             if (input.id === 'au-stop-at-cycle-end') {
-                input.disabled = false;
+                input.disabled = false; // Siempre habilitado
                 return;
             }
             input.disabled = !isStopped;
             input.style.opacity = isStopped ? '1' : '0.5';
             input.style.cursor = isStopped ? 'auto' : 'not-allowed';
         });
-
-        // Aseguramos que el contenedor general no bloquee los clics, 
-        // para que el botón START/STOP (que está adentro) funcione.
-        autobotSettings.style.pointerEvents = 'auto'; 
-        autobotSettings.style.opacity = '1';
     }
 }
 
@@ -181,26 +173,18 @@ function updateStatusLabel(id, status) {
 }
 
 /**
- * Muestra notificaciones temporales en pantalla (Toasts)
+ * Toasts (Mensajes de éxito/error)
  */
 export function displayMessage(message, type = 'info') {
     const container = document.getElementById('message-container');
-    if (!container) {
-        console.warn("No se encontró el contenedor 'message-container' para mostrar el mensaje:", message);
-        return;
-    }
+    if (!container) return;
 
-    // Actualizar contenido y clases
     container.textContent = message;
-    
-    // Limpiar clases previas de tipo
     container.classList.remove('bg-blue-500', 'bg-red-500', 'bg-emerald-500', 'hidden');
     
-    // Asignar color según tipo (Ejemplo con Tailwind)
     const bgClass = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500');
     container.classList.add(bgClass, 'active');
 
-    // Auto-ocultar después de 4 segundos
     setTimeout(() => {
         container.classList.remove('active');
         container.classList.add('hidden');
