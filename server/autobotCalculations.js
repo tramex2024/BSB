@@ -108,11 +108,35 @@ function calculateInitialState(config, currentPrice) {
     };
 }
 
+/**
+ * Calcula la ganancia o pérdida flotante en tiempo real.
+ * @param {number} currentPrice - Precio actual de mercado.
+ * @param {number} ppc - Precio promedio de compra/venta.
+ * @param {number} ac - Cantidad acumulada de activos.
+ * @param {string} strategy - 'long' o 'short'.
+ */
+function calculatePotentialProfit(ppc, ac, currentPrice, feeRate = 0.001) {
+    const p = parseFloat(currentPrice);
+    const entry = parseFloat(ppc);
+    const qty = parseFloat(ac);
+    
+    if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
+
+    // Beneficio bruto (Long)
+    const grossProfit = (p - entry) * qty;
+    
+    // Estimación de comisión (entrada + salida)
+    const fees = (entry * qty * feeRate) + (p * qty * feeRate);
+
+    return grossProfit - fees;
+}
+
 module.exports = {
     parseNumber,
     calculateLongTargets,
     calculateLongCoverage,
     calculateShortTargets,
     calculateShortCoverage,
-    calculateInitialState
+    calculateInitialState,
+    calculatePotentialProfit
 };

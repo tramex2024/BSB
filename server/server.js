@@ -1,4 +1,5 @@
 // BSB/server/server.js
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -117,20 +118,31 @@ async function updateBotStateWithPrice(price) {
         const currentPrice = parseFloat(price);
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) return;
 
-        // Solo calculamos el profit potencial para que el usuario lo vea en tiempo real
         const FEE_RATE = botState.config?.long?.feeRate || 0.001; 
+
+        // 1. Cálculo Profit LONG
         const lprofit = calculatePotentialProfit(
             botState.lStateData?.ppc || 0, 
             botState.lStateData?.ac || 0, 
             currentPrice, 
-            FEE_RATE 
+            FEE_RATE
         );       
 
-        // Actualizamos la base de datos SOLO con el profit y la hora
-        // Quitamos el cálculo de cobertura de aquí para no saturar la DB
+        // 2. Cálculo Profit SHORT (Inverso)
+        // Nota: En short, el profit es (Entrada - Actual) * Cantidad
+        const s_ppc = botState.sStateData?.ppc || 0;
+        const s_ac = botState.sStateData?.ac || 0;
+        let sprofit = 0;
+        if (s_ac > 0) {
+            sprofit = (s_ppc - currentPrice) * s_ac;
+            const s_fees = (s_ppc * s_ac * FEE_RATE) + (currentPrice * s_ac * FEE_RATE);
+            sprofit -= s_fees;
+        }
+
+        // Actualizamos la base de datos con ambos
         const updatedBotState = await Autobot.findOneAndUpdate(
             { _id: botState._id },
-            { $set: { lprofit, lastUpdateTime: new Date() } },
+            { $set: { lprofit, sprofit, lastUpdateTime: new Date() } },
             { new: true, lean: true }
         );       
 
