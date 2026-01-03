@@ -26,46 +26,46 @@ exports.requestToken = async (req, res) => {
 
     try {
         let user = await User.findOne({ email });
-        // Generar un token de 6 dígitos numérico
-        const token = Math.floor(100000 + Math.random() * 900000).toString(); // Genera un número de 6 dígitos como string
-        const tokenExpires = Date.now() + 10 * 60 * 1000; // Token válido por 10 minutos
+        const token = Math.floor(100000 + Math.random() * 900000).toString();
+        const tokenExpires = Date.now() + 10 * 60 * 1000;
 
         if (!user) {
-            // Nuevo usuario, crea una entrada
             user = new User({ email, token, tokenExpires });
-            await user.save();
         } else {
-            // Usuario existente, actualiza el token
             user.token = token;
             user.tokenExpires = tokenExpires;
-            await user.save();
         }
+        await user.save();
 
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+            from: `"BSB Bot" <${process.env.EMAIL_USER}>`, // Remitente formateado
             to: email,
             subject: 'BSB - Your Login Token',
-            html: `<p>Your login token for BSB is: <strong>${token}</strong>. It is valid for 10 minutes.</p>`
+            html: `
+                <div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4;">
+                    <h2 style="color: #10b981;">BSB - Bitmart Spot Bots</h2>
+                    <p>Your login token is: <b style="font-size: 24px; color: #3b82f6;">${token}</b></p>
+                    <p>This code is valid for 10 minutes.</p>
+                </div>
+            `
         };
 
-        // Usa un callback para detectar errores de envío del correo.
-        await transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.error('Error al enviar el correo:', error);
-                // Si hay un error aquí, la respuesta al usuario aún será 200 para no dar pistas a un atacante,
-                // pero tú verás el error en el log del servidor.
-            } else {
-                console.log('Correo enviado:', info.response);
-            }
-        });
-
-        res.status(200).json({ message: 'A token has been sent to your email.' });
-
-    } catch (error) {
-        console.error('Error general en requestToken:', error);
-        res.status(500).json({ message: 'Server error. Please try again later.' });
-    }
-};
+        // CORRECCIÓN: O usamos await o usamos callback, no ambos.
+        try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Correo enviado con éxito:', info.response);
+    
+    // IMPORTANTE: Responder al frontend aquí dentro
+    return res.status(200).json({ 
+        success: true, 
+        message: 'A token has been sent to your email.' 
+    });
+} catch (mailError) {
+    console.error('❌ Error de Nodemailer:', mailError);
+    return res.status(500).json({ 
+        error: 'Error sending email. Please try again.' 
+    });
+}
 
 exports.verifyToken = async (req, res) => {
     const { email, token } = req.body;
