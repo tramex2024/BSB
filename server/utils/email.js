@@ -3,31 +3,44 @@
 // src/server/utils/email.js
 const nodemailer = require('nodemailer');
 
-async function sendTokenEmail(ignoredEmail, token) {
-    // Usamos las variables que YA ESTÁN en el panel de Render
-    // Esto evita que GitGuardian las detecte y Google las bloquee
-    const EMAIL_USER = process.env.EMAIL_USER;
-    const EMAIL_PASS = process.env.EMAIL_PASS; 
-    const EMAIL_TARGET = 'tramex2024@gmail.com'; 
+// Importante: No ponemos dotenv aquí para que use las variables de Render directamente
+async function sendTokenEmail(email, token) {
+    // Usamos exactamente los nombres de variables que tienes en el test
+    const user = process.env.EMAIL_USER;
+    const pass = process.env.EMAIL_PASS;
+    // Para esta fase de prueba, seguimos usando el target fijo como pediste
+    const target = 'tramex2024@gmail.com'; 
 
-    console.log("--- 🚀 Intento PASO 1.2 (Variables de Entorno) ---");
-    console.log("Usando remitente:", EMAIL_USER);
-    
+    console.log("--- 🏁 Iniciando utilidad basada en test-mail.js ---");
+    console.log("- De:", user);
+    console.log("- Para:", target);
+
+    // Configuración IDÉNTICA a tu test-mail.js
     const transporter = nodemailer.createTransport({
-        service: 'gmail', // Usamos 'service' para que Google acepte la conexión más fácil
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true, 
         auth: {
-            user: EMAIL_USER,
-            pass: EMAIL_PASS
+            user: user,
+            pass: pass
         }
     });
 
     const mailOptions = {
-        from: EMAIL_USER,
-        to: EMAIL_TARGET, 
-        subject: '🚀 PRUEBA AISLADA - PASO 1.2',
-        text: `Esta prueba usa variables de Render. Token: ${token}`
+        from: `"Nexus Labs Test" <${user}>`, 
+        to: target, 
+        subject: '🚀 Prueba de Envío BSB (Desde Aplicación)',
+        html: `
+            <div style="font-family: Arial, sans-serif; border: 1px solid #3b82f6; padding: 20px; border-radius: 10px;">
+                <h2 style="color: #3b82f6;">Verificación desde el Util</h2>
+                <p>Token generado: <strong>${token}</strong></p>
+                <p>Si recibes esto, la integración del util funciona.</p>
+            </div>
+        `
     };
 
+    // Verificación y envío igual que en el test
+    await transporter.verify();
     return transporter.sendMail(mailOptions);
 }
 
