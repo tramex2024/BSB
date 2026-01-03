@@ -1,6 +1,7 @@
 // public/js/modules/login.js
 
 import { requestToken, verifyToken } from './auth.js';
+import { updateLoginIcon } from './appEvents.js';
 
 const authModal = document.getElementById('auth-modal');
 const authForm = document.getElementById('auth-form');
@@ -48,10 +49,14 @@ export async function handleAuthSubmit(onSuccess) {
         else {
             const data = await verifyToken(email, token);
             if (data.token) {
+                // GUARDAR DATOS
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userEmail', email);
+                
+                // ACTUALIZAR UI
                 authMessage.textContent = 'Login Successful!';
                 authMessage.className = 'text-emerald-400 text-xs mt-2';
+                updateLoginIcon(); // Aquí es donde cambia el icono de la flecha
                 
                 if (onSuccess) onSuccess();
                 setTimeout(() => toggleAuthModal(false), 1500);
@@ -64,4 +69,5 @@ export async function handleAuthSubmit(onSuccess) {
         authMessage.textContent = 'Connection Error';
         authMessage.className = 'text-red-400 text-xs mt-2';
     }
+    // ELIMINÉ EL BLOQUE REPETIDO QUE ESTABA AQUÍ AFUERA
 }

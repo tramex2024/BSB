@@ -7,9 +7,16 @@ import { handleApiFormSubmit } from './api.js'; // Importación necesaria
 export function updateLoginIcon() {
     const icon = document.getElementById('login-logout-icon');
     if (!icon) return;
-    const isLoggedIn = !!localStorage.getItem('token');
-    icon.className = `fas ${isLoggedIn ? 'fa-sign-out-alt' : 'fa-sign-in-alt'} cursor-pointer hover:text-white transition`;
-    icon.title = isLoggedIn ? 'Cerrar Sesión' : 'Iniciar Sesión';
+    
+    const token = localStorage.getItem('token');
+    // Si hay token, flecha hacia afuera (sign-out). Si no, hacia adentro (sign-in).
+    if (token) {
+        icon.className = 'fas fa-sign-out-alt cursor-pointer hover:text-white transition';
+        icon.title = 'Cerrar Sesión';
+    } else {
+        icon.className = 'fas fa-sign-in-alt cursor-pointer hover:text-white transition';
+        icon.title = 'Iniciar Sesión';
+    }
 }
 
 export function initializeAppEvents(onLoginSuccess) {

@@ -3,6 +3,7 @@
 export function handleLogout() {
     localStorage.removeItem('token');
     localStorage.removeItem('userEmail');
-    // Forzamos recarga para limpiar sockets y estados del bot
-    window.location.reload();
+    // Al recargar la página, el updateLoginIcon() del main.js 
+    // se ejecutará y verá que no hay token, poniendo la flecha hacia adentro.
+    window.location.reload(); 
 }
