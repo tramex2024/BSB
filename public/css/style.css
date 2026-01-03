@@ -288,6 +288,11 @@ body {
     vertical-align: middle;
 }
 
+/* Esto asegura que el precio tenga un color inicial sin bloquear a Tailwind */
+#auprice {
+    color: white;
+}
+
 /* --- TRADINGVIEW --- */
 .chart-container {
     background: var(--dark-header-bg);
