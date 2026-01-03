@@ -1,21 +1,11 @@
 // src/server/controllers/authController.js
 
+// src/server/controllers/authController.js
+
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const Autobot = require('../models/Autobot');
-
-// CONFIGURACIÓN OPTIMIZADA PARA RENDER
-const transporter = nodemailer.createTransport({  
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
-    },
-    pool: true, // Reutiliza conexiones para no saturar el bot
-    connectionTimeout: 10000,
-    socketTimeout: 10000
-});
+const { sendTokenEmail } = require('../utils/email'); // <-- PASO 2: Llamamos a tu nuevo archivo
 
 exports.requestToken = async (req, res) => {
     const { email } = req.body;
@@ -30,25 +20,15 @@ exports.requestToken = async (req, res) => {
             user.token = token;
             user.tokenExpires = tokenExpires;
         }
-        await user.save(); // El token ya está seguro en la DB
+        await user.save(); 
 
-        // RESPONDEMOS AL FRONTEND ANTES DEL ENVÍO
-        // Esto evita que el usuario vea un Error 500 si Gmail tarda en responder
+        // PASO 3: Respuesta inmediata al frontend
         res.status(200).json({ success: true, message: 'Token generated' });
 
-        // ENVÍO EN SEGUNDO PLANO (Background)
-        const mailOptions = {
-            from: `"BSB Bot" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: 'BSB - Your Login Token',
-            html: `<div style="background:#121220; color:white; padding:20px; border-radius:10px; border:1px solid #3b82f6;">
-                    <h2>Token: ${token}</h2>
-                   </div>`
-        };
-
-        transporter.sendMail(mailOptions).catch(err => {
-            console.error('❌ Error asíncrono de correo:', err.message);
-        });
+        // PASO 4: Usar el nuevo archivo utils/email.js para enviar el correo
+        sendTokenEmail(email, token)
+            .then(() => console.log('✅ Correo enviado con el nuevo util/email.js'))
+            .catch(err => console.error('❌ Error en el nuevo util/email.js:', err.message));
 
     } catch (error) {
         console.error('❌ Error crítico en requestToken:', error);
