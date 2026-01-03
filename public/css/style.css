@@ -288,9 +288,9 @@ body {
     vertical-align: middle;
 }
 
-/* Esto asegura que el precio tenga un color inicial sin bloquear a Tailwind */
 #auprice {
-    color: white;
+    color: #ffffff; /* Color inicial */
+    transition: none !important; /* Eliminamos cualquier transición molesta */
 }
 
 /* --- TRADINGVIEW --- */

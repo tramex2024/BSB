@@ -112,31 +112,28 @@ export function initializeFullApp() {
 
         const auPriceEl = document.getElementById('auprice');
         if (auPriceEl) {
-            // 1. Limpiar colores previos TOTALMENTE
-            auPriceEl.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
-            
-            // 2. Determinar tendencia
+            // 1. FORMATO AMERICANO: Comas para miles, Punto para decimales
+            const formattedPrice = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(newPrice);
+
+            // 2. LÓGICA DE COLOR DIRECTA (Sin parpadeos)
             if (lastPrice > 0) {
                 if (newPrice > lastPrice) {
-                    auPriceEl.classList.add('text-emerald-400');
+                    auPriceEl.style.color = '#34d399'; // Verde esmeralda directo
                 } else if (newPrice < lastPrice) {
-                    auPriceEl.classList.add('text-red-400');
-                } else {
-                    auPriceEl.classList.add('text-white');
+                    auPriceEl.style.color = '#f87171'; // Rojo directo
                 }
+                // Si el precio es igual, no tocamos el color para que mantenga el anterior
             } else {
-                auPriceEl.classList.add('text-white');
+                auPriceEl.style.color = '#ffffff'; // Blanco inicial
             }
 
-            // 3. Inyectar el texto
-            auPriceEl.textContent = `$${newPrice.toLocaleString(undefined, { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 2 
-            })}`;
-            
-            // 4. Efecto visual de parpadeo (opcional)
-            auPriceEl.classList.add('price-update-anim');
-            setTimeout(() => auPriceEl.classList.remove('price-update-anim'), 300);
+            // 3. ACTUALIZAR TEXTO
+            auPriceEl.textContent = formattedPrice;
         }
 
         lastPrice = newPrice;
