@@ -6,11 +6,16 @@ const nodemailer = require('nodemailer');
 const Autobot = require('../models/Autobot');
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Usar el shortcut de nodemailer para Gmail
+    host: 'smtp-relay.gmail.com', // Servidor de relay (a veces menos restringido)
+    port: 587,
+    secure: false,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
-    }
+    },
+    connectionTimeout: 10000, // 10 segundos de espera
+    greetingTimeout: 10000,
+    socketTimeout: 10000
 });
 
 exports.requestToken = async (req, res) => {
