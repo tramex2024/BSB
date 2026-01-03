@@ -36,15 +36,19 @@ export async function handleAuthSubmit(onSuccess) {
     try {
         // PASO 1: Solicitar Token
         if (tokenSection.style.display === 'none') {
-            const data = await requestToken(email);
-            if (data.success || data.message) {
-                authMessage.textContent = 'Token sent to your email!';
-                authMessage.className = 'text-emerald-400 text-xs mt-2';
-                emailSection.style.display = 'none';
-                tokenSection.style.display = 'block';
-                authButton.textContent = 'Verify Code';
-            }
-        } 
+        const data = await requestToken(email);
+        
+        // CORRECCIÓN: Algunos servidores devuelven data.success, otros data.message
+        if (data && (data.success || data.message)) {
+            authMessage.textContent = 'Token sent to your email!';
+            authMessage.className = 'text-emerald-400 text-xs mt-2';
+            emailSection.style.display = 'none';
+            tokenSection.style.display = 'block';
+            authButton.textContent = 'Verify Code';
+        } else {
+            throw new Error(data.error || 'Failed to send token');
+        }
+    }
         // PASO 2: Verificar Token
         else {
             const data = await verifyToken(email, token);
@@ -66,8 +70,10 @@ export async function handleAuthSubmit(onSuccess) {
             }
         }
     } catch (error) {
-        authMessage.textContent = 'Connection Error';
-        authMessage.className = 'text-red-400 text-xs mt-2';
+        console.error('Login Error:', error);
+    authMessage.textContent = 'Error: ' + (error.message || 'Connection failed');
+    authMessage.className = 'text-red-400 text-xs mt-2';
+    authButton.textContent = 'Continue'; // <--- Devolvemos el texto al botón para reintentar
     }
     // ELIMINÉ EL BLOQUE REPETIDO QUE ESTABA AQUÍ AFUERA
 }
