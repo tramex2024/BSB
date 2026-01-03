@@ -5,16 +5,15 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const Autobot = require('../models/Autobot');
 
-const transporter = nodemailer.createTransport({
-    host: 'smtp-relay.gmail.com', // Servidor de relay (a veces menos restringido)
-    port: 587,
-    secure: false,
+// CONFIGURACIÓN OPTIMIZADA PARA RENDER
+const transporter = nodemailer.createTransport({  
+    service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+        pass: process.env.EMAIL_PASS 
     },
-    connectionTimeout: 10000, // 10 segundos de espera
-    greetingTimeout: 10000,
+    pool: true, // Reutiliza conexiones para no saturar el bot
+    connectionTimeout: 10000,
     socketTimeout: 10000
 });
 
@@ -31,30 +30,31 @@ exports.requestToken = async (req, res) => {
             user.token = token;
             user.tokenExpires = tokenExpires;
         }
-        await user.save();
+        await user.save(); // El token ya está seguro en la DB
 
+        // RESPONDEMOS AL FRONTEND ANTES DEL ENVÍO
+        // Esto evita que el usuario vea un Error 500 si Gmail tarda en responder
+        res.status(200).json({ success: true, message: 'Token generated' });
+
+        // ENVÍO EN SEGUNDO PLANO (Background)
         const mailOptions = {
-            from: `"BSB Authentication" <${process.env.EMAIL_USER}>`,
+            from: `"BSB Bot" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'BSB - Your Login Token',
-            html: `
-                <div style="font-family: sans-serif; padding: 20px; background-color: #121220; color: white; border-radius: 10px; border: 1px solid #3b82f6;">
-                    <h2 style="color: #3b82f6;">BSB Bot Access</h2>
-                    <p>Your login token is: <strong style="font-size: 26px; color: #10b981; letter-spacing: 2px;">${token}</strong></p>
-                    <p>This code is valid for 10 minutes.</p>
-                    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
-                    <p style="font-size: 11px; color: #888;">Security notice: If you did not request this code, please ignore this email.</p>
-                </div>
-            `
+            html: `<div style="background:#121220; color:white; padding:20px; border-radius:10px; border:1px solid #3b82f6;">
+                    <h2>Token: ${token}</h2>
+                   </div>`
         };
 
-        await transporter.sendMail(mailOptions);
-        console.log('✅ Token enviado con éxito a:', email);
-        return res.status(200).json({ success: true, message: 'Token sent!' });
+        transporter.sendMail(mailOptions).catch(err => {
+            console.error('❌ Error asíncrono de correo:', err.message);
+        });
 
     } catch (error) {
-        console.error('❌ Error en requestToken:', error);
-        res.status(500).json({ error: 'Server error or mail failed.' });
+        console.error('❌ Error crítico en requestToken:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Database error' });
+        }
     }
 };
 
@@ -83,7 +83,6 @@ exports.verifyToken = async (req, res) => {
         await user.save();
 
         return res.status(200).json({ 
-            message: 'Login successful!', 
             token: jwtToken,
             user: { id: user._id, email: user.email, autobotId: user.autobotId }
         });
