@@ -1,4 +1,5 @@
 // public/js/modules/uiManager.js
+let lastPrice = 0; // Variable persistente para comparar el precio
 
 /**
  * Mapeo de estados a clases CSS
@@ -17,6 +18,38 @@ const STATUS_COLORS = {
  */
 export function updateBotUI(state) {
     if (!state) return;
+
+    // --- NUEVA LÓGICA: ACTUALIZACIÓN DE PRECIO CON COLORES ---
+    const priceElement = document.getElementById('auprice');
+    if (priceElement && state.price !== undefined && state.price !== null) {
+        const currentPrice = Number(state.price);
+        
+        if (currentPrice !== lastPrice) {
+            // Eliminar clases de color previas
+            priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
+            
+            // Determinar color según tendencia
+            if (lastPrice !== 0) {
+                if (currentPrice > lastPrice) {
+                    priceElement.classList.add('text-emerald-400'); // Sube -> Verde
+                } else if (currentPrice < lastPrice) {
+                    priceElement.classList.add('text-red-400');    // Baja -> Rojo
+                } else {
+                    priceElement.classList.add('text-white');      // Igual -> Blanco
+                }
+            } else {
+                priceElement.classList.add('text-white'); // Primer precio cargado
+            }
+
+            // Actualizar el texto del precio
+            priceElement.textContent = `$${currentPrice.toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            })}`;
+            
+            lastPrice = currentPrice;
+        }
+    }
 
     // 1. Actualización de estados (solo si cambian)
     updateStatusLabel('aubot-lstate', state.lstate);
@@ -46,9 +79,7 @@ export function updateBotUI(state) {
 
         const rawValue = state[dataKey];
         
-        // --- CORRECCIÓN CRÍTICA: FILTRO DE INTEGRIDAD ---
-        // Si el valor es undefined o null, NO actualizamos. 
-        // Esto evita que el balance BTC o el Profit vuelvan a 0 si el socket manda un paquete parcial.
+        // --- FILTRO DE INTEGRIDAD MANTENIDO ---
         if (rawValue === undefined || rawValue === null) continue;
 
         const value = Number(rawValue);
@@ -58,12 +89,10 @@ export function updateBotUI(state) {
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
         } else if (['lnorder', 'snorder', 'lcycle', 'scycle'].includes(dataKey)) {
-            // Números enteros
             if (element.textContent !== value.toString()) {
                 element.textContent = value.toFixed(0);
             }
         } else {
-            // Lógica de precisión para USDT vs BTC
             const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
             const decimals = isBtcField ? 6 : 2;
             const formatted = value.toLocaleString(undefined, { 
@@ -71,7 +100,6 @@ export function updateBotUI(state) {
                 maximumFractionDigits: decimals 
             });
 
-            // Solo actualizamos el DOM si el texto cambió (Evita parpadeos de renderizado)
             if (element.textContent !== formatted) {
                 element.textContent = formatted;
             }

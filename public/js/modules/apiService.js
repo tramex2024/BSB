@@ -5,44 +5,33 @@ import { TRADE_SYMBOL_BITMART, BACKEND_URL } from '../main.js';
 
 /**
  * Recopila todos los datos de los campos de configuración.
- * Se han añadido protecciones para evitar errores si un ID no existe en el DOM.
+ * Se han añadido protecciones para evitar errores si un ID no existe temporalmente.
  */
 export function getBotConfiguration() {
-    // Función auxiliar para obtener valores numéricos de forma segura
-    const getNum = (id) => {
-        const el = document.getElementById(id);
-        return el ? parseFloat(el.value) || 0 : 0;
-    };
+    // Función auxiliar para leer valores numéricos de forma segura
+    const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
+    const getCheck = (id) => document.getElementById(id)?.checked || false;
 
-    // Capturamos valores comunes
-    const priceVar = getNum('auincrement'); // Distancia entre órdenes DCA (%)
-    const sizeVar = 1.0; // Valor por defecto si 'audecrement' no existe o se requiere fijo
-    const profitTrigger = getNum('autrigger'); // % Objetivo de salida
-
-    const stopAtCycleEndEl = document.getElementById('au-stop-at-cycle-end');
-    const stopAtCycleEnd = stopAtCycleEndEl ? stopAtCycleEndEl.checked : false;
-
-    // Estructura exacta que espera el Backend para no romper la lógica del bot
     const config = {
         symbol: TRADE_SYMBOL_BITMART,
         long: {
             enabled: true,
             amountUsdt: getNum('auamount-usdt'),
-            purchaseUsdt: 5.0, // Valor base de seguridad para la primera orden
-            price_var: priceVar,
-            size_var: sizeVar,
-            trigger: profitTrigger,
+            purchaseUsdt: getNum('aupurchase-usdt'),
+            price_var: getNum('auincrement'),
+            size_var: getNum('audecrement'),
+            trigger: getNum('autrigger'),
         },
         short: {
             enabled: true,
             amountBtc: getNum('auamount-btc'),
-            sellBtc: 0.0001, // Valor base de seguridad
-            price_var: priceVar,
-            size_var: sizeVar,
-            trigger: profitTrigger,
+            sellBtc: getNum('aupurchase-btc'),
+            price_var: getNum('auincrement'),
+            size_var: getNum('audecrement'),
+            trigger: getNum('autrigger'),
         },
         options: {
-            stopAtCycleEnd: stopAtCycleEnd,
+            stopAtCycleEnd: getCheck('au-stop-at-cycle-end'),
         },
     };
     return config;
@@ -56,16 +45,15 @@ export async function sendConfigToBackend() {
         const config = getBotConfiguration();
         const token = localStorage.getItem('token');
         
-        if (!token) return; // Silencioso para no molestar al usuario en auto-guardado
+        if (!token) return;
 
-        // Usamos la ruta que el servidor de Render tiene mapeada
         const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ config }),
+            body: JSON.stringify({ config }), // El backend espera { config: {...} }
         });
 
         if (!response.ok) {
@@ -81,7 +69,6 @@ export async function sendConfigToBackend() {
  * Envía una solicitud para iniciar o detener el bot.
  */
 export async function toggleBotState(isRunning, config) {
-    // Ajuste de rutas para que coincidan con el controlador del Bot
     const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
     const token = localStorage.getItem('token');
 
@@ -98,13 +85,14 @@ export async function toggleBotState(isRunning, config) {
         const data = await response.json();
         
         if (data.success) {
-            displayMessage(`Bot ${isRunning ? 'stopped' : 'started'} successfully.`, 'success');
+            // Mensaje localizado y claro
+            displayMessage(`Bot ${isRunning ? 'detenido' : 'iniciado'} correctamente.`, 'success');
         } else {
             displayMessage(`Error: ${data.message}`, 'error');
         }
     } catch (error) {
         console.error('Error de red en toggleBotState:', error);
-        displayMessage('Connection failed.', 'error');
+        displayMessage('Error de conexión con el servidor.', 'error');
     }
 }
 
