@@ -1,10 +1,10 @@
 // public/js/modules/uiManager.js
 
 /**
- * Mapeo de estados a clases CSS de Tailwind para indicadores de estado
+ * Mapeo de estados a clases CSS
  */
 const STATUS_COLORS = {
-    RUNNING: 'text-green-400',
+    RUNNING: 'text-emerald-400',
     STOPPED: 'text-red-400',
     BUYING: 'text-blue-400',
     SELLING: 'text-yellow-400',
@@ -13,11 +13,12 @@ const STATUS_COLORS = {
 };
 
 /**
- * Actualiza todos los indicadores numéricos y estados del bot en la interfaz
+ * Actualiza la UI de forma estable
  */
 export function updateBotUI(state) {
     if (!state) return;
 
+    // 1. Actualización de estados (solo si cambian)
     updateStatusLabel('aubot-lstate', state.lstate);
     updateStatusLabel('aubot-sstate', state.sstate);
 
@@ -44,101 +45,91 @@ export function updateBotUI(state) {
         if (!element) continue;
 
         const rawValue = state[dataKey];
-        const value = (rawValue !== undefined && rawValue !== null) ? Number(rawValue) : NaN;
+        
+        // --- CORRECCIÓN CRÍTICA: FILTRO DE INTEGRIDAD ---
+        // Si el valor es undefined o null, NO actualizamos. 
+        // Esto evita que el balance BTC o el Profit vuelvan a 0 si el socket manda un paquete parcial.
+        if (rawValue === undefined || rawValue === null) continue;
 
-        element.classList.remove('text-green-500', 'text-red-500', 'text-gray-400');
+        const value = Number(rawValue);
+        if (isNaN(value)) continue;
 
+        // 2. Lógica de renderizado según tipo de dato
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
         } else if (['lnorder', 'snorder', 'lcycle', 'scycle'].includes(dataKey)) {
-            element.textContent = isNaN(value) ? '0' : value.toFixed(0);
+            // Números enteros
+            if (element.textContent !== value.toString()) {
+                element.textContent = value.toFixed(0);
+            }
         } else {
-            // LÓGICA DE PRECISIÓN DINÁMICA
-            // Si el ID contiene 'btc' o es el balance de BTC real, usamos 6 decimales.
+            // Lógica de precisión para USDT vs BTC
             const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
             const decimals = isBtcField ? 6 : 2;
-            
-            element.textContent = isNaN(value) 
-                ? (isBtcField ? '0.000000' : '0.00') 
-                : value.toLocaleString(undefined, { 
-                    minimumFractionDigits: decimals, 
-                    maximumFractionDigits: decimals 
-                });
+            const formatted = value.toLocaleString(undefined, { 
+                minimumFractionDigits: decimals, 
+                maximumFractionDigits: decimals 
+            });
+
+            // Solo actualizamos el DOM si el texto cambió (Evita parpadeos de renderizado)
+            if (element.textContent !== formatted) {
+                element.textContent = formatted;
+            }
         }
     }
 
-    // 3. Control de Botón e Inputs
-    // El botón debe permitir detener el bot si CUALQUIERA de los dos está corriendo
+    // 3. Control de Botones e Inputs
     const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     updateControlsState(isStopped);
 }
 
 /**
- * Actualiza las etiquetas de estado con el color correspondiente
- */
-function updateStatusLabel(id, status) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = status || 'OFFLINE';
-    el.className = `font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
-}
-
-/**
- * Aplica formato de color y símbolo de moneda a los campos de beneficio
+ * Formatea el beneficio de forma que el ancho sea predecible
  */
 function formatProfit(element, value) {
-    if (isNaN(value)) {
-        element.textContent = '$0.00';
-        element.classList.add('text-gray-400');
-        return;
-    }
-    
-    // Colores: usamos las mismas clases que en el resto de la app
-    if (value > 0) element.classList.add('text-green-500');
-    else if (value < 0) element.classList.add('text-red-500');
-    else element.classList.add('text-gray-400');
-    
-    // FORMATO UNIFICADO: Signo ($) Valor Absoluto
-    // Esto evita que aparezca "$-5.00" y lo convierte en "-$5.00"
     const sign = value >= 0 ? '+' : '-';
-    element.textContent = `${sign}$${Math.abs(value).toFixed(2)}`;
+    const formatted = `${sign}$${Math.abs(value).toFixed(2)}`;
+    
+    // Solo actualizar si el valor cambió
+    if (element.textContent === formatted) return;
+
+    element.textContent = formatted;
+
+    // Gestión de colores Emerald/Red
+    element.classList.remove('text-emerald-400', 'text-red-400', 'text-gray-400');
+    if (value > 0) element.classList.add('text-emerald-400');
+    else if (value < 0) element.classList.add('text-red-400');
+    else element.classList.add('text-gray-400');
 }
 
 /**
- * Bloquea o desbloquea los ajustes según si el bot está corriendo
+ * Bloquea/Desbloquea ajustes sin causar saltos visuales
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
     const autobotSettings = document.getElementById('autobot-settings');
 
     if (startStopButton) {
-        startStopButton.textContent = isStopped ? 'START BOT' : 'STOP BOT';
-        startStopButton.className = isStopped ? 'start-btn w-full py-3 rounded-lg font-bold' : 'stop-btn w-full py-3 rounded-lg font-bold';
+        const newText = isStopped ? 'START BOT' : 'STOP BOT';
+        if (startStopButton.textContent !== newText) {
+            startStopButton.textContent = newText;
+            startStopButton.className = isStopped 
+                ? 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all' 
+                : 'flex-1 bg-orange-600 hover:bg-orange-700 py-3 rounded-xl font-bold transition-all';
+        }
     }
 
     if (autobotSettings) {
-        const inputs = autobotSettings.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            // Permitimos cambiar solo ciertos parámetros en caliente si fuera necesario, 
-            // pero por defecto bloqueamos todo por seguridad.
-            input.disabled = !isStopped;
-            input.parentElement.style.opacity = isStopped ? '1' : '0.6';
-        });
+        // En lugar de iterar cada vez, aplicamos una clase al contenedor
+        autobotSettings.style.pointerEvents = isStopped ? 'auto' : 'none';
+        autobotSettings.style.opacity = isStopped ? '1' : '0.6';
     }
 }
 
-/**
- * Muestra notificaciones temporales en pantalla
- */
-export function displayMessage(message, type = 'info') {
-    const container = document.getElementById('message-container');
-    if (!container) return;
-
-    // Crear elemento de notificación si no existe un sistema de toast
-    container.textContent = message;
-    container.className = `message-toast ${type} active`; // Asegúrate de tener estas clases en CSS
-
-    setTimeout(() => {
-        container.classList.remove('active');
-    }, 4000);
+function updateStatusLabel(id, status) {
+    const el = document.getElementById(id);
+    if (!el || !status || el.textContent === status) return;
+    
+    el.textContent = status;
+    el.className = `font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
