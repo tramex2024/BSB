@@ -5,16 +5,11 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const Autobot = require('../models/Autobot');
 
-const transporter = nodemailer.createTransport({  
-    host: 'smtp.gmail.com', 
-    port: 587,             // Cambiado de 465 a 587
-    secure: false,         // Cambiado de true a false (requerido para el puerto 587)
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // Usar el shortcut de nodemailer para Gmail
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
-    },
-    tls: {
-        rejectUnauthorized: false // Esto ayuda a evitar bloqueos de certificados en VPS
+        pass: process.env.EMAIL_PASS
     }
 });
 
