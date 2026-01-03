@@ -7,11 +7,14 @@ const Autobot = require('../models/Autobot');
 
 const transporter = nodemailer.createTransport({  
     host: 'smtp.gmail.com', 
-    port: 465, 
-    secure: true, 
+    port: 587,             // Cambiado de 465 a 587
+    secure: false,         // Cambiado de true a false (requerido para el puerto 587)
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS 
+    },
+    tls: {
+        rejectUnauthorized: false // Esto ayuda a evitar bloqueos de certificados en VPS
     }
 });
 
