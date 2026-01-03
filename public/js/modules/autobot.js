@@ -11,7 +11,7 @@ let maxBtcBalance = 0;
 let currentTab = 'opened';
 
 /**
- * Actualiza los balances máximos en la UI
+ * Actualiza los balances máximos en la UI (labels de los inputs)
  */
 function updateMaxBalanceDisplay(currency, balance) {
     const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
@@ -46,6 +46,7 @@ function validateAmountInput(inputId, maxLimit, currency) {
 
 /**
  * Listeners para guardar configuración automáticamente
+ * Se incluyen todos los campos necesarios para la estrategia DCA
  */
 function setupConfigListeners() {
     const configIds = [
@@ -61,9 +62,11 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
+            // Validaciones específicas de saldo
             if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
             if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
             
+            // Guardado automático en el backend
             sendConfigToBackend();
         });
     });
@@ -82,36 +85,38 @@ async function loadBalancesAndLimits() {
             updateMaxBalanceDisplay('BTC', maxBtcBalance);
         }
     } catch (error) {
-        console.error("Error límites:", error);
+        console.error("Error cargando límites iniciales:", error);
     }
 }
 
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
+    // 1. Inicialización de datos y eventos
     await loadBalancesAndLimits();
     setupConfigListeners();
 
-    // Gráfico
+    // 2. Gráfico TradingView
     try {
         window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-    } catch (e) { console.error("TV Error:", e); }
+    } catch (e) { console.error("Error al inicializar TV:", e); }
 
-    // START / STOP Logic
+    // 3. Lógica del botón START / STOP
     const startBtn = document.getElementById('austart-btn');
     startBtn?.addEventListener('click', async () => {
         const isRunning = startBtn.textContent.includes('STOP');
         
         if (!isRunning) {
+            // Validar antes de arrancar
             const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
             const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-            if (!isUsdtOk || !isBtcOk) return displayMessage('Verifica saldos', 'error');
+            if (!isUsdtOk || !isBtcOk) return displayMessage('Verifica los saldos configurados', 'error');
         }
         
         await toggleBotState(isRunning, getBotConfiguration());
     });
 
-    // Manejo de Pestañas
+    // 4. Navegación de Pestañas (Historial)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -127,11 +132,12 @@ export async function initializeAutobotView() {
         });
     });
 
-    // Carga inicial
+    // 5. Carga inicial de órdenes (Abiertas por defecto)
     fetchOrders('opened', auOrderList);
 
-    // Socket Listeners
+    // 6. Configuración de Sockets (Tiempo Real)
     if (socket) {
+        // Actualización de balances máximos permitidos
         socket.on('balance-real-update', (data) => {
             maxUsdtBalance = parseFloat(data.lastAvailableUSDT) || 0;
             maxBtcBalance = parseFloat(data.lastAvailableBTC) || 0;
@@ -139,13 +145,17 @@ export async function initializeAutobotView() {
             updateMaxBalanceDisplay('BTC', maxBtcBalance);
         });
 
+        // Actualización integral de la UI (precios, ganancias, estados Long/Short)
         socket.on('bot-state-update', (state) => {
-            // delegamos la actualización masiva al uiManager para evitar saltos visuales
             updateBotUI(state); 
         });
 
+        // Actualización de tabla de órdenes
         socket.on('open-orders-update', (data) => {
-            if (currentTab === 'opened' || currentTab === 'all') {
+            // CORRECCIÓN CRÍTICA: Solo actualizamos vía socket si estamos en la pestaña 'opened'.
+            // Si estamos en 'all', 'filled' o 'cancelled', dejamos que la API maneje la lista
+            // para evitar que el socket "limpie" el historial.
+            if (currentTab === 'opened') {
                 updateOpenOrdersTable(data, 'au-order-list', currentTab);
             }
         });

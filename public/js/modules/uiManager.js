@@ -103,26 +103,44 @@ function formatProfit(element, value) {
 }
 
 /**
- * Bloquea/Desbloquea ajustes sin causar saltos visuales
+ * Bloquea/Desbloquea ajustes sin impedir que se detenga el bot.
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
     const autobotSettings = document.getElementById('autobot-settings');
-
+    
+    // 1. Actualización visual del botón
     if (startStopButton) {
         const newText = isStopped ? 'START BOT' : 'STOP BOT';
         if (startStopButton.textContent !== newText) {
             startStopButton.textContent = newText;
+            
+            // Cambiamos colores: Emerald para Start, Red/Orange para Stop
             startStopButton.className = isStopped 
-                ? 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all' 
-                : 'flex-1 bg-orange-600 hover:bg-orange-700 py-3 rounded-xl font-bold transition-all';
+                ? 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm' 
+                : 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm';
         }
     }
 
+    // 2. Bloqueo selectivo de inputs
     if (autobotSettings) {
-        // En lugar de iterar cada vez, aplicamos una clase al contenedor
-        autobotSettings.style.pointerEvents = isStopped ? 'auto' : 'none';
-        autobotSettings.style.opacity = isStopped ? '1' : '0.6';
+        // Buscamos todos los inputs y selects dentro del panel de configuración
+        const inputs = autobotSettings.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            // El checkbox de "Stop at cycle end" DEBE quedar habilitado siempre
+            if (input.id === 'au-stop-at-cycle-end') {
+                input.disabled = false;
+                return;
+            }
+            input.disabled = !isStopped;
+            input.style.opacity = isStopped ? '1' : '0.5';
+            input.style.cursor = isStopped ? 'auto' : 'not-allowed';
+        });
+
+        // Aseguramos que el contenedor general no bloquee los clics, 
+        // para que el botón START/STOP (que está adentro) funcione.
+        autobotSettings.style.pointerEvents = 'auto'; 
+        autobotSettings.style.opacity = '1';
     }
 }
 
