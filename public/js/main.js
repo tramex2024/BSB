@@ -106,34 +106,53 @@ export function initializeFullApp() {
     socket.on('disconnect', () => updateConnectionStatusBall('DISCONNECTED'));
 
     // --- MANEJO DE PRECIO EN TIEMPO REAL (LÓGICA UNIFICADA) ---
+    // --- MANEJO DE PRECIO EN TIEMPO REAL ---
     socket.on('marketData', (data) => {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
 
+        // BUSCAMOS EL ELEMENTO EN CADA EJECUCIÓN (Vital para HTML dinámico)
         const auPriceEl = document.getElementById('auprice');
+        
         if (auPriceEl) {
-            // 1. FORMATO AMERICANO: Comas para miles, Punto para decimales
-            const formattedPrice = new Intl.NumberFormat('en-US', {
+            // 1. Formato: $60,000.00 (Coma para miles, punto para decimales)
+            const formatter = new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: 'USD',
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
-            }).format(newPrice);
+            });
+            
+            auPriceEl.textContent = formatter.format(newPrice);
 
-            // 2. LÓGICA DE COLOR DIRECTA (Sin parpadeos)
+            // 2. Aplicar color directamente al estilo (Ignora CSS y Tailwind)
             if (lastPrice > 0) {
                 if (newPrice > lastPrice) {
-                    auPriceEl.style.color = '#34d399'; // Verde esmeralda directo
+                    auPriceEl.style.setProperty('color', '#34d399', 'important'); // Esmeralda
                 } else if (newPrice < lastPrice) {
-                    auPriceEl.style.color = '#f87171'; // Rojo directo
+                    auPriceEl.style.setProperty('color', '#f87171', 'important'); // Rojo
                 }
-                // Si el precio es igual, no tocamos el color para que mantenga el anterior
+                // Si es igual, se queda con el color que ya tenía
             } else {
                 auPriceEl.style.color = '#ffffff'; // Blanco inicial
             }
+        }
 
-            // 3. ACTUALIZAR TEXTO
-            auPriceEl.textContent = formattedPrice;
+        // Actualizar porcentaje y flecha (si existen en el DOM)
+        const percentEl = document.getElementById('price-percent');
+        const iconEl = document.getElementById('price-icon');
+        
+        if (percentEl && data.priceChangePercent !== undefined) {
+            const change = parseFloat(data.priceChangePercent);
+            const isUp = change >= 0;
+            
+            percentEl.textContent = `${Math.abs(change).toFixed(2)}%`;
+            percentEl.style.color = isUp ? '#34d399' : '#f87171';
+            
+            if (iconEl) {
+                iconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'}`;
+                iconEl.style.color = isUp ? '#34d399' : '#f87171';
+            }
         }
 
         lastPrice = newPrice;

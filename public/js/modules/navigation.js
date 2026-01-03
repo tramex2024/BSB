@@ -6,73 +6,51 @@ export function setupNavTabs(callback) {
     const mainContent = document.getElementById('main-content');
     
     async function loadContent(tabName) {
-        // --- LÓGICA DE CONTROL DE ACCESO ---
         const token = localStorage.getItem('token');
         
+        // --- CONTROL DE ACCESO ---
         if (tabName !== 'dashboard' && !token) {
-            console.warn('Acceso denegado. El usuario no está autenticado.');
-            
-            // 1. Revertir la clase active a la pestaña anterior o a dashboard
             navTabs.forEach(t => t.classList.remove('active'));
-            const dashboardTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
-            if (dashboardTab) dashboardTab.classList.add('active');
-
-            // 2. Mostrar modal y mensaje
+            document.querySelector('.nav-tab[data-tab="dashboard"]')?.classList.add('active');
             toggleAuthModal(true);
-            displayLogMessage('Acceso denegado. Por favor, inicia sesión.', 'error', document.getElementById('log-message'));
-            
-            // Si el dashboard no estaba cargado, cargarlo por defecto
-            if (mainContent.innerHTML === '') loadContent('dashboard');
+            displayLogMessage('Acceso denegado.', 'error', document.getElementById('log-message'));
             return; 
         }
 
         try {
-            // Limpiar contenido actual
-            mainContent.innerHTML = '<div class="p-10 text-center">Loading...</div>';
-            
-            const response = await fetch(`/${tabName}.html`);
-            if (!response.ok) throw new Error(`Failed to load ${tabName}.html`);
-            
+            // 1. Cargar el HTML
+            const response = await fetch(`./${tabName}.html`);
+            if (!response.ok) throw new Error(`Error: ${tabName}`);
             const htmlContent = await response.text();
+            
+            // 2. Inyectar en el DOM
             mainContent.innerHTML = htmlContent;
             
-            // Actualizar URL sin recargar
-            const newUrl = `${window.location.origin}${window.location.pathname}?#${tabName}`;
-            window.history.pushState({ path: newUrl }, '', newUrl);
-
-            // Callback para inicializar lógica específica (JS de cada pestaña)
+            // 3. Notificar al sistema que la vista cambió (Esto reconecta el JS)
             if (callback) {
-                callback(tabName);
+                await callback(tabName);
             }
+
+            // 4. Actualizar URL
+            window.location.hash = tabName;
+
         } catch (error) {
-            console.error('Error loading content:', error);
-            mainContent.innerHTML = `<p class="text-red-500 p-4">Error loading page content. Please try again.</p>`;
-            displayLogMessage(`Error loading content for ${tabName}.`, 'error', document.getElementById('log-message'));
+            console.error('Error:', error);
+            mainContent.innerHTML = `<p class="p-4 text-red-500">Error cargando ${tabName}</p>`;
         }
     }
 
-    // Event Listeners para los clics en el menú
     navTabs.forEach(tab => {
-        tab.addEventListener('click', function(event) {
-            event.preventDefault();
-            const tabName = this.dataset.tab;
-
-            // Gestión visual de la pestaña activa
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            const tabName = tab.dataset.tab;
             navTabs.forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-            
+            tab.classList.add('active');
             loadContent(tabName);
         });
     });
 
-    // --- CARGA INICIAL AL REFRESCAR ---
-    const hash = window.location.hash.replace('#', '') || 'dashboard';
-    const initialTab = document.querySelector(`.nav-tab[data-tab="${hash}"]`) || 
-                       document.querySelector('.nav-tab[data-tab="dashboard"]');
-
-    if (initialTab) {
-        navTabs.forEach(t => t.classList.remove('active'));
-        initialTab.classList.add('active');
-        loadContent(initialTab.dataset.tab);
-    }
+    // Carga inicial basada en hash o dashboard
+    const initialTab = window.location.hash.replace('#', '') || 'dashboard';
+    loadContent(initialTab);
 }
