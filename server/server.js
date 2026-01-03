@@ -17,6 +17,9 @@ const { calculateLongCoverage, calculatePotentialProfit } = require('./autobotCa
 
 // Modelos
 const Autobot = require('./models/Autobot');
+const MarketSignal = require('./models/MarketSignal'); // El modelo que creamos arriba
+
+const analyzer = require('./src/bitmart_indicator_analyzer'); // Tu analizador de RSI
 
 // Routers
 const authRoutes = require('./routes/authRoutes');
@@ -137,6 +140,8 @@ async function updateBotStateWithPrice(price) {
     }
 }
 
+let lastProcessedMinute = -1; // Para saber cuándo ya calculamos el RSI de este minuto
+
 // --- WEBSOCKET BITMART (PRECIOS Y MARKET DATA) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 function setupMarketWS(io) {
@@ -154,22 +159,40 @@ function setupMarketWS(io) {
                 const ticker = parsed.data[0];
                 const price = parseFloat(ticker.last_price);
                 
-                // --- NUEVO: Cálculo de cambio porcentual del mercado (24h) ---
-                const open24h = parseFloat(ticker.open_24h);
-                const priceChangePercent = open24h > 0 
-                    ? ((price - open24h) / open24h) * 100 
-                    : 0;
+                // --- LÓGICA DE ANÁLISIS GLOBAL (Cada minuto) ---
+                const now = new Date();
+                const currentMinute = now.getMinutes();
 
-                // Emitir precio Y porcentaje de cambio de mercado para "auprice"
-                io.emit('marketData', { 
-                    price, 
-                    priceChangePercent 
-                });
-                
+                if (currentMinute !== lastProcessedMinute) {
+                    lastProcessedMinute = currentMinute;
+                    
+                    // Ejecutamos el análisis con el precio actual
+                    const analysis = await analyzer.runAnalysis(price);
+                    
+                    // Guardamos o actualizamos en MongoDB
+                    await MarketSignal.findOneAndUpdate(
+                        { symbol: 'BTC_USDT' },
+                        {
+                            currentRSI: analysis.currentRSI || 0,
+                            prevRSI: analysis.lastCompleteCandleRSI || 0, // RSI de la vela que acaba de cerrar
+                            signal: analysis.action,
+                            reason: analysis.reason,
+                            lastUpdate: new Date()
+                        },
+                        { upsert: true, new: true } // Upsert crea el registro si no existe
+                    );
+                    
+                    // Opcional: Avisar por socket a todos los usuarios conectados
+                    io.emit('market-signal-update', analysis);
+                    console.log(`[GLOBAL-ANALYZER] DB actualizada: RSI ${analysis.currentRSI}`);
+                }
+
+                // ... aquí sigue tu lógica actual de marketData y botCycle ...
+                io.emit('marketData', { price, priceChangePercent: /* tu lógica */ });
                 await updateBotStateWithPrice(price);
                 await autobotLogic.botCycle(price);
             }
-        } catch (e) { console.error("Error Market WS Message:", e); }
+        } catch (e) { console.error("Error en el ciclo global:", e); }
     });
 
     ws.on('close', () => {

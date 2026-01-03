@@ -1,34 +1,46 @@
 // BSB/server/src/au/states/long/LRunning.js (ETAPA 1: Detector de Señal)
 
-const analyzer = require('../../../bitmart_indicator_analyzer');
-// Se elimina la dependencia de placeFirstBuyOrder
+// Importamos el modelo de la señal global para poder leer la DB
+const MarketSignal = require('../../../../models/MarketSignal');
 
 async function run(dependencies) {
-    const { botState, currentPrice, config, log, updateBotState } = dependencies;
+    const { botState, log, updateBotState } = dependencies;
     
-    // 💡 1. VERIFICACIÓN DE POSICIÓN (Candado de Entrada)
-    if (botState.lStateData.orderCountInCycle > 0) {
-        log("Posición detectada (orderCountInCycle > 0). Transicionando a BUYING.", 'info');
-        // Transición directa a BUYING para que maneje la posición existente.
+    // 💡 1. VERIFICACIÓN DE POSICIÓN (Candado de Seguridad)
+    // Si ya tenemos órdenes en el ciclo, no deberíamos estar en RUNNING, sino en BUYING
+    if (botState.lStateData && botState.lStateData.orderCountInCycle > 0) {
+        log("[L]: Posición detectada. Transicionando a BUYING para gestionar cobertura.", 'info');
         await updateBotState('BUYING', 'long'); 
-        return; // Detener la ejecución de RUNNING
+        return; 
     }
 
-    log("[L]: RUNNING. Esperando señal de compra.", 'info');
+    // 💡 2. CONSULTA A LA "PIZARRA" GLOBAL (MongoDB)
+    try {
+        // Buscamos la última señal generada por el servidor
+        const globalSignal = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
 
-    // Si no hay posición, procedemos con el análisis.
-    const analysisResult = await analyzer.runAnalysis(currentPrice);
+        if (!globalSignal) {
+            log("[L]: Esperando a que el servidor genere la primera señal de mercado...", 'warning');
+            return; // Si no hay señal en la DB, no hacemos nada y esperamos al siguiente tick
+        }
 
-    if (analysisResult.action === 'BUY') { 
-        log(`¡Señal de COMPRA detectada! Razón: ${analysisResult.reason}`, 'success');
-        
-        // 🛑 CAMBIO CRÍTICO: Eliminamos toda la lógica de validación de fondos y colocación de orden.
-        // Simplemente transicionamos a BUYING para que este estado inicie el proceso de compra.
-        log('Señal de COMPRA recibida. Transicionando a BUYING para iniciar la orden.', 'info');
-        await updateBotState('BUYING', 'long'); 
-        
-        // CRÍTICO: Detener este ciclo para que el bot pase a BUYING en la siguiente iteración.
-        return; 
+        // Mostramos en el log lo que estamos leyendo de la DB para monitoreo
+        // Esto te ayudará a ver en los logs si el bot está "viendo" el RSI
+        log(`[L]: Vigilando... RSI: ${globalSignal.currentRSI.toFixed(2)} | Señal: ${globalSignal.signal}`, 'info');
+
+        // 💡 3. LÓGICA DE ACTIVACIÓN
+        if (globalSignal.signal === 'BUY') { 
+            log(`¡ALERTA! Señal de COMPRA detectada en DB. Razón: ${globalSignal.reason}`, 'success');
+            
+            log('[L]: Iniciando ciclo de compra. Transicionando a BUYING...', 'info');
+            
+            // Cambiamos el estado del bot para que el archivo LBuying.js tome el control
+            await updateBotState('BUYING', 'long'); 
+            return; 
+        }
+
+    } catch (error) {
+        log(`[L]: ❌ Error al consultar la señal global en DB: ${error.message}`, 'error');
     }
 }
 
