@@ -35,10 +35,10 @@ export function updateBotUI(state) {
             
             if (lastPrice !== 0) {
                 if (currentPrice > lastPrice) {
-    priceElement.style.color = "#10b981"; // Verde Esmeralda directo
-} else if (currentPrice < lastPrice) {
-    priceElement.style.color = "#f87171"; // Rojo directo
-} else {
+                    priceElement.classList.add('text-emerald-400'); // Sube
+                } else if (currentPrice < lastPrice) {
+                    priceElement.classList.add('text-red-400');    // Baja
+                } else {
                     priceElement.classList.add('text-white');      // Igual
                 }
             } else {
