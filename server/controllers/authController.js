@@ -5,7 +5,6 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const Autobot = require('../models/Autobot');
 
-// Configuración de Nodemailer
 const transporter = nodemailer.createTransport({  
     host: 'smtp.gmail.com', 
     port: 465, 
@@ -18,11 +17,10 @@ const transporter = nodemailer.createTransport({
 
 exports.requestToken = async (req, res) => {
     const { email } = req.body;
-
     try {
         let user = await User.findOne({ email });
         const token = Math.floor(100000 + Math.random() * 900000).toString();
-        const tokenExpires = Date.now() + 10 * 60 * 1000; // 10 minutos
+        const tokenExpires = Date.now() + 10 * 60 * 1000;
 
         if (!user) {
             user = new User({ email, token, tokenExpires });
@@ -33,37 +31,32 @@ exports.requestToken = async (req, res) => {
         await user.save();
 
         const mailOptions = {
-            from: `"BSB Bot" <${process.env.EMAIL_USER}>`,
+            from: `"BSB Authentication" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'BSB - Your Login Token',
             html: `
-                <div style="font-family: sans-serif; padding: 20px; background-color: #121220; color: white; border-radius: 10px;">
-                    <h2 style="color: #3b82f6;">BSB Authentication</h2>
-                    <p>Your login token is: <strong style="font-size: 24px; color: #10b981;">${token}</strong></p>
+                <div style="font-family: sans-serif; padding: 20px; background-color: #121220; color: white; border-radius: 10px; border: 1px solid #3b82f6;">
+                    <h2 style="color: #3b82f6;">BSB Bot Access</h2>
+                    <p>Your login token is: <strong style="font-size: 26px; color: #10b981; letter-spacing: 2px;">${token}</strong></p>
                     <p>This code is valid for 10 minutes.</p>
+                    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+                    <p style="font-size: 11px; color: #888;">Security notice: If you did not request this code, please ignore this email.</p>
                 </div>
             `
         };
 
-        // ENVIAR CORREO CON ASYNC/AWAIT CORRECTO
-        try {
-            await transporter.sendMail(mailOptions);
-            console.log('✅ Correo enviado a:', email);
-            return res.status(200).json({ success: true, message: 'A token has been sent to your email.' });
-        } catch (mailError) {
-            console.error('❌ Error de Nodemailer:', mailError);
-            return res.status(500).json({ error: 'Mail delivery failed.' });
-        }
+        await transporter.sendMail(mailOptions);
+        console.log('✅ Token enviado con éxito a:', email);
+        return res.status(200).json({ success: true, message: 'Token sent!' });
 
     } catch (error) {
-        console.error('❌ Error general en requestToken:', error);
-        res.status(500).json({ message: 'Server error.' });
+        console.error('❌ Error en requestToken:', error);
+        res.status(500).json({ error: 'Server error or mail failed.' });
     }
 };
 
 exports.verifyToken = async (req, res) => {
     const { email, token } = req.body;
-
     try {
         const user = await User.findOne({ email });
 
@@ -71,14 +64,12 @@ exports.verifyToken = async (req, res) => {
             return res.status(400).json({ message: 'Invalid or expired token.' });
         }
 
-        // Si no tiene Autobot, crear uno
         if (!user.autobotId) {
             const newBot = new Autobot({ userId: user._id });
             await newBot.save();
             user.autobotId = newBot._id;
         }
 
-        // Generar JWT
         const jwtToken = jwt.sign(
             { id: user._id, email: user.email, autobotId: user.autobotId },
             process.env.JWT_SECRET,
