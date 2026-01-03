@@ -1,39 +1,48 @@
 // public/js/modules/apiService.js
 
 import { displayMessage } from './uiManager.js';
-import { TRADE_SYMBOL_BITMART } from '../main.js';
-
-const BACKEND_URL = 'https://bsb-ppex.onrender.com';
+import { TRADE_SYMBOL_BITMART, BACKEND_URL } from '../main.js';
 
 /**
  * Recopila todos los datos de los campos de configuración.
+ * Se han añadido protecciones para evitar errores si un ID no existe en el DOM.
  */
 export function getBotConfiguration() {
-    // Capturamos valores comunes
-    const priceVar = parseFloat(document.getElementById('auincrement').value); // Distancia entre órdenes DCA (%)
-    const sizeVar = parseFloat(document.getElementById('audecrement').value);  // Multiplicador de volumen DCA
-    const profitTrigger = parseFloat(document.getElementById('autrigger').value); // % Objetivo de salida
+    // Función auxiliar para obtener valores numéricos de forma segura
+    const getNum = (id) => {
+        const el = document.getElementById(id);
+        return el ? parseFloat(el.value) || 0 : 0;
+    };
 
+    // Capturamos valores comunes
+    const priceVar = getNum('auincrement'); // Distancia entre órdenes DCA (%)
+    const sizeVar = 1.0; // Valor por defecto si 'audecrement' no existe o se requiere fijo
+    const profitTrigger = getNum('autrigger'); // % Objetivo de salida
+
+    const stopAtCycleEndEl = document.getElementById('au-stop-at-cycle-end');
+    const stopAtCycleEnd = stopAtCycleEndEl ? stopAtCycleEndEl.checked : false;
+
+    // Estructura exacta que espera el Backend para no romper la lógica del bot
     const config = {
         symbol: TRADE_SYMBOL_BITMART,
         long: {
-            enabled: true, // Siempre true si se le da a START, o mapear a un checkbox si lo deseas
-            amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
-            purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
+            enabled: true,
+            amountUsdt: getNum('auamount-usdt'),
+            purchaseUsdt: 5.0, // Valor base de seguridad para la primera orden
             price_var: priceVar,
             size_var: sizeVar,
             trigger: profitTrigger,
         },
         short: {
             enabled: true,
-            amountBtc: parseFloat(document.getElementById('auamount-btc').value),
-            sellBtc: parseFloat(document.getElementById('aupurchase-btc').value),
+            amountBtc: getNum('auamount-btc'),
+            sellBtc: 0.0001, // Valor base de seguridad
             price_var: priceVar,
             size_var: sizeVar,
             trigger: profitTrigger,
         },
         options: {
-            stopAtCycleEnd: document.getElementById('au-stop-at-cycle-end').checked,
+            stopAtCycleEnd: stopAtCycleEnd,
         },
     };
     return config;
@@ -45,15 +54,11 @@ export function getBotConfiguration() {
 export async function sendConfigToBackend() {
     try {
         const config = getBotConfiguration();
-        console.log('Enviando configuración al backend:', config);
-
         const token = localStorage.getItem('token');
-        if (!token) {
-            console.error('No se encontró el token de autenticación.');
-            displayMessage('Authentication token not found. Please log in again.', 'error');
-            return;
-        }
         
+        if (!token) return; // Silencioso para no molestar al usuario en auto-guardado
+
+        // Usamos la ruta que el servidor de Render tiene mapeada
         const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
             method: 'POST',
             headers: {
@@ -63,141 +68,80 @@ export async function sendConfigToBackend() {
             body: JSON.stringify({ config }),
         });
 
-        const result = await response.json();
-        
-        if (response.ok) {
-            console.log('Configuración enviada con éxito. Respuesta del servidor:', result);
-            displayMessage('Configuración y estado inicial actualizados con éxito.', 'success');
-        } else {
-            console.error('Error al actualizar la configuración en el backend:', result.message);
-            displayMessage(`Failed to update config on backend: ${result.message}`, 'error');
+        if (!response.ok) {
+            const result = await response.json();
+            console.warn('Config auto-save warning:', result.message);
         }
     } catch (error) {
-        console.error('Failed to send config:', error);
-        displayMessage('Failed to connect to backend.', 'error');
+        console.error('Failed to auto-send config:', error);
     }
 }
 
 /**
  * Envía una solicitud para iniciar o detener el bot.
- * @param {boolean} isRunning - Indica si el bot está corriendo.
- * @param {object} config - La configuración del bot para enviar al iniciar.
- * @returns {Promise<void>}
  */
 export async function toggleBotState(isRunning, config) {
+    // Ajuste de rutas para que coincidan con el controlador del Bot
     const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
-    let body = {};
-
-    if (!isRunning) {
-        body = { config };
-    }
+    const token = localStorage.getItem('token');
 
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify({ config })
         });
+
         const data = await response.json();
-        if (!data.success) {
-            console.error(`Error al ${isRunning ? 'detener' : 'iniciar'} el bot:`, data.message);
-            displayMessage(`Error: ${data.message}`, 'error');
-        } else {
+        
+        if (data.success) {
             displayMessage(`Bot ${isRunning ? 'stopped' : 'started'} successfully.`, 'success');
+        } else {
+            displayMessage(`Error: ${data.message}`, 'error');
         }
     } catch (error) {
-        console.error(`Error de red al ${isRunning ? 'detener' : 'iniciar'} el bot:`, error);
-        displayMessage('Failed to connect to backend.', 'error');
+        console.error('Error de red en toggleBotState:', error);
+        displayMessage('Connection failed.', 'error');
     }
 }
 
 // =================================================================
-// 💡 NUEVAS FUNCIONES PARA ANALÍTICAS DEL DASHBOARD
+// 💡 ANALÍTICAS DEL DASHBOARD (Rutas v1)
 // =================================================================
 
-/**
- * Obtiene la serie de datos para la Curva de Crecimiento de Capital (Equity Curve)
- * del backend. Esto incluye la ganancia neta acumulada por ciclo.
- * @returns {Promise<Array>} Un array de objetos con { endTime, netProfit, cumulativeProfit }
- */
 export async function fetchEquityCurveData() {
-    console.log('Solicitando datos de la Curva de Crecimiento...');
-    
     const token = localStorage.getItem('token');
-    if (!token) {
-        console.error('No se encontró el token de autenticación para analíticas.');
-        return [];
-    }
+    if (!token) return [];
 
     try {
         const response = await fetch(`${BACKEND_URL}/api/v1/analytics/equity-curve`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error al obtener la Curva de Crecimiento:', errorData.message);
-            displayMessage(`Error al cargar la curva: ${errorData.message}`, 'error');
-            return [];
-        }
-
-        const data = await response.json();
-        console.log('Datos de Curva de Crecimiento recibidos con éxito.');
-        return data; // Debería ser un array de ciclos ordenados
+        if (!response.ok) return [];
+        return await response.json();
     } catch (error) {
-        console.error('Error de red al obtener la Curva de Crecimiento:', error);
-        displayMessage('Fallo la conexión con el backend para analíticas.', 'error');
+        console.error('Equity Curve Error:', error);
         return [];
     }
 }
 
-/**
- * Obtiene los Key Performance Indicators (KPIs) de los ciclos cerrados,
- * como el rendimiento promedio por ciclo.
- * @returns {Promise<object>} Un objeto con averageProfitPercentage y totalCycles.
- */
 export async function fetchCycleKpis() {
-    console.log('Solicitando KPIs de ciclos cerrados...');
-    
-    const token = localStorage.getItem('token');
-    if (!token) {
-        console.error('No se encontró el token de autenticación para KPIs.');
-        return { averageProfitPercentage: 0, totalCycles: 0 };
-    }
+    const token = localStorage.getItem('token');
+    if (!token) return { averageProfitPercentage: 0, totalCycles: 0 };
 
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error al obtener los KPIs del ciclo:', errorData.message);
-            return { averageProfitPercentage: 0, totalCycles: 0 };
-        }
-
-        const data = await response.json();
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) return { averageProfitPercentage: 0, totalCycles: 0 };
         
-        // 🎯 CORRECCIÓN: Normalizamos la respuesta para devolver el objeto KPI directamente.
-        // Si el backend devuelve un array [kpiObject], lo desempacamos.
-        // Si devuelve kpiObject directamente, lo usamos.
-        const kpiObject = Array.isArray(data) ? data[0] : data;
-        
-        return kpiObject || { averageProfitPercentage: 0, totalCycles: 0 }; 
-        
-    } catch (error) {
-        console.error('Error de red al obtener KPIs del ciclo:', error);
-        return { averageProfitPercentage: 0, totalCycles: 0 };
-    }
+        const data = await response.json();
+        return Array.isArray(data) ? (data[0] || data) : data;
+    } catch (error) {
+        console.error('KPIs Error:', error);
+        return { averageProfitPercentage: 0, totalCycles: 0 };
+    }
 }

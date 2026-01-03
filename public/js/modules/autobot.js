@@ -1,5 +1,5 @@
 import { initializeChart } from './chart.js';
-import { fetchOrders, setActiveTab as setOrdersActiveTab } from './orders.js';
+import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
 import { TRADE_SYMBOL_TV, BACKEND_URL, socket } from '../main.js';
@@ -11,7 +11,7 @@ let maxBtcBalance = 0;
 let currentTab = 'opened';
 
 /**
- * Actualiza los balances máximos en la UI (labels de los inputs)
+ * Actualiza los balances máximos en la UI
  */
 function updateMaxBalanceDisplay(currency, balance) {
     const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
@@ -48,7 +48,6 @@ function validateAmountInput(inputId, maxLimit, currency) {
  * Listeners para guardar configuración automáticamente
  */
 function setupConfigListeners() {
-    // Inputs que disparan guardado inmediato al cambiar
     const configIds = [
         'auamount-usdt', 'auamount-btc', 'aupurchase-usdt', 
         'aupurchase-btc', 'auincrement', 'audecrement', 
@@ -59,10 +58,9 @@ function setupConfigListeners() {
         const el = document.getElementById(id);
         if (!el) return;
 
-        const eventType = el.type === 'checkbox' || el.type === 'number' ? 'change' : 'input';
+        const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
-            // Si es un monto principal, validamos antes de enviar
             if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
             if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
             
@@ -71,9 +69,6 @@ function setupConfigListeners() {
     });
 }
 
-/**
- * Carga de balances desde el API para límites
- */
 async function loadBalancesAndLimits() {
     try {
         const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
@@ -94,16 +89,15 @@ async function loadBalancesAndLimits() {
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
-    // 1. Cargar datos base
     await loadBalancesAndLimits();
     setupConfigListeners();
 
-    // 2. Gráfico TradingView
+    // Gráfico
     try {
         window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
     } catch (e) { console.error("TV Error:", e); }
 
-    // 3. START / STOP Logic
+    // START / STOP Logic
     const startBtn = document.getElementById('austart-btn');
     startBtn?.addEventListener('click', async () => {
         const isRunning = startBtn.textContent.includes('STOP');
@@ -117,7 +111,7 @@ export async function initializeAutobotView() {
         await toggleBotState(isRunning, getBotConfiguration());
     });
 
-    // 4. Manejo de Pestañas (Historial de Órdenes)
+    // Manejo de Pestañas
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -133,12 +127,11 @@ export async function initializeAutobotView() {
         });
     });
 
-    // 5. Estado Inicial de Órdenes
+    // Carga inicial
     fetchOrders('opened', auOrderList);
 
-    // 6. Socket Listeners (Actualizaciones de tiempo real)
+    // Socket Listeners
     if (socket) {
-        // Actualización de balances reales (vía socket)
         socket.on('balance-real-update', (data) => {
             maxUsdtBalance = parseFloat(data.lastAvailableUSDT) || 0;
             maxBtcBalance = parseFloat(data.lastAvailableBTC) || 0;
@@ -146,47 +139,14 @@ export async function initializeAutobotView() {
             updateMaxBalanceDisplay('BTC', maxBtcBalance);
         });
 
-        // Actualización integral de la estrategia
         socket.on('bot-state-update', (state) => {
-            updateBotUI(state); // Maneja el botón START/STOP y Profit Total
+            // delegamos la actualización masiva al uiManager para evitar saltos visuales
+            updateBotUI(state); 
+        });
 
-            const fields = {
-                'aubalance-usdt': state.lastAvailableUSDT?.toFixed(2),
-                'aubalance-btc': state.lastAvailableBTC?.toFixed(6),
-                'aulbalance': state.lbalance?.toFixed(2),
-                'aulcycle': state.lcycle,
-                'aulsprice': state.lsprice?.toFixed(2),
-                'aulprofit': state.lprofit?.toFixed(4),
-                'aulcoverage': state.lcoverage?.toFixed(2),
-                'aulnorder': state.lnorder,
-                'ausbalance': state.sbalance?.toFixed(2),
-                'auscycle': state.scycle,
-                'ausbprice': state.sbprice?.toFixed(2),
-                'ausprofit': state.sprofit?.toFixed(4),
-                'auscoverage': state.scoverage?.toFixed(2),
-                'ausnorder': state.snorder
-            };
-
-            Object.entries(fields).forEach(([id, value]) => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.textContent = value ?? '0.00';
-                    if (id.includes('profit')) {
-                        el.className = parseFloat(value) >= 0 ? 'text-emerald-400' : 'text-red-400';
-                    }
-                }
-            });
-
-            // Actualizar etiquetas de estado Long/Short
-            const lStateEl = document.getElementById('aubot-lstate');
-            const sStateEl = document.getElementById('aubot-sstate');
-            if (lStateEl) {
-                lStateEl.textContent = state.lstate;
-                lStateEl.className = `text-xs font-bold ${state.lstate === 'STOPPED' ? 'text-red-400' : 'text-emerald-400'}`;
-            }
-            if (sStateEl) {
-                sStateEl.textContent = state.sstate;
-                sStateEl.className = `text-xs font-bold ${state.sstate === 'STOPPED' ? 'text-red-400' : 'text-emerald-400'}`;
+        socket.on('open-orders-update', (data) => {
+            if (currentTab === 'opened' || currentTab === 'all') {
+                updateOpenOrdersTable(data, 'au-order-list', currentTab);
             }
         });
     }
