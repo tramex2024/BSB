@@ -110,36 +110,33 @@ export function initializeFullApp() {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
 
-        // Actualizar el precio principal del Autobot (auprice)
         const auPriceEl = document.getElementById('auprice');
         if (auPriceEl) {
-            // Determinamos el color según la comparación con el precio anterior
-            let colorClass = 'text-white';
+            // 1. Limpiar colores previos TOTALMENTE
+            auPriceEl.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
+            
+            // 2. Determinar tendencia
             if (lastPrice > 0) {
-                if (newPrice > lastPrice) colorClass = 'text-emerald-400';
-                else if (newPrice < lastPrice) colorClass = 'text-red-400';
+                if (newPrice > lastPrice) {
+                    auPriceEl.classList.add('text-emerald-400');
+                } else if (newPrice < lastPrice) {
+                    auPriceEl.classList.add('text-red-400');
+                } else {
+                    auPriceEl.classList.add('text-white');
+                }
+            } else {
+                auPriceEl.classList.add('text-white');
             }
 
-            // Aplicamos clases de Tailwind limpias (eliminando las de color previas)
-            auPriceEl.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
-            auPriceEl.classList.add(colorClass);
-            
+            // 3. Inyectar el texto
             auPriceEl.textContent = `$${newPrice.toLocaleString(undefined, { 
                 minimumFractionDigits: 2, 
                 maximumFractionDigits: 2 
             })}`;
-        }
-
-        // Actualizar porcentaje de cambio y flechas (24h Change)
-        const percentEl = document.getElementById('price-percent');
-        const iconEl = document.getElementById('price-icon');
-        if (percentEl && data.priceChangePercent !== undefined) {
-            const isUp = parseFloat(data.priceChangePercent) >= 0;
-            percentEl.textContent = `${Math.abs(data.priceChangePercent).toFixed(2)}%`;
-            percentEl.className = isUp ? 'text-emerald-400' : 'text-red-400';
-            if (iconEl) {
-                iconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'} ${isUp ? 'text-emerald-400' : 'text-red-400'} mr-1`;
-            }
+            
+            // 4. Efecto visual de parpadeo (opcional)
+            auPriceEl.classList.add('price-update-anim');
+            setTimeout(() => auPriceEl.classList.remove('price-update-anim'), 300);
         }
 
         lastPrice = newPrice;

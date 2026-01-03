@@ -300,3 +300,41 @@ body {
     border-radius: 12px;
     overflow: hidden;
 }
+
+/* --- CORRECCIONES CRÍTICAS DE COLOR --- */
+
+/* Forzamos que el precio tenga color blanco por defecto si no hay tendencia */
+#auprice {
+    color: #ffffff !important;
+    display: inline-block;
+    min-width: 50px;
+}
+
+/* Clases de utilidad con !important para vencer cualquier conflicto de Tailwind */
+.text-emerald-400 {
+    color: #34d399 !important; /* Verde Esmeralda */
+}
+
+.text-red-400 {
+    color: #f87171 !important; /* Rojo */
+}
+
+.text-white {
+    color: #ffffff !important;
+}
+
+/* Animación sutil para cuando el precio cambie */
+.price-update-anim {
+    animation: pulse-price 0.3s ease-out;
+}
+
+@keyframes pulse-price {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Asegurar visibilidad en el dashboard */
+.font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+}
