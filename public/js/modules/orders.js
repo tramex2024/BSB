@@ -50,12 +50,13 @@ function createOrderHtml(order) {
 }
 
 /**
- * Renderiza y FILTRA las órdenes según la pestaña activa
+ * Renderiza y FILTRA las órdenes. 
+ * CAMBIO: Añadimos 'append' para no borrar si es necesario, 
+ * pero la clave es manejar el contenedor correctamente.
  */
 function displayOrders(orders, orderListElement, filterType) {
     if (!orderListElement) return;
 
-    // --- LÓGICA DE FILTRADO ---
     let filteredOrders = orders;
 
     if (filterType === 'filled') {
@@ -63,16 +64,20 @@ function displayOrders(orders, orderListElement, filterType) {
     } else if (filterType === 'cancelled') {
         filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
     } else if (filterType === 'opened') {
-        const openStatuses = ['new', 'partially_filled', 'open', 'active'];
+        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
         filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
     }
-    // Si filterType es 'all', no filtramos nada.
+    // En 'all', no filtramos, mostramos lo que llega.
 
     if (filteredOrders.length === 0) {
-        orderListElement.innerHTML = `<p class="text-center py-10 text-gray-500 text-xs uppercase tracking-widest">No orders found in ${filterType}</p>`;
+        // Solo mostramos "No orders" si no hay nada de nada en el contenedor previo
+        if (orderListElement.children.length === 0) {
+            orderListElement.innerHTML = `<p class="text-center py-10 text-gray-500 text-[10px] uppercase tracking-widest font-bold">No orders found in ${filterType}</p>`;
+        }
         return;
     }
 
+    // Renderizamos todo el bloque
     orderListElement.innerHTML = filteredOrders.map(order => createOrderHtml(order)).join('');
 }
 
@@ -106,12 +111,24 @@ export async function fetchOrders(status, orderListElement) {
 }
 
 /**
- * Actualiza órdenes abiertas (Real-time)
+ * ACTUALIZACIÓN CRÍTICA PARA "ALL":
+ * Evita que el WebSocket borre el historial de la pestaña ALL
  */
 export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
     const orderListElement = document.getElementById(listElementId);
-    if (!orderListElement || (activeOrderTab !== 'opened' && activeOrderTab !== 'all')) return;
+    if (!orderListElement) return;
+
+    // Si estamos en "All", no queremos que el WebSocket de 'Abiertas' 
+    // sobrescriba el historial que cargamos por API.
+    // Lo ideal en "All" es recargar el historial completo para ver todo.
+    if (activeOrderTab === 'all') {
+        // Opcional: Podrías llamar a fetchOrders('all') cada cierto tiempo 
+        // o simplemente ignorar el update de sockets para no 'limpiar' la lista.
+        return; 
+    }
+
+    if (activeOrderTab !== 'opened') return;
 
     const orders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
-    displayOrders(orders, orderListElement, activeOrderTab);
+    displayOrders(orders, orderListElement, 'opened');
 }
