@@ -53,7 +53,7 @@ export function getBotConfiguration() {
             trigger: getNum('autrigger'),
         },
         options: {
-            stopAtCycleEnd: getCheck('au-stop-at-cycle-end'),
+            stopAtCycle: getCheck('au-stop-at-cycle-end'),
         }
     };
 }
