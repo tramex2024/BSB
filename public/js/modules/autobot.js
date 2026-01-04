@@ -101,16 +101,23 @@ export async function initializeAutobotView() {
     // Botón START / STOP
     const startBtn = document.getElementById('austart-btn');
     startBtn?.addEventListener('click', async () => {
-        const isRunning = startBtn.textContent.includes('STOP');
+    // 1. Detectar estado actual basándose en el texto del botón
+    const isCurrentlyRunning = startBtn.textContent.includes('STOP');
+    
+    // 2. Si vamos a iniciar, validamos
+    if (!isCurrentlyRunning) {
+        const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+        const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
         
-        if (!isRunning) {
-            const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
-            const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-            if (!isUsdtOk || !isBtcOk) return displayMessage('Verifica los saldos configurados', 'error');
+        if (!isUsdtOk || !isBtcOk) {
+            return displayMessage('Verifica los saldos configurados antes de iniciar', 'error');
         }
-        
-        await toggleBotState(isRunning, getBotConfiguration());
-    });
+    }
+    
+    // 3. toggleBotState en apiService ya maneja el bloqueo del botón (disabled = true)
+    // Pasamos el estado actual para que sepa si debe llamar a /start o /stop
+    await toggleBotState(isCurrentlyRunning); 
+});
 
     // Pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
