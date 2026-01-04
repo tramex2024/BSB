@@ -1,8 +1,5 @@
 // src/server/utils/email.js
 
-// src/server/utils/email.js
-// src/server/utils/email.js
-
 async function sendTokenEmail(email, token) {
     const API_KEY = process.env.BREVO_API_KEY;
     const senderEmail = "info.nexuslabs@gmail.com"; 

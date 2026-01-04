@@ -9,23 +9,30 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Estilos base que no cambian */
         .overflow-y-auto::-webkit-scrollbar { width: 6px; }
         .overflow-y-auto::-webkit-scrollbar-track { background: #1f2937; }
         .overflow-y-auto::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        
         .nav-tab.active { border-bottom: 2px solid #10b981; color: #10b981; font-weight: bold; }
         .nav-tab { padding: 10px 15px; color: #9ca3af; transition: all 0.3s ease; cursor: pointer; }
         .nav-tab:hover { color: white; }
+
+        /* Contenedor principal con altura mínima para evitar saltos de layout */
         #main-content { min-height: calc(100vh - 100px); }
+
         .modal {
             position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
             background-color: rgba(0, 0, 0, 0.8); display: none; justify-content: center; align-items: center;
         }
         .modal-content { background-color: #1f2937; padding: 25px; border-radius: 12px; width: 90%; max-width: 450px; }
+
         .status-ball-container { position: relative; width: 12px; height: 12px; }
         @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } }
         .status-green { background-color: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
         .status-red { background-color: #ef4444; }
         .status-purple { background-color: #a855f7; box-shadow: 0 0 8px #a855f7; animation: pulse 2s infinite; }
+
         .animate-fadeIn { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -79,43 +86,36 @@
         </div>
     </div>
 
-    <div id="auth-modal" class="modal">
-        <div class="modal-content animate-fadeIn">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold">Acceso de Usuario</h2>
-                <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-auth-modal"></i>
-            </div>
-            <form id="auth-form" class="space-y-4">
-                <div id="email-section">
-                    <label class="text-xs text-gray-400 block mb-1">Correo Electrónico</label>
-                    <input type="email" id="email" placeholder="tu@email.com" required
-                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
-                </div>
-                <div id="token-section" style="display: none;">
-                    <label class="text-xs text-gray-400 block mb-1">Código de Verificación</label>
-                    <input type="text" id="token" placeholder="Ingresa el código" 
-                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
-                </div>
-                <button type="submit" id="auth-button" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">CONTINUAR</button>
-                <p id="auth-message" class="text-xs text-center"></p>
-            </form>
-        </div>
-    </div>
-
-    <div id="logout-modal" class="modal">
-        <div class="modal-content animate-fadeIn border border-red-900/30">
-            <h2 class="text-xl font-bold text-white mb-2">¿Cerrar Sesión?</h2>
-            <p class="text-gray-400 text-sm mb-6">Tendrás que solicitar un nuevo token para volver a entrar al dashboard.</p>
-            <div class="flex space-x-3">
-                <button id="cancel-logout" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold transition">CANCELAR</button>
-                <button id="confirm-logout" class="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold transition">SALIR</button>
-            </div>
-        </div>
-    </div>
-
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
     <script type="module" src="/js/main.js"></script>
+    <div id="auth-modal" class="modal">
+    <div class="modal-content animate-fadeIn">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">Acceso de Usuario</h2>
+            <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-auth-modal"></i>
+        </div>
+        <form id="auth-form" class="space-y-4">
+            <div id="email-section">
+                <label class="text-xs text-gray-400 block mb-1">Correo Electrónico</label>
+                <input type="email" id="email" placeholder="tu@email.com" required
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
+            </div>
+            <div id="token-section" style="display: none;">
+                <label class="text-xs text-gray-400 block mb-1">Código de Verificación</label>
+                <input type="text" id="token" placeholder="Ingresa el código" 
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
+            </div>
+            
+            <button type="submit" id="auth-button" 
+                class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">
+                CONTINUAR
+            </button>
+            <p id="auth-message" class="text-xs text-center"></p>
+        </form>
+    </div>
+</div>
 </body>
 </html>
