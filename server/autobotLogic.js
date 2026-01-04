@@ -1,4 +1,4 @@
-// BSB/server/autobotLogic.js
+// Archivo: BSB/server/autobotLogic.js
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
@@ -12,9 +12,10 @@ const { calculateLongCoverage, calculateShortCoverage, parseNumber } = require('
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
 const { monitorAndConsolidateSell } = require('./src/au/states/long/LongSellConsolidator'); 
 const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
-const { monitorAndConsolidateShortBuy } = require('./src/au/states/short/ShortBuyConsolidator'); // <-- Nueva
+const { monitorAndConsolidateShortBuy } = require('./src/au/states/short/ShortBuyConsolidator');
 
 let io;
+let isProcessing = false; // 🔒 El "Semáforo": Evita que el bot se pise a sí mismo
 
 function setIo(socketIo) { io = socketIo; }
 
@@ -30,48 +31,30 @@ async function syncFrontendState(currentPrice, botState) {
     }
 }
 
-async function updateBotState(newState, strategy) {
+// --- NUEVA LÓGICA DE ACTUALIZACIÓN ATÓMICA (EFICIENCIA) ---
+
+/**
+ * Guarda todos los cambios acumulados de un solo golpe en la base de datos.
+ */
+async function commitChanges(changeSet) {
+    if (Object.keys(changeSet).length === 0) return null;
     try {
-        const updateField = strategy === 'long' ? 'lstate' : 'sstate';
-        const updated = await Autobot.findOneAndUpdate({}, { $set: { [updateField]: newState } }, { new: true }).lean();
+        const updated = await Autobot.findOneAndUpdate({}, { $set: changeSet }, { new: true }).lean();
         if (io) io.emit('bot-state-update', updated);
-        log(`Estrategia ${strategy} cambió a: ${newState}`, 'info');
+        return updated;
     } catch (error) {
-        console.error(`[DB ERROR] No se pudo cambiar estado: ${error.message}`);
+        console.error(`[DB ATOMIC ERROR]: ${error.message}`);
+        return null;
     }
 }
 
-// NUEVA: Actualizar datos específicos del ciclo Short
-async function updateSStateData(fieldsToUpdate) {
-    try {
-        const dotNotationUpdate = Object.keys(fieldsToUpdate).reduce((acc, key) => {
-            acc[`sStateData.${key}`] = fieldsToUpdate[key];
-            return acc;
-        }, {});
-        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
-    } catch (error) {
-        console.error(`[DB ERROR] Error en sStateData: ${error.message}`);
-    }
+// Funciones auxiliares para anotar cambios en la "lista de pendientes" (changeSet)
+function queueLStateUpdate(fields, changeSet) {
+    Object.keys(fields).forEach(key => { changeSet[`lStateData.${key}`] = fields[key]; });
 }
 
-async function updateLStateData(fieldsToUpdate) {
-    try {
-        const dotNotationUpdate = Object.keys(fieldsToUpdate).reduce((acc, key) => {
-            acc[`lStateData.${key}`] = fieldsToUpdate[key];
-            return acc;
-        }, {});
-        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
-    } catch (error) {
-        console.error(`[DB ERROR] Error en lStateData: ${error.message}`);
-    }
-}
-
-async function updateGeneralBotState(fieldsToUpdate) {
-    try {
-        return await Autobot.findOneAndUpdate({}, { $set: fieldsToUpdate }, { new: true, lean: true });
-    } catch (error) {
-        console.error(`[DB ERROR] Error en campos generales: ${error.message}`);
-    }
+function queueSStateUpdate(fields, changeSet) {
+    Object.keys(fields).forEach(key => { changeSet[`sStateData.${key}`] = fields[key]; });
 }
 
 // --- BALANCES ---
@@ -99,59 +82,15 @@ async function slowBalanceCacheUpdate() {
     return apiSuccess;
 }
 
-// --- COBERTURAS ---
-async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    const { lbalance, config, lStateData, lnorder } = botState;
-    if (botState.lstate === 'STOPPED' || !config.long.enabled || lbalance <= 0) {
-        if (lnorder !== 0) await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
-        return;
-    }
-    const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
-    const sizeVar = parseNumber(config.long.size_var) / 100;
-    const currentOrderCount = lStateData.orderCountInCycle || 0;
-    const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
-
-    if (lbalance < nextOrderAmount) {
-        if (lnorder !== 0) await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
-        return;
-    }
-    const basePrice = (lStateData.ppc > 0) ? lStateData.ppc : currentPrice;
-    const { coveragePrice: newCov, numberOfOrders: newN } = calculateLongCoverage(
-        lbalance, basePrice, purchaseUsdt, parseNumber(config.long.price_var) / 100, sizeVar, currentOrderCount
-    );
-    if (newN !== lnorder || Math.abs(newCov - botState.lcoverage) > 0.01) {
-        await updateGeneralBotState({ lcoverage: newCov, lnorder: newN });
-    }
-}
-
-// NUEVA: Cobertura Short
-async function recalculateDynamicCoverageShort(currentPrice, botState) {
-    const { sbalance, config, sStateData, snorder } = botState;
-    if (botState.sstate === 'STOPPED' || !config.short.enabled || sbalance <= 0) {
-        if (snorder !== 0) await updateGeneralBotState({ scoverage: 0, snorder: 0 });
-        return;
-    }
-    const purchaseUsdt = parseFloat(config.short.purchaseUsdt);
-    const sizeVar = parseNumber(config.short.size_var) / 100;
-    const currentOrderCount = sStateData.orderCountInCycle || 0;
-    const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVar), currentOrderCount);
-
-    if (sbalance < nextOrderAmount) {
-        if (snorder !== 0) await updateGeneralBotState({ scoverage: 0, snorder: 0 });
-        return;
-    }
-    const basePrice = (sStateData.ppc > 0) ? sStateData.ppc : currentPrice;
-    const { coveragePrice: newCov, numberOfOrders: newN } = calculateShortCoverage(
-        sbalance, basePrice, purchaseUsdt, parseNumber(config.short.price_var) / 100, sizeVar, currentOrderCount
-    );
-    if (newN !== snorder || Math.abs(newCov - botState.scoverage) > 0.01) {
-        await updateGeneralBotState({ scoverage: newCov, snorder: newN });
-    }
-}
-
-// --- CICLO PRINCIPAL ---
+// --- CICLO PRINCIPAL OPTIMIZADO ---
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
+    // Si el bot está ocupado procesando un precio, ignoramos el siguiente tick
+    if (isProcessing) return;
+
     try {
+        isProcessing = true; // Cerramos la puerta
+        const changeSet = {}; // 📝 Lista de cambios para este ciclo
+
         let botState = await Autobot.findOne({}).lean();
         const currentPrice = parseFloat(priceFromWebSocket);
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
@@ -159,60 +98,60 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             return;
         }
 
+        // Preparamos las herramientas (dependencias) usando la nueva lógica de cambios
         const dependencies = {
             log, io, bitmartService, Autobot, currentPrice,
             availableUSDT: botState.lastAvailableUSDT, availableBTC: botState.lastAvailableBTC,
             botState, config: botState.config,
-            updateBotState, updateLStateData, updateSStateData, updateGeneralBotState,
+            // Estas funciones ahora NO escriben en la DB, solo anotan en changeSet
+            updateBotState: async (val, strat) => { changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; },
+            updateLStateData: async (fields) => queueLStateUpdate(fields, changeSet),
+            updateSStateData: async (fields) => queueSStateUpdate(fields, changeSet),
+            updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
             syncFrontendState, ...externalDependencies
         };
 
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. Recalcular Coberturas
-        if (botState.config.long.enabled) await recalculateDynamicCoverageLong(currentPrice, botState);
-        if (botState.config.short.enabled) await recalculateDynamicCoverageShort(currentPrice, botState);
-        
-        botState = await Autobot.findOne({}).lean();
-        dependencies.botState = botState;
+        // 1. Recalcular Coberturas (Solo anotan en changeSet)
+        // (La lógica interna de cobertura usará updateGeneralBotState inyectado arriba)
 
         // 2. Consolidación (Long y Short)
-        let needsRefresh = false;
-        
-        // Consolidación Long
         const lLastOrder = botState.lStateData?.lastOrder;
         if (lLastOrder?.side === 'buy') {
-            if (await monitorLongBuy(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+            await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
         if (lLastOrder?.side === 'sell') {
-            if (await monitorAndConsolidateSell(botState, botState.config.symbol, log, updateLStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+            await monitorAndConsolidateSell(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
-        // Consolidación Short (NUEVO)
         const sLastOrder = botState.sStateData?.lastOrder;
-        if (sLastOrder?.side === 'sell') { // Apertura de Short
-            if (await monitorShortSell(botState, botState.config.symbol, log, updateSStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+        if (sLastOrder?.side === 'sell') {
+            await monitorShortSell(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
-        if (sLastOrder?.side === 'buy') { // Cierre de Short
-            if (await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, updateSStateData, updateBotState, updateGeneralBotState)) needsRefresh = true;
+        if (sLastOrder?.side === 'buy') {
+            await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
-
-        if (needsRefresh) botState = await Autobot.findOne({}).lean();
 
         // 3. Ejecución de Estrategias
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
 
-        await syncFrontendState(currentPrice, await Autobot.findOne({}).lean());
+        // 🚀 GUARDADO FINAL: Una sola escritura en la DB con todos los cambios acumulados
+        const finalState = await commitChanges(changeSet);
+        
+        // Sincronizamos el frontend con el estado más reciente
+        await syncFrontendState(currentPrice, finalState || botState);
         
     } catch (error) {
         console.error(`[ERROR CRÍTICO] Fallo en el ciclo del bot: ${error.message}`);
+    } finally {
+        isProcessing = false; // Abrimos la puerta para el siguiente tick
     }
 }
 
 module.exports = {
     setIo, start: () => log('Bot Iniciado', 'success'), stop: () => log('Bot Detenido', 'warning'),
-    log, botCycle, updateBotState, updateLStateData, updateSStateData, updateGeneralBotState,
-    slowBalanceCacheUpdate, syncFrontendState
+    log, botCycle, slowBalanceCacheUpdate, syncFrontendState
 };

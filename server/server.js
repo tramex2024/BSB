@@ -237,12 +237,12 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-setInterval(async () => {
-    try {
-        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
-        if (openOrders) io.sockets.emit('open-orders-update', openOrders);
-    } catch (e) { console.error("Error Polling Orders:", e.message); }
-}, 5000);
+//setInterval(async () => {
+//    try {
+//        const openOrders = await bitmartService.getOpenOrders('BTC_USDT');
+//        if (openOrders) io.sockets.emit('open-orders-update', openOrders);
+//    } catch (e) { console.error("Error Polling Orders:", e.message); }
+//}, 5000);
 
 // --- ARRANQUE ---
 setupMarketWS(io);
