@@ -5,8 +5,13 @@ const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
 
-// Importaciones de Cálculos
-const { calculateLongCoverage, calculateShortCoverage, parseNumber } = require('./autobotCalculations');
+// Importaciones de Cálculos (Añadido calculatePotentialProfit)
+const { 
+    calculateLongCoverage, 
+    calculateShortCoverage, 
+    parseNumber, 
+    calculatePotentialProfit 
+} = require('./autobotCalculations');
 
 // Consolidadores
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
@@ -32,8 +37,7 @@ async function syncFrontendState(currentPrice, botState) {
 }
 
 /**
- * commitChanges: El "Notario" del bot. 
- * Asegura que la progresión exponencial sea grabada antes del próximo tick.
+ * commitChanges: Asegura que la progresión exponencial sea grabada atómicamente.
  */
 async function commitChanges(changeSet) {
     if (Object.keys(changeSet).length === 0) return null;
@@ -82,7 +86,7 @@ async function slowBalanceCacheUpdate() {
     return apiSuccess;
 }
 
-// --- CICLO PRINCIPAL ---
+// --- CICLO PRINCIPAL (AUTÓNOMO Y EXPONENCIAL) ---
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     if (isProcessing) return;
 
@@ -94,7 +98,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         const currentPrice = parseFloat(priceFromWebSocket);
         
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            await syncFrontendState(currentPrice, botState);
+            if (botState) await syncFrontendState(currentPrice, botState);
             return;
         }
 
@@ -113,7 +117,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. CONSOLIDACIÓN: Antes de comprar más, vemos si las órdenes exponenciales se llenaron
+        // 1. CONSOLIDACIÓN: Sincronización de órdenes antes de actuar
         const lLastOrder = botState.lStateData?.lastOrder;
         if (lLastOrder?.side === 'buy') {
             await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
@@ -130,31 +134,52 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
-        // 2. RECALCULAR COBERTURA (Actualización de indicadores de seguridad en cada tick)
-        // Esto permite que el usuario vea en tiempo real cuántas balas exponenciales le quedan
+        // 2. RECALCULAR COBERTURA Y PROFIT EN TIEMPO REAL
         if (botState.lstate !== 'STOPPED' && botState.lStateData.ppc > 0) {
             const { coveragePrice, numberOfOrders } = calculateLongCoverage(
-                botState.lbalance, botState.lStateData.ppc, botState.config.long.purchaseUsdt,
-                parseNumber(botState.config.long.price_var)/100, parseNumber(botState.config.long.size_var)/100
+                botState.lbalance, 
+                botState.lStateData.ppc, 
+                botState.config.long.purchaseUsdt,
+                parseNumber(botState.config.long.price_var)/100, 
+                parseNumber(botState.config.long.size_var)/100
             );
             changeSet.lcoverage = coveragePrice;
             changeSet.lnorder = numberOfOrders;
+
+            // Corrección de Profit Long
+            changeSet.lprofit = calculatePotentialProfit(
+                botState.lStateData.ppc,
+                botState.lStateData.ac,
+                currentPrice,
+                'long'
+            );
         }
 
         if (botState.sstate !== 'STOPPED' && botState.sStateData.ppc > 0) {
             const { coveragePrice, numberOfOrders } = calculateShortCoverage(
-                botState.sbalance, botState.sStateData.ppc, botState.config.short.purchaseUsdt,
-                parseNumber(botState.config.short.price_var)/100, parseNumber(botState.config.short.size_var)/100
+                botState.sbalance, 
+                botState.sStateData.ppc, 
+                botState.config.short.purchaseUsdt,
+                parseNumber(botState.config.short.price_var)/100, 
+                parseNumber(botState.config.short.size_var)/100
             );
             changeSet.scoverage = coveragePrice;
             changeSet.snorder = numberOfOrders;
+
+            // Corrección de Profit Short
+            changeSet.sprofit = calculatePotentialProfit(
+                botState.sStateData.ppc,
+                botState.sStateData.ac,
+                currentPrice,
+                'short'
+            );
         }
 
-        // 3. EJECUCIÓN: ¿Es momento de disparar el siguiente nivel exponencial?
+        // 3. EJECUCIÓN DE ESTRATEGIA (Lógica de decisión)
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
 
-        // 4. PERSISTENCIA FINAL
+        // 4. PERSISTENCIA Y SINCRONIZACIÓN
         const finalState = await commitChanges(changeSet);
         await syncFrontendState(currentPrice, finalState || botState);
         
@@ -166,6 +191,11 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 }
 
 module.exports = {
-    setIo, start: () => log('🚀 Autobot Iniciado', 'success'), stop: () => log('🛑 Autobot Detenido', 'warning'),
-    log, botCycle, slowBalanceCacheUpdate, syncFrontendState
+    setIo, 
+    start: () => log('🚀 Autobot Iniciado', 'success'), 
+    stop: () => log('🛑 Autobot Detenido', 'warning'),
+    log, 
+    botCycle, 
+    slowBalanceCacheUpdate, 
+    syncFrontendState
 };
