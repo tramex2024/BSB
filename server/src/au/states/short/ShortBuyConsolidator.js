@@ -1,87 +1,82 @@
-// BSB/server/src/au/states/short/ShortBuyConsolidator.js (ESPEJO DE LongSellConsolidator.js)
+// BSB/server/src/au/states/short/ShortBuyConsolidator.js
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulShortBuy } = require('../../managers/shortDataManager');
 
 /**
- * Monitorea una orden de COMPRA pendiente (Cierre de Short), consolida la posición 
- * si se llena, o limpia el lastOrder si falla.
+ * CONSOLIDADOR DE RECOMPRA (SHORT): 
+ * Verifica el cierre del ciclo cuando el precio baja al Take Profit.
  */
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
     const sStateData = botState.sStateData;
     const lastOrder = sStateData.lastOrder;
     const SSTATE = 'short';
 
-    // En Short, el cierre del ciclo ocurre con una orden de side 'buy'
+    // 1. FILTRO: En Short, cerramos con una COMPRA (buy)
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false; 
     }
 
     const orderIdString = String(lastOrder.order_id);
-    log(`[S-BUY CONSOLIDATOR] Orden de recompra (TP) pendiente ${orderIdString} detectada.`, 'warning');
+    log(`[S-BUY-MONITOR] 🔍 Verificando recompra de cierre ${orderIdString}...`, 'debug');
 
     try {
-        let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
-        let finalDetails = orderDetails;
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
         
-        // Consolidar volumen llenado
-        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
-
-        // Definición de ORDEN PROCESADA
-        let isOrderProcessed = (
-            finalDetails?.state === 'filled' ||
-            finalDetails?.state === 'partially_canceled' ||
-            (finalDetails?.state === 'canceled' && filledVolume > 0) ||
-            filledVolume > 0
+        // Normalización de campos de BitMart
+        let filledVolume = parseFloat(
+            finalDetails?.filledSize || 
+            finalDetails?.filled_volume || 
+            finalDetails?.filledVolume || 0
         );
 
-        // 2. Lógica de Respaldo
-        if (!isOrderProcessed && !finalDetails) {
-            log(`[S-BUY CONSOLIDATOR] Buscando orden ${orderIdString} en historial...`, 'info');
+        // 2. BACKUP: Si la API no responde el detalle, buscar en el historial
+        if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
+            log(`[S-BUY-MONITOR] ⚠️ Consulta directa fallida. Buscando en historial reciente...`, 'info');
             const recentOrders = await getRecentOrders(SYMBOL);
-            finalDetails = recentOrders.find(order => 
-                String(order.orderId) === orderIdString || String(order.order_id) === orderIdString
-            );
+            finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             
             if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0); 
-                isOrderProcessed = filledVolume > 0;
+                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
             }
         }
 
-        if (isOrderProcessed && filledVolume > 0) {
-            // === RECOMPRA PROCESADA (CIERRE DE SHORT) ===
-            log(`[S-BUY CONSOLIDATOR] Recompra ${orderIdString} confirmada. Cerrando ciclo Short...`, 'success');
+        // 3. ESTADOS DE LA ORDEN
+        const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
+        const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
+
+        // === CASO A: RECOMPRA EXITOSA (Cierre de Ciclo) ===
+        if (isFilled) {
+            log(`💰 [S-BUY-SUCCESS] Recompra confirmada (${filledVolume.toFixed(8)} BTC). Liquidando ciclo Short exponencial...`, 'success');
             
             const handlerDependencies = { 
                 log, updateBotState, updateSStateData, updateGeneralBotState, 
                 config: botState.config 
             };
             
-            // handleSuccessfulShortBuy calcula profit neto, resetea sStateData y transiciona
+            // ShortDataManager resetea el contador de órdenes y calcula la ganancia neta en USDT
             await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
-            
-            log(`[S-BUY CONSOLIDATOR] Cierre de ciclo Short completo.`, 'debug');
-            return true;
-
-        } else if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
-            // === ORDEN AÚN PENDIENTE EN EL LIBRO ===
-            log(`[S-BUY CONSOLIDATOR] Recompra ${orderIdString} activa (${finalDetails.state}).`, 'info');
-            return true;
-
-        } else {
-            // === ORDEN FALLIDA ===
-            log(`[S-BUY CONSOLIDATOR] Recompra ${orderIdString} falló. Liberando lastOrder.`, 'error');
-            await updateSStateData({ 'lastOrder': null });
-            
-            // Permanecer en BUYING para que SBuying.run intente recomprar de nuevo
-            await updateBotState('BUYING', SSTATE); 
-
             return true;
         }
 
+        // === CASO B: ORDEN PENDIENTE (El precio aún no cae lo suficiente) ===
+        if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
+            log(`⏳ [S-BUY-WAIT] Orden de recompra activa. Esperando ejecución en el libro...`, 'debug');
+            return true; // Mantiene el bloqueo del bot en este estado
+        }
+
+        // === CASO C: ORDEN FALLIDA SIN EJECUCIÓN ===
+        if (isCanceled && filledVolume === 0) {
+            log(`❌ [S-BUY-FAIL] La recompra falló o se canceló. Reintentando...`, 'error');
+            await updateSStateData({ 'lastOrder': null });
+            // Al limpiar lastOrder, el loop volverá a SBuying.run para intentar comprar de nuevo
+            return true;
+        }
+
+        return true;
+
     } catch (error) {
-        log(`[S-BUY CONSOLIDATOR] Error: ${error.message}. Persistiendo bloqueo.`, 'error');
+        log(`[S-BUY-ERROR] Error crítico en consolidación Short: ${error.message}`, 'error');
         return true; 
     }
 }

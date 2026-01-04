@@ -1,81 +1,70 @@
-// BSB/server/src/au/states/short/SNoCoverage.js (ESPEJO DE LNoCoverage.js)
+// BSB/server/src/au/states/short/SNoCoverage.js
 
-const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 const { calculateShortTargets } = require('../../../../autobotCalculations');
+const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 
 async function run(dependencies) {
     const { 
         botState, currentPrice, config, 
         updateBotState, updateSStateData,
-        getBotState, updateGeneralBotState, 
-        log 
+        updateGeneralBotState, log, 
+        availableUSDT: realUSDT 
     } = dependencies;
     
-    const availableUSDT = parseFloat(dependencies.availableUSDT || 0);
-    const { ac } = botState.sStateData;
-    
-    // --- 1. VERIFICACIÓN DE VENTA (Take Profit en Short es COMPRA) ---
-    // En Short, el TP está por DEBAJO del precio actual.
-    const targetBuyPrice = botState.stprice || 0; 
-    if (currentPrice <= targetBuyPrice && ac > 0 && targetBuyPrice > 0) {
-        log(`[S] Precio alcanzó objetivo de recompra (${targetBuyPrice.toFixed(2)}) desde NO_COVERAGE.`, 'success');
-        await updateBotState('BUYING', 'short'); // Transiciona al estado de cierre (SBuying)
+    const availableUSDT = parseFloat(realUSDT || 0);
+    const { ac, ppc, orderCountInCycle } = botState.sStateData;
+    const currentSBalance = parseFloat(botState.sbalance || 0);
+
+    // --- 1. ¿PODEMOS CERRAR CON PROFIT? (Vigilancia de Suelo) ---
+    // En Short, si el precio cae por debajo del Take Profit (stprice), 
+    // transicionamos a BUYING para que el Trailing Stop haga su magia.
+    if (ac > 0 && botState.stprice > 0 && currentPrice <= botState.stprice) {
+        log(`🚀 [S-RECOVERY] ¡Precio en zona de profit (${currentPrice.toFixed(2)})! Saliendo a BUYING.`, 'success');
+        await updateBotState('BUYING', 'short'); 
         return;
     }
 
-    // --- 2. RECUPERACIÓN DE ESTADO ---
-    let latestBotState = botState;
-    if (getBotState) {
-        try {
-            latestBotState = await getBotState();
-        } catch (error) {
-            console.error(`[S-DB ERROR] No se pudo recargar estado: ${error.message}`);
-        }
-    }
-    
-    // --- 3. RECALCULO DE REQUERIMIENTOS ---
-    let requiredAmount = latestBotState.sStateData.requiredCoverageAmount || config.short.purchaseUsdt || 0;
-    
-    if (ac > 0 && latestBotState.sStateData.orderCountInCycle >= 0) { 
-        // Espejamos el cálculo usando las funciones de Short
-        const recalculation = calculateShortTargets(
-            latestBotState.sStateData.ppc || 0,
-            config.short.profit_percent || 0,
-            config.short.price_var || 0,
-            config.short.size_var || 0,
-            config.short.purchaseUsdt || 0,
-            latestBotState.sStateData.orderCountInCycle || 0,
-            latestBotState.sbalance || 0
-        );
-        requiredAmount = recalculation.requiredCoverageAmount;
-        await updateSStateData({ 
-            requiredCoverageAmount: requiredAmount, 
-            nextCoveragePrice: recalculation.nextCoveragePrice 
-        });
-    }
+    // --- 2. RECALCULO DE REQUERIMIENTOS ---
+    // Mantenemos los targets actualizados para el Dashboard.
+    const recalculation = calculateShortTargets(
+        ppc || 0,
+        config.short.profit_percent || 0,
+        config.short.price_var || 0,
+        config.short.size_var || 0,
+        config.short.purchaseUsdt || 0,
+        orderCountInCycle || 0,
+        currentSBalance
+    );
 
-    // --- 4. RESETEO CRÍTICO DE SNORDER ---
-    const currentSBalance = parseFloat(latestBotState.sbalance || 0);
+    const requiredAmount = recalculation.requiredCoverageAmount;
 
-    if (ac <= 0 && currentSBalance < requiredAmount && latestBotState.snorder !== 0) {
+    // Actualizamos la "brújula" interna del Short
+    await updateSStateData({ 
+        requiredCoverageAmount: requiredAmount, 
+        nextCoveragePrice: recalculation.nextCoveragePrice 
+    });
+
+    // --- 3. RESETEO CRÍTICO DE INDICADORES (Si no hay deuda ni capital) ---
+    // Evitamos que el Dashboard muestre órdenes de cobertura pendientes si no hay fondos.
+    if (ac <= 0 && currentSBalance < requiredAmount && botState.snorder !== 0) {
+        log(`[S-RESET] Limpiando indicadores Short: SBalance (${currentSBalance.toFixed(2)}) insuficiente.`, 'warning');
         await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
-        log(`[SHORT] RESET: snorder a 0. Balance (${currentSBalance.toFixed(2)}) < Requerido (${requiredAmount.toFixed(2)})`, 'warning');
         return; 
     }
-    
-    // --- 5. LOG DE ESTADO Y TRANSICIÓN ---
-    const safeRequiredAmountDiag = requiredAmount && !isNaN(requiredAmount) ? requiredAmount.toFixed(2) : '0.00';
-    log(`[S] NO_COVERAGE: Balance Short: ${currentSBalance.toFixed(2)} | Requerido: ${safeRequiredAmountDiag}`, 'info');
 
-    // Si recuperamos balance (por depósito o transferencia), volvemos a SELLING (donde se abren/cubren shorts)
-    if (currentSBalance >= requiredAmount && availableUSDT >= requiredAmount && requiredAmount >= MIN_USDT_VALUE_FOR_BITMART) {
-        try {
-            log(`[S] ¡Fondos Short restaurados! Pasando a SELLING. (Real: ${availableUSDT.toFixed(2)})`, 'success');
-            await updateBotState('SELLING', 'short');
-        } catch (error) {
-            log(`[S] Error al pasar a SELLING: ${error.message}`, 'error');
-        }
-    } 
+    // --- 4. VERIFICACIÓN DE TRANSICIÓN (Recuperación de Fondos) ---
+    const canResume = currentSBalance >= requiredAmount && 
+                      availableUSDT >= requiredAmount && 
+                      requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
+
+    if (canResume) {
+        log(`✅ [S-FONDOS] Capital Short restaurado (${availableUSDT.toFixed(2)} USDT). Volviendo a SELLING...`, 'success');
+        // Volvemos a SELLING porque es el estado donde se abren y promedian los Shorts.
+        await updateBotState('SELLING', 'short');
+    } else {
+        // Log scannable para monitoreo
+        log(`[S-NO_COVERAGE] Esperando... Balance: ${currentSBalance.toFixed(2)} | Real: ${availableUSDT.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)}`, 'debug');
+    }
 } 
 
 module.exports = { run };

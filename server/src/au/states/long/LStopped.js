@@ -1,12 +1,19 @@
-// BSB/server/src/au/states/long/LStopped.js (CORREGIDO - Solo espera)
+// BSB/server/src/au/states/long/LStopped.js
 
 async function run(dependencies) {
-    const { log } = dependencies;
+    const { log, botState } = dependencies;
     
-    // Loguear que el bot está detenido, pero no hacer nada más.
-    log("Estado Long: STOPPED. Bot detenido. Esperando acción del usuario (START/RESET).", 'info');
+    // Solo logueamos en nivel 'info' si es necesario, para evitar saturar el historial 
+    // en cada tick del bot mientras está apagado.
+    if (botState.lStateData && botState.lStateData.ac > 0) {
+        log(`[L-STOPPED] ⚠️ Bot detenido con posición abierta (${botState.lStateData.ac.toFixed(8)} BTC). Requiere intervención manual.`, 'warning');
+    } else {
+        log("[L-STOPPED] 🛑 Estrategia Long detenida. Esperando comando START/RESET.", 'debug');
+    }
     
-    // NOTA: No hacemos 'await resetLState' aquí.
+    // El bot se queda aquí "congelado" intencionalmente.
+    // La transición a RUNNING o BUYING solo ocurrirá cuando el usuario 
+    // cambie el 'state' en la base de datos a través del Dashboard.
 }
 
 module.exports = { run };

@@ -15,7 +15,7 @@ const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/state
 const { monitorAndConsolidateShortBuy } = require('./src/au/states/short/ShortBuyConsolidator');
 
 let io;
-let isProcessing = false; // 🔒 El "Semáforo": Evita que el bot se pise a sí mismo
+let isProcessing = false; 
 
 function setIo(socketIo) { io = socketIo; }
 
@@ -31,10 +31,9 @@ async function syncFrontendState(currentPrice, botState) {
     }
 }
 
-// --- NUEVA LÓGICA DE ACTUALIZACIÓN ATÓMICA (EFICIENCIA) ---
-
 /**
- * Guarda todos los cambios acumulados de un solo golpe en la base de datos.
+ * commitChanges: El "Notario" del bot. 
+ * Asegura que la progresión exponencial sea grabada antes del próximo tick.
  */
 async function commitChanges(changeSet) {
     if (Object.keys(changeSet).length === 0) return null;
@@ -48,7 +47,6 @@ async function commitChanges(changeSet) {
     }
 }
 
-// Funciones auxiliares para anotar cambios en la "lista de pendientes" (changeSet)
 function queueLStateUpdate(fields, changeSet) {
     Object.keys(fields).forEach(key => { changeSet[`lStateData.${key}`] = fields[key]; });
 }
@@ -57,7 +55,7 @@ function queueSStateUpdate(fields, changeSet) {
     Object.keys(fields).forEach(key => { changeSet[`sStateData.${key}`] = fields[key]; });
 }
 
-// --- BALANCES ---
+// --- ACTUALIZACIÓN DE SALDOS REALES ---
 async function slowBalanceCacheUpdate() {
     let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
     try {
@@ -77,33 +75,34 @@ async function slowBalanceCacheUpdate() {
     }, { new: true, upsert: true, lean: true });
 
     if (io) io.sockets.emit('balance-real-update', { 
-        lastAvailableUSDT: updated.lastAvailableUSDT, lastAvailableBTC: updated.lastAvailableBTC, source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK' 
+        lastAvailableUSDT: updated.lastAvailableUSDT, 
+        lastAvailableBTC: updated.lastAvailableBTC, 
+        source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK' 
     });
     return apiSuccess;
 }
 
-// --- CICLO PRINCIPAL OPTIMIZADO ---
+// --- CICLO PRINCIPAL ---
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
-    // Si el bot está ocupado procesando un precio, ignoramos el siguiente tick
     if (isProcessing) return;
 
     try {
-        isProcessing = true; // Cerramos la puerta
-        const changeSet = {}; // 📝 Lista de cambios para este ciclo
+        isProcessing = true; 
+        const changeSet = {}; 
 
         let botState = await Autobot.findOne({}).lean();
         const currentPrice = parseFloat(priceFromWebSocket);
+        
         if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
             await syncFrontendState(currentPrice, botState);
             return;
         }
 
-        // Preparamos las herramientas (dependencias) usando la nueva lógica de cambios
         const dependencies = {
             log, io, bitmartService, Autobot, currentPrice,
-            availableUSDT: botState.lastAvailableUSDT, availableBTC: botState.lastAvailableBTC,
+            availableUSDT: botState.lastAvailableUSDT, 
+            availableBTC: botState.lastAvailableBTC,
             botState, config: botState.config,
-            // Estas funciones ahora NO escriben en la DB, solo anotan en changeSet
             updateBotState: async (val, strat) => { changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; },
             updateLStateData: async (fields) => queueLStateUpdate(fields, changeSet),
             updateSStateData: async (fields) => queueSStateUpdate(fields, changeSet),
@@ -114,10 +113,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. Recalcular Coberturas (Solo anotan en changeSet)
-        // (La lógica interna de cobertura usará updateGeneralBotState inyectado arriba)
-
-        // 2. Consolidación (Long y Short)
+        // 1. CONSOLIDACIÓN: Antes de comprar más, vemos si las órdenes exponenciales se llenaron
         const lLastOrder = botState.lStateData?.lastOrder;
         if (lLastOrder?.side === 'buy') {
             await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
@@ -134,24 +130,42 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
-        // 3. Ejecución de Estrategias
+        // 2. RECALCULAR COBERTURA (Actualización de indicadores de seguridad en cada tick)
+        // Esto permite que el usuario vea en tiempo real cuántas balas exponenciales le quedan
+        if (botState.lstate !== 'STOPPED' && botState.lStateData.ppc > 0) {
+            const { coveragePrice, numberOfOrders } = calculateLongCoverage(
+                botState.lbalance, botState.lStateData.ppc, botState.config.long.purchaseUsdt,
+                parseNumber(botState.config.long.price_var)/100, parseNumber(botState.config.long.size_var)/100
+            );
+            changeSet.lcoverage = coveragePrice;
+            changeSet.lnorder = numberOfOrders;
+        }
+
+        if (botState.sstate !== 'STOPPED' && botState.sStateData.ppc > 0) {
+            const { coveragePrice, numberOfOrders } = calculateShortCoverage(
+                botState.sbalance, botState.sStateData.ppc, botState.config.short.purchaseUsdt,
+                parseNumber(botState.config.short.price_var)/100, parseNumber(botState.config.short.size_var)/100
+            );
+            changeSet.scoverage = coveragePrice;
+            changeSet.snorder = numberOfOrders;
+        }
+
+        // 3. EJECUCIÓN: ¿Es momento de disparar el siguiente nivel exponencial?
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
 
-        // 🚀 GUARDADO FINAL: Una sola escritura en la DB con todos los cambios acumulados
+        // 4. PERSISTENCIA FINAL
         const finalState = await commitChanges(changeSet);
-        
-        // Sincronizamos el frontend con el estado más reciente
         await syncFrontendState(currentPrice, finalState || botState);
         
     } catch (error) {
-        console.error(`[ERROR CRÍTICO] Fallo en el ciclo del bot: ${error.message}`);
+        log(`❌ Error crítico en ciclo: ${error.message}`, 'error');
     } finally {
-        isProcessing = false; // Abrimos la puerta para el siguiente tick
+        isProcessing = false; 
     }
 }
 
 module.exports = {
-    setIo, start: () => log('Bot Iniciado', 'success'), stop: () => log('Bot Detenido', 'warning'),
+    setIo, start: () => log('🚀 Autobot Iniciado', 'success'), stop: () => log('🛑 Autobot Detenido', 'warning'),
     log, botCycle, slowBalanceCacheUpdate, syncFrontendState
 };

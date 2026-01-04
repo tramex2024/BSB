@@ -1,5 +1,3 @@
-// BSB/server/src/au/states/short/SStopped.js (Solo espera)
-
 // BSB/server/src/au/states/short/SStopped.js (ESPEJO DE LStopped.js)
 
 /**

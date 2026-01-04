@@ -4,30 +4,33 @@ const bitmartService = require('../../../services/bitmartService');
 const { MIN_USDT_VALUE_FOR_BITMART, BUY_FEE_PERCENT } = require('../utils/tradeConstants');
 
 /**
- * Coloca la primera orden de compra de un ciclo.
+ * PRIMERA COMPRA: Inicia la cadena exponencial.
  */
 async function placeFirstBuyOrder(config, botState, log, updateBotState, updateGeneralBotState) {
     const { purchaseUsdt } = config.long;
     const SYMBOL = config.symbol;
     const amountNominal = parseFloat(purchaseUsdt);
+    
+    // El costo real incluye la comisión para no dejar saldos huérfanos en el balance del bot
     const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
 
     if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`❌ Error: Monto $${amountNominal} inferior al mínimo de BitMart.`, 'error');
+        log(`❌ [L-FIRST] Monto $${amountNominal} es inferior al mínimo de BitMart ($5).`, 'error');
         await updateBotState('NO_COVERAGE', 'long'); 
         return;
     }
 
     const currentLBalance = parseFloat(botState.lbalance || 0);
-    const newLBalance = currentLBalance - amountRealCost;
-
-    log(`🚀 Ejecutando PRIMERA COMPRA: ${amountNominal} USDT...`, 'info'); 
+    
+    log(`🚀 [L-FIRST] Comprando base de ${amountNominal} USDT para iniciar ciclo...`, 'info'); 
 
     try {
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', amountNominal); 
 
         if (orderResult && orderResult.order_id) {
-            // BLOQUEO Y DEDUCCIÓN ATÓMICA
+            const newLBalance = currentLBalance - amountRealCost;
+            
+            // REGISTRO ATÓMICO: Establecemos la base de la pirámide exponencial
             await updateGeneralBotState({
                 lbalance: newLBalance,
                 lStateData: {
@@ -35,40 +38,36 @@ async function placeFirstBuyOrder(config, botState, log, updateBotState, updateG
                     lastOrder: {
                         order_id: orderResult.order_id,
                         side: 'buy',
-                        usdt_amount: amountNominal,
+                        usdt_amount: amountNominal, // Semilla para la siguiente exponencial
                         usdt_cost_real: amountRealCost,
+                        timestamp: new Date()
                     }
                 }
             });
-            log(`✅ Primera orden registrada (ID: ${orderResult.order_id}). LBalance: ${newLBalance.toFixed(2)}`, 'success');
+            log(`✅ [L-FIRST] Orden ID: ${orderResult.order_id}. Balance Bot: ${newLBalance.toFixed(2)}`, 'success');
         }
     } catch (error) {
-        log(`❌ Error crítico en primera compra: ${error.message}`, 'error');
-        throw error; 
+        log(`❌ [L-FIRST] Error de red/API: ${error.message}. El bot reintentará en el sig. tick.`, 'error');
+        // No lanzamos throw para que el bot no se detenga, la autonomía es prioridad
     }
 }
 
 /**
- * Coloca una orden de COBERTURA (DCA).
+ * COBERTURA (DCA) EXPONENCIAL: Ejecuta el siguiente salto de la serie.
  */
 async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
     const SYMBOL = botState.config.symbol;
     const amountRealCost = usdtAmount * (1 + BUY_FEE_PERCENT);
-    const newLBalance = (parseFloat(botState.lbalance || 0)) - amountRealCost;
+    const currentBalance = parseFloat(botState.lbalance || 0);
 
-    if (newLBalance < 0) {
-        log(`⚠️ Fondos insuficientes para cobertura. Faltan ${(newLBalance * -1).toFixed(2)} USDT.`, 'error');
-        await updateBotState('NO_COVERAGE', 'long'); 
-        return;
-    }
-
-    log(`📉 Ejecutando COBERTURA (DCA): ${usdtAmount.toFixed(2)} USDT...`, 'warning');
+    log(`📉 [L-DCA] Disparando orden exponencial de ${usdtAmount.toFixed(2)} USDT...`, 'warning');
     
     try {
         const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtAmount); 
 
         if (order && order.order_id) {
-            // ACTUALIZACIÓN ATÓMICA
+            const newLBalance = currentBalance - amountRealCost;
+
             await updateGeneralBotState({
                 lbalance: newLBalance,
                 lStateData: {
@@ -76,48 +75,48 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
                     lastOrder: {
                         order_id: order.order_id,
                         side: 'buy',
-                        usdt_amount: usdtAmount,
+                        usdt_amount: usdtAmount, // Nueva semilla actualizada
                         usdt_cost_real: amountRealCost,
+                        timestamp: new Date()
                     }
                 }
             });
-            log(`✅ Cobertura colocada (ID: ${order.order_id}).`, 'success');
+            log(`✅ [L-DCA] Orden ${order.order_id} colocada. Nuevo balance bloqueado.`, 'success');
         }
     } catch (error) {
-        log(`❌ Error en orden de cobertura: ${error.message}`, 'error');
-        throw error;
+        log(`❌ [L-DCA] Error al promediar: ${error.message}`, 'error');
     }
 }
 
 /**
- * Coloca la orden de VENTA (Take Profit).
+ * VENTA (Take Profit): Liquida la posición acumulada exponencialmente.
  */
 async function placeSellOrder(config, botState, sellAmount, log, updateLStateData) { 
     const SYMBOL = config.symbol;
-    log(`💰 Ejecutando VENTA (Take Profit): ${sellAmount.toFixed(8)} BTC...`, 'info');
+    log(`💰 [L-SELL] Liquidando posición total de ${sellAmount.toFixed(8)} BTC...`, 'info');
 
     try {
         const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', sellAmount); 
 
         if (order && order.order_id) {
-            // BLOQUEO ATÓMICO: Registramos la orden para que el Consolidator la vigile
+            // Bloqueamos con lastOrder para evitar doble venta si la API tarda en responder
             await updateLStateData({
                 lastOrder: {
                     order_id: order.order_id,
                     size: sellAmount,
-                    side: 'sell'
+                    side: 'sell',
+                    timestamp: new Date()
                 }
             });
-            log(`✅ Venta enviada (ID: ${order.order_id}). Esperando confirmación...`, 'success');
+            log(`✅ [L-SELL] Orden enviada (ID: ${order.order_id}). Esperando consolidación...`, 'success');
         }
     } catch (error) { 
-        log(`❌ Error en orden de venta: ${error.message}`, 'error');
-        throw error;
+        log(`❌ [L-SELL] Error en liquidación: ${error.message}`, 'error');
     }
 }
 
 /**
- * Cancela órdenes huérfanas.
+ * CANCELACIÓN DE SEGURIDAD.
  */
 async function cancelActiveLongOrder(botState, log, updateLStateData) {
     const lastOrder = botState.lStateData.lastOrder;
@@ -126,15 +125,16 @@ async function cancelActiveLongOrder(botState, log, updateLStateData) {
     const SYMBOL = botState.config.symbol;
     
     try {
-        log(`🛑 Cancelando orden ${lastOrder.order_id}...`, 'warning');
+        log(`🛑 [L-CANCEL] Limpiando orden ${lastOrder.order_id}...`, 'warning');
         const result = await bitmartService.cancelOrder(SYMBOL, lastOrder.order_id); 
         
+        // Si el código es 1000 (éxito) o si ya se llenó, liberamos el lastOrder
         if (result?.code === 1000 || result?.message?.includes('already filled')) {
             await updateLStateData({ lastOrder: null });
-            log(`✅ Orden limpiada del sistema.`, 'success');
+            log(`✅ [L-CANCEL] Sistema desbloqueado.`, 'success');
         }
     } catch (error) {
-        log(`❌ Error al cancelar: ${error.message}`, 'error');
+        log(`❌ [L-CANCEL] No se pudo cancelar: ${error.message}`, 'error');
     }
 }
 
