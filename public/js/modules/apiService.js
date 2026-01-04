@@ -29,32 +29,34 @@ async function privateFetch(endpoint, options = {}) {
 }
 
 /**
- * 1. RECOPILACIÓN DE CONFIGURACIÓN
- * Extrae los valores de los inputs del DOM para enviarlos al backend.
+ * RECOPILACIÓN DE CONFIGURACIÓN
+ * Mapeo exacto basado en el documento de MongoDB:
+ * config.long.amountUsdt, config.long.purchaseUsdt, config.stopAtCycle, etc.
  */
 export function getBotConfiguration() {
     const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
-        symbol: TRADE_SYMBOL_BITMART,
+        symbol: "BTC_USDT", // Según tu documento: "BTC_USDT"
         long: {
-            balanceUsdt: getNum('auamount-usdt'),
-            purchaseUsdt: getNum('aupurchase-usdt'),
-            increment: getNum('auincrement'),
-            decrement: getNum('audecrement'),
-            trigger: getNum('autrigger'),
+            amountUsdt: getNum('auamount-usdt'),     // Mapeado a config.long.amountUsdt
+            purchaseUsdt: getNum('aupurchase-usdt'), // Mapeado a config.long.purchaseUsdt
+            profit_percent: getNum('autrigger'),    // Mapeado a config.long.profit_percent
+            price_var: getNum('audecrement'),       // Mapeado a config.long.price_var
+            size_var: getNum('auincrement'),        // Mapeado a config.long.size_var
+            enabled: true
         },
         short: {
-            balanceBtc: getNum('auamount-btc'),
-            purchaseBtc: getNum('aupurchase-btc'),
-            increment: getNum('auincrement'),
-            decrement: getNum('audecrement'),
-            trigger: getNum('autrigger'),
+            amountBtc: getNum('auamount-btc'),       // Mapeado a config.short.amountBtc
+            sellBtc: getNum('aupurchase-btc'),      // Mapeado a config.short.sellBtc
+            profit_percent: getNum('autrigger'),    // Mapeado a config.short.profit_percent
+            price_var: getNum('audecrement'),       // Mapeado a config.short.price_var
+            size_var: getNum('auincrement'),        // Mapeado a config.short.size_var
+            enabled: false
         },
-        options: {
-            stopAtCycle: getCheck('au-stop-at-cycle-end'),
-        }
+        // ESTA ES LA CLAVE: El campo está en la raíz de 'config', no dentro de long/short
+        stopAtCycle: getCheck('au-stop-at-cycle-end') 
     };
 }
 
