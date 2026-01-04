@@ -165,4 +165,31 @@ router.get('/market-signal', async (req, res) => {
     }
 });
 
+// --- NUEVA RUTA: OBTENER CONFIGURACIÓN Y ESTADO COMPLETO ---
+/**
+ * GET /api/autobot/config-and-state
+ * Retorna el documento completo del bot para sincronizar el frontend.
+ */
+router.get('/config-and-state', async (req, res) => {
+    try {
+        const autobot = await Autobot.findOne({});
+        if (!autobot) {
+            return res.status(404).json({ success: false, message: 'No se encontró configuración del bot.' });
+        }
+        
+        // Enviamos el objeto completo de la DB
+        res.json({ 
+            success: true, 
+            config: autobot.config,
+            lstate: autobot.lstate,
+            sstate: autobot.sstate,
+            lastAvailableUSDT: autobot.lastAvailableUSDT,
+            lastAvailableBTC: autobot.lastAvailableBTC
+        });
+    } catch (error) {
+        console.error('Error al obtener config:', error);
+        res.status(500).json({ success: false, message: 'Error en el servidor.' });
+    }
+});
+
 module.exports = router;

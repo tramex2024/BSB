@@ -13,42 +13,38 @@ let maxBtcBalance = 0;
 let currentTab = 'opened';
 
 /**
- * Sincroniza la UI con los datos reales de MongoDB (Balances y Configuración)
+ * Sincroniza la UI con los datos reales de MongoDB
  */
 async function loadBotDataFromServer() {
     try {
-        // Probemos con la ruta que sabemos que existe y no da 404
-        const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
+        const response = await fetch(`${BACKEND_URL}/api/autobot/config-and-state`, { 
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
-        // Verificamos si la respuesta es HTML en lugar de JSON para evitar el crash
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            console.error("El servidor no devolvió JSON. Ruta posiblemente incorrecta.");
-            return;
-        }
+        if (!response.ok) throw new Error("Ruta no encontrada");
 
         const data = await response.json();
 
         if (data && data.success) {
-            // Actualizar balances
-            updateMaxBalanceDisplay('USDT', parseFloat(data.data.lastAvailableUSDT) || 0);
-            updateMaxBalanceDisplay('BTC', parseFloat(data.data.lastAvailableBTC) || 0);
+            // 1. Sincronizar balances
+            updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
+            updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
 
-            // IMPORTANTE: Verifica si 'data.data' o 'data' contiene el objeto 'config'
-            // Si el backend no envía 'config' en esta ruta, hay que buscar la ruta que sí lo haga.
-            const configSource = data.data?.config || data.config;
-            
-            if (configSource) {
+            // 2. Sincronizar Checkbox "Stop at cycle end"
+            if (data.config) {
                 const stopAtCycleCheckbox = document.getElementById('au-stop-at-cycle-end');
                 if (stopAtCycleCheckbox) {
-                    stopAtCycleCheckbox.checked = !!configSource.stopAtCycle;
+                    // Sincronizamos con el valor REAL de MongoDB
+                    stopAtCycleCheckbox.checked = !!data.config.stopAtCycle;
+                    console.log("Checkbox sincronizado desde DB:", stopAtCycleCheckbox.checked);
                 }
             }
+            
+            // 3. Actualizar UI del botón (START/STOP)
+            updateBotUI(data);
         }
     } catch (error) {
-        console.error("Error al sincronizar datos:", error);
+        console.error("Error en sincronización:", error);
     }
 }
 
