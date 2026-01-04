@@ -3,11 +3,17 @@
 const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
-const MarketSignal = require('../models/MarketSignal'); // <--- Importamos el nuevo modelo
+const MarketSignal = require('../models/MarketSignal');
 const autobotLogic = require('../autobotLogic.js');
 const { calculateInitialState } = require('../autobotCalculations');
 const authMiddleware = require('../middleware/authMiddleware');
-const { CLEAN_STRATEGY_DATA, CLEAN_ROOT_FIELDS } = require('../src/au/utils/cleanState');
+
+// 🟢 Importamos las nuevas limpiezas segmentadas para garantizar independencia
+const { 
+    CLEAN_STRATEGY_DATA, 
+    CLEAN_LONG_ROOT, 
+    CLEAN_SHORT_ROOT 
+} = require('../src/au/utils/cleanState');
 
 // Importamos el servicio centralizado de BitMart
 const bitmartService = require('../services/bitmartService');
@@ -16,7 +22,8 @@ const bitmartService = require('../services/bitmartService');
 router.use(authMiddleware);
 
 /**
- * Función mejorada para emitir el estado.
+ * Función mejorada para emitir el estado mediante Socket.io.
+ * Ahora incluye todos los campos de ambas estrategias para el Frontend.
  */
 const emitBotState = (autobot, io) => {
     const botData = autobot.toObject();
@@ -25,12 +32,15 @@ const emitBotState = (autobot, io) => {
         lstate: botData.lstate || 'STOPPED',
         sstate: botData.sstate || 'STOPPED',
         lprofit: botData.lprofit || 0,
+        sprofit: botData.sprofit || 0,
         lbalance: botData.lbalance || 0,
         sbalance: botData.sbalance || 0,
         lcycle: botData.lcycle || 0,
         scycle: botData.scycle || 0,
         lcoverage: botData.lcoverage || 0,
+        scoverage: botData.scoverage || 0,
         lnorder: botData.lnorder || 0,
+        snorder: botData.snorder || 0,
         total_profit: botData.total_profit || 0,
         lastAvailableUSDT: botData.lastAvailableUSDT || 0
     };
@@ -42,7 +52,7 @@ const emitBotState = (autobot, io) => {
     return payload;
 };
 
-// --- RUTA START ---
+// --- RUTA START (Arranque Global) ---
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
@@ -61,9 +71,11 @@ router.post('/start', async (req, res) => {
         if (!autobot) {
             autobot = new Autobot({ config: { ...config, ...initialState } });
         } else {
+            // Mezclamos la config enviada con el estado inicial calculado
             autobot.config = { ...autobot.config, ...config, ...initialState };
         }
 
+        // Activamos ambas piernas
         autobot.lstate = 'RUNNING';
         autobot.sstate = 'RUNNING';
         autobot.config.long.enabled = true;
@@ -80,7 +92,7 @@ router.post('/start', async (req, res) => {
     }
 });
 
-// --- RUTA STOP ---
+// --- RUTA STOP (Parada Global Segura) ---
 router.post('/stop', async (req, res) => {
     try {
         const botState = await Autobot.findOne({});
@@ -90,18 +102,17 @@ router.post('/stop', async (req, res) => {
             botState.config.long.enabled = false;
             botState.config.short.enabled = false;
 
-            botState.ltprice = CLEAN_ROOT_FIELDS.ltprice; 
-            botState.stprice = CLEAN_ROOT_FIELDS.stprice;
-            botState.lsprice = CLEAN_ROOT_FIELDS.lsprice; 
-            botState.sbprice = CLEAN_ROOT_FIELDS.sbprice;
+            // 🟢 Aplicamos limpieza total pero segmentada para no dejar basura
+            Object.assign(botState, CLEAN_LONG_ROOT);
+            Object.assign(botState, CLEAN_SHORT_ROOT);
 
-            botState.lStateData = Object.assign({}, CLEAN_STRATEGY_DATA);
-            botState.sStateData = Object.assign({}, CLEAN_STRATEGY_DATA);
+            botState.lStateData = { ...CLEAN_STRATEGY_DATA };
+            botState.sStateData = { ...CLEAN_STRATEGY_DATA };
             
             await botState.save();
 
             const botData = emitBotState(botState, autobotLogic.io);
-            autobotLogic.log('Autobot detenido y datos limpiados.', 'info');
+            autobotLogic.log('Autobot detenido y datos limpiados globalmente.', 'info');
             
             res.json({ success: true, message: 'Bot detenido con éxito.', data: botData });
         } else {
@@ -113,16 +124,57 @@ router.post('/stop', async (req, res) => {
     }
 });
 
-// --- RUTA UPDATE CONFIG ---
+// --- 🟢 NUEVA RUTA: STOP LONG (Independiente) ---
+router.post('/stop/long', async (req, res) => {
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            botState.lstate = 'STOPPED';
+            botState.config.long.enabled = false;
+
+            // Limpiamos solo campos Long en la raíz y su objeto de estado
+            Object.assign(botState, CLEAN_LONG_ROOT);
+            botState.lStateData = { ...CLEAN_STRATEGY_DATA };
+            
+            await botState.save();
+            const botData = emitBotState(botState, autobotLogic.io);
+            autobotLogic.log('Estrategia LONG detenida individualmente.', 'info');
+            
+            res.json({ success: true, message: 'Long detenido.', data: botData });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al detener Long.' });
+    }
+});
+
+// --- 🟢 NUEVA RUTA: STOP SHORT (Independiente) ---
+router.post('/stop/short', async (req, res) => {
+    try {
+        const botState = await Autobot.findOne({});
+        if (botState) {
+            botState.sstate = 'STOPPED';
+            botState.config.short.enabled = false;
+
+            // Limpiamos solo campos Short en la raíz y su objeto de estado
+            Object.assign(botState, CLEAN_SHORT_ROOT);
+            botState.sStateData = { ...CLEAN_STRATEGY_DATA };
+            
+            await botState.save();
+            const botData = emitBotState(botState, autobotLogic.io);
+            autobotLogic.log('Estrategia SHORT detenida individualmente.', 'info');
+            
+            res.json({ success: true, message: 'Short detenido.', data: botData });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al detener Short.' });
+    }
+});
+
+// --- RUTA UPDATE CONFIG (Protegida para Lógica Exponencial) ---
 router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
         const symbol = config.symbol || 'BTC_USDT';
-
-        if (config.long?.trigger !== undefined) {
-            config.long.profit_percent = config.long.trigger;
-            delete config.long.trigger; 
-        }
 
         const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
@@ -131,27 +183,33 @@ router.post('/update-config', async (req, res) => {
 
         let autobot = await Autobot.findOne({});
         if (autobot) {
+            // Actualizamos la configuración base
             autobot.config = config; 
-            autobot.lcoverage = initialState.lcoverage;
-            autobot.lnorder = initialState.lnorder;
             
-            if (autobot.lstate === 'STOPPED') autobot.lbalance = initialState.lbalance;
-            if (autobot.sstate === 'STOPPED') autobot.sbalance = initialState.sbalance;
+            // 🟢 CRÍTICO: Solo reseteamos balances y targets si la estrategia está parada.
+            // Si está RUNNING, permitimos que la lógica exponencial siga su curso sin saltos de balance.
+            if (autobot.lstate === 'STOPPED') {
+                autobot.lbalance = initialState.lbalance;
+                autobot.lcoverage = initialState.lcoverage;
+                autobot.lnorder = initialState.lnorder;
+            }
+            if (autobot.sstate === 'STOPPED') {
+                autobot.sbalance = initialState.sbalance;
+                autobot.scoverage = initialState.scoverage;
+                autobot.snorder = initialState.snorder;
+            }
 
             await autobot.save();
             const botData = emitBotState(autobot, autobotLogic.io);
             res.json({ success: true, data: botData });
         }
     } catch (error) {
+        console.error('Error al actualizar config:', error);
         res.status(500).json({ success: false, message: 'Error al actualizar configuración.' });
     }
 });
 
-// --- NUEVA RUTA: SEÑAL DE MERCADO ---
-/**
- * GET /api/autobot/market-signal
- * Retorna el último análisis (RSI, señal) guardado en la DB por el servidor.
- */
+// --- RUTA: SEÑAL DE MERCADO ---
 router.get('/market-signal', async (req, res) => {
     try {
         const signal = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
@@ -160,24 +218,18 @@ router.get('/market-signal', async (req, res) => {
         }
         res.json({ success: true, data: signal });
     } catch (error) {
-        console.error('Error en ruta market-signal:', error);
         res.status(500).json({ success: false, message: 'Error al obtener señal.' });
     }
 });
 
-// --- NUEVA RUTA: OBTENER CONFIGURACIÓN Y ESTADO COMPLETO ---
-/**
- * GET /api/autobot/config-and-state
- * Retorna el documento completo del bot para sincronizar el frontend.
- */
+// --- RUTA: OBTENER CONFIGURACIÓN Y ESTADO COMPLETO ---
 router.get('/config-and-state', async (req, res) => {
     try {
         const autobot = await Autobot.findOne({});
         if (!autobot) {
-            return res.status(404).json({ success: false, message: 'No se encontró configuración del bot.' });
+            return res.status(404).json({ success: false, message: 'No se encontró configuración.' });
         }
         
-        // Enviamos el objeto completo de la DB
         res.json({ 
             success: true, 
             config: autobot.config,
@@ -187,7 +239,6 @@ router.get('/config-and-state', async (req, res) => {
             lastAvailableBTC: autobot.lastAvailableBTC
         });
     } catch (error) {
-        console.error('Error al obtener config:', error);
         res.status(500).json({ success: false, message: 'Error en el servidor.' });
     }
 });

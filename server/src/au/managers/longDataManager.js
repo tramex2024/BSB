@@ -3,6 +3,8 @@
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 const { calculateLongCoverage, parseNumber } = require('../../../autobotCalculations'); 
+// Importamos la limpieza específica para Long
+const { CLEAN_STRATEGY_DATA, CLEAN_LONG_ROOT } = require('../utils/cleanState');
 
 const LSTATE = 'long';
 const SELL_FEE_PERCENT = 0.001; // 0.1%
@@ -13,7 +15,6 @@ const SELL_FEE_PERCENT = 0.001; // 0.1%
 async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState, updateLStateData } = dependencies;
     
-    // 1. Datos reales de la ejecución en BitMart
     const executedQty = parseFloat(orderDetails.filledSize || 0);
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedCost = executedQty * executedPrice;
@@ -24,7 +25,6 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         return;
     }
 
-    // 2. LÓGICA DE POSICIÓN
     const currentLData = botState.lStateData;
     const isFirstOrder = (currentLData.orderCountInCycle || 0) === 0;
     
@@ -35,31 +35,23 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     const newAI = currentAI + baseExecutedCost;
     const newPPC = newAI / newTotalQty;
 
-    // 3. GESTIÓN DE CAPITAL (Deducción exacta)
-    // Devolvemos al balance lo que el bot bloqueó "de más" por volatilidad
     const intendedCost = parseFloat(currentLData.lastOrder?.usdt_cost_real || 0);
     const refund = intendedCost > baseExecutedCost ? (intendedCost - baseExecutedCost) : 0;
     const finalLBalance = parseFloat(botState.lbalance || 0) + refund;
 
-    // 4. ACTUALIZACIÓN EXPONENCIAL DE TARGETS
-    const { price_var, size_var, purchaseUsdt, profit_percent } = botState.config.long;
+    const { price_var, size_var, profit_percent } = botState.config.long;
     
-    // El Take Profit siempre se calcula sobre el PPC acumulado
     const newLTPrice = newPPC * (1 + (parseNumber(profit_percent) / 100));
-    
-    // LÓGICA EXPONENCIAL: El próximo precio de cobertura es respecto al PRECIO DE EJECUCIÓN ACTUAL
     const newNextPrice = executedPrice * (1 - (parseNumber(price_var) / 100));
     
-    // Recalcular cuántas órdenes exponenciales nos quedan con el balance real
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
         finalLBalance, 
-        executedPrice, // Base para la siguiente caída
-        executedQty * executedPrice, // Monto de la "última" para calcular la "siguiente"
+        executedPrice, 
+        executedQty * executedPrice, 
         parseNumber(price_var)/100, 
         parseNumber(size_var)/100
     );
 
-    // 5. PERSISTENCIA
     const SYMBOL = botState.config.symbol || 'BTC_USDT';
     await saveExecutedOrder({ ...orderDetails, symbol: SYMBOL }, LSTATE);
 
@@ -73,14 +65,14 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
             ac: newTotalQty,
             ai: newAI,
             ppc: newPPC,
-            lastOrder: null, // Liberamos el bloqueo
-            nextCoveragePrice: newNextPrice, // Guardamos para LBuying.js
+            lastOrder: null,
+            nextCoveragePrice: newNextPrice,
             orderCountInCycle: (currentLData.orderCountInCycle || 0) + 1,
             cycleStartTime: isFirstOrder ? new Date() : currentLData.cycleStartTime
         }
     });
     
-    log(`✅ [L-DATA] PPC: ${newPPC.toFixed(2)} | Sig. Compra: ${newNextPrice.toFixed(2)} | Órdenes Restantes: ${numberOfOrders}`, 'success');
+    log(`✅ [L-DATA] PPC: ${newPPC.toFixed(2)} | Sig. Compra: ${newNextPrice.toFixed(2)}`, 'success');
 }
 
 /**
@@ -97,7 +89,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const totalRecoveredNeto = (filledSize * sellPrice) * (1 - SELL_FEE_PERCENT);
         const profitNeto = totalRecoveredNeto - totalUsdtSpent;
         
-        // Verificamos si se vendió al menos el 99% (por temas de decimales)
         const isFullSell = filledSize >= (botStateObj.lStateData.ac * 0.99);
 
         await saveExecutedOrder({ ...orderDetails, side: 'sell' }, LSTATE);
@@ -115,25 +106,24 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const newLBalance = botStateObj.lbalance + totalRecoveredNeto;
         
         if (isFullSell) {
-            // RESET TOTAL: Volvemos a la base (ej. 5 USDT)
+            // 🟢 USAMOS CLEAN_LONG_ROOT para no afectar los campos del Short (stprice, etc)
             await updateGeneralBotState({
+                ...CLEAN_LONG_ROOT,
                 lbalance: newLBalance,
                 total_profit: (botStateObj.total_profit || 0) + profitNeto,
-                ltprice: 0,
                 lcycle: (Number(botStateObj.lcycle || 0) + 1)
             });
 
-            await updateLStateData({ 
-                ac: 0, ppc: 0, ai: 0, 
-                orderCountInCycle: 0, 
-                lastOrder: null,
-                nextCoveragePrice: 0 
-            });
+            // 🟢 Reseteamos lStateData con la constante genérica
+            await updateLStateData(CLEAN_STRATEGY_DATA);
 
             log(`💰 [L-DATA] Ciclo cerrado. Profit: +${profitNeto.toFixed(2)} USDT.`, 'success');
-            await updateBotState(config.long.stopAtCycle ? 'STOPPED' : 'BUYING', LSTATE);
+            
+            // 🟢 VERIFICACIÓN INDEPENDIENTE: Usamos config.long.stopAtCycle
+            const shouldStop = config.long.stopAtCycle === true;
+            await updateBotState(shouldStop ? 'STOPPED' : 'BUYING', LSTATE);
+            
         } else {
-            // Venta parcial (raro en market, pero posible)
             const remainingAc = Math.max(0, botStateObj.lStateData.ac - filledSize);
             await updateLStateData({ 
                 ac: remainingAc, 
