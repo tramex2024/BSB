@@ -23,6 +23,10 @@ async function privateFetch(endpoint, options = {}) {
     }
 }
 
+/**
+ * 🟢 Captura la configuración del formulario mapeando los nuevos 
+ * controles independientes de Long y Short.
+ */
 export function getBotConfiguration() {
     const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
     const getCheck = (id) => document.getElementById(id)?.checked || false;
@@ -32,10 +36,11 @@ export function getBotConfiguration() {
         long: {
             amountUsdt: getNum('auamount-usdt'),
             purchaseUsdt: getNum('aupurchase-usdt'),
-            // Enviamos 'trigger' porque tu backend lo busca para convertirlo
             trigger: getNum('autrigger'), 
             price_var: getNum('audecrement'),
             size_var: getNum('auincrement'),
+            // 🟢 Nuevo mapeo independiente para Long
+            stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
         short: {
@@ -44,10 +49,10 @@ export function getBotConfiguration() {
             trigger: getNum('autrigger'),
             price_var: getNum('audecrement'),
             size_var: getNum('auincrement'),
-            enabled: false
-        },
-        // Clave para MongoDB: debe coincidir con el campo en la raíz de 'config'
-        stopAtCycle: getCheck('au-stop-at-cycle-end') 
+            // 🟢 Nuevo mapeo independiente para Short
+            stopAtCycle: getCheck('au-stop-short-at-cycle'),
+            enabled: true // Ahora ambos pueden estar habilitados
+        }
     };
 }
 
@@ -60,7 +65,12 @@ export async function sendConfigToBackend() {
     if (!data.success) console.warn('Error auto-save:', data.message);
 }
 
+/**
+ * 🟢 Modificado para manejar el inicio/parada global o segmentada.
+ */
 export async function toggleBotState(isRunning) {
+    // Si isRunning es true, significa que queremos DETENERLO.
+    // Usamos el endpoint global de parada por defecto.
     const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
     const config = isRunning ? {} : getBotConfiguration();
 
@@ -73,12 +83,25 @@ export async function toggleBotState(isRunning) {
     });
 
     if (data.success) {
-        displayMessage(`Bot ${isRunning ? 'detenido' : 'iniciado'}`, 'success');
+        displayMessage(`Bot ${isRunning ? 'detenido' : 'iniciado'} con éxito`, 'success');
     } else {
         displayMessage(`Error: ${data.message}`, 'error');
     }
 
     if (btn) btn.disabled = false;
+    return data;
+}
+
+/**
+ * 🟢 NUEVA FUNCIÓN: Permite detener solo una pierna desde la UI si lo necesitas.
+ */
+export async function stopStrategyIndependently(type) { // type: 'long' o 'short'
+    const endpoint = `/api/autobot/stop/${type}`;
+    const data = await privateFetch(endpoint, { method: 'POST' });
+    
+    if (data.success) {
+        displayMessage(`${type.toUpperCase()} detenido individualmente`, 'success');
+    }
     return data;
 }
 

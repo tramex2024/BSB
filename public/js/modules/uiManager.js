@@ -29,18 +29,13 @@ export function updateBotUI(state) {
     if (priceElement && state.price !== undefined && state.price !== null) {
         const currentPrice = Number(state.price);
         
-        // Solo actualizar si el precio ha cambiado
         if (currentPrice !== lastPrice) {
             priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
             
             if (lastPrice !== 0) {
-                if (currentPrice > lastPrice) {
-                    priceElement.classList.add('text-emerald-400'); // Sube
-                } else if (currentPrice < lastPrice) {
-                    priceElement.classList.add('text-red-400');    // Baja
-                } else {
-                    priceElement.classList.add('text-white');      // Igual
-                }
+                if (currentPrice > lastPrice) priceElement.classList.add('text-emerald-400');
+                else if (currentPrice < lastPrice) priceElement.classList.add('text-red-400');
+                else priceElement.classList.add('text-white');
             } else {
                 priceElement.classList.add('text-white');
             }
@@ -82,8 +77,6 @@ export function updateBotUI(state) {
         if (!element) continue;
 
         const rawValue = state[dataKey];
-        
-        // Filtro de integridad: no borrar datos si el socket manda un nulo
         if (rawValue === undefined || rawValue === null) continue;
 
         const value = Number(rawValue);
@@ -92,12 +85,10 @@ export function updateBotUI(state) {
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
         } else if (['lnorder', 'snorder', 'lcycle', 'scycle'].includes(dataKey)) {
-            // Enteros
             if (element.textContent !== value.toString()) {
                 element.textContent = value.toFixed(0);
             }
         } else {
-            // Decimales (BTC 6, USDT 2)
             const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
             const decimals = isBtcField ? 6 : 2;
             const formatted = value.toLocaleString(undefined, { 
@@ -111,9 +102,10 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 4. CONTROL DE BOTONES E INPUTS ---
-    const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
-    updateControlsState(isStopped);
+    // --- 4. CONTROL DE BOTONES E INPUTS (Lógica de Bloqueo) ---
+    // El bot se considera detenido globalmente solo si AMBAS piernas están en STOPPED
+    const isGlobalStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
+    updateControlsState(isGlobalStopped);
 }
 
 /**
@@ -134,14 +126,15 @@ function formatProfit(element, value) {
 }
 
 /**
- * Bloquea los ajustes mientras el bot corre, pero permite darle a STOP
+ * Gestiona el estado de los inputs y el botón principal.
+ * 🟢 Ahora maneja los nuevos checkboxes de parada independiente.
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
     const autobotSettings = document.getElementById('autobot-settings');
     
     if (startStopButton) {
-        const newText = isStopped ? 'START BOT' : 'STOP BOT';
+        const newText = isStopped ? 'START AUTOBOT' : 'STOP AUTOBOT';
         if (startStopButton.textContent !== newText) {
             startStopButton.textContent = newText;
             startStopButton.className = isStopped 
@@ -153,10 +146,18 @@ function updateControlsState(isStopped) {
     if (autobotSettings) {
         const inputs = autobotSettings.querySelectorAll('input, select');
         inputs.forEach(input => {
-            if (input.id === 'au-stop-at-cycle-end') {
-                input.disabled = false; // Siempre habilitado
+            // 🟢 Los nuevos checkboxes de parada por ciclo NUNCA se bloquean.
+            // Esto permite al usuario decidir parar en medio de un ciclo exponencial.
+            const isIndependentStop = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
+            
+            if (isIndependentStop) {
+                input.disabled = false;
+                input.style.opacity = '1';
+                input.style.cursor = 'pointer';
                 return;
             }
+
+            // Bloqueamos el resto (cantidades, incrementos) si el bot está corriendo
             input.disabled = !isStopped;
             input.style.opacity = isStopped ? '1' : '0.5';
             input.style.cursor = isStopped ? 'auto' : 'not-allowed';
@@ -169,7 +170,7 @@ function updateStatusLabel(id, status) {
     if (!el || !status || el.textContent === status) return;
     
     el.textContent = status;
-    el.className = `font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
+    el.className = `text-[10px] font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
 
 /**
@@ -180,13 +181,13 @@ export function displayMessage(message, type = 'info') {
     if (!container) return;
 
     container.textContent = message;
-    container.classList.remove('bg-blue-500', 'bg-red-500', 'bg-emerald-500', 'hidden');
+    container.className = 'fixed bottom-5 right-5 px-6 py-3 rounded-xl text-white font-bold shadow-2xl z-50 transition-all transform animate-slideUp';
     
     const bgClass = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500');
-    container.classList.add(bgClass, 'active');
+    container.classList.add(bgClass);
 
     setTimeout(() => {
-        container.classList.remove('active');
-        container.classList.add('hidden');
+        container.classList.add('opacity-0', 'translate-y-10');
+        setTimeout(() => container.classList.add('hidden'), 500);
     }, 4000);
 }
