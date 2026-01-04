@@ -5,7 +5,7 @@ const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
 
-// Importaciones de Cálculos (Añadido calculatePotentialProfit)
+// Importaciones de Cálculos
 const { 
     calculateLongCoverage, 
     calculateShortCoverage, 
@@ -37,7 +37,8 @@ async function syncFrontendState(currentPrice, botState) {
 }
 
 /**
- * commitChanges: Asegura que la progresión exponencial sea grabada atómicamente.
+ * commitChanges: El Notario Atómico.
+ * Fusiona todos los cambios del ciclo y los graba en una sola operación de DB.
  */
 async function commitChanges(changeSet) {
     if (Object.keys(changeSet).length === 0) return null;
@@ -86,7 +87,7 @@ async function slowBalanceCacheUpdate() {
     return apiSuccess;
 }
 
-// --- CICLO PRINCIPAL (AUTÓNOMO Y EXPONENCIAL) ---
+// --- CICLO PRINCIPAL (RESILIENTE AL PARPADEO) ---
 async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     if (isProcessing) return;
 
@@ -117,7 +118,7 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. CONSOLIDACIÓN: Sincronización de órdenes antes de actuar
+        // 1. CONSOLIDACIÓN: Sincronizar órdenes
         const lLastOrder = botState.lStateData?.lastOrder;
         if (lLastOrder?.side === 'buy') {
             await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
@@ -134,52 +135,41 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
-        // 2. RECALCULAR COBERTURA Y PROFIT EN TIEMPO REAL
-        if (botState.lstate !== 'STOPPED' && botState.lStateData.ppc > 0) {
+        // 2. RECALCULAR INDICADORES (EVITA EL PARPADEO)
+        // Usamos los valores "frescos" del changeSet si el consolidador los cambió justo arriba
+        const activeLPPC = changeSet['lStateData.ppc'] !== undefined ? changeSet['lStateData.ppc'] : botState.lStateData.ppc;
+        const activeLAC = changeSet['lStateData.ac'] !== undefined ? changeSet['lStateData.ac'] : botState.lStateData.ac;
+
+        if (botState.lstate !== 'STOPPED' && activeLPPC > 0) {
             const { coveragePrice, numberOfOrders } = calculateLongCoverage(
-                botState.lbalance, 
-                botState.lStateData.ppc, 
-                botState.config.long.purchaseUsdt,
-                parseNumber(botState.config.long.price_var)/100, 
-                parseNumber(botState.config.long.size_var)/100
+                botState.lbalance, activeLPPC, botState.config.long.purchaseUsdt,
+                parseNumber(botState.config.long.price_var)/100, parseNumber(botState.config.long.size_var)/100
             );
             changeSet.lcoverage = coveragePrice;
             changeSet.lnorder = numberOfOrders;
 
-            // Corrección de Profit Long
-            changeSet.lprofit = calculatePotentialProfit(
-                botState.lStateData.ppc,
-                botState.lStateData.ac,
-                currentPrice,
-                'long'
-            );
+            // EL PROFIT SE CALCULA AQUÍ CON LA VERDAD FINAL DEL CICLO
+            changeSet.lprofit = calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long');
         }
 
-        if (botState.sstate !== 'STOPPED' && botState.sStateData.ppc > 0) {
+        const activeSPPC = changeSet['sStateData.ppc'] !== undefined ? changeSet['sStateData.ppc'] : botState.sStateData.ppc;
+        const activeSAC = changeSet['sStateData.ac'] !== undefined ? changeSet['sStateData.ac'] : botState.sStateData.ac;
+
+        if (botState.sstate !== 'STOPPED' && activeSPPC > 0) {
             const { coveragePrice, numberOfOrders } = calculateShortCoverage(
-                botState.sbalance, 
-                botState.sStateData.ppc, 
-                botState.config.short.purchaseUsdt,
-                parseNumber(botState.config.short.price_var)/100, 
-                parseNumber(botState.config.short.size_var)/100
+                botState.sbalance, activeSPPC, botState.config.short.purchaseUsdt,
+                parseNumber(botState.config.short.price_var)/100, parseNumber(botState.config.short.size_var)/100
             );
             changeSet.scoverage = coveragePrice;
             changeSet.snorder = numberOfOrders;
-
-            // Corrección de Profit Short
-            changeSet.sprofit = calculatePotentialProfit(
-                botState.sStateData.ppc,
-                botState.sStateData.ac,
-                currentPrice,
-                'short'
-            );
+            changeSet.sprofit = calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short');
         }
 
-        // 3. EJECUCIÓN DE ESTRATEGIA (Lógica de decisión)
+        // 3. EJECUCIÓN DE ESTRATEGIA
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
 
-        // 4. PERSISTENCIA Y SINCRONIZACIÓN
+        // 4. PERSISTENCIA ÚNICA Y ATÓMICA
         const finalState = await commitChanges(changeSet);
         await syncFrontendState(currentPrice, finalState || botState);
         
