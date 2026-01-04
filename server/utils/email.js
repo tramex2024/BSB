@@ -1,40 +1,51 @@
 // src/server/utils/email.js
 
 // src/server/utils/email.js
-const { Resend } = require('resend');
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+// src/server/utils/email.js
 
 async function sendTokenEmail(email, token) {
-    // CAMBIO CLAVE: Resend en modo prueba solo permite enviar al correo de la cuenta
-    const target = 'info.nexuslabs@gmail.com'; 
+    const API_KEY = process.env.BREVO_API_KEY;
+    const senderEmail = "info.nexuslabs@gmail.com"; 
 
-    console.log("--- 🏁 Intento PASO 1.6 (Destinatario Autorizado) ---");
-    console.log("- Enviando a cuenta propia:", target);
+    console.log("--- 🏁 Paso 5: Enviando vía BREVO API ---");
+    console.log("- De:", senderEmail);
+    console.log("- Para:", email);
 
     try {
-        const { data, error } = await resend.emails.send({
-            from: 'BSB Bot <onboarding@resend.dev>',
-            to: target,
-            subject: '🚀 Tu Token de BSB - PRUEBA FINAL',
-            html: `
-                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; border: 2px solid #3b82f6; border-radius: 10px;">
-                    <h2 style="color: #3b82f6;">¡CONEXIÓN EXITOSA!</h2>
-                    <p style="font-size: 18px;">Tu token de acceso es: <strong>${token}</strong></p>
-                    <p style="color: #888; font-size: 12px;">Enviado exitosamente desde Render vía Resend API.</p>
-                </div>
-            `
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: "Nexus Labs Support", email: senderEmail },
+                to: [{ email: email }], // Aquí ya es el email dinámico del usuario
+                subject: "🚀 Tu Token de Acceso BSB",
+                htmlContent: `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+                        <h2 style="color: #3b82f6;">Verificación de Acceso</h2>
+                        <p>Tu código de seguridad para el bot es:</p>
+                        <div style="background: #f3f4f6; padding: 15px; font-size: 24px; font-weight: bold; text-align: center;">
+                            ${token}
+                        </div>
+                        <p style="font-size: 12px; color: #999; margin-top: 20px;">Enviado desde el motor de BSB vía HTTP API.</p>
+                    </div>`
+            })
         });
 
-        if (error) {
-            throw new Error(error.message);
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(`Error Brevo: ${data.message || JSON.stringify(data)}`);
         }
 
-        console.log("✅ ¡ÉXITO TOTAL! Revisa info.nexuslabs@gmail.com. ID:", data.id);
+        console.log("✅ ¡ÉXITO TOTAL CON BREVO! ID del mensaje:", data.messageId);
         return data;
 
     } catch (error) {
-        console.error("❌ Error en la API de Resend:", error.message);
+        console.error("❌ Falló el envío por API de Brevo:", error.message);
         throw error;
     }
 }
