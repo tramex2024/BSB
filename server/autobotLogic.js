@@ -180,6 +180,27 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
     }
 }
 
+/**
+ * Verifica si debe apagar una pierna específica basándose en la config independiente.
+ * Se llama justo después de un Take Profit exitoso.
+ */
+async function checkIndependentStop(type, changeSet, botState) {
+    const config = botState.config[type];
+    
+    if (config && config.stopAtCycle) {
+        log(`[${type.toUpperCase()}] Ciclo completado. Aplicando STOP preventivo.`, 'warning');
+        
+        // 1. Cambiamos el estado a STOPPED en el changeSet
+        changeSet[type === 'long' ? 'lstate' : 'sstate'] = 'STOPPED';
+        
+        // 2. Deshabilitamos la pierna en la configuración para que persista el stop
+        changeSet[`config.${type}.enabled`] = false;
+        
+        return true; // Se detuvo
+    }
+    return false; // Continúa
+}
+
 module.exports = {
     setIo, 
     start: () => log('🚀 Autobot Iniciado', 'success'), 

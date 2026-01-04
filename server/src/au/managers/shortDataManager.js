@@ -3,11 +3,10 @@
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 const { calculateShortCoverage, parseNumber } = require('../../../autobotCalculations'); 
-// 🟢 Importamos las constantes de limpieza independientes
 const { CLEAN_STRATEGY_DATA, CLEAN_SHORT_ROOT } = require('../utils/cleanState');
 
 const SSTATE = 'short';
-const BUY_FEE_PERCENT = 0.001; // 0.1% comisión de recompra
+const BUY_FEE_PERCENT = 0.001; 
 
 /**
  * Maneja una VENTA exitosa (Apertura o DCA de Short).
@@ -103,21 +102,22 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
 
         const newSBalance = botStateObj.sbalance + totalSpentToCover + profitNeto;
         
-        // 🟢 LIMPIEZA QUIRÚRGICA: Solo campos raíz de Short (stprice, sbprice, etc.)
+        // 🟢 Lógica Stop at Cycle:
+        const shouldStopShort = config.short.stopAtCycle === true;
+
         await updateGeneralBotState({
             ...CLEAN_SHORT_ROOT,
             sbalance: newSBalance,
             total_profit: (botStateObj.total_profit || 0) + profitNeto,
-            scycle: (Number(botStateObj.scycle || 0) + 1)
+            scycle: (Number(botStateObj.scycle || 0) + 1),
+            'config.short.enabled': !shouldStopShort // Sincroniza con la UI
         });
 
-        // 🟢 RESET TOTAL DE DATOS DE ESTRATEGIA
         await updateSStateData(CLEAN_STRATEGY_DATA);
 
         log(`💰 [S-DATA] Short liquidado. Ganancia neta: +${profitNeto.toFixed(2)} USDT.`, 'success');
         
-        // 🟢 VERIFICACIÓN DE PARADA INDEPENDIENTE: Usa config.short.stopAtCycle
-        const shouldStopShort = config.short.stopAtCycle === true;
+        // Transición de estado: STOPPED si debe parar, RUNNING si busca nueva venta
         await updateBotState(shouldStopShort ? 'STOPPED' : 'RUNNING', SSTATE);
 
     } catch (error) {

@@ -174,38 +174,34 @@ router.post('/stop/short', async (req, res) => {
 router.post('/update-config', async (req, res) => {
     try {
         const { config } = req.body;
-        const symbol = config.symbol || 'BTC_USDT';
-
-        const tickerData = await bitmartService.getTicker(symbol);
-        const currentPrice = parseFloat(tickerData.last_price);
-
-        const initialState = calculateInitialState(config, currentPrice);
-
+        
+        // Buscamos el documento único del bot
         let autobot = await Autobot.findOne({});
+        
         if (autobot) {
-            // Actualizamos la configuración base
-            autobot.config = config; 
-            
-            // 🟢 CRÍTICO: Solo reseteamos balances y targets si la estrategia está parada.
-            // Si está RUNNING, permitimos que la lógica exponencial siga su curso sin saltos de balance.
-            if (autobot.lstate === 'STOPPED') {
-                autobot.lbalance = initialState.lbalance;
-                autobot.lcoverage = initialState.lcoverage;
-                autobot.lnorder = initialState.lnorder;
-            }
-            if (autobot.sstate === 'STOPPED') {
-                autobot.sbalance = initialState.sbalance;
-                autobot.scoverage = initialState.scoverage;
-                autobot.snorder = initialState.snorder;
+            // 1. Asignamos la nueva configuración recibida del Frontend
+            autobot.config = config;
+
+            // 2. IMPORTANTE: Eliminamos manualmente el campo antiguo si existe 
+            // para que no ensucie la base de datos (limpieza de legado)
+            if (autobot.config.stopAtCycle !== undefined) {
+                autobot.set('config.stopAtCycle', undefined);
             }
 
+            // 3. CRÍTICO: Avisamos a Mongoose que el objeto 'config' cambió internamente
+            autobot.markModified('config');
+            
             await autobot.save();
+            
+            // Emitimos el estado actualizado por Socket
             const botData = emitBotState(autobot, autobotLogic.io);
             res.json({ success: true, data: botData });
+        } else {
+            res.status(404).json({ success: false, message: 'Bot no encontrado' });
         }
     } catch (error) {
         console.error('Error al actualizar config:', error);
-        res.status(500).json({ success: false, message: 'Error al actualizar configuración.' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

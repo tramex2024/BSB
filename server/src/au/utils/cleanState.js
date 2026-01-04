@@ -26,18 +26,17 @@ const CLEAN_LONG_ROOT = {
     lsprice: 0,
     lprofit: 0,
     lnorder: 0,
-    lcoverage: 0
+    lcoverage: 0,
+    lstate: 'STOPPED' // 🟢 Asegura que el estado también vuelva a base si es necesario
 };
 
-/**
- * CAMPOS RAÍZ ESPECÍFICOS PARA SHORT
- */
 const CLEAN_SHORT_ROOT = {
     stprice: 0,
     sbprice: 0,
     sprofit: 0,
     snorder: 0,
-    scoverage: 0
+    scoverage: 0,
+    sstate: 'STOPPED' // 🟢 Asegura coherencia
 };
 
 /**

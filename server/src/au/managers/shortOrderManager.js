@@ -4,14 +4,12 @@ const bitmartService = require('../../../services/bitmartService');
 const { MIN_USDT_VALUE_FOR_BITMART, BUY_FEE_PERCENT } = require('../utils/tradeConstants');
 
 /**
- * APERTURA DE SHORT: Inicia la deuda exponencial vendiendo el activo.
+ * APERTURA DE SHORT: Venta inicial de mercado.
  */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState) {
     const { purchaseUsdt } = config.short;
     const SYMBOL = config.symbol;
     const amountNominal = parseFloat(purchaseUsdt);
-    
-    // El costo real incluye la comisión para que el balance del bot sea exacto
     const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
 
     if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
@@ -21,7 +19,6 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     }
 
     const currentSBalance = parseFloat(botState.sbalance || 0);
-
     log(`🚀 [S-FIRST] Abriendo Short con ${amountNominal} USDT...`, 'info'); 
 
     try {
@@ -29,8 +26,6 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
 
         if (orderResult && orderResult.order_id) {
             const newSBalance = currentSBalance - amountRealCost;
-            
-            // REGISTRO ATÓMICO: Guardamos la base para el crecimiento exponencial
             await updateGeneralBotState({
                 sbalance: newSBalance,
                 sStateData: {
@@ -38,7 +33,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
                     lastOrder: {
                         order_id: orderResult.order_id,
                         side: 'sell',
-                        usdt_amount: amountNominal, // Base para la siguiente multiplicación
+                        usdt_amount: amountNominal,
                         usdt_cost_real: amountRealCost,
                         timestamp: new Date()
                     }
@@ -47,13 +42,12 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
             log(`✅ [S-FIRST] Éxito. ID: ${orderResult.order_id}. Balance Short: ${newSBalance.toFixed(2)}`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-FIRST] Error de API al abrir: ${error.message}. Reintentando en sig. tick...`, 'error');
-        // No lanzamos throw para mantener autonomía
+        log(`❌ [S-FIRST] Error de API al abrir: ${error.message}. Reintentando...`, 'error');
     }
 }
 
 /**
- * COBERTURA SHORT (DCA): Venta exponencial hacia arriba.
+ * COBERTURA SHORT (DCA): Venta exponencial.
  */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
     const SYMBOL = botState.config.symbol;
@@ -67,7 +61,6 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
 
         if (order && order.order_id) {
             const newSBalance = currentBalance - amountRealCost;
-            
             await updateGeneralBotState({
                 sbalance: newSBalance,
                 sStateData: {
@@ -75,13 +68,13 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
                     lastOrder: {
                         order_id: order.order_id,
                         side: 'sell',
-                        usdt_amount: usdtAmount, // Actualizamos la semilla exponencial
+                        usdt_amount: usdtAmount,
                         usdt_cost_real: amountRealCost,
                         timestamp: new Date()
                     }
                 }
             });
-            log(`✅ [S-DCA] Orden ${order.order_id} registrada. PPC en proceso de subida.`, 'success');
+            log(`✅ [S-DCA] Orden ${order.order_id} registrada.`, 'success');
         }
     } catch (error) {
         log(`❌ [S-DCA] Error en ejecución: ${error.message}`, 'error');
@@ -129,7 +122,7 @@ async function cancelActiveShortOrder(botState, log, updateSStateData) {
         
         if (result?.code === 1000 || result?.message?.includes('already filled')) {
             await updateSStateData({ lastOrder: null });
-            log(`✅ [S-CANCEL] Sistema sincronizado y desbloqueado.`, 'success');
+            log(`✅ [S-CANCEL] Sistema desbloqueado.`, 'success');
         }
     } catch (error) {
         log(`❌ [S-CANCEL] Error: ${error.message}`, 'error');
