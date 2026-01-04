@@ -17,37 +17,38 @@ let currentTab = 'opened';
  */
 async function loadBotDataFromServer() {
     try {
-        const response = await fetch(`${BACKEND_URL}/api/user/bot-config-and-state`, {
+        // Probemos con la ruta que sabemos que existe y no da 404
+        const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
+
+        // Verificamos si la respuesta es HTML en lugar de JSON para evitar el crash
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            console.error("El servidor no devolvió JSON. Ruta posiblemente incorrecta.");
+            return;
+        }
+
         const data = await response.json();
 
         if (data && data.success) {
-            // 1. Sincronizar Balances Máximos
-            updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
-            updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
+            // Actualizar balances
+            updateMaxBalanceDisplay('USDT', parseFloat(data.data.lastAvailableUSDT) || 0);
+            updateMaxBalanceDisplay('BTC', parseFloat(data.data.lastAvailableBTC) || 0);
 
-            // 2. Sincronizar Checkbox "Stop at cycle end"
-            // Importante: Usamos data.config.stopAtCycle que es el nombre en tu MongoDB
-            if (data.config) {
+            // IMPORTANTE: Verifica si 'data.data' o 'data' contiene el objeto 'config'
+            // Si el backend no envía 'config' en esta ruta, hay que buscar la ruta que sí lo haga.
+            const configSource = data.data?.config || data.config;
+            
+            if (configSource) {
                 const stopAtCycleCheckbox = document.getElementById('au-stop-at-cycle-end');
                 if (stopAtCycleCheckbox) {
-                    stopAtCycleCheckbox.checked = !!data.config.stopAtCycle;
-                }
-                
-                // Opcional: Rellenar inputs con valores guardados si estaban vacíos
-                const purchaseInput = document.getElementById('aupurchase-usdt');
-                if (purchaseInput && !purchaseInput.value) {
-                    purchaseInput.value = data.config.long?.purchaseUsdt || 5;
+                    stopAtCycleCheckbox.checked = !!configSource.stopAtCycle;
                 }
             }
-            
-            // 3. Actualizar estado visual del Bot (Botón Start/Stop)
-            updateBotUI(data);
-
         }
     } catch (error) {
-        console.error("Error al sincronizar datos desde el servidor:", error);
+        console.error("Error al sincronizar datos:", error);
     }
 }
 
