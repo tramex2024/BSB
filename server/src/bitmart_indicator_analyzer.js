@@ -1,7 +1,6 @@
 // server/bitmart_indicator_analyzer.js
 
 const { RSI } = require('technicalindicators');
-const fs = require('fs').promises;
 const bitmartService = require('../services/bitmartService');
 
 const SYMBOL = 'BTC_USDT';
@@ -19,20 +18,19 @@ async function getCandles(symbol, interval, size = 500) {
         const rawCandlesData = await bitmartService.getKlines(symbol, interval, size);
 
         if (!rawCandlesData || rawCandlesData.length === 0) {
-            console.error("[ANALYZER] No se recibieron datos de velas.");
             return [];
         }
 
         return rawCandlesData.map(c => ({
-            open: Number(c.open),
-            high: Number(c.high),
-            low: Number(c.low),
-            close: Number(c.close),
-            volume: Number(c.volume)
+            open: parseFloat(c.open),
+            high: parseFloat(c.high),
+            low: parseFloat(c.low),
+            close: parseFloat(c.close),
+            volume: parseFloat(c.volume)
         })).filter(c => !isNaN(c.close));
 
     } catch (error) {
-        console.error(`[ANALYZER] ❌ Error obteniendo velas: ${error.message}`);
+        console.error(`[ANALYZER] ❌ Error en getCandles: ${error.message}`);
         return [];
     }
 }
@@ -54,57 +52,51 @@ function calculateIndicators(candles) {
 }
 
 /**
- * DETERMINA LA SEÑAL (Cerebro de la estrategia)
- * Ahora devuelve RSI numérico para la Base de Datos.
+ * DETERMINA LA SEÑAL
  */
 function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBOL) {
-    // 1. Objeto por defecto (HOLD)
     const result = {
         action: "HOLD",
         symbol: symbol,
         currentRSI: 0,
         lastCompleteCandleRSI: 0,
-        reason: "Esperando condiciones de mercado...",
+        reason: "Analizando mercado...",
         timestamp: new Date().toISOString()
     };
 
     if (candlesWithIndicators.length < 2) {
-        result.reason = "Datos insuficientes para análisis.";
+        result.reason = "Datos insuficientes.";
         return result;
     }
 
-    // RSI de la última vela cerrada
     const lastCompleteCandle = candlesWithIndicators[candlesWithIndicators.length - 1];
     const lastCompleteCandleRSI = lastCompleteCandle.rsi;
 
-    // RSI Actual calculado con el precio en tiempo real
     const allPrices = candlesWithIndicators.map(c => c.close);
-    allPrices.push(currentPrice);
+    allPrices.push(parseFloat(currentPrice));
+    
     const latestRsiValues = RSI.calculate({ values: allPrices, period: RSI_PERIOD });
     const currentRSI = latestRsiValues[latestRsiValues.length - 1];
 
-    // Guardamos los valores numéricos en el resultado
-    result.currentRSI = currentRSI;
-    result.lastCompleteCandleRSI = lastCompleteCandleRSI;
+    result.currentRSI = currentRSI || 0;
+    result.lastCompleteCandleRSI = lastCompleteCandleRSI || 0;
 
-    // --- LÓGICA DE COMPRA ---
+    // --- LÓGICA DE SEÑALES ---
     if (lastCompleteCandleRSI <= RSI_OVERSOLD && currentRSI > RSI_OVERSOLD) {
         result.action = "BUY";
-        result.reason = `COMPRA: RSI cruzó ${RSI_OVERSOLD} al alza (${lastCompleteCandleRSI.toFixed(2)} -> ${currentRSI.toFixed(2)})`;
+        result.reason = `RSI cruzó ${RSI_OVERSOLD} al alza`;
     } 
     else if (currentRSI < RSI_OVERSOLD && currentRSI > lastCompleteCandleRSI) {
         result.action = "BUY";
-        result.reason = `COMPRA: RSI en sobreventa subiendo (${currentRSI.toFixed(2)})`;
+        result.reason = `RSI en sobreventa subiendo`;
     }
-
-    // --- LÓGICA DE VENTA ---
     else if (lastCompleteCandleRSI >= RSI_OVERBOUGHT && currentRSI < RSI_OVERBOUGHT) {
         result.action = "SELL";
-        result.reason = `VENTA: RSI cruzó ${RSI_OVERBOUGHT} a la baja`;
+        result.reason = `RSI cruzó ${RSI_OVERBOUGHT} a la baja`;
     }
     else if (currentRSI > RSI_OVERBOUGHT && currentRSI < lastCompleteCandleRSI) {
         result.action = "SELL";
-        result.reason = `VENTA: RSI en sobrecompra bajando (${currentRSI.toFixed(2)})`;
+        result.reason = `RSI en sobrecompra bajando`;
     }
 
     return result;
@@ -115,23 +107,20 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
  */
 async function runAnalysis(currentPriceFromBotLogic) {
     try {
-        const rawCandles = await getCandles(SYMBOL, '1', 500);
-        if (rawCandles.length === 0) return { action: "HOLD", reason: "Error de conexión con BitMart" };
+        // Obtenemos velas de 1 minuto
+        const rawCandles = await getCandles(SYMBOL, '1', 100); 
+        if (rawCandles.length === 0) {
+            return { action: "HOLD", reason: "Sin datos de velas", currentRSI: 0 };
+        }
 
-        // Ignoramos la última vela de la API para usar nuestro currentPrice fresco
         const candlesForAnalysis = rawCandles.slice(0, -1);
         const candlesWithIndicators = calculateIndicators(candlesForAnalysis);
 
-        const signal = determineEntryPoint(candlesWithIndicators, currentPriceFromBotLogic, SYMBOL);
-
-        // Guardamos copia en JSON por seguridad (opcional)
-        await fs.writeFile("bitmart_entry_point.json", JSON.stringify(signal, null, 4));
-
-        return signal;
+        return determineEntryPoint(candlesWithIndicators, currentPriceFromBotLogic, SYMBOL);
 
     } catch (error) {
-        console.error("[ANALYZER] Error crítico:", error);
-        return { action: "HOLD", reason: "Error interno del analizador" };
+        console.error("[ANALYZER] Error:", error.message);
+        return { action: "HOLD", reason: "Error en análisis", currentRSI: 0 };
     }
 }
 
