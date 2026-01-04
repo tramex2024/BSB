@@ -11,7 +11,7 @@ const WebSocket = require('ws');
 // Servicios y Lógica del Bot
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const checkTimeSync = require('./services/check_time');
+//const checkTimeSync = require('./services/check_time');
 
 // Importa las funciones de cálculo
 const { calculateLongCoverage, calculatePotentialProfit } = require('./autobotCalculations');
@@ -257,5 +257,5 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
     console.log(`🚀 SERVIDOR ACTIVO EN PUERTO: ${PORT}`);
-    checkTimeSync();
+    //checkTimeSync();
 });
