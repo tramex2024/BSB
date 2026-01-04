@@ -116,13 +116,18 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
     
     if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
 
+    // 1. Calcular Ganancia Bruta
     let grossProfit = (strategy === 'long') 
         ? (p - entry) * qty 
         : (entry - p) * qty;
     
-    // Estimación de fees (Entrada + Salida)
-    const fees = (entry * qty * feeRate) + (p * qty * feeRate);
-    return grossProfit - fees;
+    // 2. Fees Reales: BitMart suele cobrar sobre el valor de la transacción
+    // Si qty es 0.00006, el fee es minúsculo. 
+    const entryValue = entry * qty;
+    const exitValue = p * qty;
+    const totalFees = (entryValue + exitValue) * feeRate;
+
+    return grossProfit - totalFees;
 }
 
 module.exports = {
