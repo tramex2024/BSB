@@ -1,9 +1,12 @@
 // public/js/modules/logout.js
 
 export function handleLogout() {
+    // Limpiamos todas las credenciales almacenadas
     localStorage.removeItem('token');
     localStorage.removeItem('userEmail');
-    // Al recargar la página, el updateLoginIcon() del main.js 
-    // se ejecutará y verá que no hay token, poniendo la flecha hacia adentro.
+    
+    console.log("Session cleared. Redirecting to login...");
+    
+    // Recargamos la página para resetear el estado de la App
     window.location.reload(); 
 }

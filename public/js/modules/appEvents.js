@@ -11,10 +11,10 @@ export function updateLoginIcon() {
     const token = localStorage.getItem('token');
     if (token) {
         icon.className = 'fas fa-sign-out-alt cursor-pointer text-emerald-500 hover:text-red-400 transition';
-        icon.title = 'Cerrar Sesión';
+        icon.title = 'Sign Out'; // Texto en inglés
     } else {
         icon.className = 'fas fa-sign-in-alt cursor-pointer hover:text-white transition';
-        icon.title = 'Iniciar Sesión';
+        icon.title = 'Sign In'; // Texto en inglés
     }
 }
 
