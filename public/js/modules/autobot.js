@@ -1,3 +1,5 @@
+// public/js/modules/autobot.js
+
 import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
@@ -9,6 +11,45 @@ const MIN_BTC_AMOUNT = 0.00005;
 let maxUsdtBalance = 0;
 let maxBtcBalance = 0;
 let currentTab = 'opened';
+
+/**
+ * Sincroniza la UI con los datos reales de MongoDB (Balances y Configuración)
+ */
+async function loadBotDataFromServer() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/user/bot-config-and-state`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await response.json();
+
+        if (data && data.success) {
+            // 1. Sincronizar Balances Máximos
+            updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
+            updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
+
+            // 2. Sincronizar Checkbox "Stop at cycle end"
+            // Importante: Usamos data.config.stopAtCycle que es el nombre en tu MongoDB
+            if (data.config) {
+                const stopAtCycleCheckbox = document.getElementById('au-stop-at-cycle-end');
+                if (stopAtCycleCheckbox) {
+                    stopAtCycleCheckbox.checked = !!data.config.stopAtCycle;
+                }
+                
+                // Opcional: Rellenar inputs con valores guardados si estaban vacíos
+                const purchaseInput = document.getElementById('aupurchase-usdt');
+                if (purchaseInput && !purchaseInput.value) {
+                    purchaseInput.value = data.config.long?.purchaseUsdt || 5;
+                }
+            }
+            
+            // 3. Actualizar estado visual del Bot (Botón Start/Stop)
+            updateBotUI(data);
+
+        }
+    } catch (error) {
+        console.error("Error al sincronizar datos desde el servidor:", error);
+    }
+}
 
 /**
  * Actualiza los balances máximos en la UI y las variables de validación
@@ -64,31 +105,18 @@ function setupConfigListeners() {
             if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
             if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
             
-            // Guardado automático
+            // Guardado automático al cambiar cualquier valor
             sendConfigToBackend();
         });
     });
 }
 
-async function loadBalancesAndLimits() {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const data = await response.json();
-        if (data.success && data.data) {
-            updateMaxBalanceDisplay('USDT', parseFloat(data.data.lastAvailableUSDT) || 0);
-            updateMaxBalanceDisplay('BTC', parseFloat(data.data.lastAvailableBTC) || 0);
-        }
-    } catch (error) {
-        console.error("Error cargando límites iniciales:", error);
-    }
-}
-
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
-    await loadBalancesAndLimits();
+    // CARGA INICIAL: Trae balances y estado del checkbox desde MongoDB
+    await loadBotDataFromServer();
+    
     setupConfigListeners();
 
     // Gráfico con delay para renderizado correcto
@@ -101,23 +129,20 @@ export async function initializeAutobotView() {
     // Botón START / STOP
     const startBtn = document.getElementById('austart-btn');
     startBtn?.addEventListener('click', async () => {
-    // 1. Detectar estado actual basándose en el texto del botón
-    const isCurrentlyRunning = startBtn.textContent.includes('STOP');
-    
-    // 2. Si vamos a iniciar, validamos
-    if (!isCurrentlyRunning) {
-        const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
-        const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+        const isCurrentlyRunning = startBtn.textContent.includes('STOP');
         
-        if (!isUsdtOk || !isBtcOk) {
-            return displayMessage('Verifica los saldos configurados antes de iniciar', 'error');
+        if (!isCurrentlyRunning) {
+            const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+            const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+            
+            if (!isUsdtOk || !isBtcOk) {
+                return displayMessage('Verifica los saldos configurados antes de iniciar', 'error');
+            }
         }
-    }
-    
-    // 3. toggleBotState en apiService ya maneja el bloqueo del botón (disabled = true)
-    // Pasamos el estado actual para que sepa si debe llamar a /start o /stop
-    await toggleBotState(isCurrentlyRunning); 
-});
+        
+        // toggleBotState usará getBotConfiguration() internamente
+        await toggleBotState(isCurrentlyRunning); 
+    });
 
     // Pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
@@ -137,9 +162,8 @@ export async function initializeAutobotView() {
 
     fetchOrders('opened', auOrderList);
 
-    // Sockets específicos de la vista
+    // Sockets específicos de la vista para actualizaciones en tiempo real
     if (socket) {
-        // Sincronizar balances internos con el socket global
         socket.on('balance-real-update', (data) => {
             updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
             updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
