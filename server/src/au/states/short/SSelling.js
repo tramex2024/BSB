@@ -1,131 +1,80 @@
-// BSB/server/src/states/short/SSelling.js (Espejo de LBuying.js)
+// BSB/server/src/au/states/short/SSelling.js
 
-// BSB/server/src/au/states/short/SSelling.js (ESPEJO DE LBuying.js)
-
-const { calculateShortTargets } = require('../../../../autobotCalculations');
-const { parseNumber } = require('../../../../utils/helpers'); 
-// 💡 IMPORTACIONES PARA SHORT
 const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager'); 
-// ✅ CONSOLIDADOR DE APERTURA SHORT
 const { monitorAndConsolidateShort } = require('./ShortSellConsolidator'); 
 
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
-        availableUSDT // Balance para vender (Short utiliza margen/USDT)
+        availableUSDT 
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
     const sStateData = botState.sStateData;
 
     // =================================================================
-    // === [ 0. APERTURA DE POSICIÓN SHORT (Venta Inicial) ] ============
+    // 1. MONITOREO DE ORDEN PENDIENTE (Prioridad)
+    // =================================================================
+    const orderIsActive = await monitorAndConsolidateShort(
+        botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState
+    );
+    
+    if (orderIsActive) return; 
+
+    // =================================================================
+    // 2. APERTURA DE SHORT (Si no hay posición)
     // =================================================================
     if (sStateData.ppc === 0 && !sStateData.lastOrder) {
-        log("[S]: Estado inicial detectado. Iniciando apertura de SHORT...", 'warning');
-
         const purchaseAmount = parseFloat(config.short.purchaseUsdt);
-        const MIN_USDT_VALUE_FOR_BITMART = 5.00; 
-        
         const currentSBalance = parseFloat(botState.sbalance || 0);
 
-        const isRealBalanceSufficient = availableUSDT >= purchaseAmount && purchaseAmount >= MIN_USDT_VALUE_FOR_BITMART;
-        const isCapitalLimitSufficient = currentSBalance >= purchaseAmount;
-        
-        if (isRealBalanceSufficient && isCapitalLimitSufficient) {
-            log("[S]: Verificaciones aprobadas. Colocando primera orden de VENTA (Short)...", 'info');
-
-            // 🎯 Coloca la orden de venta inicial para abrir el Short
+        if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
+            log("[S]: Abriendo posición inicial SHORT...", 'info');
             await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState); 
-            
-            log("[S]: Orden inicial enviada. Esperando consolidación.", 'success');
-
         } else {
-            let reason = '';
-            if (!isRealBalanceSufficient) {
-                reason = `Fondos REALES (${availableUSDT.toFixed(2)} USDT) insuficientes.`;
-            } else if (!isCapitalLimitSufficient) {
-                reason = `LÍMITE ASIGNADO SHORT (${currentSBalance.toFixed(2)} USDT) insuficiente.`;
-            }
-
-            log(`[S]: No se puede iniciar Short. ${reason} Transicionando a NO_COVERAGE.`, 'warning');
+            const reason = availableUSDT < purchaseAmount ? "Saldo Exchange insuficiente" : "Límite SBalance alcanzado";
+            log(`⚠️ [S]: No se puede iniciar: ${reason}. Pasando a NO_COVERAGE.`, 'warning');
             await updateBotState('NO_COVERAGE', 'short'); 
         }
         return; 
     }
 
     // =================================================================
-    // === [ 1. MONITOREO Y CONSOLIDACIÓN DE VENTA PENDIENTE ] =========
+    // 3. EVALUACIÓN DE TRANSICIÓN (Take Profit o DCA)
     // =================================================================
     
-    const orderIsPendingOrProcessed = await monitorAndConsolidateShort(
-        botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState
-    );
-    
-    if (orderIsPendingOrProcessed) return; 
-    
-    // =================================================================
-    // === [ 2. GESTIÓN DE TARGETS SHORT ] ==============================
-    // =================================================================
-    
-    if (sStateData.ppc > 0) { 
-        const logSummary = `
-            [S] SELLING:            
-            💰 PPC Short: ${sStateData.ppc.toFixed(2)} USD (AC: ${sStateData.ac.toFixed(8)} BTC).
-            🎯 TP Objetivo (Recompra): ${botState.stprice.toFixed(2)} USD.
-            📈 Proxima Cobertura (DCA): ${sStateData.nextCoveragePrice.toFixed(2)} USD (Monto: ${sStateData.requiredCoverageAmount.toFixed(2)} USDT).
-            🛡️ Cobertura Máxima (S-Coverage): ${botState.scoverage.toFixed(2)} USD.
-        `.replace(/\s+/g, ' ').trim();
-        log(logSummary, 'debug'); 
-
-    } else if (!sStateData.lastOrder && sStateData.ppc === 0) {
-        log("[S]: Posición inicial (AC=0). Esperando señal de entrada.", 'info');
-    }
-
-    // =================================================================
-    // === [ 3. EVALUACIÓN DE TRANSICIONES ] ===========================
-    // =================================================================
-    
-    // 3A. Transición a BUYING por Take Profit (stprice alcanzado hacia ABAJO)
+    // 3A. TAKE PROFIT: El precio bajó lo suficiente para recomprar con ganancia
     if (botState.stprice > 0 && currentPrice <= botState.stprice) {
-        log(`[SHORT] ¡TARGET DE RECOMPRA alcanzado! Precio: ${currentPrice.toFixed(2)} <= ${botState.stprice.toFixed(2)}. Transicionando a BUYING (Profit).`, 'success');
-        
+        log(`💰 [S-TP] Objetivo alcanzado: ${currentPrice.toFixed(2)} <= ${botState.stprice.toFixed(2)}. Transicionando a BUYING para cerrar.`, 'success');
         await updateBotState('BUYING', 'short');
         return;
     }
 
-    // 3B. Colocación de COBERTURA (DCA hacia ARRIBA)
+    // 3B. COBERTURA (DCA): El precio subió y necesitamos promediar la venta más arriba
     const requiredAmount = sStateData.requiredCoverageAmount;
-
+    
     if (!sStateData.lastOrder && sStateData.nextCoveragePrice > 0 && currentPrice >= sStateData.nextCoveragePrice) {
         
-        if (requiredAmount <= 0) {
-            log(`[S]: Error: Monto requerido 0. Transicionando a NO_COVERAGE.`, 'error');
-            await updateBotState('NO_COVERAGE', 'short'); 
-            return; 
-        }
+        const hasBalance = botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount;
 
-        if (botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount) {
-            log(`[SHORT] ¡Precio de COBERTURA alcanzado! Precio: ${currentPrice.toFixed(2)} >= ${sStateData.nextCoveragePrice.toFixed(2)}. Vendiendo más (DCA).`, 'warning');
-            
+        if (hasBalance) {
+            log(`📈 [S-DCA] Precio alcanzado (${currentPrice.toFixed(2)}). Vendiendo más para subir PPC...`, 'warning');
             try {
                 await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState);
             } catch (error) {
-                log(`[S]: Error en orden de COBERTURA: ${error.message}.`, 'error');
+                log(`❌ [S]: Error en cobertura: ${error.message}`, 'error');
             }
-            return;
-
         } else {
-            log(`[S]: Cobertura alcanzada pero fondos insuficientes. Transicionando a NO_COVERAGE.`, 'error');
+            log(`🚫 [S-DCA] Fondos insuficientes. SBalance: ${botState.sbalance.toFixed(2)}, Real: ${availableUSDT.toFixed(2)}. Pasando a NO_COVERAGE.`, 'error');
             await updateBotState('NO_COVERAGE', 'short');
-            return;
         }
+        return;
     }
-    
-    if (!sStateData.lastOrder && sStateData.ppc > 0) return;
 
-    log(`[S]SELLING: Monitoreando...`, 'debug');
+    // 4. LOG DE ESTADO
+    const logSummary = `[S] SELLING | PPC: ${sStateData.ppc.toFixed(2)} | TP: ${botState.stprice.toFixed(2)} | DCA: ${sStateData.nextCoveragePrice.toFixed(2)}`;
+    log(logSummary, 'debug');
 }
 
 module.exports = { run };

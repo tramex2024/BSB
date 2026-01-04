@@ -1,8 +1,6 @@
-// BSB/server/src/au/managers/shortOrderManager.js (Espejo de longOrderManager.js)
+// BSB/server/src/au/managers/shortOrderManager.js
 
-const Autobot = require('../../../models/Autobot');
 const bitmartService = require('../../../services/bitmartService');
-// Usamos las mismas constantes, ya que BitMart aplica las mismas reglas para vender
 const { MIN_USDT_VALUE_FOR_BITMART, BUY_FEE_PERCENT } = require('../utils/tradeConstants');
 
 /**
@@ -12,148 +10,130 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     const { purchaseUsdt } = config.short;
     const SYMBOL = config.symbol;
     const amountNominal = parseFloat(purchaseUsdt);
-    
-    // En Short, al vender, también calculamos el costo real con comisión
     const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
 
     if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`[S] Error: Cantidad menor al mínimo ($${MIN_USDT_VALUE_FOR_BITMART}).`, 'error');
+        log(`[S] ❌ Error: Monto $${amountNominal} inferior al mínimo de BitMart.`, 'error');
         await updateBotState('NO_COVERAGE', 'short'); 
         return;
     }
-    
+
     const currentSBalance = parseFloat(botState.sbalance || 0);
     const newSBalance = currentSBalance - amountRealCost;
 
-    log(`[S] Abriendo Short: Venta a mercado por ${amountNominal.toFixed(2)} USDT (Costo real: ${amountRealCost.toFixed(2)} USDT).`, 'info'); 
+    log(`[S] 🚀 Abriendo SHORT: Venta a mercado por ${amountNominal} USDT...`, 'info'); 
 
     try {
-        // ACCIÓN: 'sell' para abrir el Short
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', amountNominal); 
 
-        const orderId = orderResult.order_id;
-        log(`[S] Orden inicial colocada. ID: ${orderId}. Bloqueando sStateData...`, 'info');
-
-        // ACTUALIZACIÓN ATÓMICA SHORT
-        await Autobot.findOneAndUpdate({}, {
-            $set: {
-                'sbalance': newSBalance,
-                'sStateData.lastOrder': {
-                    order_id: orderId,
-                    side: 'sell', // Identifica que es apertura/cobertura de short
-                    usdt_amount: amountNominal,
-                    usdt_cost_real: amountRealCost,
+        if (orderResult && orderResult.order_id) {
+            // ACTUALIZACIÓN ATÓMICA: Deducción y Bloqueo
+            await updateGeneralBotState({
+                sbalance: newSBalance,
+                sStateData: {
+                    ...botState.sStateData,
+                    lastOrder: {
+                        order_id: orderResult.order_id,
+                        side: 'sell',
+                        usdt_amount: amountNominal,
+                        usdt_cost_real: amountRealCost,
+                    }
                 }
-            }
-        });
-
-        log(`[S] Balance asignado Short reducido. Nuevo balance: ${newSBalance.toFixed(2)} USDT.`, 'info');
-        
+            });
+            log(`✅ [S] Orden inicial registrada (ID: ${orderResult.order_id}). SBalance: ${newSBalance.toFixed(2)}`, 'success');
+        }
     } catch (error) {
-        log(`[S] Error CRÍTICO al abrir Short: ${error.message}`, 'error');
-        throw error;
+        log(`[S] ❌ Error crítico al abrir Short: ${error.message}`, 'error');
+        throw error; 
     }
 }
 
 /**
- * Coloca orden de VENTA adicional (Cobertura/DCA de Short).
+ * Coloca orden de VENTA adicional (Cobertura/DCA de Short hacia arriba).
  */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
     const SYMBOL = botState.config.symbol;
-    const currentSBalance = parseFloat(botState.sbalance || 0);
-    const amountNominal = usdtAmount;
-    const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
-
-    if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`[S] Cantidad de cobertura insuficiente para BitMart.`, 'error');
-        await updateBotState('NO_COVERAGE', 'short'); 
-        return;
-    }
-    
-    const newSBalance = currentSBalance - amountRealCost; 
+    const amountRealCost = usdtAmount * (1 + BUY_FEE_PERCENT);
+    const newSBalance = (parseFloat(botState.sbalance || 0)) - amountRealCost;
 
     if (newSBalance < 0) {
-        log(`[S] Capital insuficiente para cobertura Short.`, 'error');
+        log(`[S] ⚠️ Fondos insuficientes para cobertura Short. SBalance: ${botState.sbalance.toFixed(2)}`, 'error');
         await updateBotState('NO_COVERAGE', 'short'); 
         return;
     }
+
+    log(`[S] 📈 Ejecutando COBERTURA SHORT: ${usdtAmount.toFixed(2)} USDT...`, 'warning');
     
     try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', amountNominal); 
+        const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', usdtAmount); 
 
         if (order && order.order_id) {
-            const currentOrderId = order.order_id; 
-
-            await Autobot.findOneAndUpdate({}, { 
-                $set: {
-                    'sbalance': newSBalance,
-                    'sStateData.lastOrder': {
-                        order_id: currentOrderId,
+            await updateGeneralBotState({
+                sbalance: newSBalance,
+                sStateData: {
+                    ...botState.sStateData,
+                    lastOrder: {
+                        order_id: order.order_id,
                         side: 'sell',
-                        usdt_amount: amountNominal,
-                        usdt_cost_real: amountRealCost, 
-                    },
+                        usdt_amount: usdtAmount,
+                        usdt_cost_real: amountRealCost,
+                    }
                 }
-            }, { new: true });
-            
-            log(`[S] Cobertura Short colocada. ID: ${currentOrderId}.`, 'success');
+            });
+            log(`✅ [S] Cobertura Short colocada (ID: ${order.order_id}).`, 'success');
         }
     } catch (error) {
-        log(`[S] Error de API en cobertura: ${error.message}`, 'error');
+        log(`[S] ❌ Error en cobertura Short: ${error.message}`, 'error');
         throw error;
     }
 }
 
 /**
- * Coloca orden de COMPRA (Cierre de Short/Take Profit).
+ * Coloca la orden de COMPRA (Cierre de Short / Take Profit abajo).
  */
-async function placeShortBuyOrder(config, botState, btcAmount, log) { 
+async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData) { 
     const SYMBOL = config.symbol;
-    const amountToBuy = parseFloat(btcAmount);
+    log(`[S] 💰 Ejecutando RECOMPRA (Take Profit): ${btcAmount.toFixed(8)} BTC...`, 'info');
 
-    log(`[S] Cerrando Short: Recomprando ${btcAmount.toFixed(8)} BTC a mercado.`, 'info');
     try {
-        // ACCIÓN: 'buy' para cerrar la deuda del Short
-        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', amountToBuy); 
+        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', btcAmount); 
 
         if (order && order.order_id) {
-            const currentOrderId = order.order_id;
-            
-            const buyLastOrder = {
-                order_id: currentOrderId,
-                size: btcAmount,
-                side: 'buy', // Identifica cierre de Short
-            };
-            
-            await Autobot.findOneAndUpdate({}, { 
-                $set: { 'sStateData.lastOrder': buyLastOrder } 
+            // BLOQUEO ATÓMICO: Registramos la orden para consolidación
+            await updateSStateData({
+                lastOrder: {
+                    order_id: order.order_id,
+                    size: btcAmount,
+                    side: 'buy'
+                }
             });
-
-            log(`[S] Orden de cierre colocada. ID: ${currentOrderId}. Esperando consolidación...`, 'success');
+            log(`✅ [S] Recompra enviada (ID: ${order.order_id}).`, 'success');
         }
     } catch (error) { 
-        log(`[S] Error de API al cerrar Short: ${error.message}`, 'error');
+        log(`[S] ❌ Error en orden de recompra: ${error.message}`, 'error');
         throw error;
     }
 }
 
 /**
- * Cancela orden activa de Short.
+ * Cancela órdenes activas de Short.
  */
-async function cancelActiveShortOrder(botState, log) {
-    if (!botState.sStateData.lastOrder || !botState.sStateData.lastOrder.order_id) return;
+async function cancelActiveShortOrder(botState, log, updateSStateData) {
+    const lastOrder = botState.sStateData.lastOrder;
+    if (!lastOrder?.order_id) return;
 
     const SYMBOL = botState.config.symbol;
-    const orderId = botState.sStateData.lastOrder.order_id;
     
     try {
-        const result = await bitmartService.cancelOrder(SYMBOL, orderId); 
-        if (result && result.code === 1000) {
-            log(`[S] Orden Short ${orderId} cancelada.`, 'success');
+        log(`[S] 🛑 Cancelando orden Short ${lastOrder.order_id}...`, 'warning');
+        const result = await bitmartService.cancelOrder(SYMBOL, lastOrder.order_id); 
+        
+        if (result?.code === 1000 || result?.message?.includes('already filled')) {
+            await updateSStateData({ lastOrder: null });
+            log(`✅ [S] Orden Short limpiada.`, 'success');
         }
-        await Autobot.findOneAndUpdate({}, { $set: { 'sStateData.lastOrder': null } });
     } catch (error) {
-        log(`[S] Error al cancelar orden Short: ${error.message}`, 'error');
+        log(`[S] ❌ Error al cancelar orden Short: ${error.message}`, 'error');
     }
 }
 
