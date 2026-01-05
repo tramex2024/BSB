@@ -11,7 +11,7 @@ async function updateBotConfig(req, res) {
     try {
         // Extraemos 'config' porque el frontend lo envía como { config: { ... } }
         const { config: newConfig } = req.body; 
-        
+        console.log("DATOS RECIBIDOS DEL FRONT:", JSON.stringify(newConfig.long, null, 2));
         if (!newConfig) {
             return res.status(400).json({ success: false, message: "No configuration data provided." });
         }
