@@ -4,7 +4,7 @@ const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00005;
 const SSTATE = 'short';
-const TRAILING_STOP_PERCENTAGE = 0.4; // Rebote del 0.4% desde el mínimo para cerrar
+const TRAILING_STOP_PERCENTAGE = 0.4; 
 
 async function run(dependencies) {
     const { 
@@ -21,34 +21,33 @@ async function run(dependencies) {
         return;
     }
 
-    // 2. LÓGICA DE TRAILING STOP INVERSO (Hacia abajo)
+    // 2. LÓGICA DE TRAILING STOP INVERSO
     const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100;
 
-    // En Short, PM es el precio MÍNIMO alcanzado. 
-    // Si no existe (primera vuelta), usamos el precio actual.
-    const currentMin = pm || currentPrice;
+    // 🟢 MEJORA: Si es la primera vez que entra en este estado, inicializamos PM con el precio actual
+    // para evitar que un valor 0 previo dispare un PC incorrecto.
+    let currentMin = (pm && pm > 0) ? pm : currentPrice;
     const newPm = Math.min(currentMin, currentPrice);
-    
-    // El PC (Precio de Cierre) se sitúa un 0.4% POR ENCIMA del suelo detectado
     const newPc = newPm * (1 + trailingStopPercent);
 
-    // Si el precio marca un nuevo mínimo, "bajamos" la orden de cierre
     if (newPm < currentMin || !pm) {
-        log(`📉 [S-TRAILING] Nuevo mínimo detectado: ${newPm.toFixed(2)}. Recompra bajó a: ${newPc.toFixed(2)}`, 'info');
+        log(`📉 [S-TRAILING] Nuevo mínimo detectado: ${newPm.toFixed(2)}. Recompra sube a: ${newPc.toFixed(2)}`, 'info');
 
         await updateSStateData({ pm: newPm, pc: newPc });
-        await updateGeneralBotState({ ssprice: newPc }); // Actualiza la línea visual en el dashboard
+        await updateGeneralBotState({ sbprice: newPc }); // 💡 Usar 'sbprice' para Short Buy Price
     }
 
     // 3. CONDICIÓN DE DISPARO (REBOTE)
     if (acBuying >= MIN_CLOSE_AMOUNT_BTC) {
         
-        // Si el precio rebota y cruza hacia ARRIBA el PC, cerramos con profit
-        if (currentPrice >= (pc || newPc)) {
-            log(`💰 [S-CLOSE] ¡Profit detectado por rebote! Precio ${currentPrice.toFixed(2)} >= Stop ${pc?.toFixed(2)}. Recomprando ${acBuying.toFixed(8)} BTC.`, 'success');
+        // Usamos el PC guardado en la DB o el nuevo calculado si es la primera vuelta
+        const triggerPrice = pc || newPc;
+
+        if (currentPrice >= triggerPrice) {
+            log(`💰 [S-CLOSE] ¡Profit detectado por rebote! Precio ${currentPrice.toFixed(2)} >= Stop ${triggerPrice.toFixed(2)}. Recomprando ${acBuying.toFixed(8)} BTC.`, 'success');
             
             try {
-                // placeShortBuyOrder realiza el bloqueo atómico inyectando la orden en lastOrder
+                // Sigue usando la función correcta: placeShortBuyOrder
                 await placeShortBuyOrder(config, botState, acBuying, log, updateSStateData); 
             } catch (error) {
                 log(`❌ [S] Error crítico al recomprar: ${error.message}`, 'error');
@@ -59,8 +58,7 @@ async function run(dependencies) {
                 }
             }
         } else {
-            // Log de monitoreo silencioso para no saturar Render
-            log(`[S-BUYING] Buscando suelo... Precio: ${currentPrice.toFixed(2)} | Recompra en: ${pc?.toFixed(2)}`, 'debug');
+            log(`[S-BUYING] Buscando suelo... Precio: ${currentPrice.toFixed(2)} | Recompra en: ${triggerPrice.toFixed(2)}`, 'debug');
         }
     } else {
         log(`[S-BUYING] ⚠️ Deuda BTC insuficiente para cerrar (${acBuying.toFixed(8)} BTC).`, 'warning');

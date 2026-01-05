@@ -1,6 +1,7 @@
 // BSB/server/src/au/states/long/LSelling.js
 
-const { placeSellOrder } = require('../../managers/longOrderManager');
+// 🟢 CORRECCIÓN: Cambiado placeSellOrder por placeLongSellOrder para coincidir con el Manager
+const { placeLongSellOrder } = require('../../managers/longOrderManager');
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
 const LSTATE = 'long';
@@ -16,7 +17,6 @@ async function run(dependencies) {
     const { ac: acSelling, pm, pc } = botState.lStateData;
 
     // 1. BLOQUEO DE SEGURIDAD
-    // Si ya hay una orden de venta en curso, no hacemos nada. El Consolidator se encarga.
     if (lastOrder) {
         log(`[L-SELLING] ⏳ Esperando consolidación de orden de venta ${lastOrder.order_id}...`, 'debug');
         return;
@@ -25,11 +25,9 @@ async function run(dependencies) {
     // 2. LÓGICA DE TRAILING STOP
     const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100;
 
-    // PM (Precio Máximo alcanzado) | PC (Precio de Corte/Venta)
     const newPm = Math.max(pm || 0, currentPrice);
     const newPc = newPm * (1 - trailingStopPercent);
 
-    // Si el precio marca un nuevo máximo, subimos el Stop
     if (newPm > (pm || 0)) {
         log(`📈 [L-TRAILING] Nuevo máximo: ${newPm.toFixed(2)}. Stop sube a: ${newPc.toFixed(2)}`, 'info');
 
@@ -38,26 +36,23 @@ async function run(dependencies) {
     }
 
     // 3. CONDICIÓN DE DISPARO
-    // Solo vendemos si tenemos suficiente BTC y el precio cae por debajo del PC
     if (acSelling >= MIN_SELL_AMOUNT_BTC) {
         
         if (currentPrice <= (pc || newPc)) {
             log(`💰 [L-SELL] ¡Trailing Stop activado! Precio ${currentPrice.toFixed(2)} <= Stop ${pc?.toFixed(2)}. Liquidando ${acSelling.toFixed(8)} BTC.`, 'success');
             
             try {
-                // placeSellOrder ya realiza el bloqueo atómico guardando lastOrder
-                await placeSellOrder(config, botState, acSelling, log); 
+                // 🟢 CORRECCIÓN: Llamada a la función correcta
+                await placeLongSellOrder(config, botState, acSelling, log, updateLStateData); 
             } catch (error) {
                 log(`❌ Error crítico al intentar vender: ${error.message}`, 'error');
                 
-                // Si el error es por falta de fondos reales o volumen insignificante, protegemos el bot
                 if (error.message.includes('Balance not enough') || error.message.includes('volume too small')) {
                     log('⚠️ Transicionando a NO_COVERAGE para revisión manual de balance BTC.', 'error');
                     await updateBotState('NO_COVERAGE', LSTATE); 
                 }
             }
         } else {
-            // Log de monitoreo silencioso
             log(`[L-SELLING] Vigilando... Precio: ${currentPrice.toFixed(2)} | Stop: ${pc?.toFixed(2)}`, 'debug');
         }
     } else {
