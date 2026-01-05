@@ -26,20 +26,23 @@ async function loadBotDataFromServer() {
         const data = await response.json();
 
         if (data && data.success) {
-            // 1. Sincronizar balances con formato de punto decimal
             updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
             updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
 
-            // 2. Sincronizar Checkbox "Stop at cycle end"
+            // 🟢 SINCRONIZACIÓN DE CHECKBOXES INDEPENDIENTES
             if (data.config) {
-                const stopAtCycleCheckbox = document.getElementById('au-stop-at-cycle-end');
-                if (stopAtCycleCheckbox) {
-                    stopAtCycleCheckbox.checked = !!data.config.stopAtCycle;
-                    console.log("Checkbox synchronized from DB:", stopAtCycleCheckbox.checked);
-                }
+                const stopLongCb = document.getElementById('au-stop-long-at-cycle');
+                const stopShortCb = document.getElementById('au-stop-short-at-cycle');
+                
+                if (stopLongCb) stopLongCb.checked = !!data.config.long?.stopAtCycle;
+                if (stopShortCb) stopShortCb.checked = !!data.config.short?.stopAtCycle;
+                
+                console.log("Checkboxes sincronizados:", { 
+                    long: stopLongCb?.checked, 
+                    short: stopShortCb?.checked 
+                });
             }
             
-            // 3. Actualizar UI del botón (START/STOP)
             updateBotUI(data);
         }
     } catch (error) {
@@ -94,10 +97,13 @@ function validateAmountInput(inputId, maxLimit, currency) {
 }
 
 function setupConfigListeners() {
+    // 🟢 LISTA DE IDs ACTUALIZADA PARA COINCIDIR CON EL HTML
     const configIds = [
         'auamount-usdt', 'auamount-btc', 'aupurchase-usdt', 
         'aupurchase-btc', 'auincrement', 'audecrement', 
-        'autrigger', 'au-stop-at-cycle-end'
+        'autrigger', 
+        'au-stop-long-at-cycle', // Corregido
+        'au-stop-short-at-cycle'  // Corregido
     ];
     
     configIds.forEach(id => {
@@ -110,7 +116,7 @@ function setupConfigListeners() {
             if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
             if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
             
-            // Guardado automático al cambiar cualquier valor
+            // Enviamos la config al backend
             sendConfigToBackend();
         });
     });
