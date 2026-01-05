@@ -21,12 +21,12 @@ async function loadBotDataFromServer() {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
-        if (!response.ok) throw new Error("Ruta no encontrada");
+        if (!response.ok) throw new Error("Route not found");
 
         const data = await response.json();
 
         if (data && data.success) {
-            // 1. Sincronizar balances
+            // 1. Sincronizar balances con formato de punto decimal
             updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
             updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
 
@@ -34,9 +34,8 @@ async function loadBotDataFromServer() {
             if (data.config) {
                 const stopAtCycleCheckbox = document.getElementById('au-stop-at-cycle-end');
                 if (stopAtCycleCheckbox) {
-                    // Sincronizamos con el valor REAL de MongoDB
                     stopAtCycleCheckbox.checked = !!data.config.stopAtCycle;
-                    console.log("Checkbox sincronizado desde DB:", stopAtCycleCheckbox.checked);
+                    console.log("Checkbox synchronized from DB:", stopAtCycleCheckbox.checked);
                 }
             }
             
@@ -44,12 +43,12 @@ async function loadBotDataFromServer() {
             updateBotUI(data);
         }
     } catch (error) {
-        console.error("Error en sincronización:", error);
+        console.error("Sync error:", error);
     }
 }
 
 /**
- * Actualiza los balances máximos en la UI y las variables de validación
+ * Actualiza los balances máximos en la UI con formato estrictamente en-US (Punto decimal)
  */
 function updateMaxBalanceDisplay(currency, balance) {
     if (currency === 'USDT') maxUsdtBalance = balance;
@@ -57,12 +56,17 @@ function updateMaxBalanceDisplay(currency, balance) {
 
     const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
     if (displayElement) {
-        displayElement.textContent = `(Max: ${balance.toFixed(currency === 'USDT' ? 2 : 6)} ${currency})`;
+        // Forzamos el uso de punto (.) mediante el locale en-US
+        const formattedBalance = balance.toLocaleString('en-US', {
+            minimumFractionDigits: currency === 'USDT' ? 2 : 6,
+            maximumFractionDigits: currency === 'USDT' ? 2 : 6
+        });
+        displayElement.textContent = `(Max: ${formattedBalance} ${currency})`;
     }
 }
 
 /**
- * Validación visual y lógica de montos
+ * Validación visual y lógica de montos con mensajes en inglés y punto decimal
  */
 function validateAmountInput(inputId, maxLimit, currency) {
     const input = document.getElementById(inputId);
@@ -73,9 +77,13 @@ function validateAmountInput(inputId, maxLimit, currency) {
     const minBitmart = currency === 'USDT' ? MIN_USDT_AMOUNT : MIN_BTC_AMOUNT;
     
     let errorMsg = '';
-    if (isNaN(value) || value <= 0) errorMsg = `Monto inválido.`;
-    else if (value < minBitmart) errorMsg = `Min: ${minBitmart} ${currency}`;
-    else if (value > maxLimit) errorMsg = `Saldo insuficiente.`;
+    if (isNaN(value) || value <= 0) {
+        errorMsg = `Invalid amount.`;
+    } else if (value < minBitmart) {
+        errorMsg = `Min: ${minBitmart.toFixed(currency === 'USDT' ? 2 : 6)} ${currency}`;
+    } else if (value > maxLimit) {
+        errorMsg = `Insufficient balance.`;
+    }
 
     if (errorElement) {
         errorElement.textContent = errorMsg;
@@ -111,16 +119,16 @@ function setupConfigListeners() {
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
-    // CARGA INICIAL: Trae balances y estado del checkbox desde MongoDB
+    // CARGA INICIAL: Sincronización con MongoDB
     await loadBotDataFromServer();
     
     setupConfigListeners();
 
-    // Gráfico con delay para renderizado correcto
+    // Gráfico de TradingView
     setTimeout(() => {
         try {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-        } catch (e) { console.error("Error al inicializar TV:", e); }
+        } catch (e) { console.error("TV Init Error:", e); }
     }, 200);
 
     // Botón START / STOP
@@ -133,11 +141,10 @@ export async function initializeAutobotView() {
             const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
             
             if (!isUsdtOk || !isBtcOk) {
-                return displayMessage('Verifica los saldos configurados antes de iniciar', 'error');
+                return displayMessage('Check configured balances before starting', 'error');
             }
         }
         
-        // toggleBotState usará getBotConfiguration() internamente
         await toggleBotState(isCurrentlyRunning); 
     });
 
@@ -159,7 +166,7 @@ export async function initializeAutobotView() {
 
     fetchOrders('opened', auOrderList);
 
-    // Sockets específicos de la vista para actualizaciones en tiempo real
+    // Sockets para actualizaciones en tiempo real
     if (socket) {
         socket.on('balance-real-update', (data) => {
             updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);

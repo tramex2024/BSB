@@ -19,7 +19,7 @@ const STATUS_COLORS = {
 };
 
 /**
- * Actualiza la UI de forma estable con los datos del Socket
+ * Actualiza la UI de forma estable con los datos del Socket usando PUNTO DECIMAL
  */
 export function updateBotUI(state) {
     if (!state) return;
@@ -40,7 +40,8 @@ export function updateBotUI(state) {
                 priceElement.classList.add('text-white');
             }
 
-            priceElement.textContent = `$${currentPrice.toLocaleString(undefined, { 
+            // 🟢 CORRECCIÓN: Forzado a en-US para PUNTO DECIMAL (.)
+            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
                 minimumFractionDigits: 2, 
                 maximumFractionDigits: 2 
             })}`;
@@ -91,7 +92,9 @@ export function updateBotUI(state) {
         } else {
             const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
             const decimals = isBtcField ? 6 : 2;
-            const formatted = value.toLocaleString(undefined, { 
+
+            // 🟢 CORRECCIÓN: Forzado a en-US en todos los labels numéricos
+            const formatted = value.toLocaleString('en-US', { 
                 minimumFractionDigits: decimals, 
                 maximumFractionDigits: decimals 
             });
@@ -103,16 +106,16 @@ export function updateBotUI(state) {
     }
 
     // --- 4. CONTROL DE BOTONES E INPUTS (Lógica de Bloqueo) ---
-    // El bot se considera detenido globalmente solo si AMBAS piernas están en STOPPED
     const isGlobalStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     updateControlsState(isGlobalStopped);
 }
 
 /**
- * Formatea el profit con signo y colores
+ * Formatea el profit con signo, colores y PUNTO DECIMAL
  */
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '-';
+    // 🟢 CORRECCIÓN: toFixed siempre usa punto decimal por estándar JS
     const formatted = `${sign}$${Math.abs(value).toFixed(2)}`;
     
     if (element.textContent === formatted) return;
@@ -127,7 +130,6 @@ function formatProfit(element, value) {
 
 /**
  * Gestiona el estado de los inputs y el botón principal.
- * 🟢 Ahora maneja los nuevos checkboxes de parada independiente.
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
@@ -146,9 +148,7 @@ function updateControlsState(isStopped) {
     if (autobotSettings) {
         const inputs = autobotSettings.querySelectorAll('input, select');
         inputs.forEach(input => {
-            // 🟢 Los nuevos checkboxes de parada por ciclo NUNCA se bloquean.
-            // Esto permite al usuario decidir parar en medio de un ciclo exponencial.
-            const isIndependentStop = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
+            const isIndependentStop = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle', 'au-stop-at-cycle-end'].includes(input.id);
             
             if (isIndependentStop) {
                 input.disabled = false;
@@ -157,7 +157,6 @@ function updateControlsState(isStopped) {
                 return;
             }
 
-            // Bloqueamos el resto (cantidades, incrementos) si el bot está corriendo
             input.disabled = !isStopped;
             input.style.opacity = isStopped ? '1' : '0.5';
             input.style.cursor = isStopped ? 'auto' : 'not-allowed';
