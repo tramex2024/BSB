@@ -4,73 +4,64 @@ const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmar
 const { handleSuccessfulShortSell } = require('../../managers/shortDataManager'); 
 
 /**
- * Monitorea órdenes de VENTA (apertura/cobertura de Short) y consolida la posición.
+ * Monitorea órdenes de VENTA (apertura o DCA de Short).
+ * Confirma la ejecución y delega la actualización de métricas al ShortDataManager.
  */
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
     const sStateData = botState.sStateData;
     const lastOrder = sStateData.lastOrder;
 
-    // Salida rápida si no hay nada que monitorear
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false;
     }
 
     const orderIdString = String(lastOrder.order_id);
-    log(`[S-CONSOLIDATOR] 🔍 Verificando venta Short ${orderIdString}...`, 'warning');
 
     try {
-        let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
-        let finalDetails = orderDetails;
-        
-        // Normalización de volumen llenado
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
         let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
         
-        let isOrderProcessed = (
-            ['filled', 'partially_canceled', 'canceled'].includes(finalDetails?.state) || 
-            filledVolume > 0
-        );
-
-        // Respaldo: Buscar en historial si la consulta directa falla
-        if (!isOrderProcessed) {
+        // Verificación de respaldo si la API no retorna datos inmediatos
+        if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
-            finalDetails = recentOrders.find(order => 
-                String(order.orderId) === orderIdString || String(order.order_id) === orderIdString
-            );
-            
-            if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.filled_volume || 0);
-                isOrderProcessed = filledVolume > 0;
-            }
+            finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
+            if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
         }
 
-        // --- CASO 1: VENTA EXITOSA (Apertura o DCA del Short) ---
-        if (isOrderProcessed && filledVolume > 0) {
-            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada. Actualizando PPC de Short...`, 'success');
+        const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
+        const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
+
+        // --- CASO 1: VENTA EXITOSA (Entrada o Cobertura) ---
+        if (isFilled) {
+            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada.`, 'success');
             
-            // Pasamos las dependencias para que use la "Caja de Cambios" interna
+            // Delegamos el recálculo de PPC y limpieza de 'lastOrder' al Manager
             await handleSuccessfulShortSell(botState, finalDetails, log, { updateGeneralBotState, updateSStateData }); 
             
+            // Mantenemos el estado en SELLING para que el motor siga gestionando la posición
             await updateBotState('SELLING', 'short'); 
             return true; 
         } 
 
-        // --- CASO 2: ORDEN AÚN ACTIVA EN BITMART ---
+        // --- CASO 2: ORDEN ACTIVA ---
         if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
-            log(`[S-CONSOLIDATOR] ⏳ Orden Short ${orderIdString} sigue abierta en libro (${finalDetails.state}).`, 'info');
             return true; 
         } 
 
-        // --- CASO 3: ORDEN FALLIDA / CANCELADA ---
-        log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} no se ejecutó. Liberando bloqueo.`, 'error');
-        
-        await updateSStateData({ 'lastOrder': null });
-        await updateBotState('SELLING', 'short');
-        
+        // --- CASO 3: ORDEN CANCELADA O FALLIDA ---
+        if (isCanceled && filledVolume === 0) {
+            log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada sin ejecución.`, 'error');
+            
+            // Liberamos el lastOrder para que el bot pueda intentar vender de nuevo
+            await updateSStateData({ 'lastOrder': null });
+            await updateBotState('SELLING', 'short');
+            return true;
+        }
+
         return true;
 
     } catch (error) {
-        log(`[S-CONSOLIDATOR] ⚠️ Error de conexión al verificar orden Short: ${error.message}`, 'error');
-        // Bloqueamos el estado por seguridad hasta la siguiente vuelta
+        log(`[S-CONSOLIDATOR] ⚠️ Error crítico: ${error.message}`, 'error');
         return true; 
     }
 }

@@ -5,6 +5,7 @@ const { handleSuccessfulSell } = require('../../managers/longDataManager');
 
 /**
  * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.
+ * Delega la lógica de parada o reinicio al LongDataManager.
  */
 async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
     const lStateData = botState.lStateData;
@@ -20,6 +21,7 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
         let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
 
+        // Respaldo Atómico: Verificación en historial si falla la consulta directa
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
@@ -29,14 +31,10 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: ÉXITO TOTAL (Liquidando ciclo exponencial) ===
+        // === CASO A: VENTA CONFIRMADA (Delegación al Manager) ===
         if (isFilled) {
-            log(`💰 [L-SELL-SUCCESS] Venta confirmada. Liquidando ciclo...`, 'success');
+            log(`💰 [L-SELL-SUCCESS] Venta confirmada. Procesando cierre de ciclo...`, 'success');
             
-            // 🟢 DETECCIÓN DE STOP INDEPENDIENTE
-            // Verificamos si en la config de Long se marcó "Stop at Cycle"
-            const shouldStopAfterThis = botState.config?.long?.stopAtCycle === true;
-
             const handlerDependencies = { 
                 log, 
                 updateBotState, 
@@ -45,35 +43,21 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
                 config: botState.config 
             };
             
-            // 1. Ejecutamos la limpieza normal del ciclo (reset de ppc, ac, ai, etc.)
+            // Centralizamos aquí la lógica de STOPPED o reinicio a BUYING.
+            // Esto evita que el bot reciba órdenes contradictorias.
             await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
-
-            // 2. Si el stop estaba activo, sobreescribimos el estado a STOPPED
-            if (shouldStopAfterThis) {
-                log(`🛑 [L-STOP] Aplicando parada solicitada por usuario tras cierre de ciclo.`, 'warning');
-                
-                // Actualizamos ambos estados para asegurar que no reinicie
-                await updateBotState('STOPPED', 'long'); 
-                
-                // También grabamos en la configuración que ya no está "enabled" para esta pierna
-                // Esto es vital para que la UI refleje que el bot se apagó solo.
-                await updateGeneralBotState({ 
-                    'config.long.enabled': false,
-                    'lstate': 'STOPPED' // Doble seguridad
-                });
-            }
 
             return true;
         }
 
-        // === CASO B: LA ORDEN SIGUE EN LIBRO ===
+        // === CASO B: LA ORDEN SIGUE EN EL LIBRO ===
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
             return true; 
         }
 
-        // === CASO C: FALLO O CANCELACIÓN ===
+        // === CASO C: FALLO O CANCELACIÓN SIN EJECUCIÓN ===
         if (isCanceled && filledVolume === 0) {
-            log(`❌ [L-SELL-FAIL] Venta cancelada. Reintentando...`, 'error');
+            log(`❌ [L-SELL-FAIL] Venta cancelada sin ejecución. Liberando para reintento...`, 'error');
             await updateLStateData({ 'lastOrder': null });
             return true;
         }

@@ -5,13 +5,14 @@ const { handleSuccessfulShortBuy } = require('../../managers/shortDataManager');
 
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
- * Verifica el cierre del ciclo cuando el precio baja al Take Profit.
+ * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy).
+ * Delega la lógica de reinicio exponencial o parada al ShortDataManager.
  */
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
     const sStateData = botState.sStateData;
     const lastOrder = sStateData.lastOrder;
 
-    // 1. FILTRO: En Short, cerramos con una COMPRA (buy)
+    // En Short, el ciclo se cierra con una compra (buy) para cubrir la venta previa
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false; 
     }
@@ -20,32 +21,22 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
 
     try {
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
-        
-        let filledVolume = parseFloat(
-            finalDetails?.filledSize || 
-            finalDetails?.filled_volume || 
-            finalDetails?.filledVolume || 0
-        );
+        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
 
+        // Verificación de respaldo en historial
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
-            
-            if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
-            }
+            if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
         }
 
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: RECOMPRA EXITOSA (Cierre de Ciclo Short) ===
+        // === CASO A: RECOMPRA EXITOSA (Take Profit) ===
         if (isFilled) {
-            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. Liquidando ciclo Short exponencial...`, 'success');
+            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. Finalizando ciclo Short...`, 'success');
             
-            // 🟢 DETECCIÓN DE STOP INDEPENDIENTE PARA SHORT
-            const shouldStopAfterThis = botState.config?.short?.stopAtCycle === true;
-
             const handlerDependencies = { 
                 log, 
                 updateBotState, 
@@ -54,41 +45,30 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
                 config: botState.config 
             };
             
-            // 1. Reseteamos balances y contadores de Short
+            // Centralizamos la decisión: ¿Ir a SELLING (Exponencial) o a STOPPED?
+            // Esta lógica ya está blindada dentro del ShortDataManager que corregimos.
             await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
-
-            // 2. Aplicamos parada si está configurada
-            if (shouldStopAfterThis) {
-                log(`🛑 [S-STOP] Deteniendo estrategia Short tras completar ciclo.`, 'warning');
-                
-                await updateBotState('STOPPED', 'short');
-                
-                // Persistimos el apagado en la configuración raíz
-                await updateGeneralBotState({ 
-                    'config.short.enabled': false,
-                    'sstate': 'STOPPED' 
-                });
-            }
 
             return true;
         }
 
-        // === CASO B: ORDEN PENDIENTE ===
+        // === CASO B: ORDEN PENDIENTE EN LIBRO ===
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
             return true; 
         }
 
-        // === CASO C: ORDEN FALLIDA ===
+        // === CASO C: ORDEN FALLIDA O CANCELADA ===
         if (isCanceled && filledVolume === 0) {
-            log(`❌ [S-BUY-FAIL] Recompra cancelada. Reintentando...`, 'error');
+            log(`❌ [S-BUY-FAIL] Recompra cancelada sin ejecución. Reintentando...`, 'error');
             await updateSStateData({ 'lastOrder': null });
+            // El bot volverá a intentar poner la compra de cierre en el próximo ciclo
             return true;
         }
 
         return true;
 
     } catch (error) {
-        log(`[S-BUY-ERROR] Error crítico en consolidación Short: ${error.message}`, 'error');
+        log(`[S-BUY-ERROR] Error en consolidación Short Buy: ${error.message}`, 'error');
         return true; 
     }
 }

@@ -4,76 +4,62 @@ const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmar
 const { handleSuccessfulBuy } = require('../../managers/longDataManager'); 
 
 /**
- * Monitorea órdenes de compra y consolida la posición.
+ * Monitorea órdenes de compra y delega la consolidación al Data Manager.
  */
 async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
     const lStateData = botState.lStateData;
     const lastOrder = lStateData.lastOrder;
 
-    // Si no hay orden pendiente, salimos rápido
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false;
     }
 
     const orderIdString = String(lastOrder.order_id);
-    log(`[CONSOLIDATOR] 🔍 Verificando orden de compra ${orderIdString}...`, 'warning');
 
     try {
-        let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
-        let finalDetails = orderDetails;
-        
-        // Normalización de volumen (BitMart usa distintos nombres según la versión de API)
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
         let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
-        
-        let isOrderProcessed = (
-            ['filled', 'partially_canceled', 'canceled'].includes(finalDetails?.state) || 
-            filledVolume > 0
-        );
 
-        // Lógica de Respaldo: Si la consulta directa no da resultado claro, buscamos en historial
-        if (!isOrderProcessed) {
+        // Lógica de Respaldo Atómica
+        if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
-            finalDetails = recentOrders.find(order => 
-                String(order.orderId) === orderIdString || String(order.order_id) === orderIdString
-            );
-            
-            if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || finalDetails.filled_volume || 0);
-                isOrderProcessed = filledVolume > 0;
-            }
+            finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
+            if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
         }
 
-        // --- CASO 1: ORDEN COMPLETADA O CON EJECUCIÓN PARCIAL ---
-        if (isOrderProcessed && filledVolume > 0) {
-            log(`[CONSOLIDATOR] ✅ Orden ${orderIdString} procesada. Actualizando PPC y AC...`, 'success');
+        const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
+        const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
+
+        // --- CASO 1: ÉXITO (Delegamos todo al Brain/DataManager) ---
+        if (isFilled) {
+            log(`[CONSOLIDATOR] ✅ Ejecución detectada en ${orderIdString}. Procesando datos...`, 'success');
             
-            // IMPORTANTE: handleSuccessfulBuy debe recibir los "updates" si los necesita internamente.
-            // Esta función recalcula el PPC (tus $90,556.01) y limpia el lastOrder.
-            await handleSuccessfulBuy(botState, finalDetails, log); 
+            const dependencies = { updateGeneralBotState, updateLStateData };
             
-            // Forzamos un refresco de estado para asegurar que el bot vea los nuevos targets inmediatamente
-            await updateBotState('BUYING', 'long'); 
+            // Aquí es donde el Data Manager recalcula el PPC y limpia el lastOrder
+            await handleSuccessfulBuy(botState, finalDetails, log, dependencies);
+            
+            // Importante: No forzamos estados aquí, el flujo natural del bot seguirá 
+            // su curso basado en los datos limpios que dejó handleSuccessfulBuy.
             return true; 
         } 
 
-        // --- CASO 2: ORDEN TODAVÍA ACTIVA EN EL EXCHANGE ---
+        // --- CASO 2: ORDEN ACTIVA (Esperamos) ---
         if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
-            log(`[CONSOLIDATOR] ⏳ Orden ${orderIdString} sigue abierta (${finalDetails.state}).`, 'info');
             return true; 
         } 
 
-        // --- CASO 3: ORDEN CANCELADA O FALLIDA SIN LLENAR NADA ---
-        log(`[CONSOLIDATOR] ❌ Orden ${orderIdString} falló o fue cancelada sin ejecución.`, 'error');
-        
-        // Limpiamos la orden para que el bot pueda intentar una nueva compra
-        await updateLStateData({ 'lastOrder': null });
-        await updateBotState('BUYING', 'long');
-        
+        // --- CASO 3: FALLO / CANCELACIÓN ---
+        if (isCanceled && filledVolume === 0) {
+            log(`[CONSOLIDATOR] ❌ Orden ${orderIdString} cancelada sin ejecución. Reintentando...`, 'error');
+            await updateLStateData({ 'lastOrder': null });
+            return true;
+        }
+
         return true;
 
     } catch (error) {
-        log(`[CONSOLIDATOR] ⚠️ Error consultando orden ${orderIdString}: ${error.message}`, 'error');
-        // Retornamos true para "bloquear" nuevas compras hasta que la conexión se estabilice
+        log(`[CONSOLIDATOR] ⚠️ Error: ${error.message}`, 'error');
         return true; 
     }
 }
