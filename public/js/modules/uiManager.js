@@ -28,24 +28,17 @@ export function updateBotUI(state) {
     const priceElement = document.getElementById('auprice');
     if (priceElement && state.price !== undefined && state.price !== null) {
         const currentPrice = Number(state.price);
-        
         if (currentPrice !== lastPrice) {
             priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
-            
             if (lastPrice !== 0) {
                 if (currentPrice > lastPrice) priceElement.classList.add('text-emerald-400');
                 else if (currentPrice < lastPrice) priceElement.classList.add('text-red-400');
                 else priceElement.classList.add('text-white');
-            } else {
-                priceElement.classList.add('text-white');
-            }
+            } else { priceElement.classList.add('text-white'); }
 
-            // 🟢 CORRECCIÓN: Forzado a en-US para PUNTO DECIMAL (.)
             priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
-                minimumFractionDigits: 2, 
-                maximumFractionDigits: 2 
+                minimumFractionDigits: 2, maximumFractionDigits: 2 
             })}`;
-            
             lastPrice = currentPrice;
         }
     }
@@ -54,7 +47,7 @@ export function updateBotUI(state) {
     updateStatusLabel('aubot-lstate', state.lstate);
     updateStatusLabel('aubot-sstate', state.sstate);
 
-    // --- 3. ACTUALIZACIÓN DE VALORES NUMÉRICOS ---
+    // --- 3. ACTUALIZACIÓN DE VALORES NUMÉRICOS (LABELS) ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
@@ -65,47 +58,62 @@ export function updateBotUI(state) {
         auscycle: 'scycle',
         aulcoverage: 'lcoverage', 
         auscoverage: 'scoverage',
-        aulnorder: 'lnorder',
-        ausnorder: 'snorder',
         aulsprice: 'lsprice',
         ausbprice: 'sbprice',
         aulprofit: 'lprofit',
-        ausprofit: 'sprofit'
+        ausprofit: 'sprofit',
+        'aubalance-usdt': 'lastAvailableUSDT',
+        'aubalance-btc': 'lastAvailableBTC'
     };
 
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
         if (!element) continue;
-
         const rawValue = state[dataKey];
         if (rawValue === undefined || rawValue === null) continue;
-
         const value = Number(rawValue);
         if (isNaN(value)) continue;
 
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
-        } else if (['lnorder', 'snorder', 'lcycle', 'scycle'].includes(dataKey)) {
-            if (element.textContent !== value.toString()) {
-                element.textContent = value.toFixed(0);
-            }
         } else {
-            const isBtcField = elementId.includes('btc') || elementId === 'aubalance-btc';
-            const decimals = isBtcField ? 6 : 2;
-
-            // 🟢 CORRECCIÓN: Forzado a en-US en todos los labels numéricos
+            const decimals = (elementId.includes('btc') || elementId === 'aubalance-btc') ? 6 : 2;
             const formatted = value.toLocaleString('en-US', { 
-                minimumFractionDigits: decimals, 
-                maximumFractionDigits: decimals 
+                minimumFractionDigits: decimals, maximumFractionDigits: decimals 
             });
-
-            if (element.textContent !== formatted) {
-                element.textContent = formatted;
-            }
+            if (element.textContent !== formatted) element.textContent = formatted;
         }
     }
 
-    // --- 4. CONTROL DE BOTONES E INPUTS (Lógica de Bloqueo) ---
+    // --- 4. ACTUALIZACIÓN DE INPUTS DE CONFIGURACIÓN ---
+    if (state.config) {
+        const conf = state.config;
+        const inputsMapping = {
+            'auamountl-usdt': conf.long?.amountUsdt,
+            'auamounts-usdt': conf.short?.amountUsdt,
+            'aupurchasel-usdt': conf.long?.purchaseUsdt,
+            'aupurchases-usdt': conf.short?.purchaseUsdt,
+            'auincrement': conf.long?.size_var,
+            'audecrement': conf.long?.price_var,
+            'autrigger': conf.long?.trigger
+        };
+
+        for (const [id, value] of Object.entries(inputsMapping)) {
+            const input = document.getElementById(id);
+            // Sincronizar solo si el usuario no está escribiendo en él
+            if (input && value !== undefined && document.activeElement !== input) {
+                input.value = value;
+            }
+        }
+
+        // Sincronizar Checkboxes (Stop at Cycle)
+        const stopL = document.getElementById('au-stop-long-at-cycle');
+        const stopS = document.getElementById('au-stop-short-at-cycle');
+        if (stopL) stopL.checked = !!conf.long?.stopAtCycle;
+        if (stopS) stopS.checked = !!conf.short?.stopAtCycle;
+    }
+
+    // --- 5. CONTROL DE BLOQUEO ---
     const isGlobalStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     updateControlsState(isGlobalStopped);
 }
@@ -115,7 +123,6 @@ export function updateBotUI(state) {
  */
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '-';
-    // 🟢 CORRECCIÓN: toFixed siempre usa punto decimal por estándar JS
     const formatted = `${sign}$${Math.abs(value).toFixed(2)}`;
     
     if (element.textContent === formatted) return;
@@ -130,36 +137,42 @@ function formatProfit(element, value) {
 
 /**
  * Gestiona el estado de los inputs y el botón principal.
+ * Permite que los Stop at Cycle sigan editables aunque el bot corra.
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
     const autobotSettings = document.getElementById('autobot-settings');
     
     if (startStopButton) {
-        const newText = isStopped ? 'START AUTOBOT' : 'STOP AUTOBOT';
+        const isRunning = !isStopped;
+        const newText = isRunning ? 'STOP AUTOBOT' : 'START AUTOBOT';
         if (startStopButton.textContent !== newText) {
             startStopButton.textContent = newText;
-            startStopButton.className = isStopped 
-                ? 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm' 
-                : 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm';
+            startStopButton.className = isRunning 
+                ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm'
+                : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm';
         }
     }
 
     if (autobotSettings) {
-        const inputs = autobotSettings.querySelectorAll('input, select');
+        const inputs = autobotSettings.querySelectorAll('input');
         inputs.forEach(input => {
-            const isIndependentStop = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle', 'au-stop-at-cycle-end'].includes(input.id);
+            // IDs que NO se bloquean nunca
+            const isAlwaysEnabled = [
+                'au-stop-long-at-cycle', 
+                'au-stop-short-at-cycle'
+            ].includes(input.id);
             
-            if (isIndependentStop) {
+            if (isAlwaysEnabled) {
                 input.disabled = false;
                 input.style.opacity = '1';
                 input.style.cursor = 'pointer';
-                return;
+            } else {
+                // Bloquear inputs sensibles si el bot NO está detenido
+                input.disabled = !isStopped;
+                input.style.opacity = isStopped ? '1' : '0.5';
+                input.style.cursor = isStopped ? 'auto' : 'not-allowed';
             }
-
-            input.disabled = !isStopped;
-            input.style.opacity = isStopped ? '1' : '0.5';
-            input.style.cursor = isStopped ? 'auto' : 'not-allowed';
         });
     }
 }
