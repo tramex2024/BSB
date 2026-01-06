@@ -26,21 +26,21 @@ const configSchema = new mongoose.Schema({
     symbol: { type: String, default: "BTC_USDT" },
     long: {
         enabled: { type: Boolean, default: false },
-        amountUsdt: { type: Number, default: 5.00 },
+        amountUsdt: { type: Number, default: 6.00 },
         purchaseUsdt: { type: Number, default: 6.00 },
         price_var: { type: Number, default: 0.1 },
         size_var: { type: Number, default: 5.0 },
         profit_percent: { type: Number, default: 1.5 },
-        stopAtCycle: { type: Boolean, default: false } // 🟢 Movid aquí (Independiente para Long)
+        stopAtCycle: { type: Boolean, default: false } 
     },
     short: {
         enabled: { type: Boolean, default: false },        
-        amountBtc: { type: Number, default: 0.00005 }, 
-        sellBtc: { type: Number, default: 0.00005 }, 
+        amountUsdt: { type: Number, default: 6.00 }, 
+        purchaseUsdt: { type: Number, default: 6.00 }, 
         price_var: { type: Number, default: 0.1 },
         size_var: { type: Number, default: 5.0 },
         profit_percent: { type: Number, default: 1.5 },
-        stopAtCycle: { type: Boolean, default: false } // 🟢 Movid aquí (Independiente para Short)
+        stopAtCycle: { type: Boolean, default: false } 
     }
     // 🔴 Se eliminó stopAtCycle de la raíz para evitar colisiones globales
 });
