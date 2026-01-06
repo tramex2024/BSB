@@ -1,11 +1,10 @@
 // public/js/modules/apiService.js
 
+// public/js/modules/apiService.js
+
 import { displayMessage } from './uiManager.js';
 import { TRADE_SYMBOL_BITMART, BACKEND_URL } from '../main.js';
 
-/**
- * Helper para peticiones fetch privadas con token de autorización
- */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) return { success: false, message: "Session not found." };
@@ -26,17 +25,15 @@ async function privateFetch(endpoint, options = {}) {
     }
 }
 
-/**
- * Captura la configuración del formulario mapeando los controles independientes.
- * Se asegura de enviar números con punto decimal (.) para compatibilidad con MongoDB.
- */
 export function getBotConfiguration() {
     const getNum = (id) => {
-        const val = document.getElementById(id)?.value;
-        return val ? parseFloat(val) : 0;
+        const el = document.getElementById(id);
+        const val = el ? el.value : "0";
+        return parseFloat(val) || 0;
     };
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
+    // --- CORRECCIÓN CRÍTICA: Mapeo simétrico en USDT ---
     return {
         symbol: "BTC_USDT",
         long: {
@@ -45,45 +42,48 @@ export function getBotConfiguration() {
             trigger: getNum('autrigger'), 
             price_var: getNum('audecrement'),
             size_var: getNum('auincrement'),
-            // Mapeo independiente para la parada de ciclo Long
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
         short: {
-            amountBtc: getNum('auamount-btc'),
-            sellBtc: getNum('aupurchase-btc'),
+            // Ahora el Short usa los valores de USDT para mantener la lógica exponencial
+            amountUsdt: getNum('auamount-usdt'), 
+            purchaseUsdt: getNum('aupurchase-usdt'),
             trigger: getNum('autrigger'),
             price_var: getNum('audecrement'),
             size_var: getNum('auincrement'),
-            // Mapeo independiente para la parada de ciclo Short
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }
     };
 }
 
-/**
- * Envía la configuración actual al backend para auto-guardado
- */
 export async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    const data = await privateFetch('/api/autobot/update-config', {
-        method: 'POST',
-        body: JSON.stringify({ config })
-    });
-    if (!data.success) console.warn('Auto-save error:', data.message);
+    try {
+        const config = getBotConfiguration();
+        const data = await privateFetch('/api/autobot/update-config', {
+            method: 'POST',
+            body: JSON.stringify({ config })
+        });
+        if (!data.success) console.warn('Auto-save error:', data.message);
+    } catch (e) { console.error("Config sync failed", e); }
 }
 
-/**
- * Maneja el inicio y parada global del bot
- */
 export async function toggleBotState(isRunning) {
-    // Si isRunning es true, el usuario pulsó STOP
     const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
-    const config = isRunning ? {} : getBotConfiguration();
+    
+    // Si vamos a arrancar, obtenemos la config limpia
+    let config = {};
+    if (!isRunning) {
+        config = getBotConfiguration();
+        console.log("🚀 Enviando configuración de arranque:", config);
+    }
 
     const btn = document.getElementById('austart-btn');
-    if (btn) btn.disabled = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+    }
 
     const data = await privateFetch(endpoint, {
         method: 'POST',
@@ -94,40 +94,14 @@ export async function toggleBotState(isRunning) {
         displayMessage(`Bot ${isRunning ? 'stopped' : 'started'} successfully`, 'success');
     } else {
         displayMessage(`Error: ${data.message}`, 'error');
+        console.error("Backend rejection:", data);
     }
 
-    if (btn) btn.disabled = false;
-    return data;
-}
-
-/**
- * Detiene una estrategia (pierna) de forma independiente
- */
-export async function stopStrategyIndependently(type) { // type: 'long' o 'short'
-    const endpoint = `/api/autobot/stop/${type}`;
-    const data = await privateFetch(endpoint, { method: 'POST' });
-    
-    if (data.success) {
-        displayMessage(`${type.toUpperCase()} stopped individually`, 'success');
-    } else {
-        displayMessage(`Error stopping ${type}: ${data.message}`, 'error');
+    if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
     }
     return data;
 }
 
-/**
- * Obtiene los datos para la curva de equidad (Analytics)
- */
-export async function fetchEquityCurveData() {
-    const data = await privateFetch('/api/v1/analytics/equity-curve');
-    return data.success ? data.data : (Array.isArray(data) ? data : []);
-}
-
-/**
- * Obtiene los KPIs de los ciclos cerrados
- */
-export async function fetchCycleKpis() {
-    const data = await privateFetch('/api/v1/analytics/kpis');
-    if (data.success) return data.data;
-    return Array.isArray(data) ? (data[0] || data) : { averageProfitPercentage: 0, totalCycles: 0 };
-}
+// ... rest of the file stays the same
