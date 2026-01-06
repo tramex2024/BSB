@@ -4,16 +4,18 @@ const bitmartService = require('../../../services/bitmartService');
 const { MIN_USDT_VALUE_FOR_BITMART, BUY_FEE_PERCENT } = require('../utils/tradeConstants');
 
 /**
- * APERTURA DE SHORT: Venta inicial de mercado.
+ * APERTURA DE SHORT: Venta inicial de mercado basada en purchaseUsdt.
  */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState) {
     const { purchaseUsdt } = config.short;
     const SYMBOL = config.symbol;
     const amountNominal = parseFloat(purchaseUsdt);
+    
+    // El costo real incluye la comisión para descontarlo del balance interno (sbalance)
     const amountRealCost = amountNominal * (1 + BUY_FEE_PERCENT);
 
     if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`[S-FIRST] ❌ Error: Monto $${amountNominal} inferior al mínimo de BitMart.`, 'error');
+        log(`[S-FIRST] ❌ Error: Monto $${amountNominal} inferior al mínimo.`, 'error');
         await updateBotState('NO_COVERAGE', 'short'); 
         return;
     }
@@ -22,14 +24,17 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     log(`🚀 [S-FIRST] Abriendo Short con ${amountNominal} USDT...`, 'info'); 
 
     try {
+        // Usamos sell market para abrir el Short (vender lo que no tenemos)
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', amountNominal); 
 
         if (orderResult && orderResult.order_id) {
             const newSBalance = currentSBalance - amountRealCost;
+            
             await updateGeneralBotState({
                 sbalance: newSBalance,
                 sStateData: {
                     ...botState.sStateData,
+                    orderCountInCycle: 1, // Primer paso del ciclo
                     lastOrder: {
                         order_id: orderResult.order_id,
                         side: 'sell',
@@ -39,15 +44,15 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
                     }
                 }
             });
-            log(`✅ [S-FIRST] Éxito. ID: ${orderResult.order_id}. Balance Short: ${newSBalance.toFixed(2)}`, 'success');
+            log(`✅ [S-FIRST] Éxito. ID: ${orderResult.order_id}.`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-FIRST] Error de API al abrir: ${error.message}. Reintentando...`, 'error');
+        log(`❌ [S-FIRST] Error de API: ${error.message}`, 'error');
     }
 }
 
 /**
- * COBERTURA SHORT (DCA): Venta exponencial.
+ * COBERTURA SHORT (DCA): Venta exponencial basada en requiredCoverageAmount.
  */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState) { 
     const SYMBOL = botState.config.symbol;
@@ -61,10 +66,15 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
 
         if (order && order.order_id) {
             const newSBalance = currentBalance - amountRealCost;
+            
+            // Incrementamos el contador de órdenes para el cálculo de promedios
+            const nextCount = (botState.sStateData.orderCountInCycle || 0) + 1;
+
             await updateGeneralBotState({
                 sbalance: newSBalance,
                 sStateData: {
                     ...botState.sStateData,
+                    orderCountInCycle: nextCount,
                     lastOrder: {
                         order_id: order.order_id,
                         side: 'sell',
@@ -74,19 +84,21 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
                     }
                 }
             });
-            log(`✅ [S-DCA] Orden ${order.order_id} registrada.`, 'success');
+            log(`✅ [S-DCA] Orden de cobertura ${nextCount} enviada.`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-DCA] Error en ejecución: ${error.message}`, 'error');
+        log(`❌ [S-DCA] Error en DCA: ${error.message}`, 'error');
     }
 }
 
 /**
  * RECOMPRA (Take Profit): Cierre de ciclo Short.
+ * Aquí btcAmount es el AC (Acumulado) total vendido durante el ciclo.
  */
 async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData) { 
     const SYMBOL = config.symbol;
-    log(`💰 [S-PROFIT] Recomprando ${btcAmount.toFixed(8)} BTC para cerrar ciclo...`, 'info');
+    // En Short, para ganar dinero RECOMPRAMOS (buy) el BTC acumulado (ac)
+    log(`💰 [S-PROFIT] Recomprando ${btcAmount.toFixed(8)} BTC para cerrar Short...`, 'info');
 
     try {
         const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', btcAmount); 
@@ -95,20 +107,20 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateSState
             await updateSStateData({
                 lastOrder: {
                     order_id: order.order_id,
-                    size: btcAmount,
+                    size: btcAmount, // Guardamos cuánto BTC recompramos para el consolidador
                     side: 'buy',
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-PROFIT] Recompra enviada (ID: ${order.order_id}).`, 'success');
+            log(`✅ [S-PROFIT] Orden de cierre enviada (ID: ${order.order_id}).`, 'success');
         }
     } catch (error) { 
-        log(`❌ [S-PROFIT] Error en recompra: ${error.message}`, 'error');
+        log(`❌ [S-PROFIT] Error en cierre: ${error.message}`, 'error');
     }
 }
 
 /**
- * LIMPIEZA DE ÓRDENES HUÉRFANAS.
+ * CANCELACIÓN / LIMPIEZA
  */
 async function cancelActiveShortOrder(botState, log, updateSStateData) {
     const lastOrder = botState.sStateData.lastOrder;
@@ -122,10 +134,10 @@ async function cancelActiveShortOrder(botState, log, updateSStateData) {
         
         if (result?.code === 1000 || result?.message?.includes('already filled')) {
             await updateSStateData({ lastOrder: null });
-            log(`✅ [S-CANCEL] Sistema desbloqueado.`, 'success');
+            log(`✅ [S-CANCEL] Sistema liberado.`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-CANCEL] Error: ${error.message}`, 'error');
+        log(`❌ [S-CANCEL] Error al cancelar: ${error.message}`, 'error');
     }
 }
 

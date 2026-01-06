@@ -108,6 +108,9 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             availableUSDT: botState.lastAvailableUSDT, 
             availableBTC: botState.lastAvailableBTC,
             botState, config: botState.config,
+            // Sincronización de balances de pierna (Ambos ahora en USDT)
+            lbalance: botState.lbalance,
+            sbalance: botState.sbalance,
             updateBotState: async (val, strat) => { changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; },
             updateLStateData: async (fields) => queueLStateUpdate(fields, changeSet),
             updateSStateData: async (fields) => queueSStateUpdate(fields, changeSet),
@@ -135,8 +138,8 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
-        // 2. RECALCULAR INDICADORES (EVITA EL PARPADEO)
-        // Usamos los valores "frescos" del changeSet si el consolidador los cambió justo arriba
+        // 2. RECALCULAR INDICADORES
+        // LONG
         const activeLPPC = changeSet['lStateData.ppc'] !== undefined ? changeSet['lStateData.ppc'] : botState.lStateData.ppc;
         const activeLAC = changeSet['lStateData.ac'] !== undefined ? changeSet['lStateData.ac'] : botState.lStateData.ac;
 
@@ -147,18 +150,20 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
             );
             changeSet.lcoverage = coveragePrice;
             changeSet.lnorder = numberOfOrders;
-
-            // EL PROFIT SE CALCULA AQUÍ CON LA VERDAD FINAL DEL CICLO
             changeSet.lprofit = calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long');
         }
 
+        // SHORT (Corregido para usar purchaseUsdt y sbalance de USDT)
         const activeSPPC = changeSet['sStateData.ppc'] !== undefined ? changeSet['sStateData.ppc'] : botState.sStateData.ppc;
         const activeSAC = changeSet['sStateData.ac'] !== undefined ? changeSet['sStateData.ac'] : botState.sStateData.ac;
 
         if (botState.sstate !== 'STOPPED' && activeSPPC > 0) {
             const { coveragePrice, numberOfOrders } = calculateShortCoverage(
-                botState.sbalance, activeSPPC, botState.config.short.purchaseUsdt,
-                parseNumber(botState.config.short.price_var)/100, parseNumber(botState.config.short.size_var)/100
+                botState.sbalance, // Ahora es el saldo asignado en USDT
+                activeSPPC, 
+                botState.config.short.purchaseUsdt, // Campo unificado
+                parseNumber(botState.config.short.price_var)/100, 
+                parseNumber(botState.config.short.size_var)/100
             );
             changeSet.scoverage = coveragePrice;
             changeSet.snorder = numberOfOrders;
@@ -182,7 +187,6 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 
 /**
  * Verifica si debe apagar una pierna específica basándose en la config independiente.
- * Se llama justo después de un Take Profit exitoso.
  */
 async function checkIndependentStop(type, changeSet, botState) {
     const config = botState.config[type];
@@ -190,15 +194,15 @@ async function checkIndependentStop(type, changeSet, botState) {
     if (config && config.stopAtCycle) {
         log(`[${type.toUpperCase()}] Ciclo completado. Aplicando STOP preventivo.`, 'warning');
         
-        // 1. Cambiamos el estado a STOPPED en el changeSet
+        // 1. Cambiamos el estado a STOPPED
         changeSet[type === 'long' ? 'lstate' : 'sstate'] = 'STOPPED';
         
-        // 2. Deshabilitamos la pierna en la configuración para que persista el stop
+        // 2. Deshabilitamos para persistencia
         changeSet[`config.${type}.enabled`] = false;
         
-        return true; // Se detuvo
+        return true;
     }
-    return false; // Continúa
+    return false;
 }
 
 module.exports = {

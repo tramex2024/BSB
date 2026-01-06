@@ -6,9 +6,10 @@ async function run(dependencies) {
     const { botState, log, updateBotState } = dependencies;
     
     // 1. VERIFICACIÓN DE SEGURIDAD (Posición huérfana)
-    // Si hay deuda de BTC (ac > 0), el bot debe estar gestionando la venta/cobertura.
+    // Si hay acumulado de BTC (ac > 0), significa que ya vendimos (estamos en Short)
+    // pero el estado se quedó en RUNNING por algún error o reinicio.
     if (botState.sStateData && botState.sStateData.ac > 0) {
-        log("[S-RUNNING] 🛡️ Posición Short activa detectada. Corrigiendo estado a SELLING...", 'warning');
+        log("[S-RUNNING] 🛡️ Posición Short activa detectada (AC > 0). Corrigiendo estado a SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
@@ -19,7 +20,8 @@ async function run(dependencies) {
         const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
 
         if (!globalSignal) {
-            log("[S-RUNNING] ⏳ Esperando señales del servidor para Short...", 'debug');
+            // Log nivel debug para no saturar la consola
+            // log("[S-RUNNING] ⏳ Esperando señales del servidor para Short...", 'debug');
             return;
         }
 
@@ -30,14 +32,17 @@ async function run(dependencies) {
             return;
         }
 
-        log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Señal: ${globalSignal.signal}`, 'debug');
-
-        // 4. LÓGICA DE ACTIVACIÓN (Sobrecompra)
+        // 4. LÓGICA DE ACTIVACIÓN (Señal de VENTA para iniciar SHORT)
+        // El bot entra en Short cuando el RSI indica sobrecompra (SELL en la señal global)
         if (globalSignal.signal === 'SELL') { 
-            log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
+            log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
             
-            // Transicionamos a SELLING. 
-            // SSelling.js verá que ac=0 y disparará la placeFirstShortOrder.
+            /* IMPORTANTE: 
+               Transicionamos a SELLING. 
+               El archivo SSelling.js debe estar preparado para detectar que:
+               si (botState.sStateData.ac === 0) -> Ejecutar la primera orden de venta
+               usando botState.config.short.purchaseUsdt.
+            */
             await updateBotState('SELLING', 'short'); 
             return; 
         }
