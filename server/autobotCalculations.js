@@ -130,11 +130,40 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
     return grossProfit - totalFees;
 }
 
+/**
+ * Inicializa los valores de la estrategia al dar START
+ * Sincronizado con los nuevos IDs: amountUsdt y purchaseUsdt
+ */
+function calculateInitialState(config, currentPrice) {
+    const p = parseNumber(currentPrice);
+    
+    // Extraemos valores de la configuración que viene del front
+    // Usamos los nuevos nombres de variables
+    const lAmount = parseNumber(config.long?.amountUsdt || 0);
+    const sAmount = parseNumber(config.short?.amountUsdt || 0);
+
+    return {
+        // Estado inicial para Long
+        long: {
+            ...config.long,
+            nextCoveragePrice: p * (1 - (parseNumber(config.long?.price_var || 0) / 100)),
+            requiredCoverageAmount: lAmount * (1 + (parseNumber(config.long?.size_var || 0) / 100))
+        },
+        // Estado inicial para Short
+        short: {
+            ...config.short,
+            nextCoveragePrice: p * (1 + (parseNumber(config.short?.price_var || 0) / 100)),
+            requiredCoverageAmount: sAmount * (1 + (parseNumber(config.short?.size_var || 0) / 100))
+        }
+    };
+}
+
 module.exports = {
     parseNumber,
     calculateLongTargets,
     calculateLongCoverage,
     calculateShortTargets,
     calculateShortCoverage,
-    calculatePotentialProfit
+    calculatePotentialProfit,
+    calculateInitialState
 };
