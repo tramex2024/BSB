@@ -62,10 +62,8 @@ function processNextLog() {
     const logEl = document.getElementById('log-message');
 
     if (logEl) {
-        // Aplicar texto
         logEl.textContent = log.message;
         
-        // Determinar color
         const colors = {
             success: 'text-emerald-400',
             error: 'text-red-400',
@@ -73,11 +71,9 @@ function processNextLog() {
             info: 'text-blue-400'
         };
         
-        // Limpiar y aplicar clases
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
         logEl.style.opacity = '1';
 
-        // Esperar 2.5 segundos antes de pasar al siguiente
         setTimeout(() => {
             logEl.style.opacity = '0.5';
             processNextLog();
@@ -131,7 +127,7 @@ export async function initializeTab(tabName) {
  * Inicialización completa de la App (Sockets y Eventos Globales)
  */
 export function initializeFullApp() {
-    if (socket) return; // Evitar duplicar conexiones
+    if (socket) return; 
 
     updateConnectionStatusBall('DISCONNECTED'); 
 
@@ -148,7 +144,6 @@ export function initializeFullApp() {
 
     socket.on('disconnect', () => updateConnectionStatusBall('DISCONNECTED'));
 
-    // --- PRECIO EN TIEMPO REAL ---
     socket.on('marketData', (data) => {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
@@ -170,8 +165,6 @@ export function initializeFullApp() {
                 } else if (newPrice < lastPrice) {
                     auPriceEl.style.setProperty('color', '#f87171', 'important');
                 }
-            } else {
-                auPriceEl.style.color = '#ffffff';
             }
         }
 
@@ -191,7 +184,6 @@ export function initializeFullApp() {
         lastPrice = newPrice;
     });
 
-    // --- PROFIT Y ESTADÍSTICAS ---
     socket.on('bot-stats', (data) => {
         const profitEl = document.getElementById('auprofit');
         if (profitEl) {
@@ -201,7 +193,6 @@ export function initializeFullApp() {
         }
     });
 
-    // --- BALANCES ---
     socket.on('balance-real-update', (data) => {
         updateConnectionStatusBall(data.source);
         updateBotBalances([
@@ -212,8 +203,6 @@ export function initializeFullApp() {
         const elements = {
             'aubalance-usdt': parseFloat(data.lastAvailableUSDT || 0).toFixed(2),
             'aubalance-btc': parseFloat(data.lastAvailableBTC || 0).toFixed(6),
-            'au-max-usdt': `(Max: ${parseFloat(data.lastAvailableUSDT || 0).toFixed(2)})`,
-            'au-max-btc': `(Max: ${parseFloat(data.lastAvailableBTC || 0).toFixed(6)})`
         };
 
         Object.entries(elements).forEach(([id, val]) => {
@@ -222,29 +211,22 @@ export function initializeFullApp() {
         });
     });
 
-    // --- LOGS DEL SISTEMA (COLA DE ESPERA) ---
     socket.on('bot-log', (log) => {
         logQueue.push(log);
-        if (logQueue.length > 20) logQueue.shift(); // Evitar colas infinitas
+        if (logQueue.length > 20) logQueue.shift();
         if (!isProcessingLog) processNextLog();
     });
 
     setupNavTabs(initializeTab);
 }
 
-// Iniciar aplicación al cargar el DOM
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Iniciamos los eventos (esto conecta los botones)
     initializeAppEvents(initializeFullApp);
-    
-    // 2. Dibujamos el icono correcto (Login o Logout)
     updateLoginIcon();
 
-    // 3. Lógica de arranque
     if (localStorage.getItem('token')) {
-        initializeFullApp(); // Si hay sesión, conecta sockets
+        initializeFullApp();
     } else {
-        // Si no hay sesión, cargamos el dashboard vacío o splash
         initializeTab('dashboard'); 
     }
 });

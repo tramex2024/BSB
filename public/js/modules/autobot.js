@@ -1,5 +1,7 @@
 // public/js/modules/autobot.js
 
+// public/js/modules/autobot.js
+
 import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
@@ -20,29 +22,16 @@ async function loadBotDataFromServer() {
         const response = await fetch(`${BACKEND_URL}/api/autobot/config-and-state`, { 
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-
-        if (!response.ok) throw new Error("Route not found");
-
         const data = await response.json();
-
         if (data && data.success) {
             updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
             updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
-
-            // 🟢 SINCRONIZACIÓN DE CHECKBOXES INDEPENDIENTES
             if (data.config) {
                 const stopLongCb = document.getElementById('au-stop-long-at-cycle');
                 const stopShortCb = document.getElementById('au-stop-short-at-cycle');
-                
                 if (stopLongCb) stopLongCb.checked = !!data.config.long?.stopAtCycle;
                 if (stopShortCb) stopShortCb.checked = !!data.config.short?.stopAtCycle;
-                
-                console.log("Checkboxes sincronizados:", { 
-                    long: stopLongCb?.checked, 
-                    short: stopShortCb?.checked 
-                });
             }
-            
             updateBotUI(data);
         }
     } catch (error) {
@@ -50,16 +39,11 @@ async function loadBotDataFromServer() {
     }
 }
 
-/**
- * Actualiza los balances máximos en la UI con formato estrictamente en-US (Punto decimal)
- */
 function updateMaxBalanceDisplay(currency, balance) {
     if (currency === 'USDT') maxUsdtBalance = balance;
     if (currency === 'BTC') maxBtcBalance = balance;
-
     const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
     if (displayElement) {
-        // Forzamos el uso de punto (.) mediante el locale en-US
         const formattedBalance = balance.toLocaleString('en-US', {
             minimumFractionDigits: currency === 'USDT' ? 2 : 6,
             maximumFractionDigits: currency === 'USDT' ? 2 : 6
@@ -68,55 +52,38 @@ function updateMaxBalanceDisplay(currency, balance) {
     }
 }
 
-/**
- * Validación visual y lógica de montos con mensajes en inglés y punto decimal
- */
 function validateAmountInput(inputId, maxLimit, currency) {
     const input = document.getElementById(inputId);
-    const errorElement = document.getElementById(`au-error-${currency.toLowerCase()}`); 
     if (!input) return true;
-
+    const errorElement = document.getElementById(`au-error-${currency.toLowerCase()}`); 
     const value = parseFloat(input.value);
     const minBitmart = currency === 'USDT' ? MIN_USDT_AMOUNT : MIN_BTC_AMOUNT;
     
     let errorMsg = '';
-    if (isNaN(value) || value <= 0) {
-        errorMsg = `Invalid amount.`;
-    } else if (value < minBitmart) {
-        errorMsg = `Min: ${minBitmart.toFixed(currency === 'USDT' ? 2 : 6)} ${currency}`;
-    } else if (value > maxLimit) {
-        errorMsg = `Insufficient balance.`;
-    }
+    if (isNaN(value) || value <= 0) errorMsg = `Invalid amount.`;
+    else if (value < minBitmart) errorMsg = `Min: ${minBitmart.toFixed(currency === 'USDT' ? 2 : 6)} ${currency}`;
+    else if (maxLimit > 0 && value > maxLimit) errorMsg = `Insufficient balance.`;
 
+    input.classList.toggle('border-red-500', !!errorMsg);
     if (errorElement) {
         errorElement.textContent = errorMsg;
         errorElement.style.display = errorMsg ? 'block' : 'none';
-        input.classList.toggle('border-red-500', !!errorMsg);
     }
     return !errorMsg;
 }
 
 function setupConfigListeners() {
-    // 🟢 LISTA DE IDs ACTUALIZADA PARA COINCIDIR CON EL HTML
     const configIds = [
         'auamount-usdt', 'auamount-btc', 'aupurchase-usdt', 
         'aupurchase-btc', 'auincrement', 'audecrement', 
-        'autrigger', 
-        'au-stop-long-at-cycle', // Corregido
-        'au-stop-short-at-cycle'  // Corregido
+        'autrigger', 'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
     ];
-    
     configIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
-
-        const eventType = el.type === 'checkbox' ? 'change' : 'input';
-        
-        el.addEventListener(eventType, () => {
+        el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
             if (id === 'auamount-usdt') validateAmountInput(id, maxUsdtBalance, 'USDT');
             if (id === 'auamount-btc') validateAmountInput(id, maxBtcBalance, 'BTC');
-            
-            // Enviamos la config al backend
             sendConfigToBackend();
         });
     });
@@ -125,46 +92,66 @@ function setupConfigListeners() {
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
 
-    // CARGA INICIAL: Sincronización con MongoDB
     await loadBotDataFromServer();
-    
     setupConfigListeners();
 
-    // Gráfico de TradingView
+    // Gráfico con Delay de seguridad
     setTimeout(() => {
-        try {
+        if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-        } catch (e) { console.error("TV Init Error:", e); }
-    }, 200);
-
-    // Botón START / STOP
-    const startBtn = document.getElementById('austart-btn');
-    startBtn?.addEventListener('click', async () => {
-        const isCurrentlyRunning = startBtn.textContent.includes('STOP');
-        
-        if (!isCurrentlyRunning) {
-            const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
-            const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
-            
-            if (!isUsdtOk || !isBtcOk) {
-                return displayMessage('Check configured balances before starting', 'error');
-            }
         }
-        
-        await toggleBotState(isCurrentlyRunning); 
-    });
+    }, 400);
+
+    // --- LÓGICA DE ACTIVACIÓN DEL BOTÓN (MODO BULLDOZER) ---
+    const activateStartBtn = () => {
+        const startBtn = document.getElementById('austart-btn');
+        if (startBtn) {
+            console.log("🚀 [UI] Botón Start Autobot localizado y vinculado.");
+            const newBtn = startBtn.cloneNode(true);
+            startBtn.parentNode.replaceChild(newBtn, startBtn);
+
+            newBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                console.log("🔥 [EVENT] Click en Start detectado.");
+                
+                const isRunning = newBtn.textContent.includes('STOP');
+                
+                // Validación rápida: si falla el visual, igual intentamos ejecutar
+                if (!isRunning) {
+                    const isUsdtOk = validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT');
+                    const isBtcOk = validateAmountInput('auamount-btc', maxBtcBalance, 'BTC');
+                    if (!isUsdtOk || !isBtcOk) {
+                        console.warn("⚠️ Validación incompleta, revisa balances.");
+                        // Opcional: displayMessage('Check balances', 'warning');
+                    }
+                }
+                
+                try {
+                    await toggleBotState(isRunning);
+                    console.log("✅ [API] Señal de cambio de estado enviada.");
+                } catch (err) {
+                    console.error("❌ Error al cambiar estado:", err);
+                }
+            });
+            return true;
+        }
+        return false;
+    };
+
+    // Reintento automático por si el HTML tarda en inyectarse
+    if (!activateStartBtn()) {
+        const retry = setInterval(() => {
+            if (activateStartBtn()) clearInterval(retry);
+        }, 200);
+        setTimeout(() => clearInterval(retry), 4000);
+    }
 
     // Pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            orderTabs.forEach(t => {
-                t.classList.remove('text-emerald-500', 'bg-gray-800');
-                t.classList.add('text-gray-500');
-            });
+            orderTabs.forEach(t => t.classList.remove('text-emerald-500', 'bg-gray-800'));
             tab.classList.add('text-emerald-500', 'bg-gray-800');
-            tab.classList.remove('text-gray-500');
-
             currentTab = tab.id.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
         });
@@ -172,8 +159,12 @@ export async function initializeAutobotView() {
 
     fetchOrders('opened', auOrderList);
 
-    // Sockets para actualizaciones en tiempo real
+    // Gestión de Sockets (Limpieza de duplicados)
     if (socket) {
+        socket.off('balance-real-update');
+        socket.off('bot-state-update');
+        socket.off('open-orders-update');
+
         socket.on('balance-real-update', (data) => {
             updateMaxBalanceDisplay('USDT', parseFloat(data.lastAvailableUSDT) || 0);
             updateMaxBalanceDisplay('BTC', parseFloat(data.lastAvailableBTC) || 0);
@@ -184,9 +175,7 @@ export async function initializeAutobotView() {
         });
 
         socket.on('open-orders-update', (data) => {
-            if (currentTab === 'opened') {
-                updateOpenOrdersTable(data, 'au-order-list', currentTab);
-            }
+            if (currentTab === 'opened') updateOpenOrdersTable(data, 'au-order-list', currentTab);
         });
     }
 }
