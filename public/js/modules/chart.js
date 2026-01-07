@@ -4,28 +4,29 @@ let equityChartInstance = null;
 
 /**
  * Gráfico de TradingView (Precios en vivo)
- * Configurado para llenar el panel correctamente.
  */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 1. Limpiamos el contenedor por si había un gráfico previo
+    // 1. Limpiamos y preparamos el contenedor
     container.innerHTML = '';
-
-    // 2. FORZAR ALTURA: Sin esto, el gráfico a veces sale de 0 píxeles de alto.
-    // Puedes cambiar "500px" por "100%" si el contenedor padre ya tiene una altura fija.
     container.style.height = "500px"; 
     container.style.width = "100%";
 
+    // 2. RECUPERAR PREFERENCIAS DEL USUARIO
+    // Si no existen, usamos '1' (1 minuto) y '1' (Velas) por defecto
+    const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
+    const savedStyle = localStorage.getItem('tv_preferred_style') || '1';
+
     // 3. Crear el widget de TradingView
-    new TradingView.widget({
-        "autosize": true, // Esto hace que use el 100% del ancho y alto del contenedor
+    const widget = new TradingView.widget({
+        "autosize": true,
         "symbol": `BITMART:${symbol}`,
-        "interval": "60",
+        "interval": savedInterval, // Aplicamos lo guardado
         "timezone": "Etc/UTC",
         "theme": "dark",
-        "style": "1",
+        "style": savedStyle, // Aplicamos el estilo de velas guardado
         "locale": "es",
         "toolbar_bg": "#111827",
         "enable_publishing": false,
@@ -34,49 +35,57 @@ export function initializeChart(containerId, symbol) {
         "allow_symbol_change": true,
         "container_id": containerId,
         "support_host": "https://www.tradingview.com",
+        "save_image": false,
+        // Habilitamos el guardado de estudios en el almacenamiento local del widget
+        "studies_overrides": {},
+        "overrides": {},
     });
+
+    /**
+     * NOTA: El widget gratuito se ejecuta en un <iframe> de otro dominio.
+     * Para guardar cambios de indicadores manualmente, TradingView suele requerir 
+     * que el usuario esté logueado en su cuenta de TradingView en ese navegador.
+     */
+}
+
+/**
+ * Función auxiliar para guardar preferencias manualmente si fuera necesario
+ * Puedes llamarla desde la consola o botones externos.
+ */
+export function saveChartPreferences(interval, style) {
+    if (interval) localStorage.setItem('tv_preferred_interval', interval);
+    if (style) localStorage.setItem('tv_preferred_style', style);
 }
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Muestra el historial de ganancias por ciclo.
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
-    if (!canvas) {
-        console.error("Canvas 'equityCurveChart' no encontrado.");
-        return;
-    }
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-
-    // Destruir instancia previa para evitar errores visuales al recargar
     if (equityChartInstance) {
         equityChartInstance.destroy();
     }
 
-    // Si no hay datos, no dibujamos nada
-    if (!data || data.length === 0) {
-        console.warn("No hay datos para graficar la curva de capital.");
-        return;
-    }
+    if (!data || data.length === 0) return;
 
     const labels = data.map((_, i) => `Ciclo ${i + 1}`);
     let dataPoints = [];
     let labelText = '';
-    let color = '#10b981'; // Verde Esmeralda
+    let color = '#10b981'; 
 
-    // Selección de qué datos mostrar en el gráfico
     switch (parameter) {
         case 'durationHours':
             dataPoints = data.map(c => parseFloat(c.durationHours || 0));
             labelText = 'Duración (Horas)';
-            color = '#f59e0b'; // Naranja
+            color = '#f59e0b';
             break;
         case 'initialInvestment':
             dataPoints = data.map(c => parseFloat(c.initialInvestment || 0));
             labelText = 'Inversión Inicial (USDT)';
-            color = '#3b82f6'; // Azul
+            color = '#3b82f6';
             break;
         default:
             dataPoints = data.map(c => parseFloat(c.accumulatedProfit || c.netProfit || 0));
@@ -84,9 +93,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#10b981';
     }
 
-    // Configuración estética del degradado bajo la línea
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.4)'));
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
     equityChartInstance = new Chart(ctx, {
@@ -101,7 +109,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 borderWidth: 3,
                 pointBackgroundColor: color,
                 pointBorderColor: '#fff',
-                pointHoverRadius: 6,
                 tension: 0.4, 
                 fill: true,
                 pointRadius: 4
@@ -114,25 +121,12 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 legend: { display: false },
                 tooltip: {
                     backgroundColor: '#1f2937',
-                    titleColor: '#9ca3af',
-                    bodyColor: '#fff',
-                    borderColor: color,
-                    borderWidth: 1,
-                    displayColors: false,
-                    callbacks: {
-                        label: (context) => ` ${context.parsed.y.toLocaleString()} USDT`
-                    }
+                    displayColors: false
                 }
             },
             scales: {
-                y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#9ca3af', font: { size: 10 } }
-                },
-                x: {
-                    grid: { display: false },
-                    ticks: { color: '#9ca3af', font: { size: 10 } }
-                }
+                y: { grid: { color: 'rgba(255, 255, 255, 0.05)' } },
+                x: { grid: { display: false } }
             }
         }
     });
