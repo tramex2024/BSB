@@ -20,12 +20,13 @@ async function run(dependencies) {
         const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
 
         if (!globalSignal) {
-            // Log nivel debug para no saturar la consola
-            // log("[S-RUNNING] ⏳ Esperando señales del servidor para Short...", 'debug');
             return;
         }
 
-        // 3. VALIDACIÓN DE TIEMPO REAL (Seguridad ante latencia)
+        // 🟢 AÑADE ESTA LÍNEA PARA VISIBILIDAD:
+        log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Tendencia: ${globalSignal.signal}`, 'debug');
+
+        // 3. VALIDACIÓN DE TIEMPO REAL
         const signalAgeMinutes = (Date.now() - new Date(globalSignal.updatedAt).getTime()) / 60000;
         if (signalAgeMinutes > 5) {
             log(`[S-RUNNING] ⚠️ Señal de Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
