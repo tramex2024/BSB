@@ -2,31 +2,25 @@
 
 let equityChartInstance = null;
 
-/**
- * Gráfico de TradingView (Precios en vivo)
- */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 1. Limpiamos y preparamos el contenedor
     container.innerHTML = '';
     container.style.height = "500px"; 
     container.style.width = "100%";
 
-    // 2. RECUPERAR PREFERENCIAS DEL USUARIO
-    // Si no existen, usamos '1' (1 minuto) y '1' (Velas) por defecto
+    // 1. Recuperar la temporalidad (ej: '1' para 1 minuto)
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
-    const savedStyle = localStorage.getItem('tv_preferred_style') || '1';
 
-    // 3. Crear el widget de TradingView
-    const widget = new TradingView.widget({
+    // 2. Crear el widget con INDICADORES PRE-CONFIGURADOS
+    new TradingView.widget({
         "autosize": true,
         "symbol": `BITMART:${symbol}`,
-        "interval": savedInterval, // Aplicamos lo guardado
+        "interval": savedInterval,
         "timezone": "Etc/UTC",
         "theme": "dark",
-        "style": savedStyle, // Aplicamos el estilo de velas guardado
+        "style": "1",
         "locale": "es",
         "toolbar_bg": "#111827",
         "enable_publishing": false,
@@ -35,17 +29,21 @@ export function initializeChart(containerId, symbol) {
         "allow_symbol_change": true,
         "container_id": containerId,
         "support_host": "https://www.tradingview.com",
-        "save_image": false,
-        // Habilitamos el guardado de estudios en el almacenamiento local del widget
-        "studies_overrides": {},
-        "overrides": {},
+        
+        // 🟢 ESTA ES LA CLAVE: Forzar indicadores al cargar
+        "studies": [
+            "RSI@tv-basicstudies", // Fuerza el RSI
+            "MASimple@tv-basicstudies" // Ejemplo: Media Móvil Simple (opcional)
+        ],
+        
+        // Configuraciones visuales para que no se pierdan
+        "overrides": {
+            "mainSeriesProperties.style": 1, // Velas
+            "paneProperties.background": "#111827",
+            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.05)",
+            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)"
+        }
     });
-
-    /**
-     * NOTA: El widget gratuito se ejecuta en un <iframe> de otro dominio.
-     * Para guardar cambios de indicadores manualmente, TradingView suele requerir 
-     * que el usuario esté logueado en su cuenta de TradingView en ese navegador.
-     */
 }
 
 /**
