@@ -62,6 +62,8 @@ export function updateBotUI(state) {
         ausbprice: 'sbprice',
         aulprofit: 'lprofit',
         ausprofit: 'sprofit',
+        aulnorder: 'lnorder',   
+        ausnorder: 'snorder',   
         'aubalance-usdt': 'lastAvailableUSDT',
         'aubalance-btc': 'lastAvailableBTC'
     };
