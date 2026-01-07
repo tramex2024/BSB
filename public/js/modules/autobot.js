@@ -110,14 +110,29 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // Tabs de órdenes
-    document.querySelectorAll('.autobot-tabs button').forEach(tab => {
+    // --- MANEJO DE PESTAÑAS DE ÓRDENES CON RESALTADO VISUAL ---
+    const orderTabs = document.querySelectorAll('.autobot-tabs button');
+    
+    orderTabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
-            currentTab = e.target.id.replace('tab-', '');
+            // 1. Limpiar el estilo de todas las pestañas para quitar el "verde"
+            orderTabs.forEach(btn => {
+                btn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-500');
+                btn.classList.add('bg-gray-800/50', 'text-gray-400', 'border-transparent');
+            });
+
+            // 2. Aplicar el resaltado a la pestaña clickeada
+            const selectedTab = e.currentTarget;
+            selectedTab.classList.add('bg-emerald-600', 'text-white', 'border-emerald-500');
+            selectedTab.classList.remove('bg-gray-800/50', 'text-gray-400', 'border-transparent');
+
+            // 3. Cargar los datos correspondientes
+            currentTab = selectedTab.id.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
         });
     });
 
+    // Carga inicial (por defecto 'opened')
     fetchOrders('opened', auOrderList);
 
     // Sockets

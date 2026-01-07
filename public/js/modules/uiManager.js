@@ -79,10 +79,19 @@ export function updateBotUI(state) {
         if (dataKey.includes('profit')) {
             formatProfit(element, value);
         } else {
-            const decimals = (elementId.includes('btc') || elementId === 'aubalance-btc') ? 6 : 2;
+            // Lógica de decimales: 6 para BTC, 0 para contadores/ciclos, 2 para el resto
+            const isBtc = elementId.includes('btc') || elementId === 'aubalance-btc';
+            const isInteger = elementId.includes('norder') || elementId.includes('cycle');
+            
+            let decimals = 2;
+            if (isBtc) decimals = 6;
+            else if (isInteger) decimals = 0;
+
             const formatted = value.toLocaleString('en-US', { 
-                minimumFractionDigits: decimals, maximumFractionDigits: decimals 
+                minimumFractionDigits: decimals, 
+                maximumFractionDigits: decimals 
             });
+            
             if (element.textContent !== formatted) element.textContent = formatted;
         }
     }
@@ -102,13 +111,11 @@ export function updateBotUI(state) {
 
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
-            // Sincronizar solo si el usuario no está escribiendo en él
             if (input && value !== undefined && document.activeElement !== input) {
                 input.value = value;
             }
         }
 
-        // Sincronizar Checkboxes (Stop at Cycle)
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
         if (stopL) stopL.checked = !!conf.long?.stopAtCycle;
@@ -139,7 +146,6 @@ function formatProfit(element, value) {
 
 /**
  * Gestiona el estado de los inputs y el botón principal.
- * Permite que los Stop at Cycle sigan editables aunque el bot corra.
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
@@ -159,7 +165,6 @@ function updateControlsState(isStopped) {
     if (autobotSettings) {
         const inputs = autobotSettings.querySelectorAll('input');
         inputs.forEach(input => {
-            // IDs que NO se bloquean nunca
             const isAlwaysEnabled = [
                 'au-stop-long-at-cycle', 
                 'au-stop-short-at-cycle'
@@ -170,7 +175,6 @@ function updateControlsState(isStopped) {
                 input.style.opacity = '1';
                 input.style.cursor = 'pointer';
             } else {
-                // Bloquear inputs sensibles si el bot NO está detenido
                 input.disabled = !isStopped;
                 input.style.opacity = isStopped ? '1' : '0.5';
                 input.style.cursor = isStopped ? 'auto' : 'not-allowed';
