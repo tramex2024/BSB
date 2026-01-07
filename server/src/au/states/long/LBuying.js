@@ -1,6 +1,6 @@
 // BSB/server/src/au/states/long/LBuying.js
 
-const { placeFirstBuyOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 
+const { placeFirstLongOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 
 /**
@@ -39,7 +39,7 @@ async function run(dependencies) {
             // Verificamos si podemos iniciar
             if (availableUSDT >= purchaseAmount && currentLBalance >= purchaseAmount) {
                 log("🚀 [L-BUY] Iniciando ciclo exponencial. Colocando primera compra...", 'info');
-                await placeFirstBuyOrder(config, botState, log, updateBotState, updateGeneralBotState); 
+                await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState); 
             } else {
                 // En lugar de morir, pasamos a NO_COVERAGE para reintentar cuando haya fondos
                 log(`⚠️ [L-BUY] Esperando fondos para iniciar (Necesita: ${purchaseAmount}). Estado: NO_COVERAGE`, 'warning');
