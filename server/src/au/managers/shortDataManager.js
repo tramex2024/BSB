@@ -85,18 +85,22 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
     const { config, log, updateBotState, updateSStateData, updateGeneralBotState } = dependencies;
     
     try {
-        const totalUsdtReceivedFromSales = botStateObj.sStateData.ai; 
+        const currentSData = botStateObj.sStateData;
+        const totalUsdtReceivedFromSales = parseFloat(currentSData.ai || 0); 
         const buyPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         const filledSize = parseFloat(orderDetails.filledSize || 0); 
         
-        // El costo de cerrar la posición (Recomprar el BTC)
+        // 1. CÁLCULO DE PROFIT REAL
+        // totalUsdtReceivedFromSales es el AI (Acumulado de Inversión) que entró al bot al vender caro.
+        // totalSpentToCover es lo que nos costó recomprar ese mismo BTC ahora que está barato.
         const totalSpentToCover = (filledSize * buyPrice) * (1 + BUY_FEE_PERCENT);
         const profitNeto = totalUsdtReceivedFromSales - totalSpentToCover;
 
+        // 2. PERSISTENCIA
         await saveExecutedOrder({ ...orderDetails, side: 'buy' }, SSTATE);
 
-        // Registro de Ciclo en historial
-        if (botStateObj.sStateData.cycleStartTime) {
+        // 3. LOG DE CICLO
+        if (currentSData.cycleStartTime) {
             await logSuccessfulCycle({
                 strategy: 'Short',
                 cycleIndex: (botStateObj.scycle || 0) + 1,
@@ -106,24 +110,26 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
             });
         }
 
-        // Recuperamos el balance asignado + el profit generado
-        const newSBalance = botStateObj.sbalance + totalSpentToCover + profitNeto;
+        // 4. ACTUALIZACIÓN DE BALANCE INTERNO
+        // Sumamos el profit al balance que el bot tiene asignado para Short.
+        // Como el sbalance ya se redujo con cada venta (amountRealCost), 
+        // ahora le devolvemos el valor total que "regresó" a la billetera tras la recompra.
+        const newSBalance = (parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto;
+
         const shouldStopShort = config.short.stopAtCycle === true;
 
-        // Limpieza y persistencia de configuración
         await updateGeneralBotState({
             ...CLEAN_SHORT_ROOT,
             sbalance: newSBalance,
-            total_profit: (botStateObj.total_profit || 0) + profitNeto,
+            total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
             scycle: (Number(botStateObj.scycle || 0) + 1),
             'config.short.enabled': !shouldStopShort 
         });
 
         await updateSStateData(CLEAN_STRATEGY_DATA);
 
-        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT.`, 'success');
+        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT. Nuevo Bal: ${newSBalance.toFixed(2)}`, 'success');
         
-        // Si stopAtCycle es false, volvemos a RUNNING para esperar nueva señal
         await updateBotState(shouldStopShort ? 'STOPPED' : 'RUNNING', SSTATE);
 
     } catch (error) {

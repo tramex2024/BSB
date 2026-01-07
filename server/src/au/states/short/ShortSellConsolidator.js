@@ -5,13 +5,11 @@ const { handleSuccessfulShortSell } = require('../../managers/shortDataManager')
 
 /**
  * Monitorea órdenes de VENTA (apertura o DCA de Short).
- * Confirma la ejecución y delega la actualización de métricas al ShortDataManager.
  */
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
     const sStateData = botState.sStateData;
     const lastOrder = sStateData?.lastOrder;
 
-    // Si no hay orden o la orden es de COMPRA (buy), este consolidador no la maneja
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false;
     }
@@ -21,57 +19,55 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
     try {
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
         
-        // BitMart puede devolver el volumen en distintos campos según la versión de la API
-        let filledVolume = parseFloat(
+        // 🟢 MEJORA: BitMart V2/V4 usa campos distintos. Aseguramos capturar el tamaño ejecutado.
+        let filledSize = parseFloat(
             finalDetails?.filledSize || 
             finalDetails?.filled_volume || 
-            finalDetails?.filledVolume || 0
+            finalDetails?.size || 0
         );
-        
-        // 1. Verificación de respaldo (Back-up) si la API de detalle falla
-        if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
+
+        // 1. Verificación de respaldo (Back-up)
+        if (!finalDetails || (isNaN(filledSize) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+                filledSize = parseFloat(finalDetails.filledSize || finalDetails.size || 0);
             }
         }
 
-        const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
+        // En BitMart, una orden market suele pasar a 'filled' casi instantáneamente
+        const isFilled = finalDetails?.state === 'filled' || (finalDetails?.state === 'completed') || filledSize > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // --- CASO 1: VENTA EXITOSA (Apertura o DCA) ---
+        // --- CASO 1: VENTA EXITOSA ---
         if (isFilled) {
-            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada (${filledVolume} BTC).`, 'success');
+            // Si la API no nos dio el size pero sabemos que es filled, usamos el del lastOrder como fallback
+            const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
+
+            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada (${finalExecutedQty} BTC).`, 'success');
             
-            // 🟢 CRÍTICO: Aquí se recalculan el PPC, el AC y el siguiente paso Exponencial
-            await handleSuccessfulShortSell(botState, finalDetails, log, { 
+            // 🟢 Inyectamos el detalle procesado al DataManager
+            await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
                 updateGeneralBotState, 
                 updateSStateData 
             }); 
             
-            // Forzamos que se mantenga en SELLING para que SSelling.js busque el siguiente TP o DCA
-            await updateBotState('SELLING', 'short'); 
-            return false; // Liberamos el bloqueo de orden activa
+            // Importante: retornamos false para que el bucle de SSelling.js continúe
+            return false; 
         } 
 
-        // --- CASO 2: ORDEN ACTIVA (Esperando en el libro) ---
-        if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
-            // Retornamos true para indicar que hay una orden bloqueando el ciclo
-            return true; 
+        // --- CASO 2: ORDEN ACTIVA ---
+        if (finalDetails && ['new', 'partially_filled', '8'].includes(String(finalDetails.state))) {
+            return true; // Bloquea hasta que se llene
         } 
 
-        // --- CASO 3: ORDEN CANCELADA O FALLIDA ---
-        if (isCanceled && filledVolume === 0) {
-            log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada. Liberando...`, 'error');
-            
-            // Limpiamos la orden huérfana para que el bot pueda reintentar
+        // --- CASO 3: ORDEN CANCELADA ---
+        if (isCanceled) {
+            log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada sin ejecutarse.`, 'error');
             await updateSStateData({ 'lastOrder': null });
-            await updateBotState('SELLING', 'short');
             return false;
         }
 
-        // Por defecto, si el estado es desconocido, bloqueamos por seguridad
         return true;
 
     } catch (error) {

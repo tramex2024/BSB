@@ -105,7 +105,16 @@ const bitmartService = {
         } catch (e) { return null; }
     },
 
-    placeOrder: async (symbol, side, type, amount, price) => {
+    /**
+     * placeOrder: Versión Robusta
+     * @param {string} symbol - Ejemplo: 'BTC_USDT'
+     * @param {string} side - 'buy' o 'sell'
+     * @param {string} type - 'limit' o 'market'
+     * @param {number|string} amount - Cantidad (en BTC si es size, en USDT si es notional)
+     * @param {number|string} price - Solo para órdenes limit
+     * @param {boolean} isNotional - Si es true, usa el campo 'notional' (USDT). Si es false, usa 'size' (BTC).
+     */
+    placeOrder: async (symbol, side, type, amount, price, isNotional = false) => {
         const body = { 
             symbol, 
             side: side.toLowerCase(), 
@@ -117,17 +126,16 @@ const bitmartService = {
             body.price = price.toString();
         } else {
             // MARKET ORDERS
-            if (side.toLowerCase() === 'buy') {
-                // Para comprar a mercado, BitMart espera 'notional' (USDT)
+            // Si el usuario especifica isNotional (para compras en USDT)
+            if (isNotional) {
                 body.notional = amount.toString();
             } else {
-                // Para vender a mercado, BitMart espera 'size' (BTC)
-                // Gracias al cambio en shortOrderManager, 'amount' ya viene en BTC
+                // Por defecto usamos size (BTC) para Ventas y Recompras de Short
                 body.size = amount.toString();
             }
         }
 
-        console.log(`${LOG_PREFIX} Enviando Orden:`, body); // Debug útil
+        console.log(`${LOG_PREFIX} 📡 Enviando a BitMart:`, body);
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body);
         return res.data;
     },
