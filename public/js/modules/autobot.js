@@ -86,18 +86,21 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // --- GESTIÓN DE PESTAÑAS (SOLO CAMBIO DE COLOR DE TEXTO) ---
+    // --- GESTIÓN DE PESTAÑAS (UNIFICANDO RECUADRO SOMBREADO) ---
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
+            // TODAS mantienen el recuadro sombreado y borde sutil
+            btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50', 'transition-all');
+
             if (btn.id === selectedId) {
-                // Estilo TEXTO ACTIVO: Verde esmeralda, fuente negrita
-                btn.classList.add('text-emerald-400', 'font-bold');
+                // ACTIVA: Texto Verde + Brillo sutil en el borde
+                btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
                 btn.classList.remove('text-gray-500', 'font-normal');
             } else {
-                // Estilo TEXTO INACTIVO: Gris apagado
-                btn.classList.remove('text-emerald-400', 'font-bold');
+                // INACTIVA: Texto Gris + Borde normal
+                btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
                 btn.classList.add('text-gray-500', 'font-normal');
             }
         });
@@ -112,7 +115,7 @@ export async function initializeAutobotView() {
         });
     });
 
-    // Inicializar con "Opened" resaltado en verde (solo texto)
+    // Carga inicial
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
