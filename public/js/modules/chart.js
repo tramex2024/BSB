@@ -2,18 +2,22 @@
 
 let equityChartInstance = null;
 
+/**
+ * Gráfico de TradingView (Precios en vivo) con Indicadores Persistentes
+ */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    // 1. Limpieza y preparación del contenedor
     container.innerHTML = '';
     container.style.height = "500px"; 
     container.style.width = "100%";
 
-    // 1. Recuperar la temporalidad (ej: '1' para 1 minuto)
+    // 2. Recuperar preferencia de temporalidad (por defecto '1' para 1 minuto)
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
-    // 2. Crear el widget con INDICADORES PRE-CONFIGURADOS
+    // 3. Crear el widget con los 3 indicadores solicitados
     new TradingView.widget({
         "autosize": true,
         "symbol": `BITMART:${symbol}`,
@@ -30,39 +34,36 @@ export function initializeChart(containerId, symbol) {
         "container_id": containerId,
         "support_host": "https://www.tradingview.com",
         
-        // 🟢 ESTA ES LA CLAVE: Forzar indicadores al cargar
+        // 🟢 INDICADORES FORZADOS POR CÓDIGO
         "studies": [
-            "RSI@tv-basicstudies", // Fuerza el RSI
-            "MASimple@tv-basicstudies" // Ejemplo: Media Móvil Simple (opcional)
+            "RSI@tv-basicstudies",      // Índice de Fuerza Relativa
+            "BB@tv-basicstudies",       // Bandas de Bollinger
+            "MACD@tv-basicstudies"      // Convergencia/Divergencia del Promedio Móvil
         ],
         
-        // Configuraciones visuales para que no se pierdan
         "overrides": {
-            "mainSeriesProperties.style": 1, // Velas
+            "mainSeriesProperties.style": 1,
             "paneProperties.background": "#111827",
             "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.05)",
-            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)"
+            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)",
+            // Ajuste para que el MACD no ocupe toda la pantalla
+            "paneProperties.legendProperties.showStudyArguments": true,
+            "paneProperties.legendProperties.showStudyTitles": true,
+            "paneProperties.legendProperties.showStudyValues": true,
         }
     });
 }
 
 /**
- * Función auxiliar para guardar preferencias manualmente si fuera necesario
- * Puedes llamarla desde la consola o botones externos.
- */
-export function saveChartPreferences(interval, style) {
-    if (interval) localStorage.setItem('tv_preferred_interval', interval);
-    if (style) localStorage.setItem('tv_preferred_style', style);
-}
-
-/**
  * Gráfico de Curva de Capital (Chart.js)
+ * Muestra el historial de ganancias por ciclo.
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
+
     if (equityChartInstance) {
         equityChartInstance.destroy();
     }
@@ -107,6 +108,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 borderWidth: 3,
                 pointBackgroundColor: color,
                 pointBorderColor: '#fff',
+                pointHoverRadius: 6,
                 tension: 0.4, 
                 fill: true,
                 pointRadius: 4
@@ -119,12 +121,25 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 legend: { display: false },
                 tooltip: {
                     backgroundColor: '#1f2937',
-                    displayColors: false
+                    titleColor: '#9ca3af',
+                    bodyColor: '#fff',
+                    borderColor: color,
+                    borderWidth: 1,
+                    displayColors: false,
+                    callbacks: {
+                        label: (context) => ` ${context.parsed.y.toLocaleString()} USDT`
+                    }
                 }
             },
             scales: {
-                y: { grid: { color: 'rgba(255, 255, 255, 0.05)' } },
-                x: { grid: { display: false } }
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#9ca3af', font: { size: 10 } }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#9ca3af', font: { size: 10 } }
+                }
             }
         }
     });
