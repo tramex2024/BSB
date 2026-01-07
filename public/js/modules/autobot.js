@@ -86,19 +86,19 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // --- GESTIÓN DE PESTAÑAS (CORREGIDO PARA OPENED AL INICIO) ---
+    // --- GESTIÓN DE PESTAÑAS (SOLO CAMBIO DE COLOR DE TEXTO) ---
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
             if (btn.id === selectedId) {
-                // Estilo ACTIVO (Verde)
-                btn.classList.add('bg-emerald-600', 'text-white', 'border-emerald-500', 'shadow-lg');
-                btn.classList.remove('text-gray-400', 'hover:text-gray-200');
+                // Estilo TEXTO ACTIVO: Verde esmeralda, fuente negrita
+                btn.classList.add('text-emerald-400', 'font-bold');
+                btn.classList.remove('text-gray-500', 'font-normal');
             } else {
-                // Estilo INACTIVO (Gris)
-                btn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-500', 'shadow-lg');
-                btn.classList.add('text-gray-400', 'hover:text-gray-200');
+                // Estilo TEXTO INACTIVO: Gris apagado
+                btn.classList.remove('text-emerald-400', 'font-bold');
+                btn.classList.add('text-gray-500', 'font-normal');
             }
         });
     };
@@ -112,7 +112,7 @@ export async function initializeAutobotView() {
         });
     });
 
-    // 🟢 FORZAMOS EL ESTILO VERDE EN "tab-opened" AL CARGAR LA VISTA
+    // Inicializar con "Opened" resaltado en verde (solo texto)
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
