@@ -106,20 +106,29 @@ const bitmartService = {
     },
 
     placeOrder: async (symbol, side, type, amount, price) => {
-        const body = { symbol, side: side.toLowerCase(), type };
+        const body = { 
+            symbol, 
+            side: side.toLowerCase(), 
+            type: type.toLowerCase() 
+        };
+
         if (type === 'limit') {
             body.size = amount.toString();
             body.price = price.toString();
         } else {
-            if (side.toLowerCase() === 'buy') body.notional = amount.toString();
-            else body.size = amount.toString();
+            // MARKET ORDERS
+            if (side.toLowerCase() === 'buy') {
+                // Para comprar a mercado, BitMart espera 'notional' (USDT)
+                body.notional = amount.toString();
+            } else {
+                // Para vender a mercado, BitMart espera 'size' (BTC)
+                // Gracias al cambio en shortOrderManager, 'amount' ya viene en BTC
+                body.size = amount.toString();
+            }
         }
-        const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body);
-        return res.data;
-    },
 
-    cancelOrder: async (symbol, order_id) => {
-        const res = await makeRequest('POST', '/spot/v2/cancel-order', {}, { symbol, order_id });
+        console.log(`${LOG_PREFIX} Enviando Orden:`, body); // Debug útil
+        const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body);
         return res.data;
     },
 
