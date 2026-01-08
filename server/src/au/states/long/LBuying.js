@@ -28,7 +28,19 @@ async function run(dependencies) {
         );
         
         if (orderIsActive) return; 
+        
+        // =================================================================
+        // NUEVO: LOG DE MONITOREO EN TIEMPO REAL (LATIDO)
+        // =================================================================
+        if (lStateData.ppc > 0) {
+            const distToDCA = (((currentPrice / lStateData.nextCoveragePrice) - 1) * 100).toFixed(2);
+            const distToTP = (((botState.ltprice / currentPrice) - 1) * 100).toFixed(2);
+            const pnlActual = botState.lprofit || 0;
 
+            // Este log aparecerá en tu consola y en el Dashboard
+            log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA @: ${lStateData.nextCoveragePrice.toFixed(2)} (${distToDCA}%) | TP @: ${botState.ltprice.toFixed(2)} (${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+        }
+  
         // =================================================================
         // 2. LÓGICA DE PRIMERA COMPRA (Inicio de Ciclo)
         // =================================================================

@@ -53,7 +53,8 @@ async function run(dependencies) {
                 }
             }
         } else {
-            log(`[L-SELLING] Vigilando... Precio: ${currentPrice.toFixed(2)} | Stop: ${pc?.toFixed(2)}`, 'debug');
+            const distToStop = (((currentPrice / (pc || newPc)) - 1) * 100).toFixed(2);
+            log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Máximo: ${newPm.toFixed(2)} | Stop Venta: ${(pc || newPc).toFixed(2)} (-${distToStop}%) | AC: ${acSelling.toFixed(8)}`, 'info');
         }
     } else {
         log(`[L-SELLING] ⚠️ AC insuficiente para vender (${acSelling.toFixed(8)} BTC).`, 'warning');

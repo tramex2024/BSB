@@ -25,6 +25,19 @@ async function run(dependencies) {
         );
         if (orderIsActive) return; 
 
+        // =================================================================
+        // NUEVO: LOG DE MONITOREO (LATIDO DE SHORT SELLING)
+        // =================================================================
+        if (sStateData.ppc > 0) {
+            // Distancia al DCA (Arriba): ¿Cuánto falta para vender más caro?
+            const distToDCA = (((sStateData.nextCoveragePrice / currentPrice) - 1) * 100).toFixed(2);
+            // Distancia al TP (Abajo): ¿Cuánto falta para recomprar con ganancia?
+            const distToTP = (((currentPrice / botState.stprice) - 1) * 100).toFixed(2);
+            const pnlActual = botState.sprofit || 0;
+
+            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA @: ${sStateData.nextCoveragePrice.toFixed(2)} (+${distToDCA}%) | TP @: ${botState.stprice.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+        }  
+
         // 2. LÓGICA DE APERTURA (Si la posición Short está vacía)
         if ((!sStateData.ppc || sStateData.ppc === 0) && !sStateData.lastOrder) {
             // 🟢 Usamos purchaseUsdt del nuevo modelo
