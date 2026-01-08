@@ -51,4 +51,3 @@ const orderSchema = new mongoose.Schema({
 }, { timestamps: true }); // Mongoose adds createdAt and updatedAt
 
 module.exports = mongoose.model('Order', orderSchema);
-// El comentario original estaba aquí y causaba el problema.
