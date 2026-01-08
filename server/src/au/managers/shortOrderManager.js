@@ -40,7 +40,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     log(`🚀 [S-FIRST] Abriendo Short: Vendiendo ${btcSize} BTC (~${amountNominal} USDT)...`, 'info'); 
 
     try {
-        // Al ser 'sell', bitmartService usará 'size' automáticamente.
+        // Al ser 'sell', bitmartService usará 'size' automáticamente (BTC).
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcSize); 
 
         if (orderResult && orderResult.order_id) {
@@ -82,6 +82,7 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
     log(`📈 [S-DCA] Cobertura: Vendiendo ${btcSize} BTC (~${usdtAmount.toFixed(2)} USDT)...`, 'warning');
     
     try {
+        // Al ser 'sell', bitmartService usará 'size' automáticamente (BTC).
         const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcSize); 
 
         if (order && order.order_id) {
@@ -112,15 +113,21 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
 
 /**
  * RECOMPRA (Take Profit): Cierre de ciclo Short.
- * Se le pasa isNotional = false para que bitmartService use 'size' (BTC).
  */
 async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData) { 
     const SYMBOL = config.symbol;
-    log(`💰 [S-PROFIT] Recomprando ${btcAmount.toFixed(8)} BTC para cerrar Short...`, 'info');
+    const currentPrice = botState.price;
+    
+    // 🟢 CAMBIO CRÍTICO: Para cerrar el short con una orden de COMPRA mercado, 
+    // BitMart requiere 'notional' (USDT). Calculamos cuánto USDT necesitamos.
+    const usdtNeeded = btcAmount * currentPrice;
+    
+    log(`💰 [S-PROFIT] Recomprando deuda de ${btcAmount.toFixed(8)} BTC (~${usdtNeeded.toFixed(2)} USDT)...`, 'info');
 
     try {
-        // 🟢 ÚLTIMO PARÁMETRO 'false': Indica que NO es notional (es size en BTC)
-        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', btcAmount, null, false); 
+        // Al ser 'buy', bitmartService usará 'notional' automáticamente (USDT).
+        // Le pasamos usdtNeeded para que BitMart ejecute la compra.
+        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtNeeded); 
 
         if (order && order.order_id) {
             await updateSStateData({

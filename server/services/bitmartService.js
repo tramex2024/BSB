@@ -1,4 +1,4 @@
-// Archivo: BSB/server/services/bitmartService.js
+// BSB/server/services/bitmartService.js
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
@@ -8,7 +8,7 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 // =========================================================================
-// MOTOR DE FIRMA Y PETICIONES (Antes en bitmartClient.js)
+// MOTOR DE FIRMA Y PETICIONES
 // =========================================================================
 async function makeRequest(method, path, params = {}, body = {}) {
     const { BITMART_API_KEY, BITMART_SECRET_KEY, BITMART_API_MEMO } = process.env;
@@ -39,7 +39,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO (Antes en bitmartSpot.js)
+// LÓGICA DE NEGOCIO
 // =========================================================================
 
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
@@ -106,32 +106,29 @@ const bitmartService = {
     },
 
     /**
-     * placeOrder: Versión Robusta
-     * @param {string} symbol - Ejemplo: 'BTC_USDT'
-     * @param {string} side - 'buy' o 'sell'
-     * @param {string} type - 'limit' o 'market'
-     * @param {number|string} amount - Cantidad (en BTC si es size, en USDT si es notional)
-     * @param {number|string} price - Solo para órdenes limit
-     * @param {boolean} isNotional - Si es true, usa el campo 'notional' (USDT). Si es false, usa 'size' (BTC).
+     * placeOrder: Versión Restaurada (Lógica Automática por Lado)
      */
-    placeOrder: async (symbol, side, type, amount, price, isNotional = false) => {
+    placeOrder: async (symbol, side, type, amount, price) => {
+        const sideLower = side.toLowerCase();
         const body = { 
             symbol, 
-            side: side.toLowerCase(), 
+            side: sideLower, 
             type: type.toLowerCase() 
         };
 
-        if (type === 'limit') {
+        if (type.toLowerCase() === 'limit') {
             body.size = amount.toString();
             body.price = price.toString();
         } else {
-            // MARKET ORDERS
-            // Si el usuario especifica isNotional (para compras en USDT)
-            if (isNotional) {
+            // MARKET ORDERS - Restaurado a la lógica de éxito previa
+            if (sideLower === 'buy') {
+                // Para COMPRAS (Long y Recompras): BitMart usa 'notional'
                 body.notional = amount.toString();
-            } else {
-                // Por defecto usamos size (BTC) para Ventas y Recompras de Short
+            } else if (sideLower === 'sell') {
+                // Para VENTAS (Short y DCA): BitMart usa 'size'
                 body.size = amount.toString();
+            } else {
+                throw new Error(`Lado de orden no soportado: ${sideLower}`);
             }
         }
 
@@ -163,7 +160,10 @@ const bitmartService = {
     // --- Helpers ---
     initOrderWebSocket,
     getRecentOrders: async (symbol) => bitmartService.getHistoryOrders({ symbol, limit: 50 }),
-    placeMarketOrder: async ({ symbol, side, notional }) => bitmartService.placeOrder(symbol, side, 'market', notional, null)
+    
+    // Este helper ahora funcionará correctamente para el LongManager
+    placeMarketOrder: async ({ symbol, side, notional }) => 
+        bitmartService.placeOrder(symbol, side, 'market', notional, null)
 };
 
 module.exports = bitmartService;
