@@ -176,6 +176,14 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 
         // 4. PERSISTENCIA ÚNICA Y ATÓMICA
         const finalState = await commitChanges(changeSet);
+        
+        // Sincronización extra para el Profit (Garantiza que el front reciba el dato fresco)
+if (io && finalState) {
+    io.emit('bot-profit-update', {
+        lprofit: finalState.lprofit,
+        sprofit: finalState.sprofit
+    });
+}
         await syncFrontendState(currentPrice, finalState || botState);
         
     } catch (error) {
