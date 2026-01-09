@@ -7,6 +7,14 @@ import { socket } from '../main.js';
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
 
+// --- CONFIGURACIÓN DE AUDIO (Notificaciones) ---
+const sounds = {
+    buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'), // Sonido entrada/cobertura
+    sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'), // Sonido cierre/ganancia
+};
+// Volumen moderado para no asustar
+Object.values(sounds).forEach(s => s.volume = 0.4);
+
 export function initializeDashboardView() {
     setupSocketListeners();
     setupChartSelector();
@@ -29,7 +37,7 @@ function setupChartSelector() {
     }
 }
 
-// --- SOCKETS (Monitoreo de Salud y Ciclos) ---
+// --- SOCKETS (Monitoreo de Salud, Ciclos y Notificaciones) ---
 function setupSocketListeners() {
     if (!socket) return;
 
@@ -61,14 +69,28 @@ function setupSocketListeners() {
         }
     });
 
-    // 4. ACTUALIZACIÓN POR CIERRE DE CICLO
+    // 4. NOTIFICACIONES ACTIVAS: Compras y Ventas
+    // Este evento debe ser emitido por el backend cuando una orden se llena
+    socket.on('order-executed', (order) => {
+        if (order.side.toLowerCase() === 'buy') {
+            sounds.buy.play().catch(() => console.log("Interacción requerida para audio"));
+            flashElement('auprice', 'bg-emerald-500/20'); // Destello verde en precio
+        } else {
+            sounds.sell.play().catch(() => console.log("Interacción requerida para audio"));
+            flashElement('auprice', 'bg-orange-500/20'); // Destello naranja en precio
+        }
+    });
+
+    // 5. ACTUALIZACIÓN POR CIERRE DE CICLO
     socket.on('cycle-closed', () => {
         console.log("Ciclo cerrado detectado. Actualizando analíticas...");
+        sounds.sell.play().catch(() => {});
+        flashElement('auprofit', 'bg-yellow-500/30'); // Destello en el profit total
         loadAndRenderEquityCurve();
         loadAndDisplayKpis();
     });
 
-    // Fallback de desconexión: Si el socket general cae, marcamos como offline
+    // Fallback de desconexión
     socket.on('disconnect', () => {
         updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
         updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
@@ -118,6 +140,20 @@ function updateHealthStatus(dotId, textId, isOnline) {
         dot.className = isOnline ? 'w-2 h-2 rounded-full bg-emerald-500' : 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
         txt.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
         txt.className = isOnline ? 'text-[9px] font-mono text-emerald-500' : 'text-[9px] font-mono text-red-500';
+    }
+}
+
+/**
+ * Genera un efecto visual de parpadeo en un contenedor
+ */
+function flashElement(id, colorClass) {
+    const el = document.getElementById(id);
+    if (el && el.parentElement) {
+        const parent = el.parentElement;
+        parent.classList.add(colorClass, 'transition-colors', 'duration-300');
+        setTimeout(() => {
+            parent.classList.remove(colorClass);
+        }, 1000);
     }
 }
 
