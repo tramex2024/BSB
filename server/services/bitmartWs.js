@@ -1,71 +1,92 @@
 // BSB/server/services/bitmartWs.js
 
-const { WebSocket } = require('ws'); // Asegúrate de tener 'ws' instalado (npm install ws)
+const { WebSocket } = require('ws');
 
 const WS_URL = 'wss://ws-manager-compress.bitmart.com';
 const LOG_PREFIX = '[BITMART_WS]';
 
 let wsClient = null;
+let heartbeatInterval = null; // 🟢 Nuevo: Para mantener la conexión viva
 
 /**
  * Inicia la conexión WebSocket y suscribe las órdenes del usuario.
- * @param {function} updateCallback - Función para enviar las órdenes actualizadas al servidor principal (app.js).
  */
 function initOrderWebSocket(updateCallback) {
     if (wsClient) {
-        console.log(`${LOG_PREFIX} Conexión ya activa.`);
-        return;
+        // Si el estado no es OPEN, forzamos cierre para limpiar
+        if (wsClient.readyState !== WebSocket.OPEN) {
+            wsClient.terminate();
+        } else {
+            return;
+        }
     }
 
     wsClient = new WebSocket(WS_URL);
 
-    wsClient.on('open', () => {
-        console.log(`${LOG_PREFIX} Conexión exitosa. Suscribiendo a órdenes abiertas...`);
-        // 🚨 IMPORTANTE: La suscripción de órdenes de usuario requiere autenticación (si es BitMart)
-        // La API de BitMart para órdenes de usuario WS requiere un paso de login o suscripción
-        // con tus credenciales. Debes reemplazar esto con el formato exacto de BitMart.
+    // 🟢 Nuevo: Función para enviar PING proactivamente
+    const startHeartbeat = () => {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(() => {
+            if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+                // BitMart espera un mensaje de texto "ping" o un JSON según el canal
+                wsClient.send("ping"); 
+            }
+        }, 20000); // Cada 20 segundos
+    };
 
-        // --- Suscripción de EJEMPLO (Formato común) ---
+    wsClient.on('open', () => {
+        console.log(`${LOG_PREFIX} ✅ Conexión exitosa. Suscribiendo...`);
+        startHeartbeat(); // Iniciamos el latido
+
+        // Suscripción (Asegúrate de que tu auth de BitMart esté configurada si usas user data)
         const subscriptionMessage = {
             op: "subscribe",
-            args: ["spot/user/order:BTC_USDT"] // Suscribe a órdenes de usuario (debes usar tu símbolo)
+            args: ["spot/user/order:BTC_USDT"] 
         };
         wsClient.send(JSON.stringify(subscriptionMessage));
-        // Si BitMart requiere un 'login' o 'auth' previo, debe ir aquí.
     });
 
     wsClient.on('message', (data) => {
+        const rawData = data.toString();
+        
+        // Manejo rápido de Pong para no saturar el log
+        if (rawData === 'pong' || rawData.includes('"event":"pong"')) return;
+
         try {
-            const message = JSON.parse(data.toString());
+            const message = JSON.parse(rawData);
             
-            // 💡 Filtramos solo los mensajes de actualización de órdenes
-            if (message.event === 'update' && message.topic.startsWith('spot/user/order')) {
-                // Aquí, la data.orders es donde están tus órdenes abiertas, llenadas, o canceladas.
-                const updatedOrders = message.data; // Asume que 'message.data' es el array de órdenes
+            if (message.event === 'update' && message.topic && message.topic.startsWith('spot/user/order')) {
+                const updatedOrders = message.data;
                 updateCallback(updatedOrders);
             }
             
-            // Si BitMart usa un mecanismo de ping/pong, se debe manejar aquí para mantener viva la conexión
+            // Responder a Pings del servidor
             if (message.event === 'ping') {
                 wsClient.send(JSON.stringify({ event: 'pong' }));
             }
             
         } catch (error) {
-            console.error(`${LOG_PREFIX} Error al procesar el mensaje WS:`, error.message);
+            // Algunos mensajes de BitMart son strings planos (como "pong")
+            if (rawData !== 'pong') {
+                console.error(`${LOG_PREFIX} Error al procesar mensaje:`, error.message);
+            }
         }
     });
 
     wsClient.on('error', (error) => {
-        console.error(`${LOG_PREFIX} Error en el WebSocket:`, error.message);
+        console.error(`${LOG_PREFIX} ❌ Error:`, error.message);
     });
 
     wsClient.on('close', () => {
-        console.log(`${LOG_PREFIX} Conexión cerrada. Intentando reconectar...`);
-        wsClient = null; // Reinicia el cliente para permitir la reconexión
-        setTimeout(() => initOrderWebSocket(updateCallback), 5000); // Reintenta en 5 segundos
+        console.log(`${LOG_PREFIX} ⚠️ Conexión cerrada. Reconectando en 2s...`);
+        
+        // Limpiar intervalos para evitar fugas de memoria
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        wsClient = null; 
+
+        // 🟢 Reducido a 2 segundos para no perder ventanas de RSI
+        setTimeout(() => initOrderWebSocket(updateCallback), 2000); 
     });
 }
 
-module.exports = {
-    initOrderWebSocket
-};
+module.exports = { initOrderWebSocket };

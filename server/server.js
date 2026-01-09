@@ -88,21 +88,38 @@ const emitBotState = (io, state) => {
     });
 };
 
-// --- WEBSOCKET BITMART (LÓGICA UNIFICADA) ---
+// --- WEBSOCKET BITMART (LÓGICA MARKET DATA MEJORADA) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 let lastProcessedMinute = -1;
+let marketWs = null;
+let marketHeartbeat = null; // 🟢 Nuevo: Heartbeat para Market Data
 
 function setupMarketWS(io) {
-    const ws = new WebSocket(bitmartWsUrl);
+    if (marketWs) {
+        marketWs.terminate();
+    }
+
+    marketWs = new WebSocket(bitmartWsUrl);
     
-    ws.on('open', () => {
-        console.log("📡 WebSocket BitMart: Market Data Conectado.");
-        ws.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
+    marketWs.on('open', () => {
+        console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a Ticker...");
+        marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
+
+        // 🟢 Heartbeat Activo para evitar desconexiones por inactividad
+        if (marketHeartbeat) clearInterval(marketHeartbeat);
+        marketHeartbeat = setInterval(() => {
+            if (marketWs.readyState === WebSocket.OPEN) {
+                marketWs.send("ping");
+            }
+        }, 15000); // Cada 15 segundos
     });
 
-    ws.on('message', async (data) => {
+    marketWs.on('message', async (data) => {
         try {
-            const parsed = JSON.parse(data);
+            const rawData = data.toString();
+            if (rawData === 'pong') return; // Ignorar respuestas de latido
+
+            const parsed = JSON.parse(rawData);
             if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
                 const ticker = parsed.data[0];
                 const price = parseFloat(ticker.last_price);
@@ -115,7 +132,9 @@ function setupMarketWS(io) {
 
                 if (currentMinute !== lastProcessedMinute) {
                     lastProcessedMinute = currentMinute;
+                    // El analyzer ahora tiene la lógica de inercia que corregimos
                     const analysis = await analyzer.runAnalysis(price);
+                    
                     await MarketSignal.findOneAndUpdate(
                         { symbol: 'BTC_USDT' },
                         {
@@ -133,18 +152,23 @@ function setupMarketWS(io) {
                 // 2. EMISIÓN DE PRECIO AL FRONTEND
                 io.emit('marketData', { price, priceChangePercent });
                 
-                // 3. ÚNICO PUNTO DE ENTRADA LÓGICA (Se eliminó updateBotStateWithPrice)
-                // Esta función ahora calcula Profit, Cobertura y ejecuta Órdenes de forma atómica.
+                // 3. CICLO DE BOT (Atómico: Profit, Coberturas, Órdenes)
                 await autobotLogic.botCycle(price);
             }
         } catch (e) { 
-            console.error("Error en el ciclo global:", e); 
+            // Silenciamos errores de parseo de strings simples como "pong"
         }
     });
 
-    ws.on('close', () => {
-        console.log("⚠️ Market WS Cerrado. Reintentando...");
-        setTimeout(() => setupMarketWS(io), 5000);
+    marketWs.on('close', () => {
+        console.log("⚠️ [MARKET_WS] Cerrado. Reconectando en 2s...");
+        if (marketHeartbeat) clearInterval(marketHeartbeat);
+        // Reconexión rápida (2 segundos) para no perder señales de RSI
+        setTimeout(() => setupMarketWS(io), 2000);
+    });
+
+    marketWs.on('error', (err) => {
+        console.error("❌ [MARKET_WS] Error:", err.message);
     });
 }
 

@@ -1,4 +1,4 @@
-// server/bitmart_indicator_analyzer.js
+// BSB/server/src/au/bitmart_indicator_analyzer.js
 
 const { RSI } = require('technicalindicators');
 const bitmartService = require('../services/bitmartService');
@@ -9,6 +9,9 @@ const SYMBOL = 'BTC_USDT';
 const RSI_PERIOD = 21;
 const RSI_OVERSOLD = 30;
 const RSI_OVERBOUGHT = 70;
+
+// Umbral de movimiento mínimo para confirmar que el RSI tiene "fuerza" y no es solo ruido
+const RSI_MOMENTUM_THRESHOLD = 0.8; 
 
 /**
  * Obtiene velas desde BitMart
@@ -52,7 +55,7 @@ function calculateIndicators(candles) {
 }
 
 /**
- * DETERMINA LA SEÑAL
+ * DETERMINA LA SEÑAL CON LÓGICA DE CONFIRMACIÓN
  */
 function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBOL) {
     const result = {
@@ -69,9 +72,11 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
         return result;
     }
 
+    // Vela cerrada anterior
     const lastCompleteCandle = candlesWithIndicators[candlesWithIndicators.length - 1];
     const lastCompleteCandleRSI = lastCompleteCandle.rsi;
 
+    // RSI en tiempo real (incluyendo el precio actual)
     const allPrices = candlesWithIndicators.map(c => c.close);
     allPrices.push(parseFloat(currentPrice));
     
@@ -81,22 +86,36 @@ function determineEntryPoint(candlesWithIndicators, currentPrice, symbol = SYMBO
     result.currentRSI = currentRSI || 0;
     result.lastCompleteCandleRSI = lastCompleteCandleRSI || 0;
 
-    // --- LÓGICA DE SEÑALES ---
+    const rsiDiff = currentRSI - lastCompleteCandleRSI;
+
+    // --- LÓGICA DE SEÑALES REFORZADA ---
+
+    // 1. SEÑAL DE COMPRA (LONG)
+    // Caso A: Cruce limpio de abajo hacia arriba
     if (lastCompleteCandleRSI <= RSI_OVERSOLD && currentRSI > RSI_OVERSOLD) {
         result.action = "BUY";
-        result.reason = `RSI cruzó ${RSI_OVERSOLD} al alza`;
+        result.reason = "RSI cruzó 30 al alza (Cruce Limpio)";
     } 
-    else if (currentRSI < RSI_OVERSOLD && currentRSI > lastCompleteCandleRSI) {
-        result.action = "BUY";
-        result.reason = `RSI en sobreventa subiendo`;
+    // Caso B: Recuperación fuerte (Captura el rebote aunque el RSI suba muy rápido)
+    else if (lastCompleteCandleRSI < (RSI_OVERSOLD + 2) && rsiDiff >= RSI_MOMENTUM_THRESHOLD && currentRSI > lastCompleteCandleRSI) {
+        if (currentRSI > RSI_OVERSOLD) {
+            result.action = "BUY";
+            result.reason = `Recuperación fuerte desde sobreventa (Dif: ${rsiDiff.toFixed(2)})`;
+        }
     }
+
+    // 2. SEÑAL DE VENTA (SHORT)
+    // Caso A: Cruce limpio de arriba hacia abajo
     else if (lastCompleteCandleRSI >= RSI_OVERBOUGHT && currentRSI < RSI_OVERBOUGHT) {
         result.action = "SELL";
-        result.reason = `RSI cruzó ${RSI_OVERBOUGHT} a la baja`;
+        result.reason = "RSI cruzó 70 a la baja (Cruce Limpio)";
     }
-    else if (currentRSI > RSI_OVERBOUGHT && currentRSI < lastCompleteCandleRSI) {
-        result.action = "SELL";
-        result.reason = `RSI en sobrecompra bajando`;
+    // Caso B: Abandono de zona con fuerza (Captura el salto de 73 a 65)
+    else if (lastCompleteCandleRSI > (RSI_OVERBOUGHT - 2) && Math.abs(rsiDiff) >= RSI_MOMENTUM_THRESHOLD && currentRSI < lastCompleteCandleRSI) {
+        if (currentRSI < RSI_OVERBOUGHT) {
+            result.action = "SELL";
+            result.reason = `Abandono agresivo de sobrecompra (Dif: ${rsiDiff.toFixed(2)})`;
+        }
     }
 
     return result;
@@ -113,6 +132,7 @@ async function runAnalysis(currentPriceFromBotLogic) {
             return { action: "HOLD", reason: "Sin datos de velas", currentRSI: 0 };
         }
 
+        // Excluimos la última vela incompleta para que el cálculo de RSI sea estable
         const candlesForAnalysis = rawCandles.slice(0, -1);
         const candlesWithIndicators = calculateIndicators(candlesForAnalysis);
 

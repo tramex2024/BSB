@@ -1,49 +1,31 @@
-// BSB/server/server.js
+// Archivo: BSB/server/server.js
 
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const http = require('http');
-
 const { Server } = require("socket.io");
-
 const WebSocket = require('ws');
-const jwt = require('jsonwebtoken');
 
 // Servicios y Lógica del Bot
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const checkTimeSync = require('./services/check_time');
-
-// Importa las funciones de cálculo
-const { calculateLongCoverage, calculatePotentialProfit /*, calculateShortCoverage*/ } = require('./autobotCalculations');
 
 // Modelos
-const Order = require('./models/Order');
 const Autobot = require('./models/Autobot');
-
-// Routers
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const ordersRoutes = require('./routes/ordersRoutes');
-const autobotRoutes = require('./routes/autobotRoutes');
-const configRoutes = require('./routes/configRoutes');
-const balanceRoutes = require('./routes/balanceRoutes');
-const analyticsRoutes = require('./routes/analyticsRoutes'); // 💡 NUEVAS RUTAS DE ANALÍTICAS
-
-// Middleware
-const authMiddleware = require('./middleware/authMiddleware');
+const MarketSignal = require('./models/MarketSignal');
+const analyzer = require('./src/bitmart_indicator_analyzer'); 
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// Configuración de Socket.IO
+// --- CONFIGURACIÓN DE SOCKET.IO ---
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: ["https://bsb-lime.vercel.app", "http://localhost:3000"],
         methods: ["GET", "POST"]
     },
     path: '/socket.io'
@@ -51,271 +33,151 @@ const io = new Server(server, {
 
 autobotLogic.setIo(io);
 
-// -------------------------------------------------------------
-// === [ INICIALIZACIÓN DE WEBSOCKETS DE ÓRDENES ] =================
-// -------------------------------------------------------------
+// --- MIDDLEWARES ---
+app.use(cors());
+app.use(express.json());
 
-const handleOrderUpdate = (ordersData) => {
-    // ordersData es un array de órdenes (abiertas/llenadas/canceladas)
-    // Usamos 'open-orders-update' para enviar la data al frontend
-    console.log(`[Socket.io] Retransmitiendo ${ordersData.length} órdenes abiertas/actualizadas.`);
-    io.sockets.emit('open-orders-update', ordersData);
+// --- RUTAS ---
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/orders', require('./routes/ordersRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/autobot', require('./routes/autobotRoutes'));
+app.use('/api/v1/config', require('./routes/configRoutes'));
+app.use('/api/v1/bot-state', require('./routes/balanceRoutes'));
+app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
+
+// --- CONEXIÓN DB ---
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ MongoDB Connected...'))
+    .catch(err => console.error('❌ MongoDB Error:', err));
+
+/**
+ * emitBotState: Función auxiliar para sincronización inicial
+ */
+const emitBotState = (io, state) => {
+    if (!state) return;
+    const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
+    const profitPercent = totalCurrentBalance > 0 
+        ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
+        : 0;
+
+    io.sockets.emit('bot-state-update', {
+        lstate: state.lstate,
+        sstate: state.sstate,
+        total_profit: state.total_profit,
+        lbalance: state.lbalance,
+        sbalance: state.sbalance,
+        lprofit: state.lprofit,
+        sprofit: state.sprofit,
+        lastAvailableUSDT: state.lastAvailableUSDT,
+        ltprice: state.ltprice,
+        stprice: state.stprice,
+        lsprice: state.lsprice,
+        sbprice: state.sbprice,
+        lcycle: state.lcycle,
+        scycle: state.scycle,
+        lcoverage: state.lcoverage,
+        scoverage: state.scoverage,
+        lnorder: state.lnorder,
+        snorder: state.snorder
+    });
+
+    io.sockets.emit('bot-stats', {
+        totalProfit: state.total_profit || 0,
+        profitChangePercent: profitPercent 
+    });
 };
 
-// 💡 Conectar con BitMart para el stream de Órdenes de Usuario
-bitmartService.initOrderWebSocket(handleOrderUpdate);
-// -------------------------------------------------------------
-
-// 🛑 CORRECCIÓN #1: Configuración de CORS para solicitudes HTTP/REST
-const allowedOrigins = [
-    'https://bsb-lime.vercel.app', // Dominio de tu Front-end
-    'http://localhost:3000',        // Desarrollo local
-];
-
-const corsOptions = {
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error(`CORS no permite el acceso desde el Origen: ${origin}`), false);
-        }
-    },
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
-    credentials: true,
-    optionsSuccessStatus: 204
-};
-app.use(cors(corsOptions)); // Aplicamos la configuración de CORS
-app.use(express.json()); // El parser JSON
-// -------------------------------------------------------------
-
-// Definición de Rutas
-app.use('/api/auth', authRoutes);
-app.use('/api/orders', ordersRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/autobot', autobotRoutes);
-app.use('/api/v1/config', configRoutes);
-app.use('/api/v1/bot-state', balanceRoutes);   // cambiar /api/v1/bot-state por /api/v1/balances
-
-// 💡 NUEVAS RUTAS DE ANALÍTICAS
-
-app.use('/api/v1/analytics', analyticsRoutes); 
-
-// Conexión a la Base de Datos
-const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log('MongoDB Connected...');
-    } catch (err) {
-        console.error('MongoDB connection error:', err.message);
-        process.exit(1);
-    }
-};
-
-connectDB();
-
-// 🛑 1. DEFINIR LA FUNCIÓN DE LECTURA DE ESTADO
-async function getBotState() {
-    return await Autobot.findOne({});
-}
-
-// 🛑 2. CREAR LAS CREDENCIALES/DEPENDENCIAS BASE
-const botDependencies = {
-    getBotState: getBotState, // <--- FUNCIÓN NECESARIA PARA LA PRUEBA DE AI
-    // Aquí puedes añadir otras funciones que se usen globalmente, si es necesario.
-};
-
-let currentMarketPrice = 'N/A';
-
-// **FUNCIÓN CORREGIDA: Ahora usa findOneAndUpdate para la actualización atómica y parcial.**
-async function updateBotStateWithPrice(price) {
-    try {
-        const botState = await Autobot.findOne({});
-        const currentPrice = parseFloat(price);
-
-        if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            return;
-        }
-
-        let updatedBotState = botState;      
-
-        // Tasa de comisión (ej: 0.1% = 0.001). Asegúrate de que este campo exista en tu config.
-        // Si no existe, usa un valor por defecto seguro (0.001 para 0.1%)
-        const FEE_RATE = botState.config.long.feeRate || 0.001; 
-
-        // 🎯 1. CALCULAR EL L-PROFIT POTENCIAL (Se calcula en cada tick, independientemente del estado)
-        const lprofit = calculatePotentialProfit(
-            botState.lStateData.ppc, 
-            botState.lStateData.ac, 
-            currentPrice, 
-            FEE_RATE 
-        );       
-
-        const updateData = {
-            lprofit: lprofit, // Siempre actualiza el profit potencial
-            lastUpdateTime: new Date()
-        };
-
-        // 🛑 2. LÓGICA DE ACTUALIZACIÓN DE COBERTURA 🛑
-        if (botState.lstate === 'STOPPED' || botState.lstate === 'NO_COVERAGE') {            
-
-    		const { coveragePrice: lcoverage, numberOfOrders: lnorder } = calculateLongCoverage(
-        		botState.lbalance,
-        		currentPrice,
-        		botState.config.long.purchaseUsdt,
-        		botState.config.long.price_var / 100,
-        		botState.config.long.size_var / 100,
-        		botState.lStateData.orderCountInCycle // <--- AGREGAR ESTE PARÁMETRO
-    	);
-
-            // Inicializar scoverage y snorder (mantener el valor actual)
-            const scoverage = botState.scoverage;
-            const snorder = botState.snorder;
-            
-            // Combina los datos de lprofit con los datos de cobertura
-            Object.assign(updateData, {
-                lcoverage: lcoverage, // ACTUALIZACIÓN SOLO EN ESTADO DETENIDO
-                lnorder: lnorder,
-                scoverage: scoverage,
-                snorder: snorder,
-            });
-        } else {
-             // 💡 Si el bot está RUNNING/BUYING/SELLING, SOLO actualiza lprofit y la marca de tiempo.
-             // lcoverage, ltprice, lnorder son gestionados por LBuying.js
-        }      
-
-        // 🛑 3. GUARDADO ATÓMICO EN LA DB
-        updatedBotState = await Autobot.findOneAndUpdate(
-            { _id: botState._id },
-            { $set: updateData }, // Usa el objeto de actualización preparado
-            { new: true } // Devuelve el documento actualizado
-        );        
-
-        // 🚨 CRÍTICO: Asegurarse de que el objeto updatedBotState sea válido para la emisión.
-        if (!updatedBotState) {
-            console.error('No se pudo encontrar o actualizar el documento del bot.');
-            return;
-        }
-
-        // === [ Emisión Inmediata de los Datos ] ===
-        // Emitimos el estado actual (ya sea el recién actualizado o el que estaba en la DB)
-        io.sockets.emit('bot-state-update', {
-            lstate: updatedBotState.lstate,
-            sstate: updatedBotState.sstate,
-            total_profit: updatedBotState.total_profit || 0,
-            lbalance: updatedBotState.lbalance || 0,
-            sbalance: updatedBotState.sbalance || 0,
-            ltprice: updatedBotState.ltprice || 0,
-            stprice: updatedBotState.stprice || 0,
-            lsprice: updatedBotState.lsprice || 0,
-            sbprice: updatedBotState.sbprice || 0,
-            lcycle: updatedBotState.lcycle || 0,
-            scycle: updatedBotState.scycle || 0,
-            lcoverage: updatedBotState.lcoverage || 0, 
-            scoverage: updatedBotState.scoverage || 0,
-            lnorder: updatedBotState.lnorder || 0,
-            snorder: updatedBotState.snorder || 0,
-            lprofit: updatedBotState.lprofit || 0 // ⬅️ NUEVO: Emitir lprofit
-        });
-        // ==========================================================        
-
-    } catch (error) {
-        console.error('Error al actualizar el estado del bot con el nuevo precio:', error);
-    }
-}
-
-// Configuración de WebSocket para datos de mercado
+// --- WEBSOCKET BITMART (LÓGICA UNIFICADA) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
-function setupWebSocket(io) {
-    const ws = new WebSocket(bitmartWsUrl);
-    ws.onopen = function() {
-        console.log("Conectado a la API de WebSocket de BitMart.");
-        const subscribeMessage = { "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] };
-        ws.send(JSON.stringify(subscribeMessage));
-    };
-    ws.onmessage = async function(event) {
-        try {
-            const data = JSON.parse(event.data);
-            if (data && data.data && data.data.length > 0 && data.data[0].symbol === 'BTC_USDT') {
-                currentMarketPrice = data.data[0].last_price;
-                io.emit('marketData', { price: currentMarketPrice });
+let lastProcessedMinute = -1;
 
-                // Llama a la función CORREGIDA para recalcular, guardar Y EMITIR
-                await updateBotStateWithPrice(currentMarketPrice);
+function setupMarketWS(io) {
+    const ws = new WebSocket(bitmartWsUrl);
+    
+    ws.on('open', () => {
+        console.log("📡 WebSocket BitMart: Market Data Conectado.");
+        ws.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
+    });
 
-                // Disparar el ciclo de la estrategia en tiempo real (debe ser el último paso)
-                await autobotLogic.botCycle(currentMarketPrice, botDependencies);
-            }
-        } catch (error) {
-            console.error("Error al procesar el mensaje de WebSocket:", error);
-        }
-    };
-    ws.onclose = function() {
-        console.log("Conexión de WebSocket a BitMart cerrada. Reconectando...");
-        setTimeout(() => setupWebSocket(io), 5000);
-    };
-    ws.onerror = function(err) {
-        console.error("Error en la conexión de WebSocket:", err);
-        ws.close();
-    };
+    ws.on('message', async (data) => {
+        try {
+            const parsed = JSON.parse(data);
+            if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
+                const ticker = parsed.data[0];
+                const price = parseFloat(ticker.last_price);
+                const open24h = parseFloat(ticker.open_24h);
+                const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
+
+                // 1. ANÁLISIS GLOBAL (Cada minuto)
+                const now = new Date();
+                const currentMinute = now.getMinutes();
+
+                if (currentMinute !== lastProcessedMinute) {
+                    lastProcessedMinute = currentMinute;
+                    const analysis = await analyzer.runAnalysis(price);
+                    await MarketSignal.findOneAndUpdate(
+                        { symbol: 'BTC_USDT' },
+                        {
+                            currentRSI: analysis.currentRSI || 0,
+                            prevRSI: analysis.lastCompleteCandleRSI || 0,
+                            signal: analysis.action,
+                            reason: analysis.reason,
+                            lastUpdate: new Date()
+                        },
+                        { upsert: true, new: true }
+                    );
+                    io.emit('market-signal-update', analysis);
+                }
+
+                // 2. EMISIÓN DE PRECIO AL FRONTEND
+                io.emit('marketData', { price, priceChangePercent });
+                
+                // 3. ÚNICO PUNTO DE ENTRADA LÓGICA (Se eliminó updateBotStateWithPrice)
+                // Esta función ahora calcula Profit, Cobertura y ejecuta Órdenes de forma atómica.
+                await autobotLogic.botCycle(price);
+            }
+        } catch (e) { 
+            console.error("Error en el ciclo global:", e); 
+        }
+    });
+
+    ws.on('close', () => {
+        console.log("⚠️ Market WS Cerrado. Reintentando...");
+        setTimeout(() => setupMarketWS(io), 5000);
+    });
 }
 
-setupWebSocket(io);
-
-// Conexión de Socket.IO
-io.on('connection', (socket) => {
-    console.log(`User connected with ID: ${socket.id}`);
-    socket.on('disconnect', () => {
-        console.log(`User disconnected with ID: ${socket.id}`);
-    });
+// --- WEBSOCKET BITMART (ÓRDENES PRIVADAS) ---
+bitmartService.initOrderWebSocket((ordersData) => {
+    io.sockets.emit('open-orders-update', ordersData);
 });
 
-// 🛑 MODIFICACIÓN DEL BUCLE LENTO: Llama a la API solo para actualizar la CACHÉ en DB
-// Frecuencia segura para BitMart: 10,000ms (10 segundos)
-setInterval(async () => {
-    // 1. Llama a la API de BitMart para actualizar el CACHÉ en DB (campo lastAvailableUSDT/BTC)
-    await autobotLogic.slowBalanceCacheUpdate();
-    
-    // 2. Lee el documento de la DB actualizado
-    const botState = await Autobot.findOne({});
-
-    // 3. Emite los balances a la UI a través de un nuevo evento de Socket.IO
-    if (botState && botState.lastAvailableUSDT !== undefined) {
-        io.sockets.emit('balance-update', { // ⬅️ Nuevo evento 'balance-update'
-            lastAvailableUSDT: botState.lastAvailableUSDT || 0,
-            lastAvailableBTC: botState.lastAvailableBTC || 0,
-        });
-    }
-
-}, 10000); // Mantenemos 10 segundos para el caché de balance.
-
-// ** NUEVO BUCLE PARA ÓRDENES ABIERTAS (POLLING) **
-// CRÍTICO para sincronizar el estado inicial y como fallback
+// --- BUCLES DE SINCRONIZACIÓN (SALDOS) ---
 setInterval(async () => {
     try {
-        // Asumimos que el símbolo principal es 'BTC_USDT'
-        const symbol = 'BTC_USDT'; 
-        // Esta función debe existir en bitmartService.js y retornar [orden1, orden2, ...]
-        const openOrders = await bitmartService.getOpenOrders(symbol); 
-        
-        if (openOrders) {
-//            console.log(`[Polling] ${openOrders.length} Órdenes abiertas encontradas. Emitiendo.`);
-            // Usamos el mismo evento que el WebSocket para un manejo consistente en el frontend
-            io.sockets.emit('open-orders-update', openOrders); 
+        const apiSuccess = await autobotLogic.slowBalanceCacheUpdate();
+        const botState = await Autobot.findOne({}).lean();
+        if (botState) {
+            io.sockets.emit('balance-real-update', { 
+                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK',
+                lastAvailableUSDT: botState.lastAvailableUSDT || 0,
+                lastAvailableBTC: botState.lastAvailableBTC || 0,
+            });
         }
-        
-    } catch (error) {
-        // Evitamos que un error de polling detenga el servidor
-        console.error('Error al consultar órdenes abiertas por polling:', error.message);
-        // Opcional: Emitir un log de error al frontend
-        io.sockets.emit('bot-log', {
-            type: 'error',
-            message: `Error al sincronizar órdenes abiertas: ${error.message.substring(0, 50)}...`
-        });
-    }
+    } catch (e) { console.error("Error Balance Loop:", e); }
+}, 10000);
 
-}, 5000); // Consultamos cada 5 segundos
+// --- ARRANQUE ---
+setupMarketWS(io);
+
+io.on('connection', (socket) => {
+    console.log(`👤 Usuario conectado: ${socket.id}`);
+    Autobot.findOne({}).lean().then(state => {
+        if (state) emitBotState(io, state);
+    });
+});
 
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    checkTimeSync();
+    console.log(`🚀 SERVIDOR ACTIVO EN PUERTO: ${PORT}`);
 });
