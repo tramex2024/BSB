@@ -2,6 +2,8 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulSell } = require('../../managers/longDataManager');
+// 🟢 CORRECCIÓN: Importación necesaria para que el historial (tradecycles) funcione
+const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
 
 /**
  * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.
@@ -40,6 +42,7 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
                 updateBotState, 
                 updateLStateData, 
                 updateGeneralBotState, 
+                logSuccessfulCycle, // 🟢 CORRECCIÓN: Inyectamos la función para asegurar el registro en tradecycles
                 config: botState.config 
             };
             
