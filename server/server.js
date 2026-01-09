@@ -23,6 +23,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
+const aiRoutes = require('./routes/aiRoutes'); // El archivo que me mostraste antes
+app.use('/api/ai', aiRoutes);
+
+app.use(cors({
+  allowedHeaders: ['Content-Type', 'Authorization'] // 👈 Asegúrate de que Authorization esté permitido
+}));
+
 // --- CONFIGURACIÓN DE SOCKET.IO ---
 const io = new Server(server, {
     cors: {
