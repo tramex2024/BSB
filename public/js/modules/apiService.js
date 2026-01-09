@@ -1,6 +1,4 @@
 // public/js/modules/apiService.js
-
-// public/js/modules/apiService.js
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL } from '../main.js';
 
@@ -23,6 +21,27 @@ async function privateFetch(endpoint, options = {}) {
         return { success: false, message: "Connection error." };
     }
 }
+
+// --- NUEVAS FUNCIONES PARA DASHBOARD (Analíticas) ---
+
+/**
+ * Obtiene los KPIs de los ciclos (Promedio de profit, ciclos totales, etc.)
+ */
+export async function fetchCycleKpis() {
+    // Apunta a la ruta de analytics definida en tu server.js
+    const data = await privateFetch('/api/v1/analytics/stats'); 
+    return data.success ? data.data : null;
+}
+
+/**
+ * Obtiene los datos para el gráfico de la curva de capital
+ */
+export async function fetchEquityCurveData() {
+    const data = await privateFetch('/api/v1/analytics/equity-curve');
+    return data.success ? data.data : [];
+}
+
+// --- LÓGICA DE CONFIGURACIÓN ---
 
 export function getBotConfiguration() {
     const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
