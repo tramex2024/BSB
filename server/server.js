@@ -8,10 +8,10 @@ const http = require('http');
 const { Server } = require("socket.io");
 const WebSocket = require('ws');
 
-// Servicios y Lógica del Bot
+// --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const aiEngine = require('./src/ai/aiEngine'); // 🧠 Importamos el nuevo motor IA
+const aiEngine = require('./src/ai/aiEngine'); // 🧠 Motor IA
 
 // Modelos
 const Autobot = require('./models/Autobot');
@@ -23,14 +23,17 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-const aiRoutes = require('./routes/aiRoutes'); // El archivo que me mostraste antes
-app.use('/api/ai', aiRoutes);
-
+// --- 2. CONFIGURACIÓN DE MIDDLEWARES (Orden Crítico) ---
+// Primero habilitamos lectura de JSON y CORS antes que cualquier ruta
+app.use(express.json()); 
 app.use(cors({
-  allowedHeaders: ['Content-Type', 'Authorization'] // 👈 Asegúrate de que Authorization esté permitido
+    origin: ["https://bsb-lime.vercel.app", "http://localhost:3000"],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
 }));
 
-// --- CONFIGURACIÓN DE SOCKET.IO ---
+// --- 3. CONFIGURACIÓN DE SOCKET.IO ---
 const io = new Server(server, {
     cors: {
         origin: ["https://bsb-lime.vercel.app", "http://localhost:3000"],
@@ -39,30 +42,29 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
+// Vinculamos sockets a los motores
 autobotLogic.setIo(io);
-aiEngine.setIo(io); // 🧠 Vinculamos socket al motor de IA para logs en tiempo real
+aiEngine.setIo(io); 
 
-// --- MIDDLEWARES ---
-app.use(cors());
-app.use(express.json());
+// --- 4. DEFINICIÓN DE RUTAS ---
+const aiRoutes = require('./routes/aiRoutes'); 
 
-// --- RUTAS ---
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/orders', require('./routes/ordersRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/autobot', require('./routes/autobotRoutes'));
+app.use('/api/ai', aiRoutes); // 🧠 Ruta unificada para la IA
 app.use('/api/v1/config', require('./routes/configRoutes'));
 app.use('/api/v1/bot-state', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
-app.use('/api/ai', require('./routes/aiRoutes')); // 🧠 Nueva ruta para el AIBot
 
-// --- CONEXIÓN DB ---
+// --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB Connected...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 /**
- * emitBotState: Función auxiliar para sincronización inicial
+ * emitBotState: Sincronización inicial
  */
 const emitBotState = (io, state) => {
     if (!state) return;
@@ -72,24 +74,9 @@ const emitBotState = (io, state) => {
         : 0;
 
     io.sockets.emit('bot-state-update', {
-        lstate: state.lstate,
-        sstate: state.sstate,
+        ...state, // Enviamos el estado completo de forma eficiente
         total_profit: state.total_profit,
-        lbalance: state.lbalance,
-        sbalance: state.sbalance,
-        lprofit: state.lprofit,
-        sprofit: state.sprofit,
-        lastAvailableUSDT: state.lastAvailableUSDT,
-        ltprice: state.ltprice,
-        stprice: state.stprice,
-        lsprice: state.lsprice,
-        sbprice: state.sbprice,
-        lcycle: state.lcycle,
-        scycle: state.scycle,
-        lcoverage: state.lcoverage,
-        scoverage: state.scoverage,
-        lnorder: state.lnorder,
-        snorder: state.snorder
+        lastAvailableUSDT: state.lastAvailableUSDT
     });
 
     io.sockets.emit('bot-stats', {
@@ -98,28 +85,24 @@ const emitBotState = (io, state) => {
     });
 };
 
-// --- WEBSOCKET BITMART (LÓGICA MARKET DATA MEJORADA) ---
+// --- 6. WEBSOCKET BITMART (Market Data + AI Engine) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 let lastProcessedMinute = -1;
 let marketWs = null;
 let marketHeartbeat = null;
 
 function setupMarketWS(io) {
-    if (marketWs) {
-        marketWs.terminate();
-    }
+    if (marketWs) marketWs.terminate();
 
     marketWs = new WebSocket(bitmartWsUrl);
     
     marketWs.on('open', () => {
-        console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a Ticker...");
+        console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a BTC_USDT...");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
         if (marketHeartbeat) clearInterval(marketHeartbeat);
         marketHeartbeat = setInterval(() => {
-            if (marketWs.readyState === WebSocket.OPEN) {
-                marketWs.send("ping");
-            }
+            if (marketWs.readyState === WebSocket.OPEN) marketWs.send("ping");
         }, 15000);
     });
 
@@ -135,7 +118,7 @@ function setupMarketWS(io) {
                 const open24h = parseFloat(ticker.open_24h);
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
-                // 1. ANÁLISIS GLOBAL (Cada minuto)
+                // A. Análisis por Minuto (Indicadores)
                 const now = new Date();
                 const currentMinute = now.getMinutes();
 
@@ -147,48 +130,46 @@ function setupMarketWS(io) {
                         { symbol: 'BTC_USDT' },
                         {
                             currentRSI: analysis.currentRSI || 0,
-                            prevRSI: analysis.lastCompleteCandleRSI || 0,
                             signal: analysis.action,
                             reason: analysis.reason,
                             lastUpdate: new Date()
                         },
-                        { upsert: true, new: true }
+                        { upsert: true }
                     );
                     io.emit('market-signal-update', analysis);
                 }
 
-                // 2. EMISIÓN DE PRECIO AL FRONTEND
+                // B. Emisión de Precio Real-time
                 io.emit('marketData', { price, priceChangePercent });
                 
-                // 🧠 3. MOTOR DE INTELIGENCIA ARTIFICIAL (Independiente)
-                // Le pasamos el precio actual al AIEngine para su análisis autónomo
-                aiEngine.analyze(price);
+                // 🧠 C. MOTOR IA (Análisis Autónomo Tick-a-Tick)
+                try {
+                    aiEngine.analyze(price);
+                } catch (aiErr) {
+                    console.error("⚠️ Error en AIEngine:", aiErr.message);
+                }
 
-                // 4. CICLO DE AUTOBOT (Atómico: Profit, Coberturas, Órdenes)
+                // D. CICLO DE AUTOBOT (Órdenes Reales)
                 await autobotLogic.botCycle(price);
             }
-        } catch (e) { 
-            // Manejo de errores silencioso para protocolos WS
-        }
+        } catch (e) { /* Error silenciado para mantener flujo WS */ }
     });
 
     marketWs.on('close', () => {
-        console.log("⚠️ [MARKET_WS] Cerrado. Reconectando en 2s...");
+        console.log("⚠️ [MARKET_WS] Cerrado. Reconectando...");
         if (marketHeartbeat) clearInterval(marketHeartbeat);
         setTimeout(() => setupMarketWS(io), 2000);
     });
 
-    marketWs.on('error', (err) => {
-        console.error("❌ [MARKET_WS] Error:", err.message);
-    });
+    marketWs.on('error', (err) => console.error("❌ [MARKET_WS] Error:", err.message));
 }
 
-// --- WEBSOCKET BITMART (ÓRDENES PRIVADAS) ---
+// --- 7. WEBSOCKET ÓRDENES PRIVADAS ---
 bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- BUCLES DE SINCRONIZACIÓN (SALDOS) ---
+// --- 8. BUCLE DE SINCRONIZACIÓN DE SALDOS (10s) ---
 setInterval(async () => {
     try {
         const apiSuccess = await autobotLogic.slowBalanceCacheUpdate();
@@ -203,7 +184,7 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// --- ARRANQUE ---
+// --- 9. ARRANQUE DEL SERVIDOR ---
 setupMarketWS(io);
 
 io.on('connection', (socket) => {
@@ -214,5 +195,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`🚀 SERVIDOR ACTIVO EN PUERTO: ${PORT}`);
+    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });
