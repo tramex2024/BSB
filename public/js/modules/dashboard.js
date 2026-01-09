@@ -181,7 +181,10 @@ function flashElement(id, colorClass) {
     const el = document.getElementById(id);
     if (el && el.parentElement) {
         const parent = el.parentElement;
-        parent.classList.add(colorClass, 'transition-colors', 'duration-300');
+        // Quitamos cualquier color anterior para que no se mezclen
+        parent.classList.remove('bg-emerald-500/20', 'bg-orange-500/20', 'bg-yellow-500/30');
+        
+        parent.classList.add(colorClass);
         setTimeout(() => {
             parent.classList.remove(colorClass);
         }, 1000);
