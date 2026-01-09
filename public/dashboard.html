@@ -71,6 +71,26 @@
             </div>            
         </div>
 
+        <div class="bg-blue-900/20 p-4 rounded-2xl border border-blue-500/30 mb-4 animate-pulse-slow">
+    <div class="flex justify-between items-center mb-3">
+        <h3 class="text-[9px] font-bold text-blue-400 uppercase tracking-widest">AI Engine Monitor</h3>
+        <span id="ai-mini-mode" class="text-[8px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">VIRTUAL</span>
+    </div>
+    <div class="flex items-center gap-4">
+        <div class="relative w-12 h-12 flex-shrink-0">
+            <svg class="w-full h-full" viewBox="0 0 36 36">
+                <path class="text-gray-700" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path id="ai-mini-progress" class="text-blue-500" stroke-width="3" stroke-dasharray="0, 100" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <span id="ai-mini-confidence" class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">0%</span>
+        </div>
+        <div class="overflow-hidden">
+            <p id="ai-mini-thought" class="text-[10px] text-gray-300 italic truncate font-mono">Iniciando sistema neural...</p>
+            <p id="ai-mini-action" class="text-[9px] font-bold text-blue-400 mt-1 uppercase">Esperando señal</p>
+        </div>
+    </div>
+</div>
+        
         <div class="bg-gray-900/40 p-4 rounded-2xl border border-gray-700">
             <h3 class="text-[9px] font-bold text-gray-500 uppercase mb-3 tracking-widest text-center">System Health</h3>
             <div class="grid grid-cols-1 gap-2">

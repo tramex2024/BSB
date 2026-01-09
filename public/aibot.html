@@ -1,114 +1,41 @@
-<div class="flex flex-col md:flex-row h-full md:h-screen">
-    <div class="w-full md:w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-            <div class="flex justify-between text-sm">
-                <div id="connection-status" class="flex items-center space-x-2">
-                    <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-                    <h2 class="text-lg font-bold">AIBOT</h2>
-                </div>
-                <div class="flex justify-between items-center">
-                    <div><strong>Profit:</strong> <span id="aiprofit" class="text-green-400">0.00</span></div>
-                </div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LState:</strong> <span id="aibot-lstate" class="text-yellow-400">STOPPED</span></div>
-                <div><strong>SState:</strong> <span id="aibot-sstate" class="text-yellow-400">STOPPED</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LBalance:</strong> <span id="ailbalance">0.00</span></div>
-                <div><strong>SBalance:</strong> <span id="aisbalance">0.00</span></div>
-            </div>
+<div class="p-6 space-y-6">
+    <div class="flex justify-between items-center bg-gray-900 p-4 rounded-xl border border-blue-500/30">
+        <div>
+            <h2 class="text-2xl font-bold text-blue-400">AI Autonomous Engine</h2>
+            <p class="text-xs text-gray-400">Modo: <span id="ai-mode-status" class="text-yellow-500 font-mono">SIMULACIÓN VIRTUAL</span></p>
         </div>
-
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-            <div class="flex justify-between text-sm">
-		<div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>
-                <div><strong>Price:</strong> <span id="aiprice">0.00</span></div>
-                <div><strong>Balance:</strong> <span id="aibalance">0.00</span></div>
-            </div>
+        <div class="text-right">
+            <div id="ai-status-dot" class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span class="text-sm font-mono ml-2">MODELO: NEURAL-V1</span>
         </div>
-
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-            <div class="flex justify-between text-sm">
-                <div><strong>LTPrice:</strong> <span id="ailtprice">0.00</span></div>
-                <div><strong>STPrice:</strong> <span id="aistprice">0.00</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LCycle:</strong> <span id="ailcycle">0</span></div>
-                <div><strong>SCycle:</strong> <span id="aiscycle">0</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LCoverage:</strong> <span id="ailcoverage">0.00</span></div>
-                <div><strong>SCoverage:</strong> <span id="aiscoverage">0.00</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LNorder:</strong> <span id="ailnorder">0</span></div>
-                <div><strong>SNorder:</strong> <span id="aisnorder">0</span></div>
-            </div>
-        </div>
-
-        <div class="space-y-4 text-sm">
-            <hr class="border-gray-600"/>
-            <div class="flex space-x-4">
-                <div class="flex-1">
-                    <label class="block">Amount (USDT)</label>
-                    <input id="aiamount-usdt" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-                <div class="flex-1">
-                    <label class="block">Amount (BTC)</label>
-                    <input id="aiamount-btc" type="number" step="0.000010" value="0.000000" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-            </div>
-            <div class="flex space-x-4">
-                <div class="flex-1">
-                    <label class="block">Purchase (USDT)</label>
-                    <input id="aipurchase-usdt" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-                <div class="flex-1">
-                    <label class="block">Purchase (BTC)</label>
-                    <input id="aipurchase-btc" type="number" step="0.000010" value="0.000000" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-            </div>
-            <label class="block">Increment (%)</label>
-            <input id="aiincrement" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/>
-            <div>
-                <label class="block">Decrement (%)</label>
-                <input id="aidecrement" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/>
-            </div>
-            <div>
-                <label class="block">Trigger (%)</label>
-                <input id="aitrigger" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
-            </div>
-
-            <div class="flex flex-col space-y-2">
-                <div class="flex items-center">
-                    <input type="checkbox" id="aistop-at-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
-                    <label for="stop-at-cycle-end" class="ml-2 block text-sm text-gray-200">Stop at cycle end</label>
-                </div>
-                <div class="flex space-x-2">
-                    <button id="aistart-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
-                    <button id="aireset-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button>
-                </div>
-            </div>
-        </div>
-
     </div>
-    <div class="w-full md:w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
 
-        <div id="ai-tvchart" class="bg-gray-800 rounded p-2 h-[500px] flex-grow"></div>
-
-        <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
-            <h3 class="text-lg font-semibold mb-2">Order History</h3>
-            <div class="flex border-b border-gray-600 mb-4 autobot-tabs">
-                <button id="aitab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
-                <button id="aitab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
-                <button id="aitab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
-                <button id="aitab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 flex flex-col items-center">
+            <h3 class="text-gray-400 text-sm mb-4">NIVEL DE CONFIANZA</h3>
+            <div class="relative w-32 h-32">
+                <div id="ai-confidence-value" class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-blue-500">
+                    0%
+                </div>
             </div>
+            <p id="ai-prediction-text" class="mt-4 text-xs font-mono text-center text-gray-500 italic">Analizando mercado...</p>
+        </div>
 
-            <div id="ai-order-list" class="overflow-y-auto text-sm space-y-2 flex-grow">
-                <p class="text-gray-400">Loading orders...</p>
+        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 space-y-4">
+            <h3 class="text-gray-400 text-sm">CONTROL DE ENTRENAMIENTO</h3>
+            <button id="btn-start-ai" class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-all">
+                ACTIVAR NÚCLEO IA
+            </button>
+            <div class="flex items-center justify-between text-xs px-2">
+                <span>Saldo Virtual:</span>
+                <span class="text-emerald-400 font-mono">$10,000.00 USDT</span>
             </div>
+        </div>
+
+        <div class="bg-black p-4 rounded-2xl border border-gray-800 font-mono text-[10px] h-48 overflow-y-auto">
+            <div class="text-blue-500">[SYSTEM] Iniciando secuencia de IA...</div>
+            <div id="ai-log-container" class="space-y-1 mt-2">
+                </div>
         </div>
     </div>
 </div>

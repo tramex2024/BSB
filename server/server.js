@@ -11,6 +11,7 @@ const WebSocket = require('ws');
 // Servicios y Lógica del Bot
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
+const aiEngine = require('./src/ai/aiEngine'); // 🧠 Importamos el nuevo motor IA
 
 // Modelos
 const Autobot = require('./models/Autobot');
@@ -32,6 +33,7 @@ const io = new Server(server, {
 });
 
 autobotLogic.setIo(io);
+aiEngine.setIo(io); // 🧠 Vinculamos socket al motor de IA para logs en tiempo real
 
 // --- MIDDLEWARES ---
 app.use(cors());
@@ -45,6 +47,7 @@ app.use('/api/autobot', require('./routes/autobotRoutes'));
 app.use('/api/v1/config', require('./routes/configRoutes'));
 app.use('/api/v1/bot-state', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes')); // 🧠 Nueva ruta para el AIBot
 
 // --- CONEXIÓN DB ---
 mongoose.connect(process.env.MONGO_URI)
@@ -92,7 +95,7 @@ const emitBotState = (io, state) => {
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 let lastProcessedMinute = -1;
 let marketWs = null;
-let marketHeartbeat = null; // 🟢 Nuevo: Heartbeat para Market Data
+let marketHeartbeat = null;
 
 function setupMarketWS(io) {
     if (marketWs) {
@@ -105,19 +108,18 @@ function setupMarketWS(io) {
         console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a Ticker...");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
-        // 🟢 Heartbeat Activo para evitar desconexiones por inactividad
         if (marketHeartbeat) clearInterval(marketHeartbeat);
         marketHeartbeat = setInterval(() => {
             if (marketWs.readyState === WebSocket.OPEN) {
                 marketWs.send("ping");
             }
-        }, 15000); // Cada 15 segundos
+        }, 15000);
     });
 
     marketWs.on('message', async (data) => {
         try {
             const rawData = data.toString();
-            if (rawData === 'pong') return; // Ignorar respuestas de latido
+            if (rawData === 'pong') return;
 
             const parsed = JSON.parse(rawData);
             if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
@@ -132,7 +134,6 @@ function setupMarketWS(io) {
 
                 if (currentMinute !== lastProcessedMinute) {
                     lastProcessedMinute = currentMinute;
-                    // El analyzer ahora tiene la lógica de inercia que corregimos
                     const analysis = await analyzer.runAnalysis(price);
                     
                     await MarketSignal.findOneAndUpdate(
@@ -152,18 +153,21 @@ function setupMarketWS(io) {
                 // 2. EMISIÓN DE PRECIO AL FRONTEND
                 io.emit('marketData', { price, priceChangePercent });
                 
-                // 3. CICLO DE BOT (Atómico: Profit, Coberturas, Órdenes)
+                // 🧠 3. MOTOR DE INTELIGENCIA ARTIFICIAL (Independiente)
+                // Le pasamos el precio actual al AIEngine para su análisis autónomo
+                aiEngine.analyze(price);
+
+                // 4. CICLO DE AUTOBOT (Atómico: Profit, Coberturas, Órdenes)
                 await autobotLogic.botCycle(price);
             }
         } catch (e) { 
-            // Silenciamos errores de parseo de strings simples como "pong"
+            // Manejo de errores silencioso para protocolos WS
         }
     });
 
     marketWs.on('close', () => {
         console.log("⚠️ [MARKET_WS] Cerrado. Reconectando en 2s...");
         if (marketHeartbeat) clearInterval(marketHeartbeat);
-        // Reconexión rápida (2 segundos) para no perder señales de RSI
         setTimeout(() => setupMarketWS(io), 2000);
     });
 

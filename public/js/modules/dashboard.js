@@ -121,11 +121,38 @@ function setupSocketListeners() {
         loadAndDisplayKpis();
     });
 
-    // Fallback de desconexión
+    // 6. Fallback de desconexión
     socket.on('disconnect', () => {
         updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
         updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
     });
+    
+    // 7. --- NUEVO: MONITOR DE IA EN DASHBOARD ---
+socket.on('ai-decision-update', (data) => {
+    const confidenceVal = Math.round(data.confidence * 100);
+    
+    // Actualizar porcentaje y círculo de progreso
+    const confidenceEl = document.getElementById('ai-mini-confidence');
+    const progressEl = document.getElementById('ai-mini-progress');
+    if (confidenceEl) confidenceEl.textContent = `${confidenceVal}%`;
+    if (progressEl) progressEl.style.strokeDasharray = `${confidenceVal}, 100`;
+
+    // Actualizar texto de "pensamiento"
+    const thoughtEl = document.getElementById('ai-mini-thought');
+    if (thoughtEl) thoughtEl.textContent = data.message;
+
+    // Cambiar color si la confianza es alta
+    const actionEl = document.getElementById('ai-mini-action');
+    if (actionEl) {
+        if (confidenceVal > 80) {
+            actionEl.textContent = "ALTA PROBABILIDAD";
+            actionEl.className = "text-[9px] font-bold text-emerald-400 mt-1 uppercase";
+        } else {
+            actionEl.textContent = "ANALIZANDO PATRONES";
+            actionEl.className = "text-[9px] font-bold text-blue-400 mt-1 uppercase";
+        }
+    }
+});
 }
 
 // --- CARGA DE DATOS DESDE API (Analíticas) ---
