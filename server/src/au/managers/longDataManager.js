@@ -15,7 +15,6 @@ const SELL_FEE_PERCENT = 0.001;
 async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState, updateLStateData } = dependencies;
     
-    // 1. Extraer datos reales de la ejecución en BitMart
     const executedQty = parseFloat(orderDetails.filledSize || 0);
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
@@ -26,63 +25,61 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         return;
     }
 
+    // --- CORRECCIÓN DE BALANCE ---
+    // Calculamos el nuevo balance una sola vez aquí
+    const currentBalance = parseFloat(botState.lbalance || 0);
+    const finalizedLBalance = parseFloat((currentBalance - baseExecutedValue).toFixed(8));
+    // -----------------------------
+
     const currentLData = botState.lStateData;
     const isFirstOrder = (currentLData.orderCountInCycle || 0) === 0;
     
-    // 2. Cálculos de Acumulación con Saneamiento de Precisión
     const currentTotalQty = isFirstOrder ? 0 : parseFloat(currentLData.ac || 0);
     const currentAI = isFirstOrder ? 0 : parseFloat(currentLData.ai || 0);
     
-    // CORRECCIÓN: Fix de precisión (8 decimales) para evitar el 0.00018999...
     const newTotalQty = parseFloat((currentTotalQty + executedQty).toFixed(8)); 
     const newAI = currentAI + baseExecutedValue;
     const newPPC = newAI / newTotalQty;
     const newOrderCount = (currentLData.orderCountInCycle || 0) + 1;
 
-    // 3. Recálculo del LTPrice (Take Profit)
-    // CORRECCIÓN: El target debe bajar junto con el PPC promediado
     const profitPercent = parseNumber(botState.config.long.profit_percent) / 100;
     const newLTPrice = newPPC * (1 + profitPercent);
 
-    // 4. Proyección de la Siguiente Cobertura (Lógica Exponencial)
     const { price_var, size_var, purchaseUsdt } = botState.config.long;
     const newNextPrice = executedPrice * (1 - (parseNumber(price_var) / 100));
-    
-    // CORRECCIÓN: Salta al siguiente requerimiento (ej: de 12 a 24 USDT)
     const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount);
     
-    // Recalcular cuántas órdenes más soporta el balance real restante
+    // Usamos el balance ya finalizado para el cálculo de cobertura
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
-        botState.lbalance - baseExecutedValue, 
+        finalizedLBalance, 
         executedPrice, 
         purchaseUsdt, 
         parseNumber(price_var)/100, 
         parseNumber(size_var)/100
     );
 
-    // 5. Persistencia y Sincronización Atómica
     await saveExecutedOrder({ ...orderDetails, side: 'buy' }, LSTATE);
 
     await updateGeneralBotState({
         lcoverage: coveragePrice,
         lnorder: numberOfOrders,
-        lbalance: botState.lbalance - baseExecutedValue, // Sincroniza el gasto real
-        ltprice: newLTPrice,                            // CORRECCIÓN: Actualiza el precio de salida
+        lbalance: finalizedLBalance, // <--- Usamos la variable saneada
+        ltprice: newLTPrice,
         lStateData: {
             ...currentLData,
             ac: newTotalQty,
             ai: newAI,
             ppc: newPPC,
             lastOrder: null,
-            lastExecutionPrice: executedPrice,      // Registro del precio de esta orden
-            requiredCoverageAmount: nextRequiredAmount, // Salto exponencial 2^n
+            lastExecutionPrice: executedPrice,
+            requiredCoverageAmount: nextRequiredAmount,
             nextCoveragePrice: newNextPrice,
             orderCountInCycle: newOrderCount,
             cycleStartTime: isFirstOrder ? new Date() : currentLData.cycleStartTime
         }
     });
 
-    log(`✅ [L-DATA] Orden #${newOrderCount} procesada. PPC: ${newPPC.toFixed(2)}. Target Sale: ${newLTPrice.toFixed(2)}. Próx: ${nextRequiredAmount} USDT`, 'success');
+    log(`✅ [L-DATA] Balance actualizado: $${finalizedLBalance}. PPC: ${newPPC.toFixed(2)}`, 'success');
 }
 
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
