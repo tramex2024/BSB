@@ -2,6 +2,8 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulShortBuy } = require('../../managers/shortDataManager');
+// 🟢 CORRECCIÓN: Importación esencial para que el historial de ciclos (tradecycles) no quede vacío
+const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
 
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
@@ -42,6 +44,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
                 updateBotState, 
                 updateSStateData, 
                 updateGeneralBotState, 
+                logSuccessfulCycle, // 🟢 CORRECCIÓN: Inyectamos el servicio para guardar el profit en la DB
                 config: botState.config 
             };
             
