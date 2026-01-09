@@ -22,6 +22,37 @@ export function initializeDashboardView() {
     // Cargas iniciales de datos históricos y estadísticas
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
+
+    // Al final de initializeDashboardView()
+const testBtn = document.getElementById('test-notification-btn');
+if (testBtn) {
+    testBtn.addEventListener('click', () => {
+        console.log("Botón presionado - Iniciando prueba");
+
+        // 1. Sonido (Cambiamos a una URL de respaldo muy confiable)
+        const testAudio = new Audio('https://actions.google.com/sounds/v1/foley/door_bell.ogg');
+        testAudio.volume = 1.0;
+        testAudio.play()
+            .then(() => console.log("Sonido ok"))
+            .catch(err => alert("El navegador bloqueó el sonido. Haz clic en la página primero."));
+
+        // 2. Luz (Cambiamos a un estilo directo para que no dependa de Tailwind)
+        const precioEl = document.getElementById('auprice');
+        if (precioEl) {
+            const contenedor = precioEl.parentElement;
+            contenedor.style.transition = "all 0.5s";
+            contenedor.style.backgroundColor = "#059669"; // Verde esmeralda fuerte
+            
+            setTimeout(() => {
+                contenedor.style.backgroundColor = ""; // Vuelve al color original
+            }, 1000);
+        } else {
+            console.error("No se encontró el elemento con ID 'auprice'");
+        }
+    });
+}
+
+
 }
 
 // --- CONFIGURACIÓN DEL GRÁFICO ---
