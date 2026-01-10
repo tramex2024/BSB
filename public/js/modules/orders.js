@@ -13,7 +13,8 @@ function createOrderHtml(order) {
     const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
     
     // Normalización de estados y tiempos
-    const state = (order.state || order.status || 'UNKNOWN').toUpperCase();
+    const rawState = (order.state || order.status || 'UNKNOWN').toString();
+    const state = rawState.toUpperCase();
     const timestamp = order.createTime || order.create_time || Date.now();
     
     // Formato de fecha: DD/MM/YYYY HH:MM:SS
@@ -84,12 +85,24 @@ function displayOrders(orders, orderListElement, filterType) {
     let filteredOrders = orders;
 
     if (filterType === 'filled') {
-        filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('filled'));
+        filteredOrders = orders.filter(o => {
+            const s = (o.state || o.status || '').toString().toLowerCase();
+            return s.includes('filled') || s.includes('completed');
+        });
     } else if (filterType === 'cancelled') {
-        filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
+        filteredOrders = orders.filter(o => {
+            const s = (o.state || o.status || '').toString().toLowerCase();
+            return s.includes('cancel');
+        });
     } else if (filterType === 'opened') {
-        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
-        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
+        // Incluimos estados numéricos de BitMart (8 = New) y estados activos comunes
+        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending', '8', 'triggered', '6'];
+        
+        filteredOrders = orders.filter(o => {
+            const s = (o.state || o.status || '').toString().toLowerCase();
+            // Si el estado está en la lista O no es un estado final, se considera abierta
+            return openStatuses.includes(s) || (!s.includes('filled') && !s.includes('cancel') && !s.includes('completed'));
+        });
     }
 
     if (filteredOrders.length === 0) {
@@ -118,6 +131,7 @@ export async function fetchOrders(status, orderListElement) {
         </div>`;
 
     try {
+        // Si pedimos 'all', el backend suele devolver las ejecutadas (filled)
         const endpoint = status === 'all' ? 'filled' : status; 
         
         const response = await fetch(`${BACKEND_URL}/api/orders/${endpoint}`, {
@@ -146,15 +160,19 @@ export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab)
     const orderListElement = document.getElementById(listElementId);
     if (!orderListElement) return;
 
-    // En la pestaña "All" priorizamos el historial completo cargado por fetchOrders
-    if (activeOrderTab === 'all') return; 
-
-    // Solo actualizamos si el usuario está mirando las órdenes abiertas
-    if (activeOrderTab !== 'opened') return;
+    // Permitimos actualizaciones si estamos en la pestaña 'all' o 'opened'
+    if (activeOrderTab !== 'opened' && activeOrderTab !== 'all') return;
 
     const orders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
     
-    if (orders.length === 0) {
+    // Filtrar solo las que realmente están abiertas para no ensuciar la pestaña Opened
+    const onlyOpen = orders.filter(o => {
+        const s = (o.state || o.status || '').toString().toLowerCase();
+        const openStatuses = ['new', 'partially_filled', 'open', 'active', '8', 'triggered', '6'];
+        return openStatuses.includes(s) || (!s.includes('filled') && !s.includes('cancel'));
+    });
+
+    if (onlyOpen.length === 0 && activeOrderTab === 'opened') {
         orderListElement.innerHTML = `
             <div class="flex flex-col items-center justify-center py-12 text-gray-600">
                 <i class="fas fa-check-circle text-2xl mb-2 opacity-20"></i>
@@ -163,5 +181,7 @@ export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab)
         return;
     }
 
-    orderListElement.innerHTML = orders.map(order => createOrderHtml(order)).join('');
+    if (onlyOpen.length > 0) {
+        orderListElement.innerHTML = onlyOpen.map(order => createOrderHtml(order)).join('');
+    }
 }

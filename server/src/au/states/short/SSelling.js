@@ -24,7 +24,7 @@ async function run(dependencies) {
             const distToDCA = (((sStateData.nextCoveragePrice / currentPrice) - 1) * 100).toFixed(2);
             const distToTP = (((currentPrice / botState.stprice) - 1) * 100).toFixed(2);
             const pnlActual = botState.sprofit || 0;
-            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA @: ${sStateData.nextCoveragePrice.toFixed(2)} (+${distToDCA}%) | TP @: ${botState.stprice.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA : ${sStateData.nextCoveragePrice.toFixed(2)} (+${distToDCA}%) | TP : ${botState.stprice.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }  
 
         // 2. LÓGICA DE APERTURA - Inyectamos currentPrice
