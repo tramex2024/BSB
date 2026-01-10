@@ -29,14 +29,17 @@ class AIEngine {
     }
 
     async init() {
-        try {
-            const state = await Autobot.findOne({});
-            this.virtualBalance = state?.virtualAiBalance || 1000.00;
-            this._log(`Sistema Iniciado: Modo Virtual`, 0.5);
-        } catch (e) {
-            console.error("Error en init de AIEngine:", e);
-        }
+    try {
+        // FUERZA EL RESETEO A 100 AL ARRANCAR (Solo una vez)
+        await Autobot.updateOne({}, { $set: { virtualAiBalance: 100.00 } });
+        
+        const state = await Autobot.findOne({});
+        this.virtualBalance = 100.00; // Reset local
+        this._log(`Sistema Reiniciado a $100.00`, 0.5);
+    } catch (e) {
+        console.error("Error en reset de AIEngine:", e);
     }
+}
 
     toggle(action) {
         this.isRunning = (action === 'start');
@@ -79,34 +82,27 @@ class AIEngine {
     }
 
     async _executeStrategy(price) {
-        // Reducido a 5 para el test de estrés
-        if (this.history.length < 5) {
-            this._log(`Construyendo memoria neural... (${this.history.length}/5)`, 0.2);
-            return;
-        }
-
-        const analysis = StrategyManager.calculate(this.history);
-        
-        // Lógica de respaldo ultra-sensible para el test
-        if (!analysis || !analysis.adx) {
-            const prevPrice = this.history[this.history.length - 2].close;
-            if (price > prevPrice && this.lastEntryPrice === 0) {
-                await this._trade('BUY', price, 0.85);
-            } else if (price < prevPrice && this.lastEntryPrice > 0) {
-                await this._trade('SELL', price, 0.85);
-            }
-            return;
-        }
-
-        const { adx } = analysis;
-        // ADX > 5 para que dispare casi siempre durante el test
-        if (adx.adx > 5 && adx.pdi > adx.mdi && this.lastEntryPrice === 0) {
-            await this._trade('BUY', price, 0.85);
-        } 
-        else if (adx.mdi > adx.pdi && this.lastEntryPrice > 0) {
-            await this._trade('SELL', price, 0.85);
-        }
+    // 1. Restauramos la memoria mínima a 28 velas (aprox 30 min de datos)
+    if (this.history.length < 28) {
+        this._log(`Construyendo memoria neural... (${this.history.length}/28)`, 0.2);
+        return;
     }
+
+    const analysis = StrategyManager.calculate(this.history);
+    
+    if (!analysis || !analysis.adx) return;
+
+    const { adx, stoch, rsi } = analysis; // Asumiendo que StrategyManager da RSI
+
+// ESTRATEGIA PROFESIONAL:
+// 1. ADX > 25 (Fuerza de tendencia)
+// 2. PDI > MDI (Tendencia Alcista)
+// 3. RSI < 60 (No estamos en zona de burbuja/sobrecompra)
+// 4. StochK < 80 (Confirmación de entrada limpia)
+
+if (adx.adx > 25 && adx.pdi > adx.mdi && rsi < 60 && stoch.stochK < 80 && this.lastEntryPrice === 0) {
+    await this._trade('BUY', price, 0.9);
+}
 
     async _trade(side, price, conf) {
         try {
