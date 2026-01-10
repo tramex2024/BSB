@@ -20,39 +20,48 @@ exports.getOrders = async (req, res) => {
 
         switch (status) {
             case 'opened':
-                // ✅ RESTAURADO: Consultamos la API de BitMart para ver órdenes activas
+                // Consultamos órdenes activas (las que están ejecutando la estrategia exponencial)
                 const openData = await bitmartService.getOpenOrders(symbol);
-                // bitmartService.getOpenOrders devuelve { orders: [...] }
+                // Aseguramos que devolvemos un array plano para que el frontend lo mapee fácil
                 result = openData.orders || [];
                 break;
 
             case 'filled':
             case 'cancelled':
             case 'all':
-                // Configuración de historial (90 días por defecto)
-                const ninetyDaysAgo = new Date();
-                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                
+                // Para el historial, configuramos los parámetros que bitmartService.getHistoryOrders espera
                 const historyParams = {
                     symbol: symbol,
-                    startTime: ninetyDaysAgo.getTime(),
-                    endTime: Date.now(),
-                    limit: 100
+                    limit: 100,
+                    // Pasamos el status directamente para que el service lo mapee con orderStatusMap
+                    status: status 
                 };
                 
-                // Aplicamos el filtro de estado para el historial
-                if (status !== 'all') {
-                    historyParams.order_state = status; 
-                }
+                // Obtenemos el historial normalizado
+                const historyData = await bitmartService.getRecentOrders(symbol);
                 
-                result = await bitmartService.getHistoryOrders(historyParams);
+                // Si el status no es 'all', filtramos localmente para asegurar precisión 
+                // (útil si el mapeo de la API tiene discrepancias)
+                if (status !== 'all') {
+                    result = historyData.filter(o => {
+                        const s = (o.state || o.status || '').toString().toLowerCase();
+                        if (status === 'filled') return s.includes('filled') || s === '1';
+                        if (status === 'cancelled') return s.includes('cancel') || s === '6';
+                        return true;
+                    });
+                } else {
+                    result = historyData;
+                }
                 break;
                 
             default:
                 return res.status(400).json({ success: false, message: 'Parámetro de estado inválido' });
         }
 
-        // BitMart Service ya normaliza los resultados, así que los enviamos directamente
+        // Registro para depuración en la consola del servidor
+        console.log(`[ORDER_CONTROLLER] ✅ Enviando ${result.length} órdenes al frontend.`);
+        
+        // Enviamos el array directamente
         res.status(200).json(result);
         
     } catch (error) {

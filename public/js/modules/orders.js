@@ -98,16 +98,31 @@ function displayOrders(orders, orderListElement, filterType) {
  */
 export async function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
+    
+    // Mostramos un loader visual
+    orderListElement.innerHTML = `<p class="text-center py-10 text-gray-500 animate-pulse text-[10px] uppercase tracking-widest">Fetching ${status} orders...</p>`;
+
     try {
+        const token = localStorage.getItem('token');
+        // IMPORTANTE: Verifica si tu backend usa /api/orders o /api/v1/orders
         const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
         });
+
         const data = await response.json();
-        // Normalizamos la entrada para que siempre sea un array
-        const orders = Array.isArray(data) ? data : (data.orders || data.data || []);
-        displayOrders(orders, orderListElement, status);
+        console.log(`[DEBUG] Datos recibidos para ${status}:`, data);
+
+        // El controlador envía el array directamente: res.json(result)
+        // Por lo tanto, 'data' ya es el array.
+        const ordersArray = Array.isArray(data) ? data : (data.orders || []);
+        
+        displayOrders(ordersArray, orderListElement, status);
     } catch (error) {
-        console.error("Fetch error:", error);
+        console.error("❌ Error al cargar órdenes:", error);
+        orderListElement.innerHTML = `<p class="text-center py-10 text-red-400 text-[10px] uppercase font-bold">Error loading orders</p>`;
     }
 }
 
