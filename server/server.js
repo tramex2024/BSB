@@ -29,24 +29,10 @@ app.use(express.json());
 
 // Configuración de CORS mejorada
 app.use(cors({
-    origin: function (origin, callback) {
-        // Permitimos: Vercel, Localhost y también si el origen es "null" o "undefined" (común en algunos navegadores)
-        const allowedOrigins = [
-            "https://bsb-lime.vercel.app", 
-            "http://localhost:3000",
-            "http://localhost:5000"
-        ];
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('CORS no permitido para este origen'));
-        }
-    },
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with'],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    origin: true, // Permite cualquier origen que conecte
     credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with']
 }));
 
 // --- 3. CONFIGURACIÓN DE SOCKET.IO ---
