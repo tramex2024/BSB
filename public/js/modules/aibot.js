@@ -1,35 +1,95 @@
-// public/js/modules/aibot.js
+// Archivo: public/js/modules/aibot.js
 
 import { socket } from '../main.js';
 
-// 🔗 CONFIGURACIÓN DE CONEXIÓN DIRECTA
-const API_BASE_URL = 'https://bsb-v2-0.onrender.com'; // Asegúrate de que esta sea tu URL de Render
-
 export function initializeAibotView() {
-    console.log("🚀 Sistema IA: Inicializando interfaz directa...");
+    console.log("🚀 Sistema IA: Inicializando interfaz vía WebSockets...");
     setupAISocketListeners();
     setupAIControls();
     loadInitialAIHistory();
 }
 
+/**
+ * 1. ESCUCHADORES DE EVENTOS (Recibir datos del servidor)
+ */
 function setupAISocketListeners() {
+    // Respuesta inicial de estado (Saldo y si está corriendo)
+    socket.on('ai-status-init', (state) => {
+        console.log("📊 Estado IA recibido:", state);
+        const btn = document.getElementById('btn-start-ai');
+        const balanceEl = document.getElementById('ai-virtual-balance');
+        
+        if (btn) setBtnUI(btn, state.isRunning);
+        if (balanceEl && state.virtualBalance !== undefined) {
+            balanceEl.textContent = `$${state.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} USDT`;
+        }
+    });
+
+    // Actualización de estado (Cuando alguien pulsa el botón)
+    socket.on('ai-status-update', (data) => {
+        const btn = document.getElementById('btn-start-ai');
+        if (btn) {
+            setBtnUI(btn, data.isRunning);
+            btn.disabled = false; // Reactivar tras el procesamiento
+        }
+        if (data.virtualBalance !== undefined) {
+            updateAIBalance({ currentVirtualBalance: data.virtualBalance });
+        }
+    });
+
+    // Datos del historial
+    socket.on('ai-history-data', (history) => {
+        const tableBody = document.getElementById('ai-history-table-body');
+        if (tableBody && Array.isArray(history)) {
+            tableBody.innerHTML = '';
+            history.forEach(order => appendOrderToTable(order));
+        }
+    });
+
+    // Decisiones en tiempo real del motor
     socket.on('ai-decision-update', (data) => {
         updateAIUI(data);
     });
 
+    // Cuando se ejecuta una orden virtual
     socket.on('ai-order-executed', (data) => {
         updateAIBalance(data);
         addTradeToLog(data);
         appendOrderToTable(data);
         playNeuralSound(data.side);
     });
+}
 
-    socket.on('ai-status-update', (data) => {
-        const btn = document.getElementById('btn-start-ai');
-        if (btn) setBtnUI(btn, data.isRunning);
+/**
+ * 2. CONTROLES DE INTERFAZ (Enviar datos al servidor)
+ */
+function setupAIControls() {
+    const btn = document.getElementById('btn-start-ai');
+    if (!btn) return;
+
+    // Pedir estado inicial al conectar
+    socket.emit('get-ai-status');
+
+    btn.addEventListener('click', () => {
+        const isCurrentlyRunning = btn.textContent.includes("DETENER");
+        const action = isCurrentlyRunning ? 'stop' : 'start';
+
+        btn.disabled = true;
+        btn.textContent = "PROCESANDO...";
+
+        // Enviar orden de encendido/apagado vía Socket
+        socket.emit('toggle-ai', { action: action });
     });
 }
 
+function loadInitialAIHistory() {
+    // Pedir historial vía Socket
+    socket.emit('get-ai-history');
+}
+
+/**
+ * 3. FUNCIONES DE ACTUALIZACIÓN VISUAL (DOM)
+ */
 function updateAIUI(data) {
     const confidenceEl = document.getElementById('ai-confidence-value');
     const predictionText = document.getElementById('ai-prediction-text');
@@ -72,71 +132,6 @@ function addTradeToLog(data) {
     }
 }
 
-async function setupAIControls() {
-    const btn = document.getElementById('btn-start-ai');
-    const logContainer = document.getElementById('ai-log-container');
-    const balanceEl = document.getElementById('ai-virtual-balance');
-    
-    if (!btn) return;
-
-    try {
-        const token = localStorage.getItem('token');
-        // Llamada con URL completa
-        const response = await fetch(`${API_BASE_URL}/api/ai/status`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const state = await response.json();
-        setBtnUI(btn, state.isRunning);
-        if (state.virtualBalance) {
-            balanceEl.textContent = `$${state.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} USDT`;
-        }
-    } catch (err) {
-        console.error("Error obteniendo estado inicial:", err);
-    }
-
-    btn.addEventListener('click', async () => {
-        const token = localStorage.getItem('token');
-        const isCurrentlyRunning = btn.textContent.includes("DETENER");
-        const action = isCurrentlyRunning ? 'stop' : 'start';
-
-        btn.disabled = true;
-        btn.textContent = "PROCESANDO...";
-
-        try {
-            // Llamada con URL completa
-            const response = await fetch(`${API_BASE_URL}/api/ai/toggle`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ action: action })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                setBtnUI(btn, result.isRunning);
-                const statusMsg = document.createElement('div');
-                const timestamp = new Date().toLocaleTimeString();
-                
-                if (result.isRunning) {
-                    statusMsg.className = 'text-emerald-500 font-bold border-l-2 border-emerald-500 pl-2 mt-2 bg-emerald-500/5 py-1 text-[10px]';
-                    statusMsg.innerHTML = `[${timestamp}] 🚀 NÚCLEO IA: ONLINE`;
-                } else {
-                    statusMsg.className = 'text-red-500 font-bold border-l-2 border-red-500 pl-2 mt-2 bg-red-500/5 py-1 text-[10px]';
-                    statusMsg.innerHTML = `[${timestamp}] 🛑 NÚCLEO IA: OFFLINE`;
-                }
-                if (logContainer) logContainer.prepend(statusMsg);
-            }
-        } catch (err) {
-            console.error("Error toggle:", err);
-        } finally {
-            btn.disabled = false;
-        }
-    });
-}
-
 function setBtnUI(btn, isRunning) {
     if (isRunning) {
         btn.textContent = "DETENER NÚCLEO IA";
@@ -145,22 +140,6 @@ function setBtnUI(btn, isRunning) {
         btn.textContent = "ACTIVAR NÚCLEO IA";
         btn.className = "w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg shadow-blue-900/40 transition-all cursor-pointer";
     }
-}
-
-async function loadInitialAIHistory() {
-    const tableBody = document.getElementById('ai-history-table-body');
-    const token = localStorage.getItem('token');
-    try {
-        // Llamada con URL completa
-        const response = await fetch(`${API_BASE_URL}/api/ai/history`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const history = await response.json();
-        if (tableBody && Array.isArray(history)) {
-            tableBody.innerHTML = '';
-            history.forEach(order => appendOrderToTable(order));
-        }
-    } catch (err) { console.error("Error historial:", err); }
 }
 
 function appendOrderToTable(order) {
@@ -199,5 +178,5 @@ function playNeuralSound(type) {
         gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.1);
-    } catch (e) { console.log("Audio bloqueado"); }
+    } catch (e) { }
 }
