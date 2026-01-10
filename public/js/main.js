@@ -87,6 +87,7 @@ function processNextLog() {
  * Carga el HTML y activa la lógica JS de la pestaña seleccionada
  */
 export async function initializeTab(tabName) {
+    // 1. Limpiar procesos previos (Intervalos y Gráficos)
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
     
@@ -98,27 +99,46 @@ export async function initializeTab(tabName) {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
+    // Efecto de transición: Ocultar
     mainContent.style.opacity = '0';
 
     try {
+        // 2. Cargar el archivo HTML de la pestaña
         const response = await fetch(`./${tabName}.html`);
-        if (!response.ok) throw new Error("Plantilla no encontrada");
+        if (!response.ok) throw new Error(`Plantilla no encontrada: ${tabName}.html`);
         const html = await response.text();
         
+        // Insertar HTML en el contenedor principal
         mainContent.innerHTML = html;
         mainContent.style.opacity = '1';
 
+        // 3. Cargar el módulo JS correspondiente (dashboard.js, autobot.js, aibot.js)
         if (views[tabName]) {
-            const module = await views[tabName](); 
-            const initFunctionName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            const module = await views[tabName]();
+            
+            // Creamos las dos variaciones posibles del nombre de la función
+            // Ejemplo para aibot: initializeAibotView y initializeAIBotView
+            const formatNormal = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            const formatUpper = `initialize${tabName.toUpperCase()}View`;
 
-            if (module[initFunctionName]) {
-                await module[initFunctionName]();
+            const initFn = module[formatNormal] || module[formatUpper];
+
+            if (typeof initFn === 'function') {
+                console.log(`✅ Inicializando vista: ${tabName}`);
+                await initFn();
+            } else {
+                console.warn(`⚠️ Módulo cargado pero no se encontró la función de inicio (${formatNormal})`);
             }
         }
     } catch (error) {
-        console.error(`Error al cargar ${tabName}:`, error);
-        mainContent.innerHTML = `<div class="p-10 text-center text-red-400">Error cargando vista: ${tabName}</div>`;
+        console.error(`❌ Error al cargar pestaña [${tabName}]:`, error);
+        mainContent.innerHTML = `
+            <div class="p-10 text-center">
+                <div class="text-red-400 font-bold mb-2">Error de Sistema</div>
+                <div class="text-gray-500 text-xs font-mono">${error.message}</div>
+                <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-gray-800 text-white rounded-lg text-xs">Reintentar</button>
+            </div>
+        `;
         mainContent.style.opacity = '1';
     }
 }

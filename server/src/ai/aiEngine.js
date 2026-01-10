@@ -29,6 +29,26 @@ class AIEngine {
         this.PANIC_STOP_BALANCE = 800.00; 
         this.MIN_TRADE_AMOUNT = 10.00;
     }
+    
+    // Dentro de la clase AIEngine en aiEngine.js
+toggle(action) {
+    if (action === 'start') {
+        this.isRunning = true;
+        this._log("🚀 NÚCLEO IA: INICIADO", 1);
+    } else {
+        this.isRunning = false;
+        this._log("🛑 NÚCLEO IA: DETENIDO", 0);
+    }
+    return this.isRunning;
+}
+
+getStatus() {
+    return {
+        isRunning: this.isRunning,
+        virtualBalance: this.virtualBalance,
+        mode: this.IS_VIRTUAL_MODE ? 'VIRTUAL' : 'REAL'
+    };
+}
 
     setIo(io) { 
         this.io = io; 
@@ -90,62 +110,63 @@ class AIEngine {
     }
 
     async _trade(side, price, conf) {
-        try {
-            // CÁLCULO DE MONTO
-            let amount = this.virtualBalance * this.RISK_PER_TRADE;
-            if (amount < this.MIN_TRADE_AMOUNT) amount = this.MIN_TRADE_AMOUNT;
+    try {
+        // CÁLCULO DE MONTO
+        let amount = this.virtualBalance * this.RISK_PER_TRADE;
+        if (amount < this.MIN_TRADE_AMOUNT) amount = this.MIN_TRADE_AMOUNT;
 
-            if (this.IS_VIRTUAL_MODE) {
-                // --- EJECUCIÓN VIRTUAL ---
-                const newOrder = new AIBotOrder({ 
-                    symbol: 'BTC_USDT', side, price, amount, isVirtual: true, confidenceScore: (conf * 100).toFixed(2) 
-                });
-                await newOrder.save();
+        if (this.IS_VIRTUAL_MODE) {
+            // --- EJECUCIÓN VIRTUAL ---
+            const newOrder = new AIBotOrder({ 
+                symbol: 'BTC_USDT', 
+                side, 
+                price, 
+                amount, 
+                isVirtual: true, 
+                confidenceScore: (conf * 100).toFixed(2) 
+            });
+            await newOrder.save();
 
-                if (side === 'BUY') {
-                    this.lastEntryPrice = price;
-                    this.highestPrice = price;
-                    this.virtualBalance -= amount;
-                } else {
-                    const performance = (price / this.lastEntryPrice) - 1;
-                    const profitReal = (amount * performance) - ((amount * (1 + performance)) * 0.001);
-                    this.virtualBalance += (amount + profitReal);
-                    
-                    this.tradeLog.push({ profit: profitReal, performance });
-                    this._autoOptimize();
-                    this.lastEntryPrice = 0;
-                    this.highestPrice = 0;
-                }
+            let pnlLast = 0;
 
-                await Autobot.updateOne({}, { $set: { virtualAiBalance: this.virtualBalance } });
-                if (this.io) this.io.emit('ai-order-executed', { isVirtual: true, balance: this.virtualBalance });
-                this._log(`IA ${side} Virtual Ejecutada`, conf);
-
+            if (side === 'BUY') {
+                this.lastEntryPrice = price;
+                this.highestPrice = price;
+                this.virtualBalance -= amount;
             } else {
-                // --- 🟢 AQUÍ IRÁ LA CONEXIÓN AL BOT REAL EN EL FUTURO ---
-                this._log(`IA intentó operar en REAL: ${side} (Funcionalidad bloqueada)`, 1);
+                // Cálculo de PNL al vender
+                const performance = (price / this.lastEntryPrice) - 1;
+                pnlLast = (amount * performance) - ((amount * (1 + performance)) * 0.001);
+                this.virtualBalance += (amount + pnlLast);
+                
+                this.tradeLog.push({ profit: pnlLast, performance });
+                this._autoOptimize();
+                this.lastEntryPrice = 0;
+                this.highestPrice = 0;
             }
 
-        } catch (e) { console.error("Error en Trade:", e); }
-    }
+            // Guardar balance en la DB
+            await Autobot.updateOne({}, { $set: { virtualAiBalance: this.virtualBalance } });
 
-    _autoOptimize() {
-        if (this.tradeLog.length < 5) return;
-        const lastFive = this.tradeLog.slice(-5);
-        const winRate = lastFive.filter(t => t.profit > 0).length / 5;
+            // 📢 NOTIFICACIÓN AL FRONTEND (Sincronizado con aibot.js)
+            if (this.io) {
+                this.io.emit('ai-order-executed', { 
+                    side: side,
+                    price: price.toFixed(2),
+                    amount: amount.toFixed(2),
+                    currentVirtualBalance: this.virtualBalance, // <--- CAMBIO CLAVE
+                    pnlLastTrade: pnlLast.toFixed(2),
+                    confidenceScore: (conf * 100).toFixed(0)
+                });
+            }
 
-        if (winRate < 0.4) {
-            this.RISK_PER_TRADE = Math.max(0.05, this.RISK_PER_TRADE - 0.01);
-            this.TRAILING_PERCENT = Math.max(0.003, this.TRAILING_PERCENT - 0.001);
-        } else if (winRate > 0.8) {
-            this.RISK_PER_TRADE = Math.min(0.20, this.RISK_PER_TRADE + 0.01);
-            this.TRAILING_PERCENT = Math.min(0.015, this.TRAILING_PERCENT + 0.002);
+            this._log(`IA ${side} Virtual Ejecutada @ ${price}`, conf);
+
+        } else {
+            this._log(`IA intentó operar en REAL: ${side} (Bloqueado)`, 1);
         }
-    }
 
-    _log(msg, conf) {
-        if (this.io) this.io.emit('ai-decision-update', { confidence: conf, message: msg });
-    }
+    } catch (e) { console.error("Error en Trade:", e); }
 }
 
 module.exports = new AIEngine();
