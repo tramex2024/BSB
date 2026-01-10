@@ -71,16 +71,13 @@ const bitmartService = {
     },
 
     // --- Órdenes ---
-    
-    // MEJORA: Mapeo consistente para órdenes abiertas
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
-        // BitMart V4 devuelve la lista en res.data.data
         const list = res.data?.data || [];
         return { 
             orders: list.map(o => ({
                 ...o,
-                state: o.state || 'new', // Aseguramos que el frontend vea un estado
+                state: o.state || 'new',
                 price: o.price || o.filled_price || 0,
                 size: o.size || o.filled_size || 0
             }))
@@ -101,7 +98,6 @@ const bitmartService = {
         
         return rawOrders.map(o => ({
             ...o,
-            // Normalización para el frontend (orders.js)
             price: parseFloat(o.priceAvg || o.price || 0),
             size: parseFloat(o.filledSize || o.size || 0),
             state: o.state || (o.status == 1 ? 'filled' : 'open')
@@ -139,6 +135,25 @@ const bitmartService = {
     getTicker: async (symbol) => {
         const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
         return res.data.tickers.find(t => t.symbol === symbol);
+    },
+
+    /**
+     * getKlines: RESTAURADO para el indicador RSI y el Analizador
+     */
+    getKlines: async (symbol, interval, limit = 200) => {
+        const res = await makeRequest('GET', '/spot/quotation/v3/klines', { 
+            symbol, step: interval, size: limit 
+        });
+        
+        // El analizador espera un array de objetos con estos campos
+        return (res.data || []).map(c => ({
+            timestamp: parseInt(c[0]),
+            open: parseFloat(c[1]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[3]),
+            close: parseFloat(c[4]),
+            volume: parseFloat(c[5])
+        }));
     },
 
     // --- Helpers ---
