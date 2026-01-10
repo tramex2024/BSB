@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/ai/:path*",
+      "destination": "https://bsb-v2-0.onrender.com/api/ai/:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://bsb-v2-0.onrender.com/api/:path*"
     }
