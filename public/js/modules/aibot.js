@@ -104,13 +104,30 @@ function addTradeToLog(data) {
 
 async function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
+    const logContainer = document.getElementById('ai-log-container');
+    const balanceEl = document.querySelector('.text-emerald-400.font-mono');
     if (!btn) return;
 
+    // 1. Sincronización inicial
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/ai/status', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const state = await response.json();
+        setBtnUI(btn, state.isRunning);
+    } catch (err) {
+        console.error("Error al obtener estado inicial:", err);
+    }
+
+    // 2. Evento Click (Interruptor)
     btn.addEventListener('click', async () => {
         const token = localStorage.getItem('token');
-        const isActivating = btn.textContent.includes("ACTIVAR");
-        btn.textContent = isActivating ? "INICIANDO..." : "DETENIENDO...";
+        const isCurrentlyRunning = btn.textContent.includes("DETENER");
+        const action = isCurrentlyRunning ? 'stop' : 'start';
+
         btn.disabled = true;
+        btn.textContent = isCurrentlyRunning ? "DESACTIVANDO..." : "INICIALIZANDO...";
 
         try {
             const response = await fetch('/api/ai/toggle', {
@@ -118,22 +135,59 @@ async function setupAIControls() {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify({ action: action })
             });
+
             const result = await response.json();
+
             if (result.success) {
-                btn.textContent = result.isRunning ? "NÚCLEO ONLINE" : "ACTIVAR NÚCLEO IA";
-                btn.className = result.isRunning ? 
-                    "w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold shadow-lg shadow-emerald-500/20 transition-all text-white" : 
-                    "w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-all text-white";
+                setBtnUI(btn, result.isRunning);
+                
+                const statusMsg = document.createElement('div');
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                
+                if (result.isRunning) {
+                    // Extraemos el saldo actual de la pantalla para el log
+                    const currentBalance = balanceEl ? balanceEl.textContent : "$1,000.00";
+                    
+                    statusMsg.className = 'text-emerald-500 font-bold border-l-2 border-emerald-500 pl-2 mt-2 bg-emerald-500/5 py-1';
+                    statusMsg.innerHTML = `
+                        <span class="text-[9px] text-emerald-700">[${timestamp}]</span><br>
+                        🚀 NÚCLEO IA: ONLINE<br>
+                        💰 SALDO INICIAL: ${currentBalance}
+                    `;
+                } else {
+                    statusMsg.className = 'text-red-500 font-bold border-l-2 border-red-500 pl-2 mt-2 bg-red-500/5 py-1';
+                    statusMsg.innerHTML = `
+                        <span class="text-[9px] text-red-700">[${timestamp}]</span><br>
+                        🛑 NÚCLEO IA: OFFLINE (SISTEMA DETENIDO)
+                    `;
+                }
+
+                if (logContainer) {
+                    logContainer.prepend(statusMsg);
+                }
             }
         } catch (err) {
+            console.error("Error en el toggle:", err);
             btn.textContent = "ERROR DE SISTEMA";
-            btn.className = "w-full py-3 bg-red-600 rounded-lg font-bold text-white";
+            btn.className = "w-full py-3 bg-orange-600 rounded-lg font-bold text-white";
         } finally {
             btn.disabled = false;
         }
     });
+}
+
+// Función para cambiar los colores y texto del botón
+function setBtnUI(btn, isRunning) {
+    if (isRunning) {
+        btn.textContent = "DETENER NÚCLEO IA";
+        btn.className = "w-full py-3 bg-red-600 hover:bg-red-500 rounded-lg font-bold shadow-lg shadow-red-900/40 transition-all text-white cursor-pointer";
+    } else {
+        btn.textContent = "ACTIVAR NÚCLEO IA";
+        btn.className = "w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold shadow-lg shadow-blue-900/40 transition-all text-white cursor-pointer";
+    }
 }
 
 async function loadInitialAIHistory() {
