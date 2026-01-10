@@ -91,82 +91,40 @@ class AIEngine {
         }
     }
 
-    async _executeStrategy(price) {
-        if (this.history.length < 28) return;
+    // server/src/ai/aiEngine.js
 
-        const analysis = StrategyManager.calculate(this.history);
-        if (!analysis || !analysis.adx || !analysis.stoch) return;
-
-        const { adx, stoch } = analysis;
-        let confidence = adx.adx / 100;
-
-        if (adx.adx > 25 && adx.pdi > adx.mdi && stoch.stochK < 80 && this.lastEntryPrice === 0) {
-            await this._trade('BUY', price, confidence);
-        } 
-        else if (adx.adx > 25 && adx.mdi > adx.pdi && this.lastEntryPrice > 0) {
-            await this._trade('SELL', price, confidence);
-        }
+async _executeStrategy(price) {
+    // Bajamos el requisito de historial de 28 a 5 velas para el test
+    if (this.history.length < 5) {
+        this._log(`Construyendo memoria neural... (${this.history.length}/5)`, 0.2);
+        return;
     }
 
-    async _trade(side, price, conf) {
-        try {
-            let amount = this.virtualBalance * this.RISK_PER_TRADE;
-            if (amount < this.MIN_TRADE_AMOUNT) amount = this.MIN_TRADE_AMOUNT;
-
-            if (this.IS_VIRTUAL_MODE) {
-                const newOrder = new AIBotOrder({ 
-                    symbol: 'BTC_USDT', side, price, amount, isVirtual: true, confidenceScore: (conf * 100).toFixed(2) 
-                });
-                await newOrder.save();
-
-                let pnlLast = 0;
-                if (side === 'BUY') {
-                    this.lastEntryPrice = price;
-                    this.highestPrice = price;
-                    this.virtualBalance -= amount;
-                } else {
-                    const perf = (price / this.lastEntryPrice) - 1;
-                    pnlLast = (amount * perf) - ((amount * (1 + perf)) * 0.001);
-                    this.virtualBalance += (amount + pnlLast);
-                    this.tradeLog.push({ profit: pnlLast });
-                    this._autoOptimize();
-                    this.lastEntryPrice = 0;
-                    this.highestPrice = 0;
-                }
-
-                await Autobot.updateOne({}, { $set: { virtualAiBalance: this.virtualBalance } });
-
-                if (this.io) {
-                    this.io.emit('ai-order-executed', { 
-                        side,
-                        price: price.toFixed(2),
-                        currentVirtualBalance: this.virtualBalance,
-                        pnlLastTrade: pnlLast.toFixed(2)
-                    });
-                }
-                this._log(`IA ${side} Virtual Ejecutada`, conf);
-            }
-        } catch (e) {
-            console.error("Error en Trade:", e);
+    const analysis = StrategyManager.calculate(this.history);
+    // Si StrategyManager no devuelve datos por falta de velas, usamos lógica simple de precio
+    if (!analysis || !analysis.adx) {
+        // Lógica de respaldo para el test: si el precio sube, compra; si baja, vende.
+        const prevPrice = this.history[this.history.length - 2].close;
+        if (price > prevPrice && this.lastEntryPrice === 0) {
+            await this._trade('BUY', price, 0.5);
+        } else if (price < prevPrice && this.lastEntryPrice > 0) {
+            await this._trade('SELL', price, 0.5);
         }
+        return;
     }
 
-    _autoOptimize() {
-        if (this.tradeLog.length < 5) return;
-        const lastFive = this.tradeLog.slice(-5);
-        const winRate = lastFive.filter(t => t.profit > 0).length / 5;
+    const { adx, stoch } = analysis;
+    
+    // --- TEST: UMBRALES MÍNIMOS (ADX > 5 en lugar de 25) ---
+    let confidence = 0.85; 
 
-        if (winRate < 0.4) {
-            this.RISK_PER_TRADE = Math.max(0.05, this.RISK_PER_TRADE - 0.01);
-        } else if (winRate > 0.8) {
-            this.RISK_PER_TRADE = Math.min(0.20, this.RISK_PER_TRADE + 0.01);
-        }
-    }
-
-    _log(msg, conf) {
-        if (this.io) {
-            this.io.emit('ai-decision-update', { confidence: conf, message: msg });
-        }
+    // Condición de COMPRA ultra-sensible
+    if (adx.adx > 5 && adx.pdi > adx.mdi && this.lastEntryPrice === 0) {
+        await this._trade('BUY', price, confidence);
+    } 
+    // Condición de VENTA ultra-sensible
+    else if ((adx.mdi > adx.pdi || price < this.lastEntryPrice * 0.998) && this.lastEntryPrice > 0) {
+        await this._trade('SELL', price, confidence);
     }
 }
 
