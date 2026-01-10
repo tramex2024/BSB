@@ -47,15 +47,24 @@ function setupConfigListeners() {
 }
 
 export async function initializeAutobotView() {
-    const auOrderList = document.getElementById('au-order-list');
+    // 1. Asegurar que el elemento DOM existe (con pequeño reintento si es necesario)
+    let auOrderList = document.getElementById('au-order-list');
+    if (!auOrderList) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        auOrderList = document.getElementById('au-order-list');
+    }
+
+    // 2. Inicializar Listeners de Configuración (Inputs de la Estrategia)
     setupConfigListeners();
 
+    // 3. Inicializar el Gráfico de TradingView (con delay para Renderizado)
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
+    // 4. Configurar el Botón de Start/Stop (con limpieza de eventos previos)
     const activateStartBtn = () => {
         const startBtn = document.getElementById('austart-btn');
         if (startBtn) {
@@ -71,7 +80,7 @@ export async function initializeAutobotView() {
                 try {
                     await toggleBotState(isRunning);
                 } catch (err) {
-                    console.error("❌ Error:", err);
+                    console.error("❌ Error al cambiar estado del bot:", err);
                 }
             });
             return true;
@@ -86,20 +95,16 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // --- GESTIÓN DE PESTAÑAS (UNIFICANDO RECUADRO SOMBREADO) ---
+    // 5. Gestión de Pestañas de Órdenes (Visual y Lógica)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            // TODAS mantienen el recuadro sombreado y borde sutil
             btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50', 'transition-all');
-
             if (btn.id === selectedId) {
-                // ACTIVA: Texto Verde + Brillo sutil en el borde
                 btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
                 btn.classList.remove('text-gray-500', 'font-normal');
             } else {
-                // INACTIVA: Texto Gris + Borde normal
                 btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
                 btn.classList.add('text-gray-500', 'font-normal');
             }
@@ -111,16 +116,31 @@ export async function initializeAutobotView() {
             const selectedId = e.currentTarget.id;
             setActiveTabStyle(selectedId);
             currentTab = selectedId.replace('tab-', '');
+            // Forzamos la carga desde la API al cambiar de pestaña
             fetchOrders(currentTab, auOrderList);
         });
     });
 
-    // Carga inicial
-    setActiveTabStyle('tab-opened');
-    fetchOrders('opened', auOrderList);
-
+    // 6. Configuración de Sockets (Tiempo Real)
     if (socket) {
+        // Escuchar actualizaciones de estado del bot (UI)
         socket.off('bot-state-update');
         socket.on('bot-state-update', (state) => updateBotUI(state));
+
+        // Escuchar actualizaciones de órdenes (NUEVO: Para ver la lógica exponencial en vivo)
+        socket.off('open-orders-update');
+        socket.on('open-orders-update', (ordersData) => {
+            console.log("📦 [Autobot WS] Actualización recibida:", ordersData);
+            // Solo actualizamos si el usuario está viendo la pestaña de órdenes abiertas
+            if (currentTab === 'opened' || currentTab === 'all') {
+                updateOpenOrdersTable(ordersData, 'au-order-list', currentTab);
+            }
+        });
     }
+
+    // 7. Carga Inicial de Datos
+    setActiveTabStyle('tab-opened');
+    fetchOrders('opened', auOrderList);
+    
+    console.log("🚀 Vista Autobot Inicializada");
 }
