@@ -131,17 +131,15 @@ export async function fetchOrders(status, orderListElement) {
         </div>`;
 
     try {
-        // Si pedimos 'all', el backend suele devolver las ejecutadas (filled)
-        const endpoint = status === 'all' ? 'filled' : status; 
-        
-        const response = await fetch(`${BACKEND_URL}/api/orders/${endpoint}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-
-        if (!response.ok) throw new Error("Error en API de órdenes");
+        const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, { ... });
         const data = await response.json();
-        const orders = Array.isArray(data) ? data : (data.orders || []);
 
+        // 🛑 ESTA LÍNEA ES CRÍTICA:
+        // Si el backend envía [obj, obj], usamos data.
+        // Si el backend envía { success: true, orders: [] }, usamos data.orders.
+        const orders = Array.isArray(data) ? data : (data.orders || data.data || []);
+
+        console.log(`[Frontend] Órdenes recibidas para ${status}:`, orders.length);
         displayOrders(orders, orderListElement, status);
     } catch (error) {
         console.error("Fetch error:", error);

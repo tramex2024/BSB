@@ -1,91 +1,75 @@
 // BSB/server/services/bitmartWs.js
 
 const { WebSocket } = require('ws');
+const CryptoJS = require('crypto-js'); // Necesario para la firma
 
-const WS_URL = 'wss://ws-manager-compress.bitmart.com';
+const WS_URL = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 const LOG_PREFIX = '[BITMART_WS]';
 
 let wsClient = null;
-let heartbeatInterval = null; // 🟢 Nuevo: Para mantener la conexión viva
+let heartbeatInterval = null;
 
-/**
- * Inicia la conexión WebSocket y suscribe las órdenes del usuario.
- */
 function initOrderWebSocket(updateCallback) {
-    if (wsClient) {
-        // Si el estado no es OPEN, forzamos cierre para limpiar
-        if (wsClient.readyState !== WebSocket.OPEN) {
-            wsClient.terminate();
-        } else {
-            return;
-        }
-    }
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) return;
 
     wsClient = new WebSocket(WS_URL);
 
-    // 🟢 Nuevo: Función para enviar PING proactivamente
     const startHeartbeat = () => {
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
-            if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-                // BitMart espera un mensaje de texto "ping" o un JSON según el canal
-                wsClient.send("ping"); 
-            }
-        }, 20000); // Cada 20 segundos
+            if (wsClient?.readyState === WebSocket.OPEN) wsClient.send("ping");
+        }, 20000);
     };
 
     wsClient.on('open', () => {
-        console.log(`${LOG_PREFIX} ✅ Conexión exitosa. Suscribiendo...`);
-        startHeartbeat(); // Iniciamos el latido
+        console.log(`${LOG_PREFIX} ✅ Socket Abierto. Autenticando...`);
+        startHeartbeat();
 
-        // Suscripción (Asegúrate de que tu auth de BitMart esté configurada si usas user data)
-        const subscriptionMessage = {
-            op: "subscribe",
-            args: ["spot/user/order:BTC_USDT"] 
+        // --- PASO 1: LOGIN (Obligatorio para datos privados) ---
+        const { BITMART_API_KEY, BITMART_SECRET_KEY, BITMART_API_MEMO } = process.env;
+        const timestamp = Date.now().toString();
+        const message = `${timestamp}#${BITMART_API_MEMO}#bitmart.WebSocket`;
+        const sign = CryptoJS.HmacSHA256(message, BITMART_SECRET_KEY).toString(CryptoJS.enc.Hex);
+
+        const loginMessage = {
+            op: "login",
+            args: [BITMART_API_KEY, timestamp, sign, BITMART_API_MEMO]
         };
-        wsClient.send(JSON.stringify(subscriptionMessage));
+        wsClient.send(JSON.stringify(loginMessage));
     });
 
     wsClient.on('message', (data) => {
         const rawData = data.toString();
-        
-        // Manejo rápido de Pong para no saturar el log
-        if (rawData === 'pong' || rawData.includes('"event":"pong"')) return;
+        if (rawData === 'pong') return;
 
         try {
             const message = JSON.parse(rawData);
-            
-            if (message.event === 'update' && message.topic && message.topic.startsWith('spot/user/order')) {
-                const updatedOrders = message.data;
+
+            // --- PASO 2: SUSCRIBIR TRAS LOGIN EXITOSO ---
+            if (message.event === 'login') {
+                console.log(`${LOG_PREFIX} 👤 Login Exitoso. Suscribiendo a órdenes...`);
+                wsClient.send(JSON.stringify({
+                    op: "subscribe",
+                    args: ["spot/user/order:BTC_USDT"]
+                }));
+            }
+
+            // --- PASO 3: CAPTURAR ACTUALIZACIONES ---
+            if (message.table === 'spot/user/order' || (message.topic && message.topic.includes('order'))) {
+                const updatedOrders = message.data || [];
+                // Enviamos el array directamente al callback
                 updateCallback(updatedOrders);
             }
-            
-            // Responder a Pings del servidor
-            if (message.event === 'ping') {
-                wsClient.send(JSON.stringify({ event: 'pong' }));
-            }
-            
+
         } catch (error) {
-            // Algunos mensajes de BitMart son strings planos (como "pong")
-            if (rawData !== 'pong') {
-                console.error(`${LOG_PREFIX} Error al procesar mensaje:`, error.message);
-            }
+            if (rawData !== 'pong') console.error(`${LOG_PREFIX} Error parsing:`, error.message);
         }
     });
 
-    wsClient.on('error', (error) => {
-        console.error(`${LOG_PREFIX} ❌ Error:`, error.message);
-    });
-
     wsClient.on('close', () => {
-        console.log(`${LOG_PREFIX} ⚠️ Conexión cerrada. Reconectando en 2s...`);
-        
-        // Limpiar intervalos para evitar fugas de memoria
+        console.log(`${LOG_PREFIX} ⚠️ Cerrado. Reconectando...`);
         if (heartbeatInterval) clearInterval(heartbeatInterval);
-        wsClient = null; 
-
-        // 🟢 Reducido a 2 segundos para no perder ventanas de RSI
-        setTimeout(() => initOrderWebSocket(updateCallback), 2000); 
+        setTimeout(() => initOrderWebSocket(updateCallback), 3000);
     });
 }
 

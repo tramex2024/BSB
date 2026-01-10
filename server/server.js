@@ -154,8 +154,11 @@ function setupMarketWS(io) {
 }
 
 // --- 7. WEBSOCKET ÓRDENES PRIVADAS ---
-bitmartService.initOrderWebSocket((ordersData) => {
-    io.sockets.emit('open-orders-update', ordersData);
+// BSB/server/server.js (Línea 116 aprox)
+bitmartService.initOrderWebSocket((ordersArray) => {
+    console.log(`[WS_ORDERS] 📡 ${ordersArray.length} órdenes nuevas detectadas.`);
+    // Enviamos el array tal cual, porque ya viene filtrado desde bitmartWs.js
+    io.sockets.emit('open-orders-update', ordersArray);
 });
 
 // --- 8. BUCLE DE SINCRONIZACIÓN DE SALDOS (10s) ---
