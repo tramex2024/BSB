@@ -49,6 +49,7 @@ const bitmartService = {
     validateApiKeys: async () => {
         try {
             await bitmartService.getBalance();
+            console.log(`${LOG_PREFIX} ✅ Credenciales validadas.`);
             return true;
         } catch (e) { return false; }
     },
@@ -71,20 +72,9 @@ const bitmartService = {
     },
 
     // --- Órdenes ---
-    
-    // MEJORA: Mapeo consistente para órdenes abiertas
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
-        // BitMart V4 devuelve la lista en res.data.data
-        const list = res.data?.data || [];
-        return { 
-            orders: list.map(o => ({
-                ...o,
-                state: o.state || 'new', // Aseguramos que el frontend vea un estado
-                price: o.price || o.filled_price || 0,
-                size: o.size || o.filled_size || 0
-            }))
-        };
+        return { orders: res.data.data || res.data || [] };
     },
 
     getHistoryOrders: async (options = {}) => {
@@ -97,14 +87,12 @@ const bitmartService = {
         if (status && status !== 'all') requestBody.status = orderStatusMap[status];
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
-        const rawOrders = res.data?.data?.list || res.data?.data || [];
+        const rawOrders = res.data?.data?.list || res.data || [];
         
         return rawOrders.map(o => ({
             ...o,
-            // Normalización para el frontend (orders.js)
-            price: parseFloat(o.priceAvg || o.price || 0),
-            size: parseFloat(o.filledSize || o.size || 0),
-            state: o.state || (o.status == 1 ? 'filled' : 'open')
+            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
+            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size
         }));
     },
 
@@ -117,20 +105,34 @@ const bitmartService = {
         } catch (e) { return null; }
     },
 
+    /**
+     * placeOrder: Versión Restaurada (Lógica Automática por Lado)
+     */
     placeOrder: async (symbol, side, type, amount, price) => {
         const sideLower = side.toLowerCase();
-        const body = { symbol, side: sideLower, type: type.toLowerCase() };
+        const body = { 
+            symbol, 
+            side: sideLower, 
+            type: type.toLowerCase() 
+        };
 
         if (type.toLowerCase() === 'limit') {
             body.size = amount.toString();
             body.price = price.toString();
         } else {
-            if (sideLower === 'buy') body.notional = amount.toString();
-            else if (sideLower === 'sell') body.size = amount.toString();
-            else throw new Error(`Lado no soportado: ${sideLower}`);
+            // MARKET ORDERS - Restaurado a la lógica de éxito previa
+            if (sideLower === 'buy') {
+                // Para COMPRAS (Long y Recompras): BitMart usa 'notional'
+                body.notional = amount.toString();
+            } else if (sideLower === 'sell') {
+                // Para VENTAS (Short y DCA): BitMart usa 'size'
+                body.size = amount.toString();
+            } else {
+                throw new Error(`Lado de orden no soportado: ${sideLower}`);
+            }
         }
 
-        console.log(`${LOG_PREFIX} 📡 Enviando:`, body);
+        console.log(`${LOG_PREFIX} 📡 Enviando a BitMart:`, body);
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body);
         return res.data;
     },
@@ -141,10 +143,25 @@ const bitmartService = {
         return res.data.tickers.find(t => t.symbol === symbol);
     },
 
+    getKlines: async (symbol, interval, limit = 200) => {
+        const res = await makeRequest('GET', '/spot/quotation/v3/klines', { 
+            symbol, step: interval, size: limit 
+        });
+        return res.data.map(c => ({
+            timestamp: parseInt(c[0]),
+            open: parseFloat(c[1]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[3]),
+            close: parseFloat(c[4]),
+            volume: parseFloat(c[5])
+        }));
+    },
+
     // --- Helpers ---
     initOrderWebSocket,
     getRecentOrders: async (symbol) => bitmartService.getHistoryOrders({ symbol, limit: 50 }),
     
+    // Este helper ahora funcionará correctamente para el LongManager
     placeMarketOrder: async ({ symbol, side, notional }) => 
         bitmartService.placeOrder(symbol, side, 'market', notional, null)
 };

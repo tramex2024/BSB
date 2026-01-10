@@ -1,77 +1,64 @@
 // server/controllers/orderController.js
 
 const bitmartService = require('../services/bitmartService');
-// Si estás utilizando el modelo 'Order' para guardar el historial, debería ser importado:
-// const OrderHistory = require('../models/OrderHistory'); 
 
+/**
+ * Obtiene las órdenes (Abiertas o Historial) desde BitMart
+ */
 exports.getOrders = async (req, res) => {
-    // OBTENEMOS EL TIPO DE ORDEN DE LOS PARÁMETROS DE RUTA
     const { status } = req.params;
+    const symbol = 'BTC_USDT'; 
 
-    console.log(`[Backend]: Intentando obtener órdenes de tipo: ${status}`);
+    console.log(`[ORDER_CONTROLLER] 📥 Petición recibida para estado: ${status}`);
 
     if (!status) {
-        return res.status(400).json({ success: false, message: 'Missing "status" path parameter.' });
+        return res.status(400).json({ success: false, message: 'Falta el parámetro de estado.' });
     }
 
     try {
         let result;
-        const symbol = 'BTC_USDT'; // Asegúrate de que este sea el símbolo correcto.
 
         switch (status) {
             case 'opened':
-                // 🛑 MODIFICACIÓN: Esta ruta ya NO debe llamar a la API REST.
-                console.log('[Backend - OBSOLETO]: La consulta de órdenes abiertas debe usar ahora WebSockets.');
-                return res.status(200).json([]); // Devolvemos un array vacío y status 200.
-                // result = await bitmartService.getOpenOrders(symbol); // ⬅️ ELIMINAR ESTA LÍNEA
-                break; // Ya no necesitamos el break si hacemos return antes.
-                
+                // ✅ RESTAURADO: Consultamos la API de BitMart para ver órdenes activas
+                const openData = await bitmartService.getOpenOrders(symbol);
+                // bitmartService.getOpenOrders devuelve { orders: [...] }
+                result = openData.orders || [];
+                break;
+
             case 'filled':
             case 'cancelled':
             case 'all':
-                // Para el historial, definimos el rango de tiempo (90 días)
-                const endTime = Date.now();
+                // Configuración de historial (90 días por defecto)
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                const startTime = ninetyDaysAgo.getTime();
                 
                 const historyParams = {
                     symbol: symbol,
-                    orderMode: 'spot',
-                    startTime: startTime,
-                    endTime: endTime,
-                    limit: 100 
+                    startTime: ninetyDaysAgo.getTime(),
+                    endTime: Date.now(),
+                    limit: 100
                 };
                 
-                // 🛑 CORRECCIÓN CRÍTICA: Cambiamos 'status' por 'order_state' 
-                // para que BitMart aplique el filtro en su API.
+                // Aplicamos el filtro de estado para el historial
                 if (status !== 'all') {
-                    historyParams.order_state = status; // ✅ Ahora BitMart filtra por 'filled' o 'cancelled'
+                    historyParams.order_state = status; 
                 }
                 
                 result = await bitmartService.getHistoryOrders(historyParams);
                 break;
                 
             default:
-                return res.status(400).json({ success: false, message: 'Invalid order status parameter' });
+                return res.status(400).json({ success: false, message: 'Parámetro de estado inválido' });
         }
 
-        // Si la respuesta de BitMart tiene un campo 'data', lo extraemos.
-        // Asumimos que BitMart devuelve un array de órdenes o un objeto con un campo 'data' o similar.
-        const ordersToReturn = result && result.data ? result.data : result;
-
-        res.status(200).json(ordersToReturn);
+        // BitMart Service ya normaliza los resultados, así que los enviamos directamente
+        res.status(200).json(result);
         
     } catch (error) {
-        console.error('Error al obtener órdenes. Detalles:', error.response ? error.response.data : error.message);
+        console.error('[ORDER_CONTROLLER] ❌ Error:', error.message);
         
-        let errorMessage = 'Error al obtener órdenes. Por favor, revisa tus API Keys y los logs del servidor.';
-        if (error.response && error.response.data && error.response.data.message) {
-            errorMessage = error.response.data.message;
-        } else if (error.message) {
-            errorMessage = error.message;
-        }
-        
+        const errorMessage = error.response?.data?.message || error.message || 'Error interno del servidor';
         res.status(500).json({ success: false, message: errorMessage });
     }
 };
