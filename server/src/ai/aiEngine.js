@@ -17,7 +17,8 @@ class AIEngine {
         this.lastEntryPrice = 0;
         this.highestPrice = 0;
 
-        this.TRAILING_PERCENT = 0.005; 
+        // PARÁMETROS PROFESIONALES
+        this.TRAILING_PERCENT = 0.003; // 0.3% para asegurar ganancias rápido
         this.RISK_PER_TRADE = 0.10;    
         this.PANIC_STOP_BALANCE = 800.00; 
         this.MIN_TRADE_AMOUNT = 10.00;
@@ -29,17 +30,17 @@ class AIEngine {
     }
 
     async init() {
-    try {
-        // FUERZA EL RESETEO A 100 AL ARRANCAR (Solo una vez)
-        await Autobot.updateOne({}, { $set: { virtualAiBalance: 100.00 } });
-        
-        const state = await Autobot.findOne({});
-        this.virtualBalance = 100.00; // Reset local
-        this._log(`Sistema Reiniciado a $100.00`, 0.5);
-    } catch (e) {
-        console.error("Error en reset de AIEngine:", e);
+        try {
+            // --- RESET DE SALDO A 1000 ---
+            await Autobot.updateOne({}, { $set: { virtualAiBalance: 1000.00 } });
+            
+            const state = await Autobot.findOne({});
+            this.virtualBalance = 1000.00;
+            this._log(`Sistema Reseteado: Balance $1,000.00`, 0.5);
+        } catch (e) {
+            console.error("Error en init de AIEngine:", e);
+        }
     }
-}
 
     toggle(action) {
         this.isRunning = (action === 'start');
@@ -64,11 +65,12 @@ class AIEngine {
             return;
         }
 
+        // TRAILING STOP LÓGICA
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) this.highestPrice = price;
             const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
             if (price <= stopPrice) {
-                await this._trade('SELL', price, 0.9);
+                await this._trade('SELL', price, 0.95);
                 return; 
             }
         }
@@ -82,27 +84,25 @@ class AIEngine {
     }
 
     async _executeStrategy(price) {
-    // 1. Restauramos la memoria mínima a 28 velas (aprox 30 min de datos)
-    if (this.history.length < 28) {
-        this._log(`Construyendo memoria neural... (${this.history.length}/28)`, 0.2);
-        return;
+        // PASO 2: PARÁMETROS NORMALES (28 velas de memoria)
+        if (this.history.length < 28) {
+            this._log(`Analizando mercado... (${this.history.length}/28)`, 0.2);
+            return;
+        }
+
+        const analysis = StrategyManager.calculate(this.history);
+        if (!analysis || !analysis.adx || !analysis.stoch) return;
+
+        const { adx, stoch } = analysis;
+        
+        // ESTRATEGIA: ADX > 25 (Tendencia fuerte) + Estocástico bajo (Sobreventa)
+        if (adx.adx > 25 && adx.pdi > adx.mdi && stoch.stochK < 70 && this.lastEntryPrice === 0) {
+            await this._trade('BUY', price, adx.adx / 100);
+        } 
+        else if (adx.mdi > adx.pdi && this.lastEntryPrice > 0) {
+            await this._trade('SELL', price, 0.85);
+        }
     }
-
-    const analysis = StrategyManager.calculate(this.history);
-    
-    if (!analysis || !analysis.adx) return;
-
-    const { adx, stoch, rsi } = analysis; // Asumiendo que StrategyManager da RSI
-
-// ESTRATEGIA PROFESIONAL:
-// 1. ADX > 25 (Fuerza de tendencia)
-// 2. PDI > MDI (Tendencia Alcista)
-// 3. RSI < 60 (No estamos en zona de burbuja/sobrecompra)
-// 4. StochK < 80 (Confirmación de entrada limpia)
-
-if (adx.adx > 25 && adx.pdi > adx.mdi && rsi < 60 && stoch.stochK < 80 && this.lastEntryPrice === 0) {
-    await this._trade('BUY', price, 0.9);
-}
 
     async _trade(side, price, conf) {
         try {
@@ -121,7 +121,7 @@ if (adx.adx > 25 && adx.pdi > adx.mdi && rsi < 60 && stoch.stochK < 80 && this.l
                 this.virtualBalance -= amount;
             } else {
                 const perf = (price / this.lastEntryPrice) - 1;
-                pnlLast = (amount * perf) - ((amount * (1 + perf)) * 0.001);
+                pnlLast = (amount * perf) - ((amount * (1 + perf)) * 0.001); // Menos comisión
                 this.virtualBalance += (amount + pnlLast);
                 this.tradeLog.push({ profit: pnlLast });
                 this.lastEntryPrice = 0;
@@ -138,7 +138,7 @@ if (adx.adx > 25 && adx.pdi > adx.mdi && rsi < 60 && stoch.stochK < 80 && this.l
                     pnlLastTrade: pnlLast.toFixed(2)
                 });
             }
-            this._log(`IA ${side} Virtual Ejecutada`, conf);
+            this._log(`IA ${side} Virtual ejecutada exitosamente`, conf);
         } catch (e) {
             console.error("Error en Trade:", e);
         }
@@ -150,7 +150,6 @@ if (adx.adx > 25 && adx.pdi > adx.mdi && rsi < 60 && stoch.stochK < 80 && this.l
         }
     }
 
-    // Añadido para el historial por socket
     async getVirtualHistory() {
         return await AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(20);
     }
