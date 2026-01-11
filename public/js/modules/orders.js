@@ -3,76 +3,73 @@
 import { BACKEND_URL } from '../main.js';
 
 /**
- * Crea el HTML de una orden (Card)
- * Formateado con estándares de trading internacional (US)
- */
+ * Crea el HTML de una orden (Card)
+ * Optimizada para legibilidad rápida y jerarquía de datos
+ */
 function createOrderHtml(order) {
-    const side = (order.side || 'buy').toLowerCase();
-    const isBuy = side === 'buy';
-    const sideClass = isBuy ? 'text-emerald-400 bg-emerald-500/10' : 'text-red-400 bg-red-500/10';
-    const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
-    
-    // Normalización de estados y tiempos
-    const state = (order.state || order.status || 'UNKNOWN').toUpperCase();
-    const timestamp = order.createTime || order.create_time || Date.now();
-    
-    // Formato de fecha: DD/MM/YYYY HH:MM:SS
-    const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric',
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-    });
+    const side = (order.side || 'buy').toLowerCase();
+    const isBuy = side === 'buy';
+    
+    // Colores basados en el sentimiento del mercado
+    const sideTheme = isBuy 
+        ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' 
+        : 'text-red-400 border-red-500/20 bg-red-500/5';
+    
+    const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
+    
+    const state = (order.state || order.status || 'UNKNOWN').toUpperCase();
+    const isFilled = state.includes('FILLED');
+    const timestamp = order.createTime || order.create_time || Date.now();
+    
+    // Fecha simplificada para trading (la hora es más importante que el año)
+    const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' 
+    });
 
-    // FORMATO UNIFICADO: Americano (Comas para miles, punto para decimales)
-    const priceFormatter = new Intl.NumberFormat('en-US', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-    });
+    const priceFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const qtyFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
 
-    const qtyFormatter = new Intl.NumberFormat('en-US', { 
-        minimumFractionDigits: 6,
-        maximumFractionDigits: 8
-    });
+    const price = priceFormatter.format(parseFloat(order.price || order.filled_price || 0));
+    const quantity = qtyFormatter.format(parseFloat(order.filled_size || order.size || 0));
 
-    const price = priceFormatter.format(parseFloat(order.price || order.filled_price || 0));
-    const quantity = qtyFormatter.format(parseFloat(order.filled_size || order.size || 0));
+    return `
+        <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between hover:bg-gray-800/60 transition-all border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
+            
+            <div class="flex items-center gap-4 w-1/4">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Type</span>
+                    <div class="flex items-center gap-1.5 ${sideTheme} py-0.5 px-2 rounded-md w-fit">
+                        <i class="fas ${icon} text-[10px]"></i>
+                        <span class="font-black text-xs uppercase">${side}</span>
+                    </div>
+                </div>
+            </div>
 
-    return `
-        <div class="bg-gray-800/50 border border-gray-700 p-4 rounded-xl mb-3 flex flex-wrap md:flex-nowrap justify-between items-center hover:border-gray-600 transition-colors animate-fadeIn">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-lg flex items-center justify-center ${sideClass}">
-                    <i class="fas ${icon}"></i>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-[10px] uppercase font-bold tracking-tighter">Side</p>
-                    <p class="text-white font-bold text-xs uppercase">${side}</p>                     
-                </div>
-            </div>
-            <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 px-6">
-                <div>
-                    <p class="text-gray-500 text-[10px] uppercase font-bold tracking-tighter">Price</p>
-                    <p class="text-gray-200 font-mono text-sm">$${price}</p>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-[10px] uppercase font-bold tracking-tighter">Amount</p>
-                    <p class="text-gray-200 font-mono text-sm">${quantity}</p>
-                </div>
-                <div>
-                    <p class="text-gray-500 text-[10px] uppercase font-bold tracking-tighter">Status</p>
-                    <p class="${state.includes('FILLED') ? 'text-emerald-400' : 'text-orange-400'} font-bold text-[10px]">${state}</p>
-                </div>
-            </div>
-            <div class="text-right text-[9px] text-gray-500 leading-tight">
-                <p class="mb-1">${date}</p>
-                <p class="font-mono opacity-40 hover:opacity-100 transition-opacity">
-                    ID: ${order.orderId || order.order_id || ''}
-                </p>
-            </div>
-        </div>
-    `;
+            <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
+                    <span class="text-gray-100 font-mono font-semibold text-sm">$${price}</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Amount</span>
+                    <span class="text-gray-300 font-mono text-sm">${quantity}</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Status</span>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
+                        ${state}
+                    </span>
+                </div>
+            </div>
+
+            <div class="w-1/4 text-right pl-4">
+                <p class="text-[10px] text-gray-400 font-medium">${date}</p>
+                <p class="text-[9px] text-gray-600 font-mono mt-1">
+                    ID: <span class="group-hover:text-gray-400 transition-colors">${(order.orderId || order.order_id || '').toString().slice(-6)}...</span>
+                </p>
+            </div>
+        </div>
+    `;
 }
 
 /**
