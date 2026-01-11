@@ -32,6 +32,9 @@ function createOrderHtml(order) {
 
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(state);
 
+    // Ajuste aquí: Se eliminó el .slice(-6) para mostrar el ID completo
+    const fullOrderId = (order.orderId || order.order_id || '').toString();
+
     return `
     <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between hover:bg-gray-800/60 transition-all border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
         <div class="flex items-center gap-4 w-1/4">
@@ -64,12 +67,12 @@ function createOrderHtml(order) {
         <div class="w-1/4 flex flex-col items-end gap-1">
             <p class="text-[10px] text-gray-400 font-medium">${date}</p>
             ${isCancellable ? `
-                <button onclick="cancelOrder('${order.orderId || order.order_id}')" 
+                <button onclick="cancelOrder('${fullOrderId}')" 
                         class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all border border-red-500/20">
                     Cancel
                 </button>
             ` : `
-                <p class="text-[9px] text-gray-600 font-mono">ID: ${ (order.orderId || order.order_id || '').toString().slice(-6) }</p>
+                <p class="text-[9px] text-gray-600 font-mono">ID: ${fullOrderId}</p>
             `}
         </div>
     </div>
@@ -86,12 +89,9 @@ export function displayOrders(orders, orderListElement, filterType) {
     } else if (filterType === 'cancelled') {
         filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
     } else if (filterType === 'opened') {
-        // Añadimos 'new' que es el estado real que devuelve BitMart
+        // Incluimos 'new' para que detecte las órdenes abiertas según el test de BitMart
         const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
-        filteredOrders = orders.filter(o => {
-            const currentStatus = (o.state || o.status || '').toLowerCase();
-            return openStatuses.includes(currentStatus);
-        });
+        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
     }
 
     if (filteredOrders.length === 0) {
