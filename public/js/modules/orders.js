@@ -64,65 +64,55 @@ function createOrderHtml(order) {
  */
 function displayOrders(orders, orderListElement, filterType) {
     if (!orderListElement) return;
+    
+    // Limpieza de seguridad
+    orderListElement.innerHTML = ''; 
 
-    let filteredOrders = orders;
+    // Normalización: Asegurar que 'orders' sea un array
+    const dataArray = Array.isArray(orders) ? orders : (orders.orders || orders.data || []);
 
-    if (filterType === 'filled') {
-        filteredOrders = orders.filter(o => {
-            const s = (o.state || o.status || '').toString().toLowerCase();
-            return s.includes('filled') || s.includes('completed') || s === '1';
-        });
-    } else if (filterType === 'cancelled') {
-        filteredOrders = orders.filter(o => {
-            const s = (o.state || o.status || '').toString().toLowerCase();
-            return s.includes('cancel') || s === '6';
-        });
-    } else if (filterType === 'opened') {
-        const openStatuses = ['new', 'partially_filled', 'open', 'active', '8', 'triggered', '6'];
-        filteredOrders = orders.filter(o => {
-            const s = (o.state || o.status || '').toString().toLowerCase();
-            return openStatuses.includes(s) || (!s.includes('filled') && !s.includes('cancel'));
-        });
-    }
-
-    if (filteredOrders.length === 0) {
-        orderListElement.innerHTML = `<p class="text-center py-10 text-gray-600 text-xs uppercase tracking-widest">No orders found</p>`;
+    if (dataArray.length === 0) {
+        orderListElement.innerHTML = `<p class="text-center py-10 text-gray-600 text-[10px] uppercase font-bold tracking-widest">No orders found (${filterType})</p>`;
         return;
     }
 
-    orderListElement.innerHTML = filteredOrders.map(order => createOrderHtml(order)).join('');
+    // Dibujar cada orden
+    const html = dataArray.map(order => createOrderHtml(order)).join('');
+    orderListElement.innerHTML = html;
 }
-
 /**
  * Obtiene historial vía API
  */
-export async function fetchOrders(status, orderListElement) {
-    if (!orderListElement) return;
-    
-    // Mostramos un loader visual
-    orderListElement.innerHTML = `<p class="text-center py-10 text-gray-500 animate-pulse text-[10px] uppercase tracking-widest">Fetching ${status} orders...</p>`;
+export async function fetchOrders(status, container) {
+    if (!container) return;
 
     try {
         const token = localStorage.getItem('token');
-        // IMPORTANTE: Verifica si tu backend usa /api/orders o /api/v1/orders
-        const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
-            headers: { 
+        // Usamos la ruta exacta definida en tu server.js
+        const response = await fetch(`/api/orders/${status}`, {
+            headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
 
+        // IMPORTANTE: Tu controlador envía el array directamente
         const data = await response.json();
-        console.log(`[DEBUG] Datos recibidos para ${status}:`, data);
-
-        // El controlador envía el array directamente: res.json(result)
-        // Por lo tanto, 'data' ya es el array.
-        const ordersArray = Array.isArray(data) ? data : (data.orders || []);
         
-        displayOrders(ordersArray, orderListElement, status);
+        // Normalizamos: si data no es array, buscamos dentro de sus propiedades
+        const orders = Array.isArray(data) ? data : (data.orders || []);
+
+        if (orders.length === 0) {
+            container.innerHTML = `<p class="text-center py-10 text-gray-500 text-[10px] uppercase tracking-widest">No ${status} orders found</p>`;
+            return;
+        }
+
+        // Renderizamos (aquí usas tu función createOrderHtml)
+        container.innerHTML = orders.map(order => createOrderHtml(order)).join('');
+
     } catch (error) {
-        console.error("❌ Error al cargar órdenes:", error);
-        orderListElement.innerHTML = `<p class="text-center py-10 text-red-400 text-[10px] uppercase font-bold">Error loading orders</p>`;
+        console.error("❌ Error en fetchOrders:", error);
+        container.innerHTML = `<p class="text-center py-10 text-red-500 text-[10px]">Error loading orders</p>`;
     }
 }
 

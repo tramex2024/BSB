@@ -138,9 +138,11 @@ export async function initializeAutobotView() {
         });
     }
 
-    // 7. Carga Inicial de Datos
-    setActiveTabStyle('tab-opened');
+    // 7. // Carga inicial forzada desde la API
+    console.log("📡 Solicitando carga inicial de órdenes...");
     fetchOrders('opened', auOrderList);
-    
-    console.log("🚀 Vista Autobot Inicializada");
-}
+
+    // Pedir al socket que nos envíe lo que tenga ahora mismo (si tienes implementado ese evento)
+    if (socket && socket.connected) {
+        socket.emit('get-open-orders'); // Opcional: si tu server escucha esto
+    }
