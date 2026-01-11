@@ -32,45 +32,54 @@ function createOrderHtml(order) {
     const price = priceFormatter.format(parseFloat(order.price || order.filled_price || 0));
     const quantity = qtyFormatter.format(parseFloat(order.filled_size || order.size || 0));
 
-    return `
-        <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between hover:bg-gray-800/60 transition-all border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
-            
-            <div class="flex items-center gap-4 w-1/4">
-                <div class="flex flex-col">
-                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Type</span>
-                    <div class="flex items-center gap-1.5 ${sideTheme} py-0.5 px-2 rounded-md w-fit">
-                        <i class="fas ${icon} text-[10px]"></i>
-                        <span class="font-black text-xs uppercase">${side}</span>
-                    </div>
-                </div>
-            </div>
+    // Dentro de createOrderHtml(order) antes del return...
 
-            <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
-                <div class="flex flex-col">
-                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Price</span>
-                    <span class="text-gray-100 font-mono font-semibold text-sm">$${price}</span>
-                </div>
-                <div class="flex flex-col">
-                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Amount</span>
-                    <span class="text-gray-300 font-mono text-sm">${quantity}</span>
-                </div>
-                <div class="flex flex-col items-center">
-                    <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Status</span>
-                    <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
-                        ${state}
-                    </span>
-                </div>
-            </div>
+const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(state);
 
-            <div class="w-1/4 text-right pl-4">
-                <p class="text-[10px] text-gray-400 font-medium">${date}</p>
-                <p class="text-[9px] text-gray-600 font-mono mt-1">
-                    ID: <span class="group-hover:text-gray-400 transition-colors">${(order.orderId || order.order_id || '').toString().slice(-6)}...</span>
-                </p>
+// Reemplaza el bloque de retorno con este para incluir el botón de acción:
+return `
+    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between hover:bg-gray-800/60 transition-all border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
+        
+        <div class="flex items-center gap-4 w-1/4">
+            <div class="flex flex-col">
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Side</span>
+                <div class="${sideTheme} py-0.5 px-2 rounded-md w-fit flex items-center gap-1">
+                    <i class="fas ${icon} text-[10px]"></i>
+                    <span class="font-black text-xs uppercase">${side}</span>
+                </div>
             </div>
         </div>
-    `;
-}
+
+        <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
+            <div class="flex flex-col">
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider text-center md:text-left">Price</span>
+                <span class="text-gray-100 font-mono font-semibold text-sm text-center md:text-left">$${price}</span>
+            </div>
+            <div class="flex flex-col border-x border-gray-700/10 px-2">
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider text-center">Amount</span>
+                <span class="text-gray-300 font-mono text-sm text-center">${quantity}</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Status</span>
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
+                    ${state}
+                </span>
+            </div>
+        </div>
+
+        <div class="w-1/4 flex flex-col items-end gap-1">
+            <p class="text-[10px] text-gray-400 font-medium">${date}</p>
+            ${isCancellable ? `
+                <button onclick="cancelOrder('${order.orderId || order.order_id}')" 
+                        class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all border border-red-500/20">
+                    Cancel
+                </button>
+            ` : `
+                <p class="text-[9px] text-gray-600 font-mono">ID: ${ (order.orderId || order.order_id || '').toString().slice(-6) }</p>
+            `}
+        </div>
+    </div>
+`;
 
 /**
  * Renderiza y filtra las órdenes en el contenedor
