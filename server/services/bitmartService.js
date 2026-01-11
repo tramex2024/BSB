@@ -73,15 +73,7 @@ const bitmartService = {
     // --- Órdenes ---
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
-        const list = res.data?.data || [];
-        return { 
-            orders: list.map(o => ({
-                ...o,
-                state: o.state || 'new',
-                price: o.price || o.filled_price || 0,
-                size: o.size || o.filled_size || 0
-            }))
-        };
+        return { orders: res.data.data || res.data || [] };
     },
 
     getHistoryOrders: async (options = {}) => {
