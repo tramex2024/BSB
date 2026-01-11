@@ -1,26 +1,23 @@
 // server/controllers/orderController.js
 
-// server/controllers/orderController.js
+const bitmartService = require('../services/bitmartService');
 
 exports.getOrders = async (req, res) => {
     const { status } = req.params;
-    const symbol = 'BTC_USDT'; 
+    console.log(`[Backend]: Intentando obtener órdenes de tipo: ${status}`);
+
+    if (!status) {
+        return res.status(400).json({ success: false, message: 'Missing "status" path parameter.' });
+    }
 
     try {
         let result;
+        const symbol = 'BTC_USDT';
+
         switch (status) {
             case 'opened':
-                // ✅ RESTAURADO: Obtener órdenes reales para la carga inicial
-                console.log(`[Backend]: Consultando órdenes abiertas en BitMart para ${symbol}`);
-                result = await bitmartService.getOpenOrders(symbol);
-                
-                // LOG DE DEBUG (Lo que pediste)
-                console.log("--------------------------------------------");
-                console.log("🔍 DEBUG ÓRDENES ABIERTAS RECIBIDAS:");
-                console.dir(result, { depth: null });
-                console.log("--------------------------------------------");
-                break;
-
+                console.log('[Backend - OBSOLETO]: La consulta de órdenes abiertas debe usar ahora WebSockets.');
+                return res.status(200).json([]); 
             case 'filled':
             case 'cancelled':
             case 'all':
@@ -45,15 +42,14 @@ exports.getOrders = async (req, res) => {
                 break;
                 
             default:
-                return res.status(400).json({ success: false, message: 'Invalid status' });
+                return res.status(400).json({ success: false, message: 'Invalid order status parameter' });
         }
 
-        // Normalizamos la respuesta: BitMart a veces envuelve en .data o .orders
-        const ordersToReturn = result.orders ? result.orders : (result.data ? result.data : result);
+        const ordersToReturn = result && result.data ? result.data : result;
         res.status(200).json(ordersToReturn);
         
     } catch (error) {
-        console.error('Error en getOrders:', error.message);
+        console.error('Error al obtener órdenes:', error.message);
         res.status(500).json({ success: false, message: error.message });
     }
 };
