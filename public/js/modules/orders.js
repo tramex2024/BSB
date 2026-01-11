@@ -85,34 +85,42 @@ function displayOrders(orders, orderListElement, filterType) {
  */
 export async function fetchOrders(status, container) {
     if (!container) return;
+    
+    // Limpieza inicial para confirmar que el click funciona
+    container.innerHTML = '<div class="text-center py-10 text-gray-500 animate-pulse">CARGANDO...</div>';
 
     try {
         const token = localStorage.getItem('token');
-        // Usamos la ruta exacta definida en tu server.js
+        
+        // Usamos la ruta relativa sin el BACKEND_URL si estamos en el mismo dominio
+        // Esto suele resolver el 404 en Vercel
         const response = await fetch(`/api/orders/${status}`, {
-            headers: {
+            headers: { 
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
 
-        // IMPORTANTE: Tu controlador envía el array directamente
-        const data = await response.json();
-        
-        // Normalizamos: si data no es array, buscamos dentro de sus propiedades
-        const orders = Array.isArray(data) ? data : (data.orders || []);
-
-        if (orders.length === 0) {
-            container.innerHTML = `<p class="text-center py-10 text-gray-500 text-[10px] uppercase tracking-widest">No ${status} orders found</p>`;
+        if (response.status === 404) {
+            container.innerHTML = `<p class="text-red-400 text-center">Error 404: Ruta /api/orders/${status} no encontrada</p>`;
             return;
         }
 
-        // Renderizamos (aquí usas tu función createOrderHtml)
+        const data = await response.json();
+        
+        // Restauramos la lógica de detección de array
+        const orders = Array.isArray(data) ? data : (data.orders || []);
+
+        if (orders.length === 0) {
+            container.innerHTML = `<p class="text-center py-10 text-gray-600 font-bold uppercase tracking-widest text-[10px]">No orders found</p>`;
+            return;
+        }
+
         container.innerHTML = orders.map(order => createOrderHtml(order)).join('');
 
     } catch (error) {
         console.error("❌ Error en fetchOrders:", error);
-        container.innerHTML = `<p class="text-center py-10 text-red-500 text-[10px]">Error loading orders</p>`;
+        container.innerHTML = `<p class="text-center py-10 text-red-500 font-bold">FALLO DE CONEXIÓN</p>`;
     }
 }
 
