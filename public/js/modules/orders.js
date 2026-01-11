@@ -101,9 +101,13 @@ function displayOrders(orders, orderListElement, filterType) {
     } else if (filterType === 'cancelled') {
         filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
     } else if (filterType === 'opened') {
-        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
-        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
-    }
+        // BitMart usa 'new', 'partially_filled'. Agregamos 'pending' y '8' (que a veces es el código de pending)
+    const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending', 'triggered', '8'];
+    filteredOrders = orders.filter(o => {
+        const state = (o.state || o.status || '').toString().toLowerCase();
+        return openStatuses.includes(state);
+    });
+}
 
     if (filteredOrders.length === 0) {
         orderListElement.innerHTML = `
