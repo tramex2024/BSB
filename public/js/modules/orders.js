@@ -86,8 +86,12 @@ export function displayOrders(orders, orderListElement, filterType) {
     } else if (filterType === 'cancelled') {
         filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
     } else if (filterType === 'opened') {
+        // Añadimos 'new' que es el estado real que devuelve BitMart
         const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
-        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
+        filteredOrders = orders.filter(o => {
+            const currentStatus = (o.state || o.status || '').toLowerCase();
+            return openStatuses.includes(currentStatus);
+        });
     }
 
     if (filteredOrders.length === 0) {

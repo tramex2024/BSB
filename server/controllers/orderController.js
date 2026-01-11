@@ -16,8 +16,12 @@ exports.getOrders = async (req, res) => {
 
         switch (status) {
             case 'opened':
-                console.log('[Backend - OBSOLETO]: La consulta de órdenes abiertas debe usar ahora WebSockets.');
-                return res.status(200).json([]); 
+                console.log(`[Backend]: Obteniendo órdenes abiertas reales para ${symbol}`);
+                result = await bitmartService.getOpenOrders(symbol);
+                
+                // Extraemos el array 'orders' que vimos en el test
+                const openOrders = result.orders || [];
+                return res.status(200).json(openOrders); 
             case 'filled':
             case 'cancelled':
             case 'all':
