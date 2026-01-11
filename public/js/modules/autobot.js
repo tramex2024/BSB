@@ -146,3 +146,4 @@ export async function initializeAutobotView() {
     if (socket && socket.connected) {
         socket.emit('get-open-orders'); // Opcional: si tu server escucha esto
     }
+}

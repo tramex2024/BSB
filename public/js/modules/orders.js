@@ -119,26 +119,21 @@ export async function fetchOrders(status, container) {
 /**
  * Actualiza órdenes abiertas vía Socket
  */
+// public/js/modules/orders.js
+
 export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
-    // IMPORTANTE: Aquí usamos el 'listElementId' que viene de autobot.js ('au-order-list')
     const orderListElement = document.getElementById(listElementId);
     
-    // Si no encuentra el elemento o la pestaña no es la correcta, salimos
+    // Si el elemento no existe o la pestaña no es la de órdenes abiertas, no hacemos nada
     if (!orderListElement || (activeOrderTab !== 'opened' && activeOrderTab !== 'all')) return;
 
-    const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || ordersData.data || []);
+    // Normalizar datos: BitMart suele enviar un array directo o un objeto con .data
+    const orders = Array.isArray(ordersData) ? ordersData : (ordersData.data || ordersData.orders || []);
     
-    // Filtramos para mostrar solo lo que está activo (lógica de trading viva)
-    const onlyOpen = orders.filter(o => {
-        const s = (o.state || o.status || '').toString().toLowerCase();
-        // Incluimos estados de BitMart: 'new', 'partially_filled', '8' (prio), etc.
-        return ['new', 'partially_filled', '8', 'open', 'active'].includes(s) || 
-               (!s.includes('filled') && !s.includes('cancel'));
-    });
-
-    if (onlyOpen.length > 0) {
-        orderListElement.innerHTML = onlyOpen.map(order => createOrderHtml(order)).join('');
+    if (orders.length > 0) {
+        // Mapeamos las órdenes usando tu función de creación de HTML
+        orderListElement.innerHTML = orders.map(order => createOrderHtml(order)).join('');
     } else {
-        orderListElement.innerHTML = `<p class="text-center py-10 text-gray-600 text-[10px] uppercase tracking-widest font-bold">No active orders</p>`;
+        orderListElement.innerHTML = `<p class="text-center py-10 text-gray-500 text-[10px] uppercase font-bold tracking-widest">No active orders</p>`;
     }
 }
