@@ -9,7 +9,8 @@ const TRAILING_STOP_PERCENTAGE = 0.4;
 async function run(dependencies) {
     const { 
         botState, currentPrice, config, log, 
-        updateSStateData, updateBotState, updateGeneralBotState 
+        updateSStateData, updateBotState, updateGeneralBotState,
+        logSuccessfulCycle // AÑADIDO: Para persistencia del ciclo
     } = dependencies;
     
     // 0. VALIDACIÓN INICIAL DE PRECIO (Seguridad para el Trailing)
@@ -53,8 +54,12 @@ async function run(dependencies) {
             log(`💰 [S-CLOSE] ¡Rebote detectado! Precio ${currentPrice.toFixed(2)} >= Stop ${triggerPrice.toFixed(2)}. Recomprando deuda de ${acBuying.toFixed(8)} BTC.`, 'success');
             
             try {
-                // MODIFICACIÓN CRÍTICA: Ahora inyectamos currentPrice como último argumento
-                await placeShortBuyOrder(config, botState, acBuying, log, updateSStateData, currentPrice); 
+                // MODIFICACIÓN: Pasamos las dependencias para que el ciclo se guarde al confirmarse la orden
+                await placeShortBuyOrder(config, botState, acBuying, log, updateSStateData, currentPrice, {
+                    logSuccessfulCycle,
+                    updateBotState,
+                    updateGeneralBotState
+                }); 
             } catch (error) {
                 log(`❌ [S] Error en ejecución de recompra: ${error.message}`, 'error');
                 

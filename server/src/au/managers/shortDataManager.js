@@ -83,7 +83,10 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
  * Maneja el éxito de una COMPRA (Take Profit).
  */
 async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies) {
-    const { config, log, updateBotState, updateSStateData, updateGeneralBotState } = dependencies;
+    const { 
+        config, log, updateBotState, updateSStateData, 
+        updateGeneralBotState, logSuccessfulCycle // Asegúrate que logSuccessfulCycle venga en deps
+    } = dependencies;
     
     try {
         const currentSData = botStateObj.sStateData;
@@ -98,20 +101,32 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
         const profitNeto = totalUsdtReceivedFromSales - totalSpentToCover;
 
         // RECUPERACIÓN DE BALANCE:
-        // El sbalance ya fue restado en cada venta. Al cerrar, devolvemos el capital 
-        // inicial más el profit generado.
         const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
 
         await saveExecutedOrder({ ...orderDetails, side: 'buy' }, SSTATE);
 
-        if (currentSData.cycleStartTime) {
-            await logSuccessfulCycle({
-                strategy: 'Short',
-                cycleIndex: (botStateObj.scycle || 0) + 1,
-                netProfit: profitNeto,
-                initialInvestment: totalUsdtReceivedFromSales,
-                finalRecovery: totalSpentToCover
-            });
+        // --- REGISTRO CORREGIDO PARA SHORT ---
+        if (logSuccessfulCycle && currentSData.cycleStartTime) {
+            try {
+                await logSuccessfulCycle({
+                    autobotId: botStateObj._id,
+                    symbol: botStateObj.config.symbol || 'BTC_USDT',
+                    strategy: 'Short',
+                    cycleIndex: (botStateObj.scycle || 0) + 1,
+                    startTime: currentSData.cycleStartTime,
+                    endTime: new Date(),
+                    averagePPC: parseFloat(currentSData.ppc || 0),
+                    finalSellPrice: buyPrice, // En Short, el precio final es el de compra
+                    orderCount: parseInt(currentSData.orderCountInCycle || 0),
+                    initialInvestment: totalUsdtReceivedFromSales,
+                    finalRecovery: totalSpentToCover,
+                    netProfit: profitNeto,
+                    profitPercentage: (profitNeto / totalUsdtReceivedFromSales) * 100
+                });
+                log(`✅ Ciclo Short #${(botStateObj.scycle || 0) + 1} guardado.`, 'success');
+            } catch (dbError) {
+                log(`⚠️ Error al guardar ciclo Short: ${dbError.message}`, 'error');
+            }
         }
 
         const shouldStopShort = config.short.stopAtCycle === true;
@@ -126,7 +141,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
 
         await updateSStateData(CLEAN_STRATEGY_DATA);
 
-        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT. Nuevo Bal: ${finalizedSBalance.toFixed(2)}`, 'success');
+        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT.`, 'success');
         await updateBotState(shouldStopShort ? 'STOPPED' : 'RUNNING', SSTATE);
 
     } catch (error) {
@@ -135,5 +150,4 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
         throw error;
     }
 }
-
 module.exports = { handleSuccessfulShortSell, handleSuccessfulShortBuy };

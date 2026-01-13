@@ -90,8 +90,8 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
     }
 }
 
-// Las funciones placeShortBuyOrder y cancelActiveShortOrder se mantienen igual pero asegurando el uso de currentPrice
-async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData, injectedPrice = 0) { 
+// Modificada para inyectar dependencias y asegurar el guardado del ciclo
+async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData, injectedPrice = 0, dependencies = {}) { 
     const SYMBOL = config.symbol;
     const currentPrice = injectedPrice || botState.price || 0;
     const usdtNeeded = btcAmount * currentPrice;
@@ -109,7 +109,12 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateSState
                     order_id: order.order_id,
                     size: btcAmount, 
                     side: 'buy',
-                    timestamp: new Date()
+                    timestamp: new Date(),
+                    dependencies: {
+                        logSuccessfulCycle: dependencies.logSuccessfulCycle,
+                        updateBotState: dependencies.updateBotState,
+                        updateGeneralBotState: dependencies.updateGeneralBotState
+                    }
                 }
             });
             log(`✅ [S-PROFIT] Cierre enviado ID: ${order.order_id}.`, 'success');
