@@ -176,46 +176,96 @@ setInterval(async () => {
 // --- 9. ARRANQUE DEL SERVIDOR Y EVENTOS DE SOCKET ---
 setupMarketWS(io);
 
+// Variable para rastrear el último precio en memoria del servidor
+let lastKnownPrice = 0;
+
+// Escuchamos cuando el WebSocket de BitMart nos da el precio para guardarlo
 io.on('connection', (socket) => {
-    console.log(`👤 Usuario conectado: ${socket.id}`);
+    console.log(`👤 Usuario conectado: ${socket.id}`);
 
-    // Sincronización inicial Autobot
-    Autobot.findOne({}).lean().then(state => {
-        if (state) emitBotState(io, state);
-    });
+    /**
+     * Función reutilizable para enviar el estado completo del bot
+     * incluyendo balances, estados y el precio más reciente.
+     */
+    const sendFullBotStatus = async () => {
+        try {
+            const state = await Autobot.findOne({}).lean();
+            if (state) {
+                // Si el motor de lógica tiene el precio, lo usamos, si no, el último guardado
+                const currentPrice = (typeof autobotLogic.getLastPrice === 'function') 
+                    ? autobotLogic.getLastPrice() 
+                    : lastKnownPrice;
 
-    // --- EVENTOS DE LA IA (MIGRACIÓN DESDE FETCH) ---
+                // Enviamos el paquete de datos unificado
+                socket.emit('bot-state-update', {
+                    ...state,
+                    price: currentPrice
+                });
 
-    // 1. Obtener estado inicial (Saldo y Running)
-    socket.on('get-ai-status', async () => {
-        try {
-            const state = await aiEngine.getStatus();
-            socket.emit('ai-status-init', state);
-        } catch (err) { console.error("Error en socket get-ai-status:", err); }
-    });
+                // También enviamos las estadísticas rápidas
+                const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
+                const profitPercent = totalCurrentBalance > 0 
+                    ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
+                    : 0;
 
-    // 2. Obtener historial de trades de la IA
-    socket.on('get-ai-history', async () => {
-        try {
-            const history = await aiEngine.getVirtualHistory();
-            socket.emit('ai-history-data', history);
-        } catch (err) { console.error("Error en socket get-ai-history:", err); }
-    });
+                socket.emit('bot-stats', {
+                    totalProfit: state.total_profit || 0,
+                    profitChangePercent: profitPercent 
+                });
+            }
+        } catch (err) {
+            console.error("❌ Error al recuperar estado para el socket:", err);
+        }
+    };
 
-    // 3. Encender/Apagar IA
-    socket.on('toggle-ai', async (data) => {
-        try {
-            const result = await aiEngine.toggle(data.action);
-            // Avisamos a todos los clientes del nuevo estado
-            io.emit('ai-status-update', { 
-                success: true, 
-                isRunning: result.isRunning,
-                virtualBalance: result.virtualBalance 
-            });
-        } catch (err) { console.error("Error en socket toggle-ai:", err); }
-    });
+    // 1. Envío automático al conectar físicamente el socket
+    sendFullBotStatus();
+
+    // 2. Respuesta a la petición manual 'get-bot-state' del Frontend
+    // Esto es lo que soluciona el precio en $0 al cambiar de pestañas
+    socket.on('get-bot-state', () => {
+        sendFullBotStatus();
+    });
+
+    // --- EVENTOS DE LA IA (MIGRACIÓN DESDE FETCH) ---
+
+    // 1. Obtener estado inicial de la IA
+    socket.on('get-ai-status', async () => {
+        try {
+            const state = await aiEngine.getStatus();
+            socket.emit('ai-status-init', state);
+        } catch (err) { console.error("Error en socket get-ai-status:", err); }
+    });
+
+    // 2. Obtener historial de trades de la IA
+    socket.on('get-ai-history', async () => {
+        try {
+            const history = await aiEngine.getVirtualHistory();
+            socket.emit('ai-history-data', history);
+        } catch (err) { console.error("Error en socket get-ai-history:", err); }
+    });
+
+    // 3. Encender/Apagar IA
+    socket.on('toggle-ai', async (data) => {
+        try {
+            const result = await aiEngine.toggle(data.action);
+            io.emit('ai-status-update', { 
+                success: true, 
+                isRunning: result.isRunning,
+                virtualBalance: result.virtualBalance 
+            });
+        } catch (err) { console.error("Error en socket toggle-ai:", err); }
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`👤 Usuario desconectado: ${socket.id}`);
+    });
 });
 
+// Extra: Actualizamos lastKnownPrice cada vez que llegue data del mercado
+// Esto debe ir dentro de tu función setupMarketWS, justo donde haces io.emit('marketData'...)
+// Agrega esta línea ahí: lastKnownPrice = price;
+
 server.listen(PORT, () => {
-    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
+    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });

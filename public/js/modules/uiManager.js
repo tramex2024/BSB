@@ -24,30 +24,32 @@ export function updateBotUI(state) {
     if (!state) return;
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
-    const priceElement = document.getElementById('auprice');
-    if (priceElement && state.price !== undefined && state.price !== null) {
-        const currentPrice = Number(state.price);
-        
-        // Si es la primera vez que recibimos el precio (lastPrice === 0)
-        if (lastPrice === 0) {
-            priceElement.classList.add('text-white');
-            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
-                minimumFractionDigits: 2, maximumFractionDigits: 2 
-            })}`;
-            lastPrice = currentPrice;
-        } 
-        // Si el precio cambió, aplicamos la lógica de colores (verde/rojo)
-        else if (currentPrice !== lastPrice) {
-            priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
-            if (currentPrice > lastPrice) priceElement.classList.add('text-emerald-400');
-            else priceElement.classList.add('text-red-400');
+const priceElement = document.getElementById('auprice');
+if (priceElement && state.price !== undefined && state.price !== null) {
+    const currentPrice = Number(state.price);
+    
+    // Detectamos si el elemento está recién creado (vacío o con el default del HTML)
+    const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
 
-            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
-                minimumFractionDigits: 2, maximumFractionDigits: 2 
-            })}`;
-            lastPrice = currentPrice;
+    // Si el precio cambió O si la interfaz está vacía (por cambio de pestaña)
+    if (currentPrice !== lastPrice || isUIEmpty) {
+        
+        // Lógica de colores
+        if (isUIEmpty || lastPrice === 0) {
+            priceElement.className = 'text-white'; // Color neutral al aparecer
+        } else if (currentPrice > lastPrice) {
+            priceElement.className = 'text-emerald-400';
+        } else if (currentPrice < lastPrice) {
+            priceElement.className = 'text-red-400';
         }
+
+        priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
+            minimumFractionDigits: 2, maximumFractionDigits: 2 
+        })}`;
+        
+        lastPrice = currentPrice;
     }
+}
 
     // --- 2. ESTADOS DE LAS ESTRATEGIAS ---
     updateStatusLabel('aubot-lstate', state.lstate);
