@@ -7,52 +7,137 @@ import { socket } from '../main.js';
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
 
-// --- CONFIGURACIÓN DE AUDIO (Notificaciones) ---
+// --- CONFIGURACIÓN DE AUDIO ---
 const sounds = {
-    buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'), // Sonido entrada/cobertura
-    sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'), // Sonido cierre/ganancia
+    buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
+    sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'),
 };
-// Volumen moderado para no asustar
 Object.values(sounds).forEach(s => s.volume = 0.4);
 
+/**
+ * Inicialización principal del Dashboard
+ */
 export function initializeDashboardView() {
+    // 1. LIMPIEZA CRÍTICA DE SOCKETS (Para evitar duplicidad de sonidos y logs)
+    if (socket) {
+        socket.off('marketData');
+        socket.off('open-orders-update');
+        socket.off('market-signal-update');
+        socket.off('order-executed');
+        socket.off('cycle-closed');
+        socket.off('ai-decision-update');
+        socket.off('disconnect');
+    }
+
+    // 2. ACTIVAR COMPONENTES
     setupSocketListeners();
     setupChartSelector();
+    setupTestButton(); // Extraído para mayor claridad
     
-    // Cargas iniciales de datos históricos y estadísticas
+    // 3. CARGA DE DATOS
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
+}
 
-    // Al final de initializeDashboardView()
-const testBtn = document.getElementById('test-notification-btn');
-if (testBtn) {
-    testBtn.addEventListener('click', () => {
-        console.log("Botón presionado - Iniciando prueba");
+/**
+ * Configura el botón de prueba de notificaciones
+ */
+function setupTestButton() {
+    const testBtn = document.getElementById('test-notification-btn');
+    if (!testBtn) return;
 
-        // 1. Sonido (Cambiamos a una URL de respaldo muy confiable)
+    // Clonamos para limpiar eventos previos de clics
+    const newBtn = testBtn.cloneNode(true);
+    testBtn.parentNode.replaceChild(newBtn, testBtn);
+
+    newBtn.addEventListener('click', () => {
+        console.log("🔔 Iniciando prueba de alerta...");
+
+        // Prueba de Sonido
         const testAudio = new Audio('https://actions.google.com/sounds/v1/foley/door_bell.ogg');
-        testAudio.volume = 1.0;
+        testAudio.volume = 0.8;
         testAudio.play()
-            .then(() => console.log("Sonido ok"))
-            .catch(err => alert("El navegador bloqueó el sonido. Haz clic en la página primero."));
+            .catch(() => alert("Por favor, haz clic en cualquier parte de la pantalla primero para habilitar el sonido."));
 
-        // 2. Luz (Cambiamos a un estilo directo para que no dependa de Tailwind)
-        const precioEl = document.getElementById('auprice');
-        if (precioEl) {
-            const contenedor = precioEl.parentElement;
-            contenedor.style.transition = "all 0.5s";
-            contenedor.style.backgroundColor = "#059669"; // Verde esmeralda fuerte
-            
-            setTimeout(() => {
-                contenedor.style.backgroundColor = ""; // Vuelve al color original
-            }, 1000);
-        } else {
-            console.error("No se encontró el elemento con ID 'auprice'");
-        }
+        // Prueba Visual (Flash Verde)
+        flashElement('auprice', 'bg-emerald-500/40');
     });
 }
 
+/**
+ * Gestión de Sockets (Salud, Señales y Ejecuciones)
+ */
+function setupSocketListeners() {
+    if (!socket) return;
 
+    // 1. Salud del WebSocket de Mercado
+    socket.on('marketData', () => {
+        updateHealthStatus('health-market-ws', 'health-market-ws-text', true);
+    });
+
+    // 2. Salud de Órdenes Privadas
+    socket.on('open-orders-update', () => {
+        updateHealthStatus('health-user-ws', 'health-user-ws-text', true);
+    });
+
+    // 3. Señales del Analizador RSI
+    socket.on('market-signal-update', (analysis) => {
+        const signalEl = document.getElementById('health-analyzer-signal');
+        const reasonEl = document.getElementById('health-analyzer-reason');
+        
+        if (signalEl) {
+            signalEl.textContent = `RSI: ${analysis.currentRSI.toFixed(1)} | ${analysis.action}`;
+            if (analysis.action === 'BUY') signalEl.className = 'text-[9px] font-bold text-emerald-400';
+            else if (analysis.action === 'SELL') signalEl.className = 'text-[9px] font-bold text-red-400';
+            else signalEl.className = 'text-[9px] font-bold text-blue-400';
+        }
+
+        if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
+    });
+
+    // 4. Notificaciones de Órdenes Ejecutadas (Sonido + Flash)
+    socket.on('order-executed', (order) => {
+        const side = order.side.toLowerCase();
+        if (side === 'buy') {
+            sounds.buy.play().catch(() => {});
+            flashElement('auprice', 'bg-emerald-500/20');
+        } else {
+            sounds.sell.play().catch(() => {});
+            flashElement('auprice', 'bg-orange-500/20');
+        }
+    });
+
+    // 5. Fin de Ciclo
+    socket.on('cycle-closed', () => {
+        sounds.sell.play().catch(() => {});
+        flashElement('auprofit', 'bg-yellow-500/30');
+        loadAndRenderEquityCurve();
+        loadAndDisplayKpis();
+    });
+
+    // 6. Monitor de IA (Mini-Widget)
+    socket.on('ai-decision-update', (data) => {
+        const confidenceVal = Math.round(data.confidence * 100);
+        updateElementText('ai-mini-confidence', `${confidenceVal}%`);
+        
+        const progressEl = document.getElementById('ai-mini-progress');
+        if (progressEl) progressEl.style.strokeDasharray = `${confidenceVal}, 100`;
+
+        updateElementText('ai-mini-thought', data.message);
+
+        const actionEl = document.getElementById('ai-mini-action');
+        if (actionEl) {
+            const isHigh = confidenceVal > 80;
+            actionEl.textContent = isHigh ? "ALTA PROBABILIDAD" : "ANALIZANDO PATRONES";
+            actionEl.className = `text-[9px] font-bold mt-1 uppercase ${isHigh ? 'text-emerald-400' : 'text-blue-400'}`;
+        }
+    });
+
+    // 7. Estado desconectado
+    socket.on('disconnect', () => {
+        updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
+        updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
+    });
 }
 
 // --- CONFIGURACIÓN DEL GRÁFICO ---
@@ -61,169 +146,62 @@ function setupChartSelector() {
     if (selector) {
         selector.addEventListener('change', (e) => {
             currentChartParameter = e.target.value;
-            if (cycleHistoryData && cycleHistoryData.length > 0) {
+            if (cycleHistoryData.length > 0) {
                 renderEquityCurve(cycleHistoryData, currentChartParameter);
             }
         });
     }
 }
 
-// --- SOCKETS (Monitoreo de Salud, Ciclos y Notificaciones) ---
-function setupSocketListeners() {
-    if (!socket) return;
-
-    // 1. MONITOR DE SALUD: Market WebSocket (Precios)
-    socket.on('marketData', () => {
-        updateHealthStatus('health-market-ws', 'health-market-ws-text', true);
-    });
-
-    // 2. MONITOR DE SALUD: User WebSocket (Órdenes Privadas)
-    socket.on('open-orders-update', () => {
-        updateHealthStatus('health-user-ws', 'health-user-ws-text', true);
-    });
-
-    // 3. MONITOR DE SALUD: Analizador RSI (Señales y Motivos)
-    socket.on('market-signal-update', (analysis) => {
-        const signalEl = document.getElementById('health-analyzer-signal');
-        const reasonEl = document.getElementById('health-analyzer-reason');
-        
-        if (signalEl) {
-            signalEl.textContent = `RSI: ${analysis.currentRSI.toFixed(1)} | ${analysis.action}`;
-            // Color dinámico según la señal
-            if (analysis.action === 'BUY') signalEl.className = 'text-[9px] font-bold text-emerald-400';
-            else if (analysis.action === 'SELL') signalEl.className = 'text-[9px] font-bold text-red-400';
-            else signalEl.className = 'text-[9px] font-bold text-blue-400';
-        }
-
-        if (reasonEl) {
-            reasonEl.textContent = analysis.reason || 'Buscando oportunidad...';
-        }
-    });
-
-    // 4. NOTIFICACIONES ACTIVAS: Compras y Ventas
-    // Este evento debe ser emitido por el backend cuando una orden se llena
-    socket.on('order-executed', (order) => {
-        if (order.side.toLowerCase() === 'buy') {
-            sounds.buy.play().catch(() => console.log("Interacción requerida para audio"));
-            flashElement('auprice', 'bg-emerald-500/20'); // Destello verde en precio
-        } else {
-            sounds.sell.play().catch(() => console.log("Interacción requerida para audio"));
-            flashElement('auprice', 'bg-orange-500/20'); // Destello naranja en precio
-        }
-    });
-
-    // 5. ACTUALIZACIÓN POR CIERRE DE CICLO
-    socket.on('cycle-closed', () => {
-        console.log("Ciclo cerrado detectado. Actualizando analíticas...");
-        sounds.sell.play().catch(() => {});
-        flashElement('auprofit', 'bg-yellow-500/30'); // Destello en el profit total
-        loadAndRenderEquityCurve();
-        loadAndDisplayKpis();
-    });
-
-    // 6. Fallback de desconexión
-    socket.on('disconnect', () => {
-        updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
-        updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
-    });
-    
-    // 7. --- NUEVO: MONITOR DE IA EN DASHBOARD ---
-socket.on('ai-decision-update', (data) => {
-    const confidenceVal = Math.round(data.confidence * 100);
-    
-    // Actualizar porcentaje y círculo de progreso
-    const confidenceEl = document.getElementById('ai-mini-confidence');
-    const progressEl = document.getElementById('ai-mini-progress');
-    if (confidenceEl) confidenceEl.textContent = `${confidenceVal}%`;
-    if (progressEl) progressEl.style.strokeDasharray = `${confidenceVal}, 100`;
-
-    // Actualizar texto de "pensamiento"
-    const thoughtEl = document.getElementById('ai-mini-thought');
-    if (thoughtEl) thoughtEl.textContent = data.message;
-
-    // Cambiar color si la confianza es alta
-    const actionEl = document.getElementById('ai-mini-action');
-    if (actionEl) {
-        if (confidenceVal > 80) {
-            actionEl.textContent = "ALTA PROBABILIDAD";
-            actionEl.className = "text-[9px] font-bold text-emerald-400 mt-1 uppercase";
-        } else {
-            actionEl.textContent = "ANALIZANDO PATRONES";
-            actionEl.className = "text-[9px] font-bold text-blue-400 mt-1 uppercase";
-        }
-    }
-});
-}
-
-// --- CARGA DE DATOS DESDE API (Analíticas) ---
+// --- CARGA DE DATOS ---
 async function loadAndDisplayKpis() {
     try {
         const kpis = await fetchCycleKpis();
         if (!kpis) return;
-
         const avgVal = kpis.averageProfitPercentage || 0;
-        
         updateElementText('cycle-avg-profit', 
             `${avgVal >= 0 ? '+' : ''}${avgVal.toFixed(2)}%`, 
-            avgVal >= 0 ? 'text-xl font-bold text-yellow-500' : 'text-xl font-bold text-red-500'
+            `text-xl font-bold ${avgVal >= 0 ? 'text-yellow-500' : 'text-red-500'}`
         );
-        
         updateElementText('total-cycles-closed', kpis.totalCycles || 0);
-    } catch (e) { 
-        console.error("Error cargando KPIs:", e); 
-    }
+    } catch (e) { console.error("Error KPIs:", e); }
 }
 
 async function loadAndRenderEquityCurve() {
     try {
         const curveData = await fetchEquityCurveData();
-        if (curveData && Array.isArray(curveData) && curveData.length > 0) {
+        if (curveData?.length > 0) {
             cycleHistoryData = curveData;
             renderEquityCurve(cycleHistoryData, currentChartParameter);
         }
-    } catch (e) { 
-        console.error("Error cargando curva de capital:", e); 
-    }
+    } catch (e) { console.error("Error Gráfico:", e); }
 }
 
 // --- FUNCIONES AUXILIARES DE UI ---
-
-/**
- * Actualiza los indicadores visuales del Panel de Salud
- */
 function updateHealthStatus(dotId, textId, isOnline) {
     const dot = document.getElementById(dotId);
     const txt = document.getElementById(textId);
     if (dot && txt) {
-        dot.className = isOnline ? 'w-2 h-2 rounded-full bg-emerald-500' : 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+        dot.className = `w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`;
         txt.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
-        txt.className = isOnline ? 'text-[9px] font-mono text-emerald-500' : 'text-[9px] font-mono text-red-500';
+        txt.className = `text-[9px] font-mono ${isOnline ? 'text-emerald-500' : 'text-red-500'}`;
     }
 }
 
-/**
- * Genera un efecto visual de parpadeo en un contenedor
- */
 function flashElement(id, colorClass) {
     const el = document.getElementById(id);
-    if (el && el.parentElement) {
+    if (el?.parentElement) {
         const parent = el.parentElement;
-        // Quitamos cualquier color anterior para que no se mezclen
-        parent.classList.remove('bg-emerald-500/20', 'bg-orange-500/20', 'bg-yellow-500/30');
-        
+        parent.classList.remove('bg-emerald-500/20', 'bg-orange-500/20', 'bg-yellow-500/30', 'bg-emerald-500/40');
         parent.classList.add(colorClass);
-        setTimeout(() => {
-            parent.classList.remove(colorClass);
-        }, 1000);
+        parent.style.transition = "background-color 0.5s ease";
+        setTimeout(() => parent.classList.remove(colorClass), 1000);
     }
 }
 
-/**
- * Actualiza texto y clases de elementos de forma segura
- */
 function updateElementText(id, text, className = null) {
     const el = document.getElementById(id);
-    if (el && text !== undefined && text !== null) {
+    if (el) {
         el.textContent = text;
         if (className) el.className = className;
     }

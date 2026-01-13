@@ -84,9 +84,10 @@ function processNextLog() {
 }
 
 /**
- * Carga el HTML y activa la lógica JS de la pestaña seleccionada
+ * CARGA UNIFICADA: Esta es la única función que descarga el HTML y activa el JS.
  */
 export async function initializeTab(tabName) {
+    // 1. Limpieza de procesos anteriores para no saturar la memoria
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
     
@@ -98,16 +99,20 @@ export async function initializeTab(tabName) {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
-    mainContent.style.opacity = '0';
+    // Efecto visual suave de carga
+    mainContent.style.opacity = '0.5';
 
     try {
+        // 2. Traer el HTML de la vista
         const response = await fetch(`./${tabName}.html`);
         if (!response.ok) throw new Error(`Plantilla no encontrada: ${tabName}.html`);
         const html = await response.text();
         
+        // 3. Inyectar el HTML (Solo una vez aquí)
         mainContent.innerHTML = html;
         mainContent.style.opacity = '1';
 
+        // 4. Activar la lógica de JavaScript para esa pestaña
         if (views[tabName]) {
             const module = await views[tabName]();
             const formatNormal = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
@@ -116,30 +121,33 @@ export async function initializeTab(tabName) {
             const initFn = module[formatNormal] || module[formatUpper];
 
             if (typeof initFn === 'function') {
-                console.log(`✅ Inicializando vista: ${tabName}`);
+                console.log(`✅ Iniciando vista: ${tabName}`);
                 await initFn();
             }
         }
     } catch (error) {
         console.error(`❌ Error al cargar pestaña [${tabName}]:`, error);
-        mainContent.innerHTML = `<div class="p-10 text-center"><button onclick="location.reload()">Reintentar</button></div>`;
+        mainContent.innerHTML = `<div class="p-10 text-center text-red-500">Error: ${error.message} <br><button class="mt-4 bg-gray-700 px-4 py-2 rounded" onclick="location.reload()">Reintentar</button></div>`;
         mainContent.style.opacity = '1';
     }
 }
 
 /**
- * Gestiona la reconexión cuando la pestaña vuelve a estar activa
+ * Gestión de reconexión cuando la pestaña vuelve a estar activa (Wake up)
  */
 function handleVisibilityChange() {
     if (document.visibilityState === 'visible') {
+        console.log('🔄 Pestaña recuperada: Sincronizando datos...');
+        
+        // Si el socket se murió, lo reconectamos
         if (!socket || !socket.connected) {
-            console.log('🔄 Pestaña recuperada: Forzando reconexión de Socket...');
-            if (socket) {
-                socket.connect();
-            } else {
-                initializeFullApp();
-            }
+            if (socket) socket.connect();
+            else initializeFullApp();
         }
+
+        // Forzamos a que la pestaña actual se refresque para que no se vea "congelada"
+        const currentTab = window.location.hash.replace('#', '') || 'dashboard';
+        initializeTab(currentTab);
     }
 }
 
@@ -151,11 +159,11 @@ export function initializeFullApp() {
 
     updateConnectionStatusBall('DISCONNECTED'); 
 
-    // Configuración optimizada para evitar desconexiones en móviles y pestañas inactivas
+    // Configuración robusta para móviles y Render
     socket = io(BACKEND_URL, { 
         path: '/socket.io',
         reconnection: true,
-        reconnectionAttempts: Infinity, // No rendirse nunca
+        reconnectionAttempts: Infinity, 
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         timeout: 20000,
@@ -175,6 +183,7 @@ export function initializeFullApp() {
         }
     });
 
+    // --- ESCUCHA DE PRECIOS ---
     socket.on('marketData', (data) => {
         const newPrice = parseFloat(data.price);
         if (isNaN(newPrice)) return;
@@ -182,14 +191,9 @@ export function initializeFullApp() {
         const auPriceEl = document.getElementById('auprice');
         if (auPriceEl) {
             const formatter = new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
+                style: 'currency', currency: 'USD', minimumFractionDigits: 2
             });
-            
             auPriceEl.textContent = formatter.format(newPrice);
-
             if (lastPrice > 0) {
                 auPriceEl.style.setProperty('color', newPrice > lastPrice ? '#34d399' : '#f87171', 'important');
             }
@@ -197,7 +201,6 @@ export function initializeFullApp() {
 
         const percentEl = document.getElementById('price-percent');
         const iconEl = document.getElementById('price-icon');
-        
         if (percentEl && data.priceChangePercent !== undefined) {
             const change = parseFloat(data.priceChangePercent);
             const isUp = change >= 0;
@@ -211,6 +214,7 @@ export function initializeFullApp() {
         lastPrice = newPrice;
     });
 
+    // --- ESCUCHA DE BENEFICIOS (PROFIT) ---
     socket.on('bot-stats', (data) => {
         const profitEl = document.getElementById('auprofit');
         if (profitEl) {
@@ -220,6 +224,7 @@ export function initializeFullApp() {
         }
     });
 
+    // --- ESCUCHA DE BALANCES ---
     socket.on('balance-real-update', (data) => {
         updateConnectionStatusBall(data.source);
         updateBotBalances([
@@ -238,16 +243,18 @@ export function initializeFullApp() {
         });
     });
 
+    // --- ESCUCHA DE LOGS ---
     socket.on('bot-log', (log) => {
         logQueue.push(log);
         if (logQueue.length > 20) logQueue.shift();
         if (!isProcessingLog) processNextLog();
     });
 
+    // Inicializamos las pestañas pasándole la función de carga
     setupNavTabs(initializeTab);
 }
 
-// Registro de eventos globales de vida de la página
+// Eventos de vida de la página
 document.addEventListener('visibilitychange', handleVisibilityChange);
 
 document.addEventListener('DOMContentLoaded', () => {

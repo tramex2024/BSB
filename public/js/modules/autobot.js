@@ -4,11 +4,14 @@ import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotState } from './apiService.js';
-import { TRADE_SYMBOL_TV, BACKEND_URL, socket } from '../main.js';
+import { TRADE_SYMBOL_TV, socket } from '../main.js';
 
 const MIN_USDT_AMOUNT = 5.00;
 let currentTab = 'opened';
 
+/**
+ * Valida que los montos cumplan con el mínimo requerido por BitMart
+ */
 function validateStrategyInputs() {
     const fields = ['auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt'];
     let isValid = true;
@@ -26,6 +29,9 @@ function validateStrategyInputs() {
     return isValid;
 }
 
+/**
+ * Escucha cambios en los inputs para enviar la configuración al backend al instante
+ */
 function setupConfigListeners() {
     const configIds = [
         'auamountl-usdt', 'auamounts-usdt', 
@@ -46,16 +52,23 @@ function setupConfigListeners() {
     });
 }
 
+/**
+ * Inicialización principal de la vista de Autobot
+ */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
+    
+    // 1. Configurar listeners de configuración (Inputs)
     setupConfigListeners();
 
+    // 2. Inicializar gráfico con un pequeño retraso para asegurar el contenedor DOM
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
+    // 3. Lógica del Botón Start/Stop (Clonación para limpiar eventos previos)
     const activateStartBtn = () => {
         const startBtn = document.getElementById('austart-btn');
         if (startBtn) {
@@ -71,7 +84,7 @@ export async function initializeAutobotView() {
                 try {
                     await toggleBotState(isRunning);
                 } catch (err) {
-                    console.error("❌ Error:", err);
+                    console.error("❌ Error al cambiar estado del bot:", err);
                 }
             });
             return true;
@@ -79,6 +92,7 @@ export async function initializeAutobotView() {
         return false;
     };
 
+    // Reintento de activación si el botón no está listo inmediatamente
     if (!activateStartBtn()) {
         const retry = setInterval(() => {
             if (activateStartBtn()) clearInterval(retry);
@@ -86,7 +100,7 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // --- GESTIÓN DE PESTAÑAS ---
+    // 4. GESTIÓN DE PESTAÑAS (Opened / History)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     
     const setActiveTabStyle = (selectedId) => {
@@ -111,22 +125,27 @@ export async function initializeAutobotView() {
         });
     });
 
-    // Carga inicial
+    // Carga inicial de datos
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
-    // --- SOCKETS: ACTUALIZACIÓN EN TIEMPO REAL ---
+    // 5. SOCKETS: ACTUALIZACIÓN EN TIEMPO REAL (Con Limpieza Crítica)
     if (socket) {
-        // Limpiar listeners previos para evitar duplicados al cambiar de pestaña
+        // IMPORTANTE: Limpiar antes de asignar para evitar duplicados en memoria
         socket.off('bot-state-update');
         socket.off('orders-update'); 
 
-        // Actualiza botones y estado general
+        // Escuchar actualización de interfaz (Botones Start/Stop)
         socket.on('bot-state-update', (state) => updateBotUI(state));
 
-        // Actualiza la lista de órdenes si estamos en la pestaña "opened"
+        // Escuchar actualización de la tabla de órdenes
         socket.on('orders-update', (data) => {
-            updateOpenOrdersTable(data, 'au-order-list', currentTab);
+            if (document.getElementById('au-order-list')) {
+                updateOpenOrdersTable(data, 'au-order-list', currentTab);
+            }
         });
+
+        // Solicitar estado actual al backend para sincronizar la UI nada más cargar
+        socket.emit('get-bot-state');
     }
 }

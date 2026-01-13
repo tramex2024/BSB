@@ -1,8 +1,7 @@
 // public/js/modules/uiManager.js
 
 /**
- * Variable global para comparar el precio anterior con el nuevo
- * y poder cambiar el color (verde si sube, rojo si baja).
+ * Estado local para evitar renders innecesarios
  */
 let lastPrice = 0;
 
@@ -19,22 +18,25 @@ const STATUS_COLORS = {
 };
 
 /**
- * Actualiza la UI de forma estable con los datos del Socket usando PUNTO DECIMAL
+ * Actualiza la interfaz global con los datos recibidos del Socket
  */
 export function updateBotUI(state) {
     if (!state) return;
 
-    // --- 1. ACTUALIZACIÓN DE PRECIO CON COLORES ---
+    // --- 1. ACTUALIZACIÓN DE PRECIO ---
     const priceElement = document.getElementById('auprice');
-    if (priceElement && state.price !== undefined && state.price !== null) {
+    if (priceElement && state.price !== undefined) {
         const currentPrice = Number(state.price);
         if (currentPrice !== lastPrice) {
+            // Cambio de color dinámico según tendencia inmediata
             priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
             if (lastPrice !== 0) {
                 if (currentPrice > lastPrice) priceElement.classList.add('text-emerald-400');
                 else if (currentPrice < lastPrice) priceElement.classList.add('text-red-400');
                 else priceElement.classList.add('text-white');
-            } else { priceElement.classList.add('text-white'); }
+            } else {
+                priceElement.classList.add('text-white');
+            }
 
             priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
                 minimumFractionDigits: 2, maximumFractionDigits: 2 
@@ -43,11 +45,11 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 2. ACTUALIZACIÓN DE ESTADOS LONG/SHORT ---
+    // --- 2. ESTADOS DE LAS ESTRATEGIAS ---
     updateStatusLabel('aubot-lstate', state.lstate);
     updateStatusLabel('aubot-sstate', state.sstate);
 
-    // --- 3. ACTUALIZACIÓN DE VALORES NUMÉRICOS (LABELS) ---
+    // --- 3. VALORES NUMÉRICOS (Lógica de Precisión) ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
@@ -71,16 +73,18 @@ export function updateBotUI(state) {
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
         if (!element) continue;
+
         const rawValue = state[dataKey];
         if (rawValue === undefined || rawValue === null) continue;
+
         const value = Number(rawValue);
         if (isNaN(value)) continue;
 
-        if (dataKey.includes('profit')) {
+        if (elementId.includes('profit')) {
             formatProfit(element, value);
         } else {
-            // Lógica de decimales: 6 para BTC, 0 para contadores/ciclos, 2 para el resto
-            const isBtc = elementId.includes('btc') || elementId === 'aubalance-btc';
+            // Configuración de decimales según el tipo de dato
+            const isBtc = elementId.includes('btc');
             const isInteger = elementId.includes('norder') || elementId.includes('cycle');
             
             let decimals = 2;
@@ -92,11 +96,13 @@ export function updateBotUI(state) {
                 maximumFractionDigits: decimals 
             });
             
-            if (element.textContent !== formatted) element.textContent = formatted;
+            if (element.textContent !== formatted) {
+                element.textContent = formatted;
+            }
         }
     }
 
-    // --- 4. ACTUALIZACIÓN DE INPUTS DE CONFIGURACIÓN ---
+    // --- 4. SINCRONIZACIÓN DE INPUTS (Solo si no están en foco) ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -112,23 +118,25 @@ export function updateBotUI(state) {
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
             if (input && value !== undefined && document.activeElement !== input) {
-                input.value = value;
+                // Sincroniza el valor del input solo si el usuario no está escribiendo en él
+                if (input.value != value) input.value = value;
             }
         }
 
+        // Checkboxes de "Stop at Cycle"
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
         if (stopL) stopL.checked = !!conf.long?.stopAtCycle;
         if (stopS) stopS.checked = !!conf.short?.stopAtCycle;
     }
 
-    // --- 5. CONTROL DE BLOQUEO ---
+    // --- 5. ESTADO GLOBAL DE CONTROLES ---
     const isGlobalStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
     updateControlsState(isGlobalStopped);
 }
 
 /**
- * Formatea el profit con signo, colores y PUNTO DECIMAL
+ * Formatea valores de ganancia/pérdida con colores y signos
  */
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '-';
@@ -145,7 +153,7 @@ function formatProfit(element, value) {
 }
 
 /**
- * Gestiona el estado de los inputs y el botón principal.
+ * Gestiona la disponibilidad de los inputs y el estilo del botón Start/Stop
  */
 function updateControlsState(isStopped) {
     const startStopButton = document.getElementById('austart-btn');
@@ -154,6 +162,7 @@ function updateControlsState(isStopped) {
     if (startStopButton) {
         const isRunning = !isStopped;
         const newText = isRunning ? 'STOP AUTOBOT' : 'START AUTOBOT';
+        
         if (startStopButton.textContent !== newText) {
             startStopButton.textContent = newText;
             startStopButton.className = isRunning 
@@ -165,16 +174,15 @@ function updateControlsState(isStopped) {
     if (autobotSettings) {
         const inputs = autobotSettings.querySelectorAll('input');
         inputs.forEach(input => {
-            const isAlwaysEnabled = [
-                'au-stop-long-at-cycle', 
-                'au-stop-short-at-cycle'
-            ].includes(input.id);
+            // Ciertos controles siempre deben ser editables (estrategia de salida)
+            const isAlwaysEnabled = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
             
             if (isAlwaysEnabled) {
                 input.disabled = false;
                 input.style.opacity = '1';
                 input.style.cursor = 'pointer';
             } else {
+                // Bloquear parámetros base mientras el bot corre para evitar errores de cálculo
                 input.disabled = !isStopped;
                 input.style.opacity = isStopped ? '1' : '0.5';
                 input.style.cursor = isStopped ? 'auto' : 'not-allowed';
@@ -183,6 +191,9 @@ function updateControlsState(isStopped) {
     }
 }
 
+/**
+ * Actualiza etiquetas de estado (RUNNING, STOPPED, etc.)
+ */
 function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
     if (!el || !status || el.textContent === status) return;
@@ -192,7 +203,7 @@ function updateStatusLabel(id, status) {
 }
 
 /**
- * Toasts (Mensajes de éxito/error)
+ * Sistema de Notificaciones (Toasts)
  */
 export function displayMessage(message, type = 'info') {
     const container = document.getElementById('message-container');
