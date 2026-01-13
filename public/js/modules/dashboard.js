@@ -3,6 +3,7 @@
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
 import { socket } from '../main.js'; 
+import { updateBotUI } from './uiManager.js'; // Importante para cargar el precio
 
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
@@ -18,8 +19,9 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
  * Inicialización principal del Dashboard
  */
 export function initializeDashboardView() {
-    // 1. LIMPIEZA CRÍTICA DE SOCKETS (Para evitar duplicidad de sonidos y logs)
+    // 1. LIMPIEZA CRÍTICA DE SOCKETS
     if (socket) {
+        socket.off('bot-state-update'); // Escuchar estado para el precio
         socket.off('marketData');
         socket.off('open-orders-update');
         socket.off('market-signal-update');
@@ -32,11 +34,15 @@ export function initializeDashboardView() {
     // 2. ACTIVAR COMPONENTES
     setupSocketListeners();
     setupChartSelector();
-    setupTestButton(); // Extraído para mayor claridad
+    setupTestButton(); 
     
-    // 3. CARGA DE DATOS
+    // 3. CARGA DE DATOS (API + SOCKET INITIAL EMIT)
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
+
+    if (socket && socket.connected) {
+        socket.emit('get-bot-state'); // Pedimos el precio y estado actual inmediatamente
+    }
 }
 
 /**
@@ -46,41 +52,42 @@ function setupTestButton() {
     const testBtn = document.getElementById('test-notification-btn');
     if (!testBtn) return;
 
-    // Clonamos para limpiar eventos previos de clics
     const newBtn = testBtn.cloneNode(true);
     testBtn.parentNode.replaceChild(newBtn, testBtn);
 
     newBtn.addEventListener('click', () => {
         console.log("🔔 Iniciando prueba de alerta...");
-
-        // Prueba de Sonido
         const testAudio = new Audio('https://actions.google.com/sounds/v1/foley/door_bell.ogg');
         testAudio.volume = 0.8;
         testAudio.play()
-            .catch(() => alert("Por favor, haz clic en cualquier parte de la pantalla primero para habilitar el sonido."));
+            .catch(() => alert("Por favor, interactúa con la pantalla primero para habilitar el sonido."));
 
-        // Prueba Visual (Flash Verde)
         flashElement('auprice', 'bg-emerald-500/40');
     });
 }
 
 /**
- * Gestión de Sockets (Salud, Señales y Ejecuciones)
+ * Gestión de Sockets
  */
 function setupSocketListeners() {
     if (!socket) return;
 
-    // 1. Salud del WebSocket de Mercado
+    // Actualización de estado global (Precio BTC, balances, etc.)
+    socket.on('bot-state-update', (state) => {
+        updateBotUI(state);
+    });
+
+    // Salud del WebSocket de Mercado
     socket.on('marketData', () => {
         updateHealthStatus('health-market-ws', 'health-market-ws-text', true);
     });
 
-    // 2. Salud de Órdenes Privadas
+    // Salud de Órdenes Privadas
     socket.on('open-orders-update', () => {
         updateHealthStatus('health-user-ws', 'health-user-ws-text', true);
     });
 
-    // 3. Señales del Analizador RSI
+    // Señales del Analizador RSI
     socket.on('market-signal-update', (analysis) => {
         const signalEl = document.getElementById('health-analyzer-signal');
         const reasonEl = document.getElementById('health-analyzer-reason');
@@ -91,11 +98,10 @@ function setupSocketListeners() {
             else if (analysis.action === 'SELL') signalEl.className = 'text-[9px] font-bold text-red-400';
             else signalEl.className = 'text-[9px] font-bold text-blue-400';
         }
-
         if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
     });
 
-    // 4. Notificaciones de Órdenes Ejecutadas (Sonido + Flash)
+    // Notificaciones de Ejecución
     socket.on('order-executed', (order) => {
         const side = order.side.toLowerCase();
         if (side === 'buy') {
@@ -107,7 +113,7 @@ function setupSocketListeners() {
         }
     });
 
-    // 5. Fin de Ciclo
+    // Fin de Ciclo (Venta Total)
     socket.on('cycle-closed', () => {
         sounds.sell.play().catch(() => {});
         flashElement('auprofit', 'bg-yellow-500/30');
@@ -115,13 +121,13 @@ function setupSocketListeners() {
         loadAndDisplayKpis();
     });
 
-    // 6. Monitor de IA (Mini-Widget)
+    // Mini-Widget de IA
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
         
         const progressEl = document.getElementById('ai-mini-progress');
-        if (progressEl) progressEl.style.strokeDasharray = `${confidenceVal}, 100`;
+        if (progressEl) progressEl.style.strokeDashoffset = 100 - confidenceVal;
 
         updateElementText('ai-mini-thought', data.message);
 
@@ -133,7 +139,6 @@ function setupSocketListeners() {
         }
     });
 
-    // 7. Estado desconectado
     socket.on('disconnect', () => {
         updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
         updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
@@ -194,7 +199,6 @@ function flashElement(id, colorClass) {
         const parent = el.parentElement;
         parent.classList.remove('bg-emerald-500/20', 'bg-orange-500/20', 'bg-yellow-500/30', 'bg-emerald-500/40');
         parent.classList.add(colorClass);
-        parent.style.transition = "background-color 0.5s ease";
         setTimeout(() => parent.classList.remove(colorClass), 1000);
     }
 }

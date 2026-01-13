@@ -42,6 +42,8 @@ function setupConfigListeners() {
     configIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
+        
+        // Limpiamos listeners previos clonando si es necesario o usando una sola vez
         el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
             if (el.type === 'number') {
                 const val = parseFloat(el.value);
@@ -61,15 +63,15 @@ export async function initializeAutobotView() {
     // 1. Configurar listeners de configuración (Inputs)
     setupConfigListeners();
 
-    // 2. Inicializar gráfico con un pequeño retraso para asegurar el contenedor DOM
+    // 2. Inicializar gráfico (TradingView)
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
-    // 3. Lógica del Botón Start/Stop (Clonación para limpiar eventos previos)
-    const activateStartBtn = () => {
+    // 3. Lógica del Botón Start/Stop
+    const setupStartBtn = () => {
         const startBtn = document.getElementById('austart-btn');
         if (startBtn) {
             const newBtn = startBtn.cloneNode(true);
@@ -78,13 +80,13 @@ export async function initializeAutobotView() {
                 e.preventDefault();
                 const isRunning = newBtn.textContent.includes('STOP');
                 if (!isRunning && !validateStrategyInputs()) {
-                    displayMessage(`Min amount is $${MIN_USDT_AMOUNT} USDT`, 'error');
+                    displayMessage(`Monto mínimo es $${MIN_USDT_AMOUNT} USDT`, 'error');
                     return;
                 }
                 try {
                     await toggleBotState(isRunning);
                 } catch (err) {
-                    console.error("❌ Error al cambiar estado del bot:", err);
+                    console.error("❌ Error al cambiar estado:", err);
                 }
             });
             return true;
@@ -92,20 +94,15 @@ export async function initializeAutobotView() {
         return false;
     };
 
-    // Reintento de activación si el botón no está listo inmediatamente
-    if (!activateStartBtn()) {
-        const retry = setInterval(() => {
-            if (activateStartBtn()) clearInterval(retry);
-        }, 200);
+    if (!setupStartBtn()) {
+        const retry = setInterval(() => { if (setupStartBtn()) clearInterval(retry); }, 200);
         setTimeout(() => clearInterval(retry), 3000);
     }
 
     // 4. GESTIÓN DE PESTAÑAS (Opened / History)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
-    
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50', 'transition-all');
             if (btn.id === selectedId) {
                 btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
                 btn.classList.remove('text-gray-500', 'font-normal');
@@ -125,27 +122,38 @@ export async function initializeAutobotView() {
         });
     });
 
-    // Carga inicial de datos
+    // Carga inicial de órdenes
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
-    // 5. SOCKETS: ACTUALIZACIÓN EN TIEMPO REAL (Con Limpieza Crítica)
+    // 5. SOCKETS: ACTUALIZACIÓN Y SINCRONIZACIÓN INICIAL
     if (socket) {
-        // IMPORTANTE: Limpiar antes de asignar para evitar duplicados en memoria
+        // Limpieza de eventos duplicados
         socket.off('bot-state-update');
         socket.off('orders-update'); 
 
-        // Escuchar actualización de interfaz (Botones Start/Stop)
-        socket.on('bot-state-update', (state) => updateBotUI(state));
+        // Listener para actualizaciones de estado (incluye el precio de BTC)
+        socket.on('bot-state-update', (state) => {
+            updateBotUI(state); 
+        });
 
-        // Escuchar actualización de la tabla de órdenes
+        // Listener para actualizar tabla de órdenes
         socket.on('orders-update', (data) => {
             if (document.getElementById('au-order-list')) {
                 updateOpenOrdersTable(data, 'au-order-list', currentTab);
             }
         });
 
-        // Solicitar estado actual al backend para sincronizar la UI nada más cargar
-        socket.emit('get-bot-state');
+        /**
+         * CRÍTICO: Petición activa de estado inicial.
+         * Esto resuelve el problema del precio vacío al cambiar de pestaña.
+         */
+        if (socket.connected) {
+            socket.emit('get-bot-state');
+        } else {
+            socket.on('connect', () => {
+                socket.emit('get-bot-state');
+            });
+        }
     }
 }

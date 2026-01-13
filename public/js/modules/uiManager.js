@@ -25,18 +25,22 @@ export function updateBotUI(state) {
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
     const priceElement = document.getElementById('auprice');
-    if (priceElement && state.price !== undefined) {
+    if (priceElement && state.price !== undefined && state.price !== null) {
         const currentPrice = Number(state.price);
-        if (currentPrice !== lastPrice) {
-            // Cambio de color dinámico según tendencia inmediata
+        
+        // Si es la primera vez que recibimos el precio (lastPrice === 0)
+        if (lastPrice === 0) {
+            priceElement.classList.add('text-white');
+            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
+                minimumFractionDigits: 2, maximumFractionDigits: 2 
+            })}`;
+            lastPrice = currentPrice;
+        } 
+        // Si el precio cambió, aplicamos la lógica de colores (verde/rojo)
+        else if (currentPrice !== lastPrice) {
             priceElement.classList.remove('text-emerald-400', 'text-red-400', 'text-white');
-            if (lastPrice !== 0) {
-                if (currentPrice > lastPrice) priceElement.classList.add('text-emerald-400');
-                else if (currentPrice < lastPrice) priceElement.classList.add('text-red-400');
-                else priceElement.classList.add('text-white');
-            } else {
-                priceElement.classList.add('text-white');
-            }
+            if (currentPrice > lastPrice) priceElement.classList.add('text-emerald-400');
+            else priceElement.classList.add('text-red-400');
 
             priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
                 minimumFractionDigits: 2, maximumFractionDigits: 2 
