@@ -3,7 +3,7 @@
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotBalances } from './modules/balance.js';
-import { updateBotUI } from './modules/uiManager.js'; // <--- IMPORTANTE
+import { updateBotUI } from './modules/uiManager.js';
 
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
@@ -13,12 +13,50 @@ export let currentChart = null;
 export let intervals = {};
 export let socket = null;
 
+// --- VARIABLES PARA LOGS ---
+let logQueue = [];
+let isProcessingLog = false;
+
 // Registro de módulos para carga dinámica
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),
     aibot: () => import('./modules/aibot.js')
 };
+
+/**
+ * Sistema de gestión de Logs con retardo (Anti-Spam)
+ */
+function processNextLog() {
+    if (logQueue.length === 0) {
+        isProcessingLog = false;
+        return;
+    }
+
+    isProcessingLog = true;
+    const log = logQueue.shift();
+    const logEl = document.getElementById('log-message');
+
+    if (logEl) {
+        logEl.textContent = log.message;
+        
+        const colors = {
+            success: 'text-emerald-400',
+            error: 'text-red-400',
+            warning: 'text-yellow-400',
+            info: 'text-blue-400'
+        };
+        
+        logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;        
+logEl.style.opacity = '0'; // Primero lo ocultamos
+setTimeout(() => {
+    logEl.textContent = log.message;
+    logEl.style.opacity = '1'; // Aparece suavemente con el CSS nuevo
+}, 50);
+    } else {
+        isProcessingLog = false;
+    }
+}
 
 /**
  * Actualiza el indicador visual de conexión
@@ -97,33 +135,26 @@ export function initializeFullApp() {
     socket.on('connect', () => {
         console.log('Real-time: Connected');
         updateConnectionStatusBall('API_SUCCESS');
-        // Pedir estado inmediatamente al conectar
         socket.emit('get-bot-state');
     });
 
-    // --- EL CAMBIO CRÍTICO AQUÍ ---
-    // Centralizamos todos los datos que vienen del bot hacia el UI Manager
-    
-    // 1. Datos de Mercado (Precio)
+    // 1. Datos de Mercado
     socket.on('marketData', (data) => {
-        // En lugar de manipular el DOM aquí, usamos el manager
         updateBotUI({ price: data.price });
-        
-        // Actualizar porcentaje de cambio (opcional si no está en uiManager)
         updatePriceHeader(data);
     });
 
-    // 2. Estado Global del Bot (Balances, Estados, Ciclos)
+    // 2. Estado Global
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
     });
 
-    // 3. Stats rápidas (Total Profit)
+    // 3. Stats rápidas
     socket.on('bot-stats', (data) => {
         updateBotUI({ total_profit: data.totalProfit });
     });
 
-    // 4. Balances (USDT / BTC)
+    // 4. Balances
     socket.on('balance-real-update', (data) => {
         updateConnectionStatusBall(data.source);
         updateBotUI({
@@ -132,11 +163,18 @@ export function initializeFullApp() {
         });
     });
 
+    // --- 5. ESCUCHA DE LOGS (Restaurado) ---
+    socket.on('bot-log', (log) => {
+        logQueue.push(log);
+        if (logQueue.length > 20) logQueue.shift();
+        if (!isProcessingLog) processNextLog();
+    });
+
     setupNavTabs(initializeTab);
 }
 
 /**
- * Helper para el header de precios (Percent & Icon)
+ * Helper para el header de precios
  */
 function updatePriceHeader(data) {
     const percentEl = document.getElementById('price-percent');
