@@ -1,279 +1,242 @@
 // Archivo: BSB/server/server.js
 
-const express = require('express');
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const cors = require('cors');
-const http = require('http');
-const { Server } = require("socket.io");
-const WebSocket = require('ws');
+// public/js/main.js
 
-// --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
-const bitmartService = require('./services/bitmartService');
-const autobotLogic = require('./autobotLogic.js');
-const aiEngine = require('./src/ai/aiEngine'); // 🧠 Motor IA
+import { setupNavTabs } from './modules/navigation.js';
+import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
+import { updateBotBalances } from './modules/balance.js';
+import { updateBotUI } from './modules/uiManager.js';
 
-// Modelos
-const Autobot = require('./models/Autobot');
-const MarketSignal = require('./models/MarketSignal');
-const analyzer = require('./src/bitmart_indicator_analyzer'); 
+export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
+export const TRADE_SYMBOL_TV = 'BTCUSDT';
+export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
-dotenv.config();
-const app = express();
-const PORT = process.env.PORT || 5000;
-const server = http.createServer(app);
+export let currentChart = null;
+export let intervals = {};
+export let socket = null;
 
-// --- 2. CONFIGURACIÓN DE MIDDLEWARES ---
-app.use(express.json()); 
-app.use(cors()); // CORS abierto para evitar bloqueos en rutas API estándar
+// --- VARIABLES PARA LOGS (MANTENIDO) ---
+let logQueue = [];
+let isProcessingLog = false;
+const LOG_DISPLAY_TIME = 2500; 
+const MAX_QUEUE_SIZE = 2;      
 
-// --- 3. CONFIGURACIÓN DE SOCKET.IO ---
-const io = new Server(server, {
-    cors: {
-        origin: "*", // Permitimos conexión desde cualquier origen para WebSockets
-        methods: ["GET", "POST"]
-    },
-    path: '/socket.io'
-});
+// --- VARIABLE PARA EL WATCHDOG (NUEVO) ---
+let watchdogTimer = null;
 
-// Vinculamos sockets a los motores
-autobotLogic.setIo(io);
-aiEngine.setIo(io); 
-
-// --- 4. DEFINICIÓN DE RUTAS API (Opcionales ahora que usamos Sockets) ---
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/orders', require('./routes/ordersRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/autobot', require('./routes/autobotRoutes'));
-app.use('/api/v1/config', require('./routes/configRoutes'));
-app.use('/api/v1/bot-state', require('./routes/balanceRoutes'));
-app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
-
-// --- 5. CONEXIÓN BASE DE DATOS ---
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected...'))
-    .catch(err => console.error('❌ MongoDB Error:', err));
-
-/**
- * emitBotState: Sincronización inicial del Autobot
- */
-const emitBotState = (io, state) => {
-    if (!state) return;
-    const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
-    const profitPercent = totalCurrentBalance > 0 
-        ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
-        : 0;
-
-    io.sockets.emit('bot-state-update', {
-        ...state,
-        total_profit: state.total_profit,
-        lastAvailableUSDT: state.lastAvailableUSDT
-    });
-
-    io.sockets.emit('bot-stats', {
-        totalProfit: state.total_profit || 0,
-        profitChangePercent: profitPercent 
-    });
+// Registro de módulos para carga dinámica
+const views = {
+    dashboard: () => import('./modules/dashboard.js'),
+    autobot: () => import('./modules/autobot.js'),
+    aibot: () => import('./modules/aibot.js')
 };
 
-// --- 6. WEBSOCKET BITMART (Market Data + AI Engine) ---
-const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
-let lastProcessedMinute = -1;
-let marketWs = null;
-let marketHeartbeat = null;
-let isMarketConnected = false; // El sensor de salud
+/**
+ * Sistema de gestión de Logs (Lógica de 2.5s con descarte de logs viejos)
+ */
+function processNextLog() {
+    if (logQueue.length === 0) {
+        isProcessingLog = false;
+        return;
+    }
 
-function setupMarketWS(io) {
-    if (marketWs) marketWs.terminate();
+    if (logQueue.length > MAX_QUEUE_SIZE) {
+        logQueue = logQueue.slice(-MAX_QUEUE_SIZE);
+    }
 
-    marketWs = new WebSocket(bitmartWsUrl);
-    
-    marketWs.on('open', () => {
-        isMarketConnected = true; // ✅ Conectado a BitMart
-        console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a BTC_USDT...");
-        marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
+    isProcessingLog = true;
+    const log = logQueue.shift();
+    const logEl = document.getElementById('log-message');
 
-        if (marketHeartbeat) clearInterval(marketHeartbeat);
-        marketHeartbeat = setInterval(() => {
-            if (marketWs.readyState === WebSocket.OPEN) marketWs.send("ping");
-        }, 15000);
-    });
+    if (logEl) {
+        const colors = {
+            success: 'text-emerald-400',
+            error: 'text-red-400',
+            warning: 'text-yellow-400',
+            info: 'text-blue-400'
+        };
 
-    marketWs.on('message', async (data) => {
-        try {
-            const rawData = data.toString();
-            if (rawData === 'pong') return;
+        logEl.style.opacity = '0';
 
-            const parsed = JSON.parse(rawData);
-            if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
-                const ticker = parsed.data[0];
-                const price = parseFloat(ticker.last_price);
-                const open24h = parseFloat(ticker.open_24h);
-                const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
+        setTimeout(() => {
+            logEl.textContent = log.message;
+            logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+            logEl.style.opacity = '1';
 
-                const now = new Date();
-                const currentMinute = now.getMinutes();
+            setTimeout(() => {
+                processNextLog();
+            }, LOG_DISPLAY_TIME);
 
-                if (currentMinute !== lastProcessedMinute) {
-                    lastProcessedMinute = currentMinute;
-                    const analysis = await analyzer.runAnalysis(price);
-                    
-                    await MarketSignal.findOneAndUpdate(
-                        { symbol: 'BTC_USDT' },
-                        {
-                            currentRSI: analysis.currentRSI || 0,
-                            signal: analysis.action,
-                            reason: analysis.reason,
-                            lastUpdate: new Date()
-                        },
-                        { upsert: true }
-                    );
-                    io.emit('market-signal-update', analysis);
-                }
-
-                io.emit('marketData', { 
-                price, 
-                priceChangePercent,
-                exchangeOnline: isMarketConnected // <-- Enviamos la salud real
-            });
-                
-                // 🧠 MOTOR IA
-                try {
-                    aiEngine.analyze(price);
-                } catch (aiErr) {
-                    console.error("⚠️ Error en AIEngine:", aiErr.message);
-                }
-
-                // CICLO DE AUTOBOT
-                await autobotLogic.botCycle(price);
-            }
-        } catch (e) { }
-    });
-
-    marketWs.on('close', () => {
-        isMarketConnected = false; // ❌ Se perdió BitMart
-        console.log("⚠️ [MARKET_WS] Cerrado. Reconectando...");
-        // Emitimos de inmediato que estamos offline
-        io.emit('exchange-status', { online: false }); 
-        setTimeout(() => setupMarketWS(io), 2000);
-    });
-
-    marketWs.on('error', (err) => console.error("❌ [MARKET_WS] Error:", err.message));
+        }, 300);
+    } else {
+        isProcessingLog = false;
+    }
 }
 
-// --- 7. WEBSOCKET ÓRDENES PRIVADAS ---
-bitmartService.initOrderWebSocket((ordersData) => {
-    io.sockets.emit('open-orders-update', ordersData);
-});
+/**
+ * Actualiza el indicador visual de conexión
+ */
+function updateConnectionStatusBall(source) {
+    const statusDot = document.getElementById('status-dot'); 
+    if (!statusDot) return;
+    
+    statusDot.className = 'status-dot transition-all duration-300 h-full w-full rounded-full block'; 
 
-// --- 8. BUCLE DE SINCRONIZACIÓN DE SALDOS (10s) ---
-setInterval(async () => {
+    switch (source) {
+        case 'API_SUCCESS':
+            statusDot.classList.add('status-green');
+            break;
+        case 'CACHE_FALLBACK':
+            statusDot.classList.add('status-purple');
+            break;
+        default: // Cualquier fallo o timeout pone ROJO
+            statusDot.classList.add('status-red');
+    }
+}
+
+/**
+ * Reinicia el temporizador de seguridad (NUEVO)
+ */
+function resetWatchdog() {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => {
+        updateConnectionStatusBall('DISCONNECTED'); // Rojo si no hay datos en 1.5s
+    }, 1500);
+}
+
+/**
+ * CARGA UNIFICADA DE VISTAS (MANTENIDO)
+ */
+export async function initializeTab(tabName) {
+    Object.values(intervals).forEach(clearInterval);
+    intervals = {};
+    
+    if (window.currentChart && typeof window.currentChart.remove === 'function') {
+        window.currentChart.remove();
+        window.currentChart = null;
+    }
+
+    const mainContent = document.getElementById('main-content');
+    if (!mainContent) return;
+
+    mainContent.style.opacity = '0.5';
+
     try {
-        const apiSuccess = await autobotLogic.slowBalanceCacheUpdate();
-        const botState = await Autobot.findOne({}).lean();
-        if (botState) {
-            io.sockets.emit('balance-real-update', { 
-                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK',
-                lastAvailableUSDT: botState.lastAvailableUSDT || 0,
-                lastAvailableBTC: botState.lastAvailableBTC || 0,
-            });
+        const response = await fetch(`./${tabName}.html`);
+        if (!response.ok) throw new Error(`Plantilla no encontrada: ${tabName}.html`);
+        const html = await response.text();
+        
+        mainContent.innerHTML = html;
+        mainContent.style.opacity = '1';
+
+        if (views[tabName]) {
+            const module = await views[tabName]();
+            const formatNormal = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            const initFn = module[formatNormal];
+
+            if (typeof initFn === 'function') {
+                console.log(`✅ Vista Activa: ${tabName}`);
+                await initFn();
+            }
         }
-    } catch (e) { console.error("Error Balance Loop:", e); }
-}, 10000);
+    } catch (error) {
+        console.error(`❌ Error en [${tabName}]:`, error);
+        mainContent.style.opacity = '1';
+    }
+}
 
-// --- 9. ARRANQUE DEL SERVIDOR Y EVENTOS DE SOCKET ---
-setupMarketWS(io);
+/**
+ * Inicialización completa de la App (Sockets)
+ */
+export function initializeFullApp() {
+    if (socket && socket.connected) return; 
 
-// Variable para rastrear el último precio en memoria del servidor
-let lastKnownPrice = 0;
+    // Ponemos la bolita roja por defecto nada más arrancar
+    updateConnectionStatusBall('DISCONNECTED');
 
-// Escuchamos cuando el WebSocket de BitMart nos da el precio para guardarlo
-io.on('connection', (socket) => {
-    console.log(`👤 Usuario conectado: ${socket.id}`);
+    socket = io(BACKEND_URL, { 
+        path: '/socket.io',
+        reconnection: true,
+        transports: ['websocket']
+    });
 
-    /**
-     * Función reutilizable para enviar el estado completo del bot
-     * incluyendo balances, estados y el precio más reciente.
-     */
-    const sendFullBotStatus = async () => {
-        try {
-            const state = await Autobot.findOne({}).lean();
-            if (state) {
-                // Si el motor de lógica tiene el precio, lo usamos, si no, el último guardado
-                const currentPrice = (typeof autobotLogic.getLastPrice === 'function') 
-                    ? autobotLogic.getLastPrice() 
-                    : lastKnownPrice;
+    socket.on('connect', () => {
+        console.log('Real-time: Connected');
+        socket.emit('get-bot-state');
+    });
 
-                // Enviamos el paquete de datos unificado
-                socket.emit('bot-state-update', {
-                    ...state,
-                    price: currentPrice
-                });
+    // 1. Datos de Mercado (CON LÓGICA DE BOLITA)
+    socket.on('marketData', (data) => {
+        updateBotUI({ price: data.price });
+        updatePriceHeader(data);
 
-                // También enviamos las estadísticas rápidas
-                const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
-                const profitPercent = totalCurrentBalance > 0 
-                    ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
-                    : 0;
-
-                socket.emit('bot-stats', {
-                    totalProfit: state.total_profit || 0,
-                    profitChangePercent: profitPercent 
-                });
-            }
-        } catch (err) {
-            console.error("❌ Error al recuperar estado para el socket:", err);
+        // Si el server dice que BitMart está online, ponemos verde y reseteamos el reloj
+        if (data.exchangeOnline) {
+            updateConnectionStatusBall('API_SUCCESS');
+            resetWatchdog();
+        } else {
+            updateConnectionStatusBall('DISCONNECTED');
         }
-    };
+    });
 
-    // 1. Envío automático al conectar físicamente el socket
-    sendFullBotStatus();
+    // 2. Estado Global
+    socket.on('bot-state-update', (state) => {
+        updateBotUI(state);
+    });
 
-    // 2. Respuesta a la petición manual 'get-bot-state' del Frontend
-    // Esto es lo que soluciona el precio en $0 al cambiar de pestañas
-    socket.on('get-bot-state', () => {
-        sendFullBotStatus();
-    });
+    // 3. Stats rápidas
+    socket.on('bot-stats', (data) => {
+        updateBotUI({ total_profit: data.totalProfit });
+    });
 
-    // --- EVENTOS DE LA IA (MIGRACIÓN DESDE FETCH) ---
+    // 4. Balances
+    socket.on('balance-real-update', (data) => {
+        if (data.source === 'CACHE_FALLBACK') updateConnectionStatusBall('CACHE_FALLBACK');
+        updateBotUI({
+            lastAvailableUSDT: data.lastAvailableUSDT,
+            lastAvailableBTC: data.lastAvailableBTC
+        });
+    });
 
-    // 1. Obtener estado inicial de la IA
-    socket.on('get-ai-status', async () => {
-        try {
-            const state = await aiEngine.getStatus();
-            socket.emit('ai-status-init', state);
-        } catch (err) { console.error("Error en socket get-ai-status:", err); }
-    });
+    // 5. ESCUCHA DE LOGS
+    socket.on('bot-log', (log) => {
+        logQueue.push(log);
+        if (!isProcessingLog) processNextLog();
+    });
 
-    // 2. Obtener historial de trades de la IA
-    socket.on('get-ai-history', async () => {
-        try {
-            const history = await aiEngine.getVirtualHistory();
-            socket.emit('ai-history-data', history);
-        } catch (err) { console.error("Error en socket get-ai-history:", err); }
-    });
-
-    // 3. Encender/Apagar IA
-    socket.on('toggle-ai', async (data) => {
-        try {
-            const result = await aiEngine.toggle(data.action);
-            io.emit('ai-status-update', { 
-                success: true, 
-                isRunning: result.isRunning,
-                virtualBalance: result.virtualBalance 
-            });
-        } catch (err) { console.error("Error en socket toggle-ai:", err); }
-    });
-
+    // NUEVO: Detector de desconexión de socket
     socket.on('disconnect', () => {
-        console.log(`👤 Usuario desconectado: ${socket.id}`);
+        updateConnectionStatusBall('DISCONNECTED');
     });
-});
 
-// Extra: Actualizamos lastKnownPrice cada vez que llegue data del mercado
-// Esto debe ir dentro de tu función setupMarketWS, justo donde haces io.emit('marketData'...)
-// Agrega esta línea ahí: lastKnownPrice = price;
+    setupNavTabs(initializeTab);
+}
 
-server.listen(PORT, () => {
-    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
+/**
+ * Helper para el header de precios (MANTENIDO)
+ */
+function updatePriceHeader(data) {
+    const percentEl = document.getElementById('price-percent');
+    const iconEl = document.getElementById('price-icon');
+    if (percentEl && data.priceChangePercent !== undefined) {
+        const change = parseFloat(data.priceChangePercent);
+        const isUp = change >= 0;
+        percentEl.textContent = `${Math.abs(change).toFixed(2)}%`;
+        percentEl.style.color = isUp ? '#34d399' : '#f87171';
+        if (iconEl) {
+            iconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'}`;
+            iconEl.style.color = isUp ? '#34d399' : '#f87171';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initializeAppEvents(initializeFullApp);
+    updateLoginIcon();
+
+    if (localStorage.getItem('token')) {
+        initializeFullApp();
+    } else {
+        initializeTab('dashboard'); 
+    }
 });
