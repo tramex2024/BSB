@@ -167,18 +167,20 @@ export function initializeFullApp() {
 
     // 1. Datos de Mercado (CON LÓGICA DE BOLITA)
     socket.on('marketData', (data) => {
-        console.log("¿Llega salud del server?", data.exchangeOnline);///////////////////
-        updateBotUI({ price: data.price });
-        updatePriceHeader(data);
+    updateBotUI({ price: data.price });
+    updatePriceHeader(data);
 
-        // Si el server dice que BitMart está online, ponemos verde y reseteamos el reloj
-        if (data.exchangeOnline) {
+    // Solo actuamos si el dato de salud existe realmente (true o false)
+    if (data.exchangeOnline !== undefined) {
+        if (data.exchangeOnline === true) {
             updateConnectionStatusBall('API_SUCCESS');
             resetWatchdog();
         } else {
             updateConnectionStatusBall('DISCONNECTED');
         }
-    });
+    }
+    // Si es undefined, no hacemos nada (mantenemos el color que ya tenía)
+});
 
     // 2. Estado Global
     socket.on('bot-state-update', (state) => {
