@@ -13,9 +13,11 @@ export let currentChart = null;
 export let intervals = {};
 export let socket = null;
 
-// --- VARIABLES PARA LOGS ---
+// --- VARIABLES PARA LOGS (CON LÓGICA DE SALTO) ---
 let logQueue = [];
 let isProcessingLog = false;
+const LOG_DISPLAY_TIME = 2500; // 2.5 segundos por mensaje
+const MAX_QUEUE_SIZE = 3;      // Si hay más de 3, limpiamos para frescura
 
 // Registro de módulos para carga dinámica
 const views = {
@@ -25,7 +27,7 @@ const views = {
 };
 
 /**
- * Sistema de gestión de Logs con retardo (Anti-Spam)
+ * Sistema de gestión de Logs (Lógica de 2.5s con descarte de logs viejos)
  */
 function processNextLog() {
     if (logQueue.length === 0) {
@@ -33,26 +35,42 @@ function processNextLog() {
         return;
     }
 
+    // LÓGICA DE FRESCURA: Si la cola creció mucho, saltamos al más reciente
+    if (logQueue.length > MAX_QUEUE_SIZE) {
+        console.log(`[LogBar] Limpiando cola acumulada (${logQueue.length} mensajes). Saltando a lo más reciente.`);
+        // Dejamos solo los últimos 3 mensajes
+        logQueue = logQueue.slice(-MAX_QUEUE_SIZE);
+    }
+
     isProcessingLog = true;
     const log = logQueue.shift();
     const logEl = document.getElementById('log-message');
 
     if (logEl) {
-        logEl.textContent = log.message;
-        
         const colors = {
             success: 'text-emerald-400',
             error: 'text-red-400',
             warning: 'text-yellow-400',
             info: 'text-blue-400'
         };
-        
-        logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;        
-logEl.style.opacity = '0'; // Primero lo ocultamos
-setTimeout(() => {
-    logEl.textContent = log.message;
-    logEl.style.opacity = '1'; // Aparece suavemente con el CSS nuevo
-}, 50);
+
+        // 1. Ocultar el anterior
+        logEl.style.opacity = '0';
+
+        setTimeout(() => {
+            // 2. Cambiar contenido y color
+            logEl.textContent = log.message;
+            logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+            
+            // 3. Mostrar nuevo
+            logEl.style.opacity = '1';
+
+            // 4. Esperar los 2.5s acordados antes de pasar al siguiente
+            setTimeout(() => {
+                processNextLog();
+            }, LOG_DISPLAY_TIME);
+
+        }, 300); // Pequeño delay para que el fade-out se complete
     } else {
         isProcessingLog = false;
     }
@@ -138,23 +156,19 @@ export function initializeFullApp() {
         socket.emit('get-bot-state');
     });
 
-    // 1. Datos de Mercado
     socket.on('marketData', (data) => {
         updateBotUI({ price: data.price });
         updatePriceHeader(data);
     });
 
-    // 2. Estado Global
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
     });
 
-    // 3. Stats rápidas
     socket.on('bot-stats', (data) => {
         updateBotUI({ total_profit: data.totalProfit });
     });
 
-    // 4. Balances
     socket.on('balance-real-update', (data) => {
         updateConnectionStatusBall(data.source);
         updateBotUI({
@@ -163,10 +177,10 @@ export function initializeFullApp() {
         });
     });
 
-    // --- 5. ESCUCHA DE LOGS (Restaurado) ---
+    // --- ESCUCHA DE LOGS ---
     socket.on('bot-log', (log) => {
         logQueue.push(log);
-        if (logQueue.length > 20) logQueue.shift();
+        // Si no se está mostrando nada ahora mismo, arranca el proceso
         if (!isProcessingLog) processNextLog();
     });
 
