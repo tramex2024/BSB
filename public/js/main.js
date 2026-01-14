@@ -13,15 +13,16 @@ export let currentChart = null;
 export let intervals = {};
 export let socket = null;
 
-// --- VARIABLES PARA LOGS (CON LÓGICA DE SALTO) ---
+// --- VARIABLES PARA LOGS (MANTENIDO) ---
 let logQueue = [];
 let isProcessingLog = false;
 const LOG_DISPLAY_TIME = 2500; 
 const MAX_QUEUE_SIZE = 2;      
 
-// --- VARIABLE PARA EL WATCHDOG (CONEXIÓN) ---
+// --- VARIABLE PARA EL WATCHDOG (NUEVO) ---
 let watchdogTimer = null;
 
+// Registro de módulos para carga dinámica
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),
@@ -29,8 +30,8 @@ const views = {
 };
 
 /**
- * Sistema de gestión de Logs
- */
+ * Sistema de gestión de Logs (Lógica de 2.5s con descarte de logs viejos)
+ */
 function processNextLog() {
     if (logQueue.length === 0) {
         isProcessingLog = false;
@@ -71,34 +72,39 @@ function processNextLog() {
 }
 
 /**
- * Actualiza el indicador visual de conexión
- */
-function updateConnectionStatusBall(status) {
+ * Actualiza el indicador visual de conexión
+ */
+function updateConnectionStatusBall(source) {
     const statusDot = document.getElementById('status-dot'); 
     if (!statusDot) return;
     
     statusDot.className = 'status-dot transition-all duration-300 h-full w-full rounded-full block'; 
 
-    if (status === 'ONLINE') {
-        statusDot.classList.add('status-green');
-    } else if (status === 'FALLBACK') {
-        statusDot.classList.add('status-purple');
-    } else {
-        statusDot.classList.add('status-red');
+    switch (source) {
+        case 'API_SUCCESS':
+            statusDot.classList.add('status-green');
+            break;
+        case 'CACHE_FALLBACK':
+            statusDot.classList.add('status-purple');
+            break;
+        default: // Cualquier fallo o timeout pone ROJO
+            statusDot.classList.add('status-red');
     }
 }
 
 /**
- * Reinicia el temporizador de seguridad (Watchdog)
+ * Reinicia el temporizador de seguridad (NUEVO)
  */
 function resetWatchdog() {
     if (watchdogTimer) clearTimeout(watchdogTimer);
     watchdogTimer = setTimeout(() => {
-        // Si pasan 1.5s sin recibir marketData, bolita roja.
-        updateConnectionStatusBall('OFFLINE');
+        updateConnectionStatusBall('DISCONNECTED'); // Rojo si no hay datos en 1.5s
     }, 1500);
 }
 
+/**
+ * CARGA UNIFICADA DE VISTAS (MANTENIDO)
+ */
 export async function initializeTab(tabName) {
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
@@ -110,26 +116,41 @@ export async function initializeTab(tabName) {
 
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
+
     mainContent.style.opacity = '0.5';
 
     try {
         const response = await fetch(`./${tabName}.html`);
+        if (!response.ok) throw new Error(`Plantilla no encontrada: ${tabName}.html`);
         const html = await response.text();
+        
         mainContent.innerHTML = html;
         mainContent.style.opacity = '1';
 
         if (views[tabName]) {
             const module = await views[tabName]();
-            const initFn = module[`initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`];
-            if (typeof initFn === 'function') await initFn();
+            const formatNormal = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            const initFn = module[formatNormal];
+
+            if (typeof initFn === 'function') {
+                console.log(`✅ Vista Activa: ${tabName}`);
+                await initFn();
+            }
         }
     } catch (error) {
+        console.error(`❌ Error en [${tabName}]:`, error);
         mainContent.style.opacity = '1';
     }
 }
 
+/**
+ * Inicialización completa de la App (Sockets)
+ */
 export function initializeFullApp() {
     if (socket && socket.connected) return; 
+
+    // Ponemos la bolita roja por defecto nada más arrancar
+    updateConnectionStatusBall('DISCONNECTED');
 
     socket = io(BACKEND_URL, { 
         path: '/socket.io',
@@ -137,56 +158,61 @@ export function initializeFullApp() {
         transports: ['websocket']
     });
 
-    // POR DEFECTO: Roja al iniciar
-    updateConnectionStatusBall('OFFLINE');
-
     socket.on('connect', () => {
+        console.log('Real-time: Connected');
         socket.emit('get-bot-state');
     });
 
-    // El corazón del sistema: Si llega MarketData con exchangeOnline: true, se pone verde
+    // 1. Datos de Mercado (CON LÓGICA DE BOLITA)
     socket.on('marketData', (data) => {
         updateBotUI({ price: data.price });
         updatePriceHeader(data);
 
+        // Si el server dice que BitMart está online, ponemos verde y reseteamos el reloj
         if (data.exchangeOnline) {
-            updateConnectionStatusBall('ONLINE');
-            resetWatchdog(); // Si los datos fluyen, el watchdog no se dispara
+            updateConnectionStatusBall('API_SUCCESS');
+            resetWatchdog();
         } else {
-            updateConnectionStatusBall('OFFLINE');
+            updateConnectionStatusBall('DISCONNECTED');
         }
     });
 
+    // 2. Estado Global
     socket.on('bot-state-update', (state) => {
         updateBotUI(state);
     });
 
+    // 3. Stats rápidas
     socket.on('bot-stats', (data) => {
         updateBotUI({ total_profit: data.totalProfit });
     });
 
+    // 4. Balances
     socket.on('balance-real-update', (data) => {
-        // Solo actualizamos a púrpura si realmente estamos en fallback, 
-        // pero la salud general la manda el marketData
-        if (data.source === 'CACHE_FALLBACK') updateConnectionStatusBall('FALLBACK');
+        if (data.source === 'CACHE_FALLBACK') updateConnectionStatusBall('CACHE_FALLBACK');
         updateBotUI({
             lastAvailableUSDT: data.lastAvailableUSDT,
             lastAvailableBTC: data.lastAvailableBTC
         });
     });
 
+    // 5. ESCUCHA DE LOGS
     socket.on('bot-log', (log) => {
         logQueue.push(log);
         if (!isProcessingLog) processNextLog();
     });
 
+    // NUEVO: Detector de desconexión de socket
     socket.on('disconnect', () => {
-        updateConnectionStatusBall('OFFLINE');
+        updateConnectionStatusBall('DISCONNECTED');
     });
 
     setupNavTabs(initializeTab);
 }
 
+/**
+ * Helper para el header de precios (MANTENIDO)
+ */
 function updatePriceHeader(data) {
     const percentEl = document.getElementById('price-percent');
     const iconEl = document.getElementById('price-icon');
@@ -205,6 +231,7 @@ function updatePriceHeader(data) {
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
+
     if (localStorage.getItem('token')) {
         initializeFullApp();
     } else {
