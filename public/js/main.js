@@ -167,6 +167,7 @@ export function initializeFullApp() {
 
     // 1. Datos de Mercado (CON LÓGICA DE BOLITA)
     socket.on('marketData', (data) => {
+        console.log("¿Llega salud del server?", data.exchangeOnline);///////////////////
         updateBotUI({ price: data.price });
         updatePriceHeader(data);
 
