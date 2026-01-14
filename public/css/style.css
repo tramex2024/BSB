@@ -119,27 +119,43 @@ header, .fixed-header {
     100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
 }
 
-/* --- LOG BAR CORREGIDA --- */
+/* --- LOG BAR REFINADA --- */
 .log-bar, #log-bar {
     position: sticky;
-    /* IMPORTANTE: Debe ser igual al alto del header (64px) */
     top: 64px !important; 
     width: 100%;
     height: 32px;
-    background-color: rgba(17, 24, 39, 0.95); /* gray-900 con transparencia */
-    backdrop-filter: blur(4px);
+    background-color: rgba(11, 15, 25, 0.98);
+    backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
-    padding: 0 24px;
-    z-index: 900; /* Un escalón por debajo del header */
+    padding: 0 16px; /* Un poco menos de padding en los lados */
+    z-index: 900;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden; /* Evita que el texto ensucie el diseño */
 }
 
 #log-message {
     margin: 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 0.01em;
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+    color: #9ca3af;
+    white-space: nowrap; /* Fuerza al texto a quedarse en una sola línea */
+    text-overflow: ellipsis; /* Si el mensaje es muy largo, pone "..." al final */
+    
+    /* Fuente responsiva: */
+    font-size: 11px; /* Tamaño por defecto para PC */
+}
+
+/* Ajuste específico para celulares (pantallas menores a 640px) */
+@media (max-width: 640px) {
+    #log-message {
+        font-size: 9px; /* Un poco más pequeña para que encaje perfecto */
+        letter-spacing: -0.02em; /* Junta un poquito las letras para ganar espacio */
+    }
+    
+    .log-bar {
+        padding: 0 10px; /* Más espacio para el texto en móviles */
+    }
 }
 
 /* --- MODALES --- */
