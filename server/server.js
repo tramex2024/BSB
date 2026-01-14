@@ -81,6 +81,7 @@ const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&com
 let lastProcessedMinute = -1;
 let marketWs = null;
 let marketHeartbeat = null;
+let isMarketConnected = false; // El sensor de salud
 
 function setupMarketWS(io) {
     if (marketWs) marketWs.terminate();
@@ -88,6 +89,7 @@ function setupMarketWS(io) {
     marketWs = new WebSocket(bitmartWsUrl);
     
     marketWs.on('open', () => {
+        isMarketConnected = true; // ✅ Conectado a BitMart
         console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a BTC_USDT...");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
@@ -129,7 +131,11 @@ function setupMarketWS(io) {
                     io.emit('market-signal-update', analysis);
                 }
 
-                io.emit('marketData', { price, priceChangePercent });
+                io.emit('marketData', { 
+                price, 
+                priceChangePercent,
+                exchangeOnline: isMarketConnected // <-- Enviamos la salud real
+            });
                 
                 // 🧠 MOTOR IA
                 try {
@@ -145,10 +151,12 @@ function setupMarketWS(io) {
     });
 
     marketWs.on('close', () => {
-        console.log("⚠️ [MARKET_WS] Cerrado. Reconectando...");
-        if (marketHeartbeat) clearInterval(marketHeartbeat);
-        setTimeout(() => setupMarketWS(io), 2000);
-    });
+        isMarketConnected = false; // ❌ Se perdió BitMart
+        console.log("⚠️ [MARKET_WS] Cerrado. Reconectando...");
+        // Emitimos de inmediato que estamos offline
+        io.emit('exchange-status', { online: false }); 
+        setTimeout(() => setupMarketWS(io), 2000);
+    });
 
     marketWs.on('error', (err) => console.error("❌ [MARKET_WS] Error:", err.message));
 }

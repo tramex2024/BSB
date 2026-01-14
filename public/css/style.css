@@ -207,3 +207,9 @@ button:active { transform: scale(0.97); }
     .fixed-header { height: auto; padding: 12px; flex-direction: column; gap: 12px; }
     .nav-tab { padding: 8px 4px; font-size: 0.75rem; }
 }
+
+/* Estado inicial/por defecto: Rojo */
+#status-dot {
+    background-color: var(--danger); 
+    box-shadow: 0 0 8px var(--danger);
+}
