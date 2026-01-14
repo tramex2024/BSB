@@ -75,21 +75,23 @@ function processNextLog() {
  * Actualiza el indicador visual de conexión
  */
 function updateConnectionStatusBall(source) {
-    const statusDot = document.getElementById('status-dot'); 
-    if (!statusDot) return;
-    
-    statusDot.className = 'status-dot transition-all duration-300 h-full w-full rounded-full block'; 
+    const statusDot = document.getElementById('status-dot'); 
+    if (!statusDot) return;
+    
+    // Limpiamos clases viejas y mantenemos la estructura base
+    statusDot.className = 'status-dot-base'; 
 
-    switch (source) {
-        case 'API_SUCCESS':
+    switch (source) {
+        case 'API_SUCCESS':
             statusDot.classList.add('status-green');
             break;
-        case 'CACHE_FALLBACK':
-            statusDot.classList.add('status-purple');
-            break;
-        default: // Cualquier fallo o timeout pone ROJO
-            statusDot.classList.add('status-red');
-    }
+        case 'CACHE_FALLBACK':
+            statusDot.classList.add('status-purple');
+            break;
+        default: 
+            statusDot.classList.add('status-red');
+            break;
+    }
 }
 
 /**
