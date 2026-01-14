@@ -100,55 +100,62 @@ function setupMarketWS(io) {
     });
 
     marketWs.on('message', async (data) => {
-        try {
-            const rawData = data.toString();
-            if (rawData === 'pong') return;
+        try {
+            const rawData = data.toString();
+            if (rawData === 'pong') return;
 
-            const parsed = JSON.parse(rawData);
-            if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
-                const ticker = parsed.data[0];
-                const price = parseFloat(ticker.last_price);
-                const open24h = parseFloat(ticker.open_24h);
-                const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
+            const parsed = JSON.parse(rawData);
+            if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
+                const ticker = parsed.data[0];
+                const price = parseFloat(ticker.last_price);
+                const open24h = parseFloat(ticker.open_24h);
+                const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
-                const now = new Date();
-                const currentMinute = now.getMinutes();
+                // --- 1. ACTUALIZACIÓN DE PRECIO EN MEMORIA ---
+                lastKnownPrice = price; 
 
-                if (currentMinute !== lastProcessedMinute) {
-                    lastProcessedMinute = currentMinute;
-                    const analysis = await analyzer.runAnalysis(price);
-                    
-                    await MarketSignal.findOneAndUpdate(
-                        { symbol: 'BTC_USDT' },
-                        {
-                            currentRSI: analysis.currentRSI || 0,
-                            signal: analysis.action,
-                            reason: analysis.reason,
-                            lastUpdate: new Date()
-                        },
-                        { upsert: true }
-                    );
-                    io.emit('market-signal-update', analysis);
-                }
+                const now = new Date();
+                const currentMinute = now.getMinutes();
 
-                io.emit('marketData', { 
-                price, 
-                priceChangePercent,
-                exchangeOnline: isMarketConnected // <-- Enviamos la salud real
-            });
-                
-                // 🧠 MOTOR IA
-                try {
-                    aiEngine.analyze(price);
-                } catch (aiErr) {
-                    console.error("⚠️ Error en AIEngine:", aiErr.message);
-                }
+                // --- 2. LÓGICA DE SEÑALES (POR MINUTO) ---
+                if (currentMinute !== lastProcessedMinute) {
+                    lastProcessedMinute = currentMinute;
+                    const analysis = await analyzer.runAnalysis(price);
+                    
+                    await MarketSignal.findOneAndUpdate(
+                        { symbol: 'BTC_USDT' },
+                        {
+                            currentRSI: analysis.currentRSI || 0,
+                            signal: analysis.action,
+                            reason: analysis.reason,
+                            lastUpdate: new Date()
+                        },
+                        { upsert: true }
+                    );
+                    io.emit('market-signal-update', analysis);
+                }
 
-                // CICLO DE AUTOBOT
-                await autobotLogic.botCycle(price);
-            }
-        } catch (e) { }
-    });
+                // --- 3. ENVÍO DE DATOS AL FRONTEND (CON ESTADO DE SALUD) ---
+                io.emit('marketData', { 
+                    price, 
+                    priceChangePercent,
+                    exchangeOnline: isMarketConnected // Indica al front que BitMart fluye
+                });
+                
+                // --- 4. MOTOR IA ---
+                try {
+                    aiEngine.analyze(price);
+                } catch (aiErr) {
+                    console.error("⚠️ Error en AIEngine:", aiErr.message);
+                }
+
+                // --- 5. CICLO DE AUTOBOT (Lógica exponencial activa) ---
+                await autobotLogic.botCycle(price);
+            }
+        } catch (e) { 
+            console.error("❌ Error procesando mensaje de BitMart:", e.message);
+        }
+    });
 
     marketWs.on('close', () => {
         isMarketConnected = false; // ❌ Se perdió BitMart
