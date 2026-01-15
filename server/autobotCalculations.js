@@ -84,26 +84,38 @@ function calculateShortTargets(lastPrice, profit_percent, price_var, size_var, b
     };
 }
 
-function calculateShortCoverage(balance, lastPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
+/**
+ * LÓGICA CORRECTA: SCoverage es la proyección de resistencia desde el precio actual.
+ */
+function calculateShortCoverage(balance, currentPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
     let remainingBalance = parseNumber(balance);
-    let currentPriceLevel = parseNumber(lastPrice);
+    let simulationPrice = parseNumber(currentPrice); // Empezamos desde el precio real de mercado
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    if (baseAmount <= 0 || remainingBalance <= 0) return { coveragePrice: currentPriceLevel, numberOfOrders: 0 };
-
+    // Usamos un bucle para ver cuántas órdenes "caben" en el balance
     while (numberOfExtraOrders < 20) {
-        let nextAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
-        if (nextAmount <= 0 || remainingBalance < nextAmount) break;
+        // Calculamos cuánto costaría la SIGUIENTE orden exponencial
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
 
-        remainingBalance -= nextAmount;
-        currentPriceLevel = currentPriceLevel * (1 + parseNumber(priceVarDec));
+        // Si no tenemos dinero para esta orden, la cobertura se queda en el precio de la anterior
+        if (remainingBalance < nextOrderAmount) break;
+
+        // Si hay dinero: lo restamos, subimos el precio de simulación y aumentamos el contador
+        remainingBalance -= nextOrderAmount;
+        
+        // En la primera iteración, el precio es el actual. 
+        // En las siguientes, el precio va subiendo según el priceVarDec.
+        if (numberOfExtraOrders > 0) {
+            simulationPrice = simulationPrice * (1 + parseNumber(priceVarDec));
+        }
+
         orderCount++;
         numberOfExtraOrders++;
     }
 
     return { 
-        coveragePrice: currentPriceLevel, 
+        coveragePrice: simulationPrice, // Este es tu SCoverage real
         numberOfOrders: numberOfExtraOrders 
     };
 }
