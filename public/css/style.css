@@ -149,7 +149,7 @@ header, .fixed-header {
 /* Ajuste específico para celulares (pantallas menores a 640px) */
 @media (max-width: 640px) {
     #log-message {
-        font-size: 9px; /* Un poco más pequeña para que encaje perfecto */
+        font-size: 10px; /* Un poco más pequeña para que encaje perfecto */
         letter-spacing: -0.02em; /* Junta un poquito las letras para ganar espacio */
     }
     
