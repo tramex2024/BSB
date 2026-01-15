@@ -54,12 +54,13 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     
     // --- 3. CÁLCULO DE COBERTURA RESTANTE (Resistencia) ---
     const { coveragePrice, numberOfOrders } = calculateShortCoverage(
-        finalizedSBalance, 
-        newPPC, 
-        purchaseUsdt, 
-        parseNumber(price_var) / 100, 
-        parseNumber(size_var) // Enviamos el valor entero (ej: 100) para que la calculadora procese el multiplicador (1 + 100/100)
-    );
+    finalizedSBalance, 
+    executedPrice, // <--- PASAMOS EL PRECIO DE MERCADO, NO EL PPC
+    purchaseUsdt, 
+    parseNumber(price_var) / 100, 
+    parseNumber(size_var),
+    newOrderCount
+);
 
     // --- 4. PERSISTENCIA Y ACTUALIZACIÓN ---
     await saveExecutedOrder({ ...orderDetails, side: 'sell' }, SSTATE);

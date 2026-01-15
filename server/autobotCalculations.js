@@ -85,27 +85,35 @@ function calculateShortTargets(lastPrice, profit_percent, price_var, size_var, b
 }
 
 /**
- * LÓGICA CORRECTA: SCoverage es la proyección de resistencia desde el precio actual.
+ * LÓGICA DE RESISTENCIA (CONCEPTUALMENTE PURA)
+ * Calcula hasta qué precio de BTC aguanta el balance disponible
+ * empezando desde el precio actual de mercado.
  */
-function calculateShortCoverage(balance, currentPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
+function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
     let remainingBalance = parseNumber(balance);
-    let simulationPrice = parseNumber(currentPrice); // Empezamos desde el precio real de mercado
+    let simulationPrice = parseNumber(currentMarketPrice); // EL PUNTO DE PARTIDA ES EL PRECIO ACTUAL
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // Usamos un bucle para ver cuántas órdenes "caben" en el balance
+    // Si el balance inicial ya no alcanza para la primera orden de la simulación
+    let firstOrderCost = getExponentialAmount(baseAmount, orderCount, sizeVar);
+    if (remainingBalance < firstOrderCost) {
+        // Si no hay dinero para ni una orden más, tu cobertura es el precio actual
+        return { 
+            coveragePrice: simulationPrice, 
+            numberOfOrders: 0 
+        };
+    }
+
     while (numberOfExtraOrders < 20) {
-        // Calculamos cuánto costaría la SIGUIENTE orden exponencial
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
 
-        // Si no tenemos dinero para esta orden, la cobertura se queda en el precio de la anterior
         if (remainingBalance < nextOrderAmount) break;
 
-        // Si hay dinero: lo restamos, subimos el precio de simulación y aumentamos el contador
         remainingBalance -= nextOrderAmount;
         
-        // En la primera iteración, el precio es el actual. 
-        // En las siguientes, el precio va subiendo según el priceVarDec.
+        // Si es la primera orden de la simulación, se queda en el precio actual
+        // Si son las siguientes, se le suma el incremento de precio (priceVar)
         if (numberOfExtraOrders > 0) {
             simulationPrice = simulationPrice * (1 + parseNumber(priceVarDec));
         }
@@ -115,7 +123,7 @@ function calculateShortCoverage(balance, currentPrice, baseAmount, priceVarDec, 
     }
 
     return { 
-        coveragePrice: simulationPrice, // Este es tu SCoverage real
+        coveragePrice: simulationPrice, 
         numberOfOrders: numberOfExtraOrders 
     };
 }
