@@ -10,6 +10,7 @@ const BUY_FEE_PERCENT = 0.001;
 
 /**
  * Maneja el éxito de una VENTA (Apertura o DCA).
+ * Actualizada con lógica exponencial dinámica (size_var).
  */
 async function handleSuccessfulShortSell(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState, updateSStateData } = dependencies;
@@ -24,7 +25,7 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         return;
     }
 
-    // --- SANEAMIENTO DE BALANCE ---
+    // --- 1. SANEAMIENTO DE BALANCE ---
     const currentSBalance = parseFloat(botState.sbalance || 0);
     const finalizedSBalance = parseFloat((currentSBalance - baseExecutedValue).toFixed(8));
 
@@ -39,22 +40,28 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const newPPC = newAI / newTotalQty;
     const newOrderCount = (currentSData.orderCountInCycle || 0) + 1;
 
-    // Target de recompra (precio menor al promedio de venta)
+    // --- 2. CÁLCULO DE TARGETS (TP y Siguiente Cobertura) ---
     const profitPercent = parseNumber(botState.config.short.profit_percent) / 100;
     const newSTPrice = newPPC * (1 - profitPercent);
 
     const { price_var, size_var, purchaseUsdt } = botState.config.short;
-    const newNextPrice = executedPrice * (1 + (parseNumber(price_var) / 100));
-    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount);
     
+    // El precio de la próxima cobertura se basa en el último precio ejecutado
+    const newNextPrice = executedPrice * (1 + (parseNumber(price_var) / 100));
+
+    // CORRECCIÓN CRÍTICA: Ahora enviamos size_var como 3er parámetro para la lógica 2^n
+    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount, size_var);
+    
+    // --- 3. CÁLCULO DE COBERTURA RESTANTE (Resistencia) ---
     const { coveragePrice, numberOfOrders } = calculateShortCoverage(
         finalizedSBalance, 
         newPPC, 
         purchaseUsdt, 
-        parseNumber(price_var)/100, 
-        parseNumber(size_var)/100
+        parseNumber(price_var) / 100, 
+        parseNumber(size_var) // Enviamos el valor entero (ej: 100) para que la calculadora procese el multiplicador (1 + 100/100)
     );
 
+    // --- 4. PERSISTENCIA Y ACTUALIZACIÓN ---
     await saveExecutedOrder({ ...orderDetails, side: 'sell' }, SSTATE);
 
     await updateGeneralBotState({
