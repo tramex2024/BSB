@@ -11,17 +11,15 @@ const parseNumber = (val) => {
 
 /**
  * LÓGICA EXPONENCIAL DINÁMICA
- * multiplier = 1 + (sizeVar / 100) -> 100% es 2 (doblar)
  */
 function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     const base = parseNumber(baseAmount);
     const count = parseNumber(orderCount);
-    const sVar = parseNumber(sizeVar || 100); // Default 100% (x2) si no viene valor
+    const sVar = parseNumber(sizeVar || 100);
 
     const multiplier = 1 + (sVar / 100);
 
     if (base <= 0) return 0;
-    // Si el multiplicador es 1 (0% de aumento), devolvemos la base plana
     if (multiplier <= 1) return base;
 
     return base * Math.pow(multiplier, count);
@@ -43,27 +41,38 @@ function calculateLongTargets(lastPrice, profit_percent, price_var, size_var, or
     };
 }
 
-function calculateLongCoverage(balance, lastPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
+/**
+ * LÓGICA DE RESISTENCIA LONG (ESPEJO DEL SHORT)
+ */
+function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
     let remainingBalance = parseNumber(balance);
-    let currentPriceLevel = parseNumber(lastPrice);
+    let simulationPrice = parseNumber(currentMarketPrice); 
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    if (baseAmount <= 0 || remainingBalance <= 0) return { coveragePrice: currentPriceLevel, numberOfOrders: 0 };
+    let firstOrderCost = getExponentialAmount(baseAmount, orderCount, sizeVar);
+    if (remainingBalance < firstOrderCost) {
+        return { coveragePrice: simulationPrice, numberOfOrders: 0 };
+    }
 
-    // Limitamos a 20 para evitar bucles infinitos por error de datos
     while (numberOfExtraOrders < 20) {
-        let nextAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
-        if (nextAmount <= 0 || remainingBalance < nextAmount) break;
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
 
-        remainingBalance -= nextAmount;
-        currentPriceLevel = currentPriceLevel * (1 - parseNumber(priceVarDec));
+        if (remainingBalance < nextOrderAmount) break;
+
+        remainingBalance -= nextOrderAmount;
+        
+        // La primera orden ocurre al precio actual. Las siguientes bajan el precio.
+        if (numberOfExtraOrders > 0) {
+            simulationPrice = simulationPrice * (1 - parseNumber(priceVarDec));
+        }
+
         orderCount++;
         numberOfExtraOrders++;
     }
 
     return { 
-        coveragePrice: currentPriceLevel, 
+        coveragePrice: simulationPrice, 
         numberOfOrders: numberOfExtraOrders 
     };
 }
@@ -84,25 +93,15 @@ function calculateShortTargets(lastPrice, profit_percent, price_var, size_var, b
     };
 }
 
-/**
- * LÓGICA DE RESISTENCIA (CONCEPTUALMENTE PURA)
- * Calcula hasta qué precio de BTC aguanta el balance disponible
- * empezando desde el precio actual de mercado.
- */
 function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
     let remainingBalance = parseNumber(balance);
-    let simulationPrice = parseNumber(currentMarketPrice); // EL PUNTO DE PARTIDA ES EL PRECIO ACTUAL
+    let simulationPrice = parseNumber(currentMarketPrice); 
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // Si el balance inicial ya no alcanza para la primera orden de la simulación
     let firstOrderCost = getExponentialAmount(baseAmount, orderCount, sizeVar);
     if (remainingBalance < firstOrderCost) {
-        // Si no hay dinero para ni una orden más, tu cobertura es el precio actual
-        return { 
-            coveragePrice: simulationPrice, 
-            numberOfOrders: 0 
-        };
+        return { coveragePrice: simulationPrice, numberOfOrders: 0 };
     }
 
     while (numberOfExtraOrders < 20) {
@@ -112,8 +111,6 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
 
         remainingBalance -= nextOrderAmount;
         
-        // Si es la primera orden de la simulación, se queda en el precio actual
-        // Si son las siguientes, se le suma el incremento de precio (priceVar)
         if (numberOfExtraOrders > 0) {
             simulationPrice = simulationPrice * (1 + parseNumber(priceVarDec));
         }

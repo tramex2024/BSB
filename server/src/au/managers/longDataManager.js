@@ -25,11 +25,9 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         return;
     }
 
-    // --- CORRECCIÓN DE BALANCE ---
-    // Calculamos el nuevo balance una sola vez aquí
+    // --- 1. SANEAMIENTO DE BALANCE ---
     const currentBalance = parseFloat(botState.lbalance || 0);
     const finalizedLBalance = parseFloat((currentBalance - baseExecutedValue).toFixed(8));
-    // -----------------------------
 
     const currentLData = botState.lStateData;
     const isFirstOrder = (currentLData.orderCountInCycle || 0) === 0;
@@ -42,20 +40,25 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     const newPPC = newAI / newTotalQty;
     const newOrderCount = (currentLData.orderCountInCycle || 0) + 1;
 
+    // --- 2. CÁLCULO DE TARGETS ---
     const profitPercent = parseNumber(botState.config.long.profit_percent) / 100;
     const newLTPrice = newPPC * (1 + profitPercent);
 
     const { price_var, size_var, purchaseUsdt } = botState.config.long;
     const newNextPrice = executedPrice * (1 - (parseNumber(price_var) / 100));
-    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount);
     
-    // Usamos el balance ya finalizado para el cálculo de cobertura
+    // CORRECCIÓN: Pasamos size_var como 3er parámetro para la potencia 2^n
+    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount, size_var);
+    
+    // --- 3. COBERTURA REAL (CONCEPTUAL) ---
+    // Usamos executedPrice para proyectar resistencia desde el precio actual de mercado
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
         finalizedLBalance, 
-        executedPrice, 
+        executedPrice, // <--- CAMBIO: Precio actual, NO el PPC
         purchaseUsdt, 
-        parseNumber(price_var)/100, 
-        parseNumber(size_var)/100
+        parseNumber(price_var) / 100, 
+        parseNumber(size_var), // <--- CAMBIO: Sin dividir por 100
+        newOrderCount
     );
 
     await saveExecutedOrder({ ...orderDetails, side: 'buy' }, LSTATE);
@@ -63,7 +66,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     await updateGeneralBotState({
         lcoverage: coveragePrice,
         lnorder: numberOfOrders,
-        lbalance: finalizedLBalance, // <--- Usamos la variable saneada
+        lbalance: finalizedLBalance,
         ltprice: newLTPrice,
         lStateData: {
             ...currentLData,
@@ -79,7 +82,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         }
     });
 
-    log(`✅ [L-DATA] Balance actualizado: $${finalizedLBalance}. PPC: ${newPPC.toFixed(2)}`, 'success');
+    log(`✅ [L-DATA] Balance: $${finalizedLBalance.toFixed(2)}. Target TP: ${newLTPrice.toFixed(2)}. Capacidad: ${numberOfOrders} órdenes.`, 'success');
 }
 
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
