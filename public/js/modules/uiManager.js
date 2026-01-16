@@ -1,13 +1,10 @@
-// public/js/modules/uiManager.js
-
 /**
- * Estado local para evitar renders innecesarios
+ * uiManager.js - Gestión Atómica de la Interfaz
+ * Optimizado para evitar parpadeos y colisiones de estado.
  */
+
 let lastPrice = 0;
 
-/**
- * Mapeo de estados a clases CSS de Tailwind
- */
 const STATUS_COLORS = {
     RUNNING: 'text-emerald-400',
     STOPPED: 'text-red-400',
@@ -132,49 +129,51 @@ export function updateBotUI(state) {
 }
 
 /**
- * Gestiona el estado visual de los botones individuales de Long y Short
+ * Gestiona el estado visual de los botones individuales con validación anti-flash
  */
 function updateControlsState(state) {
-    // Botón Long
-    const btnLong = document.getElementById('austartl-btn');
-    if (btnLong) {
-        const isLongRunning = state.lstate && state.lstate !== 'STOPPED';
-        btnLong.textContent = isLongRunning ? 'STOP LONG' : 'START LONG';
-        btnLong.className = isLongRunning 
-            ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white'
-            : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white';
-    }
+    const btnConfigs = [
+        { id: 'austartl-btn', running: state.lstate && state.lstate !== 'STOPPED', label: 'LONG' },
+        { id: 'austarts-btn', running: state.sstate && state.sstate !== 'STOPPED', label: 'SHORT' }
+    ];
 
-    // Botón Short
-    const btnShort = document.getElementById('austarts-btn');
-    if (btnShort) {
-        const isShortRunning = state.sstate && state.sstate !== 'STOPPED';
-        btnShort.textContent = isShortRunning ? 'STOP SHORT' : 'START SHORT';
-        btnShort.className = isShortRunning 
-            ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white'
-            : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white';
-    }
+    btnConfigs.forEach(conf => {
+        const btn = document.getElementById(conf.id);
+        if (btn) {
+            const expectedText = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
+            
+            // Validamos antes de tocar el DOM para evitar parpadeos
+            if (btn.textContent !== expectedText) {
+                btn.textContent = expectedText;
+                btn.className = conf.running 
+                    ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white'
+                    : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white';
+            }
+        }
+    });
 
-    // Bloqueo de inputs si alguno está operando (Protección de Lógica Exponencial)
-    const autobotSettings = document.getElementById('autobot-settings');
-    if (autobotSettings) {
+    // Bloqueo de inputs de estrategia (Protección de Lógica Exponencial)
+    const settingsContainer = document.getElementById('autobot-settings');
+    if (settingsContainer) {
         const isAnyRunning = (state.lstate && state.lstate !== 'STOPPED') || 
                              (state.sstate && state.sstate !== 'STOPPED');
         
-        const inputs = autobotSettings.querySelectorAll('input');
+        const inputs = settingsContainer.querySelectorAll('input');
         inputs.forEach(input => {
             const isAlwaysEnabled = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
             if (!isAlwaysEnabled) {
-                input.disabled = isAnyRunning;
-                input.style.opacity = isAnyRunning ? '0.5' : '1';
-                input.style.cursor = isAnyRunning ? 'not-allowed' : 'auto';
+                if (input.disabled !== isAnyRunning) {
+                    input.disabled = isAnyRunning;
+                    input.style.opacity = isAnyRunning ? '0.5' : '1';
+                    input.style.cursor = isAnyRunning ? 'not-allowed' : 'auto';
+                }
             }
         });
     }
 }
 
 /**
- * Formatea valores de ganancia/pérdida con colores y signos
+ * Formatea valores de ganancia/pérdida
  */
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '-';
@@ -183,15 +182,11 @@ function formatProfit(element, value) {
     if (element.textContent === formatted) return;
 
     element.textContent = formatted;
-    element.classList.remove('text-emerald-400', 'text-red-400', 'text-gray-400');
-    
-    if (value > 0) element.classList.add('text-emerald-400');
-    else if (value < 0) element.classList.add('text-red-400');
-    else element.classList.add('text-gray-400');
+    element.className = `text-xl font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
 }
 
 /**
- * Actualiza etiquetas de estado (RUNNING, STOPPED, etc.)
+ * Actualiza etiquetas de estado
  */
 function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
@@ -202,7 +197,7 @@ function updateStatusLabel(id, status) {
 }
 
 /**
- * Sistema de Notificaciones (Toasts)
+ * Notificaciones Toast
  */
 export function displayMessage(message, type = 'info') {
     const container = document.getElementById('message-container');

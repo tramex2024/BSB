@@ -67,27 +67,26 @@ function setupTestButton() {
 }
 
 /**
- * Gestión de Sockets
+ * Gestión de Sockets - Versión Optimizada para evitar conflictos
  */
 function setupSocketListeners() {
     if (!socket) return;
 
-    // Actualización de estado global (Precio BTC, balances, etc.)
-    socket.on('bot-state-update', (state) => {
-        updateBotUI(state);
-    });
+    // NOTA: Se eliminó 'bot-state-update' de aquí. 
+    // La actualización de precios y botones ahora es responsabilidad ÚNICA de main.js
 
-    // Salud del WebSocket de Mercado
-    socket.on('marketData', () => {
+    // 1. Salud del WebSocket de Mercado
+    socket.on('marketData', (data) => {
+        // Aprovechamos para marcar online, pero no tocamos botones de compra/venta
         updateHealthStatus('health-market-ws', 'health-market-ws-text', true);
     });
 
-    // Salud de Órdenes Privadas
+    // 2. Salud de Órdenes Privadas (BitMart User Stream)
     socket.on('open-orders-update', () => {
         updateHealthStatus('health-user-ws', 'health-user-ws-text', true);
     });
 
-    // Señales del Analizador RSI
+    // 3. Señales del Analizador RSI
     socket.on('market-signal-update', (analysis) => {
         const signalEl = document.getElementById('health-analyzer-signal');
         const reasonEl = document.getElementById('health-analyzer-reason');
@@ -101,7 +100,7 @@ function setupSocketListeners() {
         if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
     });
 
-    // Notificaciones de Ejecución
+    // 4. Notificaciones de Ejecución (Efectos Visuales y Sonoros)
     socket.on('order-executed', (order) => {
         const side = order.side.toLowerCase();
         if (side === 'buy') {
@@ -113,21 +112,25 @@ function setupSocketListeners() {
         }
     });
 
-    // Fin de Ciclo (Venta Total)
+    // 5. Fin de Ciclo (Venta Total con Profit)
     socket.on('cycle-closed', () => {
         sounds.sell.play().catch(() => {});
         flashElement('auprofit', 'bg-yellow-500/30');
+        // Recargamos datos de analítica para el gráfico
         loadAndRenderEquityCurve();
         loadAndDisplayKpis();
     });
 
-    // Mini-Widget de IA
+    // 6. Mini-Widget de Inteligencia Artificial
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
         
         const progressEl = document.getElementById('ai-mini-progress');
-        if (progressEl) progressEl.style.strokeDashoffset = 100 - confidenceVal;
+        if (progressEl) {
+            // Suponiendo un círculo de progreso SVG con stroke-dasharray
+            progressEl.style.strokeDashoffset = 100 - confidenceVal;
+        }
 
         updateElementText('ai-mini-thought', data.message);
 
@@ -139,6 +142,7 @@ function setupSocketListeners() {
         }
     });
 
+    // 7. Manejo de desconexión local
     socket.on('disconnect', () => {
         updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
         updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
