@@ -14,6 +14,7 @@ const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),
     aibot: () => import('./modules/aibot.js')
+    flujo: () => import('./modules/flujo.js')
 };
 
 function updateConnectionStatusBall(status) {
@@ -44,10 +45,10 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-        if (data && data.price != null) updateBotUI({ price: data.price });
-        if (data.exchangeOnline === false) updateConnectionStatusBall('DISCONNECTED');
-        else if (data.exchangeOnline === true) updateConnectionStatusBall('CONNECTED');
-    });
+    if (data && data.price != null) {
+        currentBotState.price = data.price; // Guardar en memoria
+        updateBotUI(currentBotState);      // Intentar actualizar si la pestaña está abierta
+    }
 
     socket.on('balance-real-update', (data) => {
         if (data.source === 'CACHE_FALLBACK') updateConnectionStatusBall('CACHE');
@@ -56,6 +57,27 @@ export function initializeFullApp() {
 
     setupNavTabs(initializeTab);
 }
+
+
+
+// En la parte superior de tu main.js actual
+export let globalState = {
+    price: 0
+};
+// Memoria central de la aplicación
+export let currentBotState = {
+    price: 0
+};
+
+
+
+// Dentro de tu socket.on('marketData')
+socket.on('marketData', (data) => {
+    if (data && data.price) {
+        globalState.price = data.price; // Guardamos en memoria
+        updateBotUI({ price: data.price }); // Intentamos actualizar la UI
+    }
+});
 
 export async function initializeTab(tabName) {
     Object.values(intervals).forEach(clearInterval);
