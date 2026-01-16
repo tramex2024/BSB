@@ -24,32 +24,26 @@ export function updateBotUI(state) {
     if (!state) return;
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
-const priceElement = document.getElementById('auprice');
-if (priceElement && state.price !== undefined && state.price !== null) {
-    const currentPrice = Number(state.price);
-    
-    // Detectamos si el elemento está recién creado (vacío o con el default del HTML)
-    const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
+    const priceElement = document.getElementById('auprice');
+    if (priceElement && state.price !== undefined && state.price !== null) {
+        const currentPrice = Number(state.price);
+        const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
 
-    // Si el precio cambió O si la interfaz está vacía (por cambio de pestaña)
-    if (currentPrice !== lastPrice || isUIEmpty) {
-        
-        // Lógica de colores
-        if (isUIEmpty || lastPrice === 0) {
-            priceElement.className = 'text-white'; // Color neutral al aparecer
-        } else if (currentPrice > lastPrice) {
-            priceElement.className = 'text-emerald-400';
-        } else if (currentPrice < lastPrice) {
-            priceElement.className = 'text-red-400';
+        if (currentPrice !== lastPrice || isUIEmpty) {
+            if (isUIEmpty || lastPrice === 0) {
+                priceElement.className = 'text-white text-3xl font-bold';
+            } else if (currentPrice > lastPrice) {
+                priceElement.className = 'text-emerald-400 text-3xl font-bold';
+            } else if (currentPrice < lastPrice) {
+                priceElement.className = 'text-red-400 text-3xl font-bold';
+            }
+
+            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
+                minimumFractionDigits: 2, maximumFractionDigits: 2 
+            })}`;
+            lastPrice = currentPrice;
         }
-
-        priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
-            minimumFractionDigits: 2, maximumFractionDigits: 2 
-        })}`;
-        
-        lastPrice = currentPrice;
     }
-}
 
     // --- 2. ESTADOS DE LAS ESTRATEGIAS ---
     updateStatusLabel('aubot-lstate', state.lstate);
@@ -89,7 +83,6 @@ if (priceElement && state.price !== undefined && state.price !== null) {
         if (elementId.includes('profit')) {
             formatProfit(element, value);
         } else {
-            // Configuración de decimales según el tipo de dato
             const isBtc = elementId.includes('btc');
             const isInteger = elementId.includes('norder') || elementId.includes('cycle');
             
@@ -124,21 +117,60 @@ if (priceElement && state.price !== undefined && state.price !== null) {
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
             if (input && value !== undefined && document.activeElement !== input) {
-                // Sincroniza el valor del input solo si el usuario no está escribiendo en él
                 if (input.value != value) input.value = value;
             }
         }
 
-        // Checkboxes de "Stop at Cycle"
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
         if (stopL) stopL.checked = !!conf.long?.stopAtCycle;
         if (stopS) stopS.checked = !!conf.short?.stopAtCycle;
     }
 
-    // --- 5. ESTADO GLOBAL DE CONTROLES ---
-    const isGlobalStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
-    updateControlsState(isGlobalStopped);
+    // --- 5. ACTUALIZACIÓN VISUAL DE BOTONES ---
+    updateControlsState(state);
+}
+
+/**
+ * Gestiona el estado visual de los botones individuales de Long y Short
+ */
+function updateControlsState(state) {
+    // Botón Long
+    const btnLong = document.getElementById('austartl-btn');
+    if (btnLong) {
+        const isLongRunning = state.lstate && state.lstate !== 'STOPPED';
+        btnLong.textContent = isLongRunning ? 'STOP LONG' : 'START LONG';
+        btnLong.className = isLongRunning 
+            ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white'
+            : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white';
+    }
+
+    // Botón Short
+    const btnShort = document.getElementById('austarts-btn');
+    if (btnShort) {
+        const isShortRunning = state.sstate && state.sstate !== 'STOPPED';
+        btnShort.textContent = isShortRunning ? 'STOP SHORT' : 'START SHORT';
+        btnShort.className = isShortRunning 
+            ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white'
+            : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white';
+    }
+
+    // Bloqueo de inputs si alguno está operando (Protección de Lógica Exponencial)
+    const autobotSettings = document.getElementById('autobot-settings');
+    if (autobotSettings) {
+        const isAnyRunning = (state.lstate && state.lstate !== 'STOPPED') || 
+                             (state.sstate && state.sstate !== 'STOPPED');
+        
+        const inputs = autobotSettings.querySelectorAll('input');
+        inputs.forEach(input => {
+            const isAlwaysEnabled = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
+            if (!isAlwaysEnabled) {
+                input.disabled = isAnyRunning;
+                input.style.opacity = isAnyRunning ? '0.5' : '1';
+                input.style.cursor = isAnyRunning ? 'not-allowed' : 'auto';
+            }
+        });
+    }
 }
 
 /**
@@ -156,45 +188,6 @@ function formatProfit(element, value) {
     if (value > 0) element.classList.add('text-emerald-400');
     else if (value < 0) element.classList.add('text-red-400');
     else element.classList.add('text-gray-400');
-}
-
-/**
- * Gestiona el estado visual de los botones individuales de Long y Short
- */
-function updateControlsState(state) {
-    // Botón Long
-    const btnLong = document.getElementById('austartl-btn');
-    if (btnLong) {
-        const isLongRunning = state.lstate !== 'STOPPED';
-        btnLong.textContent = isLongRunning ? 'STOP LONG' : 'START LONG';
-        btnLong.className = isLongRunning 
-            ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm'
-            : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm';
-    }
-
-    // Botón Short
-    const btnShort = document.getElementById('austarts-btn');
-    if (btnShort) {
-        const isShortRunning = state.sstate !== 'STOPPED';
-        btnShort.textContent = isShortRunning ? 'STOP SHORT' : 'START SHORT';
-        btnShort.className = isShortRunning 
-            ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm'
-            : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm';
-    }
-
-    // Bloqueo de inputs: Solo bloqueamos si AMBOS están corriendo
-    const autobotSettings = document.getElementById('autobot-settings');
-    if (autobotSettings) {
-        const bothStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
-        const inputs = autobotSettings.querySelectorAll('input');
-        inputs.forEach(input => {
-            const isAlwaysEnabled = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
-            if (!isAlwaysEnabled) {
-                input.disabled = !bothStopped;
-                input.style.opacity = bothStopped ? '1' : '0.5';
-            }
-        });
-    }
 }
 
 /**
