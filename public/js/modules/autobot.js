@@ -142,27 +142,12 @@ export async function initializeAutobotView() {
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
-    // 5. SOCKETS
+    // 5. SOCKETS: Solo pedimos el estado inicial
     if (socket) {
-        socket.off('bot-state-update');
-        socket.off('orders-update'); 
-
-        socket.on('bot-state-update', (state) => {
-            updateBotUI(state); 
-        });
-
-        socket.on('orders-update', (data) => {
-            if (document.getElementById('au-order-list')) {
-                updateOpenOrdersTable(data, 'au-order-list', currentTab);
-            }
-        });
-
+        // NO registramos socket.on('bot-state-update') aquí otra vez.
+        // El listener de main.js ya se encarga de llamar a updateBotUI.
+        
         if (socket.connected) {
             socket.emit('get-bot-state');
-        } else {
-            socket.on('connect', () => {
-                socket.emit('get-bot-state');
-            });
         }
     }
-}
