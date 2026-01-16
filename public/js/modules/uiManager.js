@@ -132,9 +132,14 @@ export function updateBotUI(state) {
  * Gestiona el estado visual de los botones individuales con validación anti-flash
  */
 function updateControlsState(state) {
+    // MAPEAMOS LAS VARIABLES QUE VIENEN DEL SERVIDOR
+    // Si viene 's' lo usamos, si viene 'sstate' también. Si no, 'STOPPED'.
+    const sState = state.sstate || state.s || 'STOPPED';
+    const lState = state.lstate || state.l || 'STOPPED';
+
     const btnConfigs = [
-        { id: 'austartl-btn', running: state.lstate && state.lstate !== 'STOPPED', label: 'LONG' },
-        { id: 'austarts-btn', running: state.sstate && state.sstate !== 'STOPPED', label: 'SHORT' }
+        { id: 'austartl-btn', running: lState !== 'STOPPED', label: 'LONG' },
+        { id: 'austarts-btn', running: sState !== 'STOPPED', label: 'SHORT' }
     ];
 
     btnConfigs.forEach(conf => {
@@ -142,7 +147,6 @@ function updateControlsState(state) {
         if (btn) {
             const expectedText = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
             
-            // Validamos antes de tocar el DOM para evitar parpadeos
             if (btn.textContent !== expectedText) {
                 btn.textContent = expectedText;
                 btn.className = conf.running 

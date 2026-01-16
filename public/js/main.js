@@ -68,11 +68,14 @@ export function initializeFullApp() {
 });
 
     socket.on('marketData', (data) => {
-        if (data.price) updateBotUI({ price: data.price });
-        // Si el exchange se cae, la bolita cambia
-        if (data.exchangeOnline === false) updateConnectionStatusBall('DISCONNECTED');
-        else if (data.exchangeOnline === true) updateConnectionStatusBall('CONNECTED');
-    });
+    // Validamos que el precio sea un número real antes de enviarlo a la UI
+    if (data && data.price != null) {
+        updateBotUI({ price: data.price });
+    }
+    
+    if (data.exchangeOnline === false) updateConnectionStatusBall('DISCONNECTED');
+    else if (data.exchangeOnline === true) updateConnectionStatusBall('CONNECTED');
+});
 
     socket.on('balance-real-update', (data) => {
         if (data.source === 'CACHE_FALLBACK') updateConnectionStatusBall('CACHE');

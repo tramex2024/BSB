@@ -3,7 +3,6 @@
 import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
-// CORRECCIÓN: Importamos toggleBotSideState que es el nombre real en apiService.js
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, socket } from '../main.js';
 
@@ -49,7 +48,6 @@ function setupConfigListeners() {
                 const val = parseFloat(el.value);
                 el.classList.toggle('border-red-500', isNaN(val) || val < 0);
             }
-            // En cada cambio de input (como tu purchase de 7), se guarda en el server
             sendConfigToBackend();
         });
     });
@@ -77,7 +75,6 @@ export async function initializeAutobotView() {
         const btnShort = document.getElementById('austarts-btn');
 
         if (btnLong && btnShort) {
-            // Lógica para el botón de LONG
             btnLong.onclick = async (e) => {
                 e.preventDefault();
                 if (!validateStrategyInputs() && !btnLong.textContent.includes('STOP')) {
@@ -92,7 +89,6 @@ export async function initializeAutobotView() {
                 }
             };
 
-            // Lógica para el botón de SHORT
             btnShort.onclick = async (e) => {
                 e.preventDefault();
                 if (!validateStrategyInputs() && !btnShort.textContent.includes('STOP')) {
@@ -143,10 +139,8 @@ export async function initializeAutobotView() {
     fetchOrders('opened', auOrderList);
 
     // 5. RELLENADO DE DATOS: 
-    // Pedimos al servidor que emita un 'bot-state-update' YA MISMO
     if (socket && socket.connected) {
         console.log("🔄 Pestaña Autobot lista, solicitando datos...");
         socket.emit('get-bot-state'); 
     }
-}
-}
+} // <--- Cierre correcto de la función. No debe haber nada más después.
