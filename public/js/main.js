@@ -60,9 +60,12 @@ export function initializeFullApp() {
 
     // --- ESCUCHA ÚNICA DE DATOS ---
     socket.on('bot-state-update', (state) => {
-        // Solo enviamos a la UI si el estado existe
-        if (state) updateBotUI(state);
-    });
+    if (state) {
+        // Log de debug para ver si sstate llega como 'RUNNING' o 'STOPPED'
+        console.log("📡 State Update:", { s: state.sstate, price: state.price });
+        updateBotUI(state);
+    }
+});
 
     socket.on('marketData', (data) => {
         if (data.price) updateBotUI({ price: data.price });

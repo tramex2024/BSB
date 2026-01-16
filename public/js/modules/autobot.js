@@ -142,13 +142,11 @@ export async function initializeAutobotView() {
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
-    // 5. SOCKETS: Solo pedimos el estado inicial
-    if (socket) {
-        // NO registramos socket.on('bot-state-update') aquí otra vez.
-        // El listener de main.js ya se encarga de llamar a updateBotUI.
-        
-        if (socket.connected) {
-            socket.emit('get-bot-state');
-        }
+    // 5. RELLENADO DE DATOS: 
+    // Pedimos al servidor que emita un 'bot-state-update' YA MISMO
+    if (socket && socket.connected) {
+        console.log("🔄 Pestaña Autobot lista, solicitando datos...");
+        socket.emit('get-bot-state'); 
     }
+}
 }
