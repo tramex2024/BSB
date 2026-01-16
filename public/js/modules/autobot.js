@@ -151,3 +151,4 @@ export async function initializeAutobotView() {
             socket.emit('get-bot-state');
         }
     }
+}
