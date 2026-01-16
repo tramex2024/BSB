@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Optimizado para evitar parpadeos y colisiones de estado.
+ * Optimizado para lógica exponencial y sincronización de estados.
  */
 
 let lastPrice = 0;
@@ -28,11 +28,11 @@ export function updateBotUI(state) {
 
         if (currentPrice !== lastPrice || isUIEmpty) {
             if (isUIEmpty || lastPrice === 0) {
-                priceElement.className = 'text-white text-3xl font-bold';
+                priceElement.className = 'text-white text-xl font-mono font-bold';
             } else if (currentPrice > lastPrice) {
-                priceElement.className = 'text-emerald-400 text-3xl font-bold';
+                priceElement.className = 'text-emerald-400 text-xl font-mono font-bold';
             } else if (currentPrice < lastPrice) {
-                priceElement.className = 'text-red-400 text-3xl font-bold';
+                priceElement.className = 'text-red-400 text-xl font-mono font-bold';
             }
 
             priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
@@ -42,11 +42,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 2. ESTADOS DE LAS ESTRATEGIAS ---
-    updateStatusLabel('aubot-lstate', state.lstate);
-    updateStatusLabel('aubot-sstate', state.sstate);
-
-    // --- 3. VALORES NUMÉRICOS (Lógica de Precisión) ---
+    // --- 2. VALORES NUMÉRICOS ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
@@ -98,7 +94,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 4. SINCRONIZACIÓN DE INPUTS (Solo si no están en foco) ---
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Inputs) ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -124,78 +120,74 @@ export function updateBotUI(state) {
         if (stopS) stopS.checked = !!conf.short?.stopAtCycle;
     }
 
-    // --- 5. ACTUALIZACIÓN VISUAL DE BOTONES ---
+    // --- 4. ACTUALIZACIÓN DE ESTADOS Y BOTONES ---
     updateControlsState(state);
 }
 
 /**
- * Gestiona el estado visual de los botones individuales con validación anti-flash
+ * Gestiona botones, bloqueo de inputs y etiquetas de estado
  */
-function updateControlsState(state) {
-    // MAPEAMOS LAS VARIABLES QUE VIENEN DEL SERVIDOR
-    // Si viene 's' lo usamos, si viene 'sstate' también. Si no, 'STOPPED'.
-    const sState = state.sstate || state.s || 'STOPPED';
-    const lState = state.lstate || state.l || 'STOPPED';
+export function updateControlsState(state) {
+    const sStatus = state.s || state.sstate || 'STOPPED';
+    const lStatus = state.l || state.lstate || 'STOPPED';
 
+    const isShortRunning = sStatus !== 'STOPPED';
+    const isLongRunning = lStatus !== 'STOPPED';
+
+    // Actualización de Botones
     const btnConfigs = [
-        { id: 'austartl-btn', running: lState !== 'STOPPED', label: 'LONG' },
-        { id: 'austarts-btn', running: sState !== 'STOPPED', label: 'SHORT' }
+        { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
+        { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' }
     ];
 
     btnConfigs.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
-            const expectedText = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
-            
-            if (btn.textContent !== expectedText) {
-                btn.textContent = expectedText;
-                btn.className = conf.running 
-                    ? 'flex-1 bg-red-600 hover:bg-red-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white'
-                    : 'flex-1 bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg uppercase text-sm text-white';
-            }
+            const text = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
+            btn.textContent = text;
+            btn.className = `flex-1 py-3 rounded-xl font-bold text-sm shadow-lg transition-all uppercase text-white ${
+                conf.running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+            }`;
         }
     });
 
-    // Bloqueo de inputs de estrategia (Protección de Lógica Exponencial)
-    const settingsContainer = document.getElementById('autobot-settings');
-    if (settingsContainer) {
-        const isAnyRunning = (state.lstate && state.lstate !== 'STOPPED') || 
-                             (state.sstate && state.sstate !== 'STOPPED');
-        
-        const inputs = settingsContainer.querySelectorAll('input');
-        inputs.forEach(input => {
-            const isAlwaysEnabled = ['au-stop-long-at-cycle', 'au-stop-short-at-cycle'].includes(input.id);
-            if (!isAlwaysEnabled) {
-                if (input.disabled !== isAnyRunning) {
-                    input.disabled = isAnyRunning;
-                    input.style.opacity = isAnyRunning ? '0.5' : '1';
-                    input.style.cursor = isAnyRunning ? 'not-allowed' : 'auto';
-                }
-            }
-        });
-    }
+    // Bloqueo de Inputs
+    const shouldDisable = isShortRunning || isLongRunning;
+    const inputs = [
+        'auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt',
+        'auincrement', 'audecrement', 'autrigger', 'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
+    ];
+
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.disabled = shouldDisable;
+            el.classList.toggle('opacity-50', shouldDisable);
+            el.classList.toggle('cursor-not-allowed', shouldDisable);
+        }
+    });
+
+    // Etiquetas de estado
+    updateStatusLabel('aubot-lstate', lStatus);
+    updateStatusLabel('aubot-sstate', sStatus);
 }
 
 /**
  * Formatea valores de ganancia/pérdida
  */
 function formatProfit(element, value) {
-    const sign = value >= 0 ? '+' : '-';
-    const formatted = `${sign}$${Math.abs(value).toFixed(2)}`;
-    
-    if (element.textContent === formatted) return;
-
+    const sign = value >= 0 ? '+' : '';
+    const formatted = `${sign}$${value.toFixed(2)}`;
     element.textContent = formatted;
-    element.className = `text-xl font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+    element.className = `text-xl font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
 }
 
 /**
- * Actualiza etiquetas de estado
+ * Actualiza etiquetas de estado con colores dinámicos
  */
 function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
-    if (!el || !status || el.textContent === status) return;
-    
+    if (!el || !status) return;
     el.textContent = status;
     el.className = `text-[10px] font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
@@ -204,17 +196,20 @@ function updateStatusLabel(id, status) {
  * Notificaciones Toast
  */
 export function displayMessage(message, type = 'info') {
-    const container = document.getElementById('message-container');
-    if (!container) return;
+    let container = document.getElementById('message-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'message-container';
+        document.body.appendChild(container);
+    }
 
     container.textContent = message;
-    container.className = 'fixed bottom-5 right-5 px-6 py-3 rounded-xl text-white font-bold shadow-2xl z-50 transition-all transform animate-slideUp';
-    
-    const bgClass = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500');
-    container.classList.add(bgClass);
+    container.className = `fixed bottom-5 right-5 px-6 py-3 rounded-xl text-white font-bold shadow-2xl z-50 transition-all transform animate-slideUp ${
+        type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500')
+    }`;
 
     setTimeout(() => {
         container.classList.add('opacity-0', 'translate-y-10');
-        setTimeout(() => container.classList.add('hidden'), 500);
+        setTimeout(() => container.remove(), 500);
     }, 4000);
 }

@@ -10,43 +10,23 @@ export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export let socket = null;
 export let intervals = {};
 
-// Gestión de Vistas
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),
     aibot: () => import('./modules/aibot.js')
 };
 
-/**
- * Actualiza la bolita de estado de forma atómica
- */
 function updateConnectionStatusBall(status) {
     const statusDot = document.getElementById('status-dot');
     if (!statusDot) return;
-    
-    // Reset de clases
     statusDot.className = 'status-dot-base';
-    
-    const classes = {
-        'CONNECTED': 'status-green',
-        'DISCONNECTED': 'status-red',
-        'CACHE': 'status-purple'
-    };
-    
+    const classes = { 'CONNECTED': 'status-green', 'DISCONNECTED': 'status-red', 'CACHE': 'status-purple' };
     statusDot.classList.add(classes[status] || 'status-red');
 }
 
-/**
- * Inicializa el Socket UNA SOLA VEZ
- */
 export function initializeFullApp() {
-    if (socket) return; // Si ya existe, no hacemos nada
-
-    socket = io(BACKEND_URL, { 
-        path: '/socket.io',
-        transports: ['websocket'],
-        reconnection: true
-    });
+    if (socket) return;
+    socket = io(BACKEND_URL, { path: '/socket.io', transports: ['websocket'], reconnection: true });
 
     socket.on('connect', () => {
         console.log('✅ Real-time: Connected');
@@ -54,49 +34,32 @@ export function initializeFullApp() {
         socket.emit('get-bot-state');
     });
 
-    socket.on('disconnect', () => {
-        updateConnectionStatusBall('DISCONNECTED');
+    socket.on('disconnect', () => { updateConnectionStatusBall('DISCONNECTED'); });
+
+    socket.on('bot-state-update', (state) => {
+        if (state) {
+            console.log("📡 State Update:", state);
+            updateBotUI(state);
+        }
     });
 
-    // --- ESCUCHA ÚNICA DE DATOS ---
-    socket.on('bot-state-update', (state) => {
-    if (state) {
-        // Log de debug para ver si sstate llega como 'RUNNING' o 'STOPPED'
-        console.log("📡 State Update:", { s: state.sstate, price: state.price });
-        updateBotUI(state);
-    }
-});
-
     socket.on('marketData', (data) => {
-    // Validamos que el precio sea un número real antes de enviarlo a la UI
-    if (data && data.price != null) {
-        updateBotUI({ price: data.price });
-    }
-    
-    if (data.exchangeOnline === false) updateConnectionStatusBall('DISCONNECTED');
-    else if (data.exchangeOnline === true) updateConnectionStatusBall('CONNECTED');
-});
+        if (data && data.price != null) updateBotUI({ price: data.price });
+        if (data.exchangeOnline === false) updateConnectionStatusBall('DISCONNECTED');
+        else if (data.exchangeOnline === true) updateConnectionStatusBall('CONNECTED');
+    });
 
     socket.on('balance-real-update', (data) => {
         if (data.source === 'CACHE_FALLBACK') updateConnectionStatusBall('CACHE');
-        updateBotUI({
-            lastAvailableUSDT: data.lastAvailableUSDT,
-            lastAvailableBTC: data.lastAvailableBTC
-        });
+        updateBotUI({ lastAvailableUSDT: data.lastAvailableUSDT, lastAvailableBTC: data.lastAvailableBTC });
     });
 
-    // Inicializar navegación pasándole la función de carga
     setupNavTabs(initializeTab);
 }
 
-/**
- * Carga de Vistas sin duplicar Listeners
- */
 export async function initializeTab(tabName) {
-    // Limpieza de intervalos viejos
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
-
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
@@ -109,8 +72,10 @@ export async function initializeTab(tabName) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
-                console.log(`📍 Cambiando a: ${tabName}`);
                 await module[initFnName]();
+                if (socket && socket.connected) {
+                    socket.emit('get-bot-state'); // REFRESCAR DATOS TRAS CARGA
+                }
             }
         }
     } catch (error) {
@@ -118,11 +83,9 @@ export async function initializeTab(tabName) {
     }
 }
 
-// Arranque inicial
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-
     if (localStorage.getItem('token')) {
         initializeFullApp();
     } else {
