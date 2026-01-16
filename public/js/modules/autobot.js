@@ -3,7 +3,8 @@
 import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
-import { sendConfigToBackend, toggleBotState } from './apiService.js';
+// CORRECCIÓN: Importamos toggleBotSideState que es el nombre real en apiService.js
+import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, socket } from '../main.js';
 
 const MIN_USDT_AMOUNT = 5.00;
@@ -43,12 +44,12 @@ function setupConfigListeners() {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // Limpiamos listeners previos clonando si es necesario o usando una sola vez
         el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
             if (el.type === 'number') {
                 const val = parseFloat(el.value);
                 el.classList.toggle('border-red-500', isNaN(val) || val < 0);
             }
+            // En cada cambio de input (como tu purchase de 7), se guarda en el server
             sendConfigToBackend();
         });
     });
@@ -79,9 +80,12 @@ export async function initializeAutobotView() {
             // Lógica para el botón de LONG
             btnLong.onclick = async (e) => {
                 e.preventDefault();
+                if (!validateStrategyInputs() && !btnLong.textContent.includes('STOP')) {
+                    displayMessage("Monto mínimo 5 USDT", "error");
+                    return;
+                }
                 const isRunning = btnLong.textContent.includes('STOP');
                 try {
-                    // Llamamos a una nueva función que crearemos en apiService para manejar el lado
                     await toggleBotSideState(isRunning, 'long');
                 } catch (err) {
                     console.error("❌ Error en Start Long:", err);
@@ -91,6 +95,10 @@ export async function initializeAutobotView() {
             // Lógica para el botón de SHORT
             btnShort.onclick = async (e) => {
                 e.preventDefault();
+                if (!validateStrategyInputs() && !btnShort.textContent.includes('STOP')) {
+                    displayMessage("Monto mínimo 5 USDT", "error");
+                    return;
+                }
                 const isRunning = btnShort.textContent.includes('STOP');
                 try {
                     await toggleBotSideState(isRunning, 'short');
@@ -103,13 +111,12 @@ export async function initializeAutobotView() {
         return false;
     };
 
-    // Intentar configurar botones, si no existen reintentar (mantiene tu lógica original)
     if (!setupSeparateButtons()) {
         const retry = setInterval(() => { if (setupSeparateButtons()) clearInterval(retry); }, 200);
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // 4. GESTIÓN DE PESTAÑAS (Opened / History)
+    // 4. GESTIÓN DE PESTAÑAS
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
@@ -132,32 +139,24 @@ export async function initializeAutobotView() {
         });
     });
 
-    // Carga inicial de órdenes
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
-    // 5. SOCKETS: ACTUALIZACIÓN Y SINCRONIZACIÓN INICIAL
+    // 5. SOCKETS
     if (socket) {
-        // Limpieza de eventos duplicados
         socket.off('bot-state-update');
         socket.off('orders-update'); 
 
-        // Listener para actualizaciones de estado (incluye el precio de BTC)
         socket.on('bot-state-update', (state) => {
             updateBotUI(state); 
         });
 
-        // Listener para actualizar tabla de órdenes
         socket.on('orders-update', (data) => {
             if (document.getElementById('au-order-list')) {
                 updateOpenOrdersTable(data, 'au-order-list', currentTab);
             }
         });
 
-        /**
-         * CRÍTICO: Petición activa de estado inicial.
-         * Esto resuelve el problema del precio vacío al cambiar de pestaña.
-         */
         if (socket.connected) {
             socket.emit('get-bot-state');
         } else {

@@ -80,28 +80,33 @@ export async function sendConfigToBackend() {
 
 /**
  * Nueva función para encender/apagar Long o Short de forma independiente
+ * Exportada correctamente para que autobot.js la reconozca
  */
 export async function toggleBotSideState(isRunning, side) {
-    // side será 'long' o 'short'
+    // isRunning: true si el botón dice "STOP", false si dice "START"
     const endpoint = isRunning ? `/api/autobot/stop/${side}` : `/api/autobot/start/${side}`;
+    
+    // Si vamos a iniciar, capturamos la config exponencial actual de los inputs
     const config = isRunning ? {} : getBotConfiguration();
 
-    // Deshabilitamos el botón que se pulsó para evitar clics dobles
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
     const btn = document.getElementById(btnId);
     if (btn) btn.disabled = true;
 
-    const data = await privateFetch(endpoint, {
-        method: 'POST',
-        body: JSON.stringify({ config })
-    });
+    try {
+        const data = await privateFetch(endpoint, {
+            method: 'POST',
+            body: JSON.stringify({ config })
+        });
 
-    if (data.success) {
-        displayMessage(`${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'} correctamente`, 'success');
-    } else {
-        displayMessage(`Error: ${data.message}`, 'error');
+        if (data.success) {
+            displayMessage(`${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`, 'success');
+        } else {
+            displayMessage(`Error: ${data.message}`, 'error');
+        }
+        
+        return data;
+    } finally {
+        if (btn) btn.disabled = false;
     }
-
-    if (btn) btn.disabled = false;
-    return data;
 }

@@ -146,6 +146,12 @@ header, .fixed-header {
     font-size: 11px; /* Tamaño por defecto para PC */
 }
 
+/* Añade esto a tu archivo de estilos principal si quieres suavidad */
+input:disabled {
+    transition: all 0.3s ease;
+    filter: grayscale(1);
+}
+
 /* Ajuste específico para celulares (pantallas menores a 640px) */
 @media (max-width: 640px) {
     #log-message {
