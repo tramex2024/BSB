@@ -78,11 +78,17 @@ export async function sendConfigToBackend() {
     });
 }
 
-export async function toggleBotState(isRunning) {
-    const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
+/**
+ * Nueva función para encender/apagar Long o Short de forma independiente
+ */
+export async function toggleBotSideState(isRunning, side) {
+    // side será 'long' o 'short'
+    const endpoint = isRunning ? `/api/autobot/stop/${side}` : `/api/autobot/start/${side}`;
     const config = isRunning ? {} : getBotConfiguration();
 
-    const btn = document.getElementById('austart-btn');
+    // Deshabilitamos el botón que se pulsó para evitar clics dobles
+    const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
+    const btn = document.getElementById(btnId);
     if (btn) btn.disabled = true;
 
     const data = await privateFetch(endpoint, {
@@ -91,7 +97,7 @@ export async function toggleBotState(isRunning) {
     });
 
     if (data.success) {
-        displayMessage(`Bot ${isRunning ? 'stopped' : 'started'} successfully`, 'success');
+        displayMessage(`${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'} correctamente`, 'success');
     } else {
         displayMessage(`Error: ${data.message}`, 'error');
     }

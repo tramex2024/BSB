@@ -21,16 +21,11 @@ const { monitorAndConsolidateShortBuy } = require('./src/au/states/short/ShortBu
 
 let io;
 let isProcessing = false; 
-let lastCyclePrice = 0; // <--- Crucial: Memoria interna del último precio procesado
+let lastCyclePrice = 0; 
 
 function setIo(socketIo) { io = socketIo; }
 
-/**
- * Función para que el server.js obtenga el precio actual fuera del ciclo
- */
-function getLastPrice() {
-    return lastCyclePrice;
-}
+function getLastPrice() { return lastCyclePrice; }
 
 function log(message, type = 'info') {
     if (io) io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
@@ -39,15 +34,11 @@ function log(message, type = 'info') {
 
 async function syncFrontendState(currentPrice, botState) {
     if (io && botState) {
-        // Enviamos el estado completo y el precio por separado para asegurar recepción
         io.emit('bot-state-update', { ...botState, price: currentPrice }); 
         io.emit('marketData', { price: currentPrice });
     }
 }
 
-/**
- * commitChanges: Fusiona los cambios y los emite por socket inmediatamente
- */
 async function commitChanges(changeSet) {
     if (Object.keys(changeSet).length === 0) return null;
     try {
@@ -68,7 +59,6 @@ function queueSStateUpdate(fields, changeSet) {
     Object.keys(fields).forEach(key => { changeSet[`sStateData.${key}`] = fields[key]; });
 }
 
-// --- ACTUALIZACIÓN DE SALDOS REALES ---
 async function slowBalanceCacheUpdate() {
     let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
     try {
@@ -106,7 +96,6 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
         let botState = await Autobot.findOne({}).lean();
         const currentPrice = parseFloat(priceFromWebSocket);
         
-        // Sincronizamos el precio en la memoria del módulo
         if (!isNaN(currentPrice) && currentPrice > 0) {
             lastCyclePrice = currentPrice;
         }
@@ -135,82 +124,79 @@ async function botCycle(priceFromWebSocket, externalDependencies = {}) {
 
         // 1. CONSOLIDACIÓN
         const lLastOrder = botState.lStateData?.lastOrder;
-        if (lLastOrder?.side === 'buy') {
+        if (lLastOrder?.side === 'buy' && botState.lstate !== 'STOPPED') {
             await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
-        if (lLastOrder?.side === 'sell') {
+        if (lLastOrder?.side === 'sell' && botState.lstate !== 'STOPPED') {
             await monitorAndConsolidateSell(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
         const sLastOrder = botState.sStateData?.lastOrder;
-        if (sLastOrder?.side === 'sell') {
+        if (sLastOrder?.side === 'sell' && botState.sstate !== 'STOPPED') {
             await monitorShortSell(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
-        if (sLastOrder?.side === 'buy') {
+        if (sLastOrder?.side === 'buy' && botState.sstate !== 'STOPPED') {
             await monitorAndConsolidateShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
         }
 
         // 2. RECALCULAR INDICADORES (Lógica Exponencial)
-        const activeLPPC = changeSet['lStateData.ppc'] !== undefined ? changeSet['lStateData.ppc'] : botState.lStateData.ppc;
-        const activeLAC = changeSet['lStateData.ac'] !== undefined ? changeSet['lStateData.ac'] : botState.lStateData.ac;
+        // LONG
+        if (botState.lstate !== 'STOPPED') {
+            const activeLPPC = changeSet['lStateData.ppc'] !== undefined ? changeSet['lStateData.ppc'] : (botState.lStateData?.ppc || 0);
+            const activeLAC = changeSet['lStateData.ac'] !== undefined ? changeSet['lStateData.ac'] : (botState.lStateData?.ac || 0);
 
-        if (botState.lstate !== 'STOPPED' && activeLPPC > 0) {
-            const { coveragePrice, numberOfOrders } = calculateLongCoverage(
-                botState.lbalance, activeLPPC, botState.config.long.purchaseUsdt,
-                parseNumber(botState.config.long.price_var)/100, parseNumber(botState.config.long.size_var)/100
-            );
-            changeSet.lcoverage = coveragePrice;
-            changeSet.lnorder = numberOfOrders;
-            changeSet.lprofit = calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long');
+            if (activeLPPC > 0) {
+                const { coveragePrice, numberOfOrders } = calculateLongCoverage(
+                    botState.lbalance, activeLPPC, botState.config.long.purchaseUsdt,
+                    parseNumber(botState.config.long.price_var)/100, parseNumber(botState.config.long.size_var)/100
+                );
+                changeSet.lcoverage = coveragePrice;
+                changeSet.lnorder = numberOfOrders;
+                changeSet.lprofit = calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long');
+            }
+        } else {
+            // Si está parado, reseteamos visualmente el profit flotante
+            changeSet.lprofit = 0;
+            changeSet.lcoverage = 0;
+            changeSet.lnorder = 0;
         }
 
-        const activeSPPC = changeSet['sStateData.ppc'] !== undefined ? changeSet['sStateData.ppc'] : botState.sStateData.ppc;
-        const activeSAC = changeSet['sStateData.ac'] !== undefined ? changeSet['sStateData.ac'] : botState.sStateData.ac;
+        // SHORT
+        if (botState.sstate !== 'STOPPED') {
+            const activeSPPC = changeSet['sStateData.ppc'] !== undefined ? changeSet['sStateData.ppc'] : (botState.sStateData?.ppc || 0);
+            const activeSAC = changeSet['sStateData.ac'] !== undefined ? changeSet['sStateData.ac'] : (botState.sStateData?.ac || 0);
 
-        if (botState.sstate !== 'STOPPED' && activeSPPC > 0) {
-            const { coveragePrice, numberOfOrders } = calculateShortCoverage(
-                botState.sbalance, 
-                activeSPPC, 
-                botState.config.short.purchaseUsdt, 
-                parseNumber(botState.config.short.price_var)/100, 
-                parseNumber(botState.config.short.size_var)/100
-            );
-            changeSet.scoverage = coveragePrice;
-            changeSet.snorder = numberOfOrders;
-            changeSet.sprofit = calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short');
+            if (activeSPPC > 0) {
+                const { coveragePrice, numberOfOrders } = calculateShortCoverage(
+                    botState.sbalance, activeSPPC, botState.config.short.purchaseUsdt, 
+                    parseNumber(botState.config.short.price_var)/100, parseNumber(botState.config.short.size_var)/100
+                );
+                changeSet.scoverage = coveragePrice;
+                changeSet.snorder = numberOfOrders;
+                changeSet.sprofit = calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short');
+            }
+        } else {
+            changeSet.sprofit = 0;
+            changeSet.scoverage = 0;
+            changeSet.snorder = 0;
         }
 
-        // 3. EJECUCIÓN
+        // 3. EJECUCIÓN ESTRATÉGICA
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
 
-        // 4. PERSISTENCIA
+        // 4. PERSISTENCIA Y EMISIÓN
         const finalState = await commitChanges(changeSet);
         
-        if (io && finalState) {
-            io.emit('bot-profit-update', {
-                lprofit: finalState.lprofit,
-                sprofit: finalState.sprofit
-            });
+        if (finalState) {
+            await syncFrontendState(currentPrice, finalState);
         }
-        await syncFrontendState(currentPrice, finalState || botState);
         
     } catch (error) {
         log(`❌ Error crítico en ciclo: ${error.message}`, 'error');
     } finally {
         isProcessing = false; 
     }
-}
-
-async function checkIndependentStop(type, changeSet, botState) {
-    const config = botState.config[type];
-    if (config && config.stopAtCycle) {
-        log(`[${type.toUpperCase()}] Ciclo completado. Aplicando STOP preventivo.`, 'warning');
-        changeSet[type === 'long' ? 'lstate' : 'sstate'] = 'STOPPED';
-        changeSet[`config.${type}.enabled`] = false;
-        return true;
-    }
-    return false;
 }
 
 module.exports = {
@@ -221,5 +207,5 @@ module.exports = {
     botCycle, 
     slowBalanceCacheUpdate, 
     syncFrontendState,
-    getLastPrice // <--- Exportado para que server.js lo use al inicio
+    getLastPrice 
 };

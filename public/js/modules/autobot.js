@@ -70,32 +70,42 @@ export async function initializeAutobotView() {
         }
     }, 400);
 
-    // 3. Lógica del Botón Start/Stop
-    const setupStartBtn = () => {
-        const startBtn = document.getElementById('austart-btn');
-        if (startBtn) {
-            const newBtn = startBtn.cloneNode(true);
-            startBtn.parentNode.replaceChild(newBtn, startBtn);
-            newBtn.addEventListener('click', async (e) => {
+    // 3. Lógica de Botones Separados (Long y Short)
+    const setupSeparateButtons = () => {
+        const btnLong = document.getElementById('austartl-btn');
+        const btnShort = document.getElementById('austarts-btn');
+
+        if (btnLong && btnShort) {
+            // Lógica para el botón de LONG
+            btnLong.onclick = async (e) => {
                 e.preventDefault();
-                const isRunning = newBtn.textContent.includes('STOP');
-                if (!isRunning && !validateStrategyInputs()) {
-                    displayMessage(`Monto mínimo es $${MIN_USDT_AMOUNT} USDT`, 'error');
-                    return;
-                }
+                const isRunning = btnLong.textContent.includes('STOP');
                 try {
-                    await toggleBotState(isRunning);
+                    // Llamamos a una nueva función que crearemos en apiService para manejar el lado
+                    await toggleBotSideState(isRunning, 'long');
                 } catch (err) {
-                    console.error("❌ Error al cambiar estado:", err);
+                    console.error("❌ Error en Start Long:", err);
                 }
-            });
+            };
+
+            // Lógica para el botón de SHORT
+            btnShort.onclick = async (e) => {
+                e.preventDefault();
+                const isRunning = btnShort.textContent.includes('STOP');
+                try {
+                    await toggleBotSideState(isRunning, 'short');
+                } catch (err) {
+                    console.error("❌ Error en Start Short:", err);
+                }
+            };
             return true;
         }
         return false;
     };
 
-    if (!setupStartBtn()) {
-        const retry = setInterval(() => { if (setupStartBtn()) clearInterval(retry); }, 200);
+    // Intentar configurar botones, si no existen reintentar (mantiene tu lógica original)
+    if (!setupSeparateButtons()) {
+        const retry = setInterval(() => { if (setupSeparateButtons()) clearInterval(retry); }, 200);
         setTimeout(() => clearInterval(retry), 3000);
     }
 

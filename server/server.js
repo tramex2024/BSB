@@ -181,29 +181,46 @@ io.on('connection', (socket) => {
 
     const sendFullBotStatus = async () => {
         try {
+            // Buscamos el estado actual en la base de datos
             const state = await Autobot.findOne({}).lean();
+            
             if (state) {
-                const currentPrice = (typeof autobotLogic.getLastPrice === 'function') 
+                // 1. Obtener el precio más reciente (del motor de lógica o del ticker)
+                const currentPrice = (autobotLogic && typeof autobotLogic.getLastPrice === 'function') 
                     ? autobotLogic.getLastPrice() 
                     : lastKnownPrice;
 
+                // 2. Emitir el estado completo para sincronizar la UI (Botones, Labels, Precios)
                 socket.emit('bot-state-update', {
                     ...state,
-                    price: currentPrice
+                    price: currentPrice,
+                    // Aseguramos que los estados existan para que los botones cambien de color correctamente
+                    lstate: state.lstate || 'STOPPED',
+                    sstate: state.sstate || 'STOPPED',
+                    config: state.config // Enviamos la config para que los inputs se llenen solos
                 });
 
-                const totalCurrentBalance = (state.lbalance || 0) + (state.sbalance || 0);
-                const profitPercent = totalCurrentBalance > 0 
-                    ? ((state.total_profit || 0) / totalCurrentBalance) * 100 
+                // 3. Cálculos de estadísticas rápidas (Profit total y porcentaje)
+                // Usamos el balance configurado para calcular el rendimiento real
+                const totalAllocated = (state.config?.long?.amountUsdt || 0) + (state.config?.short?.amountUsdt || 0);
+                const totalProfit = state.total_profit || 0;
+                
+                const profitPercent = totalAllocated > 0 
+                    ? (totalProfit / totalAllocated) * 100 
                     : 0;
 
+                // 4. Emitir estadísticas para el header del Dashboard
                 socket.emit('bot-stats', {
-                    totalProfit: state.total_profit || 0,
+                    totalProfit: totalProfit,
                     profitChangePercent: profitPercent 
                 });
+
+                console.log(`📊 Estado enviado a usuario ${socket.id} [L:${state.lstate} | S:${state.sstate}]`);
+            } else {
+                console.log(`⚠️ No se encontró estado inicial para el usuario ${socket.id}`);
             }
         } catch (err) {
-            console.error("❌ Error al recuperar estado:", err);
+            console.error("❌ Error crítico al recuperar estado para Socket:", err);
         }
     };
 

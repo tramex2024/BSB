@@ -14,9 +14,8 @@ function setDependencies(deps) {
 }
 
 async function runLongStrategy() {
-    const { botState, currentPrice, availableUSDT, availableBTC } = dependencies;
+    const { botState } = dependencies;
 
-    // Selecciona la función a ejecutar basándose en el estado actual del bot
     switch (botState.lstate) {
         case 'RUNNING':
             await LRunning.run(dependencies);
@@ -31,7 +30,7 @@ async function runLongStrategy() {
             await LNoCoverage.run(dependencies);
             break;
         case 'STOPPED':
-            await LStopped.run(dependencies);
+            await LStopped.run(dependencies); // Volvemos a habilitarlo
             break;
         default:
             console.error(`Estado Long desconocido: ${botState.lstate}`);
