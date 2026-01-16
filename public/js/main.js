@@ -8,19 +8,24 @@ export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export let socket = null;
 
 // --- MEMORIA CENTRAL (Estado Persistente) ---
+// Aquí es donde vive la "verdad" de tu bot mientras navegas
 export let currentBotState = {
     price: 0,
     sstate: 'STOPPED',
-    lstate: 'STOPPED'
+    lstate: 'STOPPED',
+    config: {}
 };
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),
-    flujo: () => import('./modules/flujo.js'), // Asegúrate de que esta coma exista
+    flujo: () => import('./modules/flujo.js'),
     aibot: () => import('./modules/aibot.js')
 };
 
+/**
+ * Inicializa la conexión y los escuchas de eventos globales
+ */
 export function initializeFullApp() {
     if (socket) return;
 
@@ -32,23 +37,37 @@ export function initializeFullApp() {
 
     socket.on('connect', () => {
         console.log('✅ Socket Conectado');
+        // Pedimos el estado inicial al conectar
         socket.emit('get-bot-state');
     });
 
+    // Escucha de Precios (Alta frecuencia)
     socket.on('marketData', (data) => {
         if (data && data.price != null) {
-            // 1. Guardar en memoria siempre
+            // Actualizamos memoria
             currentBotState.price = data.price;
-            // 2. Intentar pintar la UI (si la pestaña actual tiene los IDs)
-            updateBotUI({ price: data.price });
+            
+            // Actualizamos la UI con el estado completo para mantener coherencia
+            updateBotUI(currentBotState);
         }
     });
 
-    // Escucha genérica para el estado del bot
+    // Escucha de cambios en el Bot (Estados, balances, config)
     socket.on('bot-state-update', (state) => {
         if (state) {
-            // Fusionamos los datos nuevos con la memoria existente
+            // Fusionamos de forma atómica: lo que ya tenemos + lo que llega nuevo
             currentBotState = { ...currentBotState, ...state };
+            
+            console.log("📡 Memoria Actualizada:", currentBotState);
+            updateBotUI(currentBotState);
+        }
+    });
+
+    // Escucha de balances reales
+    socket.on('balance-real-update', (data) => {
+        if (data) {
+            currentBotState.lastAvailableUSDT = data.lastAvailableUSDT;
+            currentBotState.lastAvailableBTC = data.lastAvailableBTC;
             updateBotUI(currentBotState);
         }
     });
@@ -56,15 +75,20 @@ export function initializeFullApp() {
     setupNavTabs(initializeTab);
 }
 
+/**
+ * Gestiona el cambio de pestañas sin perder los datos de la memoria
+ */
 export async function initializeTab(tabName) {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
     try {
+        // 1. Cargamos el HTML de la pestaña
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         mainContent.innerHTML = html;
 
+        // 2. Cargamos e inicializamos el JS de la pestaña
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
@@ -72,23 +96,28 @@ export async function initializeTab(tabName) {
             if (typeof module[initFnName] === 'function') {
                 await module[initFnName]();
                 
-                // --- SINCRONIZACIÓN INSTANTÁNEA ---
-                // Al terminar de cargar cualquier pestaña, le pasamos lo que tenemos en memoria
+                // --- SINCRONIZACIÓN CRÍTICA ---
+                // Inmediatamente después de cargar el HTML y el JS, 
+                // rellenamos los campos con lo que tenemos en memoria.
                 updateBotUI(currentBotState);
+                console.log(`🖼️ Vista ${tabName} sincronizada con memoria.`);
             }
         }
     } catch (error) {
-        console.error("Error cargando vista:", error);
+        console.error("❌ Error cargando vista:", error);
     }
 }
 
-// Inicio
+// Arranque inicial de la aplicación
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
+
+    // Si hay sesión iniciada, arrancamos el flujo de datos
     if (localStorage.getItem('token')) {
         initializeFullApp();
     } else {
+        // Si no, enviamos al dashboard (login)
         initializeTab('dashboard');
     }
 });
