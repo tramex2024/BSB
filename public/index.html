@@ -4,7 +4,7 @@
     <link rel="icon" href="/images/bsb-logo.png" type="image/png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BSB - Bitmart Spot Bots</title>
+    <title>BSB - Bitmart Spot Bots (Test Mode)</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -25,6 +25,7 @@
         <nav id="main-nav" class="flex space-x-1">
             <a class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
             <a class="nav-tab" data-tab="autobot">AUTOBOT</a>
+            <a class="nav-tab text-emerald-400 font-bold" data-tab="flujo">FLUJO</a> 
             <a class="nav-tab" data-tab="aibot">AIBOT</a>
         </nav>
         
@@ -35,10 +36,10 @@
     </header>
 
     <div id="log-bar" class="log-bar">
-    <p id="log-message">Sincronizando con Bitmart API...</p>
-</div>
+        <p id="log-message">Sincronizando con Bitmart API...</p>
+    </div>
 
-    <main id="main-content" class="relative overflow-x-hidden p-4 md:p-6">
+    <main id="main-content" class="relative overflow-x-hidden p-4 md:p-6 min-h-[calc(100vh-4rem)]">
         <div class="flex items-center justify-center h-64">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
         </div>
@@ -96,6 +97,7 @@
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>
