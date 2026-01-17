@@ -35,7 +35,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 2. VALORES NUMÉRICOS (Labels informativos) ---
+    // --- 2. VALORES NUMÉRICOS ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
@@ -74,48 +74,39 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Inputs y Switches) ---
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Actualizada) ---
 if (state.config) {
     const conf = state.config;
-    
-    // Mapeo exacto entre: ID del HTML <-> Valor en el objeto state.config
     const inputsMapping = {
-        // Long
-        'auamountl-usdt': conf.long?.amountUsdt,
-        'aupurchasel-usdt': conf.long?.purchaseUsdt,
-        'auincrementl':   conf.long?.size_var,
-        'audecrementl':   conf.long?.price_var,
-        'autriggerl':     conf.long?.trigger,
-
-        // Short
+        'auamountl-usdt':   conf.long?.amountUsdt,
+        'aupurchasel-usdt':  conf.long?.purchaseUsdt,
+        'auincrementl':     conf.long?.size_var,
+        'audecrementl':     conf.long?.price_var,
+        'aupriceinc-l':     conf.long?.price_step_inc, // Nuevo: Incremento distancia Long
+        'autriggerl':       conf.long?.trigger,
         'auamounts-usdt':   conf.short?.amountUsdt,
-        'aupurchases-usdt': conf.short?.purchaseUsdt,
+        'aupurchases-usdt':  conf.short?.purchaseUsdt,
         'auincrements':     conf.short?.size_var,
         'audecrements':     conf.short?.price_var,
+        'aupriceinc-s':     conf.short?.price_step_inc, // Nuevo: Incremento distancia Short
         'autriggers':       conf.short?.trigger
     };
 
     for (const [id, value] of Object.entries(inputsMapping)) {
         const input = document.getElementById(id);
-        // Regla de oro: No sobreescribir si el usuario está escribiendo (activeElement)
+        // Protegemos el foco para no interrumpir al usuario
         if (input && value !== undefined && document.activeElement !== input) {
-            // Usamos != para comparar número con string sin ser estrictos
             if (input.value != value) {
                 input.value = value;
             }
         }
     }
 
-    // Checkboxes (Switches de Stop At Cycle)
-    const stopL = document.getElementById('au-stop-long-at-cycle');
-    const stopS = document.getElementById('au-stop-short-at-cycle');
-    
-    if (stopL && document.activeElement !== stopL) {
-        stopL.checked = !!conf.long?.stopAtCycle;
-    }
-    if (stopS && document.activeElement !== stopS) {
-        stopS.checked = !!conf.short?.stopAtCycle;
-    }
+        const stopL = document.getElementById('au-stop-long-at-cycle');
+        const stopS = document.getElementById('au-stop-short-at-cycle');
+        if (stopL && document.activeElement !== stopL) stopL.checked = !!conf.long?.stopAtCycle;
+        if (stopS && document.activeElement !== stopS) stopS.checked = !!conf.short?.stopAtCycle;
+    } // <--- AQUÍ FALTABA ESTA LLAVE
 }
 
 export function updateControlsState(state) {
@@ -124,7 +115,6 @@ export function updateControlsState(state) {
     const isShortRunning = sStatus !== 'STOPPED';
     const isLongRunning = lStatus !== 'STOPPED';
 
-    // 1. Botones: Cambian de color y texto
     const btns = [
         { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
         { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' }
@@ -140,7 +130,6 @@ export function updateControlsState(state) {
         }
     });
 
-    // 2. Bloqueo de inputs mientras el bot corre (Actualizado para lógica exponencial)
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers'];
 

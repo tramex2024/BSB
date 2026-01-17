@@ -39,24 +39,23 @@ export function getBotConfiguration() {
     const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
-    // Estructura para la lógica exponencial del bot
     return {
         symbol: "BTC_USDT",
         long: {
             amountUsdt: getNum('auamountl-usdt'),
             purchaseUsdt: getNum('aupurchasel-usdt'),
-            price_var: getNum('audecrement'),
-            size_var: getNum('auincrement'),
-            trigger: getNum('autrigger'),
+            price_var: getNum('audecrementl'), // Agregada 'l'
+            size_var: getNum('auincrementl'),   // Agregada 'l'
+            trigger: getNum('autriggerl'),     // Agregada 'l'
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
         short: {
             amountUsdt: getNum('auamounts-usdt'), 
             purchaseUsdt: getNum('aupurchases-usdt'), 
-            price_var: getNum('audecrement'),
-            size_var: getNum('auincrement'),
-            trigger: getNum('autrigger'),
+            price_var: getNum('audecrements'), // Agregada 's'
+            size_var: getNum('auincrements'),   // Agregada 's'
+            trigger: getNum('autriggers'),     // Agregada 's'
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }

@@ -81,17 +81,21 @@ router.post('/start', async (req, res) => {
  */
 router.post('/start/:side', async (req, res) => {
     try {
-        const { side } = req.params; // Captura 'long' o 'short'
+        const { side } = req.params;
         const { config } = req.body;
         
         const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
         const currentPrice = parseFloat(tickerData.last_price);
-
         if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
 
         const initialState = calculateInitialState(config, currentPrice);
-        let autobot = await Autobot.findOne({});
         
+        // BUSCAR O CREAR (Upsert)
+        let autobot = await Autobot.findOne({});
+        if (!autobot) {
+            autobot = new Autobot({ config: config });
+        }
+
         if (side === 'long') {
             autobot.config.long = { ...config.long, ...initialState.long, enabled: true };
             autobot.lstate = 'RUNNING';
@@ -106,6 +110,7 @@ router.post('/start/:side', async (req, res) => {
         emitBotState(autobot, autobotLogic.io);
         res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
     } catch (error) {
+        console.error("Error en Start:", error);
         res.status(500).json({ success: false, message: `Error al iniciar ${req.params.side}.` });
     }
 });

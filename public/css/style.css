@@ -146,6 +146,18 @@ header, .fixed-header {
     font-size: 11px; /* Tamaño por defecto para PC */
 }
 
+/* Clase para campos editables 'al vuelo' */
+.editable-running {
+    border-bottom: 2px dashed var(--warning) !important;
+    cursor: edit;
+}
+
+.editable-running:focus {
+    background-color: rgba(245, 158, 11, 0.1);
+    outline: none;
+    border-bottom: 2px solid var(--warning) !important;
+}
+
 /* Añade esto a tu archivo de estilos principal si quieres suavidad */
 input:disabled {
     transition: all 0.3s ease;

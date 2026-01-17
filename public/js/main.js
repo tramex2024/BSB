@@ -126,12 +126,17 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-        resetWatchdog();
-        if (data && data.price != null) {
+    resetWatchdog();
+    if (data && data.price != null) {
+        // Solo actualizamos si el precio realmente cambió
+        if (currentBotState.price !== data.price) {
             currentBotState.price = data.price;
+            // IMPORTANTE: updateBotUI ahora maneja el color (verde/rojo) 
+            // basado en el lastPrice que guarda internamente.
             updateBotUI(currentBotState);
         }
-    });
+    }
+});
 
     socket.on('bot-log', (log) => {
         logStatus(log.message, log.type);
