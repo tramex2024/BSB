@@ -19,7 +19,7 @@ export let currentBotState = {
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
-let isOffline = false; // Nueva bandera para control de estado
+let isOffline = false; 
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -44,19 +44,27 @@ function setInstantError(message, active) {
             logEl.style.opacity = '1';
             if (statusDot) statusDot.className = 'status-dot-base status-red';
         } else {
+            // RESTAURACIÓN
             isOffline = false;
             logEl.textContent = "✅ Conexión restaurada";
             logEl.className = "text-emerald-400 font-bold";
             logBar.style.backgroundColor = '#111827';
             if (statusDot) statusDot.className = 'status-dot-base status-green';
-            // Limpiar el mensaje después de 2 segundos
-            setTimeout(() => { if(!isOffline) logEl.style.opacity = '0.5'; }, 2000);
+            
+            // IMPORTANTE: Reiniciamos el procesador de logs para que vuelva a mostrar mensajes del backend
+            setTimeout(() => { 
+                if(!isOffline) {
+                    logEl.style.opacity = '0.5';
+                    if (!isProcessingLog && logQueue.length > 0) {
+                        processNextLog(); 
+                    }
+                }
+            }, 2000);
         }
     }
 }
 
 function resetWatchdog() {
-    // Si recibimos datos y estábamos en modo offline, restauramos instantáneamente
     if (isOffline) {
         setInstantError(null, false);
     }
@@ -65,11 +73,12 @@ function resetWatchdog() {
 
     connectionWatchdog = setTimeout(() => {
         setInstantError("⚠️ ALERTA: Sin recepción de datos (Wifi/Server Offline)", true);
-    }, 2000); // 2 segundos exactos de tolerancia
+    }, 2000);
 }
 
 function processNextLog() {
-    if (logQueue.length === 0 || isOffline) { // Si está offline, no procesamos logs normales
+    // Si no hay mensajes o estamos offline, detenemos el proceso
+    if (logQueue.length === 0 || isOffline) { 
         isProcessingLog = false;
         return;
     }
@@ -98,9 +107,8 @@ function processNextLog() {
 }
 
 export function logStatus(message, type = 'info') {
-    if (isOffline && type !== 'error') return; // No encolar info si estamos caídos
     logQueue.push({ message, type });
-    if (!isProcessingLog) processNextLog();
+    if (!isProcessingLog && !isOffline) processNextLog();
 }
 
 export function initializeFullApp() {
@@ -110,7 +118,7 @@ export function initializeFullApp() {
         path: '/socket.io', 
         transports: ['websocket'], 
         reconnection: true,
-        reconnectionDelay: 500 // Reintento más rápido
+        reconnectionDelay: 500
     });
 
     socket.on('connect', () => {
@@ -124,11 +132,10 @@ export function initializeFullApp() {
     });
 
     socket.on('bot-log', (log) => {
-        if (!isOffline) {
-            logQueue.push(log);
-            if (logQueue.length > 20) logQueue.shift();
-            if (!isProcessingLog) processNextLog();
-        }
+        logQueue.push(log);
+        if (logQueue.length > 20) logQueue.shift();
+        // Solo procesamos si no estamos offline
+        if (!isProcessingLog && !isOffline) processNextLog();
     });
 
     socket.on('marketData', (data) => {
