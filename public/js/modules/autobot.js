@@ -4,9 +4,9 @@ import { initializeChart } from './chart.js';
 import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
-import { TRADE_SYMBOL_TV, socket } from '../main.js';
+import { socket, currentBotState, TRADE_SYMBOL_TV } from '../main.js';
 
-const MIN_USDT_AMOUNT = 5.00;
+const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'opened';
 
 /**
