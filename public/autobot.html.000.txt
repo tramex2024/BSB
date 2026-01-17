@@ -117,7 +117,14 @@
 
         <div id="execution-controls" class="bg-gray-800 p-4 rounded-2xl border-2 border-emerald-500/10 space-y-3 relative z-50">
             <div class="grid grid-cols-2 gap-2">
-                
+                <div class="flex items-center space-x-2 bg-gray-900/60 p-2 rounded-lg border border-gray-700 hover:border-emerald-500/30 transition-all pointer-events-auto">
+                    <input type="checkbox" id="au-stop-long-at-cycle" class="w-4 h-4 bg-gray-800 border-gray-600 rounded text-emerald-500 cursor-pointer" style="pointer-events: auto !important; position: relative; z-index: 999;">
+                    <label for="au-stop-long-at-cycle" class="text-[10px] text-gray-300 cursor-pointer font-bold uppercase select-none">Stop Long</label>
+                </div>
+                <div class="flex items-center space-x-2 bg-gray-900/60 p-2 rounded-lg border border-gray-700 hover:border-emerald-500/30 transition-all pointer-events-auto">
+                    <input type="checkbox" id="au-stop-short-at-cycle" class="w-4 h-4 bg-gray-800 border-gray-600 rounded text-emerald-500 cursor-pointer" style="pointer-events: auto !important; position: relative; z-index: 999;">
+                    <label for="au-stop-short-at-cycle" class="text-[10px] text-gray-300 cursor-pointer font-bold uppercase select-none">Stop Short</label>
+                </div>
             </div>
             
             <div class="pt-2 border-t border-gray-700 mt-2">
