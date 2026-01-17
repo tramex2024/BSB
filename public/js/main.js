@@ -5,7 +5,7 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI } from './modules/uiManager.js';
 
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
-export const TRADE_SYMBOL_TV = 'BTC/USDT'; // <--- AÑADE ESTA LÍNEA
+export const TRADE_SYMBOL_TV = 'BTC_USDT'; // <--- AÑADE ESTA LÍNEA
 export let socket = null;
 
 // --- MEMORIA CENTRAL (Estado Persistente) ---
