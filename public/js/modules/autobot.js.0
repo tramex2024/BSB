@@ -12,37 +12,34 @@ let currentTab = 'opened';
 
 /**
  * Recolecta los valores de la UI y los envía al backend vía Socket
- * Corregido para coincidir con el modelo de Mongoose (profit_percent)
  */
 function syncConfigWithBackend() {
     if (!socket || !socket.connected) {
-        logStatus("❌ Error: Sin conexión para actualizar configuración", "error");
+        logStatus("❌ Error: Sin conexión para actualizar configuración", true);
         return;
     }
 
-    // Estructuramos el payload exactamente como lo espera tu modelo Autobot.js
     const payload = {
-        config: {
-            long: {
-                amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
-                purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
-                stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false,
-                size_var: parseFloat(document.getElementById('auincrement')?.value) || 0,
-                price_var: parseFloat(document.getElementById('audecrement')?.value) || 0,
-                profit_percent: parseFloat(document.getElementById('autrigger')?.value) || 0
-            },
-            short: {
-                amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
-                purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
-                stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false,
-                size_var: parseFloat(document.getElementById('auincrement')?.value) || 0,
-                price_var: parseFloat(document.getElementById('audecrement')?.value) || 0,
-                profit_percent: parseFloat(document.getElementById('autrigger')?.value) || 0
-            }
+        long: {
+            amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false,
+            // Variables exponenciales (compartidas en lógica backend)
+            size_var: parseFloat(document.getElementById('auincrement')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrement')?.value) || 0,
+            trigger: parseFloat(document.getElementById('autrigger')?.value) || 0
+        },
+        short: {
+            amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false,
+            // Replicamos variables compartidas para consistencia
+            size_var: parseFloat(document.getElementById('auincrement')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrement')?.value) || 0,
+            trigger: parseFloat(document.getElementById('autrigger')?.value) || 0
         }
     };
 
-    // Emitimos el evento que el servidor escucha para actualizar la DB
     socket.emit('update-bot-config', payload);
     logStatus("⏳ Enviando configuración...");
 }
@@ -90,17 +87,14 @@ function setupConfigListeners() {
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     
-    // 1. Iniciamos los escuchas de los inputs
     setupConfigListeners();
 
-    // 2. Iniciamos el gráfico (con delay para asegurar que el DOM esté listo)
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
-    // 3. Configuración de los botones Start/Stop
     const setupSeparateButtons = () => {
         const btnLong = document.getElementById('austartl-btn');
         const btnShort = document.getElementById('austarts-btn');
@@ -119,7 +113,7 @@ export async function initializeAutobotView() {
                     logStatus(isRunning ? "🛑 Deteniendo Long..." : "🚀 Iniciando Long...");
                     await toggleBotSideState(isRunning, 'long');
                 } catch (err) {
-                    logStatus("❌ Error en operación Long", "error");
+                    logStatus("❌ Error en operación Long", true);
                 }
             };
 
@@ -136,7 +130,7 @@ export async function initializeAutobotView() {
                     logStatus(isRunning ? "🛑 Deteniendo Short..." : "🚀 Iniciando Short...");
                     await toggleBotSideState(isRunning, 'short');
                 } catch (err) {
-                    logStatus("❌ Error en operación Short", "error");
+                    logStatus("❌ Error en operación Short", true);
                 }
             };
             return true;
@@ -149,7 +143,7 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // 4. Gestión de Pestañas de Órdenes
+    // GESTIÓN DE PESTAÑAS (Simplificada)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.onclick = (e) => {
@@ -160,7 +154,6 @@ export async function initializeAutobotView() {
         };
     });
 
-    // 5. Pedir el estado inicial al conectar
     if (socket && socket.connected) {
         socket.emit('get-bot-state'); 
     }
