@@ -19,8 +19,7 @@ export let currentBotState = {
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
-    autobot: () => import('./modules/autobot.js'),
-    flujo: () => import('./modules/flujo.js'),
+    autobot: () => import('./modules/autobot.js'),    
     aibot: () => import('./modules/aibot.js')
 };
 
