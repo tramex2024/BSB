@@ -17,6 +17,10 @@ export let currentBotState = {
     config: {}
 };
 
+// Variables para la gestión de logs (Originales)
+let logQueue = [];
+let isProcessingLog = false;
+
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),    
@@ -26,22 +30,15 @@ const views = {
 // --- LÓGICA DE MONITOREO (WATCHDOG) ---
 let connectionWatchdog = null;
 
-/**
- * Reinicia el temporizador de seguridad. 
- * Si no se llama en 2 segundos, la bolita se pone roja.
- */
 function resetWatchdog() {
     const statusDot = document.getElementById('status-dot');
     
-    // Si recibimos datos y estaba en rojo, lo devolvemos a verde
     if (statusDot && statusDot.classList.contains('status-red')) {
         statusDot.className = 'status-dot-base status-green';
     }
 
-    // Limpiar el temporizador anterior
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
-    // Iniciar nueva cuenta regresiva de 2 segundos
     connectionWatchdog = setTimeout(() => {
         if (statusDot) {
             console.warn('⚠️ Watchdog: Sin datos detectados en 2 segundos.');
@@ -51,15 +48,55 @@ function resetWatchdog() {
 }
 
 /**
- * Inicializa la conexión Socket.io y gestiona el flujo de logs/watchdog
+ * Sistema de gestión de Logs original con retardo
+ */
+function processNextLog() {
+    if (logQueue.length === 0) {
+        isProcessingLog = false;
+        return;
+    }
+
+    isProcessingLog = true;
+    const log = logQueue.shift();
+    const logEl = document.getElementById('log-message');
+    const logBar = document.getElementById('log-bar');
+
+    if (logEl && logBar) {
+        logEl.textContent = log.message;
+        
+        const colors = {
+            success: 'text-emerald-400',
+            error: 'text-red-400',
+            warning: 'text-yellow-400',
+            info: 'text-blue-400'
+        };
+        
+        logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+        logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
+        logEl.style.opacity = '1';
+
+        setTimeout(() => {
+            logEl.style.opacity = '0.5';
+            processNextLog();
+        }, 2500);
+    } else {
+        isProcessingLog = false;
+    }
+}
+
+export function logStatus(message, type = 'info') {
+    logQueue.push({ message, type });
+    if (!isProcessingLog) processNextLog();
+}
+
+/**
+ * Inicializa la conexión Socket.io
  */
 export function initializeFullApp() {
-    // Evitar duplicar la conexión si ya existe
     if (socket && socket.connected) return;
 
     const statusDot = document.getElementById('status-dot');
 
-    // Configuración del Socket
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
@@ -68,72 +105,49 @@ export function initializeFullApp() {
         reconnectionDelay: 1000
     });
 
-    // --- EVENTOS DE CONEXIÓN ---
-
     socket.on('connect', () => {
-        logStatus("✅ Conexión establecida con Bitmart API");
+        logStatus("✅ Conexión establecida", "success");
         if (statusDot) {
             statusDot.className = 'status-dot-base status-green';
         }
-        resetWatchdog(); // Inicia el temporizador de seguridad
-        
-        // Solicitar el estado inicial del bot nada más conectar
+        resetWatchdog();
         socket.emit('get-bot-state');
     });
 
     socket.on('disconnect', (reason) => {
-        logStatus(`⚠️ Desconectado: ${reason}`, true);
+        logStatus(`⚠️ Desconectado: ${reason}`, "error");
         if (statusDot) {
             statusDot.className = 'status-dot-base status-red';
         }
         if (connectionWatchdog) clearTimeout(connectionWatchdog);
     });
 
-    socket.on('connect_error', () => {
-        logStatus("❌ Error de conexión con el servidor", true);
-        if (statusDot) {
-            statusDot.className = 'status-dot-base status-red';
-        }
+    // Evento original para recibir logs del backend
+    socket.on('bot-log', (log) => {
+        logQueue.push(log);
+        if (logQueue.length > 20) logQueue.shift();
+        if (!isProcessingLog) processNextLog();
     });
 
-    // --- RECEPCIÓN DE DATOS ---
-
-    // MarketData (Precio en tiempo real)
     socket.on('marketData', (data) => {
-        resetWatchdog(); // Si llega precio, la conexión está viva
+        resetWatchdog();
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
         }
     });
 
-    // Bot State Update (Estado de ciclos, balances, etc.)
     socket.on('bot-state-update', (state) => {
-        resetWatchdog(); // Si llega estado, la conexión está viva
+        resetWatchdog();
         if (state) {
-            // Mezclamos el nuevo estado con el actual para no perder datos
             currentBotState = { ...currentBotState, ...state };
             updateBotUI(currentBotState);
         }
     });
 
-    // Confirmación de cambios desde el servidor
-    socket.on('config-success', (msg) => {
-        logStatus(`✅ Servidor: ${msg || 'Configuración aplicada'}`);
-    });
-
-    socket.on('error-msg', (msg) => {
-        logStatus(`❌ ERROR: ${msg}`, true);
-    });
-
-    // --- INICIALIZAR NAVEGACIÓN ---
-    // Pasamos el callback para que las pestañas sepan qué cargar
     setupNavTabs(initializeTab);
 }
 
-/**
- * Gestiona el cambio de pestañas sin perder los datos de la memoria
- */
 export async function initializeTab(tabName) {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
@@ -150,7 +164,6 @@ export async function initializeTab(tabName) {
             if (typeof module[initFnName] === 'function') {
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
-                console.log(`🖼️ Vista ${tabName} sincronizada.`);
             }
         }
     } catch (error) {
@@ -158,29 +171,6 @@ export async function initializeTab(tabName) {
     }
 }
 
-/**
- * Actualiza la barra de mensajes superior (Log Bar)
- * @param {string} message - Texto a mostrar
- * @param {boolean} isError - Si es true, la barra se pone roja
- */
-export function logStatus(message, isError = false) {
-    const logMessage = document.getElementById('log-message');
-    const logBar = document.getElementById('log-bar');
-    
-    if (logMessage && logBar) {
-        logMessage.textContent = message;
-        // Rojo oscuro para errores, azul/gris oscuro para normal
-        logBar.style.backgroundColor = isError ? '#7f1d1d' : '#111827'; 
-        
-        // Si es un error, le damos un pequeño efecto de vibración (opcional)
-        if (isError) {
-            logBar.classList.add('animate-pulse');
-            setTimeout(() => logBar.classList.remove('animate-pulse'), 2000);
-        }
-    }
-}
-
-// Arranque
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
