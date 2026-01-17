@@ -1,4 +1,7 @@
-// public/js/modules/dashboard.js
+/**
+ * dashboard.js - Gestión del Panel Principal
+ * Sincronizado con la Memoria Central del Main.js
+ */
 
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
@@ -8,6 +11,7 @@ import { updateBotUI } from './uiManager.js';
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
 
+// --- CONFIGURACIÓN DE AUDIO ---
 const sounds = {
     buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
     sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'),
@@ -16,45 +20,41 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 
 /**
  * Inicialización principal del Dashboard
- * @param {Object} initialState - Recibe la memoria central desde main.js
  */
 export function initializeDashboardView(initialState) {
-    // 1. SINCRONIZACIÓN INICIAL
-    // Pintamos lo que ya sabemos antes de esperar al siguiente tic del socket
+    console.log("📊 Dashboard: Sincronizando con Memoria Central");
+
+    // 1. Aplicar estado inicial inmediatamente (Evita el $0.00 al entrar)
     if (initialState) {
         updateBotUI(initialState);
     }
 
-    // 2. LIMPIEZA SELECTIVA (No apagues los eventos globales del main.js)
+    // 2. Limpieza de listeners previos para evitar duplicidad
     if (socket) {
-        // Solo apagamos eventos específicos de ESTA pestaña para no duplicarlos
         socket.off('market-signal-update');
         socket.off('order-executed');
         socket.off('cycle-closed');
         socket.off('ai-decision-update');
     }
 
-    // 3. ACTIVAR COMPONENTES
+    // 3. Activar componentes de la interfaz
     setupSocketListeners();
     setupChartSelector();
     setupTestButton(); 
     
-    // 4. CARGA DE DATOS PESADOS
+    // 4. Carga de datos externos (Gráficos y KPIs)
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
 
-    // Refresco de salud visual inmediato
+    // 5. Forzar actualización de salud visual
     updateHealthStatus('health-market-ws', 'health-market-ws-text', socket?.connected);
 }
 
 /**
- * Gestión de Sockets Específicos del Dashboard
+ * Gestión de Sockets (Específicos para feedback visual del Dashboard)
  */
 function setupSocketListeners() {
     if (!socket) return;
-
-    // NOTA: No re-pongas socket.on('bot-state-update') aquí, 
-    // porque el main.js ya lo está manejando globalmente.
 
     // Señales del Analizador RSI
     socket.on('market-signal-update', (analysis) => {
@@ -70,7 +70,7 @@ function setupSocketListeners() {
         if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
     });
 
-    // Notificaciones de Ejecución + Sonidos
+    // Notificaciones de Ejecución (Sonidos + Flashing)
     socket.on('order-executed', (order) => {
         const side = order.side.toLowerCase();
         if (side === 'buy') {
@@ -82,7 +82,7 @@ function setupSocketListeners() {
         }
     });
 
-    // Fin de Ciclo
+    // Evento de cierre de ciclo
     socket.on('cycle-closed', () => {
         sounds.sell.play().catch(() => {});
         flashElement('auprofit', 'bg-yellow-500/30');
@@ -90,13 +90,18 @@ function setupSocketListeners() {
         loadAndDisplayKpis();
     });
 
-    // Mini-Widget de IA
+    // Mini-Widget de IA (Monitor Neural)
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
         
         const progressEl = document.getElementById('ai-mini-progress');
-        if (progressEl) progressEl.style.strokeDasharray = `${confidenceVal}, 100`;
+        if (progressEl) {
+            // Ajuste del círculo de progreso SVG
+            const radius = 15.9155;
+            const circumference = 2 * Math.PI * radius;
+            progressEl.style.strokeDasharray = `${(confidenceVal * circumference) / 100}, ${circumference}`;
+        }
 
         updateElementText('ai-mini-thought', data.message);
 
@@ -109,7 +114,9 @@ function setupSocketListeners() {
     });
 }
 
-// --- CONFIGURACIÓN DEL GRÁFICO ---
+/**
+ * Selector de parámetros para el gráfico de Chart.js
+ */
 function setupChartSelector() {
     const selector = document.getElementById('chart-param-selector');
     if (selector) {
@@ -122,7 +129,27 @@ function setupChartSelector() {
     }
 }
 
-// --- CARGA DE DATOS ---
+/**
+ * Botón de prueba para verificar sonidos y efectos visuales
+ */
+function setupTestButton() {
+    const testBtn = document.getElementById('test-notification-btn');
+    if (!testBtn) return;
+
+    // Clonación para limpiar eventos previos
+    const newBtn = testBtn.cloneNode(true);
+    testBtn.parentNode.replaceChild(newBtn, testBtn);
+
+    newBtn.addEventListener('click', () => {
+        console.log("🔔 Prueba de sistema activada");
+        const testAudio = new Audio('https://actions.google.com/sounds/v1/foley/door_bell.ogg');
+        testAudio.play().catch(() => console.log("Se requiere interacción para audio"));
+        flashElement('auprice', 'bg-emerald-500/40');
+    });
+}
+
+// --- FUNCIONES DE CARGA DE DATOS (API) ---
+
 async function loadAndDisplayKpis() {
     try {
         const kpis = await fetchCycleKpis();
@@ -133,7 +160,7 @@ async function loadAndDisplayKpis() {
             `text-xl font-bold ${avgVal >= 0 ? 'text-yellow-500' : 'text-red-500'}`
         );
         updateElementText('total-cycles-closed', kpis.totalCycles || 0);
-    } catch (e) { console.error("Error KPIs:", e); }
+    } catch (e) { console.error("Error cargando KPIs:", e); }
 }
 
 async function loadAndRenderEquityCurve() {
@@ -143,10 +170,11 @@ async function loadAndRenderEquityCurve() {
             cycleHistoryData = curveData;
             renderEquityCurve(cycleHistoryData, currentChartParameter);
         }
-    } catch (e) { console.error("Error Gráfico:", e); }
+    } catch (e) { console.error("Error cargando gráfico:", e); }
 }
 
-// --- FUNCIONES AUXILIARES DE UI ---
+// --- UTILIDADES DE INTERFAZ ---
+
 function updateHealthStatus(dotId, textId, isOnline) {
     const dot = document.getElementById(dotId);
     const txt = document.getElementById(textId);
@@ -159,11 +187,11 @@ function updateHealthStatus(dotId, textId, isOnline) {
 
 function flashElement(id, colorClass) {
     const el = document.getElementById(id);
-    if (el?.parentElement) {
-        const parent = el.parentElement;
-        parent.classList.remove('bg-emerald-500/20', 'bg-orange-500/20', 'bg-yellow-500/30', 'bg-emerald-500/40');
-        parent.classList.add(colorClass);
-        setTimeout(() => parent.classList.remove(colorClass), 1000);
+    if (el) {
+        // Buscamos el contenedor visual más cercano para aplicar el brillo
+        const container = el.closest('.bg-gray-700\\/50') || el.parentElement;
+        container.classList.add(colorClass);
+        setTimeout(() => container.classList.remove(colorClass), 800);
     }
 }
 
