@@ -38,8 +38,8 @@ function updateConnectionStatus(connected) {
         if (errorInterval) {
             clearInterval(errorInterval);
             errorInterval = null;
-            // Limpiamos los warnings acumulados para que no retrasen los logs nuevos
-            logQueue = logQueue.filter(msg => msg.type !== 'error');
+            // Limpiamos cola al reconectar para dar paso a lo nuevo
+            logQueue = []; 
             logStatus("✅ Conexión restaurada", "success");
         }
     } else {
@@ -47,15 +47,18 @@ function updateConnectionStatus(connected) {
         statusDot.classList.add('status-red');
 
         if (!errorInterval) {
+            // --- LIMPIEZA INMEDIATA AL DESCONECTAR ---
+            logQueue = []; 
+            
             const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
             logStatus(warningMsg, "error"); 
             
             errorInterval = setInterval(() => {
-                // Solo añadimos si no hay ya demasiados en cola para no saturar
-                if (logQueue.length < 3) {
+                // Mantenemos la cola corta para que el ciclo sea rápido
+                if (logQueue.length < 2) {
                     logStatus(warningMsg, "error");
                 }
-            }, 2000); // Inyectamos cada 2s
+            }, 2000); 
         }
     }
 }
@@ -68,7 +71,7 @@ function resetWatchdog() {
     }, 3000);
 }
 
-// --- GESTIÓN DE LOGS (Optimizado) ---
+// --- GESTIÓN DE LOGS ---
 export function logStatus(message, type = 'info') {
     logQueue.push({ message, type });
     if (logQueue.length > 20) logQueue.shift();
@@ -94,9 +97,8 @@ function processNextLog() {
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
-        // TIEMPO DE ESPERA REDUCIDO a 1.5s para mayor agilidad
         setTimeout(() => {
-            logEl.style.opacity = '0.5';
+            if (logEl) logEl.style.opacity = '0.5';
             processNextLog();
         }, 1500); 
     } else {
