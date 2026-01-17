@@ -1,6 +1,5 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Optimizado para lógica exponencial y sincronización de estados.
  */
 
 let lastPrice = 0;
@@ -14,15 +13,12 @@ const STATUS_COLORS = {
     PAUSED: 'text-orange-400'
 };
 
-/**
- * Actualiza la interfaz global con los datos recibidos del Socket
- */
 export function updateBotUI(state) {
     if (!state) return;
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
-    const priceElement = document.getElementById('auprice'); // ID Universal (Autobot, Dashboard y Flujo)
-    if (priceElement && state.price !== undefined && state.price !== null) {
+    const priceElement = document.getElementById('auprice');
+    if (priceElement && state.price !== undefined) {
         const currentPrice = Number(state.price);
         const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
 
@@ -34,13 +30,10 @@ export function updateBotUI(state) {
             } else if (currentPrice < lastPrice) {
                 priceElement.className = 'text-red-400 text-2xl font-mono font-bold';
             }
-
-            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
-                minimumFractionDigits: 2, maximumFractionDigits: 2 
-            })}`;
+            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             lastPrice = currentPrice;
         }
-    } // <--- Aquí terminaba el bloque de precio, pero ANTES tenías una llave extra que cerraba la función.
+    }
 
     // --- 2. VALORES NUMÉRICOS ---
     const elementsToUpdate = {
@@ -66,10 +59,8 @@ export function updateBotUI(state) {
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
         if (!element) continue;
-
         const rawValue = state[dataKey];
         if (rawValue === undefined || rawValue === null) continue;
-
         const value = Number(rawValue);
         if (isNaN(value)) continue;
 
@@ -78,23 +69,12 @@ export function updateBotUI(state) {
         } else {
             const isBtc = elementId.includes('btc');
             const isInteger = elementId.includes('norder') || elementId.includes('cycle');
-            
-            let decimals = 2;
-            if (isBtc) decimals = 6;
-            else if (isInteger) decimals = 0;
-
-            const formatted = value.toLocaleString('en-US', { 
-                minimumFractionDigits: decimals, 
-                maximumFractionDigits: decimals 
-            });
-            
-            if (element.textContent !== formatted) {
-                element.textContent = formatted;
-            }
+            let decimals = isBtc ? 6 : (isInteger ? 0 : 2);
+            element.textContent = value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Inputs) ---
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -114,77 +94,74 @@ export function updateBotUI(state) {
             }
         }
 
+        // Checkboxes: Siempre actualizan su estado visual pero NO entran en el bucle de bloqueo
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
         if (stopL) stopL.checked = !!conf.long?.stopAtCycle;
         if (stopS) stopS.checked = !!conf.short?.stopAtCycle;
     }
 
-    // --- 4. ACTUALIZACIÓN DE ESTADOS Y BOTONES ---
     updateControlsState(state);
 }
 
-/**
- * Gestiona botones, bloqueo de inputs y etiquetas de estado
- */
 export function updateControlsState(state) {
     const sStatus = state.s || state.sstate || 'STOPPED';
     const lStatus = state.l || state.lstate || 'STOPPED';
-
     const isShortRunning = sStatus !== 'STOPPED';
     const isLongRunning = lStatus !== 'STOPPED';
 
-    // Actualización de Botones
-    const btnConfigs = [
+    // 1. Botones: Cambian de color y texto independientemente
+    const btns = [
         { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
         { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' }
     ];
 
-    btnConfigs.forEach(conf => {
+    btns.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
-            const text = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
-            btn.textContent = text;
-            btn.className = `flex-1 py-3 rounded-xl font-bold text-sm shadow-lg transition-all uppercase text-white ${
+            btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
+            btn.className = `flex-1 py-3 rounded-xl font-bold text-xs shadow-lg transition-all uppercase text-white ${
                 conf.running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
             }`;
         }
     });
 
-    // Bloqueo de Inputs
-    const shouldDisable = isShortRunning || isLongRunning;
-    const inputs = [
-        'auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt',
-        'auincrement', 'audecrement', 'autrigger', 'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
-    ];
+    // 2. Definición de grupos de inputs según tu HTML
+    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt'];
+    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt'];
+    // Estos afectan a la lógica exponencial global
+    const globalInputs = ['auincrement', 'audecrement', 'autrigger'];
 
-    inputs.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.disabled = shouldDisable;
-            el.classList.toggle('opacity-50', shouldDisable);
-            el.classList.toggle('cursor-not-allowed', shouldDisable);
-        }
-    });
+    // Función para aplicar bloqueo visual
+    const setLock = (ids, shouldLock) => {
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.disabled = shouldLock;
+                el.classList.toggle('opacity-50', shouldLock);
+                el.classList.toggle('cursor-not-allowed', shouldLock);
+            }
+        });
+    };
 
-    // Etiquetas de estado
+    // EJECUCIÓN DEL BLOQUEO
+    setLock(longInputs, isLongRunning);   // Bloquea solo si Long está RUNNING
+    setLock(shortInputs, isShortRunning); // Bloquea solo si Short está RUNNING
+    setLock(globalInputs, isLongRunning || isShortRunning); // Bloquea si CUALQUIERA corre
+
+    // IMPORTANTE: Los IDs 'au-stop-long-at-cycle' y 'au-stop-short-at-cycle' 
+    // no se incluyen en los arrays, por lo tanto, nunca se bloquean.
+
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);
 }
 
-/**
- * Formatea valores de ganancia/pérdida
- */
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '';
-    const formatted = `${sign}$${value.toFixed(2)}`;
-    element.textContent = formatted;
+    element.textContent = `${sign}$${value.toFixed(2)}`;
     element.className = `text-xl font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
 }
 
-/**
- * Actualiza etiquetas de estado con colores dinámicos
- */
 function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
     if (!el || !status) return;
@@ -192,22 +169,16 @@ function updateStatusLabel(id, status) {
     el.className = `text-[10px] font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
 
-/**
- * Notificaciones Toast
- */
 export function displayMessage(message, type = 'info') {
-    let container = document.getElementById('message-container');
-    if (!container) {
-        container = document.createElement('div');
+    let container = document.getElementById('message-container') || document.createElement('div');
+    if (!container.id) {
         container.id = 'message-container';
         document.body.appendChild(container);
     }
-
     container.textContent = message;
     container.className = `fixed bottom-5 right-5 px-6 py-3 rounded-xl text-white font-bold shadow-2xl z-50 transition-all transform animate-slideUp ${
         type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500')
     }`;
-
     setTimeout(() => {
         container.classList.add('opacity-0', 'translate-y-10');
         setTimeout(() => container.remove(), 500);
