@@ -165,3 +165,41 @@ export async function initializeAutobotView() {
         socket.emit('get-bot-state'); 
     }
 }
+
+/**
+ * Pinta los valores de la Base de Datos en los inputs del HTML
+ */
+export function updateAutobotInputs(state) {
+    if (!state || !state.config) return;
+    const cfg = state.config;
+
+    // Actualizar Long
+    const amountL = document.getElementById('auamountl-usdt');
+    if (amountL) amountL.value = cfg.long?.amountUsdt || 0;
+    
+    const purchaseL = document.getElementById('aupurchasel-usdt');
+    if (purchaseL) purchaseL.value = cfg.long?.purchaseUsdt || 0;
+    
+    const stopL = document.getElementById('au-stop-long-at-cycle');
+    if (stopL) stopL.checked = cfg.long?.stopAtCycle || false;
+
+    // Actualizar Short
+    const amountS = document.getElementById('auamounts-usdt');
+    if (amountS) amountS.value = cfg.short?.amountUsdt || 0;
+    
+    const purchaseS = document.getElementById('aupurchases-usdt');
+    if (purchaseS) purchaseS.value = cfg.short?.purchaseUsdt || 0;
+    
+    const stopS = document.getElementById('au-stop-short-at-cycle');
+    if (stopS) stopS.checked = cfg.short?.stopAtCycle || false;
+
+    // Variables compartidas
+    const inc = document.getElementById('auincrement');
+    if (inc) inc.value = cfg.long?.size_var || 0;
+    
+    const dec = document.getElementById('audecrement');
+    if (dec) dec.value = cfg.long?.price_var || 0;
+    
+    const tri = document.getElementById('autrigger');
+    if (tri) tri.value = cfg.long?.profit_percent || 0;
+}

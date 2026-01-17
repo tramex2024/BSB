@@ -260,6 +260,28 @@ io.on('connection', (socket) => {
     });
 });
 
+socket.on('update-bot-config', async (data) => {
+    try {
+        console.log("💾 Recibida nueva configuración:", JSON.stringify(data));
+        
+        // Buscamos el único registro del bot y actualizamos su campo 'config'
+        // 'data' ya viene con la estructura { config: { long: {...}, short: {...} } }
+        const updated = await Autobot.findOneAndUpdate(
+            {}, 
+            { $set: { config: data.config } }, 
+            { new: true }
+        );
+
+        if (updated) {
+            // Notificamos a todos los clientes que la config cambió
+            io.emit('bot-state-update', updated);
+            console.log("✅ Base de Datos actualizada correctamente");
+        }
+    } catch (err) {
+        console.error("❌ Error al actualizar config en DB:", err.message);
+    }
+});
+
 server.listen(PORT, () => {
     console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });

@@ -35,7 +35,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 2. VALORES NUMÉRICOS ---
+    // --- 2. VALORES NUMÉRICOS (Labels informativos) ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
@@ -74,7 +74,8 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN ---
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Inputs y Switches) ---
+    // Corregido para usar los nombres de tu modelo de base de datos
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -84,33 +85,39 @@ export function updateBotUI(state) {
             'aupurchases-usdt': conf.short?.purchaseUsdt,
             'auincrement': conf.long?.size_var,
             'audecrement': conf.long?.price_var,
-            'autrigger': conf.long?.trigger
+            'autrigger': conf.long?.profit_percent // Antes decía 'trigger', corregido a 'profit_percent'
         };
 
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
+            // Solo actualizamos si el usuario NO está escribiendo en el campo actualmente
             if (input && value !== undefined && document.activeElement !== input) {
                 if (input.value != value) input.value = value;
             }
         }
 
-        // Checkboxes: Siempre actualizan su estado visual pero NO entran en el bucle de bloqueo
+        // Checkboxes (Switches de Stop At Cycle)
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
-        if (stopL) stopL.checked = !!conf.long?.stopAtCycle;
-        if (stopS) stopS.checked = !!conf.short?.stopAtCycle;
+        
+        if (stopL && document.activeElement !== stopL) {
+            stopL.checked = !!conf.long?.stopAtCycle;
+        }
+        if (stopS && document.activeElement !== stopS) {
+            stopS.checked = !!conf.short?.stopAtCycle;
+        }
     }
 
     updateControlsState(state);
 }
 
 export function updateControlsState(state) {
-    const sStatus = state.s || state.sstate || 'STOPPED';
-    const lStatus = state.l || state.lstate || 'STOPPED';
+    const sStatus = state.sstate || 'STOPPED';
+    const lStatus = state.lstate || 'STOPPED';
     const isShortRunning = sStatus !== 'STOPPED';
     const isLongRunning = lStatus !== 'STOPPED';
 
-    // 1. Botones: Cambian de color y texto independientemente
+    // 1. Botones: Cambian de color y texto
     const btns = [
         { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
         { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' }
@@ -126,13 +133,11 @@ export function updateControlsState(state) {
         }
     });
 
-    // 2. Definición de grupos de inputs según tu HTML
+    // 2. Bloqueo de inputs mientras el bot corre
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt'];
-    // Estos afectan a la lógica exponencial global
     const globalInputs = ['auincrement', 'audecrement', 'autrigger'];
 
-    // Función para aplicar bloqueo visual
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
             const el = document.getElementById(id);
@@ -144,13 +149,9 @@ export function updateControlsState(state) {
         });
     };
 
-    // EJECUCIÓN DEL BLOQUEO
-    setLock(longInputs, isLongRunning);   // Bloquea solo si Long está RUNNING
-    setLock(shortInputs, isShortRunning); // Bloquea solo si Short está RUNNING
-    setLock(globalInputs, isLongRunning || isShortRunning); // Bloquea si CUALQUIERA corre
-
-    // IMPORTANTE: Los IDs 'au-stop-long-at-cycle' y 'au-stop-short-at-cycle' 
-    // no se incluyen en los arrays, por lo tanto, nunca se bloquean.
+    setLock(longInputs, isLongRunning);
+    setLock(shortInputs, isShortRunning);
+    setLock(globalInputs, isLongRunning || isShortRunning);
 
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);
@@ -170,8 +171,9 @@ function updateStatusLabel(id, status) {
 }
 
 export function displayMessage(message, type = 'info') {
-    let container = document.getElementById('message-container') || document.createElement('div');
-    if (!container.id) {
+    let container = document.getElementById('message-container');
+    if (!container) {
+        container = document.createElement('div');
         container.id = 'message-container';
         document.body.appendChild(container);
     }
