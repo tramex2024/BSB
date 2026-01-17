@@ -38,36 +38,32 @@ function setInstantError(message, active) {
     if (!logEl || !logBar || !statusDot) return;
 
     if (active) {
-        // MODO ERROR: Bloqueamos y mostramos alerta roja fija
         isOffline = true;
-        logQueue = []; // Limpiamos cola para que no haya basura acumulada
+        logQueue = []; 
         logEl.textContent = message;
         logEl.className = "text-red-400 font-bold";
-        logBar.style.backgroundColor = '#7f1d1d';
+        logBar.style.backgroundColor = '#7f1d1d'; // Rojo alerta
         logEl.style.opacity = '1';
         
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
     } else {
-        // MODO RESTAURACIÓN: Solo si estábamos en error
+        // MODO RESTAURACIÓN
         if (isOffline) {
             isOffline = false;
+            
+            // 1. Limpieza visual INMEDIATA del estado de error
+            logBar.style.backgroundColor = '#111827'; // Volver al color oscuro original
             statusDot.classList.remove('status-red');
             statusDot.classList.add('status-green');
             
-            // Enviamos el mensaje de éxito a través del sistema de logs 
-            // para que se borre solo después de 2.5 segundos
+            // 2. Notificar la restauración a través del sistema de colas
             logStatus("✅ Conexión restaurada", "success");
-        } else {
-            // Asegurar verde en inicio normal
-            statusDot.classList.remove('status-red');
-            statusDot.classList.add('status-green');
         }
     }
 }
 
 function resetWatchdog() {
-    // Si entran datos, quitamos el error inmediatamente
     if (isOffline) setInstantError(null, false);
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
@@ -78,7 +74,6 @@ function resetWatchdog() {
 }
 
 function processNextLog() {
-    // Si estamos en offline, no procesamos logs normales (la alerta roja manda)
     if (isOffline) {
         isProcessingLog = false;
         return;
@@ -104,10 +99,11 @@ function processNextLog() {
         };
         
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+        
+        // El color de fondo de la barra solo cambia a rojo si el LOG es de tipo error
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
-        // Mantener el log visible 2.5 segundos y luego procesar el siguiente
         setTimeout(() => {
             if (!isOffline) {
                 logEl.style.opacity = '0.5';
@@ -121,7 +117,6 @@ function processNextLog() {
 
 export function logStatus(message, type = 'info') {
     logQueue.push({ message, type });
-    // Si el procesador estaba dormido, lo despertamos
     if (!isProcessingLog && !isOffline) processNextLog();
 }
 
@@ -136,7 +131,7 @@ export function initializeFullApp() {
     });
 
     socket.on('connect', () => {
-        // La bolita se pone verde, pero no quitamos el log hasta que llegue marketData
+        // Solo visual de bolita, el watchdog se encarga de la barra al recibir marketData
         const statusDot = document.getElementById('status-dot');
         if (statusDot) {
             statusDot.classList.remove('status-red');
@@ -156,7 +151,7 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-        resetWatchdog(); // Esto apagará el error y lanzará "Conexión restaurada"
+        resetWatchdog(); 
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
