@@ -28,46 +28,36 @@ const views = {
 };
 
 /**
- * Control inmediato de la barra de logs para errores de conexión
+ * Control de errores de conexión críticos
  */
 function setInstantError(message, active) {
     const logEl = document.getElementById('log-message');
     const logBar = document.getElementById('log-bar');
     const statusDot = document.getElementById('status-dot');
 
-    if (logEl && logBar) {
-        if (active) {
-            isOffline = true;
-            logEl.textContent = message;
-            logEl.className = "text-red-400 font-bold";
-            logBar.style.backgroundColor = '#7f1d1d';
-            logEl.style.opacity = '1';
-            if (statusDot) statusDot.className = 'status-dot-base status-red';
-        } else {
-            // RESTAURACIÓN
-            isOffline = false;
-            logEl.textContent = "✅ Conexión restaurada";
-            logEl.className = "text-emerald-400 font-bold";
-            logBar.style.backgroundColor = '#111827';
-            if (statusDot) statusDot.className = 'status-dot-base status-green';
-            
-            // IMPORTANTE: Reiniciamos el procesador de logs para que vuelva a mostrar mensajes del backend
-            setTimeout(() => { 
-                if(!isOffline) {
-                    logEl.style.opacity = '0.5';
-                    if (!isProcessingLog && logQueue.length > 0) {
-                        processNextLog(); 
-                    }
-                }
-            }, 2000);
-        }
+    if (!logEl || !logBar) return;
+
+    if (active) {
+        // Bloqueo por error crítico
+        isOffline = true;
+        logQueue = []; // Limpiamos cola vieja para dar prioridad al error
+        logEl.textContent = message;
+        logEl.className = "text-red-400 font-bold";
+        logBar.style.backgroundColor = '#7f1d1d';
+        logEl.style.opacity = '1';
+        if (statusDot) statusDot.className = 'status-dot-base status-red';
+    } else if (isOffline) {
+        // Salida del estado crítico
+        isOffline = false;
+        if (statusDot) statusDot.className = 'status-dot-base status-green';
+        
+        // En lugar de escribir directo, lo mandamos a la cola para que el procesador lo gestione y limpie
+        logStatus("✅ Conexión restaurada", "success");
     }
 }
 
 function resetWatchdog() {
-    if (isOffline) {
-        setInstantError(null, false);
-    }
+    if (isOffline) setInstantError(null, false);
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
@@ -77,8 +67,13 @@ function resetWatchdog() {
 }
 
 function processNextLog() {
-    // Si no hay mensajes o estamos offline, detenemos el proceso
-    if (logQueue.length === 0 || isOffline) { 
+    // Si estamos en modo offline crítico, no procesamos la cola normal
+    if (isOffline) {
+        isProcessingLog = false;
+        return;
+    }
+
+    if (logQueue.length === 0) {
         isProcessingLog = false;
         return;
     }
@@ -88,13 +83,20 @@ function processNextLog() {
     const logEl = document.getElementById('log-message');
     const logBar = document.getElementById('log-bar');
 
-    if (logEl && logBar && !isOffline) {
+    if (logEl && logBar) {
         logEl.textContent = log.message;
-        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
+        const colors = { 
+            success: 'text-emerald-400', 
+            error: 'text-red-400', 
+            warning: 'text-yellow-400', 
+            info: 'text-blue-400' 
+        };
+        
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
+        // El tiempo que el mensaje se queda en pantalla
         setTimeout(() => {
             if (!isOffline) {
                 logEl.style.opacity = '0.5';
@@ -134,7 +136,6 @@ export function initializeFullApp() {
     socket.on('bot-log', (log) => {
         logQueue.push(log);
         if (logQueue.length > 20) logQueue.shift();
-        // Solo procesamos si no estamos offline
         if (!isProcessingLog && !isOffline) processNextLog();
     });
 
