@@ -21,18 +21,26 @@ export function updateBotUI(state) {
     if (!state) return;
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
-    const priceElement = document.getElementById('auprice'); // ID Universal
-    if (priceElement && state.price) {
+    const priceElement = document.getElementById('auprice'); // ID Universal (Autobot, Dashboard y Flujo)
+    if (priceElement && state.price !== undefined && state.price !== null) {
         const currentPrice = Number(state.price);
-        
-        // Mantén tu lógica de comparación con lastPrice aquí...
-        if (currentPrice > lastPrice) priceElement.className = 'text-emerald-400 text-2xl font-mono font-bold';
-        else if (currentPrice < lastPrice) priceElement.className = 'text-red-400 text-2xl font-mono font-bold';
-        
-        priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        lastPrice = currentPrice;
-    }
-    }
+        const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
+
+        if (currentPrice !== lastPrice || isUIEmpty) {
+            if (isUIEmpty || lastPrice === 0) {
+                priceElement.className = 'text-white text-2xl font-mono font-bold';
+            } else if (currentPrice > lastPrice) {
+                priceElement.className = 'text-emerald-400 text-2xl font-mono font-bold';
+            } else if (currentPrice < lastPrice) {
+                priceElement.className = 'text-red-400 text-2xl font-mono font-bold';
+            }
+
+            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
+                minimumFractionDigits: 2, maximumFractionDigits: 2 
+            })}`;
+            lastPrice = currentPrice;
+        }
+    } // <--- Aquí terminaba el bloque de precio, pero ANTES tenías una llave extra que cerraba la función.
 
     // --- 2. VALORES NUMÉRICOS ---
     const elementsToUpdate = {
