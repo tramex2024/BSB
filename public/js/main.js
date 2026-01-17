@@ -94,14 +94,12 @@ export async function initializeTab(tabName) {
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             
             if (typeof module[initFnName] === 'function') {
-                await module[initFnName]();
-                
-                // --- SINCRONIZACIÓN CRÍTICA ---
-                // Inmediatamente después de cargar el HTML y el JS, 
-                // rellenamos los campos con lo que tenemos en memoria.
-                updateBotUI(currentBotState);
-                console.log(`🖼️ Vista ${tabName} sincronizada con memoria.`);
-            }
+    // IMPORTANTE: Pasamos currentBotState aquí
+    await module[initFnName](currentBotState); 
+    
+    // Refuerzo para que uiManager también intente pintar
+    updateBotUI(currentBotState);
+}
         }
     } catch (error) {
         console.error("❌ Error cargando vista:", error);
