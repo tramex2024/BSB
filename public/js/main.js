@@ -16,10 +16,10 @@ export let currentBotState = {
     config: {}
 };
 
+// Variables de control mínimas para logs
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
-let isOffline = false; 
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -28,64 +28,46 @@ const views = {
 };
 
 /**
- * Control de estados visuales críticos
+ * Función central para cambiar el color de la bolita
+ * @param {boolean} connected - true para verde, false para rojo
  */
-function setInstantError(message, active) {
-    const logEl = document.getElementById('log-message');
-    const logBar = document.getElementById('log-bar');
+function updateConnectionStatus(connected) {
     const statusDot = document.getElementById('status-dot');
+    if (!statusDot) return;
 
-    if (!logEl || !logBar || !statusDot) return;
-
-    if (active) {
-        isOffline = true;
-        logQueue = []; 
-        logEl.textContent = message;
-        logEl.className = "text-red-400 font-bold";
-        logBar.style.backgroundColor = '#7f1d1d';
-        logEl.style.opacity = '1';
-        
+    if (connected) {
+        statusDot.classList.remove('status-red');
+        statusDot.classList.add('status-green');
+    } else {
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
-    } else {
-        if (isOffline) {
-            isOffline = false;
-            logBar.style.backgroundColor = '#111827'; 
-            logEl.textContent = ""; 
-            statusDot.classList.remove('status-red');
-            statusDot.classList.add('status-green');
-            
-            logStatus("✅ Conexión restaurada", "success");
-
-            // FORZAR RE-SOLICITUD DE DATOS AL RECONECTAR
-            if (socket && socket.connected) {
-                console.log("Re-solicitando estado al servidor...");
-                socket.emit('get-bot-state');
-            }
-        }
     }
 }
 
+/**
+ * Watchdog: Si no hay precios en 3 segundos, bolita roja.
+ */
 function resetWatchdog() {
-    if (isOffline) setInstantError(null, false);
+    // Si entra aquí es porque hay datos -> Bolita Verde
+    updateConnectionStatus(true);
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
     connectionWatchdog = setTimeout(() => {
-        setInstantError("⚠️ ALERTA: Sin recepción de datos", true);
-    }, 4000); // Aumentamos a 4s para dar margen al servidor tras el reconect
+        // Si pasan 3 segundos sin datos -> Bolita Roja
+        updateConnectionStatus(false);
+    }, 3000);
+}
+
+// --- GESTIÓN DE LOGS BÁSICA (Sin bloqueos) ---
+export function logStatus(message, type = 'info') {
+    logQueue.push({ message, type });
+    if (!isProcessingLog) processNextLog();
 }
 
 function processNextLog() {
-    if (isOffline) {
-        isProcessingLog = false;
-        return;
-    }
-
     if (logQueue.length === 0) {
         isProcessingLog = false;
-        const logEl = document.getElementById('log-message');
-        if (logEl) logEl.style.opacity = '0.5';
         return;
     }
 
@@ -96,76 +78,50 @@ function processNextLog() {
 
     if (logEl && logBar) {
         logEl.textContent = log.message;
-        const colors = { 
-            success: 'text-emerald-400', 
-            error: 'text-red-400', 
-            warning: 'text-yellow-400', 
-            info: 'text-blue-400' 
-        };
-        
+        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
+        logBar.style.backgroundColor = '#111827';
         logEl.style.opacity = '1';
 
         setTimeout(() => {
-            if (!isOffline) {
-                processNextLog();
-            }
+            logEl.style.opacity = '0.5';
+            processNextLog();
         }, 2500);
     } else {
         isProcessingLog = false;
     }
 }
 
-export function logStatus(message, type = 'info') {
-    logQueue.push({ message, type });
-    if (!isProcessingLog && !isOffline) processNextLog();
-}
-
+// --- INICIALIZACIÓN ---
 export function initializeFullApp() {
-    // Si ya hay un socket pero está muerto, lo cerramos antes de crear uno nuevo
-    if (socket) {
-        socket.removeAllListeners();
-        socket.close();
-    }
+    if (socket && socket.connected) return;
 
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
-        reconnection: true,
-        reconnectionAttempts: Infinity, // No dejar de intentar nunca
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000
+        reconnection: true
     });
 
     socket.on('connect', () => {
-        console.log("Socket conectado ID:", socket.id);
-        setInstantError(null, false);
+        updateConnectionStatus(true);
         socket.emit('get-bot-state');
     });
 
-    socket.on('connect_error', (err) => {
-        console.error("Error de conexión:", err);
-        setInstantError("❌ Error de enlace con servidor", true);
-    });
-
-    socket.on('disconnect', (reason) => {
-        console.warn("Socket desconectado:", reason);
-        setInstantError("❌ Desconectado: " + reason, true);
-    });
-
-    socket.on('bot-log', (log) => {
-        logQueue.push(log);
-        if (logQueue.length > 20) logQueue.shift();
-        if (!isProcessingLog && !isOffline) processNextLog();
+    socket.on('disconnect', () => {
+        updateConnectionStatus(false);
     });
 
     socket.on('marketData', (data) => {
-        resetWatchdog(); 
+        resetWatchdog(); // Mantiene la bolita verde mientras lleguen datos
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
         }
+    });
+
+    socket.on('bot-log', (log) => {
+        logQueue.push(log);
+        if (!isProcessingLog) processNextLog();
     });
 
     socket.on('bot-state-update', (state) => {
