@@ -110,10 +110,15 @@ if (state.config) {
 }
 
 export function updateControlsState(state) {
+    // Definimos qué estados se consideran "Activos"
+    const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
+    
     const sStatus = state.sstate || 'STOPPED';
     const lStatus = state.lstate || 'STOPPED';
-    const isShortRunning = sStatus !== 'STOPPED';
-    const isLongRunning = lStatus !== 'STOPPED';
+
+    // Ahora la condición de bloqueo es más amplia
+    const isShortRunning = activeStates.includes(sStatus);
+    const isLongRunning = activeStates.includes(lStatus);
 
     const btns = [
         { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
@@ -124,12 +129,14 @@ export function updateControlsState(state) {
         const btn = document.getElementById(conf.id);
         if (btn) {
             btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
+            // Forzamos el color rojo si está ejecutándose (SELLING/BUYING/RUNNING)
             btn.className = `flex-1 py-3 rounded-xl font-bold text-xs shadow-lg transition-all uppercase text-white ${
                 conf.running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
             }`;
         }
     });
 
+    // Bloqueo estricto de inputs
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers'];
 
@@ -138,15 +145,15 @@ export function updateControlsState(state) {
             const el = document.getElementById(id);
             if (el) {
                 el.disabled = shouldLock;
-                el.classList.toggle('opacity-50', shouldLock);
-                el.classList.toggle('cursor-not-allowed', shouldLock);
+                el.style.opacity = shouldLock ? "0.5" : "1";
+                el.style.cursor = shouldLock ? "not-allowed" : "text";
             }
         });
     };
 
     setLock(longInputs, isLongRunning);
     setLock(shortInputs, isShortRunning);
-
+    
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);
 }
