@@ -19,7 +19,7 @@ export let currentBotState = {
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
-let errorInterval = null; // Para repetir el warning en la cola
+let errorInterval = null;
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -35,42 +35,43 @@ function updateConnectionStatus(connected) {
         statusDot.classList.remove('status-red');
         statusDot.classList.add('status-green');
         
-        // Si estábamos en error, detenemos la repetición de warnings
         if (errorInterval) {
             clearInterval(errorInterval);
             errorInterval = null;
+            // Limpiamos los warnings acumulados para que no retrasen los logs nuevos
+            logQueue = logQueue.filter(msg => msg.type !== 'error');
             logStatus("✅ Conexión restaurada", "success");
         }
     } else {
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
 
-        // Paso 2: Inyectar warning en la cola si no hay ya un intervalo activo
         if (!errorInterval) {
             const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
-            logStatus(warningMsg, "error"); // Primer aviso inmediato
+            logStatus(warningMsg, "error"); 
             
             errorInterval = setInterval(() => {
-                logStatus(warningMsg, "error");
-            }, 3000); // Se añade a la cola cada 3s mientras siga desconectado
+                // Solo añadimos si no hay ya demasiados en cola para no saturar
+                if (logQueue.length < 3) {
+                    logStatus(warningMsg, "error");
+                }
+            }, 2000); // Inyectamos cada 2s
         }
     }
 }
 
 function resetWatchdog() {
     updateConnectionStatus(true);
-
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
-
     connectionWatchdog = setTimeout(() => {
         updateConnectionStatus(false);
     }, 3000);
 }
 
-// --- GESTIÓN DE LOGS (Procesador de cola) ---
+// --- GESTIÓN DE LOGS (Optimizado) ---
 export function logStatus(message, type = 'info') {
     logQueue.push({ message, type });
-    if (logQueue.length > 20) logQueue.shift(); // Evitar colas infinitas
+    if (logQueue.length > 20) logQueue.shift();
     if (!isProcessingLog) processNextLog();
 }
 
@@ -87,24 +88,17 @@ function processNextLog() {
 
     if (logEl && logBar) {
         logEl.textContent = log.message;
-        
-        const colors = { 
-            success: 'text-emerald-400', 
-            error: 'text-red-400', 
-            warning: 'text-yellow-400', 
-            info: 'text-blue-400' 
-        };
-        
+        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
         
-        // La barra se pone roja solo si el log es tipo 'error'
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
+        // TIEMPO DE ESPERA REDUCIDO a 1.5s para mayor agilidad
         setTimeout(() => {
             logEl.style.opacity = '0.5';
             processNextLog();
-        }, 2500); // Cada mensaje dura 2.5s
+        }, 1500); 
     } else {
         isProcessingLog = false;
     }
