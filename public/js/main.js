@@ -24,13 +24,62 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
+// --- LÓGICA DE MONITOREO (WATCHDOG + ALERTA VISUAL) ---
+let connectionWatchdog = null;
+
+/**
+ * Muestra u oculta un banner rojo de advertencia en la parte superior
+ */
+function toggleConnectionAlert(show) {
+    let alertBox = document.getElementById('connection-alert');
+    
+    if (show) {
+        if (!alertBox) {
+            alertBox = document.createElement('div');
+            alertBox.id = 'connection-alert';
+            alertBox.className = 'fixed top-0 left-0 w-full z-[9999]';
+            alertBox.innerHTML = `
+                <div class="bg-red-600 text-white text-[10px] font-bold py-1.5 text-center animate-pulse uppercase tracking-widest shadow-xl">
+                    ⚠️ Conexión interrumpida - Esperando datos del servidor...
+                </div>`;
+            document.body.appendChild(alertBox);
+        }
+    } else {
+        if (alertBox) alertBox.remove();
+    }
+}
+
+/**
+ * Reinicia el temporizador de vida. Si pasan 2 seg sin datos, activa la alerta.
+ */
+function resetWatchdog() {
+    const statusDot = document.getElementById('status-dot');
+    
+    // Si recibimos datos, normalizamos la interfaz
+    if (statusDot && statusDot.classList.contains('status-red')) {
+        statusDot.className = 'status-dot-base status-green';
+        toggleConnectionAlert(false); 
+    }
+
+    // Limpiar temporizador previo
+    if (connectionWatchdog) clearTimeout(connectionWatchdog);
+
+    // Iniciar nueva cuenta regresiva de 2000ms
+    connectionWatchdog = setTimeout(() => {
+        if (statusDot) {
+            console.warn('⚠️ Watchdog disparado: 2 segundos sin recibir actualizaciones.');
+            statusDot.className = 'status-dot-base status-red';
+            toggleConnectionAlert(true); // Mostrar el banner rojo
+        }
+    }, 2000);
+}
+
 /**
  * Inicializa la conexión y los escuchas de eventos globales
  */
 export function initializeFullApp() {
     if (socket) return;
 
-    // Referencia a la bolita de estado en el HTML
     const statusDot = document.getElementById('status-dot');
 
     socket = io(BACKEND_URL, { 
@@ -43,16 +92,20 @@ export function initializeFullApp() {
     socket.on('connect', () => {
         console.log('✅ Socket Conectado');
         if (statusDot) {
-            statusDot.className = 'status-dot-base status-green'; // Poner Verde
+            statusDot.className = 'status-dot-base status-green';
         }
+        toggleConnectionAlert(false);
+        resetWatchdog(); 
         socket.emit('get-bot-state');
     });
 
-    socket.on('disconnect', () => {
-        console.log('❌ Socket Desconectado');
+    socket.on('disconnect', (reason) => {
+        console.log('❌ Socket Desconectado:', reason);
         if (statusDot) {
-            statusDot.className = 'status-dot-base status-red'; // Poner Rojo
+            statusDot.className = 'status-dot-base status-red';
         }
+        toggleConnectionAlert(true);
+        if (connectionWatchdog) clearTimeout(connectionWatchdog);
     });
 
     socket.on('connect_error', (err) => {
@@ -60,10 +113,13 @@ export function initializeFullApp() {
         if (statusDot) {
             statusDot.className = 'status-dot-base status-red';
         }
+        toggleConnectionAlert(true);
     });
 
-    // --- ESCUCHAS DE DATOS ---
+    // --- ESCUCHAS DE DATOS (Alimentan al Watchdog) ---
+    
     socket.on('marketData', (data) => {
+        resetWatchdog(); 
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
@@ -71,6 +127,7 @@ export function initializeFullApp() {
     });
 
     socket.on('bot-state-update', (state) => {
+        resetWatchdog(); 
         if (state) {
             currentBotState = { ...currentBotState, ...state };
             console.log("📡 Memoria Actualizada:", currentBotState);
@@ -79,6 +136,7 @@ export function initializeFullApp() {
     });
 
     socket.on('balance-real-update', (data) => {
+        resetWatchdog(); 
         if (data) {
             currentBotState.lastAvailableUSDT = data.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = data.lastAvailableBTC;
@@ -117,7 +175,7 @@ export async function initializeTab(tabName) {
     }
 }
 
-// Arranque
+// --- ARRANQUE INICIAL ---
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
