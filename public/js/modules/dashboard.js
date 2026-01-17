@@ -3,12 +3,11 @@
 import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
 import { renderEquityCurve } from './chart.js';
 import { socket } from '../main.js'; 
-import { updateBotUI } from './uiManager.js'; // Importante para cargar el precio
+import { updateBotUI } from './uiManager.js';
 
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
 
-// --- CONFIGURACIÓN DE AUDIO ---
 const sounds = {
     buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
     sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'),
@@ -17,76 +16,47 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 
 /**
  * Inicialización principal del Dashboard
+ * @param {Object} initialState - Recibe la memoria central desde main.js
  */
-export function initializeDashboardView() {
-    // 1. LIMPIEZA CRÍTICA DE SOCKETS
+export function initializeDashboardView(initialState) {
+    // 1. SINCRONIZACIÓN INICIAL
+    // Pintamos lo que ya sabemos antes de esperar al siguiente tic del socket
+    if (initialState) {
+        updateBotUI(initialState);
+    }
+
+    // 2. LIMPIEZA SELECTIVA (No apagues los eventos globales del main.js)
     if (socket) {
-        socket.off('bot-state-update'); // Escuchar estado para el precio
-        socket.off('marketData');
-        socket.off('open-orders-update');
+        // Solo apagamos eventos específicos de ESTA pestaña para no duplicarlos
         socket.off('market-signal-update');
         socket.off('order-executed');
         socket.off('cycle-closed');
         socket.off('ai-decision-update');
-        socket.off('disconnect');
     }
 
-    // 2. ACTIVAR COMPONENTES
+    // 3. ACTIVAR COMPONENTES
     setupSocketListeners();
     setupChartSelector();
     setupTestButton(); 
     
-    // 3. CARGA DE DATOS (API + SOCKET INITIAL EMIT)
+    // 4. CARGA DE DATOS PESADOS
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
 
-    if (socket && socket.connected) {
-        socket.emit('get-bot-state'); // Pedimos el precio y estado actual inmediatamente
-    }
+    // Refresco de salud visual inmediato
+    updateHealthStatus('health-market-ws', 'health-market-ws-text', socket?.connected);
 }
 
 /**
- * Configura el botón de prueba de notificaciones
- */
-function setupTestButton() {
-    const testBtn = document.getElementById('test-notification-btn');
-    if (!testBtn) return;
-
-    const newBtn = testBtn.cloneNode(true);
-    testBtn.parentNode.replaceChild(newBtn, testBtn);
-
-    newBtn.addEventListener('click', () => {
-        console.log("🔔 Iniciando prueba de alerta...");
-        const testAudio = new Audio('https://actions.google.com/sounds/v1/foley/door_bell.ogg');
-        testAudio.volume = 0.8;
-        testAudio.play()
-            .catch(() => alert("Por favor, interactúa con la pantalla primero para habilitar el sonido."));
-
-        flashElement('auprice', 'bg-emerald-500/40');
-    });
-}
-
-/**
- * Gestión de Sockets - Versión Optimizada para evitar conflictos
+ * Gestión de Sockets Específicos del Dashboard
  */
 function setupSocketListeners() {
     if (!socket) return;
 
-    // NOTA: Se eliminó 'bot-state-update' de aquí. 
-    // La actualización de precios y botones ahora es responsabilidad ÚNICA de main.js
+    // NOTA: No re-pongas socket.on('bot-state-update') aquí, 
+    // porque el main.js ya lo está manejando globalmente.
 
-    // 1. Salud del WebSocket de Mercado
-    socket.on('marketData', (data) => {
-        // Aprovechamos para marcar online, pero no tocamos botones de compra/venta
-        updateHealthStatus('health-market-ws', 'health-market-ws-text', true);
-    });
-
-    // 2. Salud de Órdenes Privadas (BitMart User Stream)
-    socket.on('open-orders-update', () => {
-        updateHealthStatus('health-user-ws', 'health-user-ws-text', true);
-    });
-
-    // 3. Señales del Analizador RSI
+    // Señales del Analizador RSI
     socket.on('market-signal-update', (analysis) => {
         const signalEl = document.getElementById('health-analyzer-signal');
         const reasonEl = document.getElementById('health-analyzer-reason');
@@ -100,7 +70,7 @@ function setupSocketListeners() {
         if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
     });
 
-    // 4. Notificaciones de Ejecución (Efectos Visuales y Sonoros)
+    // Notificaciones de Ejecución + Sonidos
     socket.on('order-executed', (order) => {
         const side = order.side.toLowerCase();
         if (side === 'buy') {
@@ -112,25 +82,21 @@ function setupSocketListeners() {
         }
     });
 
-    // 5. Fin de Ciclo (Venta Total con Profit)
+    // Fin de Ciclo
     socket.on('cycle-closed', () => {
         sounds.sell.play().catch(() => {});
         flashElement('auprofit', 'bg-yellow-500/30');
-        // Recargamos datos de analítica para el gráfico
         loadAndRenderEquityCurve();
         loadAndDisplayKpis();
     });
 
-    // 6. Mini-Widget de Inteligencia Artificial
+    // Mini-Widget de IA
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
         
         const progressEl = document.getElementById('ai-mini-progress');
-        if (progressEl) {
-            // Suponiendo un círculo de progreso SVG con stroke-dasharray
-            progressEl.style.strokeDashoffset = 100 - confidenceVal;
-        }
+        if (progressEl) progressEl.style.strokeDasharray = `${confidenceVal}, 100`;
 
         updateElementText('ai-mini-thought', data.message);
 
@@ -140,12 +106,6 @@ function setupSocketListeners() {
             actionEl.textContent = isHigh ? "ALTA PROBABILIDAD" : "ANALIZANDO PATRONES";
             actionEl.className = `text-[9px] font-bold mt-1 uppercase ${isHigh ? 'text-emerald-400' : 'text-blue-400'}`;
         }
-    });
-
-    // 7. Manejo de desconexión local
-    socket.on('disconnect', () => {
-        updateHealthStatus('health-market-ws', 'health-market-ws-text', false);
-        updateHealthStatus('health-user-ws', 'health-user-ws-text', false);
     });
 }
 
