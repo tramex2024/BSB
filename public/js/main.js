@@ -42,22 +42,22 @@ function setInstantError(message, active) {
         logQueue = []; 
         logEl.textContent = message;
         logEl.className = "text-red-400 font-bold";
-        logBar.style.backgroundColor = '#7f1d1d'; // Rojo alerta
+        logBar.style.backgroundColor = '#7f1d1d';
         logEl.style.opacity = '1';
         
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
     } else {
-        // MODO RESTAURACIÓN
         if (isOffline) {
             isOffline = false;
             
-            // 1. Limpieza visual INMEDIATA del estado de error
-            logBar.style.backgroundColor = '#111827'; // Volver al color oscuro original
+            // --- LIMPIEZA FORZADA E INMEDIATA ---
+            logBar.style.backgroundColor = '#111827'; 
+            logEl.textContent = ""; // Borramos el "ALERTA" inmediatamente
             statusDot.classList.remove('status-red');
             statusDot.classList.add('status-green');
             
-            // 2. Notificar la restauración a través del sistema de colas
+            // Ahora sí, ponemos el mensaje de éxito en la cola
             logStatus("✅ Conexión restaurada", "success");
         }
     }
@@ -81,6 +81,9 @@ function processNextLog() {
 
     if (logQueue.length === 0) {
         isProcessingLog = false;
+        // Si no hay más logs, dejamos la barra limpia y con opacidad baja
+        const logEl = document.getElementById('log-message');
+        if (logEl) logEl.style.opacity = '0.5';
         return;
     }
 
@@ -99,14 +102,13 @@ function processNextLog() {
         };
         
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        
-        // El color de fondo de la barra solo cambia a rojo si el LOG es de tipo error
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
         setTimeout(() => {
             if (!isOffline) {
-                logEl.style.opacity = '0.5';
+                // No borramos el texto aquí, dejamos que el siguiente log lo sobrescriba
+                // o que la llamada recursiva lo limpie si la cola está vacía
                 processNextLog();
             }
         }, 2500);
@@ -131,7 +133,6 @@ export function initializeFullApp() {
     });
 
     socket.on('connect', () => {
-        // Solo visual de bolita, el watchdog se encarga de la barra al recibir marketData
         const statusDot = document.getElementById('status-dot');
         if (statusDot) {
             statusDot.classList.remove('status-red');
