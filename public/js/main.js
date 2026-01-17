@@ -9,7 +9,7 @@ export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 export let socket = null;
 
-// --- MEMORIA CENTRAL ---
+// --- MEMORIA CENTRAL (Estado Persistente) ---
 export let currentBotState = {
     price: 0,
     sstate: 'STOPPED',
@@ -24,66 +24,36 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-// --- LÓGICA DE MONITOREO (WATCHDOG EN EL LOG BAR) ---
+// --- LÓGICA DE MONITOREO (WATCHDOG) ---
 let connectionWatchdog = null;
 
 /**
- * Cambia el estilo del Log Bar cuando se pierde la conexión
+ * Reinicia el temporizador de seguridad. 
+ * Si no se llama en 2 segundos, la bolita se pone roja.
  */
-function toggleConnectionAlert(show) {
-    // Buscamos el contenedor de logs. Ajusta el ID 'log-container' si es diferente en tu HTML
-    const logBar = document.getElementById('log-container') || document.getElementById('log-bar');
-    
-    if (show) {
-        if (logBar) {
-            // Aplicamos rojo intenso y una sombra interna para que resalte
-            logBar.style.transition = "all 0.3s ease";
-            logBar.style.backgroundColor = "#991b1b"; // red-800
-            logBar.style.border = "1px solid #ef4444"; // red-500
-            logBar.classList.add('animate-pulse');
-            
-            // Opcional: Insertar un mensaje de error en el log si no existe ya
-            if (!document.getElementById('reconnect-msg')) {
-                const msg = document.createElement('p');
-                msg.id = 'reconnect-msg';
-                msg.className = 'text-white font-bold text-center py-1 bg-red-900/50 mb-2';
-                msg.innerText = '⚠️ CONEXIÓN PERDIDA - ESPERANDO DATOS...';
-                logBar.prepend(msg);
-            }
-        }
-    } else {
-        if (logBar) {
-            // Restauramos los colores originales (asumiendo gris oscuro/negro)
-            logBar.style.backgroundColor = ""; // Vuelve al CSS original
-            logBar.style.border = "";
-            logBar.classList.remove('animate-pulse');
-            
-            const msg = document.getElementById('reconnect-msg');
-            if (msg) msg.remove();
-        }
-    }
-}
-
 function resetWatchdog() {
     const statusDot = document.getElementById('status-dot');
     
+    // Si recibimos datos y estaba en rojo, lo devolvemos a verde
     if (statusDot && statusDot.classList.contains('status-red')) {
         statusDot.className = 'status-dot-base status-green';
-        toggleConnectionAlert(false); 
     }
 
+    // Limpiar el temporizador anterior
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
+    // Iniciar nueva cuenta regresiva de 2 segundos
     connectionWatchdog = setTimeout(() => {
         if (statusDot) {
-            console.warn('⚠️ Watchdog: Sin actividad de red por 2 segundos.');
+            console.warn('⚠️ Watchdog: Sin datos detectados en 2 segundos.');
             statusDot.className = 'status-dot-base status-red';
-            toggleConnectionAlert(true); 
         }
     }, 2000);
 }
 
-// --- INITIALIZE APP ---
+/**
+ * Inicializa la conexión y los escuchas de eventos globales
+ */
 export function initializeFullApp() {
     if (socket) return;
 
@@ -95,44 +65,52 @@ export function initializeFullApp() {
         reconnection: true 
     });
 
+    // --- EVENTOS DE CONEXIÓN ---
     socket.on('connect', () => {
         console.log('✅ Socket Conectado');
-        if (statusDot) statusDot.className = 'status-dot-base status-green';
-        toggleConnectionAlert(false);
-        resetWatchdog();
+        if (statusDot) {
+            statusDot.className = 'status-dot-base status-green';
+        }
+        resetWatchdog(); // Iniciar el monitoreo al conectar
         socket.emit('get-bot-state');
     });
 
     socket.on('disconnect', () => {
-        if (statusDot) statusDot.className = 'status-dot-base status-red';
-        toggleConnectionAlert(true);
+        console.log('❌ Socket Desconectado');
+        if (statusDot) {
+            statusDot.className = 'status-dot-base status-red';
+        }
         if (connectionWatchdog) clearTimeout(connectionWatchdog);
     });
 
-    socket.on('connect_error', () => {
-        if (statusDot) statusDot.className = 'status-dot-base status-red';
-        toggleConnectionAlert(true);
+    socket.on('connect_error', (err) => {
+        console.error('⚠️ Error de conexión:', err);
+        if (statusDot) {
+            statusDot.className = 'status-dot-base status-red';
+        }
     });
 
-    // --- ESCUCHAS DE DATOS ---
+    // --- ESCUCHAS DE DATOS (Cada uno alimenta al Watchdog) ---
+    
     socket.on('marketData', (data) => {
-        resetWatchdog();
-        if (data?.price != null) {
+        resetWatchdog(); // Datos de mercado recibidos
+        if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
         }
     });
 
     socket.on('bot-state-update', (state) => {
-        resetWatchdog();
+        resetWatchdog(); // Actualización de estado recibida
         if (state) {
             currentBotState = { ...currentBotState, ...state };
+            console.log("📡 Memoria Actualizada:", currentBotState);
             updateBotUI(currentBotState);
         }
     });
 
     socket.on('balance-real-update', (data) => {
-        resetWatchdog();
+        resetWatchdog(); // Datos de balance recibidos
         if (data) {
             currentBotState.lastAvailableUSDT = data.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = data.lastAvailableBTC;
@@ -143,6 +121,9 @@ export function initializeFullApp() {
     setupNavTabs(initializeTab);
 }
 
+/**
+ * Gestiona el cambio de pestañas sin perder los datos de la memoria
+ */
 export async function initializeTab(tabName) {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
@@ -155,17 +136,23 @@ export async function initializeTab(tabName) {
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            
             if (typeof module[initFnName] === 'function') {
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
+                console.log(`🖼️ Vista ${tabName} sincronizada.`);
             }
         }
-    } catch (error) { console.error("❌ Error cargando vista:", error); }
+    } catch (error) {
+        console.error("❌ Error cargando vista:", error);
+    }
 }
 
+// Arranque
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
+
     if (localStorage.getItem('token')) {
         initializeFullApp();
     } else {
