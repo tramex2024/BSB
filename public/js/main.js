@@ -9,7 +9,6 @@ export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 export let socket = null;
 
-// --- MEMORIA CENTRAL (Estado Persistente) ---
 export let currentBotState = {
     price: 0,
     sstate: 'STOPPED',
@@ -17,9 +16,10 @@ export let currentBotState = {
     config: {}
 };
 
-// Variables para la gestión de logs (Originales)
 let logQueue = [];
 let isProcessingLog = false;
+let connectionWatchdog = null;
+let isOffline = false; // Nueva bandera para control de estado
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -27,31 +27,49 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-// --- LÓGICA DE MONITOREO (WATCHDOG) ---
-let connectionWatchdog = null;
+/**
+ * Control inmediato de la barra de logs para errores de conexión
+ */
+function setInstantError(message, active) {
+    const logEl = document.getElementById('log-message');
+    const logBar = document.getElementById('log-bar');
+    const statusDot = document.getElementById('status-dot');
+
+    if (logEl && logBar) {
+        if (active) {
+            isOffline = true;
+            logEl.textContent = message;
+            logEl.className = "text-red-400 font-bold";
+            logBar.style.backgroundColor = '#7f1d1d';
+            logEl.style.opacity = '1';
+            if (statusDot) statusDot.className = 'status-dot-base status-red';
+        } else {
+            isOffline = false;
+            logEl.textContent = "✅ Conexión restaurada";
+            logEl.className = "text-emerald-400 font-bold";
+            logBar.style.backgroundColor = '#111827';
+            if (statusDot) statusDot.className = 'status-dot-base status-green';
+            // Limpiar el mensaje después de 2 segundos
+            setTimeout(() => { if(!isOffline) logEl.style.opacity = '0.5'; }, 2000);
+        }
+    }
+}
 
 function resetWatchdog() {
-    const statusDot = document.getElementById('status-dot');
-    
-    if (statusDot && statusDot.classList.contains('status-red')) {
-        statusDot.className = 'status-dot-base status-green';
+    // Si recibimos datos y estábamos en modo offline, restauramos instantáneamente
+    if (isOffline) {
+        setInstantError(null, false);
     }
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
     connectionWatchdog = setTimeout(() => {
-        if (statusDot) {
-            console.warn('⚠️ Watchdog: Sin datos detectados en 2 segundos.');
-            statusDot.className = 'status-dot-base status-red';
-        }
-    }, 2000);
+        setInstantError("⚠️ ALERTA: Sin recepción de datos (Wifi/Server Offline)", true);
+    }, 2000); // 2 segundos exactos de tolerancia
 }
 
-/**
- * Sistema de gestión de Logs original con retardo
- */
 function processNextLog() {
-    if (logQueue.length === 0) {
+    if (logQueue.length === 0 || isOffline) { // Si está offline, no procesamos logs normales
         isProcessingLog = false;
         return;
     }
@@ -61,23 +79,18 @@ function processNextLog() {
     const logEl = document.getElementById('log-message');
     const logBar = document.getElementById('log-bar');
 
-    if (logEl && logBar) {
+    if (logEl && logBar && !isOffline) {
         logEl.textContent = log.message;
-        
-        const colors = {
-            success: 'text-emerald-400',
-            error: 'text-red-400',
-            warning: 'text-yellow-400',
-            info: 'text-blue-400'
-        };
-        
+        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
         setTimeout(() => {
-            logEl.style.opacity = '0.5';
-            processNextLog();
+            if (!isOffline) {
+                logEl.style.opacity = '0.5';
+                processNextLog();
+            }
         }, 2500);
     } else {
         isProcessingLog = false;
@@ -85,48 +98,37 @@ function processNextLog() {
 }
 
 export function logStatus(message, type = 'info') {
+    if (isOffline && type !== 'error') return; // No encolar info si estamos caídos
     logQueue.push({ message, type });
     if (!isProcessingLog) processNextLog();
 }
 
-/**
- * Inicializa la conexión Socket.io
- */
 export function initializeFullApp() {
     if (socket && socket.connected) return;
-
-    const statusDot = document.getElementById('status-dot');
 
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
         reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000
+        reconnectionDelay: 500 // Reintento más rápido
     });
 
     socket.on('connect', () => {
-        logStatus("✅ Conexión establecida", "success");
-        if (statusDot) {
-            statusDot.className = 'status-dot-base status-green';
-        }
+        setInstantError(null, false);
         resetWatchdog();
         socket.emit('get-bot-state');
     });
 
-    socket.on('disconnect', (reason) => {
-        logStatus(`⚠️ Desconectado: ${reason}`, "error");
-        if (statusDot) {
-            statusDot.className = 'status-dot-base status-red';
-        }
-        if (connectionWatchdog) clearTimeout(connectionWatchdog);
+    socket.on('disconnect', () => {
+        setInstantError("❌ Desconectado del servidor", true);
     });
 
-    // Evento original para recibir logs del backend
     socket.on('bot-log', (log) => {
-        logQueue.push(log);
-        if (logQueue.length > 20) logQueue.shift();
-        if (!isProcessingLog) processNextLog();
+        if (!isOffline) {
+            logQueue.push(log);
+            if (logQueue.length > 20) logQueue.shift();
+            if (!isProcessingLog) processNextLog();
+        }
     });
 
     socket.on('marketData', (data) => {
@@ -151,33 +153,24 @@ export function initializeFullApp() {
 export async function initializeTab(tabName) {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
-
     try {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         mainContent.innerHTML = html;
-
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-            
             if (typeof module[initFnName] === 'function') {
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
             }
         }
-    } catch (error) {
-        console.error("❌ Error cargando vista:", error);
-    }
+    } catch (error) { console.error("❌ Error cargando vista:", error); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-
-    if (localStorage.getItem('token')) {
-        initializeFullApp();
-    } else {
-        initializeTab('dashboard');
-    }
+    if (localStorage.getItem('token')) { initializeFullApp(); } 
+    else { initializeTab('dashboard'); }
 });
