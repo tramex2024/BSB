@@ -21,25 +21,17 @@ export function updateBotUI(state) {
     if (!state) return;
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
-    const priceElement = document.getElementById('auprice');
-    if (priceElement && state.price !== undefined && state.price !== null) {
+    const priceElement = document.getElementById('auprice'); // ID Universal
+    if (priceElement && state.price) {
         const currentPrice = Number(state.price);
-        const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
-
-        if (currentPrice !== lastPrice || isUIEmpty) {
-            if (isUIEmpty || lastPrice === 0) {
-                priceElement.className = 'text-white text-xl font-mono font-bold';
-            } else if (currentPrice > lastPrice) {
-                priceElement.className = 'text-emerald-400 text-xl font-mono font-bold';
-            } else if (currentPrice < lastPrice) {
-                priceElement.className = 'text-red-400 text-xl font-mono font-bold';
-            }
-
-            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { 
-                minimumFractionDigits: 2, maximumFractionDigits: 2 
-            })}`;
-            lastPrice = currentPrice;
-        }
+        
+        // Mantén tu lógica de comparación con lastPrice aquí...
+        if (currentPrice > lastPrice) priceElement.className = 'text-emerald-400 text-2xl font-mono font-bold';
+        else if (currentPrice < lastPrice) priceElement.className = 'text-red-400 text-2xl font-mono font-bold';
+        
+        priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        lastPrice = currentPrice;
+    }
     }
 
     // --- 2. VALORES NUMÉRICOS ---
