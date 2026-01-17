@@ -1,30 +1,31 @@
-// Archivo: BSB/server/models/Autobot.js
 const mongoose = require('mongoose');
 
 const AutobotSchema = new mongoose.Schema({
-    // Estados
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
 
-    // Configuración (Estructura Original)
     config: {
         long: {
             amountUsdt: { type: Number, default: 0 },
             purchaseUsdt: { type: Number, default: 0 },
-            stopAtCycle: { type: Boolean, default: false }
+            stopAtCycle: { type: Boolean, default: false },
+            // Mover aquí para independencia
+            size_var: { type: Number, default: 0 },
+            price_var: { type: Number, default: 0 },
+            trigger: { type: Number, default: 0 } 
         },
         short: {
             amountUsdt: { type: Number, default: 0 },
             purchaseUsdt: { type: Number, default: 0 },
-            stopAtCycle: { type: Boolean, default: false }
-        },
-        // Campos de lógica exponencial (Originalmente fuera de long/short o compartidos)
-        size_var: { type: Number, default: 0 },
-        price_var: { type: Number, default: 0 },
-        trigger: { type: Number, default: 0 } 
+            stopAtCycle: { type: Boolean, default: false },
+            // Mover aquí para independencia
+            size_var: { type: Number, default: 0 },
+            price_var: { type: Number, default: 0 },
+            trigger: { type: Number, default: 0 }
+        }
+        // Eliminamos las variables sueltas de aquí para evitar confusión
     },
 
-    // Métricas
     total_profit: { type: Number, default: 0 },
     lprofit: { type: Number, default: 0 },
     sprofit: { type: Number, default: 0 },
@@ -41,7 +42,6 @@ const AutobotSchema = new mongoose.Schema({
     lnorder: { type: Number, default: 0 },
     snorder: { type: Number, default: 0 },
 
-    // Balances de cuenta
     lastAvailableUSDT: { type: Number, default: 0 },
     lastAvailableBTC: { type: Number, default: 0 },
     

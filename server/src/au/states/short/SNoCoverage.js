@@ -12,26 +12,24 @@ async function run(dependencies) {
     } = dependencies;
     
     const availableUSDT = parseFloat(realUSDT || 0);
-    const { ac, ppc, orderCountInCycle } = botState.sStateData;
+    const sStateData = botState.sStateData || {}; // Acceso seguro
+    const { ac, ppc, orderCountInCycle } = sStateData;
     const currentSBalance = parseFloat(botState.sbalance || 0);
 
     // --- 1. ¿PODEMOS CERRAR CON PROFIT? (Vigilancia de Suelo) ---
-    // En Short, si el precio cae por debajo del Take Profit (stprice), 
-    // transicionamos a BUYING para que el Trailing Stop haga su magia.
     if (ac > 0 && botState.stprice > 0 && currentPrice <= botState.stprice) {
         log(`🚀 [S-RECOVERY] ¡Precio en zona de profit (${currentPrice.toFixed(2)})! Saliendo a BUYING.`, 'success');
         await updateBotState('BUYING', 'short'); 
         return;
     }
 
-    // --- 2. RECALCULO DE REQUERIMIENTOS ---
-    // Mantenemos los targets actualizados para el Dashboard.
+    // --- 2. RECALCULO DE REQUERIMIENTOS (Ajustado a nueva DB) ---
     const recalculation = calculateShortTargets(
         ppc || 0,
-        config.short.profit_percent || 0,
-        config.short.price_var || 0,
-        config.short.size_var || 0,
-        config.short.purchaseUsdt || 0,
+        config.short?.trigger || 0,        // ✅ CORREGIDO: Antes profit_percent
+        config.short?.price_var || 0,      // ✅ Estructura jerárquica
+        config.short?.size_var || 0,       // ✅ Estructura jerárquica
+        config.short?.purchaseUsdt || 0,   // ✅ Estructura jerárquica
         orderCountInCycle || 0,
         currentSBalance
     );
@@ -44,8 +42,7 @@ async function run(dependencies) {
         nextCoveragePrice: recalculation.nextCoveragePrice 
     });
 
-    // --- 3. RESETEO CRÍTICO DE INDICADORES (Si no hay deuda ni capital) ---
-    // Evitamos que el Dashboard muestre órdenes de cobertura pendientes si no hay fondos.
+    // --- 3. RESETEO CRÍTICO DE INDICADORES ---
     if (ac <= 0 && currentSBalance < requiredAmount && botState.snorder !== 0) {
         log(`[S-RESET] Limpiando indicadores Short: SBalance (${currentSBalance.toFixed(2)}) insuficiente.`, 'warning');
         await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
@@ -59,11 +56,11 @@ async function run(dependencies) {
 
     if (canResume) {
         log(`✅ [S-FONDOS] Capital Short restaurado (${availableUSDT.toFixed(2)} USDT). Volviendo a SELLING...`, 'success');
-        // Volvemos a SELLING porque es el estado donde se abren y promedian los Shorts.
         await updateBotState('SELLING', 'short');
     } else {
-        // Log scannable para monitoreo
-        log(`[S-NO_COVERAGE] Esperando... Balance: ${currentSBalance.toFixed(2)} | Real: ${availableUSDT.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)}`, 'debug');
+        // Log de monitoreo con acceso seguro a la variable exponencial para el debug
+        const sizeInfo = config.short?.size_var || 0;
+        log(`[S-NO_COVERAGE] Esperando... Balance: ${currentSBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Var: ${sizeInfo}%)`, 'debug');
     }
 } 
 

@@ -1,4 +1,4 @@
-// Archivo: BSB/server/server.js
+// BSB/server/server.js
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -29,10 +29,7 @@ app.use(cors());
 
 // --- 3. CONFIGURACIÓN DE SOCKET.IO ---
 const io = new Server(server, {
-    cors: {
-        origin: "*", 
-        methods: ["GET", "POST"]
-    },
+    cors: { origin: "*", methods: ["GET", "POST"] },
     path: '/socket.io'
 });
 
@@ -50,7 +47,7 @@ app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected...'))
+    .then(() => console.log('✅ MongoDB Connected (BSB 2026)...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --- 6. VARIABLES GLOBALES DE ESTADO ---
@@ -60,7 +57,7 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
 
-// --- 7. WEBSOCKET BITMART ---
+// --- 7. WEBSOCKET BITMART (FLUJO DE PRECIOS) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
@@ -83,6 +80,7 @@ function setupMarketWS(io) {
             const rawData = data.toString();
             if (rawData === 'pong') return;
             const parsed = JSON.parse(rawData);
+            
             if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
                 const ticker = parsed.data[0];
                 const price = parseFloat(ticker.last_price);
@@ -93,6 +91,7 @@ function setupMarketWS(io) {
                 const now = new Date();
                 const currentMinute = now.getMinutes();
 
+                // Análisis de indicadores (1 vez por minuto para no saturar CPU)
                 if (currentMinute !== lastProcessedMinute) {
                     lastProcessedMinute = currentMinute;
                     const analysis = await analyzer.runAnalysis(price);
@@ -109,7 +108,10 @@ function setupMarketWS(io) {
                     io.emit('market-signal-update', analysis);
                 }
 
+                // Notificar Front-end
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
+                
+                // 🚀 GATILLO DEL BOT (Inyección de precio al ciclo exponencial)
                 try { aiEngine.analyze(price); } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
                 await autobotLogic.botCycle(price);
             }
@@ -118,100 +120,64 @@ function setupMarketWS(io) {
 
     marketWs.on('close', () => {
         isMarketConnected = false; 
-        setTimeout(() => setupMarketWS(io), 2000);
+        setTimeout(() => setupMarketWS(io), 5000); // Reintento en 5s
     });
 }
 
-// --- 8. WEBSOCKET ÓRDENES PRIVADAS ---
+// --- 8. WEBSOCKET ÓRDENES PRIVADAS (Para cierres de ciclo) ---
 bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 9. BUCLE SALDOS (10s) ---
+// --- 9. BUCLE SALDOS (Sync cada 10s con el Exchange) ---
 setInterval(async () => {
     try {
         const apiSuccess = await autobotLogic.slowBalanceCacheUpdate();
-        const botState = await Autobot.findOne({}).lean();
-        if (botState) {
-            io.sockets.emit('balance-real-update', { 
-                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK',
-                lastAvailableUSDT: botState.lastAvailableUSDT || 0,
-                lastAvailableBTC: botState.lastAvailableBTC || 0,
-            });
-        }
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
 setupMarketWS(io);
 
-// --- 10. GESTIÓN DE USUARIOS Y EVENTOS ---
+// --- 10. GESTIÓN DE EVENTOS SOCKET.IO ---
 io.on('connection', (socket) => {
     console.log(`👤 Usuario conectado: ${socket.id}`);
 
-    // ESCUCHADOR DE CONFIGURACIÓN (Ahora dentro de la conexión)
+    // ESCUCHADOR DE CONFIGURACIÓN
     socket.on('update-bot-config', async (data) => {
         try {
-            console.log("💾 Recibida nueva configuración:", JSON.stringify(data));
+            // ✅ Sincroniza el cambio con la nueva estructura de la DB
             const updated = await Autobot.findOneAndUpdate(
                 {}, 
                 { $set: { config: data.config } }, 
                 { new: true }
             );
-            if (updated) {
-                io.emit('bot-state-update', updated);
-                console.log("✅ Base de Datos actualizada correctamente");
-            }
-        } catch (err) {
-            console.error("❌ Error al actualizar config en DB:", err.message);
-        }
+            if (updated) io.emit('bot-state-update', updated);
+        } catch (err) { console.error("❌ Error al actualizar config:", err.message); }
     });
 
     const sendFullBotStatus = async () => {
         try {
             const state = await Autobot.findOne({}).lean();
             if (state) {
-                const currentPrice = (autobotLogic && typeof autobotLogic.getLastPrice === 'function') 
-                    ? autobotLogic.getLastPrice() : lastKnownPrice;
+                const currentPrice = autobotLogic.getLastPrice() || lastKnownPrice;
+                
+                // Enviamos estado completo al Front-end
+                socket.emit('bot-state-update', { ...state, price: currentPrice });
 
-                socket.emit('bot-state-update', {
-                    ...state,
-                    price: currentPrice,
-                    lstate: state.lstate || 'STOPPED',
-                    sstate: state.sstate || 'STOPPED',
-                    config: state.config
-                });
-
+                // Cálculo de estadísticas rápidas para Dashboard
                 const totalAllocated = (state.config?.long?.amountUsdt || 0) + (state.config?.short?.amountUsdt || 0);
                 const totalProfit = state.total_profit || 0;
                 const profitPercent = totalAllocated > 0 ? (totalProfit / totalAllocated) * 100 : 0;
 
-                socket.emit('bot-stats', {
-                    totalProfit: totalProfit,
-                    profitChangePercent: profitPercent 
-                });
+                socket.emit('bot-stats', { totalProfit, profitChangePercent: profitPercent });
             }
         } catch (err) { console.error("❌ Error Status Socket:", err); }
     };
 
     sendFullBotStatus();
 
-    socket.on('get-bot-state', () => { sendFullBotStatus(); });
-
-    socket.on('get-ai-status', async () => {
-        try {
-            const state = await aiEngine.getStatus();
-            socket.emit('ai-status-init', state);
-        } catch (err) { console.error("Error ai-status:", err); }
-    });
-
-    socket.on('toggle-ai', async (data) => {
-        try {
-            const result = await aiEngine.toggle(data.action);
-            io.emit('ai-status-update', { success: true, isRunning: result.isRunning });
-        } catch (err) { console.error("Error toggle-ai:", err); }
-    });
-
-    socket.on('disconnect', () => { console.log(`👤 Usuario desconectado: ${socket.id}`); });
+    socket.on('get-bot-state', () => sendFullBotStatus());
+    socket.on('disconnect', () => console.log(`👤 Usuario desconectado: ${socket.id}`));
 });
 
 server.listen(PORT, () => {

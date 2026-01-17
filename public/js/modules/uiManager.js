@@ -75,40 +75,47 @@ export function updateBotUI(state) {
     }
 
     // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Inputs y Switches) ---
-    // Corregido para usar los nombres de tu modelo de base de datos
-    if (state.config) {
-        const conf = state.config;
-        const inputsMapping = {
-            'auamountl-usdt': conf.long?.amountUsdt,
-            'auamounts-usdt': conf.short?.amountUsdt,
-            'aupurchasel-usdt': conf.long?.purchaseUsdt,
-            'aupurchases-usdt': conf.short?.purchaseUsdt,
-            'auincrement': conf.long?.size_var,
-            'audecrement': conf.long?.price_var,
-            'autrigger': conf.long?.profit_percent // Antes decía 'trigger', corregido a 'profit_percent'
-        };
+if (state.config) {
+    const conf = state.config;
+    
+    // Mapeo exacto entre: ID del HTML <-> Valor en el objeto state.config
+    const inputsMapping = {
+        // Long
+        'auamountl-usdt': conf.long?.amountUsdt,
+        'aupurchasel-usdt': conf.long?.purchaseUsdt,
+        'auincrementl':   conf.long?.size_var,
+        'audecrementl':   conf.long?.price_var,
+        'autriggerl':     conf.long?.trigger,
 
-        for (const [id, value] of Object.entries(inputsMapping)) {
-            const input = document.getElementById(id);
-            // Solo actualizamos si el usuario NO está escribiendo en el campo actualmente
-            if (input && value !== undefined && document.activeElement !== input) {
-                if (input.value != value) input.value = value;
+        // Short
+        'auamounts-usdt':   conf.short?.amountUsdt,
+        'aupurchases-usdt': conf.short?.purchaseUsdt,
+        'auincrements':     conf.short?.size_var,
+        'audecrements':     conf.short?.price_var,
+        'autriggers':       conf.short?.trigger
+    };
+
+    for (const [id, value] of Object.entries(inputsMapping)) {
+        const input = document.getElementById(id);
+        // Regla de oro: No sobreescribir si el usuario está escribiendo (activeElement)
+        if (input && value !== undefined && document.activeElement !== input) {
+            // Usamos != para comparar número con string sin ser estrictos
+            if (input.value != value) {
+                input.value = value;
             }
-        }
-
-        // Checkboxes (Switches de Stop At Cycle)
-        const stopL = document.getElementById('au-stop-long-at-cycle');
-        const stopS = document.getElementById('au-stop-short-at-cycle');
-        
-        if (stopL && document.activeElement !== stopL) {
-            stopL.checked = !!conf.long?.stopAtCycle;
-        }
-        if (stopS && document.activeElement !== stopS) {
-            stopS.checked = !!conf.short?.stopAtCycle;
         }
     }
 
-    updateControlsState(state);
+    // Checkboxes (Switches de Stop At Cycle)
+    const stopL = document.getElementById('au-stop-long-at-cycle');
+    const stopS = document.getElementById('au-stop-short-at-cycle');
+    
+    if (stopL && document.activeElement !== stopL) {
+        stopL.checked = !!conf.long?.stopAtCycle;
+    }
+    if (stopS && document.activeElement !== stopS) {
+        stopS.checked = !!conf.short?.stopAtCycle;
+    }
 }
 
 export function updateControlsState(state) {
@@ -133,10 +140,9 @@ export function updateControlsState(state) {
         }
     });
 
-    // 2. Bloqueo de inputs mientras el bot corre
-    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt'];
-    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt'];
-    const globalInputs = ['auincrement', 'audecrement', 'autrigger'];
+    // 2. Bloqueo de inputs mientras el bot corre (Actualizado para lógica exponencial)
+    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl'];
+    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers'];
 
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
@@ -151,7 +157,6 @@ export function updateControlsState(state) {
 
     setLock(longInputs, isLongRunning);
     setLock(shortInputs, isShortRunning);
-    setLock(globalInputs, isLongRunning || isShortRunning);
 
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);

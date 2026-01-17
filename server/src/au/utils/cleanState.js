@@ -1,9 +1,5 @@
-// BSB/server/src/au/utils/cleanState.js (VERSIÓN SEGMENTADA)
+// BSB/server/src/au/utils/cleanState.js (CORREGIDO)
 
-/**
- * Objeto que representa el estado limpio y inicializado de los datos de la estrategia.
- * Se mantiene genérico porque se asigna individualmente a 'lStateData' o 'sStateData'.
- */
 const CLEAN_STRATEGY_DATA = {
     ppc: 0, 
     ac: 0,  
@@ -18,16 +14,13 @@ const CLEAN_STRATEGY_DATA = {
     cycleStartTime: null 
 };
 
-/**
- * CAMPOS RAÍZ ESPECÍFICOS PARA LONG
- */
 const CLEAN_LONG_ROOT = {
     ltprice: 0,
     lsprice: 0,
     lprofit: 0,
     lnorder: 0,
-    lcoverage: 0,
-    lstate: 'STOPPED' // 🟢 Asegura que el estado también vuelva a base si es necesario
+    lcoverage: 0
+    // lstate eliminado: el estado lo decide tu lógica de ciclo
 };
 
 const CLEAN_SHORT_ROOT = {
@@ -35,23 +28,12 @@ const CLEAN_SHORT_ROOT = {
     sbprice: 0,
     sprofit: 0,
     snorder: 0,
-    scoverage: 0,
-    sstate: 'STOPPED' // 🟢 Asegura coherencia
-};
-
-/**
- * Objeto heredado para compatibilidad (Legacy)
- * Si alguna parte del código aún llama a CLEAN_ROOT_FIELDS, 
- * unimos ambos para que no falle, aunque el plan es dejar de usarlo.
- */
-const CLEAN_ROOT_FIELDS = {
-    ...CLEAN_LONG_ROOT,
-    ...CLEAN_SHORT_ROOT
+    scoverage: 0
+    // sstate eliminado
 };
 
 module.exports = {
     CLEAN_STRATEGY_DATA,
     CLEAN_LONG_ROOT,
-    CLEAN_SHORT_ROOT,
-    CLEAN_ROOT_FIELDS // Mantenido por precaución
+    CLEAN_SHORT_ROOT
 };

@@ -6,7 +6,7 @@ async function run(dependencies) {
     const { botState, log, updateBotState } = dependencies;
     
     // 1. VERIFICACIÓN DE SEGURIDAD (Anti-Duplicidad)
-    // Si ya hay capital invertido (AC > 0), el bot nunca debería estar en RUNNING.
+    // Si ya hay capital invertido (AC > 0), el bot debe estar gestionando la compra o venta.
     if (botState.lStateData && botState.lStateData.ac > 0) {
         log("[L-RUNNING] 🛡️ Detectada posición abierta. Corrigiendo estado a BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
@@ -15,36 +15,42 @@ async function run(dependencies) {
 
     // 2. CONSULTA DE SEÑAL GLOBAL
     try {
-        const globalSignal = await MarketSignal.findOne({ symbol: botState.config.symbol || 'BTC_USDT' });
+        // Usamos el símbolo desde la configuración (jerarquía corregida)
+        const currentSymbol = botState.config?.symbol || 'BTC_USDT';
+        const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
 
         if (!globalSignal) {
             log("[L-RUNNING] ⏳ Esperando inicialización de señales de mercado...", 'debug');
             return;
         }
 
-        // 3. VALIDACIÓN DE FRESCURA (Opcional pero Recomendado)
-        // Si la señal tiene más de 5 minutos, la ignoramos por seguridad (latencia de red)
-        const signalAgeMinutes = (Date.now() - new Date(globalSignal.updatedAt).getTime()) / 60000;
+        // 3. VALIDACIÓN DE FRESCURA
+        // Ajustado para usar 'lastUpdate' que es como lo guarda tu server.js
+        const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
+        if (!signalTime) {
+            log("[L-RUNNING] ⚠️ Señal sin marca de tiempo. Esperando actualización...", 'warning');
+            return;
+        }
+
+        const signalAgeMinutes = (Date.now() - new Date(signalTime).getTime()) / 60000;
+        
         if (signalAgeMinutes > 5) {
             log(`[L-RUNNING] ⚠️ Señal obsoleta (${signalAgeMinutes.toFixed(1)} min). Esperando actualización...`, 'warning');
             return;
         }
 
-        // Log informativo para el dashboard
-        log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Tendencia: ${globalSignal.signal}`, 'debug');
-
         // 4. LÓGICA DE ACTIVACIÓN
         if (globalSignal.signal === 'BUY') { 
-            log(`🚀 [L-SIGNAL] ¡COMPRA DETECTADA! RSI en zona: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
+            log(`🚀 [L-SIGNAL] ¡COMPRA DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
             
             // Transición inmediata a BUYING. 
-            // El archivo LBuying.js detectará que no hay órdenes y disparará la primera compra.
+            // LBuying.js se encargará de ejecutar la primera compra con los nuevos parámetros.
             await updateBotState('BUYING', 'long'); 
             return; 
         }
 
     } catch (error) {
-        log(`[L-RUNNING] ❌ Error al leer pizarra de señales: ${error.message}`, 'error');
+        log(`[L-RUNNING] ❌ Error en lectura de señales: ${error.message}`, 'error');
     }
 }
 
