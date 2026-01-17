@@ -24,32 +24,42 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-// --- LÓGICA DE MONITOREO (WATCHDOG INTEGRADO EN LA BARRA) ---
+// --- LÓGICA DE MONITOREO (WATCHDOG EN EL LOG BAR) ---
 let connectionWatchdog = null;
 
 /**
- * Transforma la barra superior (LogBar/Nav) en una alerta de conexión
+ * Cambia el estilo del Log Bar cuando se pierde la conexión
  */
 function toggleConnectionAlert(show) {
-    // Buscamos el elemento de la barra superior. 
-    // Si tu barra tiene otro ID (como 'nav-bar'), cámbialo aquí abajo:
-    const topBar = document.querySelector('nav') || document.getElementById('logBar');
-    const statusText = document.getElementById('status-text'); // Si tienes un span de texto ahí
-
+    // Buscamos el contenedor de logs. Ajusta el ID 'log-container' si es diferente en tu HTML
+    const logBar = document.getElementById('log-container') || document.getElementById('log-bar');
+    
     if (show) {
-        if (topBar) {
-            topBar.classList.add('bg-red-600', 'animate-pulse');
-            topBar.classList.remove('bg-gray-800', 'bg-black'); // Quitar colores originales
+        if (logBar) {
+            // Aplicamos rojo intenso y una sombra interna para que resalte
+            logBar.style.transition = "all 0.3s ease";
+            logBar.style.backgroundColor = "#991b1b"; // red-800
+            logBar.style.border = "1px solid #ef4444"; // red-500
+            logBar.classList.add('animate-pulse');
             
-            // Opcional: Cambiar texto de estado si existe el elemento
-            if (statusText) statusText.innerText = 'CONEXIÓN PERDIDA';
+            // Opcional: Insertar un mensaje de error en el log si no existe ya
+            if (!document.getElementById('reconnect-msg')) {
+                const msg = document.createElement('p');
+                msg.id = 'reconnect-msg';
+                msg.className = 'text-white font-bold text-center py-1 bg-red-900/50 mb-2';
+                msg.innerText = '⚠️ CONEXIÓN PERDIDA - ESPERANDO DATOS...';
+                logBar.prepend(msg);
+            }
         }
     } else {
-        if (topBar) {
-            topBar.classList.remove('bg-red-600', 'animate-pulse');
-            topBar.classList.add('bg-gray-800'); // Devolver color original
+        if (logBar) {
+            // Restauramos los colores originales (asumiendo gris oscuro/negro)
+            logBar.style.backgroundColor = ""; // Vuelve al CSS original
+            logBar.style.border = "";
+            logBar.classList.remove('animate-pulse');
             
-            if (statusText) statusText.innerText = 'SISTEMA ACTIVO';
+            const msg = document.getElementById('reconnect-msg');
+            if (msg) msg.remove();
         }
     }
 }
@@ -66,7 +76,7 @@ function resetWatchdog() {
 
     connectionWatchdog = setTimeout(() => {
         if (statusDot) {
-            console.warn('⚠️ Watchdog: 2 segundos sin datos.');
+            console.warn('⚠️ Watchdog: Sin actividad de red por 2 segundos.');
             statusDot.className = 'status-dot-base status-red';
             toggleConnectionAlert(true); 
         }
@@ -94,18 +104,17 @@ export function initializeFullApp() {
     });
 
     socket.on('disconnect', () => {
-        console.log('❌ Socket Desconectado');
         if (statusDot) statusDot.className = 'status-dot-base status-red';
         toggleConnectionAlert(true);
         if (connectionWatchdog) clearTimeout(connectionWatchdog);
     });
 
-    socket.on('connect_error', (err) => {
-        console.error('⚠️ Error de conexión:', err);
+    socket.on('connect_error', () => {
         if (statusDot) statusDot.className = 'status-dot-base status-red';
         toggleConnectionAlert(true);
     });
 
+    // --- ESCUCHAS DE DATOS ---
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data?.price != null) {
@@ -146,21 +155,17 @@ export async function initializeTab(tabName) {
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-            
             if (typeof module[initFnName] === 'function') {
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
             }
         }
-    } catch (error) {
-        console.error("❌ Error cargando vista:", error);
-    }
+    } catch (error) { console.error("❌ Error cargando vista:", error); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-
     if (localStorage.getItem('token')) {
         initializeFullApp();
     } else {
