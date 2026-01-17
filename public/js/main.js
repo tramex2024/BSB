@@ -28,7 +28,7 @@ const views = {
 };
 
 /**
- * 1. CORRECCIÓN: Control de estados visuales sin bloqueos de inicio
+ * Control de estados visuales críticos
  */
 function setInstantError(message, active) {
     const logEl = document.getElementById('log-message');
@@ -38,38 +38,37 @@ function setInstantError(message, active) {
     if (!logEl || !logBar || !statusDot) return;
 
     if (active) {
+        // MODO ERROR: Bloqueamos y mostramos alerta roja fija
         isOffline = true;
-        logQueue = []; 
+        logQueue = []; // Limpiamos cola para que no haya basura acumulada
         logEl.textContent = message;
         logEl.className = "text-red-400 font-bold";
         logBar.style.backgroundColor = '#7f1d1d';
         logEl.style.opacity = '1';
         
-        // Forzamos rojo
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
     } else {
-        // Si entramos aquí, es que hay conexión. 
-        // Si estábamos en rojo (isOffline true), mandamos el log de restaurado.
+        // MODO RESTAURACIÓN: Solo si estábamos en error
         if (isOffline) {
             isOffline = false;
+            statusDot.classList.remove('status-red');
+            statusDot.classList.add('status-green');
+            
+            // Enviamos el mensaje de éxito a través del sistema de logs 
+            // para que se borre solo después de 2.5 segundos
             logStatus("✅ Conexión restaurada", "success");
-        }
-        
-        // SIEMPRE aseguramos que la bolita esté verde si active es false
-        statusDot.classList.remove('status-red');
-        statusDot.classList.add('status-green');
-        
-        // Si no hay mensajes en la cola y la barra está roja de un error previo, la reseteamos
-        if (logBar.style.backgroundColor === 'rgb(127, 29, 29)') { // #7f1d1d en RGB
-            logBar.style.backgroundColor = '#111827';
+        } else {
+            // Asegurar verde en inicio normal
+            statusDot.classList.remove('status-red');
+            statusDot.classList.add('status-green');
         }
     }
 }
 
 function resetWatchdog() {
-    // Si recibimos datos, apagamos cualquier error previo
-    setInstantError(null, false);
+    // Si entran datos, quitamos el error inmediatamente
+    if (isOffline) setInstantError(null, false);
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
@@ -79,7 +78,13 @@ function resetWatchdog() {
 }
 
 function processNextLog() {
-    if (isOffline || logQueue.length === 0) {
+    // Si estamos en offline, no procesamos logs normales (la alerta roja manda)
+    if (isOffline) {
+        isProcessingLog = false;
+        return;
+    }
+
+    if (logQueue.length === 0) {
         isProcessingLog = false;
         return;
     }
@@ -102,6 +107,7 @@ function processNextLog() {
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
+        // Mantener el log visible 2.5 segundos y luego procesar el siguiente
         setTimeout(() => {
             if (!isOffline) {
                 logEl.style.opacity = '0.5';
@@ -115,14 +121,13 @@ function processNextLog() {
 
 export function logStatus(message, type = 'info') {
     logQueue.push({ message, type });
+    // Si el procesador estaba dormido, lo despertamos
     if (!isProcessingLog && !isOffline) processNextLog();
 }
 
 export function initializeFullApp() {
     if (socket && socket.connected) return;
 
-    // Al iniciar, intentamos marcar verde si el socket conecta, 
-    // pero el Watchdog tendrá la última palabra cuando lleguen los datos.
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
@@ -131,7 +136,7 @@ export function initializeFullApp() {
     });
 
     socket.on('connect', () => {
-        // En cuanto conecta el socket, damos un voto de confianza a la bolita
+        // La bolita se pone verde, pero no quitamos el log hasta que llegue marketData
         const statusDot = document.getElementById('status-dot');
         if (statusDot) {
             statusDot.classList.remove('status-red');
@@ -151,7 +156,7 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-        resetWatchdog(); 
+        resetWatchdog(); // Esto apagará el error y lanzará "Conexión restaurada"
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
