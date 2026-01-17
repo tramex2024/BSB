@@ -16,10 +16,10 @@ export let currentBotState = {
     config: {}
 };
 
-// Variables de control mínimas para logs
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
+let errorInterval = null; // Para repetir el warning en la cola
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -27,10 +27,6 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-/**
- * Función central para cambiar el color de la bolita
- * @param {boolean} connected - true para verde, false para rojo
- */
 function updateConnectionStatus(connected) {
     const statusDot = document.getElementById('status-dot');
     if (!statusDot) return;
@@ -38,30 +34,43 @@ function updateConnectionStatus(connected) {
     if (connected) {
         statusDot.classList.remove('status-red');
         statusDot.classList.add('status-green');
+        
+        // Si estábamos en error, detenemos la repetición de warnings
+        if (errorInterval) {
+            clearInterval(errorInterval);
+            errorInterval = null;
+            logStatus("✅ Conexión restaurada", "success");
+        }
     } else {
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
+
+        // Paso 2: Inyectar warning en la cola si no hay ya un intervalo activo
+        if (!errorInterval) {
+            const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
+            logStatus(warningMsg, "error"); // Primer aviso inmediato
+            
+            errorInterval = setInterval(() => {
+                logStatus(warningMsg, "error");
+            }, 3000); // Se añade a la cola cada 3s mientras siga desconectado
+        }
     }
 }
 
-/**
- * Watchdog: Si no hay precios en 3 segundos, bolita roja.
- */
 function resetWatchdog() {
-    // Si entra aquí es porque hay datos -> Bolita Verde
     updateConnectionStatus(true);
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
     connectionWatchdog = setTimeout(() => {
-        // Si pasan 3 segundos sin datos -> Bolita Roja
         updateConnectionStatus(false);
     }, 3000);
 }
 
-// --- GESTIÓN DE LOGS BÁSICA (Sin bloqueos) ---
+// --- GESTIÓN DE LOGS (Procesador de cola) ---
 export function logStatus(message, type = 'info') {
     logQueue.push({ message, type });
+    if (logQueue.length > 20) logQueue.shift(); // Evitar colas infinitas
     if (!isProcessingLog) processNextLog();
 }
 
@@ -78,15 +87,24 @@ function processNextLog() {
 
     if (logEl && logBar) {
         logEl.textContent = log.message;
-        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
+        
+        const colors = { 
+            success: 'text-emerald-400', 
+            error: 'text-red-400', 
+            warning: 'text-yellow-400', 
+            info: 'text-blue-400' 
+        };
+        
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        logBar.style.backgroundColor = '#111827';
+        
+        // La barra se pone roja solo si el log es tipo 'error'
+        logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
         setTimeout(() => {
             logEl.style.opacity = '0.5';
             processNextLog();
-        }, 2500);
+        }, 2500); // Cada mensaje dura 2.5s
     } else {
         isProcessingLog = false;
     }
@@ -112,7 +130,7 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-        resetWatchdog(); // Mantiene la bolita verde mientras lleguen datos
+        resetWatchdog();
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
@@ -120,8 +138,7 @@ export function initializeFullApp() {
     });
 
     socket.on('bot-log', (log) => {
-        logQueue.push(log);
-        if (!isProcessingLog) processNextLog();
+        logStatus(log.message, log.type);
     });
 
     socket.on('bot-state-update', (state) => {
