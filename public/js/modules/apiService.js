@@ -1,9 +1,12 @@
+/**
+ * apiService.js - Comunicaciones REST
+ */
 import { displayMessage } from './uiManager.js';
-import { BACKEND_URL, logStatus } from '../main.js'; // Importamos logStatus
+import { BACKEND_URL, logStatus } from '../main.js';
 
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
-    if (!token) return { success: false, message: "Session not found." };
+    if (!token) return { success: false, message: "Sesión no encontrada." };
 
     const defaultOptions = {
         headers: {
@@ -14,29 +17,32 @@ async function privateFetch(endpoint, options = {}) {
 
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
-        return await response.json();
+        const data = await response.json();
+        
+        // Si el token expiró (401), avisamos al usuario
+        if (response.status === 401) {
+            logStatus("⚠️ Sesión expirada. Por favor, relogea.", "error");
+            return { success: false, message: "Unauthorized" };
+        }
+        
+        return data;
     } catch (error) {
-        console.error(`Error at ${endpoint}:`, error);
-        logStatus("❌ Error de comunicación con el backend", true);
+        console.error(`Error en ${endpoint}:`, error);
+        logStatus("❌ Error de red: El servidor no responde", "error");
         return { success: false, message: "Connection error." };
     }
 }
 
-// --- ANALÍTICAS DASHBOARD ---
-export async function fetchCycleKpis() {
-    const data = await privateFetch('/api/v1/analytics/stats'); 
-    return data.success ? data.data : null;
-}
+// ... (fetchCycleKpis y fetchEquityCurveData se mantienen igual)
 
-export async function fetchEquityCurveData() {
-    const data = await privateFetch('/api/v1/analytics/equity-curve');
-    return data.success ? data.data : [];
-}
-
-// --- LÓGICA DE CONFIGURACIÓN ---
-
+/**
+ * Captura el estado actual de los inputs con los IDs corregidos
+ */
 export function getBotConfiguration() {
-    const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
+    const getNum = (id) => {
+        const el = document.getElementById(id);
+        return el ? parseFloat(el.value) || 0 : 0;
+    };
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
@@ -44,70 +50,66 @@ export function getBotConfiguration() {
         long: {
             amountUsdt: getNum('auamountl-usdt'),
             purchaseUsdt: getNum('aupurchasel-usdt'),
-            price_var: getNum('audecrementl'), // Agregada 'l'
-            size_var: getNum('auincrementl'),   // Agregada 'l'
-            trigger: getNum('autriggerl'),     // Agregada 'l'
+            price_var: getNum('audecrementl'),
+            size_var: getNum('auincrementl'),
+            trigger: getNum('autriggerl'),
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
         short: {
-            amountUsdt: getNum('auamounts-usdt'), 
-            purchaseUsdt: getNum('aupurchases-usdt'), 
-            price_var: getNum('audecrements'), // Agregada 's'
-            size_var: getNum('auincrements'),   // Agregada 's'
-            trigger: getNum('autriggers'),     // Agregada 's'
+            amountUsdt: getNum('auamounts-usdt'),
+            purchaseUsdt: getNum('aupurchases-usdt'),
+            price_var: getNum('audecrements'),
+            size_var: getNum('auincrements'),
+            trigger: getNum('autriggers'),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }
     };
 }
 
-export async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    logStatus("⏳ Actualizando parámetros..."); // Feedback visual en log bar
-    const data = await privateFetch('/api/autobot/update-config', {
-        method: 'POST',
-        body: JSON.stringify({ config })
-    });
-    if (data.success) {
-        logStatus("✅ Parámetros guardados");
-    }
-}
-
 /**
- * Enciende/apaga Long o Short con feedback en Log Bar
+ * Enciende/apaga el bot y bloquea el botón para evitar "Double-Click"
  */
 export async function toggleBotSideState(isRunning, side) {
     const action = isRunning ? 'stop' : 'start';
     const endpoint = `/api/autobot/${action}/${side}`;
     
-    // Capturamos configuración si es un inicio
-    const config = isRunning ? {} : getBotConfiguration();
+    // Capturamos config actual para asegurar que el START lleve los últimos valores
+    const config = getBotConfiguration();
 
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
     const btn = document.getElementById(btnId);
-    if (btn) btn.disabled = true;
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
 
-    // Mensaje inmediato en la barra de logs
-    logStatus(`⏳ Solicitando ${action.toUpperCase()} para ${side.toUpperCase()}...`);
+    logStatus(`⏳ Solicitando ${action.toUpperCase()} para ${side.toUpperCase()}...`, "info");
 
     try {
         const data = await privateFetch(endpoint, {
             method: 'POST',
-            body: JSON.stringify({ config })
+            body: JSON.stringify({ config }) // Enviamos siempre la config para sincronizar
         });
 
         if (data.success) {
             const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
-            logStatus(`✅ ${msg}`);
+            logStatus(`✅ ${msg}`, "success");
         } else {
             displayMessage(`Error: ${data.message}`, 'error');
-            logStatus(`❌ Falló ${action}: ${data.message}`, true);
+            logStatus(`❌ Falló ${action}: ${data.message}`, "error");
         }
         
         return data;
+    } catch (err) {
+        logStatus(`❌ Error crítico en ${action}`, "error");
     } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
     }
 }

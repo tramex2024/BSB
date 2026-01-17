@@ -2,7 +2,7 @@
 
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { updateBotUI } from './modules/uiManager.js';
+import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
 
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
@@ -38,7 +38,6 @@ function updateConnectionStatus(connected) {
         if (errorInterval) {
             clearInterval(errorInterval);
             errorInterval = null;
-            // Limpiamos cola al reconectar para dar paso a lo nuevo
             logQueue = []; 
             logStatus("✅ Conexión restaurada", "success");
         }
@@ -47,14 +46,11 @@ function updateConnectionStatus(connected) {
         statusDot.classList.add('status-red');
 
         if (!errorInterval) {
-            // --- LIMPIEZA INMEDIATA AL DESCONECTAR ---
             logQueue = []; 
-            
             const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
             logStatus(warningMsg, "error"); 
             
             errorInterval = setInterval(() => {
-                // Mantenemos la cola corta para que el ciclo sea rápido
                 if (logQueue.length < 2) {
                     logStatus(warningMsg, "error");
                 }
@@ -126,17 +122,16 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-    resetWatchdog();
-    if (data && data.price != null) {
-        // Solo actualizamos si el precio realmente cambió
-        if (currentBotState.price !== data.price) {
-            currentBotState.price = data.price;
-            // IMPORTANTE: updateBotUI ahora maneja el color (verde/rojo) 
-            // basado en el lastPrice que guarda internamente.
-            updateBotUI(currentBotState);
+        resetWatchdog();
+        if (data && data.price != null) {
+            if (currentBotState.price !== data.price) {
+                currentBotState.price = data.price;
+                // Sincronización dual: Datos + Controles
+                updateBotUI(currentBotState);
+                updateControlsState(currentBotState); 
+            }
         }
-    }
-});
+    });
 
     socket.on('bot-log', (log) => {
         logStatus(log.message, log.type);
@@ -146,7 +141,10 @@ export function initializeFullApp() {
         resetWatchdog();
         if (state) {
             currentBotState = { ...currentBotState, ...state };
-            updateBotUI(currentBotState);
+            
+            // Reparación del flujo de bloqueo
+            updateBotUI(currentBotState); 
+            updateControlsState(currentBotState); 
         }
     });
 
@@ -164,8 +162,10 @@ export async function initializeTab(tabName) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
+                // Inyectamos el estado actual a la nueva vista
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
+                updateControlsState(currentBotState);
             }
         }
     } catch (error) { console.error("❌ Error cargando vista:", error); }

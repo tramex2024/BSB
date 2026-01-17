@@ -1,8 +1,11 @@
-// public/js/modules/autobot.js
+/**
+ * public/js/modules/autobot.js
+ * Gestión de la vista del Autobot con Sincronización de Estados.
+ */
 
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
-import { displayMessage } from './uiManager.js';
+import { displayMessage, updateControlsState } from './uiManager.js'; // Agregado updateControlsState
 import { toggleBotSideState } from './apiService.js'; 
 import { socket, currentBotState, TRADE_SYMBOL_TV, logStatus } from '../main.js';
 
@@ -10,35 +13,45 @@ const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'opened';
 
 /**
- * Pinta los valores de la DB en los inputs de la UI de forma independiente
+ * Pinta los valores de la DB en los inputs de la UI de forma independiente.
+ * Protege el foco del usuario para evitar saltos mientras escribe.
  */
 export function updateAutobotInputs(state) {
     if (!state || !state.config) return;
     const cfg = state.config;
 
-    // Sincronizar Long
-    document.getElementById('auamountl-usdt') && (document.getElementById('auamountl-usdt').value = cfg.long?.amountUsdt || 0);
-    document.getElementById('aupurchasel-usdt') && (document.getElementById('aupurchasel-usdt').value = cfg.long?.purchaseUsdt || 0);
-    document.getElementById('auincrementl') && (document.getElementById('auincrementl').value = cfg.long?.size_var || 0);
-    document.getElementById('audecrementl') && (document.getElementById('audecrementl').value = cfg.long?.price_var || 0);
-    document.getElementById('autriggerl') && (document.getElementById('autriggerl').value = cfg.long?.trigger || 0);
-    
-    const stopL = document.getElementById('au-stop-long-at-cycle');
-    if (stopL) stopL.checked = cfg.long?.stopAtCycle || false;
+    const mapping = {
+        // LONG
+        'auamountl-usdt': cfg.long?.amountUsdt,
+        'aupurchasel-usdt': cfg.long?.purchaseUsdt,
+        'auincrementl': cfg.long?.size_var,
+        'audecrementl': cfg.long?.price_var,
+        'autriggerl': cfg.long?.trigger,
+        // SHORT
+        'auamounts-usdt': cfg.short?.amountUsdt,
+        'aupurchases-usdt': cfg.short?.purchaseUsdt,
+        'auincrements': cfg.short?.size_var,
+        'audecrements': cfg.short?.price_var,
+        'autriggers': cfg.short?.trigger
+    };
 
-    // Sincronizar Short
-    document.getElementById('auamounts-usdt') && (document.getElementById('auamounts-usdt').value = cfg.short?.amountUsdt || 0);
-    document.getElementById('aupurchases-usdt') && (document.getElementById('aupurchases-usdt').value = cfg.short?.purchaseUsdt || 0);
-    document.getElementById('auincrements') && (document.getElementById('auincrements').value = cfg.short?.size_var || 0);
-    document.getElementById('audecrements') && (document.getElementById('audecrements').value = cfg.short?.price_var || 0);
-    document.getElementById('autriggers') && (document.getElementById('autriggers').value = cfg.short?.trigger || 0);
+    for (const [id, value] of Object.entries(mapping)) {
+        const el = document.getElementById(id);
+        if (el && value !== undefined && document.activeElement !== el) {
+            el.value = value;
+        }
+    }
+
+    // Checkboxes de Stop at Cycle
+    const stopL = document.getElementById('au-stop-long-at-cycle');
+    if (stopL && document.activeElement !== stopL) stopL.checked = !!cfg.long?.stopAtCycle;
 
     const stopS = document.getElementById('au-stop-short-at-cycle');
-    if (stopS) stopS.checked = cfg.short?.stopAtCycle || false;
+    if (stopS && document.activeElement !== stopS) stopS.checked = !!cfg.short?.stopAtCycle;
 }
 
 /**
- * Recolecta los valores de la UI y los envía al backend
+ * Recolecta los valores de la UI y los envía al backend vía Socket.
  */
 function syncConfigWithBackend() {
     if (!socket || !socket.connected) return;
@@ -104,13 +117,18 @@ function setupConfigListeners() {
     });
 }
 
+/**
+ * Inicialización de la Vista de Autobot
+ */
 export async function initializeAutobotView(initialState) {
     const auOrderList = document.getElementById('au-order-list');
     
     setupConfigListeners();
 
+    // Sincronización Inicial (Estado de DB -> Interfaz)
     if (initialState) {
         updateAutobotInputs(initialState);
+        updateControlsState(initialState); // Crucial: Bloquea inputs si el bot está corriendo
     }
 
     setTimeout(() => {
@@ -126,7 +144,9 @@ export async function initializeAutobotView(initialState) {
         if (btnLong && btnShort) {
             btnLong.onclick = async (e) => {
                 e.preventDefault();
+                // Verificamos estado actual basado en el texto del botón actualizado por updateControlsState
                 const isRunning = btnLong.textContent.includes('STOP');
+                
                 if (!isRunning && !validateStrategyInputs()) {
                     displayMessage(`Monto mínimo ${MIN_USDT_AMOUNT} USDT`, "error");
                     return;
@@ -142,6 +162,7 @@ export async function initializeAutobotView(initialState) {
             btnShort.onclick = async (e) => {
                 e.preventDefault();
                 const isRunning = btnShort.textContent.includes('STOP');
+                
                 if (!isRunning && !validateStrategyInputs()) {
                     displayMessage(`Monto mínimo ${MIN_USDT_AMOUNT} USDT`, "error");
                     return;
@@ -173,6 +194,7 @@ export async function initializeAutobotView(initialState) {
         };
     });
 
+    // Pedimos el estado más reciente nada más cargar la vista
     if (socket && socket.connected) {
         socket.emit('get-bot-state'); 
     }
