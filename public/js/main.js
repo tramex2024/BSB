@@ -8,7 +8,6 @@ export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export let socket = null;
 
 // --- MEMORIA CENTRAL (Estado Persistente) ---
-// Aquí es donde vive la "verdad" de tu bot mientras navegas
 export let currentBotState = {
     price: 0,
     sstate: 'STOPPED',
@@ -29,41 +28,54 @@ const views = {
 export function initializeFullApp() {
     if (socket) return;
 
+    // Referencia a la bolita de estado en el HTML
+    const statusDot = document.getElementById('status-dot');
+
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
         reconnection: true 
     });
 
+    // --- EVENTOS DE CONEXIÓN ---
     socket.on('connect', () => {
         console.log('✅ Socket Conectado');
-        // Pedimos el estado inicial al conectar
+        if (statusDot) {
+            statusDot.className = 'status-dot-base status-green'; // Poner Verde
+        }
         socket.emit('get-bot-state');
     });
 
-    // Escucha de Precios (Alta frecuencia)
+    socket.on('disconnect', () => {
+        console.log('❌ Socket Desconectado');
+        if (statusDot) {
+            statusDot.className = 'status-dot-base status-red'; // Poner Rojo
+        }
+    });
+
+    socket.on('connect_error', (err) => {
+        console.error('⚠️ Error de conexión:', err);
+        if (statusDot) {
+            statusDot.className = 'status-dot-base status-red';
+        }
+    });
+
+    // --- ESCUCHAS DE DATOS ---
     socket.on('marketData', (data) => {
         if (data && data.price != null) {
-            // Actualizamos memoria
             currentBotState.price = data.price;
-            
-            // Actualizamos la UI con el estado completo para mantener coherencia
             updateBotUI(currentBotState);
         }
     });
 
-    // Escucha de cambios en el Bot (Estados, balances, config)
     socket.on('bot-state-update', (state) => {
         if (state) {
-            // Fusionamos de forma atómica: lo que ya tenemos + lo que llega nuevo
             currentBotState = { ...currentBotState, ...state };
-            
             console.log("📡 Memoria Actualizada:", currentBotState);
             updateBotUI(currentBotState);
         }
     });
 
-    // Escucha de balances reales
     socket.on('balance-real-update', (data) => {
         if (data) {
             currentBotState.lastAvailableUSDT = data.lastAvailableUSDT;
@@ -83,39 +95,34 @@ export async function initializeTab(tabName) {
     if (!mainContent) return;
 
     try {
-        // 1. Cargamos el HTML de la pestaña
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         mainContent.innerHTML = html;
 
-        // 2. Cargamos e inicializamos el JS de la pestaña
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             
             if (typeof module[initFnName] === 'function') {
-    // IMPORTANTE: Pasamos currentBotState aquí
-    await module[initFnName](currentBotState); 
-    
-    // Refuerzo para que uiManager también intente pintar
-    updateBotUI(currentBotState);
-}
+                // Sincronización inmediata pasando la memoria
+                await module[initFnName](currentBotState); 
+                updateBotUI(currentBotState);
+                console.log(`🖼️ Vista ${tabName} sincronizada.`);
+            }
         }
     } catch (error) {
         console.error("❌ Error cargando vista:", error);
     }
 }
 
-// Arranque inicial de la aplicación
+// Arranque
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
 
-    // Si hay sesión iniciada, arrancamos el flujo de datos
     if (localStorage.getItem('token')) {
         initializeFullApp();
     } else {
-        // Si no, enviamos al dashboard (login)
         initializeTab('dashboard');
     }
 });
