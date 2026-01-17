@@ -1,17 +1,49 @@
 // public/js/modules/autobot.js
 
 import { initializeChart } from './chart.js';
-import { fetchOrders, updateOpenOrdersTable } from './orders.js';
-import { updateBotUI, displayMessage } from './uiManager.js';
-import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
-import { socket, currentBotState, TRADE_SYMBOL_TV } from '../main.js';
+import { fetchOrders } from './orders.js';
+import { displayMessage } from './uiManager.js';
+// Cambiamos el envío de API por la función central del main para sincronizar logs
+import { toggleBotSideState } from './apiService.js'; 
+import { socket, currentBotState, TRADE_SYMBOL_TV, logStatus } from '../main.js';
 
 const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'opened';
 
 /**
- * Valida que los montos cumplan con el mínimo requerido por BitMart
+ * Recolecta los valores de la UI y los envía al backend vía Socket
  */
+function syncConfigWithBackend() {
+    if (!socket || !socket.connected) {
+        logStatus("❌ Error: Sin conexión para actualizar configuración", true);
+        return;
+    }
+
+    const payload = {
+        long: {
+            amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false,
+            // Variables exponenciales (compartidas en lógica backend)
+            size_var: parseFloat(document.getElementById('auincrement')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrement')?.value) || 0,
+            trigger: parseFloat(document.getElementById('autrigger')?.value) || 0
+        },
+        short: {
+            amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false,
+            // Replicamos variables compartidas para consistencia
+            size_var: parseFloat(document.getElementById('auincrement')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrement')?.value) || 0,
+            trigger: parseFloat(document.getElementById('autrigger')?.value) || 0
+        }
+    };
+
+    socket.emit('update-bot-config', payload);
+    logStatus("⏳ Enviando configuración...");
+}
+
 function validateStrategyInputs() {
     const fields = ['auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt'];
     let isValid = true;
@@ -29,9 +61,6 @@ function validateStrategyInputs() {
     return isValid;
 }
 
-/**
- * Escucha cambios en los inputs para enviar la configuración al backend al instante
- */
 function setupConfigListeners() {
     const configIds = [
         'auamountl-usdt', 'auamounts-usdt', 
@@ -39,37 +68,33 @@ function setupConfigListeners() {
         'auincrement', 'audecrement', 'autrigger', 
         'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
     ];
+    
     configIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         
-        el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
+        // Usamos 'change' para todos para no saturar el socket con cada tecla
+        el.addEventListener('change', () => {
             if (el.type === 'number') {
                 const val = parseFloat(el.value);
                 el.classList.toggle('border-red-500', isNaN(val) || val < 0);
             }
-            sendConfigToBackend();
+            syncConfigWithBackend();
         });
     });
 }
 
-/**
- * Inicialización principal de la vista de Autobot
- */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     
-    // 1. Configurar listeners de configuración (Inputs)
     setupConfigListeners();
 
-    // 2. Inicializar gráfico (TradingView)
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
-    // 3. Lógica de Botones Separados (Long y Short)
     const setupSeparateButtons = () => {
         const btnLong = document.getElementById('austartl-btn');
         const btnShort = document.getElementById('austarts-btn');
@@ -77,29 +102,35 @@ export async function initializeAutobotView() {
         if (btnLong && btnShort) {
             btnLong.onclick = async (e) => {
                 e.preventDefault();
-                if (!validateStrategyInputs() && !btnLong.textContent.includes('STOP')) {
-                    displayMessage("Monto mínimo 5 USDT", "error");
+                const isRunning = btnLong.textContent.includes('STOP');
+                
+                if (!isRunning && !validateStrategyInputs()) {
+                    displayMessage(`Monto mínimo ${MIN_USDT_AMOUNT} USDT`, "error");
                     return;
                 }
-                const isRunning = btnLong.textContent.includes('STOP');
+                
                 try {
+                    logStatus(isRunning ? "🛑 Deteniendo Long..." : "🚀 Iniciando Long...");
                     await toggleBotSideState(isRunning, 'long');
                 } catch (err) {
-                    console.error("❌ Error en Start Long:", err);
+                    logStatus("❌ Error en operación Long", true);
                 }
             };
 
             btnShort.onclick = async (e) => {
                 e.preventDefault();
-                if (!validateStrategyInputs() && !btnShort.textContent.includes('STOP')) {
-                    displayMessage("Monto mínimo 5 USDT", "error");
+                const isRunning = btnShort.textContent.includes('STOP');
+                
+                if (!isRunning && !validateStrategyInputs()) {
+                    displayMessage(`Monto mínimo ${MIN_USDT_AMOUNT} USDT`, "error");
                     return;
                 }
-                const isRunning = btnShort.textContent.includes('STOP');
+                
                 try {
+                    logStatus(isRunning ? "🛑 Deteniendo Short..." : "🚀 Iniciando Short...");
                     await toggleBotSideState(isRunning, 'short');
                 } catch (err) {
-                    console.error("❌ Error en Start Short:", err);
+                    logStatus("❌ Error en operación Short", true);
                 }
             };
             return true;
@@ -112,35 +143,18 @@ export async function initializeAutobotView() {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // 4. GESTIÓN DE PESTAÑAS
+    // GESTIÓN DE PESTAÑAS (Simplificada)
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
-    const setActiveTabStyle = (selectedId) => {
-        orderTabs.forEach(btn => {
-            if (btn.id === selectedId) {
-                btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
-                btn.classList.remove('text-gray-500', 'font-normal');
-            } else {
-                btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
-                btn.classList.add('text-gray-500', 'font-normal');
-            }
-        });
-    };
-
     orderTabs.forEach(tab => {
-        tab.addEventListener('click', (e) => {
-            const selectedId = e.currentTarget.id;
-            setActiveTabStyle(selectedId);
-            currentTab = selectedId.replace('tab-', '');
+        tab.onclick = (e) => {
+            orderTabs.forEach(b => b.classList.remove('text-emerald-500', 'bg-gray-800'));
+            tab.classList.add('text-emerald-500', 'bg-gray-800');
+            currentTab = tab.id.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
-        });
+        };
     });
 
-    setActiveTabStyle('tab-opened');
-    fetchOrders('opened', auOrderList);
-
-    // 5. RELLENADO DE DATOS: 
     if (socket && socket.connected) {
-        console.log("🔄 Pestaña Autobot lista, solicitando datos...");
         socket.emit('get-bot-state'); 
     }
-} // <--- Cierre correcto de la función. No debe haber nada más después.
+}
