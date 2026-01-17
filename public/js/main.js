@@ -50,15 +50,18 @@ function setInstantError(message, active) {
     } else {
         if (isOffline) {
             isOffline = false;
-            
-            // --- LIMPIEZA FORZADA E INMEDIATA ---
             logBar.style.backgroundColor = '#111827'; 
-            logEl.textContent = ""; // Borramos el "ALERTA" inmediatamente
+            logEl.textContent = ""; 
             statusDot.classList.remove('status-red');
             statusDot.classList.add('status-green');
             
-            // Ahora sí, ponemos el mensaje de éxito en la cola
             logStatus("✅ Conexión restaurada", "success");
+
+            // FORZAR RE-SOLICITUD DE DATOS AL RECONECTAR
+            if (socket && socket.connected) {
+                console.log("Re-solicitando estado al servidor...");
+                socket.emit('get-bot-state');
+            }
         }
     }
 }
@@ -70,7 +73,7 @@ function resetWatchdog() {
 
     connectionWatchdog = setTimeout(() => {
         setInstantError("⚠️ ALERTA: Sin recepción de datos", true);
-    }, 3000); 
+    }, 4000); // Aumentamos a 4s para dar margen al servidor tras el reconect
 }
 
 function processNextLog() {
@@ -81,7 +84,6 @@ function processNextLog() {
 
     if (logQueue.length === 0) {
         isProcessingLog = false;
-        // Si no hay más logs, dejamos la barra limpia y con opacidad baja
         const logEl = document.getElementById('log-message');
         if (logEl) logEl.style.opacity = '0.5';
         return;
@@ -107,8 +109,6 @@ function processNextLog() {
 
         setTimeout(() => {
             if (!isOffline) {
-                // No borramos el texto aquí, dejamos que el siguiente log lo sobrescriba
-                // o que la llamada recursiva lo limpie si la cola está vacía
                 processNextLog();
             }
         }, 2500);
@@ -123,26 +123,35 @@ export function logStatus(message, type = 'info') {
 }
 
 export function initializeFullApp() {
-    if (socket && socket.connected) return;
+    // Si ya hay un socket pero está muerto, lo cerramos antes de crear uno nuevo
+    if (socket) {
+        socket.removeAllListeners();
+        socket.close();
+    }
 
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
         reconnection: true,
-        reconnectionDelay: 1000
+        reconnectionAttempts: Infinity, // No dejar de intentar nunca
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000
     });
 
     socket.on('connect', () => {
-        const statusDot = document.getElementById('status-dot');
-        if (statusDot) {
-            statusDot.classList.remove('status-red');
-            statusDot.classList.add('status-green');
-        }
+        console.log("Socket conectado ID:", socket.id);
+        setInstantError(null, false);
         socket.emit('get-bot-state');
     });
 
-    socket.on('disconnect', () => {
-        setInstantError("❌ Desconectado del servidor", true);
+    socket.on('connect_error', (err) => {
+        console.error("Error de conexión:", err);
+        setInstantError("❌ Error de enlace con servidor", true);
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.warn("Socket desconectado:", reason);
+        setInstantError("❌ Desconectado: " + reason, true);
     });
 
     socket.on('bot-log', (log) => {
