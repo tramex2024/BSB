@@ -1,6 +1,5 @@
-// public/js/modules/apiService.js
 import { displayMessage } from './uiManager.js';
-import { BACKEND_URL } from '../main.js';
+import { BACKEND_URL, logStatus } from '../main.js'; // Importamos logStatus
 
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
@@ -18,24 +17,17 @@ async function privateFetch(endpoint, options = {}) {
         return await response.json();
     } catch (error) {
         console.error(`Error at ${endpoint}:`, error);
+        logStatus("❌ Error de comunicación con el backend", true);
         return { success: false, message: "Connection error." };
     }
 }
 
-// --- NUEVAS FUNCIONES PARA DASHBOARD (Analíticas) ---
-
-/**
- * Obtiene los KPIs de los ciclos (Promedio de profit, ciclos totales, etc.)
- */
+// --- ANALÍTICAS DASHBOARD ---
 export async function fetchCycleKpis() {
-    // Apunta a la ruta de analytics definida en tu server.js
     const data = await privateFetch('/api/v1/analytics/stats'); 
     return data.success ? data.data : null;
 }
 
-/**
- * Obtiene los datos para el gráfico de la curva de capital
- */
 export async function fetchEquityCurveData() {
     const data = await privateFetch('/api/v1/analytics/equity-curve');
     return data.success ? data.data : [];
@@ -47,6 +39,7 @@ export function getBotConfiguration() {
     const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
+    // Estructura para la lógica exponencial del bot
     return {
         symbol: "BTC_USDT",
         long: {
@@ -72,26 +65,32 @@ export function getBotConfiguration() {
 
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
-    await privateFetch('/api/autobot/update-config', {
+    logStatus("⏳ Actualizando parámetros..."); // Feedback visual en log bar
+    const data = await privateFetch('/api/autobot/update-config', {
         method: 'POST',
         body: JSON.stringify({ config })
     });
+    if (data.success) {
+        logStatus("✅ Parámetros guardados");
+    }
 }
 
 /**
- * Nueva función para encender/apagar Long o Short de forma independiente
- * Exportada correctamente para que autobot.js la reconozca
+ * Enciende/apaga Long o Short con feedback en Log Bar
  */
 export async function toggleBotSideState(isRunning, side) {
-    // isRunning: true si el botón dice "STOP", false si dice "START"
-    const endpoint = isRunning ? `/api/autobot/stop/${side}` : `/api/autobot/start/${side}`;
+    const action = isRunning ? 'stop' : 'start';
+    const endpoint = `/api/autobot/${action}/${side}`;
     
-    // Si vamos a iniciar, capturamos la config exponencial actual de los inputs
+    // Capturamos configuración si es un inicio
     const config = isRunning ? {} : getBotConfiguration();
 
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
     const btn = document.getElementById(btnId);
     if (btn) btn.disabled = true;
+
+    // Mensaje inmediato en la barra de logs
+    logStatus(`⏳ Solicitando ${action.toUpperCase()} para ${side.toUpperCase()}...`);
 
     try {
         const data = await privateFetch(endpoint, {
@@ -100,9 +99,12 @@ export async function toggleBotSideState(isRunning, side) {
         });
 
         if (data.success) {
-            displayMessage(`${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`, 'success');
+            const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+            displayMessage(msg, 'success');
+            logStatus(`✅ ${msg}`);
         } else {
             displayMessage(`Error: ${data.message}`, 'error');
+            logStatus(`❌ Falló ${action}: ${data.message}`, true);
         }
         
         return data;
