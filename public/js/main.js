@@ -28,7 +28,7 @@ const views = {
 };
 
 /**
- * Control de errores de conexión críticos
+ * Control de estados visuales críticos
  */
 function setInstantError(message, active) {
     const logEl = document.getElementById('log-message');
@@ -38,42 +38,46 @@ function setInstantError(message, active) {
     if (!logEl || !logBar) return;
 
     if (active) {
-        // Bloqueo por error crítico
         isOffline = true;
-        logQueue = []; // Limpiamos cola vieja para dar prioridad al error
+        logQueue = []; 
         logEl.textContent = message;
         logEl.className = "text-red-400 font-bold";
         logBar.style.backgroundColor = '#7f1d1d';
         logEl.style.opacity = '1';
-        if (statusDot) statusDot.className = 'status-dot-base status-red';
-    } else if (isOffline) {
-        // Salida del estado crítico
-        isOffline = false;
-        if (statusDot) statusDot.className = 'status-dot-base status-green';
-        
-        // En lugar de escribir directo, lo mandamos a la cola para que el procesador lo gestione y limpie
-        logStatus("✅ Conexión restaurada", "success");
+        if (statusDot) {
+            statusDot.classList.remove('status-green');
+            statusDot.classList.add('status-red');
+        }
+    } else {
+        // Solo restauramos si realmente estábamos en modo offline
+        if (isOffline) {
+            isOffline = false;
+            if (statusDot) {
+                statusDot.classList.remove('status-red');
+                statusDot.classList.add('status-green');
+            }
+            logStatus("✅ Conexión restaurada", "success");
+        }
     }
 }
 
+/**
+ * El Watchdog solo se activa si NO recibimos marketData
+ */
 function resetWatchdog() {
+    // Si llega aquí, significa que hay flujo de datos, por lo tanto NO estamos offline
     if (isOffline) setInstantError(null, false);
 
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
 
     connectionWatchdog = setTimeout(() => {
-        setInstantError("⚠️ ALERTA: Sin recepción de datos (Wifi/Server Offline)", true);
-    }, 2000);
+        // Si pasan 3 segundos sin datos, activamos alerta
+        setInstantError("⚠️ ALERTA: Sin recepción de datos", true);
+    }, 3000); 
 }
 
 function processNextLog() {
-    // Si estamos en modo offline crítico, no procesamos la cola normal
-    if (isOffline) {
-        isProcessingLog = false;
-        return;
-    }
-
-    if (logQueue.length === 0) {
+    if (isOffline || logQueue.length === 0) {
         isProcessingLog = false;
         return;
     }
@@ -96,7 +100,6 @@ function processNextLog() {
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
-        // El tiempo que el mensaje se queda en pantalla
         setTimeout(() => {
             if (!isOffline) {
                 logEl.style.opacity = '0.5';
@@ -120,12 +123,12 @@ export function initializeFullApp() {
         path: '/socket.io', 
         transports: ['websocket'], 
         reconnection: true,
-        reconnectionDelay: 500
+        reconnectionDelay: 1000
     });
 
     socket.on('connect', () => {
-        setInstantError(null, false);
-        resetWatchdog();
+        // Al conectar, NO quitamos el error todavía. 
+        // Esperamos a que llegue el primer marketData para asegurar que hay datos reales.
         socket.emit('get-bot-state');
     });
 
@@ -140,7 +143,8 @@ export function initializeFullApp() {
     });
 
     socket.on('marketData', (data) => {
-        resetWatchdog();
+        // RECIBIR DATOS ES LA PRUEBA REINA DE CONEXIÓN
+        resetWatchdog(); 
         if (data && data.price != null) {
             currentBotState.price = data.price;
             updateBotUI(currentBotState);
@@ -179,6 +183,9 @@ export async function initializeTab(tabName) {
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-    if (localStorage.getItem('token')) { initializeFullApp(); } 
-    else { initializeTab('dashboard'); }
+    if (localStorage.getItem('token')) { 
+        initializeFullApp(); 
+    } else { 
+        initializeTab('dashboard'); 
+    }
 });
