@@ -80,28 +80,28 @@ if (state.config) {
     const inputsMapping = {
         'auamountl-usdt':   conf.long?.amountUsdt,
         'aupurchasel-usdt':  conf.long?.purchaseUsdt,
-        'auincrementl':     conf.long?.size_var,
-        'audecrementl':     conf.long?.price_var,
-        'aupriceinc-l':     conf.long?.price_step_inc, // Nuevo: Incremento distancia Long
-        'autriggerl':       conf.long?.trigger,
+        'auincrementl':      conf.long?.size_var,
+        'audecrementl':      conf.long?.price_var,
+        'aupricestep-l':     conf.long?.price_step_inc, // ID Corregido según HTML
+        'autriggerl':        conf.long?.profit_percent,  // Cambiado trigger -> profit_percent según DB
+        
         'auamounts-usdt':   conf.short?.amountUsdt,
         'aupurchases-usdt':  conf.short?.purchaseUsdt,
-        'auincrements':     conf.short?.size_var,
-        'audecrements':     conf.short?.price_var,
-        'aupriceinc-s':     conf.short?.price_step_inc, // Nuevo: Incremento distancia Short
-        'autriggers':       conf.short?.trigger
+        'auincrements':      conf.short?.size_var,
+        'audecrements':      conf.short?.price_var,
+        'aupricestep-s':     conf.short?.price_step_inc, // ID Corregido según HTML
+        'autriggers':        conf.short?.profit_percent  // Cambiado trigger -> profit_percent según DB
     };
 
     for (const [id, value] of Object.entries(inputsMapping)) {
         const input = document.getElementById(id);
-        // Protegemos el foco para no interrumpir al usuario
         if (input && value !== undefined && document.activeElement !== input) {
+            // Usamos != para permitir comparación de string vs number
             if (input.value != value) {
                 input.value = value;
             }
         }
     }
-
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
         if (stopL && document.activeElement !== stopL) stopL.checked = !!conf.long?.stopAtCycle;
@@ -137,8 +137,14 @@ export function updateControlsState(state) {
     });
 
     // Bloqueo estricto de inputs
-    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl'];
-    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers'];
+    const longInputs = [
+    'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 
+    'audecrementl', 'autriggerl', 'aupricestep-l' // <-- Agregado
+];
+const shortInputs = [
+    'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 
+    'audecrements', 'autriggers', 'aupricestep-s' // <-- Agregado
+];
 
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {

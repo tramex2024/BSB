@@ -198,6 +198,14 @@ input:disabled {
     animation: slideUp 0.3s ease-out;
 }
 
+.autobot-tab-btn {
+    transition: all 0.2s ease-in-out;
+}
+.autobot-tab-btn:hover:not(.text-emerald-500) {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+
 /* Ajuste para el contenido principal para que no se pegue arriba */
 main#main-content {
     margin-top: 0; /* Ya que usamos sticky, no necesita padding extra */

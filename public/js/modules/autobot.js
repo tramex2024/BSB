@@ -26,17 +26,21 @@ export function updateAutobotInputs(state) {
         'aupurchasel-usdt': cfg.long?.purchaseUsdt,
         'auincrementl': cfg.long?.size_var,
         'audecrementl': cfg.long?.price_var,
-        'autriggerl': cfg.long?.trigger,
+        'autriggerl': cfg.long?.profit_percent,   // Antes trigger
+        'aupricestep-l': cfg.long?.price_step_inc, // ¡Nuevo!
+        
         // SHORT
         'auamounts-usdt': cfg.short?.amountUsdt,
         'aupurchases-usdt': cfg.short?.purchaseUsdt,
         'auincrements': cfg.short?.size_var,
         'audecrements': cfg.short?.price_var,
-        'autriggers': cfg.short?.trigger
+        'autriggers': cfg.short?.profit_percent,  // Antes trigger
+        'aupricestep-s': cfg.short?.price_step_inc // ¡Nuevo!
     };
 
     for (const [id, value] of Object.entries(mapping)) {
         const el = document.getElementById(id);
+        // Solo actualizamos si el input existe y el usuario no está escribiendo en él
         if (el && value !== undefined && document.activeElement !== el) {
             el.value = value;
         }
@@ -64,7 +68,8 @@ function syncConfigWithBackend() {
                 stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false,
                 size_var: parseFloat(document.getElementById('auincrementl')?.value) || 0,
                 price_var: parseFloat(document.getElementById('audecrementl')?.value) || 0,
-                trigger: parseFloat(document.getElementById('autriggerl')?.value) || 0
+                profit_percent: parseFloat(document.getElementById('autriggerl')?.value) || 0, // Mapeado correctamente
+                price_step_inc: parseFloat(document.getElementById('aupricestep-l')?.value) || 0 // ¡Enviando nuevo valor!
             },
             short: {
                 amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
@@ -72,7 +77,8 @@ function syncConfigWithBackend() {
                 stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false,
                 size_var: parseFloat(document.getElementById('auincrements')?.value) || 0,
                 price_var: parseFloat(document.getElementById('audecrements')?.value) || 0,
-                trigger: parseFloat(document.getElementById('autriggers')?.value) || 0
+                profit_percent: parseFloat(document.getElementById('autriggers')?.value) || 0, // Mapeado correctamente
+                price_step_inc: parseFloat(document.getElementById('aupricestep-s')?.value) || 0 // ¡Enviando nuevo valor!
             }
         }
     };
@@ -105,6 +111,7 @@ function setupConfigListeners() {
         'audecrementl', 'audecrements', 
         'autriggerl', 'autriggers',
         'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
+        'aupricestep-l', 'aupricestep-s'
     ];
     
     configIds.forEach(id => {
@@ -184,11 +191,27 @@ export async function initializeAutobotView(initialState) {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
+    // --- Lógica de Pestañas Corregida ---
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
+    
     orderTabs.forEach(tab => {
         tab.onclick = (e) => {
-            orderTabs.forEach(b => b.classList.remove('text-emerald-500', 'bg-gray-800'));
+            e.preventDefault();
+            
+            // 1. Limpiamos TODAS las pestañas a su estado inactivo
+            orderTabs.forEach(btn => {
+                // Quitamos estado activo
+                btn.classList.remove('text-emerald-500', 'bg-gray-800');
+                // Aseguramos estado inactivo (Gris)
+                btn.classList.add('text-gray-500');
+                btn.classList.add('hover:text-white'); // Opcional: recupera el hover
+            });
+
+            // 2. Aplicamos estado activo a la pestaña clicada
+            tab.classList.remove('text-gray-500', 'hover:text-white');
             tab.classList.add('text-emerald-500', 'bg-gray-800');
+
+            // 3. Ejecutamos la carga de datos
             currentTab = tab.id.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
         };
