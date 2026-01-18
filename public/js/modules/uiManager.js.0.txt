@@ -1,6 +1,5 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Incluye soporte para Long, Short y AI Bot (Lógica Exponencial)
  */
 
 let lastPrice = 0;
@@ -36,21 +35,15 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 2. VALORES NUMÉRICOS (Dashboard & Bots) ---
+    // --- 2. VALORES NUMÉRICOS ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
-        // Balances de posiciones
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
-        auaibalance: 'aibalance', // <--- Agregado AI
-        // Precios promedio / Take Profit
         aultprice: 'ltprice',
         austprice: 'stprice',
-        // Ciclos actuales
         aulcycle: 'lcycle',
         auscycle: 'scycle',
-        auaicycle: 'aicycle',     // <--- Agregado AI
-        // Coberturas y otros
         aulcoverage: 'lcoverage', 
         auscoverage: 'scoverage',
         aulsprice: 'lsprice',
@@ -59,7 +52,6 @@ export function updateBotUI(state) {
         'ausprofit-val': 'sprofit',
         aulnorder: 'lnorder',   
         ausnorder: 'snorder',   
-        // Balances de cuenta
         'aubalance-usdt': 'lastAvailableUSDT',
         'aubalance-btc': 'lastAvailableBTC'
     };
@@ -82,79 +74,77 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN ---
-    if (state.config) {
-        const conf = state.config;
-        const inputsMapping = {
-            'auamountl-usdt':    conf.long?.amountUsdt,
-            'aupurchasel-usdt':  conf.long?.purchaseUsdt,
-            'auincrementl':      conf.long?.size_var,
-            'audecrementl':      conf.long?.price_var,
-            'aupricestep-l':     conf.long?.price_step_inc,
-            'autriggerl':        conf.long?.profit_percent,
-            
-            'auamounts-usdt':    conf.short?.amountUsdt,
-            'aupurchases-usdt':  conf.short?.purchaseUsdt,
-            'auincrements':      conf.short?.size_var,
-            'audecrements':      conf.short?.price_var,
-            'aupricestep-s':     conf.short?.price_step_inc,
-            'autriggers':        conf.short?.profit_percent,
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Actualizada) ---
+if (state.config) {
+    const conf = state.config;
+    const inputsMapping = {
+        'auamountl-usdt':   conf.long?.amountUsdt,
+        'aupurchasel-usdt':  conf.long?.purchaseUsdt,
+        'auincrementl':      conf.long?.size_var,
+        'audecrementl':      conf.long?.price_var,
+        'aupricestep-l':     conf.long?.price_step_inc, // ID Corregido según HTML
+        'autriggerl':        conf.long?.profit_percent,  // Cambiado trigger -> profit_percent según DB
+        
+        'auamounts-usdt':   conf.short?.amountUsdt,
+        'aupurchases-usdt':  conf.short?.purchaseUsdt,
+        'auincrements':      conf.short?.size_var,
+        'audecrements':      conf.short?.price_var,
+        'aupricestep-s':     conf.short?.price_step_inc, // ID Corregido según HTML
+        'autriggers':        conf.short?.profit_percent  // Cambiado trigger -> profit_percent según DB
+    };
 
-            'auamountai-usdt':   conf.ai?.amountUsdt // <--- Agregado AI
-        };
-
-        for (const [id, value] of Object.entries(inputsMapping)) {
-            const input = document.getElementById(id);
-            if (input && value !== undefined && document.activeElement !== input) {
-                if (input.value != value) {
-                    input.value = value;
-                }
+    for (const [id, value] of Object.entries(inputsMapping)) {
+        const input = document.getElementById(id);
+        if (input && value !== undefined && document.activeElement !== input) {
+            // Usamos != para permitir comparación de string vs number
+            if (input.value != value) {
+                input.value = value;
             }
         }
-
-        // Checkboxes de parada en ciclo
+    }
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
-        const stopAI = document.getElementById('au-stop-ai-at-cycle'); // <--- Agregado AI
-
         if (stopL && document.activeElement !== stopL) stopL.checked = !!conf.long?.stopAtCycle;
         if (stopS && document.activeElement !== stopS) stopS.checked = !!conf.short?.stopAtCycle;
-        if (stopAI && document.activeElement !== stopAI) stopAI.checked = !!conf.ai?.stopAtCycle;
-    }
+    } // <--- AQUÍ FALTABA ESTA LLAVE
 }
 
 export function updateControlsState(state) {
+    // Definimos qué estados se consideran "Activos"
     const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
     
     const sStatus = state.sstate || 'STOPPED';
     const lStatus = state.lstate || 'STOPPED';
-    const aiStatus = state.aistate || 'STOPPED'; // <--- Agregado AI
 
+    // Ahora la condición de bloqueo es más amplia
     const isShortRunning = activeStates.includes(sStatus);
     const isLongRunning = activeStates.includes(lStatus);
-    const isAiRunning = activeStates.includes(aiStatus); // <--- Agregado AI
 
-    // Configuración de botones (Start/Stop)
     const btns = [
-        { id: 'austartl-btn', running: isLongRunning, label: 'L' },
-        { id: 'austarts-btn', running: isShortRunning, label: 'S' },
-        { id: 'austartai-btn', running: isAiRunning, label: 'AI' } // <--- Agregado AI
+        { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
+        { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' }
     ];
 
     btns.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
             btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
-            btn.className = `flex-1 py-3 rounded-xl font-bold text-[9px] shadow-lg transition-all uppercase text-white ${
+            // Forzamos el color rojo si está ejecutándose (SELLING/BUYING/RUNNING)
+            btn.className = `flex-1 py-3 rounded-xl font-bold text-xs shadow-lg transition-all uppercase text-white ${
                 conf.running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
             }`;
         }
     });
 
-    // Listas de inputs para bloqueo de seguridad
-    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
-    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['auamountai-usdt']; // <--- Agregado AI
+    // Bloqueo estricto de inputs
+    const longInputs = [
+    'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 
+    'audecrementl', 'autriggerl', 'aupricestep-l' // <-- Agregado
+];
+const shortInputs = [
+    'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 
+    'audecrements', 'autriggers', 'aupricestep-s' // <-- Agregado
+];
 
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
@@ -169,12 +159,9 @@ export function updateControlsState(state) {
 
     setLock(longInputs, isLongRunning);
     setLock(shortInputs, isShortRunning);
-    setLock(aiInputs, isAiRunning); // <--- Bloqueo de inputs de AI
     
-    // Actualización de etiquetas de estado visuales
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);
-    updateStatusLabel('aubot-aistate', aiStatus); // <--- Agregado AI
 }
 
 function formatProfit(element, value) {
@@ -187,7 +174,7 @@ function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
     if (!el || !status) return;
     el.textContent = status;
-    el.className = `font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
+    el.className = `text-[10px] font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
 
 export function displayMessage(message, type = 'info') {

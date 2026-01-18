@@ -81,7 +81,13 @@ function setupSocketListeners() {
             flashElement('auprice', 'bg-orange-500/20');
         }
     });
-
+    
+    // Escuchar el latido del bot (State Update)
+    socket.on('bot-state-update', (fullState) => {
+    console.log("🔄 Update recibido:", fullState);
+    updateBotUI(fullState); // Aquí es donde ocurre la magia
+    });
+ 
     // Evento de cierre de ciclo
     socket.on('cycle-closed', () => {
         sounds.sell.play().catch(() => {});
