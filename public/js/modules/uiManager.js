@@ -136,8 +136,8 @@ export function updateControlsState(state) {
 
     // Configuración de botones (Start/Stop)
     const btns = [
-        { id: 'austartl-btn', running: isLongRunning, label: 'L' },
-        { id: 'austarts-btn', running: isShortRunning, label: 'S' },
+        { id: 'austartl-btn', running: isLongRunning, label: 'Long' },
+        { id: 'austarts-btn', running: isShortRunning, label: 'Short' },
         { id: 'austartai-btn', running: isAiRunning, label: 'AI' } // <--- Agregado AI
     ];
 
