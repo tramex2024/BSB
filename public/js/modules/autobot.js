@@ -110,7 +110,7 @@ function setupConfigListeners() {
         'auincrementl', 'auincrements', 
         'audecrementl', 'audecrements', 
         'autriggerl', 'autriggers',
-        'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
+        'au-stop-long-at-cycle', 'au-stop-short-at-cycle', // <-- COMA AGREGADA
         'aupricestep-l', 'aupricestep-s'
     ];
     
