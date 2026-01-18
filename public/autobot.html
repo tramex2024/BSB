@@ -165,23 +165,24 @@
     </div>
     
     <div class="flex-grow flex flex-col gap-2 h-full min-h-0">
-        <div id="au-tvchart" class="bg-gray-800 rounded-xl border border-gray-700 min-h-[350px] lg:flex-grow relative overflow-hidden"></div>
-
-        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col h-[250px] lg:h-[300px]"> 
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
-                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
-                <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
-    <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
     
-    <button id="tab-filled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Filled</button>
-    <button id="tab-cancelled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Canceled</button>
-    <button id="tab-all" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">All</button>
-</div>
-            </div>
+    <div id="au-tvchart" class="bg-gray-800 rounded-xl border border-gray-700 min-h-[440px] lg:flex-grow relative overflow-hidden"></div>
 
-            <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
-                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
+    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col h-[300px] lg:h-[340px]"> 
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
+            <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
+            
+            <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
+                <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
+                <button id="tab-filled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Filled</button>
+                <button id="tab-cancelled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Canceled</button>
+                <button id="tab-all" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">All</button>
             </div>
         </div>
+
+        <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
+            <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
+        </div>
     </div>
+</div>
 </div>
