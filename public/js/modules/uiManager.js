@@ -45,8 +45,8 @@ export function updateBotUI(state) {
         ausbalance: 'sbalance',
         auaibalance: 'aibalance',
         // Precios promedio / Take Profit
-        aultprice: 'ltprice',
-        austprice: 'stprice',
+        aultprice: 'lppc', // Vinculado a Precio Promedio Compra (Lógica Exponencial)
+        austprice: 'sppc', // Vinculado a Precio Promedio Compra (Lógica Exponencial)
         // Ciclos actuales
         aulcycle: 'lcycle',
         auscycle: 'scycle',
@@ -54,13 +54,11 @@ export function updateBotUI(state) {
         // Coberturas y otros
         aulcoverage: 'lcoverage', 
         auscoverage: 'scoverage',
-        aulsprice: 'lsprice',
-        ausbprice: 'sbprice',
         'aulprofit-val': 'lprofit',
         'ausprofit-val': 'sprofit',
         aulnorder: 'lnorder',   
         ausnorder: 'snorder',   
-        // Balances de cuenta (Importante para el gráfico circular)
+        // Balances de cuenta
         'aubalance-usdt': 'lastAvailableUSDT',
         'aubalance-btc': 'lastAvailableBTC'
     };
@@ -71,7 +69,7 @@ export function updateBotUI(state) {
         
         let rawValue = state[dataKey];
         
-        // Búsqueda profunda si el valor está dentro de balances
+        // Búsqueda profunda si el valor está dentro de balances (Fallback)
         if (rawValue === undefined && state.balances) {
             if (elementId.includes('usdt')) rawValue = state.balances.USDT;
             if (elementId.includes('btc')) rawValue = state.balances.BTC;
@@ -86,12 +84,13 @@ export function updateBotUI(state) {
         } else {
             const isBtc = elementId.includes('btc');
             const isInteger = elementId.includes('norder') || elementId.includes('cycle');
+            // BTC requiere 6 decimales, enteros 0, el resto 2 para USD
             let decimals = isBtc ? 6 : (isInteger ? 0 : 2);
             element.textContent = value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN ---
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Solo si no hay foco) ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -115,20 +114,24 @@ export function updateBotUI(state) {
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
             if (input && value !== undefined && document.activeElement !== input) {
-                if (input.value != value) {
+                // Evitamos saltos de cursor si el valor es el mismo
+                if (parseFloat(input.value) !== parseFloat(value)) {
                     input.value = value;
                 }
             }
         }
 
         // Checkboxes de parada en ciclo
-        const stopL = document.getElementById('au-stop-long-at-cycle');
-        const stopS = document.getElementById('au-stop-short-at-cycle');
-        const stopAI = document.getElementById('au-stop-ai-at-cycle');
+        const stops = {
+            'au-stop-long-at-cycle': !!conf.long?.stopAtCycle,
+            'au-stop-short-at-cycle': !!conf.short?.stopAtCycle,
+            'au-stop-ai-at-cycle': !!conf.ai?.stopAtCycle
+        };
 
-        if (stopL && document.activeElement !== stopL) stopL.checked = !!conf.long?.stopAtCycle;
-        if (stopS && document.activeElement !== stopS) stopS.checked = !!conf.short?.stopAtCycle;
-        if (stopAI && document.activeElement !== stopAI) stopAI.checked = !!conf.ai?.stopAtCycle;
+        for (const [id, checked] of Object.entries(stops)) {
+            const el = document.getElementById(id);
+            if (el && document.activeElement !== el) el.checked = checked;
+        }
     }
 
     // --- 4. ACTUALIZAR ESTADO DE CONTROLES (BOTONES Y BLOQUEOS) ---
@@ -148,8 +151,8 @@ export function updateControlsState(state) {
 
     // Configuración de botones (Start/Stop)
     const btns = [
-        { id: 'austartl-btn', running: isLongRunning, label: 'L' },
-        { id: 'austarts-btn', running: isShortRunning, label: 'S' },
+        { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
+        { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' },
         { id: 'austartai-btn', running: isAiRunning, label: 'AI' }
     ];
 
@@ -157,9 +160,9 @@ export function updateControlsState(state) {
         const btn = document.getElementById(conf.id);
         if (btn) {
             btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
-            // Mantener el estilo de botón pequeño de tu Autobot
             const colorClass = conf.running ? 'bg-red-600' : (conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
-            btn.className = `flex-1 ${colorClass} py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg transition-all`;
+            // Aplicamos clases de estilo de forma segura
+            btn.className = `flex-1 ${colorClass} py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg transition-all hover:scale-105 active:scale-95`;
         }
     });
 
@@ -174,7 +177,7 @@ export function updateControlsState(state) {
             if (el) {
                 el.disabled = shouldLock;
                 el.style.opacity = shouldLock ? "0.4" : "1";
-                el.style.cursor = shouldLock ? "not-allowed" : "text";
+                el.style.pointerEvents = shouldLock ? "none" : "auto";
             }
         });
     };
@@ -192,7 +195,6 @@ export function updateControlsState(state) {
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '';
     element.textContent = `${sign}$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    // Ajuste de tamaño para que quepa en el Dashboard compacto
     element.className = `text-lg font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
 }
 
@@ -210,12 +212,18 @@ export function displayMessage(message, type = 'info') {
         container.id = 'message-container';
         document.body.appendChild(container);
     }
+    
+    // Si ya existe una notificación, la refrescamos
     container.textContent = message;
-    container.className = `fixed bottom-5 right-5 px-4 py-2 rounded-lg text-white text-[10px] font-bold shadow-2xl z-50 transition-all transform animate-fadeIn ${
+    container.className = `fixed bottom-5 right-5 px-4 py-2 rounded-lg text-white text-[10px] font-bold shadow-2xl z-50 transition-all transform translate-y-0 opacity-100 ${
         type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500')
     }`;
+
+    // Auto-ocultar después de 3 segundos
     setTimeout(() => {
-        container.classList.add('opacity-0');
-        setTimeout(() => container.remove(), 500);
+        container.className += ' opacity-0 translate-y-4';
+        setTimeout(() => {
+            if (container) container.remove();
+        }, 500);
     }, 3000);
 }

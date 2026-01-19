@@ -55,7 +55,7 @@ const autobotSchema = new mongoose.Schema({
     lastAvailableBTC: { type: Number, default: 0 },
     lastBalanceCheck: { type: Date, default: Date.now },
 
-    // --- CONFIGURACIÓN ---
+    // --- CONFIGURACIÓN (Actualizada para Lógica Exponencial) ---
     config: {
         symbol: { type: String, default: "BTC_USDT" },
         long: {
@@ -64,7 +64,8 @@ const autobotSchema = new mongoose.Schema({
             purchaseUsdt: { type: Number, default: 6.00 },
             price_var: { type: Number, default: 0.1 },
             size_var: { type: Number, default: 5.0 },
-            trigger: { type: Number, default: 1.5 },
+            profit_percent: { type: Number, default: 1.5 }, // ✅ Antes trigger
+            price_step_inc: { type: Number, default: 0.1 }, // ✅ Nuevo: Incremento de paso
             stopAtCycle: { type: Boolean, default: false }
         },
         short: {
@@ -73,7 +74,8 @@ const autobotSchema = new mongoose.Schema({
             purchaseUsdt: { type: Number, default: 6.00 },
             price_var: { type: Number, default: 0.1 },
             size_var: { type: Number, default: 5.0 },
-            trigger: { type: Number, default: 1.5 },
+            profit_percent: { type: Number, default: 1.5 }, // ✅ Antes trigger
+            price_step_inc: { type: Number, default: 0.1 }, // ✅ Nuevo: Incremento de paso
             stopAtCycle: { type: Boolean, default: false }
         }
     },

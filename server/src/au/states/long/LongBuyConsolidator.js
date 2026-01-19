@@ -4,14 +4,15 @@ const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmar
 const { handleSuccessfulBuy } = require('../../managers/longDataManager'); 
 
 /**
- * Monitorea órdenes de compra y delega la consolidación al Data Manager.
+ * CONSOLIDADOR DE COMPRA (LONG):
+ * El "vigilante" que espera a que BitMart confirme que las monedas están en nuestra cuenta.
  */
 async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
     
-    // ✅ CAMBIO: Ahora leemos la orden directamente de la raíz
+    // ✅ MIGRADO: Referencia directa a la raíz (Estructura Plana)
     const lastOrder = botState.llastOrder;
 
-    // Si no hay orden pendiente o no es de compra, no hay nada que consolidar aquí
+    // Solo consolidamos si hay una orden y es de tipo 'buy' (Apertura o DCA)
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false;
     }
@@ -20,40 +21,63 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
 
     try {
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
-        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
+        
+        // Extraemos el volumen lleno con soporte para múltiples formatos de respuesta de BitMart
+        let filledVolume = parseFloat(
+            finalDetails?.filledSize || 
+            finalDetails?.filled_volume || 
+            finalDetails?.filledVolume || 0
+        );
 
-        // Lógica de Respaldo
+        // --- LÓGICA DE RESPALDO ---
+        // Si el detalle de la orden falla pero no es una orden "new", buscamos en el historial reciente
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
-            if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+            if (finalDetails) {
+                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+            }
         }
 
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // --- CASO 1: ÉXITO ---
+        // =================================================================
+        // CASO 1: ÉXITO (La orden se llenó)
+        // =================================================================
         if (isFilled) {
-            log(`[CONSOLIDATOR] ✅ Compra confirmada: ${orderIdString}. Actualizando promedios y targets...`, 'success');
+            log(`[CONSOLIDATOR] ✅ Compra confirmada: ${orderIdString}. Procesando datos exponenciales...`, 'success');
             
             const dependencies = { updateGeneralBotState, updateLStateData };
             
-            // Enviamos a handleSuccessfulBuy que ya configuramos para procesar siglas de raíz
+            /**
+             * Delegamos a handleSuccessfulBuy para que:
+             * 1. Actualice lac (Long Accumulated Coins)
+             * 2. Actualice lppc (Long Price Per Coin)
+             * 3. Recalcule lncp y ltprice (Lógica Exponencial)
+             * 4. Limpie llastOrder
+             */
             await handleSuccessfulBuy(botState, finalDetails, log, dependencies);
             
             return true; 
         } 
 
-        // --- CASO 2: ORDEN ACTIVA ---
+        // =================================================================
+        // CASO 2: ORDEN ACTIVA (Aún en el libro de órdenes)
+        // =================================================================
         if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
+            // El bot simplemente retorna true para indicar que el estado actual (BUYING) 
+            // sigue ocupado esperando esta orden.
             return true; 
         } 
 
-        // --- CASO 3: FALLO / CANCELACIÓN ---
+        // =================================================================
+        // CASO 3: FALLO O CANCELACIÓN MANUAL EN EXCHANGE
+        // =================================================================
         if (isCanceled && filledVolume === 0) {
-            log(`[CONSOLIDATOR] ❌ Orden ${orderIdString} cancelada. Liberando estado para reintento.`, 'error');
+            log(`[CONSOLIDATOR] ❌ Orden ${orderIdString} cancelada o rechazada. Liberando raíz para reintento.`, 'error');
             
-            // ✅ CAMBIO: Limpiamos llastOrder en la raíz
+            // ✅ MIGRADO: Limpieza de la raíz para que LBuying.js pueda intentar colocar una nueva orden
             await updateGeneralBotState({ llastOrder: null });
             return true;
         }
@@ -61,8 +85,8 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         return true;
 
     } catch (error) {
-        log(`[CONSOLIDATOR] ⚠️ Error en monitoreo: ${error.message}`, 'error');
-        return true; 
+        log(`[CONSOLIDATOR] ⚠️ Error de red/API en monitoreo: ${error.message}. Reintentando en el próximo ciclo...`, 'warning');
+        return true; // No bloqueamos, permitimos que el siguiente tick lo intente de nuevo
     }
 }
 

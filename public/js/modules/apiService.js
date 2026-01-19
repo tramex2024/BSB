@@ -1,12 +1,13 @@
 /**
  * apiService.js - Comunicaciones REST
- * Sincronizado con analyticsController.js y lógica de estrategias
+ * Sincronizado con la Arquitectura Plana 2026 y Motor Exponencial
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
 /**
  * Función base para peticiones privadas
+ * Corregida para no perder datos cuando el backend no envía la propiedad .data
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
@@ -35,8 +36,14 @@ async function privateFetch(endpoint, options = {}) {
             return { success: false, message: "Unauthorized" };
         }
         
-        // El controlador envía { success: true, data: ... }, aquí extraemos 'data'
-        return result.success ? result.data : result;
+        // ✅ CORRECCIÓN CRÍTICA: 
+        // Si result.success es true y existe result.data (como en analytics), devolvemos .data
+        // Si result.success es true pero NO existe .data (como en start/stop), devolvemos result completo
+        if (result.success && result.data !== undefined) {
+            return result.data;
+        }
+        
+        return result; 
     } catch (error) {
         console.error(`Error en ${endpoint}:`, error);
         logStatus("❌ Error de red: El servidor no responde", "error");
@@ -46,22 +53,20 @@ async function privateFetch(endpoint, options = {}) {
 
 // --- SECCIÓN: DASHBOARD & ESTADÍSTICAS ---
 
-/**
- * Obtiene los KPIs filtrando por estrategia (Long/Short)
- */
 export async function fetchCycleKpis(strategy = 'Long') {
     return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
 }
 
-/**
- * Obtiene la curva de capital filtrando por estrategia
- */
 export async function fetchEquityCurveData(strategy = 'Long') {
     return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
 }
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
+/**
+ * Extrae la configuración actual de los inputs de la UI.
+ * ✅ Sincronizado con siglas raíz: profit_percent y price_step_inc
+ */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -70,13 +75,14 @@ export function getBotConfiguration() {
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
-        symbol: "BTC_USDT",
+        symbol: "BTC_USDT", // O el símbolo que manejes dinámicamente
         long: {
             amountUsdt: getNum('auamountl-usdt'),
             purchaseUsdt: getNum('aupurchasel-usdt'),
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
-            trigger: getNum('autriggerl'),
+            profit_percent: getNum('autriggerl'),   // Antes trigger
+            price_step_inc: getNum('aupricestep-l'), // Nuevo campo exponencial
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -85,17 +91,23 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchases-usdt'),
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
-            trigger: getNum('autriggers'),
+            profit_percent: getNum('autriggers'),   // Antes trigger
+            price_step_inc: getNum('aupricestep-s'), // Nuevo campo exponencial
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }
     };
 }
 
-export async function toggleBotSideState(isRunning, side) {
+/**
+ * Activa o desactiva una de las estrategias (Long o Short).
+ */
+export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const action = isRunning ? 'stop' : 'start';
     const endpoint = `/api/autobot/${action}/${side}`;
-    const config = getBotConfiguration();
+    
+    // Usar la config pasada por argumento o recolectar de la UI
+    const config = providedConfig || getBotConfiguration();
 
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
     const btn = document.getElementById(btnId);
@@ -113,17 +125,22 @@ export async function toggleBotSideState(isRunning, side) {
             body: JSON.stringify({ config }) 
         });
 
-        if (data.success || data === true) { // Maneja ambos tipos de retorno
-            const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+        // ✅ Validación robusta del éxito
+        if (data && (data.success === true || data === true)) { 
+            const msg = data.message || `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
+            return data;
         } else {
-            displayMessage(`Error: ${data.message || 'Error desconocido'}`, 'error');
-            logStatus(`❌ Falló ${action}: ${data.message || 'Error'}`, "error");
+            const errorMsg = data?.message || 'Error desconocido en el servidor';
+            displayMessage(`Error: ${errorMsg}`, 'error');
+            logStatus(`❌ Falló ${action}: ${errorMsg}`, "error");
+            return data;
         }
-        return data;
     } catch (err) {
-        logStatus(`❌ Error crítico en ${action}`, "error");
+        console.error(`Error crítico en toggleBotSideState (${side}):`, err);
+        logStatus(`❌ Error crítico en comunicación`, "error");
+        return { success: false };
     } finally {
         if (btn) {
             btn.disabled = false;

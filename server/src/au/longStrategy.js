@@ -10,7 +10,7 @@ let dependencies = {};
 
 /**
  * Inyecta las dependencias necesarias (log, bitmartService, updateGeneralBotState, etc.)
- * Estas dependencias ya vienen configuradas para escribir en la raíz de la DB.
+ * Sincronizado con la Estructura Plana 2026.
  */
 function setDependencies(deps) {
     dependencies = deps;
@@ -18,47 +18,55 @@ function setDependencies(deps) {
 
 /**
  * Ejecuta el paso correspondiente del State Machine del Long.
- * Gracias a la arquitectura plana, el acceso a 'botState.lstate' es instantáneo.
+ * La lógica exponencial se decide dentro de cada estado usando 'dependencies.config'.
  */
 async function runLongStrategy() {
-    const { botState, log } = dependencies;
+    // 1. Verificación de integridad de dependencias
+    if (!dependencies || !dependencies.botState) {
+        return; 
+    }
 
-    // Verificación de seguridad
-    if (!botState) return;
+    const { botState, log } = dependencies;
+    const currentState = botState.lstate || 'STOPPED';
 
     try {
-        switch (botState.lstate) {
+        // 
+        
+        switch (currentState) {
             case 'RUNNING':
-                // Estado de espera/decisión inicial
+                // Estado de espera/decisión: decide si entrar al mercado o esperar precio.
                 await LRunning.run(dependencies);
                 break;
                 
             case 'BUYING':
-                // Gestión de compras (Primera orden o DCA exponencial)
+                // Gestión de compras: Ejecuta la lógica exponencial de DCA (Dollar Cost Averaging).
+                // Aquí se utilizará config.long.price_step_inc para calcular distancias.
                 await LBuying.run(dependencies);
                 break;
                 
             case 'SELLING':
-                // Gestión de Take Profit (Monitor de salida)
+                // Gestión de Take Profit: Compara currentPrice contra ltprice (Target Price).
                 await LSelling.run(dependencies);
                 break;
                 
             case 'NO_COVERAGE':
-                // Estado de pausa por falta de balance o error
+                // Estado crítico: Se alcanzó el límite de órdenes o no hay saldo en Bitmart.
                 await LNoCoverage.run(dependencies);
                 break;
                 
             case 'STOPPED':
-                // Bot apagado para el lado Long
+                // Estado inactivo: No realiza operaciones pero puede limpiar estados residuales.
                 await LStopped.run(dependencies);
                 break;
                 
             default:
-                log(`⚠️ Estado Long desconocido: ${botState.lstate}`, 'error');
+                log(`⚠️ Estado Long desconocido: ${currentState}`, 'error');
                 break;
         }
     } catch (error) {
-        log(`🔥 Error en LongStrategy (${botState.lstate}): ${error.message}`, 'error');
+        // El log se emite vía Socket al frontend automáticamente gracias a las dependencias.
+        log(`🔥 Error en LongStrategy (${currentState}): ${error.message}`, 'error');
+        console.error(`[LONG STRATEGY CRITICAL]:`, error);
     }
 }
 
