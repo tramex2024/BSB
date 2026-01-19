@@ -10,6 +10,7 @@ import { updateBotUI } from './uiManager.js';
 
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
+let balanceChart = null; // Variable para el gráfico circular
 
 // --- CONFIGURACIÓN DE AUDIO ---
 const sounds = {
@@ -24,34 +25,105 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Sincronizando con Memoria Central");
 
-    // 1. Aplicar estado inicial inmediatamente (Evita el $0.00 al entrar)
+    // 1. Inicializar componentes visuales
+    initBalanceChart();
+
+    // 2. Aplicar estado inicial inmediatamente
     if (initialState) {
         updateBotUI(initialState);
+        updateDistributionWidget(initialState);
     }
 
-    // 2. Limpieza de listeners previos para evitar duplicidad
+    // 3. Limpieza de listeners previos para evitar duplicidad
     if (socket) {
         socket.off('market-signal-update');
         socket.off('order-executed');
         socket.off('cycle-closed');
         socket.off('ai-decision-update');
+        socket.off('bot-state-update');
     }
 
-    // 3. Activar componentes de la interfaz
+    // 4. Activar componentes de la interfaz
     setupSocketListeners();
     setupChartSelector();
     setupTestButton(); 
     
-    // 4. Carga de datos externos (Gráficos y KPIs)
+    // 5. Carga de datos externos (Gráficos y KPIs)
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
 
-    // 5. Forzar actualización de salud visual
-    updateHealthStatus('health-market-ws', 'health-market-ws-text', socket?.connected);
+    // 6. Actualización de salud visual
+    updateHealthStatus('health-market-ws-text', socket?.connected);
 }
 
 /**
- * Gestión de Sockets (Específicos para feedback visual del Dashboard)
+ * Inicializa el gráfico de Dona (USDT vs BTC)
+ */
+function initBalanceChart() {
+    const canvas = document.getElementById('balanceDonutChart');
+    if (!canvas) return;
+
+    // Si ya existe un gráfico, lo destruimos para crear uno limpio
+    if (balanceChart) {
+        balanceChart.destroy();
+    }
+
+    const ctx = canvas.getContext('2d');
+    balanceChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['USDT', 'BTC'],
+            datasets: [{
+                data: [100, 0], 
+                backgroundColor: ['#10b981', '#f59e0b'], // Esmeralda para USDT, Naranja para BTC
+                borderWidth: 0,
+                cutout: '75%'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            },
+            animation: { duration: 800 }
+        }
+    });
+}
+
+/**
+ * Actualiza el Widget de Distribución con datos reales
+ */
+function updateDistributionWidget(state) {
+    if (!balanceChart) return;
+
+    const usdt = parseFloat(state.balances?.USDT || 0);
+    const btcAmount = parseFloat(state.balances?.BTC || 0);
+    const price = parseFloat(state.marketPrice || 0);
+    
+    // Calculamos el valor de BTC en dólares para comparar peras con peras
+    const btcInUsdt = btcAmount * price;
+    const total = usdt + btcInUsdt;
+
+    if (total > 0) {
+        const usdtPct = (usdt / total) * 100;
+        const btcPct = (btcInUsdt / total) * 100;
+
+        // Actualizar Gráfico Circular
+        balanceChart.data.datasets[0].data = [usdtPct, btcPct];
+        balanceChart.update();
+
+        // Actualizar Barras de progreso (las líneas horizontales)
+        const usdtBar = document.getElementById('usdt-bar');
+        const btcBar = document.getElementById('btc-bar');
+        if (usdtBar) usdtBar.style.width = `${usdtPct}%`;
+        if (btcBar) btcBar.style.width = `${btcPct}%`;
+    }
+}
+
+/**
+ * Gestión de Sockets
  */
 function setupSocketListeners() {
     if (!socket) return;
@@ -70,7 +142,7 @@ function setupSocketListeners() {
         if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
     });
 
-    // Notificaciones de Ejecución (Sonidos + Flashing)
+    // Notificaciones de Ejecución
     socket.on('order-executed', (order) => {
         const side = order.side.toLowerCase();
         if (side === 'buy') {
@@ -82,10 +154,10 @@ function setupSocketListeners() {
         }
     });
     
-    // Escuchar el latido del bot (State Update)
+    // Latido del bot (State Update)
     socket.on('bot-state-update', (fullState) => {
-    console.log("🔄 Update recibido:", fullState);
-    updateBotUI(fullState); // Aquí es donde ocurre la magia
+        updateBotUI(fullState);
+        updateDistributionWidget(fullState); // Sincroniza el gráfico de balance
     });
  
     // Evento de cierre de ciclo
@@ -96,14 +168,13 @@ function setupSocketListeners() {
         loadAndDisplayKpis();
     });
 
-    // Mini-Widget de IA (Monitor Neural)
+    // Mini-Widget de IA
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
         
         const progressEl = document.getElementById('ai-mini-progress');
         if (progressEl) {
-            // Ajuste del círculo de progreso SVG
             const radius = 15.9155;
             const circumference = 2 * Math.PI * radius;
             progressEl.style.strokeDasharray = `${(confidenceVal * circumference) / 100}, ${circumference}`;
@@ -136,13 +207,12 @@ function setupChartSelector() {
 }
 
 /**
- * Botón de prueba para verificar sonidos y efectos visuales
+ * Botón de prueba
  */
 function setupTestButton() {
     const testBtn = document.getElementById('test-notification-btn');
     if (!testBtn) return;
 
-    // Clonación para limpiar eventos previos
     const newBtn = testBtn.cloneNode(true);
     testBtn.parentNode.replaceChild(newBtn, testBtn);
 
@@ -154,7 +224,7 @@ function setupTestButton() {
     });
 }
 
-// --- FUNCIONES DE CARGA DE DATOS (API) ---
+// --- CARGA DE DATOS API ---
 
 async function loadAndDisplayKpis() {
     try {
@@ -163,7 +233,7 @@ async function loadAndDisplayKpis() {
         const avgVal = kpis.averageProfitPercentage || 0;
         updateElementText('cycle-avg-profit', 
             `${avgVal >= 0 ? '+' : ''}${avgVal.toFixed(2)}%`, 
-            `text-xl font-bold ${avgVal >= 0 ? 'text-yellow-500' : 'text-red-500'}`
+            `text-sm font-bold ${avgVal >= 0 ? 'text-emerald-400' : 'text-red-500'}`
         );
         updateElementText('total-cycles-closed', kpis.totalCycles || 0);
     } catch (e) { console.error("Error cargando KPIs:", e); }
@@ -179,42 +249,20 @@ async function loadAndRenderEquityCurve() {
     } catch (e) { console.error("Error cargando gráfico:", e); }
 }
 
-// Inicialización del Donut Chart de Balance
-const ctxBalance = document.getElementById('balanceDonutChart').getContext('2d');
-const balanceChart = new Chart(ctxBalance, {
-    type: 'doughnut',
-    data: {
-        datasets: [{
-            data: [50, 50], // Valores iniciales
-            backgroundColor: ['#10b981', '#f59e0b'], // Esmeralda para USDT, Naranja para BTC
-            borderWidth: 0,
-            cutout: '80%'
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } }
-    }
-});
-
 // --- UTILIDADES DE INTERFAZ ---
 
-function updateHealthStatus(dotId, textId, isOnline) {
-    const dot = document.getElementById(dotId);
+function updateHealthStatus(textId, isOnline) {
     const txt = document.getElementById(textId);
-    if (dot && txt) {
-        dot.className = `w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`;
+    if (txt) {
         txt.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
-        txt.className = `text-[9px] font-mono ${isOnline ? 'text-emerald-500' : 'text-red-500'}`;
+        txt.className = `text-[9px] font-mono font-bold ${isOnline ? 'text-emerald-500' : 'text-red-400'}`;
     }
 }
 
 function flashElement(id, colorClass) {
     const el = document.getElementById(id);
     if (el) {
-        // Buscamos el contenedor visual más cercano para aplicar el brillo
-        const container = el.closest('.bg-gray-700\\/50') || el.parentElement;
+        const container = el.parentElement;
         container.classList.add(colorClass);
         setTimeout(() => container.classList.remove(colorClass), 800);
     }

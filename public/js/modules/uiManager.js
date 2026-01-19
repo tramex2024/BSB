@@ -24,12 +24,13 @@ export function updateBotUI(state) {
         const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
 
         if (currentPrice !== lastPrice || isUIEmpty) {
+            // Animación de color según tendencia
             if (isUIEmpty || lastPrice === 0) {
-                priceElement.className = 'text-white text-2xl font-mono font-bold';
+                priceElement.className = 'text-lg font-mono font-bold text-white leading-none';
             } else if (currentPrice > lastPrice) {
-                priceElement.className = 'text-emerald-400 text-2xl font-mono font-bold';
+                priceElement.className = 'text-lg font-mono font-bold text-emerald-400 leading-none';
             } else if (currentPrice < lastPrice) {
-                priceElement.className = 'text-red-400 text-2xl font-mono font-bold';
+                priceElement.className = 'text-lg font-mono font-bold text-red-400 leading-none';
             }
             priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             lastPrice = currentPrice;
@@ -42,14 +43,14 @@ export function updateBotUI(state) {
         // Balances de posiciones
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
-        auaibalance: 'aibalance', // <--- Agregado AI
+        auaibalance: 'aibalance',
         // Precios promedio / Take Profit
         aultprice: 'ltprice',
         austprice: 'stprice',
         // Ciclos actuales
         aulcycle: 'lcycle',
         auscycle: 'scycle',
-        auaicycle: 'aicycle',     // <--- Agregado AI
+        auaicycle: 'aicycle',
         // Coberturas y otros
         aulcoverage: 'lcoverage', 
         auscoverage: 'scoverage',
@@ -59,7 +60,7 @@ export function updateBotUI(state) {
         'ausprofit-val': 'sprofit',
         aulnorder: 'lnorder',   
         ausnorder: 'snorder',   
-        // Balances de cuenta
+        // Balances de cuenta (Importante para el gráfico circular)
         'aubalance-usdt': 'lastAvailableUSDT',
         'aubalance-btc': 'lastAvailableBTC'
     };
@@ -67,7 +68,15 @@ export function updateBotUI(state) {
     for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
         const element = document.getElementById(elementId);
         if (!element) continue;
-        const rawValue = state[dataKey];
+        
+        let rawValue = state[dataKey];
+        
+        // Búsqueda profunda si el valor está dentro de balances
+        if (rawValue === undefined && state.balances) {
+            if (elementId.includes('usdt')) rawValue = state.balances.USDT;
+            if (elementId.includes('btc')) rawValue = state.balances.BTC;
+        }
+
         if (rawValue === undefined || rawValue === null) continue;
         const value = Number(rawValue);
         if (isNaN(value)) continue;
@@ -100,7 +109,7 @@ export function updateBotUI(state) {
             'aupricestep-s':     conf.short?.price_step_inc,
             'autriggers':        conf.short?.profit_percent,
 
-            'auamountai-usdt':   conf.ai?.amountUsdt // <--- Agregado AI
+            'auamountai-usdt':   conf.ai?.amountUsdt 
         };
 
         for (const [id, value] of Object.entries(inputsMapping)) {
@@ -115,12 +124,15 @@ export function updateBotUI(state) {
         // Checkboxes de parada en ciclo
         const stopL = document.getElementById('au-stop-long-at-cycle');
         const stopS = document.getElementById('au-stop-short-at-cycle');
-        const stopAI = document.getElementById('au-stop-ai-at-cycle'); // <--- Agregado AI
+        const stopAI = document.getElementById('au-stop-ai-at-cycle');
 
         if (stopL && document.activeElement !== stopL) stopL.checked = !!conf.long?.stopAtCycle;
         if (stopS && document.activeElement !== stopS) stopS.checked = !!conf.short?.stopAtCycle;
         if (stopAI && document.activeElement !== stopAI) stopAI.checked = !!conf.ai?.stopAtCycle;
     }
+
+    // --- 4. ACTUALIZAR ESTADO DE CONTROLES (BOTONES Y BLOQUEOS) ---
+    updateControlsState(state);
 }
 
 export function updateControlsState(state) {
@@ -128,40 +140,40 @@ export function updateControlsState(state) {
     
     const sStatus = state.sstate || 'STOPPED';
     const lStatus = state.lstate || 'STOPPED';
-    const aiStatus = state.aistate || 'STOPPED'; // <--- Agregado AI
+    const aiStatus = state.aistate || 'STOPPED';
 
     const isShortRunning = activeStates.includes(sStatus);
     const isLongRunning = activeStates.includes(lStatus);
-    const isAiRunning = activeStates.includes(aiStatus); // <--- Agregado AI
+    const isAiRunning = activeStates.includes(aiStatus);
 
     // Configuración de botones (Start/Stop)
     const btns = [
-        { id: 'austartl-btn', running: isLongRunning, label: 'Long' },
-        { id: 'austarts-btn', running: isShortRunning, label: 'Short' },
-        { id: 'austartai-btn', running: isAiRunning, label: 'AI' } // <--- Agregado AI
+        { id: 'austartl-btn', running: isLongRunning, label: 'L' },
+        { id: 'austarts-btn', running: isShortRunning, label: 'S' },
+        { id: 'austartai-btn', running: isAiRunning, label: 'AI' }
     ];
 
     btns.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
             btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
-            btn.className = `flex-1 py-3 rounded-xl font-bold text-[9px] shadow-lg transition-all uppercase text-white ${
-                conf.running ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
-            }`;
+            // Mantener el estilo de botón pequeño de tu Autobot
+            const colorClass = conf.running ? 'bg-red-600' : (conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+            btn.className = `flex-1 ${colorClass} py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg transition-all`;
         }
     });
 
     // Listas de inputs para bloqueo de seguridad
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['auamountai-usdt']; // <--- Agregado AI
+    const aiInputs = ['auamountai-usdt'];
 
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
                 el.disabled = shouldLock;
-                el.style.opacity = shouldLock ? "0.5" : "1";
+                el.style.opacity = shouldLock ? "0.4" : "1";
                 el.style.cursor = shouldLock ? "not-allowed" : "text";
             }
         });
@@ -169,25 +181,26 @@ export function updateControlsState(state) {
 
     setLock(longInputs, isLongRunning);
     setLock(shortInputs, isShortRunning);
-    setLock(aiInputs, isAiRunning); // <--- Bloqueo de inputs de AI
+    setLock(aiInputs, isAiRunning);
     
     // Actualización de etiquetas de estado visuales
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);
-    updateStatusLabel('aubot-aistate', aiStatus); // <--- Agregado AI
+    updateStatusLabel('aubot-aistate', aiStatus);
 }
 
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '';
-    element.textContent = `${sign}$${value.toFixed(2)}`;
-    element.className = `text-xl font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+    element.textContent = `${sign}$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // Ajuste de tamaño para que quepa en el Dashboard compacto
+    element.className = `text-lg font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
 }
 
 function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
     if (!el || !status) return;
     el.textContent = status;
-    el.className = `font-bold ${STATUS_COLORS[status] || 'text-gray-500'}`;
+    el.className = `text-[9px] font-bold font-mono ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
 
 export function displayMessage(message, type = 'info') {
@@ -198,11 +211,11 @@ export function displayMessage(message, type = 'info') {
         document.body.appendChild(container);
     }
     container.textContent = message;
-    container.className = `fixed bottom-5 right-5 px-6 py-3 rounded-xl text-white font-bold shadow-2xl z-50 transition-all transform animate-slideUp ${
+    container.className = `fixed bottom-5 right-5 px-4 py-2 rounded-lg text-white text-[10px] font-bold shadow-2xl z-50 transition-all transform animate-fadeIn ${
         type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500')
     }`;
     setTimeout(() => {
-        container.classList.add('opacity-0', 'translate-y-10');
+        container.classList.add('opacity-0');
         setTimeout(() => container.remove(), 500);
-    }, 4000);
+    }, 3000);
 }
