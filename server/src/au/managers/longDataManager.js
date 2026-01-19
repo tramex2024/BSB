@@ -3,7 +3,7 @@
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 const { calculateLongCoverage, parseNumber, getExponentialAmount } = require('../../../autobotCalculations');
-const { CLEAN_LONG_ROOT } = require('../../utils/cleanState');
+const { CLEAN_LONG_ROOT } = require('../utils/cleanState');
 
 const LSTATE = 'long';
 const SELL_FEE_PERCENT = 0.001; 
