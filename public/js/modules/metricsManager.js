@@ -1,5 +1,5 @@
 /**
- * metricsManager.js - Lógica de analítica y filtrado
+ * metricsManager.js - Especializado en cálculos de eficiencia y rentabilidad
  */
 import { renderEquityCurve } from './chart.js';
 
@@ -7,59 +7,82 @@ let cycleHistoryData = [];
 let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
-/**
- * Recibe los datos crudos de la API y refresca la visualización
- */
 export function setAnalyticsData(data) {
     if (data) cycleHistoryData = data;
     updateMetricsDisplay();
 }
 
-/**
- * Cambia el parámetro (Profit/Duración)
- */
 export function setChartParameter(param) {
     currentChartParameter = param;
     updateMetricsDisplay();
 }
 
-/**
- * Cambia el filtro de Bot (Long/Short/AI)
- */
 export function setBotFilter(filter) {
     currentBotFilter = filter;
     updateMetricsDisplay();
 }
 
-/**
- * Procesa los datos y actualiza el gráfico y los contadores
- */
 function updateMetricsDisplay() {
     if (cycleHistoryData.length === 0) return;
 
-    // 1. Filtrar por estrategia (campo "strategy" del JSON)
+    // 1. Filtrar por estrategia
     const filtered = currentBotFilter === 'all' 
         ? cycleHistoryData 
         : cycleHistoryData.filter(c => c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
 
-    // 2. Calcular KPIs sobre los datos filtrados
     const totalCycles = filtered.length;
-    const totalProfit = filtered.reduce((acc, c) => acc + (c.profitPercentage || 0), 0);
-    const avgProfit = totalCycles > 0 ? (totalProfit / totalCycles) : 0;
+    if (totalCycles === 0) return resetKPIs();
 
-    // 3. Renderizar textos
+    // 2. CÁLCULOS AVANZADOS
+    let totalProfitPct = 0;
+    let totalNetProfitUsdt = 0;
+    let winningCycles = 0;
+    let totalHours = 0;
+
+    filtered.forEach(cycle => {
+        totalProfitPct += (cycle.profitPercentage || 0);
+        totalNetProfitUsdt += (cycle.netProfit || 0);
+        
+        // Win Rate: Si el netProfit es mayor a 0 es una victoria
+        if ((cycle.netProfit || 0) > 0) winningCycles++;
+
+        // Eficiencia: Calcular horas de duración
+        if (cycle.startTime?.$date && cycle.endTime?.$date) {
+            const start = new Date(cycle.startTime.$date);
+            const end = new Date(cycle.endTime.$date);
+            const diffHours = (end - start) / (1000 * 60 * 60);
+            totalHours += diffHours > 0 ? diffHours : 0;
+        }
+    });
+
+    const avgProfit = totalProfitPct / totalCycles;
+    const winRate = (winningCycles / totalCycles) * 100;
+    const profitPerHour = totalHours > 0 ? (totalNetProfitUsdt / totalHours) : 0;
+
+    // 3. ACTUALIZAR INTERFAZ
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', 
         `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
         `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`
     );
+    
+    // Actualizar Win Rate
+    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`);
+    
+    // Actualizar Eficiencia (Profit/Hora)
+    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
 
-    // 4. Actualizar gráfico
+    // 4. Renderizar Gráfico
     renderEquityCurve(filtered, currentChartParameter);
-    console.log(`📊 Metrics: ${totalCycles} ciclos mostrados (${currentBotFilter})`);
 }
 
-// Auxiliar para actualizar el DOM
+function resetKPIs() {
+    renderText('total-cycles-closed', '0');
+    renderText('cycle-avg-profit', '0.00%', 'text-sm font-bold text-gray-500');
+    renderText('cycle-win-rate', '0%');
+    renderText('cycle-efficiency', '$0.00/h');
+}
+
 function renderText(id, text, className = null) {
     const el = document.getElementById(id);
     if (el) {
