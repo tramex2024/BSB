@@ -1,12 +1,12 @@
 /**
  * apiService.js - Comunicaciones REST
- * Maneja todas las peticiones al servidor y la configuración del bot
+ * Sincronizado con analyticsController.js y lógica de estrategias
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
 /**
- * Función base para peticiones privadas (Maneja el Token y errores de red)
+ * Función base para peticiones privadas
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
@@ -22,22 +22,21 @@ async function privateFetch(endpoint, options = {}) {
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
         
-        // Verificamos si la respuesta es JSON antes de procesar
         const contentType = response.headers.get("content-type");
-        let data;
+        let result;
         if (contentType && contentType.includes("application/json")) {
-            data = await response.json();
+            result = await response.json();
         } else {
-            data = { success: response.ok };
+            result = { success: response.ok };
         }
         
-        // Si el token expiró (401), avisamos al usuario
         if (response.status === 401) {
             logStatus("⚠️ Sesión expirada. Por favor, relogea.", "error");
             return { success: false, message: "Unauthorized" };
         }
         
-        return data;
+        // El controlador envía { success: true, data: ... }, aquí extraemos 'data'
+        return result.success ? result.data : result;
     } catch (error) {
         console.error(`Error en ${endpoint}:`, error);
         logStatus("❌ Error de red: El servidor no responde", "error");
@@ -48,25 +47,21 @@ async function privateFetch(endpoint, options = {}) {
 // --- SECCIÓN: DASHBOARD & ESTADÍSTICAS ---
 
 /**
- * Obtiene los KPIs de los ciclos (Promedio de ganancia, total de ciclos)
+ * Obtiene los KPIs filtrando por estrategia (Long/Short)
  */
-export async function fetchCycleKpis() {
-    return await privateFetch('/api/stats/kpis'); 
+export async function fetchCycleKpis(strategy = 'Long') {
+    return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
 }
 
 /**
- * Obtiene los datos de la curva de patrimonio (Gráfico principal)
+ * Obtiene la curva de capital filtrando por estrategia
  */
-export async function fetchEquityCurveData() {
-    return await privateFetch('/api/stats/equity-curve');
+export async function fetchEquityCurveData(strategy = 'Long') {
+    return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
 }
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
-/**
- * Captura el estado actual de los inputs de la interfaz
- * Refleja la lógica exponencial de BTC_USDT
- */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -97,14 +92,9 @@ export function getBotConfiguration() {
     };
 }
 
-/**
- * Enciende/apaga el bot (Long o Short) y sincroniza la configuración
- */
 export async function toggleBotSideState(isRunning, side) {
     const action = isRunning ? 'stop' : 'start';
     const endpoint = `/api/autobot/${action}/${side}`;
-    
-    // Capturamos config actual para asegurar que el servidor reciba los datos de los inputs
     const config = getBotConfiguration();
 
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
@@ -123,15 +113,14 @@ export async function toggleBotSideState(isRunning, side) {
             body: JSON.stringify({ config }) 
         });
 
-        if (data.success) {
+        if (data.success || data === true) { // Maneja ambos tipos de retorno
             const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
         } else {
-            displayMessage(`Error: ${data.message}`, 'error');
-            logStatus(`❌ Falló ${action}: ${data.message}`, "error");
+            displayMessage(`Error: ${data.message || 'Error desconocido'}`, 'error');
+            logStatus(`❌ Falló ${action}: ${data.message || 'Error'}`, "error");
         }
-        
         return data;
     } catch (err) {
         logStatus(`❌ Error crítico en ${action}`, "error");
