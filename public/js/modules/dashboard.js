@@ -179,6 +179,25 @@ async function loadAndRenderEquityCurve() {
     } catch (e) { console.error("Error cargando gráfico:", e); }
 }
 
+// Inicialización del Donut Chart de Balance
+const ctxBalance = document.getElementById('balanceDonutChart').getContext('2d');
+const balanceChart = new Chart(ctxBalance, {
+    type: 'doughnut',
+    data: {
+        datasets: [{
+            data: [50, 50], // Valores iniciales
+            backgroundColor: ['#10b981', '#f59e0b'], // Esmeralda para USDT, Naranja para BTC
+            borderWidth: 0,
+            cutout: '80%'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } }
+    }
+});
+
 // --- UTILIDADES DE INTERFAZ ---
 
 function updateHealthStatus(dotId, textId, isOnline) {

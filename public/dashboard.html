@@ -1,170 +1,168 @@
-<div class="flex flex-col lg:flex-row h-full w-full animate-fadeIn bg-gray-900 p-4 gap-4">
-    
-    <div class="w-full lg:w-1/3 bg-gray-800 p-6 flex flex-col border-2 border-emerald-500/20 rounded-3xl shadow-2xl space-y-4 overflow-y-auto">
+<div class="max-w-[1600px] mx-auto p-4 lg:p-6 animate-fadeIn bg-gray-900">
+    <div class="flex flex-col lg:flex-row gap-6">
         
-        <div class="bg-gray-900/50 p-5 rounded-2xl border border-emerald-500/30 shadow-lg shadow-emerald-500/5">
-            <div class="flex justify-between items-start mb-4">
-                <div>
-                    <p class="text-[10px] font-bold text-emerald-500/70 uppercase tracking-widest">Market Price</p>
-                    <div class="flex items-baseline gap-2">
-                        <span id="auprice" class="text-2xl font-mono font-bold text-white">$0.00</span>
-                        <span id="price-change-container" class="text-[10px] flex items-center font-bold text-emerald-400">
-                            <i id="price-icon" class="fas fa-caret-up mr-0.5"></i>
-                            <span id="price-percent">0.00%</span>
-                        </span>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Profit</p>
-                    <div class="flex items-baseline justify-end gap-2">
-                        <span id="auprofit" class="text-2xl font-mono font-bold text-emerald-400">+$0.00</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4 border-t border-emerald-500/10 pt-4 mb-4">                
-                <div>
-                    <p class="text-[9px] text-gray-500 uppercase font-bold">Balance USDT</p>
-                    <p id="aubalance-usdt" class="text-lg font-mono text-white">0.00</p>
-                </div>
-                <div class="text-right">
-                    <p class="text-[9px] text-gray-500 uppercase font-bold">Balance BTC</p>
-                    <p id="aubalance-btc" class="text-lg font-mono text-white">0.000000</p>
-                </div>
-            </div>
-
-            <div class="space-y-2 bg-black/40 p-3 rounded-xl border border-emerald-500/10">
-                <div class="flex justify-between items-center text-[10px]">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
-                        <span class="text-gray-400 uppercase font-bold">Long:</span>
-                        <span id="aubot-lstate" class="font-bold text-red-400">STOPPED</span>
-                    </div>
-                    <div class="font-mono text-gray-300">
-                        Cyc: <span id="aulcycle">0</span> | <span id="aulbalance" class="text-emerald-500">0.00</span>
-                    </div>
-                </div>
-                <div class="flex justify-between items-center text-[10px]">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
-                        <span class="text-gray-400 uppercase font-bold">Short:</span>
-                        <span id="aubot-sstate" class="font-bold text-red-400">STOPPED</span>
-                    </div>
-                    <div class="font-mono text-gray-300">
-                        Cyc: <span id="auscycle">0</span> | <span id="ausbalance" class="text-emerald-500">0.00</span>
-                    </div>
-                </div>
-                <div class="flex justify-between items-center text-[10px]">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]"></span>
-                        <span class="text-gray-400 uppercase font-bold">AI:</span>
-                        <span id="aubot-aistate" class="font-bold text-red-400">STOPPED</span>
-                    </div>
-                    <div class="font-mono text-gray-300">
-                        Cyc: <span id="auaicycle">0</span> | <span id="auaibalance" class="text-emerald-500">0.00</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-gray-900/40 p-5 rounded-2xl border border-gray-700/50 space-y-4">            
-            <h3 class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1.5">Strategy Variables</h3>
-
-            <div class="flex flex-row gap-2 justify-center items-center">
-                <div class="flex-1">
-                    <label class="block text-[8px] text-gray-500 mb-1 font-bold uppercase font-mono text-center">Amount-L</label>
-                    <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-2 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500"/>
-                </div>
-                <div class="flex-1">
-                    <label class="block text-[8px] text-gray-500 mb-1 font-bold uppercase font-mono text-center">Amount-S</label>
-                    <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-2 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500"/>
-                </div>
-                <div class="flex-1">
-                    <label class="block text-[8px] text-gray-500 mb-1 font-bold uppercase font-mono text-center">Amount-AI</label>
-                    <input id="auamountai-usdt" type="number" step="1" value="6.00" class="w-full p-2 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500"/>
-                </div>
-            </div>
-
-            <div class="flex flex-row gap-1.5 justify-center items-center text-center">
-                <div class="flex flex-1 items-center justify-center space-x-1 bg-gray-900/60 p-2 rounded-lg border border-gray-700">
-                    <input type="checkbox" id="au-stop-long-at-cycle" class="w-3 h-3 rounded border-gray-600 text-emerald-500 focus:ring-0">
-                    <label for="au-stop-long-at-cycle" class="text-[8px] text-gray-300 font-bold uppercase">Stop L</label>
-                </div>
-                <div class="flex flex-1 items-center justify-center space-x-1 bg-gray-900/60 p-2 rounded-lg border border-gray-700">
-                    <input type="checkbox" id="au-stop-short-at-cycle" class="w-3 h-3 rounded border-gray-600 text-emerald-500 focus:ring-0">
-                    <label for="au-stop-short-at-cycle" class="text-[8px] text-gray-300 font-bold uppercase">Stop S</label>
-                </div>
-                <div class="flex flex-1 items-center justify-center space-x-1 bg-gray-900/60 p-2 rounded-lg border border-gray-700">
-                    <input type="checkbox" id="au-stop-ai-at-cycle" class="w-3 h-3 rounded border-gray-600 text-emerald-500 focus:ring-0">
-                    <label for="au-stop-ai-at-cycle" class="text-[8px] text-gray-300 font-bold uppercase">Stop AI</label>
-                </div>
-            </div>
-
-            <div class="flex gap-2 pt-1">
-                <button id="austartl-btn" class="flex-1 bg-emerald-600/90 hover:bg-emerald-500 py-3 rounded-xl font-bold text-[9px] uppercase text-white transition-all border border-emerald-400/30">Start L</button>      
-                <button id="austarts-btn" class="flex-1 bg-emerald-600/90 hover:bg-emerald-500 py-3 rounded-xl font-bold text-[9px] uppercase text-white transition-all border border-emerald-400/30">Start S</button> 
-                <button id="austartai-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-[9px] uppercase text-white transition-all border border-indigo-400/30">Start AI</button>                                            
-            </div>            
-        </div>
-
-        <div class="bg-blue-900/20 p-4 rounded-2xl border border-blue-500/30">
-            <h3 class="text-[9px] font-bold text-blue-400 uppercase tracking-widest mb-3">AI Engine Monitor</h3>
-            <div class="flex items-center gap-4">
-                <div class="relative w-10 h-10 flex-shrink-0">
-                    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                        <path class="text-gray-800" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        <path id="ai-mini-progress" class="text-blue-500 transition-all duration-700" stroke-width="3" stroke-dasharray="0, 100" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                    </svg>
-                    <span id="ai-mini-confidence" class="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white">0%</span>
-                </div>
-                <div class="overflow-hidden">
-                    <p id="ai-mini-thought" class="text-[9px] text-gray-300 italic truncate font-mono">Iniciando sistema neural...</p>
-                    <p id="ai-mini-action" class="text-[8px] font-bold text-blue-400 mt-1 uppercase">Esperando señal</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-gray-900/40 p-4 rounded-2xl border border-gray-700/50">
-             <h3 class="text-[9px] font-bold text-gray-500 uppercase mb-3 tracking-widest text-center">System Health</h3>
-             <div class="space-y-2">
-                 <div class="flex justify-between items-center bg-black/30 p-2 rounded-lg border border-emerald-500/5">
-                     <span class="text-[9px] text-gray-400 font-bold">WS MARKET</span>
-                     <span id="health-market-ws-text" class="text-[9px] font-mono text-gray-500">OFFLINE</span>
-                 </div>
-                 <div class="flex justify-between items-center bg-black/30 p-2 rounded-lg border border-emerald-500/5">
-                     <span class="text-[9px] text-gray-400 font-bold">WS USER</span>
-                     <span id="health-user-ws-text" class="text-[9px] font-mono text-gray-500">OFFLINE</span>
-                 </div>
-             </div>
-        </div>
-    </div>
-
-    <div class="flex-grow bg-gray-900 flex flex-col min-h-[500px]">
-        <div class="bg-gray-800 p-6 rounded-3xl border-2 border-emerald-500/20 shadow-2xl flex-grow flex flex-col">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <div>
-                    <h3 class="text-lg font-bold text-white tracking-tight">Curva de Crecimiento</h3>
-                    <p class="text-[10px] text-emerald-500/60 uppercase font-black tracking-widest">Equity Monitoring System</p>
-                </div>
-                <select id="chart-param-selector" class="bg-gray-900 text-xs font-bold text-emerald-400 p-2 rounded-xl border-2 border-emerald-500/30 outline-none">
-                    <option value="accumulatedProfit">Rendimiento Acumulado (%)</option>
-                    <option value="durationHours">Duración por Ciclo (Hrs)</option>
-                </select>
-            </div>
+        <div class="w-full lg:w-1/3 flex flex-col gap-6">
             
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="bg-indigo-900/10 p-4 rounded-2xl border-2 border-indigo-500/20">
-                    <p class="text-[10px] text-gray-500 uppercase font-bold">Rend. Promedio</p>
-                    <p id="cycle-avg-profit" class="text-2xl font-black text-yellow-500">0.00%</p>
+            <div class="bg-gray-800/50 backdrop-blur-md p-6 rounded-[2rem] border border-gray-700 shadow-2xl space-y-6">
+                
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em]">Market Price</p>
+                        <div class="flex items-baseline gap-2">
+                            <span id="auprice" class="text-3xl font-mono font-bold text-white">$0.00</span>
+                            <span id="price-change-container" class="text-[10px] flex items-center font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full">
+                                <i id="price-icon" class="fas fa-caret-up mr-0.5"></i>
+                                <span id="price-percent">0.00%</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Total Profit</p>
+                        <span id="auprofit" class="text-3xl font-mono font-bold text-emerald-400">+$0.00</span>
+                    </div>
                 </div>
-                <div class="bg-indigo-900/10 p-4 rounded-2xl border-2 border-indigo-500/20 text-right">
-                    <p class="text-[10px] text-gray-500 uppercase font-bold">Ciclos Cerrados</p>
-                    <p id="total-cycles-closed" class="text-2xl font-black text-indigo-400">0</p>
+
+                <div class="bg-black/40 p-4 rounded-2xl border border-gray-700/50 flex items-center gap-4">
+                    <div class="relative w-16 h-16 flex-shrink-0">
+                        <canvas id="balanceDonutChart"></canvas>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <i class="fas fa-chart-pie text-gray-600 text-[10px]"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow space-y-2">
+                        <div class="flex justify-between text-[9px] font-bold uppercase">
+                            <span class="text-emerald-400">USDT</span>
+                            <span id="aubalance-usdt" class="text-white font-mono">0.00</span>
+                        </div>
+                        <div class="w-full bg-gray-700 h-1 rounded-full overflow-hidden">
+                            <div id="usdt-bar" class="bg-emerald-500 h-full transition-all duration-1000" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between text-[9px] font-bold uppercase pt-1">
+                            <span class="text-orange-400">BTC</span>
+                            <span id="aubalance-btc" class="text-white font-mono">0.000000</span>
+                        </div>
+                        <div class="w-full bg-gray-700 h-1 rounded-full overflow-hidden">
+                            <div id="btc-bar" class="bg-orange-500 h-full transition-all duration-1000" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center bg-gray-900/60 p-3 rounded-xl border border-gray-700/30">
+                        <div class="flex items-center gap-3">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
+                            <span class="text-[10px] text-gray-400 font-bold uppercase">Long Bot</span>
+                        </div>
+                        <div class="text-[10px] font-mono">
+                            <span id="aubot-lstate" class="font-bold text-red-400 mr-2">STOPPED</span>
+                            <span class="text-gray-500">Cyc: <span id="aulcycle" class="text-gray-300">0</span></span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center bg-gray-900/60 p-3 rounded-xl border border-gray-700/30">
+                        <div class="flex items-center gap-3">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
+                            <span class="text-[10px] text-gray-400 font-bold uppercase">Short Bot</span>
+                        </div>
+                        <div class="text-[10px] font-mono">
+                            <span id="aubot-sstate" class="font-bold text-red-400 mr-2">STOPPED</span>
+                            <span class="text-gray-500">Cyc: <span id="auscycle" class="text-gray-300">0</span></span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center bg-gray-900/60 p-3 rounded-xl border border-gray-700/30">
+                        <div class="flex items-center gap-3">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]"></span>
+                            <span class="text-[10px] text-gray-400 font-bold uppercase">AI Logic</span>
+                        </div>
+                        <div class="text-[10px] font-mono">
+                            <span id="aubot-aistate" class="font-bold text-red-400 mr-2">STOPPED</span>
+                            <span class="text-gray-500">Cyc: <span id="auaicycle" class="text-gray-300">0</span></span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="relative flex-grow h-full w-full bg-black/20 rounded-2xl p-4 border border-white/5">
-                <canvas id="equityCurveChart"></canvas>
+            <div class="bg-gray-800/50 backdrop-blur-md p-6 rounded-[2rem] border border-gray-700 shadow-xl space-y-4">
+                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-2">Master Configuration</h3>
+                
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="space-y-1">
+                        <label class="block text-[8px] text-gray-500 font-bold uppercase text-center">Amount L</label>
+                        <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-2 rounded-xl bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500 transition-all"/>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="block text-[8px] text-gray-500 font-bold uppercase text-center">Amount S</label>
+                        <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-2 rounded-xl bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500 transition-all"/>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="block text-[8px] text-gray-500 font-bold uppercase text-center">Amount AI</label>
+                        <input id="auamountai-usdt" type="number" step="1" value="6.00" class="w-full p-2 rounded-xl bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500 transition-all"/>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 py-2">
+                    <div class="flex flex-col items-center bg-gray-900/60 p-2 rounded-xl border border-gray-700">
+                        <input type="checkbox" id="au-stop-long-at-cycle" class="w-3 h-3 rounded border-gray-600 text-emerald-500 focus:ring-0">
+                        <label for="au-stop-long-at-cycle" class="text-[8px] text-gray-400 font-bold uppercase mt-1">Stop L</label>
+                    </div>
+                    <div class="flex flex-col items-center bg-gray-900/60 p-2 rounded-xl border border-gray-700">
+                        <input type="checkbox" id="au-stop-short-at-cycle" class="w-3 h-3 rounded border-gray-600 text-emerald-500 focus:ring-0">
+                        <label for="au-stop-short-at-cycle" class="text-[8px] text-gray-400 font-bold uppercase mt-1">Stop S</label>
+                    </div>
+                    <div class="flex flex-col items-center bg-gray-900/60 p-2 rounded-xl border border-gray-700">
+                        <input type="checkbox" id="au-stop-ai-at-cycle" class="w-3 h-3 rounded border-gray-600 text-emerald-500 focus:ring-0">
+                        <label for="au-stop-ai-at-cycle" class="text-[8px] text-gray-400 font-bold uppercase mt-1">Stop AI</label>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="austartl-btn" class="flex-1 bg-emerald-600/90 hover:bg-emerald-500 py-3 rounded-xl font-bold text-[9px] uppercase text-white transition-all shadow-lg shadow-emerald-900/20">Start L</button>      
+                    <button id="austarts-btn" class="flex-1 bg-emerald-600/90 hover:bg-emerald-500 py-3 rounded-xl font-bold text-[9px] uppercase text-white transition-all shadow-lg shadow-emerald-900/20">Start S</button> 
+                    <button id="austartai-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-[9px] uppercase text-white transition-all shadow-lg shadow-indigo-900/20">Start AI</button>                                            
+                </div>            
+            </div>
+
+            <div class="bg-gray-800/50 backdrop-blur-md p-5 rounded-[2rem] border border-gray-700 shadow-xl space-y-4">
+                 <h3 class="text-[9px] font-bold text-gray-500 uppercase tracking-widest text-center">Network Health</h3>
+                 <div class="grid grid-cols-2 gap-3">
+                     <div class="bg-black/30 p-2 rounded-xl border border-gray-700/30 flex items-center justify-between px-3">
+                         <span class="text-[8px] text-gray-500 font-bold">MARKET</span>
+                         <span id="health-market-ws-text" class="text-[9px] font-mono text-gray-400">OFFLINE</span>
+                     </div>
+                     <div class="bg-black/30 p-2 rounded-xl border border-gray-700/30 flex items-center justify-between px-3">
+                         <span class="text-[8px] text-gray-500 font-bold">USER</span>
+                         <span id="health-user-ws-text" class="text-[9px] font-mono text-gray-400">OFFLINE</span>
+                     </div>
+                 </div>
+            </div>
+        </div>
+
+        <div class="flex-grow flex flex-col gap-6">
+            <div class="bg-gray-800/50 backdrop-blur-md p-8 rounded-[2.5rem] border border-gray-700 shadow-2xl flex-grow flex flex-col">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-white tracking-tight">Growth Performance</h3>
+                        <p class="text-xs text-emerald-500/60 uppercase font-black tracking-widest">Equity Monitoring System</p>
+                    </div>
+                    <select id="chart-param-selector" class="bg-gray-900 text-[10px] font-bold text-emerald-400 p-3 rounded-2xl border border-gray-700 outline-none hover:border-emerald-500 transition-all cursor-pointer">
+                        <option value="accumulatedProfit">Rendimiento Acumulado (%)</option>
+                        <option value="durationHours">Duración por Ciclo (Hrs)</option>
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-indigo-500/5 p-6 rounded-3xl border border-indigo-500/20">
+                        <p class="text-[10px] text-gray-500 uppercase font-bold mb-1">Rendimiento Medio</p>
+                        <p id="cycle-avg-profit" class="text-4xl font-black text-white">0.00%</p>
+                    </div>
+                    <div class="bg-indigo-500/5 p-6 rounded-3xl border border-indigo-500/20 text-right">
+                        <p class="text-[10px] text-gray-500 uppercase font-bold mb-1">Ciclos Cerrados</p>
+                        <p id="total-cycles-closed" class="text-4xl font-black text-white">0</p>
+                    </div>
+                </div>
+
+                <div class="relative flex-grow min-h-[400px] w-full bg-black/30 rounded-[2rem] p-6 border border-gray-700/50 shadow-inner">
+                    <canvas id="equityCurveChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
