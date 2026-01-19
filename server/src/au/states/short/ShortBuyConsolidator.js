@@ -10,8 +10,8 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
  * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy).
  */
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
-    const sStateData = botState.sStateData || {}; // Protección de acceso
-    const lastOrder = sStateData.lastOrder;
+    // ✅ MIGRADO: Referencia a slastOrder en la raíz
+    const lastOrder = botState.slastOrder;
 
     // En Short, el ciclo se cierra con una compra (buy) para cubrir la venta previa
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
@@ -50,6 +50,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
             
             // Centralizamos la decisión: ¿Ir a SELLING (Exponencial) o a STOPPED?
             // El Manager leerá config.short.stopAtCycle
+            // handleSuccessfulShortBuy se encargará de resetear sac, sppc, socc y slastOrder en raíz
             await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
 
             return true;
@@ -63,7 +64,8 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
         // === CASO C: ORDEN FALLIDA O CANCELADA ===
         if (isCanceled && filledVolume === 0) {
             log(`❌ [S-BUY-FAIL] Recompra cancelada sin ejecución. Liberando para reintento...`, 'error');
-            await updateSStateData({ 'lastOrder': null });
+            // ✅ MIGRADO: Limpieza de slastOrder en raíz
+            await updateSStateData({ 'slastOrder': null });
             return true;
         }
 

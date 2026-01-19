@@ -7,8 +7,8 @@ const { handleSuccessfulShortSell } = require('../../managers/shortDataManager')
  * Monitorea órdenes de VENTA (apertura o DCA de Short).
  */
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
-    const sStateData = botState.sStateData || {}; // Protección de acceso
-    const lastOrder = sStateData.lastOrder;
+    // ✅ CAMBIO DE PARÁMETRO: Referencia a raíz slastOrder
+    const lastOrder = botState.slastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false;
@@ -63,7 +63,8 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
         // --- CASO 3: ORDEN CANCELADA ---
         if (isCanceled) {
             log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada sin ejecutarse. Liberando estado.`, 'error');
-            await updateSStateData({ 'lastOrder': null });
+            // ✅ CAMBIO DE PARÁMETRO: Limpieza de slastOrder en raíz
+            await updateSStateData({ 'slastOrder': null });
             return false;
         }
 

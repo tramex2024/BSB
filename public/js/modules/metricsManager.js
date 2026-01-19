@@ -23,9 +23,9 @@ export function setBotFilter(filter) {
 }
 
 function updateMetricsDisplay() {
-    if (cycleHistoryData.length === 0) return;
+    if (!cycleHistoryData || cycleHistoryData.length === 0) return resetKPIs();
 
-    // 1. Filtrar por estrategia
+    // 1. Filtrar por estrategia (campo "strategy" de tu MongoDB)
     const filtered = currentBotFilter === 'all' 
         ? cycleHistoryData 
         : cycleHistoryData.filter(c => c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
@@ -33,31 +33,37 @@ function updateMetricsDisplay() {
     const totalCycles = filtered.length;
     if (totalCycles === 0) return resetKPIs();
 
-    // 2. CÁLCULOS AVANZADOS
+    // 2. CÁLCULOS DE ALTA PRECISIÓN
     let totalProfitPct = 0;
     let totalNetProfitUsdt = 0;
     let winningCycles = 0;
-    let totalHours = 0;
+    let totalTimeMs = 0;
 
     filtered.forEach(cycle => {
-        totalProfitPct += (cycle.profitPercentage || 0);
-        totalNetProfitUsdt += (cycle.netProfit || 0);
+        // Sumamos Profit base
+        totalProfitPct += (parseFloat(cycle.profitPercentage) || 0);
+        totalNetProfitUsdt += (parseFloat(cycle.netProfit) || 0);
         
-        // Win Rate: Si el netProfit es mayor a 0 es una victoria
-        if ((cycle.netProfit || 0) > 0) winningCycles++;
+        // Win Rate
+        if ((parseFloat(cycle.netProfit) || 0) > 0) winningCycles++;
 
-        // Eficiencia: Calcular horas de duración
-        if (cycle.startTime?.$date && cycle.endTime?.$date) {
-            const start = new Date(cycle.startTime.$date);
-            const end = new Date(cycle.endTime.$date);
-            const diffHours = (end - start) / (1000 * 60 * 60);
-            totalHours += diffHours > 0 ? diffHours : 0;
+        // Cálculo de Tiempo (Precisión de milisegundos)
+        const start = cycle.startTime?.$date ? new Date(cycle.startTime.$date) : null;
+        const end = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : null;
+
+        if (start && end && !isNaN(start) && !isNaN(end)) {
+            const diff = end - start;
+            if (diff > 0) totalTimeMs += diff;
         }
     });
 
+    // Conversiones finales
     const avgProfit = totalProfitPct / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
-    const profitPerHour = totalHours > 0 ? (totalNetProfitUsdt / totalHours) : 0;
+    
+    // Profit por Hora (totalNetProfit / totalHours)
+    const totalHours = totalTimeMs / (1000 * 60 * 60);
+    const profitPerHour = totalHours > 0.01 ? (totalNetProfitUsdt / totalHours) : totalNetProfitUsdt;
 
     // 3. ACTUALIZAR INTERFAZ
     renderText('total-cycles-closed', totalCycles);
@@ -66,11 +72,13 @@ function updateMetricsDisplay() {
         `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`
     );
     
-    // Actualizar Win Rate
-    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`);
+    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, 
+        `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`
+    );
     
-    // Actualizar Eficiencia (Profit/Hora)
-    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
+    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, 
+        `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`
+    );
 
     // 4. Renderizar Gráfico
     renderEquityCurve(filtered, currentChartParameter);
@@ -79,8 +87,8 @@ function updateMetricsDisplay() {
 function resetKPIs() {
     renderText('total-cycles-closed', '0');
     renderText('cycle-avg-profit', '0.00%', 'text-sm font-bold text-gray-500');
-    renderText('cycle-win-rate', '0%');
-    renderText('cycle-efficiency', '$0.00/h');
+    renderText('cycle-win-rate', '0%', 'text-sm font-bold text-gray-500');
+    renderText('cycle-efficiency', '$0.00/h', 'text-sm font-bold text-gray-500');
 }
 
 function renderText(id, text, className = null) {

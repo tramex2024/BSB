@@ -4,7 +4,7 @@ const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
 const SSTATE = 'short';
-const TRAILING_STOP_PERCENTAGE = 0.4; 
+const TRAILING_STOP_PERCENTAGE = 0.3; 
 
 async function run(dependencies) {
     const { 
@@ -16,20 +16,19 @@ async function run(dependencies) {
     // 0. VALIDACIÓN INICIAL DE PRECIO
     if (!currentPrice || currentPrice <= 0) return;
 
-    // Acceso seguro a los datos de estado Short
-    const sStateData = botState.sStateData || {};
-    const lastOrder = sStateData.lastOrder; 
-    const acBuying = parseFloat(sStateData.ac || 0);
-    const pm = parseFloat(sStateData.pm || 0); // Precio Mínimo (Suelo)
-    const pc = parseFloat(sStateData.pc || 0); // Precio de Cierre (Stop)
+    // ✅ MIGRADO A RAÍZ: Sustitución de parámetros sStateData por siglas de raíz
+    const slastOrder = botState.slastOrder;  // slastOrder en raíz
+    const acBuying = parseFloat(botState.sac || 0); // ac -> sac
+    const pm = parseFloat(botState.spm || 0); // pm -> spm (Suelo)
+    const pc = parseFloat(botState.spc || 0); // pc -> spc (Stop Recompra)
 
     // 1. BLOQUEO DE SEGURIDAD
-    if (lastOrder) {
-        log(`[S-BUYING] ⏳ Orden de recompra activa (ID: ${lastOrder.order_id}).`, 'debug');
+    if (slastOrder) {
+        log(`[S-BUYING] ⏳ Orden de recompra activa (ID: ${slastOrder.order_id}).`, 'debug');
         return;
     }
 
-    // 2. LÓGICA DE TRAILING STOP INVERSO
+    // 2. LÓGICA DE TRAILING STOP INVERSO (Lógica intacta, solo cambian nombres de variables)
     const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100;
 
     // Inicializamos o actualizamos el Suelo
@@ -43,8 +42,10 @@ async function run(dependencies) {
     if (newPm < currentMin || !pm) {
         log(`📉 [S-TRAILING] Suelo: ${newPm.toFixed(2)} | Stop Recompra baja a: ${newPc.toFixed(2)}`, 'info');
 
-        await updateSStateData({ pm: newPm, pc: newPc });
-        // Actualizamos sbprice en la raíz para el Dashboard
+        // ✅ MIGRADO: Actualizamos directamente spm y spc en la raíz
+        await updateSStateData({ spm: newPm, spc: newPc });
+        
+        // Sincronizamos sbprice si lo usas para el dashboard visual
         await updateGeneralBotState({ sbprice: newPc }); 
     }
 
@@ -53,12 +54,13 @@ async function run(dependencies) {
         
         const triggerPrice = pc > 0 ? pc : newPc;
 
-        // Si el precio rebota y cruza el Stop (newPc), cerramos el ciclo
+        // Si el precio rebota y cruza el Stop (triggerPrice), cerramos el ciclo
         if (currentPrice >= triggerPrice) {
             log(`💰 [S-CLOSE] ¡Rebote detectado! BTC ${currentPrice.toFixed(2)} >= Stop ${triggerPrice.toFixed(2)}. Recomprando deuda...`, 'success');
             
             try {
                 // Inyectamos las dependencias necesarias para que el Manager cierre el ciclo
+                // acBuying ya es botState.sac
                 await placeShortBuyOrder(config, botState, acBuying, log, updateSStateData, currentPrice, {
                     logSuccessfulCycle,
                     updateBotState,

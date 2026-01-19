@@ -42,12 +42,12 @@ app.use('/api/orders', require('./routes/ordersRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/autobot', require('./routes/autobotRoutes'));
 app.use('/api/v1/config', require('./routes/configRoutes'));
-app.use('/api/v1/bot-state', require('./routes/balanceRoutes'));
+app.use('/api/v1/balance', require('./routes/balanceRoutes')); // Ajustado nombre de ruta por claridad
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected (BSB 2026)...'))
+    .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Root Structure)...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --- 6. VARIABLES GLOBALES DE ESTADO ---
@@ -91,7 +91,7 @@ function setupMarketWS(io) {
                 const now = new Date();
                 const currentMinute = now.getMinutes();
 
-                // Análisis de indicadores (1 vez por minuto para no saturar CPU)
+                // Análisis de indicadores (1 vez por minuto)
                 if (currentMinute !== lastProcessedMinute) {
                     lastProcessedMinute = currentMinute;
                     const analysis = await analyzer.runAnalysis(price);
@@ -108,10 +108,10 @@ function setupMarketWS(io) {
                     io.emit('market-signal-update', analysis);
                 }
 
-                // Notificar Front-end
+                // Notificar Front-end con estado de conexión
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
-                // 🚀 GATILLO DEL BOT (Inyección de precio al ciclo exponencial)
+                // 🚀 GATILLO DEL BOT
                 try { aiEngine.analyze(price); } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
                 await autobotLogic.botCycle(price);
             }
@@ -120,19 +120,19 @@ function setupMarketWS(io) {
 
     marketWs.on('close', () => {
         isMarketConnected = false; 
-        setTimeout(() => setupMarketWS(io), 5000); // Reintento en 5s
+        setTimeout(() => setupMarketWS(io), 5000);
     });
 }
 
-// --- 8. WEBSOCKET ÓRDENES PRIVADAS (Para cierres de ciclo) ---
+// --- 8. WEBSOCKET ÓRDENES PRIVADAS ---
 bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 9. BUCLE SALDOS (Sync cada 10s con el Exchange) ---
+// --- 9. BUCLE SALDOS (Sync cada 10s) ---
 setInterval(async () => {
     try {
-        const apiSuccess = await autobotLogic.slowBalanceCacheUpdate();
+        await autobotLogic.slowBalanceCacheUpdate();
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
@@ -145,7 +145,7 @@ io.on('connection', (socket) => {
     // ESCUCHADOR DE CONFIGURACIÓN
     socket.on('update-bot-config', async (data) => {
         try {
-            // ✅ Sincroniza el cambio con la nueva estructura de la DB
+            // Actualización atómica de la configuración
             const updated = await Autobot.findOneAndUpdate(
                 {}, 
                 { $set: { config: data.config } }, 
@@ -157,14 +157,14 @@ io.on('connection', (socket) => {
 
     const sendFullBotStatus = async () => {
         try {
+            // ✅ Al usar .lean(), el Dashboard recibe la raíz plana (lac, sac, etc.)
             const state = await Autobot.findOne({}).lean();
             if (state) {
                 const currentPrice = autobotLogic.getLastPrice() || lastKnownPrice;
                 
-                // Enviamos estado completo al Front-end
                 socket.emit('bot-state-update', { ...state, price: currentPrice });
 
-                // Cálculo de estadísticas rápidas para Dashboard
+                // Estadísticas dinámicas basadas en las nuevas siglas
                 const totalAllocated = (state.config?.long?.amountUsdt || 0) + (state.config?.short?.amountUsdt || 0);
                 const totalProfit = state.total_profit || 0;
                 const profitPercent = totalAllocated > 0 ? (totalProfit / totalAllocated) * 100 : 0;

@@ -8,8 +8,8 @@
 const TRADE_SYMBOL = 'BTC_USDT';
 
 // BitMart requiere un mínimo de 5.00 USDT para órdenes de mercado.
-// 💡 Sugerencia: Usar 5.05 o 5.10 da un pequeño margen de seguridad contra fluctuaciones de precio.
-const MIN_USDT_VALUE_FOR_BITMART = 5.00;
+// 💡 Sugerencia: Usar 5.00 es el límite exacto, el bot ya gestiona el margen.
+const MIN_USDT_VALUE_FOR_BITMART = 6.00;
 
 // Comisiones estándar de BitMart (0.1%)
 const BUY_FEE_PERCENT = 0.001; 

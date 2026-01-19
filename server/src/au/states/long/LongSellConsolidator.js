@@ -10,8 +10,9 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
  * Delega la lógica de parada o reinicio al LongDataManager.
  */
 async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
-    const lStateData = botState.lStateData || {}; // Protección de acceso
-    const lastOrder = lStateData.lastOrder;
+    
+    // ✅ CAMBIO: Ahora leemos la orden directamente de la raíz (llastOrder)
+    const lastOrder = botState.llastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false; 
@@ -46,8 +47,7 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
                 config: botState.config // Contiene la nueva jerarquía config.long
             };
             
-            // Centralizamos aquí la lógica de STOPPED o reinicio a BUYING.
-            // Esto evita que el bot reciba órdenes contradictorias.
+            // ✅ handleSuccessfulSell se encargará de resetear las siglas de raíz (lac, lai, etc.)
             await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
 
             return true;
@@ -61,7 +61,9 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
         // === CASO C: FALLO O CANCELACIÓN SIN EJECUCIÓN ===
         if (isCanceled && filledVolume === 0) {
             log(`❌ [L-SELL-FAIL] Venta cancelada sin ejecución. Liberando para reintento...`, 'error');
-            await updateLStateData({ 'lastOrder': null });
+            
+            // ✅ CAMBIO: Limpiamos llastOrder en la raíz
+            await updateGeneralBotState({ llastOrder: null });
             return true;
         }
 

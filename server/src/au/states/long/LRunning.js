@@ -5,17 +5,17 @@ const MarketSignal = require('../../../../models/MarketSignal');
 async function run(dependencies) {
     const { botState, log, updateBotState } = dependencies;
     
-    // 1. VERIFICACIÓN DE SEGURIDAD (Anti-Duplicidad)
-    // Si ya hay capital invertido (AC > 0), el bot debe estar gestionando la compra o venta.
-    if (botState.lStateData && botState.lStateData.ac > 0) {
-        log("[L-RUNNING] 🛡️ Detectada posición abierta. Corrigiendo estado a BUYING...", 'warning');
+    // 1. VERIFICACIÓN DE SEGURIDAD (Arquitectura Plana)
+    // ✅ CAMBIO: Ahora verificamos 'lac' directamente en la raíz.
+    // Si lac > 0, significa que el bot ya tiene monedas compradas y debe estar en BUYING o SELLING.
+    if (parseFloat(botState.lac || 0) > 0) {
+        log("[L-RUNNING] 🛡️ Detectada posición abierta (lac > 0). Corrigiendo estado a BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
         return; 
     }
 
     // 2. CONSULTA DE SEÑAL GLOBAL
     try {
-        // Usamos el símbolo desde la configuración (jerarquía corregida)
         const currentSymbol = botState.config?.symbol || 'BTC_USDT';
         const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
 
@@ -25,7 +25,6 @@ async function run(dependencies) {
         }
 
         // 3. VALIDACIÓN DE FRESCURA
-        // Ajustado para usar 'lastUpdate' que es como lo guarda tu server.js
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
         if (!signalTime) {
             log("[L-RUNNING] ⚠️ Señal sin marca de tiempo. Esperando actualización...", 'warning');
@@ -39,12 +38,11 @@ async function run(dependencies) {
             return;
         }
 
-        // 4. LÓGICA DE ACTIVACIÓN
+        // 4. LÓGICA DE ACTIVACIÓN (Entrada al mercado)
         if (globalSignal.signal === 'BUY') { 
             log(`🚀 [L-SIGNAL] ¡COMPRA DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
             
-            // Transición inmediata a BUYING. 
-            // LBuying.js se encargará de ejecutar la primera compra con los nuevos parámetros.
+            // Transición a BUYING para que LBuying.js ejecute la primera orden exponencial.
             await updateBotState('BUYING', 'long'); 
             return; 
         }

@@ -11,23 +11,23 @@ const parseNumber = (val) => {
 
 /**
  * LÓGICA DE MONTO EXPONENCIAL
- * Formula: Amount = Base * (1 + sizeVar/100)^orderCount
+ * Formula: $Amount = Base \times (1 + \frac{sizeVar}{100})^{orderCount}$
  */
 function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     const base = parseNumber(baseAmount);
     const count = parseNumber(orderCount);
-    const sVar = parseNumber(sizeVar || 100);
-
-    const multiplier = 1 + (sVar / 100);
+    const sVar = parseNumber(sizeVar);
 
     if (base <= 0) return 0;
+    const multiplier = 1 + (sVar / 100);
+    
     // Si count es 0 (orden inicial), devuelve el baseAmount puro.
     return base * Math.pow(multiplier, count);
 }
 
 /**
- * LÓGICA DE DISTANCIA DE PRECIO (Price Var Dec)
- * Permite que cada cobertura esté un % más lejos que la anterior si se desea.
+ * LÓGICA DE DISTANCIA DE PRECIO (Price Var Increment)
+ * Permite que cada cobertura esté un % más lejos que la anterior.
  */
 function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncrement = 0) {
     const baseStep = parseNumber(basePriceVarDec);
@@ -38,14 +38,13 @@ function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncreme
 
 /**
  * CÁLCULO DE TARGET CON FEES (Precisión PNL)
- * Calcula el precio de salida necesario para obtener un beneficio NETO real.
+ * Asegura que el profit_percent sea NETO tras pagar comisiones de entrada y salida.
  */
 function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', feeRate = 0.001) {
     const p = parseNumber(entryPrice);
     const netProfitDec = parseNumber(targetProfitNet) / 100;
     
     // El precio debe cubrir el profit deseado + la comisión de entrada + la de salida
-    // Factor simplificado: (1 + %Profit + %FeeEntrada + %FeeSalida)
     const totalMarkup = netProfitDec + (feeRate * 2);
 
     if (side === 'long') {
@@ -56,18 +55,18 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
 }
 
 // ==========================================
-//           LÓGICA PARA LONG (COMPRA)
+//            LÓGICA PARA LONG
 // ==========================================
 
-function calculateLongTargets(lastPrice, profit_percent, price_var, size_var, orderCount, baseAmount) {
+function calculateLongTargets(lastPrice, config, orderCount) {
     const p = parseNumber(lastPrice);
-    const priceVarDec = parseNumber(price_var) / 100;
-    const feeRate = 0.001; // Standard Bitmart fee
+    const priceVarDec = parseNumber(config.price_var) / 100;
+    const feeRate = 0.001;
 
     return {
-        targetSellPrice: calculateTargetWithFees(p, profit_percent, 'long', feeRate),
+        targetSellPrice: calculateTargetWithFees(p, config.trigger, 'long', feeRate),
         nextCoveragePrice: p * (1 - priceVarDec),
-        requiredCoverageAmount: getExponentialAmount(baseAmount, orderCount, size_var)
+        requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, orderCount, config.size_var)
     };
 }
 
@@ -77,14 +76,14 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    while (numberOfExtraOrders < 30) {
+    // Límite de seguridad de 50 órdenes para evitar bucles infinitos
+    while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
 
         if (remainingBalance < nextOrderAmount) break;
 
         remainingBalance -= nextOrderAmount;
         
-        // Aplicamos el paso de precio exponencial para la simulación
         const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
         simulationPrice = simulationPrice * (1 - currentStep);
 
@@ -99,18 +98,18 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
 }
 
 // ==========================================
-//           LÓGICA PARA SHORT (VENTA)
+//            LÓGICA PARA SHORT
 // ==========================================
 
-function calculateShortTargets(lastPrice, profit_percent, price_var, size_var, orderCount, baseAmount) {
+function calculateShortTargets(lastPrice, config, orderCount) {
     const p = parseNumber(lastPrice);
-    const pVarDec = parseNumber(price_var) / 100;
+    const pVarDec = parseNumber(config.price_var) / 100;
     const feeRate = 0.001;
 
     return {
-        targetBuyPrice: calculateTargetWithFees(p, profit_percent, 'short', feeRate),
+        targetBuyPrice: calculateTargetWithFees(p, config.trigger, 'short', feeRate),
         nextCoveragePrice: p * (1 + pVarDec), 
-        requiredCoverageAmount: getExponentialAmount(baseAmount, orderCount, size_var)
+        requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, orderCount, config.size_var)
     };
 }
 
@@ -120,7 +119,7 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    while (numberOfExtraOrders < 30) {
+    while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
 
         if (remainingBalance < nextOrderAmount) break;
@@ -141,7 +140,7 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
 }
 
 // ==========================================
-//           PNL Y UTILIDADES
+//            PNL Y UTILIDADES
 // ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
@@ -164,23 +163,11 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
 
 function calculateInitialState(config, currentPrice) {
     const p = parseNumber(currentPrice);
-    const lBase = parseNumber(config.long?.purchaseUsdt || 0);
-    const sBase = parseNumber(config.short?.purchaseUsdt || 0);
-    const lSizeVar = parseNumber(config.long?.size_var || 100);
-    const sSizeVar = parseNumber(config.short?.size_var || 100);
     const feeRate = 0.001;
 
     return {
-        long: {
-            targetSellPrice: calculateTargetWithFees(p, config.long?.trigger, 'long', feeRate),
-            nextCoveragePrice: p * (1 - (parseNumber(config.long?.price_var || 0) / 100)),
-            requiredCoverageAmount: getExponentialAmount(lBase, 1, lSizeVar)
-        },
-        short: {
-            targetBuyPrice: calculateTargetWithFees(p, config.short?.trigger, 'short', feeRate),
-            nextCoveragePrice: p * (1 + (parseNumber(config.short?.price_var || 0) / 100)),
-            requiredCoverageAmount: getExponentialAmount(sBase, 1, sSizeVar)
-        }
+        long: calculateLongTargets(p, config.long, 1),
+        short: calculateShortTargets(p, config.short, 1)
     };
 }
 

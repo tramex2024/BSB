@@ -8,17 +8,16 @@ async function run(dependencies) {
     // Solo loguear una vez cada 10 minutos para no saturar los logs
     if (now - lastLogTime < 600000) return;
 
-    // Acceso seguro al estado de los datos (ac = Accumulated Coins)
-    const lStateData = botState.lStateData || {};
-    const ac = lStateData.ac || 0;
+    // ✅ MIGRADO: Acceso directo a lac (Long Accumulated Coins) en la raíz
+    const ac = parseFloat(botState.lac || 0);
 
     if (ac > 0) {
-        // Si hay posición abierta y el bot está en STOPPED, es un riesgo de pérdida
+        // Alerta crítica: Hay monedas compradas pero el bot está apagado.
         log(`[L-STOPPED] ⚠️ Bot detenido con posición abierta (${ac.toFixed(8)} BTC). El bot NO está gestionando el Take Profit ni el DCA. Requiere intervención manual.`, 'warning');
         lastLogTime = now;
     } else {
-        // Log de consola interno para confirmar que el ciclo de vida sigue activo
-        console.log("[L-STOPPED] En espera... Lado Long inactivo y sin posición."); 
+        // Log de consola interno (silencioso) para confirmar que el ciclo de vida sigue activo
+        console.log("[L-STOPPED] Lado Long inactivo y sin posición abierta."); 
         lastLogTime = now;
     }
 }

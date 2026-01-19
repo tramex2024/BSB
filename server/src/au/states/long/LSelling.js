@@ -1,22 +1,22 @@
 // BSB/server/src/au/states/long/LSelling.js
 
-// 🟢 CORRECCIÓN: Cambiado placeSellOrder por placeLongSellOrder para coincidir con el Manager
 const { placeLongSellOrder } = require('../../managers/longOrderManager');
 
 const MIN_SELL_AMOUNT_BTC = 0.00005;
 const LSTATE = 'long';
-const TRAILING_STOP_PERCENTAGE = 0.4; // 0.4% de retroceso para vender
+const TRAILING_STOP_PERCENTAGE = 0.3; // 0.3% de retroceso para vender
 
 async function run(dependencies) {
     const { 
         botState, currentPrice, config, log, 
-        updateLStateData, updateBotState, updateGeneralBotState 
+        updateBotState, updateGeneralBotState 
     } = dependencies;
     
-    // Acceso seguro a lStateData
-    const lStateData = botState.lStateData || {};
-    const lastOrder = lStateData.lastOrder; 
-    const { ac: acSelling, pm, pc } = lStateData;
+    // ✅ MIGRADO: Referencias directas a raíz
+    const lastOrder = botState.llastOrder; 
+    const acSelling = parseFloat(botState.lac || 0); // Monedas acumuladas
+    const pm = parseFloat(botState.lpm || 0);        // Precio Máximo alcanzado
+    const pc = parseFloat(botState.lpc || 0);        // Precio de Corte (Stop)
 
     // 1. BLOQUEO DE SEGURIDAD
     if (lastOrder) {
@@ -27,31 +27,35 @@ async function run(dependencies) {
     // 2. LÓGICA DE TRAILING STOP
     const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100;
 
-    // Aseguramos que pm (Precio Máximo) tenga un valor inicial válido
-    const newPm = Math.max(pm || 0, currentPrice);
+    // Aseguramos que pm tenga un valor inicial válido basado en el precio actual
+    const newPm = Math.max(pm, currentPrice);
     const newPc = newPm * (1 - trailingStopPercent);
 
-    if (newPm > (pm || 0)) {
+    // Si el precio sube, arrastramos el Stop hacia arriba
+    if (newPm > pm) {
         log(`📈 [L-TRAILING] Nuevo máximo: ${newPm.toFixed(2)}. Stop sube a: ${newPc.toFixed(2)}`, 'info');
 
-        // Actualizamos datos locales del estado Long
-        await updateLStateData({ pm: newPm, pc: newPc });
-        // Actualizamos el precio de stop visual en el dashboard general (lsprice)
-        await updateGeneralBotState({ lsprice: newPc });
+        // ✅ ACTUALIZACIÓN EN RAÍZ: Guardamos el nuevo máximo y el nuevo stop
+        await updateGeneralBotState({ 
+            lpm: newPm, 
+            lpc: newPc,
+            lsprice: newPc // Sincronización visual para el Dashboard
+        });
     }
 
     // 3. CONDICIÓN DE DISPARO
-    // Verificamos que tengamos BTC acumulado (AC) suficiente
+    // Verificamos que tengamos BTC acumulado (lac) suficiente
     if (acSelling >= MIN_SELL_AMOUNT_BTC) {
         
-        // El disparo ocurre si el precio cae por debajo del Stop (pc)
-        if (currentPrice <= (pc || newPc)) {
-            log(`💰 [L-SELL] ¡Trailing Stop activado! Precio ${currentPrice.toFixed(2)} <= Stop ${(pc || newPc).toFixed(2)}. Liquidando ${acSelling.toFixed(8)} BTC.`, 'success');
+        // El disparo ocurre si el precio cae por debajo del Stop (lpc)
+        const currentStop = pc || newPc;
+        
+        if (currentPrice <= currentStop) {
+            log(`💰 [L-SELL] ¡Trailing Stop activado! Precio ${currentPrice.toFixed(2)} <= Stop ${currentStop.toFixed(2)}. Liquidando ${acSelling.toFixed(8)} BTC.`, 'success');
             
             try {
-                // Pasamos 'config' (que ya tiene la nueva estructura config.long.trigger, etc.)
-                // aunque placeLongSellOrder use principalmente el símbolo y credenciales.
-                await placeLongSellOrder(config, botState, acSelling, log, updateLStateData); 
+                // Llamamos al manager para colocar la orden de mercado
+                await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState); 
             } catch (error) {
                 log(`❌ Error crítico al intentar vender: ${error.message}`, 'error');
                 
@@ -61,13 +65,12 @@ async function run(dependencies) {
                 }
             }
         } else {
-            // Log de seguimiento mientras el precio sube o se mantiene
-            const currentStop = pc || newPc;
+            // Log de seguimiento (Latido de venta)
             const distToStop = (((currentPrice / currentStop) - 1) * 100).toFixed(2);
             log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Máximo: ${newPm.toFixed(2)} | Stop Venta: ${currentStop.toFixed(2)} (-${distToStop}%) | AC: ${acSelling.toFixed(8)}`, 'info');
         }
     } else {
-        log(`[L-SELLING] ⚠️ AC insuficiente para vender (${acSelling ? acSelling.toFixed(8) : 0} BTC).`, 'warning');
+        log(`[L-SELLING] ⚠️ AC insuficiente para vender (${acSelling.toFixed(8)} BTC).`, 'warning');
     }
 }
 

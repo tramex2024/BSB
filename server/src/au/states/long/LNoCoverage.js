@@ -12,35 +12,38 @@ async function run(dependencies) {
     } = dependencies;
     
     const availableUSDT = parseFloat(realUSDT || 0);
-    const lStateData = botState.lStateData || {};
-    const { ac, ppc, orderCountInCycle } = lStateData;
     const currentLBalance = parseFloat(botState.lbalance || 0);
 
+    // ✅ MIGRADO: Referencias directas a raíz
+    const ac = parseFloat(botState.lac || 0);
+    const ppc = parseFloat(botState.lppc || 0);
+    const orderCountInCycle = parseInt(botState.locc || 0);
+
     // --- 1. ¿PODEMOS VENDER AUNQUE NO TENGAMOS FONDOS PARA COMPRAR? ---
+    // Si el precio sube y toca el target, salimos del modo espera hacia SELLING
     if (ac > 0 && botState.ltprice > 0 && currentPrice >= botState.ltprice) {
         log(`🚀 [L-RECOVERY] ¡Precio alcanzó objetivo (${botState.ltprice.toFixed(2)})! Volviendo a SELLING.`, 'success');
         await updateBotState('SELLING', 'long'); 
         return;
     }
 
-    // --- 2. RECALCULO DE REQUERIMIENTOS (Ajustado a la nueva DB) ---
-    // Usamos config.long.trigger en lugar de profit_percent
+    // --- 2. RECALCULO DE REQUERIMIENTOS (Ajustado a siglas de raíz) ---
     const recalculation = calculateLongTargets(
-        ppc || 0,
-        config.long?.trigger || 0,       // ✅ CORREGIDO: Antes profit_percent
-        config.long?.price_var || 0,     // ✅ Estructura jerárquica
-        config.long?.size_var || 0,      // ✅ Estructura jerárquica
-        config.long?.purchaseUsdt || 0,  // ✅ Estructura jerárquica
-        orderCountInCycle || 0,
+        ppc,
+        config.long?.trigger || 0,
+        config.long?.price_var || 0,
+        config.long?.size_var || 0,
+        config.long?.purchaseUsdt || 0,
+        orderCountInCycle,
         currentLBalance
     );
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
-    // Actualizamos el estado interno con los nuevos cálculos
-    await updateLStateData({ 
-        requiredCoverageAmount: requiredAmount, 
-        nextCoveragePrice: recalculation.nextCoveragePrice 
+    // ✅ ACTUALIZACIÓN EN RAÍZ: lrca (Required Amount) y lncp (Next Coverage Price)
+    await updateGeneralBotState({ 
+        lrca: requiredAmount, 
+        lncp: recalculation.nextCoveragePrice 
     });
 
     // --- 3. RESETEO CRÍTICO DE INDICADORES ---
@@ -59,9 +62,8 @@ async function run(dependencies) {
         log(`✅ [L-FONDOS] Capital recuperado (${availableUSDT.toFixed(2)} USDT). Reanudando BUYING...`, 'success');
         await updateBotState('BUYING', 'long');
     } else {
-        // Log de monitoreo (uso de optional chaining para evitar errores si config no existe)
         const sizeInfo = config.long?.size_var || 0;
-        log(`[L-NO_COVERAGE] En espera... Saldo: ${currentLBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Var: ${sizeInfo}%)`, 'debug');
+        log(`[L-NO_COVERAGE] En espera... Saldo: ${currentLBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Sig. Orden #${orderCountInCycle + 1})`, 'debug');
     }
 } 
 
