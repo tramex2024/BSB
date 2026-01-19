@@ -10,7 +10,8 @@ const autobotLogic = require('../autobotLogic');
 const bitmartService = require('../services/bitmartService');
 const { calculateInitialState } = require('../autobotCalculations');
 
-const { CLEAN_STRATEGY_DATA, CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../src/au/utils/cleanState');
+// ✅ RUTA CORREGIDA (Subiendo niveles correctamente si es necesario)
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../src/au/utils/cleanState');
 
 router.use(authMiddleware);
 
@@ -40,9 +41,6 @@ router.post('/update-config', configController.updateBotConfig);
 
 // --- RUTAS DE INICIO (START) ---
 
-/**
- * START GLOBAL: Enciende Long y Short simultáneamente
- */
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
@@ -51,34 +49,32 @@ router.post('/start', async (req, res) => {
 
         if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
 
-        const initialState = calculateInitialState(config, currentPrice);
         let autobot = await Autobot.findOne({});
         
         if (!autobot) {
-            autobot = new Autobot({ config: { ...config } });
+            autobot = new Autobot({ config: config });
         } else {
-            autobot.config = { ...autobot.config, ...config };
+            autobot.config = config; // Sincronizamos con lo que viene del front
         }
 
-        // Aplicamos estados iniciales dinámicos a ambos
-        autobot.config.long = { ...autobot.config.long, ...initialState.long, enabled: true };
-        autobot.config.short = { ...autobot.config.short, ...initialState.short, enabled: true };
-        
         autobot.lstate = 'RUNNING';
         autobot.sstate = 'RUNNING';
-        autobot.markModified('config');
+        
+        // Marcamos habilitados en config
+        if(autobot.config.long) autobot.config.long.enabled = true;
+        if(autobot.config.short) autobot.config.short.enabled = true;
 
+        autobot.markModified('config');
         await autobot.save();
+
         emitBotState(autobot, autobotLogic.io);
         res.json({ success: true, message: 'Bot global iniciado.', price: currentPrice });
     } catch (error) {
+        console.error("Error Start Global:", error);
         res.status(500).json({ success: false, message: 'Error al iniciar bot global.' });
     }
 });
 
-/**
- * START INDIVIDUAL: Enciende /api/autobot/start/long o /api/autobot/start/short
- */
 router.post('/start/:side', async (req, res) => {
     try {
         const { side } = req.params;
@@ -88,20 +84,19 @@ router.post('/start/:side', async (req, res) => {
         const currentPrice = parseFloat(tickerData.last_price);
         if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
 
-        const initialState = calculateInitialState(config, currentPrice);
-        
-        // BUSCAR O CREAR (Upsert)
         let autobot = await Autobot.findOne({});
         if (!autobot) {
             autobot = new Autobot({ config: config });
+        } else {
+            autobot.config = config;
         }
 
         if (side === 'long') {
-            autobot.config.long = { ...config.long, ...initialState.long, enabled: true };
             autobot.lstate = 'RUNNING';
+            if(autobot.config.long) autobot.config.long.enabled = true;
         } else if (side === 'short') {
-            autobot.config.short = { ...config.short, ...initialState.short, enabled: true };
             autobot.sstate = 'RUNNING';
+            if(autobot.config.short) autobot.config.short.enabled = true;
         }
 
         autobot.markModified('config');
@@ -110,29 +105,26 @@ router.post('/start/:side', async (req, res) => {
         emitBotState(autobot, autobotLogic.io);
         res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
     } catch (error) {
-        console.error("Error en Start:", error);
+        console.error("Error en Start Individual:", error);
         res.status(500).json({ success: false, message: `Error al iniciar ${req.params.side}.` });
     }
 });
 
 // --- RUTAS DE PARADA (STOP) ---
 
-/**
- * STOP GLOBAL: Apaga todo inmediatamente
- */
 router.post('/stop', async (req, res) => {
     try {
         const botState = await Autobot.findOne({});
         if (botState) {
             botState.lstate = 'STOPPED';
             botState.sstate = 'STOPPED';
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = false;
+            if(botState.config.long) botState.config.long.enabled = false;
+            if(botState.config.short) botState.config.short.enabled = false;
             
-            // Limpieza de datos operativos
+            // ✅ MIGRADO: Solo usamos siglas raíz y eliminamos lStateData/sStateData
             Object.assign(botState, CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT);
-            botState.lStateData = { ...CLEAN_STRATEGY_DATA };
-            botState.sStateData = { ...CLEAN_STRATEGY_DATA };
+            botState.set('lStateData', undefined); // Eliminamos objeto antiguo
+            botState.set('sStateData', undefined); // Eliminamos objeto antiguo
             
             botState.markModified('config');
             await botState.save();
@@ -140,13 +132,11 @@ router.post('/stop', async (req, res) => {
             res.json({ success: true, message: 'Bot global detenido.' });
         }
     } catch (error) {
+        console.error("Error Stop Global:", error);
         res.status(500).json({ success: false, message: 'Error al detener global.' });
     }
 });
 
-/**
- * STOP INDIVIDUAL: Apaga /api/autobot/stop/long o /api/autobot/stop/short
- */
 router.post('/stop/:side', async (req, res) => {
     try {
         const { side } = req.params;
@@ -154,14 +144,14 @@ router.post('/stop/:side', async (req, res) => {
         
         if (side === 'long') {
             bot.lstate = 'STOPPED';
-            bot.config.long.enabled = false;
+            if(bot.config.long) bot.config.long.enabled = false;
             Object.assign(bot, CLEAN_LONG_ROOT);
-            bot.lStateData = { ...CLEAN_STRATEGY_DATA };
+            bot.set('lStateData', undefined);
         } else if (side === 'short') {
             bot.sstate = 'STOPPED';
-            bot.config.short.enabled = false;
+            if(bot.config.short) bot.config.short.enabled = false;
             Object.assign(bot, CLEAN_SHORT_ROOT);
-            bot.sStateData = { ...CLEAN_STRATEGY_DATA };
+            bot.set('sStateData', undefined);
         }
 
         bot.markModified('config');
@@ -169,11 +159,10 @@ router.post('/stop/:side', async (req, res) => {
         emitBotState(bot, autobotLogic.io);
         res.json({ success: true, message: `${side} detenido correctamente.` });
     } catch (error) {
+        console.error("Error Stop Individual:", error);
         res.status(500).json({ success: false, message: `Error al detener ${req.params.side}.` });
     }
 });
-
-// --- CONSULTAS ---
 
 router.get('/config-and-state', async (req, res) => {
     try {
