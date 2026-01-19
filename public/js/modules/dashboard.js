@@ -10,31 +10,25 @@ import { updateBotUI } from './uiManager.js';
 
 let cycleHistoryData = []; 
 let currentChartParameter = 'accumulatedProfit'; 
-let balanceChart = null; // Variable para el gráfico circular
+let currentBotFilter = 'all'; // <-- NUEVA VARIABLE: Controla el bot seleccionado
+let balanceChart = null; 
 
-// --- CONFIGURACIÓN DE AUDIO ---
 const sounds = {
     buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
     sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'),
 };
 Object.values(sounds).forEach(s => s.volume = 0.4);
 
-/**
- * Inicialización principal del Dashboard
- */
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Sincronizando con Memoria Central");
 
-    // 1. Inicializar componentes visuales
     initBalanceChart();
 
-    // 2. Aplicar estado inicial inmediatamente
     if (initialState) {
         updateBotUI(initialState);
         updateDistributionWidget(initialState);
     }
 
-    // 3. Limpieza de listeners previos para evitar duplicidad
     if (socket) {
         socket.off('market-signal-update');
         socket.off('order-executed');
@@ -43,17 +37,70 @@ export function initializeDashboardView(initialState) {
         socket.off('bot-state-update');
     }
 
-    // 4. Activar componentes de la interfaz
     setupSocketListeners();
-    setupChartSelector();
+    setupChartSelectors(); // <-- MODIFICADO: Ahora maneja ambos selectores
     setupTestButton(); 
     
-    // 5. Carga de datos externos (Gráficos y KPIs)
     loadAndRenderEquityCurve();
     loadAndDisplayKpis();
 
-    // 6. Actualización de salud visual
     updateHealthStatus('health-market-ws-text', socket?.connected);
+}
+
+/**
+ * Función de filtrado: Actualiza el Gráfico y los Contadores (KPIs)
+ */
+function processAndRenderChart() {
+    if (cycleHistoryData.length === 0) return;
+
+    // 1. Filtrar los datos según el selector de Bot (campo "strategy")
+    let filteredData = cycleHistoryData;
+    if (currentBotFilter !== 'all') {
+        filteredData = cycleHistoryData.filter(cycle => 
+            cycle.strategy?.toLowerCase() === currentBotFilter.toLowerCase()
+        );
+    }
+
+    // 2. Calcular nuevos KPIs basados en los datos filtrados
+    const totalCycles = filteredData.length;
+    const totalProfit = filteredData.reduce((acc, cycle) => acc + (cycle.profitPercentage || 0), 0);
+    const avgProfit = totalCycles > 0 ? (totalProfit / totalCycles) : 0;
+
+    // 3. Actualizar los textos en la pantalla (Interfaz)
+    updateElementText('total-cycles-closed', totalCycles);
+    updateElementText('cycle-avg-profit', 
+        `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
+        `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`
+    );
+
+    console.log(`📊 Mostrando ${totalCycles} ciclos de tipo: ${currentBotFilter}`);
+
+    // 4. Renderizar el gráfico con los datos filtrados
+    renderEquityCurve(filteredData, currentChartParameter);
+}
+
+/**
+ * MODIFICADO: Configura ambos selectores (Parámetro y Bot)
+ */
+function setupChartSelectors() {
+    const paramSelector = document.getElementById('chart-param-selector');
+    const botSelector = document.getElementById('chart-bot-selector');
+
+    // Escuchar cambio de parámetro (Profit/Duración)
+    if (paramSelector) {
+        paramSelector.addEventListener('change', (e) => {
+            currentChartParameter = e.target.value;
+            processAndRenderChart();
+        });
+    }
+
+    // Escuchar cambio de bot (Long/Short/AI)
+    if (botSelector) {
+        botSelector.addEventListener('change', (e) => {
+            currentBotFilter = e.target.value;
+            processAndRenderChart();
+        });
+    }
 }
 
 /**
@@ -63,7 +110,6 @@ function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
 
-    // Si ya existe un gráfico, lo destruimos para crear uno limpio
     if (balanceChart) {
         balanceChart.destroy();
     }
@@ -75,7 +121,7 @@ function initBalanceChart() {
             labels: ['USDT', 'BTC'],
             datasets: [{
                 data: [100, 0], 
-                backgroundColor: ['#10b981', '#f59e0b'], // Esmeralda para USDT, Naranja para BTC
+                backgroundColor: ['#10b981', '#f59e0b'], 
                 borderWidth: 0,
                 cutout: '75%'
             }]
@@ -92,9 +138,6 @@ function initBalanceChart() {
     });
 }
 
-/**
- * Actualiza el Widget de Distribución con datos reales
- */
 function updateDistributionWidget(state) {
     if (!balanceChart) return;
 
@@ -102,7 +145,6 @@ function updateDistributionWidget(state) {
     const btcAmount = parseFloat(state.balances?.BTC || 0);
     const price = parseFloat(state.marketPrice || 0);
     
-    // Calculamos el valor de BTC en dólares para comparar peras con peras
     const btcInUsdt = btcAmount * price;
     const total = usdt + btcInUsdt;
 
@@ -110,11 +152,9 @@ function updateDistributionWidget(state) {
         const usdtPct = (usdt / total) * 100;
         const btcPct = (btcInUsdt / total) * 100;
 
-        // Actualizar Gráfico Circular
         balanceChart.data.datasets[0].data = [usdtPct, btcPct];
         balanceChart.update();
 
-        // Actualizar Barras de progreso (las líneas horizontales)
         const usdtBar = document.getElementById('usdt-bar');
         const btcBar = document.getElementById('btc-bar');
         if (usdtBar) usdtBar.style.width = `${usdtPct}%`;
@@ -122,13 +162,9 @@ function updateDistributionWidget(state) {
     }
 }
 
-/**
- * Gestión de Sockets
- */
 function setupSocketListeners() {
     if (!socket) return;
 
-    // Señales del Analizador RSI
     socket.on('market-signal-update', (analysis) => {
         const signalEl = document.getElementById('health-analyzer-signal');
         const reasonEl = document.getElementById('health-analyzer-reason');
@@ -142,7 +178,6 @@ function setupSocketListeners() {
         if (reasonEl) reasonEl.textContent = analysis.reason || 'Analizando...';
     });
 
-    // Notificaciones de Ejecución
     socket.on('order-executed', (order) => {
         const side = order.side.toLowerCase();
         if (side === 'buy') {
@@ -154,13 +189,11 @@ function setupSocketListeners() {
         }
     });
     
-    // Latido del bot (State Update)
     socket.on('bot-state-update', (fullState) => {
         updateBotUI(fullState);
-        updateDistributionWidget(fullState); // Sincroniza el gráfico de balance
+        updateDistributionWidget(fullState); 
     });
  
-    // Evento de cierre de ciclo
     socket.on('cycle-closed', () => {
         sounds.sell.play().catch(() => {});
         flashElement('auprofit', 'bg-yellow-500/30');
@@ -168,7 +201,6 @@ function setupSocketListeners() {
         loadAndDisplayKpis();
     });
 
-    // Mini-Widget de IA
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
@@ -191,24 +223,6 @@ function setupSocketListeners() {
     });
 }
 
-/**
- * Selector de parámetros para el gráfico de Chart.js
- */
-function setupChartSelector() {
-    const selector = document.getElementById('chart-param-selector');
-    if (selector) {
-        selector.addEventListener('change', (e) => {
-            currentChartParameter = e.target.value;
-            if (cycleHistoryData.length > 0) {
-                renderEquityCurve(cycleHistoryData, currentChartParameter);
-            }
-        });
-    }
-}
-
-/**
- * Botón de prueba
- */
 function setupTestButton() {
     const testBtn = document.getElementById('test-notification-btn');
     if (!testBtn) return;
@@ -223,8 +237,6 @@ function setupTestButton() {
         flashElement('auprice', 'bg-emerald-500/40');
     });
 }
-
-// --- CARGA DE DATOS API ---
 
 async function loadAndDisplayKpis() {
     try {
@@ -244,12 +256,10 @@ async function loadAndRenderEquityCurve() {
         const curveData = await fetchEquityCurveData();
         if (curveData?.length > 0) {
             cycleHistoryData = curveData;
-            renderEquityCurve(cycleHistoryData, currentChartParameter);
+            processAndRenderChart(); // <-- MODIFICADO: Usa la nueva función con filtro
         }
     } catch (e) { console.error("Error cargando gráfico:", e); }
 }
-
-// --- UTILIDADES DE INTERFAZ ---
 
 function updateHealthStatus(textId, isOnline) {
     const txt = document.getElementById(textId);

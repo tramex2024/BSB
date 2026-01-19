@@ -90,9 +90,9 @@
             </div>
 
             <div class="flex gap-1.5">
-                <button id="austartl-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg">L</button>      
-                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg">S</button> 
-                <button id="austartai-btn" class="flex-1 bg-indigo-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg">AI</button>                                            
+                <button id="austartl-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">L</button>      
+                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">S</button> 
+                <button id="austartai-btn" class="flex-1 bg-indigo-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-indigo-500 transition-colors">AI</button>                                             
             </div>
         </div>
 
@@ -116,10 +116,20 @@
                     <h3 class="text-[10px] font-bold text-white uppercase tracking-widest">Growth Analytics</h3>
                     <p class="text-[8px] text-emerald-500/60 font-bold">Equity Monitoring</p>
                 </div>
-                <select id="chart-param-selector" class="bg-gray-900 text-[9px] font-bold text-emerald-400 p-1 px-2 rounded border border-gray-700 outline-none">
-                    <option value="accumulatedProfit">Profit (%)</option>
-                    <option value="durationHours">Duration (H)</option>
-                </select>
+                
+                <div class="flex gap-2">
+                    <select id="chart-bot-selector" class="bg-gray-900 text-[9px] font-bold text-indigo-400 p-1 px-2 rounded border border-gray-700 outline-none focus:border-indigo-500">
+                        <option value="all">All Bots</option>
+                        <option value="long">Long Bot</option>
+                        <option value="short">Short Bot</option>
+                        <option value="ai">AI Logic</option>
+                    </select>
+
+                    <select id="chart-param-selector" class="bg-gray-900 text-[9px] font-bold text-emerald-400 p-1 px-2 rounded border border-gray-700 outline-none focus:border-emerald-500">
+                        <option value="accumulatedProfit">Profit (%)</option>
+                        <option value="durationHours">Duration (H)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="grid grid-cols-2 gap-2 mb-3">
