@@ -62,20 +62,20 @@ const autobotSchema = new mongoose.Schema({
             enabled: { type: Boolean, default: false },
             amountUsdt: { type: Number, default: 6.00 },
             purchaseUsdt: { type: Number, default: 6.00 },
-            price_var: { type: Number, default: 0.1 },
-            size_var: { type: Number, default: 5.0 },
+            price_var: { type: Number, default: 0.5 },
+            size_var: { type: Number, default: 100 },
             profit_percent: { type: Number, default: 1.5 }, // ✅ Antes trigger
-            price_step_inc: { type: Number, default: 0.1 }, // ✅ Nuevo: Incremento de paso
+            price_step_inc: { type: Number, default: 2.0 }, // ✅ Nuevo: Incremento de paso
             stopAtCycle: { type: Boolean, default: false }
         },
         short: {
             enabled: { type: Boolean, default: false },
             amountUsdt: { type: Number, default: 6.00 },
             purchaseUsdt: { type: Number, default: 6.00 },
-            price_var: { type: Number, default: 0.1 },
-            size_var: { type: Number, default: 5.0 },
+            price_var: { type: Number, default: 0.5 },
+            size_var: { type: Number, default: 100 },
             profit_percent: { type: Number, default: 1.5 }, // ✅ Antes trigger
-            price_step_inc: { type: Number, default: 0.1 }, // ✅ Nuevo: Incremento de paso
+            price_step_inc: { type: Number, default: 2.0 }, // ✅ Nuevo: Incremento de paso
             stopAtCycle: { type: Boolean, default: false }
         }
     },
