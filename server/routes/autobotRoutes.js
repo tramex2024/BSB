@@ -1,4 +1,4 @@
-// server/routes/autobotRoutes.js
+// BSB/server/routes/autobotRoutes.js
 
 const express = require('express');
 const router = express.Router();
@@ -8,9 +8,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 const configController = require('../controllers/configController');
 const autobotLogic = require('../autobotLogic');
 const bitmartService = require('../services/bitmartService');
-const { calculateInitialState } = require('../autobotCalculations');
-
-const { CLEAN_STRATEGY_DATA, CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../src/au/utils/cleanState');
 
 router.use(authMiddleware);
 
@@ -18,21 +15,22 @@ router.use(authMiddleware);
  * Utility para emitir el estado del bot por Sockets
  */
 const emitBotState = (autobot, io) => {
-    const botData = autobot.toObject();
-    const payload = {
-        lstate: botData.lstate, sstate: botData.sstate,
-        lprofit: botData.lprofit, sprofit: botData.sprofit,
-        lbalance: botData.lbalance, sbalance: botData.sbalance,
-        lcycle: botData.lcycle, scycle: botData.scycle,
-        lcoverage: botData.lcoverage, scoverage: botData.scoverage,
-        lnorder: botData.lnorder, snorder: botData.snorder,
-        total_profit: botData.total_profit,
-        lastAvailableUSDT: botData.lastAvailableUSDT,
-        config: botData.config 
-    };
-
-    if (io) io.emit('bot-state-update', payload);
-    return payload;
+    try {
+        const payload = {
+            lstate: autobot.lstate,
+            sstate: autobot.sstate,
+            lStateData: autobot.lStateData,
+            sStateData: autobot.sStateData,
+            config: autobot.config,
+            total_profit: autobot.total_profit,
+            lastAvailableUSDT: autobot.lastAvailableUSDT
+        };
+        if (io) {
+            io.emit('bot-state-update', payload);
+        }
+    } catch (err) {
+        console.error("Error en emitBotState:", err.message);
+    }
 };
 
 // --- CONFIGURACIÓN ---
@@ -40,140 +38,133 @@ router.post('/update-config', configController.updateBotConfig);
 
 // --- RUTAS DE INICIO (START) ---
 
-/**
- * START GLOBAL: Enciende Long y Short simultáneamente
- */
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
-        const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
+        
+        // Blindaje del símbolo para no romper el bitmartService
+        const symbol = (config && config.symbol) ? config.symbol : 'BTC_USDT';
+        const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
 
-        if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
-
-        const initialState = calculateInitialState(config, currentPrice);
-        let autobot = await Autobot.findOne({});
-        
-        if (!autobot) {
-            autobot = new Autobot({ config: { ...config } });
-        } else {
-            autobot.config = { ...autobot.config, ...config };
+        if (isNaN(currentPrice)) {
+            return res.status(503).json({ success: false, message: 'Precio no disponible.' });
         }
 
-        // Aplicamos estados iniciales dinámicos a ambos
-        autobot.config.long = { ...autobot.config.long, ...initialState.long, enabled: true };
-        autobot.config.short = { ...autobot.config.short, ...initialState.short, enabled: true };
-        
-        autobot.lstate = 'RUNNING';
-        autobot.sstate = 'RUNNING';
-        autobot.markModified('config');
-
-        await autobot.save();
-        emitBotState(autobot, autobotLogic.io);
-        res.json({ success: true, message: 'Bot global iniciado.', price: currentPrice });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Error al iniciar bot global.' });
-    }
-});
-
-/**
- * START INDIVIDUAL: Enciende /api/autobot/start/long o /api/autobot/start/short
- */
-router.post('/start/:side', async (req, res) => {
-    try {
-        const { side } = req.params;
-        const { config } = req.body;
-        
-        const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
-        const currentPrice = parseFloat(tickerData.last_price);
-        if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
-
-        const initialState = calculateInitialState(config, currentPrice);
-        
-        // BUSCAR O CREAR (Upsert)
         let autobot = await Autobot.findOne({});
         if (!autobot) {
             autobot = new Autobot({ config: config });
+        } else {
+            autobot.config = config;
+        }
+
+        autobot.lstate = 'RUNNING';
+        autobot.sstate = 'RUNNING';
+        
+        if(autobot.config.long) autobot.config.long.enabled = true;
+        if(autobot.config.short) autobot.config.short.enabled = true;
+
+        autobot.markModified('config');
+        await autobot.save();
+
+        emitBotState(autobot, autobotLogic.io);
+
+        return res.json({ success: true, message: 'Bot global iniciado.', price: currentPrice });
+    } catch (error) {
+        console.error("Error Crítico Start Global:", error.message);
+        return res.status(500).json({ success: false, message: 'Error interno al iniciar.' });
+    }
+});
+
+router.post('/start/:side', async (req, res) => {
+    const { side } = req.params; // Definido fuera para el catch
+    try {
+        const { config } = req.body;
+        
+        // Blindaje del símbolo: asegura que bitmartService reciba un string válido
+        const symbol = (config && config.symbol) ? config.symbol : 'BTC_USDT';
+        
+        const tickerData = await bitmartService.getTicker(symbol);
+        const currentPrice = parseFloat(tickerData.last_price);
+        
+        if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
+
+        let autobot = await Autobot.findOne({});
+        if (!autobot) {
+            autobot = new Autobot({ config: config });
+        } else {
+            autobot.config = config;
         }
 
         if (side === 'long') {
-            autobot.config.long = { ...config.long, ...initialState.long, enabled: true };
             autobot.lstate = 'RUNNING';
+            if(autobot.config.long) autobot.config.long.enabled = true;
         } else if (side === 'short') {
-            autobot.config.short = { ...config.short, ...initialState.short, enabled: true };
             autobot.sstate = 'RUNNING';
+            if(autobot.config.short) autobot.config.short.enabled = true;
         }
 
         autobot.markModified('config');
         await autobot.save();
         
         emitBotState(autobot, autobotLogic.io);
-        res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
+
+        return res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
     } catch (error) {
-        console.error("Error en Start:", error);
-        res.status(500).json({ success: false, message: `Error al iniciar ${req.params.side}.` });
+        console.error(`🔥 Error Crítico Start ${side}:`, error.message);
+        return res.status(500).json({ success: false, message: `Error al iniciar ${side}.` });
     }
 });
 
 // --- RUTAS DE PARADA (STOP) ---
 
-/**
- * STOP GLOBAL: Apaga todo inmediatamente
- */
 router.post('/stop', async (req, res) => {
     try {
         const botState = await Autobot.findOne({});
         if (botState) {
             botState.lstate = 'STOPPED';
             botState.sstate = 'STOPPED';
-            botState.config.long.enabled = false;
-            botState.config.short.enabled = false;
-            
-            // Limpieza de datos operativos
-            Object.assign(botState, CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT);
-            botState.lStateData = { ...CLEAN_STRATEGY_DATA };
-            botState.sStateData = { ...CLEAN_STRATEGY_DATA };
+            if(botState.config.long) botState.config.long.enabled = false;
+            if(botState.config.short) botState.config.short.enabled = false;
             
             botState.markModified('config');
             await botState.save();
+
             emitBotState(botState, autobotLogic.io);
-            res.json({ success: true, message: 'Bot global detenido.' });
+            return res.json({ success: true, message: 'Bot global detenido.' });
         }
+        res.status(404).json({ message: "Bot no encontrado" });
     } catch (error) {
+        console.error("Error Stop Global:", error.message);
         res.status(500).json({ success: false, message: 'Error al detener global.' });
     }
 });
 
-/**
- * STOP INDIVIDUAL: Apaga /api/autobot/stop/long o /api/autobot/stop/short
- */
 router.post('/stop/:side', async (req, res) => {
+    const { side } = req.params;
     try {
-        const { side } = req.params;
         const bot = await Autobot.findOne({});
         
-        if (side === 'long') {
-            bot.lstate = 'STOPPED';
-            bot.config.long.enabled = false;
-            Object.assign(bot, CLEAN_LONG_ROOT);
-            bot.lStateData = { ...CLEAN_STRATEGY_DATA };
-        } else if (side === 'short') {
-            bot.sstate = 'STOPPED';
-            bot.config.short.enabled = false;
-            Object.assign(bot, CLEAN_SHORT_ROOT);
-            bot.sStateData = { ...CLEAN_STRATEGY_DATA };
-        }
+        if (bot) {
+            if (side === 'long') {
+                bot.lstate = 'STOPPED';
+                if(bot.config.long) bot.config.long.enabled = false;
+            } else if (side === 'short') {
+                bot.sstate = 'STOPPED';
+                if(bot.config.short) bot.config.short.enabled = false;
+            }
 
-        bot.markModified('config');
-        await bot.save();
-        emitBotState(bot, autobotLogic.io);
-        res.json({ success: true, message: `${side} detenido correctamente.` });
+            bot.markModified('config');
+            await bot.save();
+            emitBotState(bot, autobotLogic.io);
+            return res.json({ success: true, message: `${side} detenido correctamente.` });
+        }
+        res.status(404).json({ message: "Bot no encontrado" });
     } catch (error) {
-        res.status(500).json({ success: false, message: `Error al detener ${req.params.side}.` });
+        console.error(`Error Stop ${side}:`, error.message);
+        return res.status(500).json({ success: false, message: `Error al detener ${side}.` });
     }
 });
-
-// --- CONSULTAS ---
 
 router.get('/config-and-state', async (req, res) => {
     try {
@@ -183,8 +174,7 @@ router.get('/config-and-state', async (req, res) => {
             config: autobot?.config, 
             lstate: autobot?.lstate, 
             sstate: autobot?.sstate,
-            lastAvailableUSDT: autobot?.lastAvailableUSDT,
-            lastAvailableBTC: autobot?.lastAvailableBTC 
+            lastAvailableUSDT: autobot?.lastAvailableUSDT 
         });
     } catch (error) {
         res.status(500).json({ success: false });
