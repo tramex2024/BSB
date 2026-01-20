@@ -1,14 +1,24 @@
 /**
  * apiService.js - Comunicaciones REST
+ * Sincronizado con la Arquitectura Plana 2026 y Motor Exponencial
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
+/**
+ * Función base para peticiones privadas
+ * Corregida para no perder datos cuando el backend no envía la propiedad .data
+ */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) return { success: false, message: "Sesión no encontrada." };
 
+    // AbortController para evitar peticiones colgadas
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
     const defaultOptions = {
+        signal: controller.signal,
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -17,26 +27,44 @@ async function privateFetch(endpoint, options = {}) {
 
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
-        const data = await response.json();
+        clearTimeout(timeoutId);
         
-        // Si el token expiró (401), avisamos al usuario
+        const result = await response.json().catch(() => ({ success: response.ok }));
+        
         if (response.status === 401) {
-            logStatus("⚠️ Sesión expirada. Por favor, relogea.", "error");
+            logStatus("⚠️ Sesión expirada.", "error");
             return { success: false, message: "Unauthorized" };
         }
         
-        return data;
+        // Manejo de la estructura de respuesta según el endpoint
+        if (result.success && result.data !== undefined) return result.data;
+        return result; 
+
     } catch (error) {
-        console.error(`Error en ${endpoint}:`, error);
-        logStatus("❌ Error de red: El servidor no responde", "error");
-        return { success: false, message: "Connection error." };
+        if (error.name === 'AbortError') {
+            logStatus("❌ Tiempo de espera agotado", "error");
+        } else {
+            logStatus("❌ Error de red", "error");
+        }
+        return { success: false, message: error.message };
     }
 }
 
-// ... (fetchCycleKpis y fetchEquityCurveData se mantienen igual)
+// --- SECCIÓN: DASHBOARD & ESTADÍSTICAS ---
+
+export async function fetchCycleKpis(strategy = 'Long') {
+    return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
+}
+
+export async function fetchEquityCurveData(strategy = 'Long') {
+    return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
+}
+
+// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
 /**
- * Captura el estado actual de los inputs con los IDs corregidos
+ * Extrae la configuración actual de los inputs de la UI.
+ * ✅ Sincronizado con siglas raíz: profit_percent y price_step_inc
  */
 export function getBotConfiguration() {
     const getNum = (id) => {
@@ -46,13 +74,14 @@ export function getBotConfiguration() {
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
-        symbol: "BTC_USDT",
+        symbol: "BTC_USDT", // O el símbolo que manejes dinámicamente
         long: {
             amountUsdt: getNum('auamountl-usdt'),
             purchaseUsdt: getNum('aupurchasel-usdt'),
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
-            trigger: getNum('autriggerl'),
+            profit_percent: getNum('autriggerl'),   // Antes trigger
+            price_step_inc: getNum('aupricestep-l'), // Nuevo campo exponencial
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -61,7 +90,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchases-usdt'),
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
-            trigger: getNum('autriggers'),
+            profit_percent: getNum('autriggers'),   // Antes trigger
+            price_step_inc: getNum('aupricestep-s'), // Nuevo campo exponencial
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }
@@ -69,14 +99,14 @@ export function getBotConfiguration() {
 }
 
 /**
- * Enciende/apaga el bot y bloquea el botón para evitar "Double-Click"
+ * Activa o desactiva una de las estrategias (Long o Short).
  */
-export async function toggleBotSideState(isRunning, side) {
+export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const action = isRunning ? 'stop' : 'start';
     const endpoint = `/api/autobot/${action}/${side}`;
     
-    // Capturamos config actual para asegurar que el START lleve los últimos valores
-    const config = getBotConfiguration();
+    // Usar la config pasada por argumento o recolectar de la UI
+    const config = providedConfig || getBotConfiguration();
 
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
     const btn = document.getElementById(btnId);
@@ -91,21 +121,25 @@ export async function toggleBotSideState(isRunning, side) {
     try {
         const data = await privateFetch(endpoint, {
             method: 'POST',
-            body: JSON.stringify({ config }) // Enviamos siempre la config para sincronizar
+            body: JSON.stringify({ config }) 
         });
 
-        if (data.success) {
-            const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+        // ✅ Validación robusta del éxito
+        if (data && (data.success === true || data === true)) { 
+            const msg = data.message || `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
+            return data;
         } else {
-            displayMessage(`Error: ${data.message}`, 'error');
-            logStatus(`❌ Falló ${action}: ${data.message}`, "error");
+            const errorMsg = data?.message || 'Error desconocido en el servidor';
+            displayMessage(`Error: ${errorMsg}`, 'error');
+            logStatus(`❌ Falló ${action}: ${errorMsg}`, "error");
+            return data;
         }
-        
-        return data;
     } catch (err) {
-        logStatus(`❌ Error crítico en ${action}`, "error");
+        console.error(`Error crítico en toggleBotSideState (${side}):`, err);
+        logStatus(`❌ Error crítico en comunicación`, "error");
+        return { success: false };
     } finally {
         if (btn) {
             btn.disabled = false;
