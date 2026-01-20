@@ -34,13 +34,12 @@ BSB/			    # Bitmart Spot Bots
 │       	  └── uiManager.js
 │       	  └── chart.js
 │       	  └── appEvents.js
+│       	  └── metricsManager.js 
 │
 ├── server/                # Backend files - Deployed on Render
      ├── server.js
      ├── autobotLogic.js
-     ├── autobotCalculations.js
-     ├── calculateShortTargets.js 
-     ├── autobotShortCalculations.js     
+     ├── autobotCalculations.js        
      ├── models/
      │   └── Order.js
      │   └── Autobot.js
@@ -94,9 +93,7 @@ BSB/			    # Bitmart Spot Bots
  	            │    └── longOrderManager.js          
 	       	    │    └── shortDataManager.js
 	            │    └── shortOrderManager.js
-	            ├── utils/
-	            │    └── coverageLogic.js
- 	            │    └── coverageLogicShort.js
+	            ├── utils/	            
 	            │    └── tradeConstants.js
 	            │    └── cleanState.js
 	            │    └── botUtilities.js

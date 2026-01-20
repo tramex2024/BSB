@@ -13,7 +13,12 @@ async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) return { success: false, message: "Sesión no encontrada." };
 
+    // AbortController para evitar peticiones colgadas
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
     const defaultOptions = {
+        signal: controller.signal,
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -22,32 +27,26 @@ async function privateFetch(endpoint, options = {}) {
 
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
+        clearTimeout(timeoutId);
         
-        const contentType = response.headers.get("content-type");
-        let result;
-        if (contentType && contentType.includes("application/json")) {
-            result = await response.json();
-        } else {
-            result = { success: response.ok };
-        }
+        const result = await response.json().catch(() => ({ success: response.ok }));
         
         if (response.status === 401) {
-            logStatus("⚠️ Sesión expirada. Por favor, relogea.", "error");
+            logStatus("⚠️ Sesión expirada.", "error");
             return { success: false, message: "Unauthorized" };
         }
         
-        // ✅ CORRECCIÓN CRÍTICA: 
-        // Si result.success es true y existe result.data (como en analytics), devolvemos .data
-        // Si result.success es true pero NO existe .data (como en start/stop), devolvemos result completo
-        if (result.success && result.data !== undefined) {
-            return result.data;
-        }
-        
+        // Manejo de la estructura de respuesta según el endpoint
+        if (result.success && result.data !== undefined) return result.data;
         return result; 
+
     } catch (error) {
-        console.error(`Error en ${endpoint}:`, error);
-        logStatus("❌ Error de red: El servidor no responde", "error");
-        return { success: false, message: "Connection error." };
+        if (error.name === 'AbortError') {
+            logStatus("❌ Tiempo de espera agotado", "error");
+        } else {
+            logStatus("❌ Error de red", "error");
+        }
+        return { success: false, message: error.message };
     }
 }
 

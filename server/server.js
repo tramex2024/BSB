@@ -23,13 +23,37 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// --- 2. CONFIGURACIÓN DE MIDDLEWARES ---
+// --- 2. CONFIGURACIÓN DE MIDDLEWARES (CORRECCIÓN CORS) ---
+const allowedOrigins = [
+    'https://bsb-lime.vercel.app', 
+    'http://localhost:3000', 
+    'http://127.0.0.1:3000'
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Permitir peticiones sin origen (como Postman o apps móviles)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'El protocolo CORS de esta API no permite acceso desde el origen especificado.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json()); 
-app.use(cors());
 
 // --- 3. CONFIGURACIÓN DE SOCKET.IO ---
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] },
+    cors: { 
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
+    },
     path: '/socket.io'
 });
 
@@ -42,7 +66,7 @@ app.use('/api/orders', require('./routes/ordersRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/autobot', require('./routes/autobotRoutes'));
 app.use('/api/v1/config', require('./routes/configRoutes'));
-app.use('/api/v1/balance', require('./routes/balanceRoutes')); // Ajustado nombre de ruta por claridad
+app.use('/api/v1/balance', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
@@ -61,7 +85,9 @@ let isMarketConnected = false;
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
-    if (marketWs) marketWs.terminate();
+    if (marketWs) {
+        try { marketWs.terminate(); } catch (e) {}
+    }
     marketWs = new WebSocket(bitmartWsUrl);
     
     marketWs.on('open', () => {
@@ -108,12 +134,14 @@ function setupMarketWS(io) {
                     io.emit('market-signal-update', analysis);
                 }
 
-                // Notificar Front-end con estado de conexión
+                // Notificar Front-end
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
                 // 🚀 GATILLO DEL BOT
-                try { aiEngine.analyze(price); } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
-                await autobotLogic.botCycle(price);
+                if (mongoose.connection.readyState === 1) { // Solo si DB está conectada
+                    try { aiEngine.analyze(price); } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                    await autobotLogic.botCycle(price);
+                }
             }
         } catch (e) { console.error("❌ Error WS Message:", e.message); }
     });
@@ -132,7 +160,9 @@ bitmartService.initOrderWebSocket((ordersData) => {
 // --- 9. BUCLE SALDOS (Sync cada 10s) ---
 setInterval(async () => {
     try {
-        await autobotLogic.slowBalanceCacheUpdate();
+        if (mongoose.connection.readyState === 1) {
+            await autobotLogic.slowBalanceCacheUpdate();
+        }
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
@@ -142,34 +172,12 @@ setupMarketWS(io);
 io.on('connection', (socket) => {
     console.log(`👤 Usuario conectado: ${socket.id}`);
 
-    // ESCUCHADOR DE CONFIGURACIÓN
-    socket.on('update-bot-config', async (data) => {
-        try {
-            // Actualización atómica de la configuración
-            const updated = await Autobot.findOneAndUpdate(
-                {}, 
-                { $set: { config: data.config } }, 
-                { new: true }
-            );
-            if (updated) io.emit('bot-state-update', updated);
-        } catch (err) { console.error("❌ Error al actualizar config:", err.message); }
-    });
-
     const sendFullBotStatus = async () => {
         try {
-            // ✅ Al usar .lean(), el Dashboard recibe la raíz plana (lac, sac, etc.)
             const state = await Autobot.findOne({}).lean();
             if (state) {
                 const currentPrice = autobotLogic.getLastPrice() || lastKnownPrice;
-                
                 socket.emit('bot-state-update', { ...state, price: currentPrice });
-
-                // Estadísticas dinámicas basadas en las nuevas siglas
-                const totalAllocated = (state.config?.long?.amountUsdt || 0) + (state.config?.short?.amountUsdt || 0);
-                const totalProfit = state.total_profit || 0;
-                const profitPercent = totalAllocated > 0 ? (totalProfit / totalAllocated) * 100 : 0;
-
-                socket.emit('bot-stats', { totalProfit, profitChangePercent: profitPercent });
             }
         } catch (err) { console.error("❌ Error Status Socket:", err); }
     };
