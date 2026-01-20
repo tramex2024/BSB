@@ -1,4 +1,4 @@
-// server/routes/autobotRoutes.js
+// BSB/server/routes/autobotRoutes.js
 
 const express = require('express');
 const router = express.Router();
@@ -9,44 +9,27 @@ const configController = require('../controllers/configController');
 const autobotLogic = require('../autobotLogic');
 const bitmartService = require('../services/bitmartService');
 
-// ✅ Importación de constantes de limpieza (Arquitectura Plana)
-const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../src/au/utils/cleanState');
-
 router.use(authMiddleware);
 
 /**
- * Utility para emitir el estado del bot por Sockets de forma segura
+ * Utility para emitir el estado del bot por Sockets
  */
 const emitBotState = (autobot, io) => {
     try {
-        // Usamos lean() o un objeto simple para evitar errores de Mongoose circular
-        const botData = autobot.toObject ? autobot.toObject() : autobot;
-        
         const payload = {
-            lstate: botData.lstate, 
-            sstate: botData.sstate,
-            lprofit: botData.lprofit || 0, 
-            sprofit: botData.sprofit || 0,
-            lbalance: botData.lbalance, 
-            sbalance: botData.sbalance,
-            lcycle: botData.lcycle, 
-            scycle: botData.scycle,
-            lcoverage: botData.lcoverage, 
-            scoverage: botData.scoverage,
-            lnorder: botData.lnorder, 
-            snorder: botData.snorder,
-            total_profit: botData.total_profit,
-            lastAvailableUSDT: botData.lastAvailableUSDT,
-            config: botData.config 
+            lstate: autobot.lstate,
+            sstate: autobot.sstate,
+            lStateData: autobot.lStateData,
+            sStateData: autobot.sStateData,
+            config: autobot.config,
+            total_profit: autobot.total_profit,
+            lastAvailableUSDT: autobot.lastAvailableUSDT
         };
-
         if (io) {
             io.emit('bot-state-update', payload);
         }
-        return payload;
     } catch (err) {
-        console.error("❌ Error en emitBotState (Socket):", err.message);
-        return null;
+        console.error("Error en emitBotState:", err.message);
     }
 };
 
@@ -81,34 +64,23 @@ router.post('/start', async (req, res) => {
         autobot.markModified('config');
         await autobot.save();
 
-        // ✅ Encapsulado para que el error de Socket no mate la respuesta HTTP
-        try {
-            emitBotState(autobot, autobotLogic.io);
-        } catch (e) { console.error("Socket error ignorado en start"); }
+        emitBotState(autobot, autobotLogic.io);
 
         return res.json({ success: true, message: 'Bot global iniciado.', price: currentPrice });
     } catch (error) {
-        console.error("🔥 Error Crítico Start Global:", error);
+        console.error("Error Crítico Start Global:", error);
         return res.status(500).json({ success: false, message: 'Error interno al iniciar.' });
     }
 });
 
 router.post('/start/:side', async (req, res) => {
-    // Definimos 'side' fuera del try para que el catch pueda verla
-    const { side } = req.params; 
-    
     try {
+        const { side } = req.params;
         const { config } = req.body;
         
-        // Verificamos que el símbolo exista para evitar el error 400 de Bitmart
-        const symbol = config?.symbol || 'BTC_USDT';
-        
-        const tickerData = await bitmartService.getTicker(symbol);
+        const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
         const currentPrice = parseFloat(tickerData.last_price);
-        
-        if (isNaN(currentPrice)) {
-            return res.status(503).json({ success: false, message: 'Precio no disponible en Bitmart.' });
-        }
+        if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
 
         let autobot = await Autobot.findOne({});
         if (!autobot) {
@@ -128,21 +100,12 @@ router.post('/start/:side', async (req, res) => {
         autobot.markModified('config');
         await autobot.save();
         
-        try {
-            emitBotState(autobot, autobotLogic.io);
-        } catch (e) { 
-            console.error("Socket error ignorado en start side"); 
-        }
+        emitBotState(autobot, autobotLogic.io);
 
         return res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
-
     } catch (error) {
-        // Ahora 'side' sí está definido aquí y no romperá el servidor
-        console.error(`🔥 Error Crítico Start ${side}:`, error.message);
-        return res.status(500).json({ 
-            success: false, 
-            message: `Error al iniciar ${side}: ${error.message}` 
-        });
+        console.error(`Error Crítico Start ${req.params.side}:`, error);
+        return res.status(500).json({ success: false, message: `Error al iniciar ${req.params.side}.` });
     }
 });
 
@@ -157,13 +120,6 @@ router.post('/stop', async (req, res) => {
             if(botState.config.long) botState.config.long.enabled = false;
             if(botState.config.short) botState.config.short.enabled = false;
             
-            // ✅ Limpieza atómica de siglas raíz
-            Object.assign(botState, CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT);
-            
-            // ✅ Eliminación segura de objetos antiguos
-            botState.set('lStateData', undefined);
-            botState.set('sStateData', undefined);
-            
             botState.markModified('config');
             await botState.save();
 
@@ -172,7 +128,7 @@ router.post('/stop', async (req, res) => {
         }
         res.status(404).json({ message: "Bot no encontrado" });
     } catch (error) {
-        console.error("🔥 Error Stop Global:", error);
+        console.error("Error Stop Global:", error);
         res.status(500).json({ success: false, message: 'Error al detener global.' });
     }
 });
@@ -186,13 +142,9 @@ router.post('/stop/:side', async (req, res) => {
             if (side === 'long') {
                 bot.lstate = 'STOPPED';
                 if(bot.config.long) bot.config.long.enabled = false;
-                Object.assign(bot, CLEAN_LONG_ROOT);
-                bot.set('lStateData', undefined);
             } else if (side === 'short') {
                 bot.sstate = 'STOPPED';
                 if(bot.config.short) bot.config.short.enabled = false;
-                Object.assign(bot, CLEAN_SHORT_ROOT);
-                bot.set('sStateData', undefined);
             }
 
             bot.markModified('config');
@@ -202,21 +154,20 @@ router.post('/stop/:side', async (req, res) => {
         }
         res.status(404).json({ message: "Bot no encontrado" });
     } catch (error) {
-        console.error(`🔥 Error Stop ${req.params.side}:`, error);
-        res.status(500).json({ success: false, message: `Error al detener ${side}.` });
+        console.error(`Error Stop ${req.params.side}:`, error);
+        res.status(500).json({ success: false, message: `Error al detener ${req.params.side}.` });
     }
 });
 
 router.get('/config-and-state', async (req, res) => {
     try {
-        const autobot = await Autobot.findOne({}).lean(); // .lean() para que el front reciba datos puros
+        const autobot = await Autobot.findOne({});
         res.json({ 
             success: !!autobot, 
             config: autobot?.config, 
             lstate: autobot?.lstate, 
             sstate: autobot?.sstate,
-            lastAvailableUSDT: autobot?.lastAvailableUSDT,
-            lastAvailableBTC: autobot?.lastAvailableBTC 
+            lastAvailableUSDT: autobot?.lastAvailableUSDT 
         });
     } catch (error) {
         res.status(500).json({ success: false });
