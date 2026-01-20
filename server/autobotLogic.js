@@ -1,11 +1,14 @@
-// Archivo: BSB/server/autobotLogic.js
+/**
+ * Archivo: BSB/server/autobotLogic.js
+ * Motor de Ciclos - Sincronizado con Lógica Exponencial 2026
+ */
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
 
-// Motor Exponencial
+// Motor Exponencial - Funciones de cálculo raíz
 const { 
     calculateLongCoverage, 
     calculateShortCoverage, 
@@ -13,7 +16,7 @@ const {
     calculatePotentialProfit 
 } = require('./autobotCalculations');
 
-// Consolidadores
+// Consolidadores de órdenes
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
 const { monitorAndConsolidateSell: monitorLongSell } = require('./src/au/states/long/LongSellConsolidator'); 
 const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
@@ -39,12 +42,11 @@ async function syncFrontendState(currentPrice, botState) {
 }
 
 /**
- * Persistencia Atómica: Guarda cambios en bloque.
+ * Persistencia Atómica: Guarda cambios en bloque y notifica vía Sockets.
  */
 async function commitChanges(changeSet) {
     if (Object.keys(changeSet).length === 0) return null;
     try {
-        // ✅ Aseguramos actualización de timestamp en cada commit
         changeSet.lastUpdate = new Date();
         const updated = await Autobot.findOneAndUpdate({}, { $set: changeSet }, { new: true }).lean();
         if (io && updated) io.emit('bot-state-update', updated);
@@ -118,7 +120,7 @@ async function botCycle(priceFromWebSocket) {
         setLongDeps(dependencies);
         setShortDeps(dependencies);
 
-        // 1. CONSOLIDACIÓN
+        // 1. CONSOLIDACIÓN DE ÓRDENES ABIERTAS
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
             if (botState.llastOrder.side === 'buy') {
                 await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
@@ -135,19 +137,22 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 2. RECALCULAR INDICADORES (Lógica Exponencial)
-        // --- LONG ---
+        // 2. RECALCULAR INDICADORES (Sincronizado con Lógica Exponencial)
+        
+        // --- LONG ESTRATEGY ---
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
             const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
             const activeLAC = changeSet.lac !== undefined ? changeSet.lac : (botState.lac || 0);
             const lOrderCount = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
 
             if (activeLPPC > 0) {
-                // ✅ Usamos price_var de la config
+                // ✅ Aplicación de price_step_inc para la curva exponencial
                 const { coveragePrice, numberOfOrders } = calculateLongCoverage(
                     botState.lbalance, currentPrice, botState.config.long.purchaseUsdt,
                     parseNumber(botState.config.long.price_var) / 100, 
-                    parseNumber(botState.config.long.size_var), lOrderCount
+                    parseNumber(botState.config.long.size_var), 
+                    lOrderCount,
+                    parseNumber(botState.config.long.price_step_inc)
                 );
                 changeSet.lcoverage = coveragePrice;
                 changeSet.lnorder = numberOfOrders;
@@ -155,17 +160,20 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // --- SHORT ---
+        // --- SHORT ESTRATEGY ---
         if (botState.sstate !== 'STOPPED' && botState.config.short) {
             const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
             const activeSAC = changeSet.sac !== undefined ? changeSet.sac : (botState.sac || 0);
             const sOrderCount = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
 
             if (activeSPPC > 0) {
+                // ✅ Aplicación de price_step_inc para la curva exponencial
                 const { coveragePrice, numberOfOrders } = calculateShortCoverage(
                     botState.sbalance, currentPrice, botState.config.short.purchaseUsdt, 
                     parseNumber(botState.config.short.price_var) / 100, 
-                    parseNumber(botState.config.short.size_var), sOrderCount
+                    parseNumber(botState.config.short.size_var), 
+                    sOrderCount,
+                    parseNumber(botState.config.short.price_step_inc)
                 );
                 changeSet.scoverage = coveragePrice;
                 changeSet.snorder = numberOfOrders;
@@ -173,11 +181,11 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 3. EJECUCIÓN DE ESTRATEGIA (Decision Making)
+        // 3. EJECUCIÓN DE DECISIONES (runLongStrategy / runShortStrategy)
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
 
-        // 4. PERSISTENCIA FINAL ATÓMICA
+        // 4. PERSISTENCIA FINAL ATÓMICA Y NOTIFICACIÓN
         const finalState = await commitChanges(changeSet);
         if (finalState) await syncFrontendState(currentPrice, finalState);
         

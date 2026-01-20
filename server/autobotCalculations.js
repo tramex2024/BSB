@@ -59,19 +59,18 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
     const priceVarDec = parseNumber(config.price_var) / 100;
     const priceVarInc = parseNumber(config.price_step_inc || 0);
+    const profitPercent = parseNumber(config.profit_percent || config.trigger);
     const feeRate = 0.001;
 
     // Calculamos el paso de precio actual basado en cuántas órdenes ya lleva
     const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount - 1, priceVarInc);
 
     return {
-        targetSellPrice: calculateTargetWithFees(p, config.trigger, 'long', feeRate),
+        targetSellPrice: calculateTargetWithFees(p, profitPercent, 'long', feeRate),
         nextCoveragePrice: p * (1 - currentStep),
         requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, currentOrderCount, config.size_var)
     };
 }
-
-// 
 
 function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
@@ -109,12 +108,13 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
     const pVarDec = parseNumber(config.price_var) / 100;
     const priceVarInc = parseNumber(config.price_step_inc || 0);
+    const profitPercent = parseNumber(config.profit_percent || config.trigger);
     const feeRate = 0.001;
 
     const currentStep = getExponentialPriceStep(pVarDec, currentOrderCount - 1, priceVarInc);
 
     return {
-        targetBuyPrice: calculateTargetWithFees(p, config.trigger, 'short', feeRate),
+        targetBuyPrice: calculateTargetWithFees(p, profitPercent, 'short', feeRate),
         nextCoveragePrice: p * (1 + currentStep), 
         requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, currentOrderCount, config.size_var)
     };
@@ -162,7 +162,7 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
         ? (p - entry) * qty 
         : (entry - p) * qty;
     
-    // Comisiones: Se cobran sobre el valor nominal de la operación (Entrada + Salida estimada)
+    // Comisiones estimadas (Entrada + Salida)
     const entryValue = entry * qty;
     const exitValue = p * qty;
     const totalFees = (entryValue + exitValue) * feeRate;

@@ -140,11 +140,19 @@ export function initializeFullApp() {
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
+            // Unimos el estado previo con el nuevo para no perder el precio actual
             currentBotState = { ...currentBotState, ...state };
             
-            // Reparación del flujo de bloqueo
+            console.log("[SOCKET] Estado actualizado detectado:", currentBotState.lstate, currentBotState.sstate);
+            
+            // Forzamos la actualización visual de la interfaz
             updateBotUI(currentBotState); 
+            
+            // Esta función es la que realmente cambia los botones de verde a rojo
             updateControlsState(currentBotState); 
+            
+            // Pequeño log de confirmación en la barra de estado
+            logStatus("🔄 Interfaz sincronizada", "info");
         }
     });
 
