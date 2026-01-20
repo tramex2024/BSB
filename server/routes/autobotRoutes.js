@@ -94,13 +94,21 @@ router.post('/start', async (req, res) => {
 });
 
 router.post('/start/:side', async (req, res) => {
+    // Definimos 'side' fuera del try para que el catch pueda verla
+    const { side } = req.params; 
+    
     try {
-        const { side } = req.params;
         const { config } = req.body;
         
-        const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
+        // Verificamos que el símbolo exista para evitar el error 400 de Bitmart
+        const symbol = config?.symbol || 'BTC_USDT';
+        
+        const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
-        if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
+        
+        if (isNaN(currentPrice)) {
+            return res.status(503).json({ success: false, message: 'Precio no disponible en Bitmart.' });
+        }
 
         let autobot = await Autobot.findOne({});
         if (!autobot) {
@@ -122,12 +130,19 @@ router.post('/start/:side', async (req, res) => {
         
         try {
             emitBotState(autobot, autobotLogic.io);
-        } catch (e) { console.error("Socket error ignorado en start side"); }
+        } catch (e) { 
+            console.error("Socket error ignorado en start side"); 
+        }
 
         return res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
+
     } catch (error) {
-        console.error(`🔥 Error Crítico Start ${req.params.side}:`, error);
-        return res.status(500).json({ success: false, message: `Error al iniciar ${side}.` });
+        // Ahora 'side' sí está definido aquí y no romperá el servidor
+        console.error(`🔥 Error Crítico Start ${side}:`, error.message);
+        return res.status(500).json({ 
+            success: false, 
+            message: `Error al iniciar ${side}: ${error.message}` 
+        });
     }
 });
 
