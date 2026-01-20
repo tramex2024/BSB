@@ -34,7 +34,29 @@ const emitBotState = (autobot, io) => {
 };
 
 // --- CONFIGURACIÓN ---
-router.post('/update-config', configController.updateBotConfig);
+// En tu archivo de rutas del backend
+router.post('/update-config', async (req, res) => {
+    try {
+        const { config } = req.body;
+        if (!config) return res.status(400).json({ success: false, message: "No config provided" });
+
+        // Actualización atómica de la configuración
+        const updatedBot = await Autobot.findOneAndUpdate(
+            {}, 
+            { $set: { config: config, lastUpdate: new Date() } },
+            { new: true }
+        );
+
+        // Notificar a todos los clientes por Socket para que vean el cambio
+        if (req.app.get('io')) {
+            req.app.get('io').emit('bot-state-update', updatedBot);
+        }
+
+        res.json({ success: true, data: updatedBot });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 // --- RUTAS DE INICIO (START) ---
 
