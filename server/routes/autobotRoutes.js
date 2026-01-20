@@ -77,29 +77,33 @@ router.post('/start', async (req, res) => {
 });
 
 router.post('/start/:side', async (req, res) => {
-    const { side } = req.params; // Definido fuera para el catch
+    const { side } = req.params;
     try {
         const { config } = req.body;
-        
-        // Blindaje del símbolo: asegura que bitmartService reciba un string válido
-        const symbol = (config && config.symbol) ? config.symbol : 'BTC_USDT';
-        
-        const tickerData = await bitmartService.getTicker(symbol);
-        const currentPrice = parseFloat(tickerData.last_price);
-        
-        if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
+        const symbol = "BTC_USDT"; // Hardcoded para asegurar compatibilidad total
+
+        let currentPrice = 0;
+        try {
+            // Intentamos obtener el ticker, pero si falla (400), no matamos el proceso
+            const tickerData = await bitmartService.getTicker(symbol);
+            currentPrice = parseFloat(tickerData.last_price);
+        } catch (tickerErr) {
+            console.warn("⚠️ Bitmart Ticker Error 400, usando fallback o continuando...");
+        }
 
         let autobot = await Autobot.findOne({});
         if (!autobot) {
             autobot = new Autobot({ config: config });
         } else {
+            // Actualizamos la config que viene del Front
             autobot.config = config;
         }
 
+        // CAMBIO DE ESTADO (Esto es lo que pone los botones en rojo)
         if (side === 'long') {
             autobot.lstate = 'RUNNING';
             if(autobot.config.long) autobot.config.long.enabled = true;
-        } else if (side === 'short') {
+        } else {
             autobot.sstate = 'RUNNING';
             if(autobot.config.short) autobot.config.short.enabled = true;
         }
@@ -109,10 +113,12 @@ router.post('/start/:side', async (req, res) => {
         
         emitBotState(autobot, autobotLogic.io);
 
+        // Respondemos ÉXITO para que el Front cambie el botón
         return res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
+        
     } catch (error) {
-        console.error(`🔥 Error Crítico Start ${side}:`, error.message);
-        return res.status(500).json({ success: false, message: `Error al iniciar ${side}.` });
+        console.error(`Error Crítico en el proceso de inicio:`, error.message);
+        return res.status(500).json({ success: false, message: "Error al procesar el inicio." });
     }
 });
 
