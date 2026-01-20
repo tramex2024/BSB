@@ -41,7 +41,10 @@ router.post('/update-config', configController.updateBotConfig);
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
-        const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
+        
+        // Ajuste de seguridad para el símbolo
+        const symbol = (config && config.symbol) ? config.symbol : 'BTC_USDT';
+        const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
 
         if (isNaN(currentPrice)) {
@@ -78,8 +81,11 @@ router.post('/start/:side', async (req, res) => {
         const { side } = req.params;
         const { config } = req.body;
         
-        const tickerData = await bitmartService.getTicker(config.symbol || 'BTC_USDT');
+        // Ajuste de seguridad para el símbolo
+        const symbol = (config && config.symbol) ? config.symbol : 'BTC_USDT';
+        const tickerData = await bitmartService.getTicker(symbol);
         const currentPrice = parseFloat(tickerData.last_price);
+        
         if (isNaN(currentPrice)) return res.status(503).json({ success: false, message: 'Precio no disponible.' });
 
         let autobot = await Autobot.findOne({});
@@ -105,6 +111,7 @@ router.post('/start/:side', async (req, res) => {
         return res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
     } catch (error) {
         console.error(`Error Crítico Start ${req.params.side}:`, error);
+        // Ajuste: usar req.params.side por si error ocurre antes de asignar side
         return res.status(500).json({ success: false, message: `Error al iniciar ${req.params.side}.` });
     }
 });
@@ -155,7 +162,7 @@ router.post('/stop/:side', async (req, res) => {
         res.status(404).json({ message: "Bot no encontrado" });
     } catch (error) {
         console.error(`Error Stop ${req.params.side}:`, error);
-        res.status(500).json({ success: false, message: `Error al detener ${req.params.side}.` });
+        return res.status(500).json({ success: false, message: `Error al detener ${req.params.side}.` });
     }
 });
 
