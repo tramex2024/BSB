@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Sincroniza Dashboard y Autobot con lógica exponencial
+ * Optimizado para Lógica Exponencial y Sincronización por Sockets
  */
 
 let lastPrice = 0;
@@ -24,24 +24,27 @@ export function updateBotUI(state) {
         const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
 
         if (currentPrice !== lastPrice || isUIEmpty) {
-            priceElement.className = 'text-lg font-mono font-bold leading-none ' + 
-                (isUIEmpty || currentPrice === lastPrice ? 'text-white' : 
-                (currentPrice > lastPrice ? 'text-emerald-400' : 'text-red-400'));
-            
+            if (isUIEmpty || lastPrice === 0) {
+                priceElement.className = 'text-lg font-mono font-bold text-white leading-none';
+            } else if (currentPrice > lastPrice) {
+                priceElement.className = 'text-lg font-mono font-bold text-emerald-400 leading-none';
+            } else if (currentPrice < lastPrice) {
+                priceElement.className = 'text-lg font-mono font-bold text-red-400 leading-none';
+            }
             priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             lastPrice = currentPrice;
         }
     }
 
-    // --- 2. VALORES NUMÉRICOS (Sincronización Global) ---
+    // --- 2. VALORES NUMÉRICOS (Sincronización con HTML) ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
-        aultprice: 'lppc',
-        austprice: 'sppc',
-        aulsprice: 'lsprice',
-        ausbprice: 'sbprice',
+        aultprice: 'lppc',         // Target Price Long
+        austprice: 'sppc',         // Target Price Short
+        aulsprice: 'lsprice',      // Precio de Venta Long
+        ausbprice: 'sbprice',      // Precio de Compra Short
         aulcycle: 'lcycle',
         auscycle: 'scycle',
         aulcoverage: 'lcoverage', 
@@ -59,9 +62,16 @@ export function updateBotUI(state) {
         if (!element) continue;
         
         let rawValue = state[dataKey];
-        if (rawValue === undefined || rawValue === null) continue;
+        
+        if (rawValue === undefined && state.balances) {
+            if (elementId.includes('usdt')) rawValue = state.balances.USDT;
+            if (elementId.includes('btc')) rawValue = state.balances.BTC;
+        }
 
+        if (rawValue === undefined || rawValue === null) continue;
         const value = Number(rawValue);
+        if (isNaN(value)) continue;
+
         if (elementId.includes('profit')) {
             formatProfit(element, value);
         } else {
@@ -72,7 +82,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 3. CONFIGURACIÓN E INPUTS ---
+    // --- 3. SINCRONIZACIÓN DE INPUTS DE CONFIGURACIÓN ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -94,11 +104,12 @@ export function updateBotUI(state) {
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
             if (input && value !== undefined && document.activeElement !== input) {
-                input.value = value;
+                if (parseFloat(input.value) !== parseFloat(value)) {
+                    input.value = value;
+                }
             }
         }
 
-        // Checkboxes
         const stops = {
             'au-stop-long-at-cycle': !!conf.long?.stopAtCycle,
             'au-stop-short-at-cycle': !!conf.short?.stopAtCycle,
@@ -125,30 +136,32 @@ export function updateControlsState(state) {
     const isShortRunning = activeStates.includes(sStatus);
     const isAiRunning = activeStates.includes(aiStatus);
 
-    // Definición de botones (Dashboard usa los 3, Autobot usa L y S)
     const btns = [
-        { id: 'austartl-btn', running: isLongRunning, label: 'L', activeColor: 'bg-red-600', idleColor: 'bg-emerald-600' },
-        { id: 'austarts-btn', running: isShortRunning, label: 'S', activeColor: 'bg-red-600', idleColor: 'bg-emerald-600' },
-        { id: 'austartai-btn', running: isAiRunning, label: 'AI', activeColor: 'bg-red-600', idleColor: 'bg-indigo-600' }
+        { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
+        { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' },
+        { id: 'austartai-btn', running: isAiRunning, label: 'AI' }
     ];
 
     btns.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
-            btn.textContent = conf.running ? `STOP ${conf.label}` : (conf.label === 'AI' ? 'AI' : conf.label);
+            // Restaurado el texto original: START LONG / STOP LONG
+            btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
             
-            // Reset y aplicación de color
             btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600', 'opacity-50', 'cursor-not-allowed');
-            btn.classList.add(conf.running ? conf.activeColor : conf.idleColor);
             
-            // DESBLOQUEO FORZADO
+            if (conf.running) {
+                btn.classList.add('bg-red-600');
+            } else {
+                btn.classList.add(conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+            }
+            
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.pointerEvents = "auto";
         }
     });
 
-    // Bloqueo de Inputs
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
             const el = document.getElementById(id);
@@ -189,10 +202,12 @@ export function displayMessage(message, type = 'info') {
         container.id = 'message-container';
         document.body.appendChild(container);
     }
+    
     container.textContent = message;
     container.className = `fixed bottom-5 right-5 px-4 py-2 rounded-lg text-white text-[10px] font-bold shadow-2xl z-50 transition-all transform translate-y-0 opacity-100 ${
         type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500')
     }`;
+
     setTimeout(() => {
         if (container) {
             container.className += ' opacity-0 translate-y-4';
