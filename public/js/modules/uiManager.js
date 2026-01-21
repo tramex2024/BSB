@@ -24,7 +24,6 @@ export function updateBotUI(state) {
         const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
 
         if (currentPrice !== lastPrice || isUIEmpty) {
-            // Animación de color según tendencia
             if (isUIEmpty || lastPrice === 0) {
                 priceElement.className = 'text-lg font-mono font-bold text-white leading-none';
             } else if (currentPrice > lastPrice) {
@@ -38,27 +37,23 @@ export function updateBotUI(state) {
     }
 
     // --- 2. VALORES NUMÉRICOS (Dashboard & Bots) ---
+    // ✅ Sincronizado con Arquitectura Plana (Ya no busca en lStateData)
     const elementsToUpdate = {
         auprofit: 'total_profit',
-        // Balances de posiciones
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
         auaibalance: 'aibalance',
-        // Precios promedio / Take Profit
-        aultprice: 'lppc', // Vinculado a Precio Promedio Compra (Lógica Exponencial)
-        austprice: 'sppc', // Vinculado a Precio Promedio Compra (Lógica Exponencial)
-        // Ciclos actuales
+        aultprice: 'lppc', 
+        austprice: 'sppc', 
         aulcycle: 'lcycle',
         auscycle: 'scycle',
         auaicycle: 'aicycle',
-        // Coberturas y otros
         aulcoverage: 'lcoverage', 
         auscoverage: 'scoverage',
         'aulprofit-val': 'lprofit',
         'ausprofit-val': 'sprofit',
         aulnorder: 'lnorder',   
         ausnorder: 'snorder',   
-        // Balances de cuenta
         'aubalance-usdt': 'lastAvailableUSDT',
         'aubalance-btc': 'lastAvailableBTC'
     };
@@ -69,7 +64,6 @@ export function updateBotUI(state) {
         
         let rawValue = state[dataKey];
         
-        // Búsqueda profunda si el valor está dentro de balances (Fallback)
         if (rawValue === undefined && state.balances) {
             if (elementId.includes('usdt')) rawValue = state.balances.USDT;
             if (elementId.includes('btc')) rawValue = state.balances.BTC;
@@ -84,13 +78,12 @@ export function updateBotUI(state) {
         } else {
             const isBtc = elementId.includes('btc');
             const isInteger = elementId.includes('norder') || elementId.includes('cycle');
-            // BTC requiere 6 decimales, enteros 0, el resto 2 para USD
             let decimals = isBtc ? 6 : (isInteger ? 0 : 2);
             element.textContent = value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN (Solo si no hay foco) ---
+    // --- 3. SINCRONIZACIÓN DE CONFIGURACIÓN ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -100,28 +93,24 @@ export function updateBotUI(state) {
             'audecrementl':      conf.long?.price_var,
             'aupricestep-l':     conf.long?.price_step_inc,
             'autriggerl':        conf.long?.profit_percent,
-            
             'auamounts-usdt':    conf.short?.amountUsdt,
             'aupurchases-usdt':  conf.short?.purchaseUsdt,
             'auincrements':      conf.short?.size_var,
             'audecrements':      conf.short?.price_var,
             'aupricestep-s':     conf.short?.price_step_inc,
             'autriggers':        conf.short?.profit_percent,
-
             'auamountai-usdt':   conf.ai?.amountUsdt 
         };
 
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
             if (input && value !== undefined && document.activeElement !== input) {
-                // Evitamos saltos de cursor si el valor es el mismo
                 if (parseFloat(input.value) !== parseFloat(value)) {
                     input.value = value;
                 }
             }
         }
 
-        // Checkboxes de parada en ciclo
         const stops = {
             'au-stop-long-at-cycle': !!conf.long?.stopAtCycle,
             'au-stop-short-at-cycle': !!conf.short?.stopAtCycle,
@@ -134,11 +123,13 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 4. ACTUALIZAR ESTADO DE CONTROLES (BOTONES Y BLOQUEOS) ---
-    updateControlsState(state);
+    // --- ❌ ELIMINADO: updateControlsState(state) ---
+    // ✅ No llamamos a la actualización de botones aquí para evitar que el ticker de precio resetee los botones.
 }
 
 export function updateControlsState(state) {
+    if (!state) return; // Seguridad
+
     const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
     
     const sStatus = state.sstate || 'STOPPED';
@@ -149,7 +140,6 @@ export function updateControlsState(state) {
     const isLongRunning = activeStates.includes(lStatus);
     const isAiRunning = activeStates.includes(aiStatus);
 
-    // Configuración de botones (Start/Stop)
     const btns = [
         { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
         { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' },
@@ -161,15 +151,13 @@ export function updateControlsState(state) {
         if (btn) {
             btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
             const colorClass = conf.running ? 'bg-red-600' : (conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
-            // Aplicamos clases de estilo de forma segura
             btn.className = `flex-1 ${colorClass} py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg transition-all hover:scale-105 active:scale-95`;
+            
+            // ✅ Aseguramos que el botón recupere su estado activo tras la actualización oficial
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     });
-
-    // Listas de inputs para bloqueo de seguridad
-    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
-    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['auamountai-usdt'];
 
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
@@ -182,11 +170,10 @@ export function updateControlsState(state) {
         });
     };
 
-    setLock(longInputs, isLongRunning);
-    setLock(shortInputs, isShortRunning);
-    setLock(aiInputs, isAiRunning);
+    setLock(['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'], isLongRunning);
+    setLock(['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'], isShortRunning);
+    setLock(['auamountai-usdt'], isAiRunning);
     
-    // Actualización de etiquetas de estado visuales
     updateStatusLabel('aubot-lstate', lStatus);
     updateStatusLabel('aubot-sstate', sStatus);
     updateStatusLabel('aubot-aistate', aiStatus);
@@ -213,17 +200,15 @@ export function displayMessage(message, type = 'info') {
         document.body.appendChild(container);
     }
     
-    // Si ya existe una notificación, la refrescamos
     container.textContent = message;
     container.className = `fixed bottom-5 right-5 px-4 py-2 rounded-lg text-white text-[10px] font-bold shadow-2xl z-50 transition-all transform translate-y-0 opacity-100 ${
         type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500')
     }`;
 
-    // Auto-ocultar después de 3 segundos
     setTimeout(() => {
-        container.className += ' opacity-0 translate-y-4';
-        setTimeout(() => {
-            if (container) container.remove();
-        }, 500);
+        if (container) {
+            container.className += ' opacity-0 translate-y-4';
+            setTimeout(() => { container.remove(); }, 500);
+        }
     }, 3000);
 }

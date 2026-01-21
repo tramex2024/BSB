@@ -11,7 +11,7 @@ import { socket, currentBotState, TRADE_SYMBOL_TV, logStatus, BACKEND_URL } from
 
 const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'opened';
-let saveTimeout; // Para el auto-guardado
+let saveTimeout; 
 
 /**
  * Pinta los valores de la DB en los inputs de la UI.
@@ -78,12 +78,10 @@ async function syncConfigWithBackend() {
         }
     };
 
-    // Enviar por Socket para actualización en tiempo real
     if (socket && socket.connected) {
         socket.emit('update-bot-config', payload);
     }
 
-    // Persistencia vía API para asegurar que se guarde en DB
     try {
         await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
             method: 'POST',
@@ -112,7 +110,6 @@ function setupConfigListeners() {
         const el = document.getElementById(id);
         if (!el) return;
 
-        // "input" detecta cada tecla, "change" detecta cuando sales del campo
         el.addEventListener('input', () => {
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(async () => {
@@ -126,7 +123,6 @@ function setupConfigListeners() {
 export async function initializeAutobotView(initialState) {
     const auOrderList = document.getElementById('au-order-list');
     
-    // 1. Iniciamos los escuchadores de cambios
     setupConfigListeners();
 
     if (initialState) {
@@ -134,14 +130,12 @@ export async function initializeAutobotView(initialState) {
         updateControlsState(initialState);
     }
 
-    // 2. Cargamos el gráfico
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
-    // 3. Configuración de botones START/STOP
     const setupButtons = () => {
         const btnLong = document.getElementById('austartl-btn');
         const btnShort = document.getElementById('austarts-btn');
@@ -149,16 +143,27 @@ export async function initializeAutobotView(initialState) {
         if (btnLong && btnShort) {
             btnLong.onclick = async (e) => {
                 e.preventDefault();
+                // Bloqueo visual inmediato (Paso 3)
+                btnLong.disabled = true;
+                btnLong.style.opacity = "0.5";
+                
                 const isRunning = btnLong.textContent.includes('STOP');
                 logStatus(isRunning ? "🛑 Deteniendo Long..." : "🚀 Iniciando Long...");
+                
                 const currentConfig = await syncConfigWithBackend();
                 await toggleBotSideState(isRunning, 'long', currentConfig);
+                // El desbloqueo y cambio de color vendrá por el Socket (bot-state-update)
             };
 
             btnShort.onclick = async (e) => {
                 e.preventDefault();
+                // Bloqueo visual inmediato (Paso 3)
+                btnShort.disabled = true;
+                btnShort.style.opacity = "0.5";
+
                 const isRunning = btnShort.textContent.includes('STOP');
                 logStatus(isRunning ? "🛑 Deteniendo Short..." : "🚀 Iniciando Short...");
+                
                 const currentConfig = await syncConfigWithBackend();
                 await toggleBotSideState(isRunning, 'short', currentConfig);
             };
@@ -172,7 +177,6 @@ export async function initializeAutobotView(initialState) {
         setTimeout(() => clearInterval(retry), 3000);
     }
 
-    // 4. Pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     orderTabs.forEach(tab => {
         tab.onclick = (e) => {

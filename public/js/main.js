@@ -126,9 +126,9 @@ export function initializeFullApp() {
         if (data && data.price != null) {
             if (currentBotState.price !== data.price) {
                 currentBotState.price = data.price;
-                // Sincronización dual: Datos + Controles
+                // Actualizamos visualmente precios y KPIs numéricos
                 updateBotUI(currentBotState);
-                updateControlsState(currentBotState); 
+                // PASO 1: Ya no llamamos aquí a updateControlsState para evitar parpadeo
             }
         }
     });
@@ -140,18 +140,15 @@ export function initializeFullApp() {
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
-            // Unimos el estado previo con el nuevo para no perder el precio actual
             currentBotState = { ...currentBotState, ...state };
             
-            console.log("[SOCKET] Estado actualizado detectado:", currentBotState.lstate, currentBotState.sstate);
+            console.log("[SOCKET] Estado oficial actualizado:", currentBotState.lstate, currentBotState.sstate);
             
-            // Forzamos la actualización visual de la interfaz
             updateBotUI(currentBotState); 
             
-            // Esta función es la que realmente cambia los botones de verde a rojo
+            // PASO 2: Solo el evento de estado oficial tiene permiso para redibujar botones
             updateControlsState(currentBotState); 
             
-            // Pequeño log de confirmación en la barra de estado
             logStatus("🔄 Interfaz sincronizada", "info");
         }
     });
@@ -170,7 +167,6 @@ export async function initializeTab(tabName) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
-                // Inyectamos el estado actual a la nueva vista
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);

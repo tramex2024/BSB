@@ -7,15 +7,13 @@ import { BACKEND_URL, logStatus } from '../main.js';
 
 /**
  * Función base para peticiones privadas
- * Corregida para no perder datos cuando el backend no envía la propiedad .data
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) return { success: false, message: "Sesión no encontrada." };
 
-    // AbortController para evitar peticiones colgadas
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); 
 
     const defaultOptions = {
         signal: controller.signal,
@@ -36,11 +34,7 @@ async function privateFetch(endpoint, options = {}) {
             return { success: false, message: "Unauthorized" };
         }
         
-        // Manejo de la estructura de respuesta según el endpoint
-        // Si el backend responde con { success: true, data: {...} } devolvemos data
         if (result.success && result.data !== undefined) return result.data;
-        
-        // Si no, devolvemos el objeto completo (útil para success: true directo)
         return result; 
 
     } catch (error) {
@@ -67,7 +61,6 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 /**
  * Extrae la configuración actual de los inputs de la UI.
- * ✅ Sincronizado con siglas raíz: profit_percent y price_step_inc para lógica exponencial
  */
 export function getBotConfiguration() {
     const getNum = (id) => {
@@ -84,7 +77,7 @@ export function getBotConfiguration() {
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
             profit_percent: getNum('autriggerl'),   
-            price_step_inc: getNum('aupricestep-l'), // Factor exponencial
+            price_step_inc: getNum('aupricestep-l'),
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -94,7 +87,7 @@ export function getBotConfiguration() {
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
             profit_percent: getNum('autriggers'),   
-            price_step_inc: getNum('aupricestep-s'), // Factor exponencial
+            price_step_inc: getNum('aupricestep-s'),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }
@@ -103,19 +96,18 @@ export function getBotConfiguration() {
 
 /**
  * Activa o desactiva una de las estrategias (Long o Short).
- * Sincronizado para evitar el efecto "F5" y proteger la lógica exponencial.
+ * PASO 4: Se elimina la actualización visual directa para confiar en el Socket.
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const action = isRunning ? 'stop' : 'start';
     const endpoint = `/api/autobot/${action}/${side}`;
     
-    // 1. Recolectamos la configuración (incluyendo los campos exponenciales)
     const config = providedConfig || getBotConfiguration();
 
     const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
     const btn = document.getElementById(btnId);
     
-    // Bloqueo preventivo del botón durante la petición
+    // Bloqueo preventivo (Paso 3 parcial: deshabilitar durante carga)
     if (btn) {
         btn.disabled = true;
         btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -129,23 +121,11 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             body: JSON.stringify({ config }) 
         });
 
-        // 2. Validación de éxito
         if (data && (data.success === true || data === true)) { 
             const msg = data.message || `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             
-            // --- ACTUALIZACIÓN OPTIMISTA (Evita el F5) ---
-            const { updateControlsState } = await import('./uiManager.js');
-            
-            // Creamos un mini-estado con el nuevo lstate/sstate para forzar el cambio visual
-            const newState = {
-                lstate: side === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : undefined,
-                sstate: side === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : undefined
-            };
-            
-            // Si el backend nos devolvió el estado real, lo usamos, si no, usamos el estimado
-            const finalState = data.data ? data.data : newState;
-            updateControlsState(finalState);
-            // --------------------------------------------
+            // ✅ PASO 4: Ya no llamamos a updateControlsState aquí.
+            // Esperamos a que el Socket oficial envíe el cambio desde el servidor.
 
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
@@ -162,7 +142,7 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         logStatus(`❌ Error crítico en comunicación`, "error");
         return { success: false };
     } finally {
-        // Liberamos el botón tras la respuesta
+        // Liberamos el botón tras la respuesta de la red
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('opacity-50', 'cursor-not-allowed');
