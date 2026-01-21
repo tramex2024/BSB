@@ -34,7 +34,6 @@ function updateConnectionStatus(connected) {
     if (connected) {
         statusDot.classList.remove('status-red');
         statusDot.classList.add('status-green');
-        
         if (errorInterval) {
             clearInterval(errorInterval);
             errorInterval = null;
@@ -44,16 +43,12 @@ function updateConnectionStatus(connected) {
     } else {
         statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
-
         if (!errorInterval) {
             logQueue = []; 
             const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
             logStatus(warningMsg, "error"); 
-            
             errorInterval = setInterval(() => {
-                if (logQueue.length < 2) {
-                    logStatus(warningMsg, "error");
-                }
+                if (logQueue.length < 2) logStatus(warningMsg, "error");
             }, 2000); 
         }
     }
@@ -79,7 +74,6 @@ function processNextLog() {
         isProcessingLog = false;
         return;
     }
-
     isProcessingLog = true;
     const log = logQueue.shift();
     const logEl = document.getElementById('log-message');
@@ -89,7 +83,6 @@ function processNextLog() {
         logEl.textContent = log.message;
         const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        
         logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
@@ -106,14 +99,17 @@ function processNextLog() {
 export function initializeFullApp() {
     if (socket && socket.connected) return;
 
+    // Aseguramos que el transporte sea WebSocket para evitar latencia
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
-        reconnection: true
+        reconnection: true,
+        reconnectionAttempts: 10
     });
 
     socket.on('connect', () => {
         updateConnectionStatus(true);
+        // 🔥 IMPORTANTE: Al conectar, forzamos la carga del estado actual de la DB
         socket.emit('get-bot-state');
     });
 
@@ -126,9 +122,7 @@ export function initializeFullApp() {
         if (data && data.price != null) {
             if (currentBotState.price !== data.price) {
                 currentBotState.price = data.price;
-                // Actualizamos visualmente precios y KPIs numéricos
                 updateBotUI(currentBotState);
-                // PASO 1: Ya no llamamos aquí a updateControlsState para evitar parpadeo
             }
         }
     });
@@ -137,16 +131,20 @@ export function initializeFullApp() {
         logStatus(log.message, log.type);
     });
 
+    // 🎯 EL MANDO ÚNICO DE ESTADO
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
+            // Fusionamos el nuevo estado con el actual
             currentBotState = { ...currentBotState, ...state };
             
-            console.log("[SOCKET] Estado oficial actualizado:", currentBotState.lstate, currentBotState.sstate);
+            console.log("📥 [SOCKET] Nuevo Estado Recibido:", {
+                Long: currentBotState.lstate,
+                Short: currentBotState.sstate
+            });
             
+            // Actualizamos TODA la interfaz
             updateBotUI(currentBotState); 
-            
-            // PASO 2: Solo el evento de estado oficial tiene permiso para redibujar botones
             updateControlsState(currentBotState); 
             
             logStatus("🔄 Interfaz sincronizada", "info");
@@ -167,6 +165,7 @@ export async function initializeTab(tabName) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
+                // Pasamos el estado actual para que la vista nazca con los datos correctos
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);
