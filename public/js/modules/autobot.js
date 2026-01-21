@@ -143,7 +143,7 @@ export async function initializeAutobotView(initialState) {
         if (btnLong && btnShort) {
             btnLong.onclick = async (e) => {
                 e.preventDefault();
-                // Bloqueo visual inmediato (Paso 3)
+                // Bloqueo visual inmediato (Feedback al usuario)
                 btnLong.disabled = true;
                 btnLong.style.opacity = "0.5";
                 
@@ -152,12 +152,12 @@ export async function initializeAutobotView(initialState) {
                 
                 const currentConfig = await syncConfigWithBackend();
                 await toggleBotSideState(isRunning, 'long', currentConfig);
-                // El desbloqueo y cambio de color vendrá por el Socket (bot-state-update)
+                // La reactivación y color se gestionan en uiManager vía socket (bot-state-update)
             };
 
             btnShort.onclick = async (e) => {
                 e.preventDefault();
-                // Bloqueo visual inmediato (Paso 3)
+                // Bloqueo visual inmediato (Feedback al usuario)
                 btnShort.disabled = true;
                 btnShort.style.opacity = "0.5";
 

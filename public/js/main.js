@@ -99,7 +99,6 @@ function processNextLog() {
 export function initializeFullApp() {
     if (socket && socket.connected) return;
 
-    // Aseguramos que el transporte sea WebSocket para evitar latencia
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
@@ -109,7 +108,6 @@ export function initializeFullApp() {
 
     socket.on('connect', () => {
         updateConnectionStatus(true);
-        // 🔥 IMPORTANTE: Al conectar, forzamos la carga del estado actual de la DB
         socket.emit('get-bot-state');
     });
 
@@ -122,6 +120,7 @@ export function initializeFullApp() {
         if (data && data.price != null) {
             if (currentBotState.price !== data.price) {
                 currentBotState.price = data.price;
+                // Actualizamos la UI informativa (Precio)
                 updateBotUI(currentBotState);
             }
         }
@@ -131,11 +130,11 @@ export function initializeFullApp() {
         logStatus(log.message, log.type);
     });
 
-    // 🎯 EL MANDO ÚNICO DE ESTADO
+    // 🎯 MANDO ÚNICO DE ESTADO (Sincronización Reactiva)
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
-            // Fusionamos el nuevo estado con el actual
+            // Fusionamos el nuevo estado asegurando la persistencia de datos previos
             currentBotState = { ...currentBotState, ...state };
             
             console.log("📥 [SOCKET] Nuevo Estado Recibido:", {
@@ -143,7 +142,7 @@ export function initializeFullApp() {
                 Short: currentBotState.sstate
             });
             
-            // Actualizamos TODA la interfaz
+            // Sincronización mandatoria de toda la UI
             updateBotUI(currentBotState); 
             updateControlsState(currentBotState); 
             
@@ -165,7 +164,6 @@ export async function initializeTab(tabName) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
-                // Pasamos el estado actual para que la vista nazca con los datos correctos
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);

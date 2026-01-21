@@ -66,7 +66,6 @@ export function updateBotUI(state) {
         
         let rawValue = state[dataKey];
         
-        // Fallback para balances si vienen anidados
         if (rawValue === undefined && state.balances) {
             if (elementId.includes('usdt')) rawValue = state.balances.USDT;
             if (elementId.includes('btc')) rawValue = state.balances.BTC;
@@ -114,7 +113,6 @@ export function updateBotUI(state) {
             }
         }
 
-        // Checkboxes de Stop at Cycle
         const stops = {
             'au-stop-long-at-cycle': !!conf.long?.stopAtCycle,
             'au-stop-short-at-cycle': !!conf.short?.stopAtCycle,
@@ -133,8 +131,6 @@ export function updateBotUI(state) {
  */
 export function updateControlsState(state) {
     if (!state) return;
-
-    console.log("🎮 [UI] Sincronizando Controles:", { L: state.lstate, S: state.sstate, AI: state.aistate });
 
     const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
     
@@ -155,26 +151,25 @@ export function updateControlsState(state) {
     btns.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
-            // Restaurado texto original: START LONG / STOP LONG
+            // Restaurado texto original START / STOP
             btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
             
-            // Reset de clases para asegurar el cambio de color
+            // Forzar limpieza de estilos y clases
             btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600', 'opacity-50', 'cursor-not-allowed');
             
             if (conf.running) {
                 btn.classList.add('bg-red-600');
             } else {
-                btn.classList.add(conf.id === 'austartai-btn' ? 'bg-indigo-600' : 'bg-emerald-600');
+                btn.classList.add(conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
             }
             
-            // Forzar desbloqueo total
+            // Reactivación inmediata (mata el bloqueo del click manual)
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.pointerEvents = "auto";
         }
     });
 
-    // Bloqueo de Inputs mientras el bot corre
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
             const el = document.getElementById(id);
