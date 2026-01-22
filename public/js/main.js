@@ -71,11 +71,10 @@ function processNextLog() {
 export function initializeFullApp() {
     if (socket && socket.connected) return;
 
-    // Asegurarse de que el script de socket.io del index.html cargó
     if (typeof io === 'undefined') return;
 
     socket = io(BACKEND_URL, { 
-        transports: ['websocket'], 
+        transports: ['websocket', 'polling'], // Añadimos polling por si acaso
         reconnection: true 
     });
 
@@ -85,16 +84,22 @@ export function initializeFullApp() {
         socket.emit('get-bot-state');
     });
 
+    // === AGREGAR ESTO PARA EL PRECIO ===
+    socket.on('marketData', (data) => {
+        resetWatchdog(); // Esto mantiene la bolita verde
+        if (data && data.price) {
+            currentBotState.price = parseFloat(data.price);
+            updateBotUI(currentBotState); // Esta función dibuja el precio en pantalla
+        }
+    });
+    // ===================================
+
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
-            // Sincronización de estado
             Object.assign(currentBotState, state); 
-            
-            // Actualización integral de UI
             updateBotUI(currentBotState); 
             updateControlsState(currentBotState); 
-            
             console.log("🔄 UI Sincronizada:", state.lstate, state.sstate);
         }
     });
