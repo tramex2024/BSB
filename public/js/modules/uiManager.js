@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Optimizado con la "Regla de Oro" de comparación previa.
+ * Optimizado con la "Regla de Oro" de comparación previa y Motor Exponencial.
  */
 
 let lastPrice = 0;
@@ -20,7 +20,7 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
 
-    // --- 1. ACTUALIZACIÓN DE PRECIO (Comparación Atómica) ---
+    // --- 1. ACTUALIZACIÓN DE PRECIO ---
     const priceElement = document.getElementById('auprice');
     if (priceElement && state.price !== undefined) {
         const currentPrice = Number(state.price);
@@ -37,13 +37,13 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 2. VALORES NUMÉRICOS (Solo toca el DOM si el dato cambió) ---
+    // --- 2. VALORES NUMÉRICOS (Mapping Atómico) ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
-        aultprice: 'lppc',
-        austprice: 'sppc',
+        aultprice: 'lppc',    // Ajustado a Motor Exponencial
+        austprice: 'sppc',    // Ajustado a Motor Exponencial
         aulsprice: 'lsprice',
         ausbprice: 'sbprice',
         aulcycle: 'lcycle',
@@ -80,14 +80,13 @@ export function updateBotUI(state) {
             let decimals = isBtc ? 6 : (isInteger ? 0 : 2);
             
             const formatted = value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-            // REGLA DE ORO: No pintar si es igual
             if (element.textContent !== formatted) {
                 element.textContent = formatted;
             }
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE INPUTS (Protección de edición activa) ---
+    // --- 3. SINCRONIZACIÓN DE INPUTS ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -108,7 +107,6 @@ export function updateBotUI(state) {
 
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
-            // Solo actualizamos si el usuario no tiene el foco en el input
             if (input && value !== undefined && document.activeElement !== input) {
                 if (parseFloat(input.value) !== parseFloat(value)) {
                     input.value = value;
@@ -174,6 +172,7 @@ export function updateControlsState(state) {
         }
     });
 
+    // Función de bloqueo mejorada para lógica exponencial
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
             const el = document.getElementById(id);

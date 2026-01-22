@@ -48,16 +48,6 @@ async function privateFetch(endpoint, options = {}) {
     }
 }
 
-// --- SECCIÓN: DASHBOARD & ESTADÍSTICAS ---
-
-export async function fetchCycleKpis(strategy = 'Long') {
-    return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
-}
-
-export async function fetchEquityCurveData(strategy = 'Long') {
-    return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
-}
-
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
 export function getBotConfiguration() {
@@ -98,38 +88,32 @@ export function getBotConfiguration() {
 }
 
 /**
- * Persistencia: Guarda la configuración en el backend sin cambiar el estado del bot
- */
-export async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    return await privateFetch('/api/autobot/update-config', {
-        method: 'POST',
-        body: JSON.stringify({ config })
-    });
-}
-
-/**
  * Activa o desactiva una estrategia (Long, Short o AI).
- * El desbloqueo del botón está garantizado por el bloque finally.
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const action = isRunning ? 'stop' : 'start';
-    const endpoint = `/api/autobot/${action}/${side}`;
+    // Normalizamos el 'side' a minúsculas para evitar errores de ID
+    const sideKey = side.toLowerCase(); 
+    const endpoint = `/api/autobot/${action}/${sideKey}`;
     const config = providedConfig || getBotConfiguration();
 
-    // Identificar botón (Long, Short o AI)
-    let btnId = `austart${side.charAt(0)}-btn`; 
-    if (side === 'ai') btnId = 'austartai-btn';
+    // Mapeo explícito de botones para evitar errores de concatenación
+    const btnMap = {
+        'long': 'austartl-btn',
+        'short': 'austarts-btn',
+        'ai': 'austartai-btn'
+    };
     
-    const btn = document.getElementById(btnId);
+    const btn = document.getElementById(btnMap[sideKey]);
     
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = "0.5";
         btn.style.pointerEvents = "none";
+        btn.textContent = "WAIT..."; // Feedback inmediato
     }
 
-    logStatus(`⏳ Enviando orden ${action.toUpperCase()}...`, "info");
+    logStatus(`⏳ Enviando orden ${action.toUpperCase()} para ${sideKey.toUpperCase()}...`, "info");
 
     try {
         const data = await privateFetch(endpoint, {
@@ -137,8 +121,9 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             body: JSON.stringify({ config }) 
         });
 
+        // Verificación de éxito flexible
         if (data && (data.success === true || data === true)) { 
-            const msg = data.message || `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+            const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
             return data;
@@ -149,15 +134,16 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             return data;
         }
     } catch (err) {
-        console.error(`Error en toggle (${side}):`, err);
+        console.error(`Error en toggle (${sideKey}):`, err);
         displayMessage("Error de conexión", "error");
         return { success: false };
     } finally {
-        // LA REGLA DE ORO: Siempre devolver el control al usuario al terminar el fetch
+        // La UI se actualizará finalmente vía Socket, pero devolvemos el control aquí por seguridad
         if (btn) {
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.pointerEvents = "auto";
+            // El texto del botón se corregirá automáticamente cuando llegue el mensaje del Socket
         }
     }
 }

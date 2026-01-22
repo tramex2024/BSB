@@ -1,5 +1,3 @@
-// public/js/main.js
-
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
@@ -7,7 +5,9 @@ import { updateBotUI, updateControlsState } from './modules/uiManager.js';
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
+
 export let socket = null;
+export let intervals = {}; // IMPORTANTE: Recuperado del funcional para evitar fugas de memoria
 
 export let currentBotState = {
     price: 0,
@@ -16,7 +16,7 @@ export let currentBotState = {
     config: {}
 };
 
-let lastPrice = 0; // Para el comparador de color del precio
+let lastPrice = 0;
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
@@ -28,42 +28,39 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-function updateConnectionStatus(connected) {
+// --- GESTIÓN DE CONEXIÓN (Estilo Semáforo del Funcional + Watchdog) ---
+function updateConnectionStatus(status) {
     const statusDot = document.getElementById('status-dot');
     if (!statusDot) return;
 
-    if (connected) {
-        statusDot.classList.remove('status-red');
+    // Limpiamos clases previas
+    statusDot.classList.remove('status-red', 'status-green', 'status-purple');
+
+    if (status === 'CONNECTED' || status === 'API_SUCCESS') {
         statusDot.classList.add('status-green');
         if (errorInterval) {
             clearInterval(errorInterval);
             errorInterval = null;
-            logQueue = []; 
             logStatus("✅ Conexión restaurada", "success");
         }
-    } else {
-        statusDot.classList.remove('status-green');
+    } else if (status === 'DISCONNECTED') {
         statusDot.classList.add('status-red');
         if (!errorInterval) {
-            logQueue = []; 
-            const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
-            logStatus(warningMsg, "error"); 
-            errorInterval = setInterval(() => {
-                if (logQueue.length < 2) logStatus(warningMsg, "error");
-            }, 2000); 
+            logStatus("⚠️ ALERTA: Sin recepción de datos", "error");
+            errorInterval = setInterval(() => logStatus("⚠️ ALERTA: Sin recepción de datos", "error"), 5000);
         }
     }
 }
 
 function resetWatchdog() {
-    updateConnectionStatus(true);
+    updateConnectionStatus('CONNECTED');
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
     connectionWatchdog = setTimeout(() => {
-        updateConnectionStatus(false);
-    }, 3000);
+        updateConnectionStatus('DISCONNECTED');
+    }, 3500);
 }
 
-// --- GESTIÓN DE LOGS ---
+// --- GESTIÓN DE LOGS (Optimizado 2.5s como el funcional) ---
 export function logStatus(message, type = 'info') {
     logQueue.push({ message, type });
     if (logQueue.length > 20) logQueue.shift();
@@ -80,23 +77,23 @@ function processNextLog() {
     const logEl = document.getElementById('log-message');
     const logBar = document.getElementById('log-bar');
 
-    if (logEl && logBar) {
+    if (logEl) {
         logEl.textContent = log.message;
         const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
+        if (logBar) logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
         setTimeout(() => {
-            if (logEl) logEl.style.opacity = '0.5';
+            logEl.style.opacity = '0.5';
             processNextLog();
-        }, 1500); 
+        }, 2500); // Sincronizado con el funcional
     } else {
         isProcessingLog = false;
     }
 }
 
-// --- INICIALIZACIÓN ---
+// --- INICIALIZACIÓN DE SOCKETS (Inyectando canales del funcional) ---
 export function initializeFullApp() {
     if (socket && socket.connected) return;
 
@@ -108,23 +105,19 @@ export function initializeFullApp() {
     });
 
     socket.on('connect', () => {
-        updateConnectionStatus(true);
+        updateConnectionStatus('CONNECTED');
         socket.emit('get-bot-state');
     });
 
-    socket.on('disconnect', () => {
-        updateConnectionStatus(false);
-    });
+    socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 
-    // ACTUALIZACIÓN DE PRECIO QUIRÚRGICA
+    // 1. Canal de Precios
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data && data.price != null) {
             const newPrice = parseFloat(data.price);
             if (currentBotState.price !== newPrice) {
                 currentBotState.price = newPrice;
-                
-                // Solo actualizamos el elemento visual del precio para no estresar el DOM
                 const auPriceEl = document.getElementById('auprice');
                 if (auPriceEl) {
                     const formatter = new Intl.NumberFormat('en-US', {
@@ -132,10 +125,8 @@ export function initializeFullApp() {
                         minimumFractionDigits: 2, maximumFractionDigits: 2
                     });
                     auPriceEl.textContent = formatter.format(newPrice);
-                    
-                    // Lógica de color de la versión funcional
                     if (lastPrice > 0) {
-                        auPriceEl.style.setProperty('color', newPrice > lastPrice ? '#34d399' : (newPrice < lastPrice ? '#f87171' : '#ffffff'), 'important');
+                        auPriceEl.style.color = newPrice > lastPrice ? '#34d399' : (newPrice < lastPrice ? '#f87171' : '#ffffff');
                     }
                 }
                 lastPrice = newPrice;
@@ -143,34 +134,51 @@ export function initializeFullApp() {
         }
     });
 
-    socket.on('bot-log', (log) => {
-        logStatus(log.message, log.type);
-    });
-
-    // 🎯 MANDO ÚNICO DE ESTADO (Sincronización Reactiva)
+    // 2. Canal de Estado (Mando Único)
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
-            // Fusionamos el nuevo estado asegurando la persistencia
             currentBotState = { ...currentBotState, ...state };
-            
-            console.log("📥 [SOCKET] Sincronización de Estado:", {
-                Long: currentBotState.lstate,
-                Short: currentBotState.sstate
-            });
-            
-            // Sincronización mandatoria de toda la UI (Solo cuando cambia el estado real)
             updateBotUI(currentBotState); 
             updateControlsState(currentBotState); 
         }
     });
 
+    // 3. Canal de Balances (Recuperado del funcional)
+    socket.on('balance-real-update', (data) => {
+        const elements = {
+            'aubalance-usdt': parseFloat(data.lastAvailableUSDT || 0).toFixed(2),
+            'aubalance-btc': parseFloat(data.lastAvailableBTC || 0).toFixed(6),
+        };
+        Object.entries(elements).forEach(([id, val]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        });
+    });
+
+    // 4. Canal de Logs
+    socket.on('bot-log', (log) => {
+        logStatus(log.message, log.type);
+    });
+
     setupNavTabs(initializeTab);
 }
 
+// --- GESTIÓN DE PESTAÑAS (Limpieza de memoria del funcional) ---
 export async function initializeTab(tabName) {
+    // Limpieza de intervalos activos (Vital para que no se pise el código)
+    Object.values(intervals).forEach(clearInterval);
+    intervals = {};
+
+    // Limpieza de gráficos (Si existe chart.js en la ventana)
+    if (window.currentChart && typeof window.currentChart.remove === 'function') {
+        window.currentChart.remove();
+        window.currentChart = null;
+    }
+
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
+
     try {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
@@ -180,7 +188,6 @@ export async function initializeTab(tabName) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
-                // Pasamos el estado actual para que la vista nazca con los datos correctos
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);
