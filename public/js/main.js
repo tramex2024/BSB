@@ -141,33 +141,22 @@ export function initializeFullApp() {
         }
     });
 
-    socket.on('bot-state-update', (state) => {
-        resetWatchdog();
-        if (state) {
-            // Actualizamos las propiedades del objeto sin romper la referencia
-            Object.assign(currentBotState, state);
-            updateBotUI(currentBotState); 
-            updateControlsState(currentBotState); 
-        }
-    });
-
-    socket.on('balance-real-update', (data) => {
-        const elements = {
-            'aubalance-usdt': parseFloat(data.lastAvailableUSDT || 0).toFixed(2),
-            'aubalance-btc': parseFloat(data.lastAvailableBTC || 0).toFixed(6),
-        };
-        Object.entries(elements).forEach(([id, val]) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = val;
-        });
-    });
-
-    socket.on('bot-log', (log) => {
-        logStatus(log.message, log.type);
-    });
-
-    setupNavTabs(initializeTab);
-}
+    // En initializeFullApp dentro de main.js
+socket.on('bot-state-update', (state) => {
+    resetWatchdog();
+    if (state) {
+        // 1. Actualizamos el estado global
+        Object.assign(currentBotState, state); 
+        
+        // 2. Forzamos la actualización de la UI informativa (precios/números)
+        updateBotUI(currentBotState); 
+        
+        // 3. Forzamos la actualización de los BOTONES (Esto es lo que te falta)
+        updateControlsState(currentBotState); 
+        
+        console.log("🔄 Interfaz sincronizada con el estado del servidor:", state);
+    }
+});
 
 // Función auxiliar para no ensuciar el socket listener
 function renderPrice(newPrice) {
