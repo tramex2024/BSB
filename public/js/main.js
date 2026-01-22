@@ -67,39 +67,49 @@ function processNextLog() {
     setTimeout(() => { processNextLog(); }, 2500);
 }
 
-// --- INICIALIZACIÓN DE SOCKETS ---
+// Dentro de la función initializeFullApp en main.js
+
 export function initializeFullApp() {
     if (socket && socket.connected) return;
 
-    // Asegurarse de que el script de socket.io del index.html cargó
-    if (typeof io === 'undefined') return;
-
+    // Usamos la configuración de transporte que pide tu Server.js
     socket = io(BACKEND_URL, { 
-        transports: ['websocket'], 
-        reconnection: true 
+        path: '/socket.io',
+        transports: ['websocket', 'polling'], 
+        credentials: true
     });
 
     socket.on('connect', () => {
         updateConnectionStatus('CONNECTED');
-        logStatus("✅ Servidor conectado", "success");
+        logStatus("✅ Conexión con el servidor establecida", "success");
+        // Solicitamos el estado inmediatamente al conectar
         socket.emit('get-bot-state');
     });
 
-    socket.on('bot-state-update', (state) => {
+    // --- ESCUCHA DE PRECIOS EN TIEMPO REAL ---
+    socket.on('marketData', (data) => {
         resetWatchdog();
-        if (state) {
-            // Sincronización de estado
-            Object.assign(currentBotState, state); 
-            
-            // Actualización integral de UI
+        if (data && data.price) {
+            currentBotState.price = parseFloat(data.price);
+            // IMPORTANTE: Llamamos a updateBotUI para que el precio cambie en pantalla
             updateBotUI(currentBotState); 
-            updateControlsState(currentBotState); 
-            
-            console.log("🔄 UI Sincronizada:", state.lstate, state.sstate);
         }
     });
 
-    socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
+    // --- ESCUCHA DE ESTADO DEL BOT (Botones y Ciclos) ---
+    socket.on('bot-state-update', (state) => {
+        if (state) {
+            Object.assign(currentBotState, state); 
+            updateBotUI(currentBotState); 
+            updateControlsState(currentBotState); 
+            console.log("🔄 Estado del bot actualizado:", state.lstate);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        updateConnectionStatus('DISCONNECTED');
+        logStatus("❌ Conexión perdida con el servidor", "error");
+    });
 }
 
 // --- GESTIÓN DE PESTAÑAS ---
