@@ -151,17 +151,19 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             body: JSON.stringify({ config }) 
         });
 
-        // Verificamos si la operación fue exitosa
         if (data && data.success) { 
             const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
-            logStatus(`✅ ${msg}`, "success");
+            
+            // --- AGREGA ESTA LÍNEA AQUÍ PARA FORZAR EL CAMBIO VISUAL ---
+            const newState = { 
+                lstate: sideKey === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : undefined,
+                sstate: sideKey === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : undefined
+            };
+            import('./uiManager.js').then(m => m.updateControlsState(newState));
+            // ----------------------------------------------------------
+
             return data;
-        } else {
-            const errorMsg = data?.message || 'Error en respuesta del servidor';
-            displayMessage(`Error: ${errorMsg}`, 'error');
-            logStatus(`❌ Falló ${action}: ${errorMsg}`, "error");
-            return { success: false, message: errorMsg };
         }
     } catch (err) {
         console.error(`Error en toggle (${sideKey}):`, err);

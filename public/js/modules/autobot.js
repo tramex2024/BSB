@@ -88,39 +88,38 @@ export async function initializeAutobotView() {
 
     // --- LÓGICA DE BOTONES INDEPENDIENTES (Evitando duplicación de eventos) ---
     const setupSideBtn = (id, sideName) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
+    const btn = document.getElementById(id);
+    if (!btn) return;
 
-        // Limpiar listener clonando el nodo
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
 
-        newBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const isRunning = newBtn.textContent.includes('STOP');
+    newBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        
+        // Detectamos el estado por el color o el texto de forma estricta
+        const isRunning = newBtn.classList.contains('bg-red-600') || newBtn.textContent.includes('STOP');
+        
+        if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
+            displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
+            return;
+        }
+
+        try {
+            newBtn.disabled = true;
+            newBtn.textContent = "Starting..."; // Feedback inmediato
             
-            if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
-                displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
-                return;
-            }
-
-            try {
-                // Deshabilitar temporalmente para evitar doble click
-                newBtn.disabled = true;
-                newBtn.style.opacity = "0.5";
-                
-                await toggleBotSideState(isRunning, sideName);
-                
-                displayMessage(`${sideName.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`, 'success');
-            } catch (err) {
-                displayMessage(`Error al cambiar estado de ${sideName}`, 'error');
-                console.error(`❌ Error en ${sideName}:`, err);
-            } finally {
-                newBtn.disabled = false;
-                newBtn.style.opacity = "1";
-            }
-        });
-    };
+            await toggleBotSideState(isRunning, sideName);
+            
+            // NOTA: No cambiamos el color aquí, dejamos que updateControlsState 
+            // llamado desde apiService o Socket lo haga.
+        } catch (err) {
+            displayMessage(`Error en ${sideName}`, 'error');
+        } finally {
+            newBtn.disabled = false;
+        }
+    });
+};
 
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
