@@ -2,19 +2,21 @@ import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
 
+// --- CONFIGURACIÓN ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
 
-export let socket = null;
-export let intervals = {}; // IMPORTANTE: Recuperado del funcional para evitar fugas de memoria
-
-export let currentBotState = {
+// Usamos un objeto constante para mantener la referencia siempre viva
+export const currentBotState = {
     price: 0,
     sstate: 'STOPPED',
     lstate: 'STOPPED',
     config: {}
 };
+
+export let socket = null;
+export let intervals = {}; 
 
 let lastPrice = 0;
 let logQueue = [];
@@ -28,15 +30,14 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-// --- GESTIÓN DE CONEXIÓN (Estilo Semáforo del Funcional + Watchdog) ---
+// --- GESTIÓN DE CONEXIÓN ---
 function updateConnectionStatus(status) {
     const statusDot = document.getElementById('status-dot');
     if (!statusDot) return;
 
-    // Limpiamos clases previas
     statusDot.classList.remove('status-red', 'status-green', 'status-purple');
 
-    if (status === 'CONNECTED' || status === 'API_SUCCESS') {
+    if (status === 'CONNECTED') {
         statusDot.classList.add('status-green');
         if (errorInterval) {
             clearInterval(errorInterval);
@@ -47,7 +48,8 @@ function updateConnectionStatus(status) {
         statusDot.classList.add('status-red');
         if (!errorInterval) {
             logStatus("⚠️ ALERTA: Sin recepción de datos", "error");
-            errorInterval = setInterval(() => logStatus("⚠️ ALERTA: Sin recepción de datos", "error"), 5000);
+            // Evitamos spam de logs con un intervalo más largo
+            errorInterval = setInterval(() => logStatus("⚠️ Reintentando conexión...", "warning"), 10000);
         }
     }
 }
@@ -55,15 +57,16 @@ function updateConnectionStatus(status) {
 function resetWatchdog() {
     updateConnectionStatus('CONNECTED');
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
+    // Aumentado a 5s para evitar falsos negativos por latencia de red
     connectionWatchdog = setTimeout(() => {
         updateConnectionStatus('DISCONNECTED');
-    }, 3500);
+    }, 5000);
 }
 
-// --- GESTIÓN DE LOGS (Optimizado 2.5s como el funcional) ---
+// --- GESTIÓN DE LOGS (Mejorada para evitar bloqueos) ---
 export function logStatus(message, type = 'info') {
+    if (logQueue.length > 30) logQueue.shift(); 
     logQueue.push({ message, type });
-    if (logQueue.length > 20) logQueue.shift();
     if (!isProcessingLog) processNextLog();
 }
 
@@ -72,36 +75,52 @@ function processNextLog() {
         isProcessingLog = false;
         return;
     }
+
+    const logEl = document.getElementById('log-message');
+    if (!logEl) {
+        isProcessingLog = false;
+        return;
+    }
+
     isProcessingLog = true;
     const log = logQueue.shift();
-    const logEl = document.getElementById('log-message');
     const logBar = document.getElementById('log-bar');
 
-    if (logEl) {
-        logEl.textContent = log.message;
-        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
-        logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        if (logBar) logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
-        logEl.style.opacity = '1';
+    logEl.textContent = log.message;
+    const colors = { 
+        success: 'text-emerald-400', 
+        error: 'text-red-400', 
+        warning: 'text-yellow-400', 
+        info: 'text-blue-400' 
+    };
+    
+    logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+    if (logBar) logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
+    logEl.style.opacity = '1';
 
-        setTimeout(() => {
-            logEl.style.opacity = '0.5';
-            processNextLog();
-        }, 2500); // Sincronizado con el funcional
-    } else {
-        isProcessingLog = false;
-    }
+    setTimeout(() => {
+        logEl.style.opacity = '0.5';
+        processNextLog();
+    }, 2500);
 }
 
-// --- INICIALIZACIÓN DE SOCKETS (Inyectando canales del funcional) ---
+// --- INICIALIZACIÓN DE SOCKETS ---
 export function initializeFullApp() {
+    // Evita duplicar conexiones
     if (socket && socket.connected) return;
+
+    // Asegúrate de que io esté disponible (Socket.io Client)
+    if (typeof io === 'undefined') {
+        console.error("Socket.io no está cargado.");
+        return;
+    }
 
     socket = io(BACKEND_URL, { 
         path: '/socket.io', 
         transports: ['websocket'], 
         reconnection: true,
-        reconnectionAttempts: 10
+        reconnectionAttempts: 10,
+        timeout: 10000
     });
 
     socket.on('connect', () => {
@@ -111,40 +130,27 @@ export function initializeFullApp() {
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 
-    // 1. Canal de Precios
     socket.on('marketData', (data) => {
         resetWatchdog();
-        if (data && data.price != null) {
+        if (data?.price != null) {
             const newPrice = parseFloat(data.price);
             if (currentBotState.price !== newPrice) {
                 currentBotState.price = newPrice;
-                const auPriceEl = document.getElementById('auprice');
-                if (auPriceEl) {
-                    const formatter = new Intl.NumberFormat('en-US', {
-                        style: 'currency', currency: 'USD',
-                        minimumFractionDigits: 2, maximumFractionDigits: 2
-                    });
-                    auPriceEl.textContent = formatter.format(newPrice);
-                    if (lastPrice > 0) {
-                        auPriceEl.style.color = newPrice > lastPrice ? '#34d399' : (newPrice < lastPrice ? '#f87171' : '#ffffff');
-                    }
-                }
-                lastPrice = newPrice;
+                renderPrice(newPrice);
             }
         }
     });
 
-    // 2. Canal de Estado (Mando Único)
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
-            currentBotState = { ...currentBotState, ...state };
+            // Actualizamos las propiedades del objeto sin romper la referencia
+            Object.assign(currentBotState, state);
             updateBotUI(currentBotState); 
             updateControlsState(currentBotState); 
         }
     });
 
-    // 3. Canal de Balances (Recuperado del funcional)
     socket.on('balance-real-update', (data) => {
         const elements = {
             'aubalance-usdt': parseFloat(data.lastAvailableUSDT || 0).toFixed(2),
@@ -156,7 +162,6 @@ export function initializeFullApp() {
         });
     });
 
-    // 4. Canal de Logs
     socket.on('bot-log', (log) => {
         logStatus(log.message, log.type);
     });
@@ -164,41 +169,60 @@ export function initializeFullApp() {
     setupNavTabs(initializeTab);
 }
 
-// --- GESTIÓN DE PESTAÑAS (Limpieza de memoria del funcional) ---
+// Función auxiliar para no ensuciar el socket listener
+function renderPrice(newPrice) {
+    const auPriceEl = document.getElementById('auprice');
+    if (!auPriceEl) return;
+
+    const formatter = new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: 'USD',
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+    
+    auPriceEl.textContent = formatter.format(newPrice);
+    if (lastPrice > 0) {
+        auPriceEl.style.color = newPrice > lastPrice ? '#34d399' : (newPrice < lastPrice ? '#f87171' : '#ffffff');
+    }
+    lastPrice = newPrice;
+}
+
+// --- GESTIÓN DE PESTAÑAS ---
 export async function initializeTab(tabName) {
-    // Limpieza de intervalos activos (Vital para que no se pise el código)
+    // Limpieza profunda de intervalos
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
-
-    // Limpieza de gráficos (Si existe chart.js en la ventana)
-    if (window.currentChart && typeof window.currentChart.remove === 'function') {
-        window.currentChart.remove();
-        window.currentChart = null;
-    }
 
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
     try {
         const response = await fetch(`./${tabName}.html`);
+        if (!response.ok) throw new Error("No se pudo cargar el HTML");
         const html = await response.text();
         mainContent.innerHTML = html;
         
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            
             if (typeof module[initFnName] === 'function') {
+                // Pasamos el estado actual a la vista
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);
             }
         }
-    } catch (error) { console.error("❌ Error cargando vista:", error); }
+    } catch (error) { 
+        console.error("❌ Error cargando vista:", error); 
+        logStatus("Error al cargar la vista", "error");
+    }
 }
 
+// Inicio de la app
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
+    
     if (localStorage.getItem('token')) { 
         initializeFullApp(); 
     } else { 

@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Optimizado con la "Regla de Oro" de comparación previa y Motor Exponencial.
+ * Optimizado para evitar parpadeos y bloqueos de interfaz.
  */
 
 let lastPrice = 0;
@@ -22,12 +22,13 @@ export function updateBotUI(state) {
 
     // --- 1. ACTUALIZACIÓN DE PRECIO ---
     const priceElement = document.getElementById('auprice');
-    if (priceElement && state.price !== undefined) {
+    if (priceElement && state.price != null) {
         const currentPrice = Number(state.price);
         const formattedPrice = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         
         if (priceElement.textContent !== formattedPrice) {
             if (lastPrice !== 0) {
+                // Cambio de color según tendencia
                 priceElement.className = `text-lg font-mono font-bold leading-none ${currentPrice > lastPrice ? 'text-emerald-400' : (currentPrice < lastPrice ? 'text-red-400' : 'text-white')}`;
             } else {
                 priceElement.className = 'text-lg font-mono font-bold text-white leading-none';
@@ -42,8 +43,8 @@ export function updateBotUI(state) {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
-        aultprice: 'lppc',    // Ajustado a Motor Exponencial
-        austprice: 'sppc',    // Ajustado a Motor Exponencial
+        aultprice: 'lppc',
+        austprice: 'sppc',
         aulsprice: 'lsprice',
         ausbprice: 'sbprice',
         aulcycle: 'lcycle',
@@ -62,6 +63,7 @@ export function updateBotUI(state) {
         const element = document.getElementById(elementId);
         if (!element) continue;
         
+        // Búsqueda flexible de datos (directo o en sub-objeto balances)
         let rawValue = state[dataKey];
         if (rawValue === undefined && state.balances) {
             if (elementId.includes('usdt')) rawValue = state.balances.USDT;
@@ -86,7 +88,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE INPUTS ---
+    // --- 3. SINCRONIZACIÓN DE INPUTS (Sin interrumpir al usuario) ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -107,8 +109,12 @@ export function updateBotUI(state) {
 
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
+            // IMPORTANTE: Solo actualiza si el usuario NO está escribiendo en ese campo
             if (input && value !== undefined && document.activeElement !== input) {
-                if (parseFloat(input.value) !== parseFloat(value)) {
+                const valNum = parseFloat(value) || 0;
+                const inputNum = parseFloat(input.value) || 0;
+                // Evitamos actualizar si la diferencia es insignificante (precisión flotante)
+                if (Math.abs(valNum - inputNum) > 0.000001) {
                     input.value = value;
                 }
             }
@@ -130,7 +136,7 @@ export function updateBotUI(state) {
 }
 
 /**
- * Actualiza estados críticos de control (Botones y Bloqueos)
+ * Actualiza estados críticos de control (Botones y Bloqueos de Seguridad)
  */
 export function updateControlsState(state) {
     if (!state) return;
@@ -164,15 +170,13 @@ export function updateControlsState(state) {
                     btn.classList.add(conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
                 }
             }
-            
-            // REACTIVACIÓN MANDATORIA
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.pointerEvents = "auto";
         }
     });
 
-    // Función de bloqueo mejorada para lógica exponencial
+    // Bloqueo de inputs cuando la estrategia está activa
     const setLock = (ids, shouldLock) => {
         ids.forEach(id => {
             const el = document.getElementById(id);

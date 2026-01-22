@@ -10,7 +10,10 @@ import { BACKEND_URL, logStatus } from '../main.js';
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
-    if (!token) return { success: false, message: "Sesión no encontrada." };
+    if (!token) {
+        logStatus("⚠️ Sesión no encontrada. Por favor inicie sesión.", "error");
+        return { success: false, message: "Sesión no encontrada." };
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); 
@@ -27,26 +30,33 @@ async function privateFetch(endpoint, options = {}) {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
         clearTimeout(timeoutId);
         
+        // Manejo de expiración de token
         if (response.status === 401) {
             logStatus("⚠️ Sesión expirada.", "error");
+            localStorage.removeItem('token'); // Limpieza de token inválido
             return { success: false, message: "Unauthorized" };
         }
 
-        const result = await response.json().catch(() => ({ success: response.ok }));
-        if (result.success && result.data !== undefined) return result.data;
+        // Parseo seguro de JSON
+        const result = await response.json().catch(() => ({ 
+            success: response.ok, 
+            message: response.statusText 
+        }));
+
+        // Estandarización de la respuesta
         return result; 
 
     } catch (error) {
         if (error.name === 'AbortError') {
             logStatus("❌ Tiempo de espera agotado", "error");
         } else {
-            logStatus("❌ Error de red", "error");
+            logStatus("❌ Error de red o conexión", "error");
         }
         return { success: false, message: error.message };
     }
 }
 
-// --- SECCIÓN: ANALYTICS (Para KPIs y Gráficos) ---
+// --- SECCIÓN: ANALYTICS ---
 
 export async function fetchCycleKpis(strategy = 'Long') {
     return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
@@ -58,6 +68,9 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
+/**
+ * Obtiene el estado actual de los inputs de la UI para enviarlos al backend
+ */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -96,7 +109,7 @@ export function getBotConfiguration() {
 }
 
 /**
- * Persistencia: Guarda la configuración en el backend (La que faltaba)
+ * Persistencia: Guarda la configuración en el backend
  */
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
@@ -107,7 +120,7 @@ export async function sendConfigToBackend() {
 }
 
 /**
- * Activa o desactiva una estrategia (Long, Short o AI).
+ * Activa o desactiva una estrategia (Long, Short o AI)
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const action = isRunning ? 'stop' : 'start';
@@ -123,10 +136,10 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     
     const btn = document.getElementById(btnMap[sideKey]);
     
+    // Bloqueo visual preventivo
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = "0.5";
-        btn.style.pointerEvents = "none";
         btn.textContent = "WAIT...";
     }
 
@@ -138,7 +151,8 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             body: JSON.stringify({ config }) 
         });
 
-        if (data && (data.success === true || data === true)) { 
+        // Verificamos si la operación fue exitosa
+        if (data && data.success) { 
             const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
@@ -147,17 +161,18 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             const errorMsg = data?.message || 'Error en respuesta del servidor';
             displayMessage(`Error: ${errorMsg}`, 'error');
             logStatus(`❌ Falló ${action}: ${errorMsg}`, "error");
-            return data;
+            return { success: false, message: errorMsg };
         }
     } catch (err) {
         console.error(`Error en toggle (${sideKey}):`, err);
-        displayMessage("Error de conexión", "error");
+        displayMessage("Error crítico de conexión", "error");
         return { success: false };
     } finally {
+        // El desbloqueo del botón ocurrirá aquí, pero recuerda que 
+        // bot-state-update (vía Socket) eventualmente sobreescribirá el texto del botón.
         if (btn) {
             btn.disabled = false;
             btn.style.opacity = "1";
-            btn.style.pointerEvents = "auto";
         }
     }
 }
