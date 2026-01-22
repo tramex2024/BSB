@@ -137,13 +137,15 @@ export async function initializeTab(tabName) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    setupNavTabs(); // Asegúrate de que esta función asigne los eventos a los botones de navegación
+    // Le pasamos initializeTab para que sepa cómo cambiar de página
+    setupNavTabs(initializeTab); 
+    
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
     
     if (localStorage.getItem('token')) { 
         initializeFullApp(); 
-        initializeTab('autobot'); // O dashboard por defecto
+        initializeTab('autobot'); 
     } else { 
         initializeTab('dashboard'); 
     }
