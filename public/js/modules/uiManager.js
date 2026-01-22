@@ -136,65 +136,68 @@ export function updateBotUI(state) {
 }
 
 /**
- * Actualiza estados críticos de control (Botones y Bloqueos de Seguridad)
+ * Actualiza visualmente los botones START/STOP basándose en el estado del servidor
  */
 export function updateControlsState(state) {
     if (!state) return;
 
-    const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
-    const lStatus = state.lstate || 'STOPPED';
-    const sStatus = state.sstate || 'STOPPED';
-    const aiStatus = state.aistate || 'STOPPED';
+    // Estos son los estados en los que el botón debe decir "STOP"
+    const runningStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
 
-    const isLongRunning = activeStates.includes(lStatus);
-    const isShortRunning = activeStates.includes(sStatus);
-    const isAiRunning = activeStates.includes(aiStatus);
+    // Obtenemos los estados (si no vienen, asumimos STOPPED)
+    const lStatus = (state.lstate || 'STOPPED').toUpperCase();
+    const sStatus = (state.sstate || 'STOPPED').toUpperCase();
+    const aiStatus = (state.aistate || 'STOPPED').toUpperCase();
 
-    const btns = [
-        { id: 'austartl-btn', running: isLongRunning, label: 'LONG' },
-        { id: 'austarts-btn', running: isShortRunning, label: 'SHORT' },
-        { id: 'austartai-btn', running: isAiRunning, label: 'AI' }
+    // Mapeo de botones: ID del HTML vs su estado y nombre
+    const buttons = [
+        { id: 'austartl-btn', currentStatus: lStatus, type: 'LONG' },
+        { id: 'austarts-btn', currentStatus: sStatus, type: 'SHORT' },
+        { id: 'austartai-btn', currentStatus: aiStatus, type: 'AI' }
     ];
 
-    btns.forEach(conf => {
-        const btn = document.getElementById(conf.id);
-        if (btn) {
-            const newText = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
+    buttons.forEach(btnInfo => {
+        const btnElement = document.getElementById(btnInfo.id);
+        if (btnElement) {
+            const isAlive = runningStates.includes(btnInfo.currentStatus);
             
-            if (btn.textContent !== newText) {
-                btn.textContent = newText;
-                btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-                if (conf.running) {
-                    btn.classList.add('bg-red-600');
-                } else {
-                    btn.classList.add(conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
-                }
+            // 1. Cambiar el texto
+            btnElement.textContent = isAlive ? `STOP ${btnInfo.type}` : `START ${btnInfo.type}`;
+
+            // 2. Cambiar el color (Rojo si corre, Verde/Indigo si está parado)
+            btnElement.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
+            
+            if (isAlive) {
+                btnElement.classList.add('bg-red-600');
+            } else {
+                // El botón AI suele ser Indigo, los otros Esmeralda (verde)
+                btnElement.classList.add(btnInfo.type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
             }
-            btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.style.pointerEvents = "auto";
+
+            // 3. Rehabilitar el botón (por si estaba en "WAIT...")
+            btnElement.disabled = false;
+            btnElement.style.opacity = "1";
+            btnElement.style.pointerEvents = "auto";
         }
     });
 
-    // Bloqueo de inputs cuando la estrategia está activa
-    const setLock = (ids, shouldLock) => {
+    // --- BLOQUEO DE INPUTS ---
+    // Bloqueamos los campos de texto si el bot ya está encendido
+    const inputsLong = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl'];
+    const inputsShort = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements'];
+
+    const setLock = (ids, isRunning) => {
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                el.disabled = shouldLock;
-                el.style.opacity = shouldLock ? "0.4" : "1";
-                el.style.pointerEvents = shouldLock ? "none" : "auto";
+                el.disabled = isRunning;
+                el.style.opacity = isRunning ? "0.5" : "1";
             }
         });
     };
 
-    setLock(['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'], isLongRunning);
-    setLock(['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'], isShortRunning);
-    setLock(['auamountai-usdt'], isAiRunning);
-    
-    updateStatusLabel('aubot-lstate', lStatus);
-    updateStatusLabel('aubot-sstate', sStatus);
-    updateStatusLabel('aubot-aistate', aiStatus);
+    setLock(inputsLong, runningStates.includes(lStatus));
+    setLock(inputsShort, runningStates.includes(sStatus));
 }
 
 function formatProfit(element, value) {

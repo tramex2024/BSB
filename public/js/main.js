@@ -142,14 +142,12 @@ export async function initializeTab(tabName) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    setupNavTabs(); // Asegúrate de que esta función asigne los eventos a los botones de navegación
+    // IMPORTANTE: Le pasamos la función initializeTab para que navigation.js sepa cómo cargar contenido
+    setupNavTabs(initializeTab); 
+    
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
     
-    if (localStorage.getItem('token')) { 
-        initializeFullApp(); 
-        initializeTab('autobot'); // O dashboard por defecto
-    } else { 
-        initializeTab('dashboard'); 
-    }
+    // Ya no necesitas cargar la pestaña inicial aquí manualmente, 
+    // porque navigation.js ya lo hace al final de su código.
 });
