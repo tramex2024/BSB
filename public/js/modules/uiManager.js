@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Gestión Atómica de la Interfaz
- * Optimizado para Lógica Exponencial y Sincronización por Sockets
+ * Optimizado con la "Regla de Oro" de comparación previa.
  */
 
 let lastPrice = 0;
@@ -20,34 +20,32 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
 
-    // --- 1. ACTUALIZACIÓN DE PRECIO ---
+    // --- 1. ACTUALIZACIÓN DE PRECIO (Comparación Atómica) ---
     const priceElement = document.getElementById('auprice');
     if (priceElement && state.price !== undefined) {
         const currentPrice = Number(state.price);
-        const isUIEmpty = priceElement.textContent === '$0.00' || priceElement.textContent === '';
-
-        if (currentPrice !== lastPrice || isUIEmpty) {
-            if (isUIEmpty || lastPrice === 0) {
+        const formattedPrice = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        
+        if (priceElement.textContent !== formattedPrice) {
+            if (lastPrice !== 0) {
+                priceElement.className = `text-lg font-mono font-bold leading-none ${currentPrice > lastPrice ? 'text-emerald-400' : (currentPrice < lastPrice ? 'text-red-400' : 'text-white')}`;
+            } else {
                 priceElement.className = 'text-lg font-mono font-bold text-white leading-none';
-            } else if (currentPrice > lastPrice) {
-                priceElement.className = 'text-lg font-mono font-bold text-emerald-400 leading-none';
-            } else if (currentPrice < lastPrice) {
-                priceElement.className = 'text-lg font-mono font-bold text-red-400 leading-none';
             }
-            priceElement.textContent = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            priceElement.textContent = formattedPrice;
             lastPrice = currentPrice;
         }
     }
 
-    // --- 2. VALORES NUMÉRICOS (Sincronización con HTML) ---
+    // --- 2. VALORES NUMÉRICOS (Solo toca el DOM si el dato cambió) ---
     const elementsToUpdate = {
         auprofit: 'total_profit',
         aulbalance: 'lbalance',
         ausbalance: 'sbalance',
-        aultprice: 'lppc',         // Target Price Long
-        austprice: 'sppc',         // Target Price Short
-        aulsprice: 'lsprice',      // Precio de Venta Long
-        ausbprice: 'sbprice',      // Precio de Compra Short
+        aultprice: 'lppc',
+        austprice: 'sppc',
+        aulsprice: 'lsprice',
+        ausbprice: 'sbprice',
         aulcycle: 'lcycle',
         auscycle: 'scycle',
         aulcoverage: 'lcoverage', 
@@ -65,7 +63,6 @@ export function updateBotUI(state) {
         if (!element) continue;
         
         let rawValue = state[dataKey];
-        
         if (rawValue === undefined && state.balances) {
             if (elementId.includes('usdt')) rawValue = state.balances.USDT;
             if (elementId.includes('btc')) rawValue = state.balances.BTC;
@@ -81,11 +78,16 @@ export function updateBotUI(state) {
             const isBtc = elementId.includes('btc');
             const isInteger = elementId.includes('norder') || elementId.includes('cycle');
             let decimals = isBtc ? 6 : (isInteger ? 0 : 2);
-            element.textContent = value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+            
+            const formatted = value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+            // REGLA DE ORO: No pintar si es igual
+            if (element.textContent !== formatted) {
+                element.textContent = formatted;
+            }
         }
     }
 
-    // --- 3. SINCRONIZACIÓN DE INPUTS DE CONFIGURACIÓN ---
+    // --- 3. SINCRONIZACIÓN DE INPUTS (Protección de edición activa) ---
     if (state.config) {
         const conf = state.config;
         const inputsMapping = {
@@ -106,6 +108,7 @@ export function updateBotUI(state) {
 
         for (const [id, value] of Object.entries(inputsMapping)) {
             const input = document.getElementById(id);
+            // Solo actualizamos si el usuario no tiene el foco en el input
             if (input && value !== undefined && document.activeElement !== input) {
                 if (parseFloat(input.value) !== parseFloat(value)) {
                     input.value = value;
@@ -121,7 +124,9 @@ export function updateBotUI(state) {
 
         for (const [id, checked] of Object.entries(stops)) {
             const el = document.getElementById(id);
-            if (el && document.activeElement !== el) el.checked = checked;
+            if (el && document.activeElement !== el && el.checked !== checked) {
+                el.checked = checked;
+            }
         }
     }
 }
@@ -133,7 +138,6 @@ export function updateControlsState(state) {
     if (!state) return;
 
     const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
-    
     const lStatus = state.lstate || 'STOPPED';
     const sStatus = state.sstate || 'STOPPED';
     const aiStatus = state.aistate || 'STOPPED';
@@ -151,19 +155,19 @@ export function updateControlsState(state) {
     btns.forEach(conf => {
         const btn = document.getElementById(conf.id);
         if (btn) {
-            // Restaurado texto original START / STOP
-            btn.textContent = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
+            const newText = conf.running ? `STOP ${conf.label}` : `START ${conf.label}`;
             
-            // Forzar limpieza de estilos y clases
-            btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600', 'opacity-50', 'cursor-not-allowed');
-            
-            if (conf.running) {
-                btn.classList.add('bg-red-600');
-            } else {
-                btn.classList.add(conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+            if (btn.textContent !== newText) {
+                btn.textContent = newText;
+                btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
+                if (conf.running) {
+                    btn.classList.add('bg-red-600');
+                } else {
+                    btn.classList.add(conf.label === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+                }
             }
             
-            // Reactivación inmediata (mata el bloqueo del click manual)
+            // REACTIVACIÓN MANDATORIA
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.pointerEvents = "auto";
@@ -192,13 +196,17 @@ export function updateControlsState(state) {
 
 function formatProfit(element, value) {
     const sign = value >= 0 ? '+' : '';
-    element.textContent = `${sign}$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    element.className = `text-lg font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+    const formatted = `${sign}$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    
+    if (element.textContent !== formatted) {
+        element.textContent = formatted;
+        element.className = `text-lg font-mono font-bold ${value >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+    }
 }
 
 function updateStatusLabel(id, status) {
     const el = document.getElementById(id);
-    if (!el || !status) return;
+    if (!el || !status || el.textContent === status) return;
     el.textContent = status;
     el.className = `text-[9px] font-bold font-mono ${STATUS_COLORS[status] || 'text-gray-500'}`;
 }
@@ -218,7 +226,7 @@ export function displayMessage(message, type = 'info') {
 
     setTimeout(() => {
         if (container) {
-            container.className += ' opacity-0 translate-y-4';
+            container.classList.add('opacity-0', 'translate-y-4');
             setTimeout(() => { container.remove(); }, 500);
         }
     }, 3000);

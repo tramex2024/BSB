@@ -1,12 +1,12 @@
 /**
  * apiService.js - Comunicaciones REST
- * Sincronizado con la Arquitectura Plana 2026 y Motor Exponencial
+ * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
 /**
- * Función base para peticiones privadas
+ * Función base para peticiones privadas con Timeout y AbortController
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
@@ -27,13 +27,14 @@ async function privateFetch(endpoint, options = {}) {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
         clearTimeout(timeoutId);
         
-        const result = await response.json().catch(() => ({ success: response.ok }));
-        
         if (response.status === 401) {
             logStatus("⚠️ Sesión expirada.", "error");
             return { success: false, message: "Unauthorized" };
         }
+
+        const result = await response.json().catch(() => ({ success: response.ok }));
         
+        // Si el backend devuelve { success: true, data: [...] }, devolvemos la data directamente
         if (result.success && result.data !== undefined) return result.data;
         return result; 
 
@@ -59,9 +60,6 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
-/**
- * Extrae la configuración actual de los inputs de la UI.
- */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -90,30 +88,48 @@ export function getBotConfiguration() {
             price_step_inc: getNum('aupricestep-s'),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
+        },
+        ai: {
+            amountUsdt: getNum('auamountai-usdt'),
+            stopAtCycle: getCheck('au-stop-ai-at-cycle'),
+            enabled: true
         }
     };
 }
 
 /**
- * Activa o desactiva una de las estrategias (Long o Short).
- * PASO 4: Se elimina la actualización visual directa para confiar en el Socket.
+ * Persistencia: Guarda la configuración en el backend sin cambiar el estado del bot
+ */
+export async function sendConfigToBackend() {
+    const config = getBotConfiguration();
+    return await privateFetch('/api/autobot/update-config', {
+        method: 'POST',
+        body: JSON.stringify({ config })
+    });
+}
+
+/**
+ * Activa o desactiva una estrategia (Long, Short o AI).
+ * El desbloqueo del botón está garantizado por el bloque finally.
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const action = isRunning ? 'stop' : 'start';
     const endpoint = `/api/autobot/${action}/${side}`;
-    
     const config = providedConfig || getBotConfiguration();
 
-    const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
+    // Identificar botón (Long, Short o AI)
+    let btnId = `austart${side.charAt(0)}-btn`; 
+    if (side === 'ai') btnId = 'austartai-btn';
+    
     const btn = document.getElementById(btnId);
     
-    // Bloqueo preventivo (Paso 3 parcial: deshabilitar durante carga)
     if (btn) {
         btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.style.opacity = "0.5";
+        btn.style.pointerEvents = "none";
     }
 
-    logStatus(`⏳ Solicitando ${action.toUpperCase()} para ${side.toUpperCase()}...`, "info");
+    logStatus(`⏳ Enviando orden ${action.toUpperCase()}...`, "info");
 
     try {
         const data = await privateFetch(endpoint, {
@@ -123,29 +139,25 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
 
         if (data && (data.success === true || data === true)) { 
             const msg = data.message || `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
-            
-            // ✅ PASO 4: Ya no llamamos a updateControlsState aquí.
-            // Esperamos a que el Socket oficial envíe el cambio desde el servidor.
-
             displayMessage(msg, 'success');
             logStatus(`✅ ${msg}`, "success");
             return data;
         } else {
-            const errorMsg = data?.message || 'Error desconocido en el servidor';
+            const errorMsg = data?.message || 'Error en respuesta del servidor';
             displayMessage(`Error: ${errorMsg}`, 'error');
             logStatus(`❌ Falló ${action}: ${errorMsg}`, "error");
             return data;
         }
     } catch (err) {
-        console.error(`Error crítico en toggleBotSideState (${side}):`, err);
-        displayMessage("Error de conexión con el servidor", "error");
-        logStatus(`❌ Error crítico en comunicación`, "error");
+        console.error(`Error en toggle (${side}):`, err);
+        displayMessage("Error de conexión", "error");
         return { success: false };
     } finally {
-        // Liberamos el botón tras la respuesta de la red
+        // LA REGLA DE ORO: Siempre devolver el control al usuario al terminar el fetch
         if (btn) {
             btn.disabled = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
         }
     }
 }

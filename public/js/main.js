@@ -16,6 +16,7 @@ export let currentBotState = {
     config: {}
 };
 
+let lastPrice = 0; // Para el comparador de color del precio
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
@@ -115,13 +116,29 @@ export function initializeFullApp() {
         updateConnectionStatus(false);
     });
 
+    // ACTUALIZACIÓN DE PRECIO QUIRÚRGICA
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data && data.price != null) {
-            if (currentBotState.price !== data.price) {
-                currentBotState.price = data.price;
-                // Actualizamos la UI informativa (Precio)
-                updateBotUI(currentBotState);
+            const newPrice = parseFloat(data.price);
+            if (currentBotState.price !== newPrice) {
+                currentBotState.price = newPrice;
+                
+                // Solo actualizamos el elemento visual del precio para no estresar el DOM
+                const auPriceEl = document.getElementById('auprice');
+                if (auPriceEl) {
+                    const formatter = new Intl.NumberFormat('en-US', {
+                        style: 'currency', currency: 'USD',
+                        minimumFractionDigits: 2, maximumFractionDigits: 2
+                    });
+                    auPriceEl.textContent = formatter.format(newPrice);
+                    
+                    // Lógica de color de la versión funcional
+                    if (lastPrice > 0) {
+                        auPriceEl.style.setProperty('color', newPrice > lastPrice ? '#34d399' : (newPrice < lastPrice ? '#f87171' : '#ffffff'), 'important');
+                    }
+                }
+                lastPrice = newPrice;
             }
         }
     });
@@ -134,19 +151,17 @@ export function initializeFullApp() {
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
         if (state) {
-            // Fusionamos el nuevo estado asegurando la persistencia de datos previos
+            // Fusionamos el nuevo estado asegurando la persistencia
             currentBotState = { ...currentBotState, ...state };
             
-            console.log("📥 [SOCKET] Nuevo Estado Recibido:", {
+            console.log("📥 [SOCKET] Sincronización de Estado:", {
                 Long: currentBotState.lstate,
                 Short: currentBotState.sstate
             });
             
-            // Sincronización mandatoria de toda la UI
+            // Sincronización mandatoria de toda la UI (Solo cuando cambia el estado real)
             updateBotUI(currentBotState); 
             updateControlsState(currentBotState); 
-            
-            logStatus("🔄 Interfaz sincronizada", "info");
         }
     });
 
@@ -160,10 +175,12 @@ export async function initializeTab(tabName) {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         mainContent.innerHTML = html;
+        
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             if (typeof module[initFnName] === 'function') {
+                // Pasamos el estado actual para que la vista nazca con los datos correctos
                 await module[initFnName](currentBotState); 
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);
