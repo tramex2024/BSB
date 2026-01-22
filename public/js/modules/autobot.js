@@ -1,134 +1,54 @@
-/**
- * public/js/modules/autobot.js
- * Gestión de la vista del Autobot con Auto-Save Exponencial.
- */
+// public/js/modules/autobot.js
 
 import { initializeChart } from './chart.js';
-import { fetchOrders } from './orders.js';
-import { displayMessage, updateControlsState } from './uiManager.js';
-import { toggleBotSideState } from './apiService.js'; 
-import { socket, currentBotState, TRADE_SYMBOL_TV, logStatus, BACKEND_URL } from '../main.js';
+import { fetchOrders, updateOpenOrdersTable } from './orders.js';
+import { updateBotUI, displayMessage } from './uiManager.js';
+import { sendConfigToBackend, toggleBotState } from './apiService.js';
+import { TRADE_SYMBOL_TV, BACKEND_URL, socket } from '../main.js';
 
-const MIN_USDT_AMOUNT = 6.00;
+const MIN_USDT_AMOUNT = 5.00;
 let currentTab = 'opened';
-let saveTimeout; 
 
-/**
- * Pinta los valores de la DB en los inputs de la UI.
- */
-export function updateAutobotInputs(state) {
-    if (!state || !state.config) return;
-    const cfg = state.config;
-
-    const mapping = {
-        'auamountl-usdt': cfg.long?.amountUsdt,
-        'aupurchasel-usdt': cfg.long?.purchaseUsdt,
-        'auincrementl': cfg.long?.size_var,
-        'audecrementl': cfg.long?.price_var,
-        'autriggerl': cfg.long?.profit_percent,
-        'aupricestep-l': cfg.long?.price_step_inc,
-        
-        'auamounts-usdt': cfg.short?.amountUsdt,
-        'aupurchases-usdt': cfg.short?.purchaseUsdt,
-        'auincrements': cfg.short?.size_var,
-        'audecrements': cfg.short?.price_var,
-        'autriggers': cfg.short?.profit_percent,
-        'aupricestep-s': cfg.short?.price_step_inc
-    };
-
-    for (const [id, value] of Object.entries(mapping)) {
-        const el = document.getElementById(id);
-        if (el && value !== undefined && document.activeElement !== el) {
-            el.value = value;
+function validateStrategyInputs() {
+    const fields = ['auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt'];
+    let isValid = true;
+    fields.forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        const val = parseFloat(input.value);
+        if (isNaN(val) || val < MIN_USDT_AMOUNT) {
+            input.classList.add('border-red-500');
+            isValid = false;
+        } else {
+            input.classList.remove('border-red-500');
         }
-    }
-
-    const stopL = document.getElementById('au-stop-long-at-cycle');
-    if (stopL && document.activeElement !== stopL) stopL.checked = !!cfg.long?.stopAtCycle;
-
-    const stopS = document.getElementById('au-stop-short-at-cycle');
-    if (stopS && document.activeElement !== stopS) stopS.checked = !!cfg.short?.stopAtCycle;
-}
-
-/**
- * Sincronización inmediata con el Backend (Auto-Save)
- */
-async function syncConfigWithBackend() {
-    const payload = {
-        config: {
-            symbol: TRADE_SYMBOL_TV || 'BTC_USDT',
-            long: {
-                amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
-                purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
-                stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false,
-                size_var: parseFloat(document.getElementById('auincrementl')?.value) || 0,
-                price_var: parseFloat(document.getElementById('audecrementl')?.value) || 0,
-                profit_percent: parseFloat(document.getElementById('autriggerl')?.value) || 0,
-                price_step_inc: parseFloat(document.getElementById('aupricestep-l')?.value) || 0
-            },
-            short: {
-                amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
-                purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
-                stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false,
-                size_var: parseFloat(document.getElementById('auincrements')?.value) || 0,
-                price_var: parseFloat(document.getElementById('audecrements')?.value) || 0,
-                profit_percent: parseFloat(document.getElementById('autriggers')?.value) || 0,
-                price_step_inc: parseFloat(document.getElementById('aupricestep-s')?.value) || 0
-            }
-        }
-    };
-
-    if (socket && socket.connected) {
-        socket.emit('update-bot-config', payload);
-    }
-
-    try {
-        await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify(payload)
-        });
-    } catch (err) {
-        console.error("Error en auto-guardado:", err);
-    }
-
-    return payload.config;
+    });
+    return isValid;
 }
 
 function setupConfigListeners() {
     const configIds = [
-        'auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt', 
-        'auincrementl', 'auincrements', 'audecrementl', 'audecrements', 
-        'autriggerl', 'autriggers', 'au-stop-long-at-cycle', 'au-stop-short-at-cycle',
-        'aupricestep-l', 'aupricestep-s'
+        'auamountl-usdt', 'auamounts-usdt', 
+        'aupurchasel-usdt', 'aupurchases-usdt', 
+        'auincrement', 'audecrement', 'autrigger', 
+        'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
     ];
-    
     configIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
-
-        el.addEventListener('input', () => {
-            clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(async () => {
-                logStatus("💾 Auto-guardando...", "info");
-                await syncConfigWithBackend();
-            }, 800); 
+        el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
+            if (el.type === 'number') {
+                const val = parseFloat(el.value);
+                el.classList.toggle('border-red-500', isNaN(val) || val < 0);
+            }
+            sendConfigToBackend();
         });
     });
 }
 
-export async function initializeAutobotView(initialState) {
+export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
-    
     setupConfigListeners();
-
-    if (initialState) {
-        updateAutobotInputs(initialState);
-        updateControlsState(initialState);
-    }
 
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
@@ -136,59 +56,71 @@ export async function initializeAutobotView(initialState) {
         }
     }, 400);
 
-    const setupButtons = () => {
-        const btnLong = document.getElementById('austartl-btn');
-        const btnShort = document.getElementById('austarts-btn');
-
-        if (btnLong && btnShort) {
-            btnLong.onclick = async (e) => {
+    const activateStartBtn = () => {
+        const startBtn = document.getElementById('austart-btn');
+        if (startBtn) {
+            const newBtn = startBtn.cloneNode(true);
+            startBtn.parentNode.replaceChild(newBtn, startBtn);
+            newBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                // Bloqueo visual inmediato (Feedback al usuario)
-                btnLong.disabled = true;
-                btnLong.style.opacity = "0.5";
-                
-                const isRunning = btnLong.textContent.includes('STOP');
-                logStatus(isRunning ? "🛑 Deteniendo Long..." : "🚀 Iniciando Long...");
-                
-                const currentConfig = await syncConfigWithBackend();
-                await toggleBotSideState(isRunning, 'long', currentConfig);
-                // La reactivación y color se gestionan en uiManager vía socket (bot-state-update)
-            };
-
-            btnShort.onclick = async (e) => {
-                e.preventDefault();
-                // Bloqueo visual inmediato (Feedback al usuario)
-                btnShort.disabled = true;
-                btnShort.style.opacity = "0.5";
-
-                const isRunning = btnShort.textContent.includes('STOP');
-                logStatus(isRunning ? "🛑 Deteniendo Short..." : "🚀 Iniciando Short...");
-                
-                const currentConfig = await syncConfigWithBackend();
-                await toggleBotSideState(isRunning, 'short', currentConfig);
-            };
+                const isRunning = newBtn.textContent.includes('STOP');
+                if (!isRunning && !validateStrategyInputs()) {
+                    displayMessage(`Min amount is $${MIN_USDT_AMOUNT} USDT`, 'error');
+                    return;
+                }
+                try {
+                    await toggleBotState(isRunning);
+                } catch (err) {
+                    console.error("❌ Error:", err);
+                }
+            });
             return true;
         }
         return false;
     };
 
-    if (!setupButtons()) {
-        const retry = setInterval(() => { if (setupButtons()) clearInterval(retry); }, 200);
+    if (!activateStartBtn()) {
+        const retry = setInterval(() => {
+            if (activateStartBtn()) clearInterval(retry);
+        }, 200);
         setTimeout(() => clearInterval(retry), 3000);
     }
 
+    // --- GESTIÓN DE PESTAÑAS (UNIFICANDO RECUADRO SOMBREADO) ---
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
+    
+    const setActiveTabStyle = (selectedId) => {
+        orderTabs.forEach(btn => {
+            // TODAS mantienen el recuadro sombreado y borde sutil
+            btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50', 'transition-all');
+
+            if (btn.id === selectedId) {
+                // ACTIVA: Texto Verde + Brillo sutil en el borde
+                btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
+                btn.classList.remove('text-gray-500', 'font-normal');
+            } else {
+                // INACTIVA: Texto Gris + Borde normal
+                btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
+                btn.classList.add('text-gray-500', 'font-normal');
+            }
+        });
+    };
+
     orderTabs.forEach(tab => {
-        tab.onclick = (e) => {
-            e.preventDefault();
-            orderTabs.forEach(btn => btn.classList.remove('text-emerald-500', 'bg-gray-800'));
-            tab.classList.add('text-emerald-500', 'bg-gray-800');
-            currentTab = tab.id.replace('tab-', '');
+        tab.addEventListener('click', (e) => {
+            const selectedId = e.currentTarget.id;
+            setActiveTabStyle(selectedId);
+            currentTab = selectedId.replace('tab-', '');
             fetchOrders(currentTab, auOrderList);
-        };
+        });
     });
 
-    if (socket && socket.connected) {
-        socket.emit('get-bot-state'); 
+    // Carga inicial
+    setActiveTabStyle('tab-opened');
+    fetchOrders('opened', auOrderList);
+
+    if (socket) {
+        socket.off('bot-state-update');
+        socket.on('bot-state-update', (state) => updateBotUI(state));
     }
 }

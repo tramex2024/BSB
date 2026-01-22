@@ -2,182 +2,231 @@
 
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
+import { updateBotBalances } from './modules/balance.js';
 
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
+
+export let currentChart = null;
+export let intervals = {};
 export let socket = null;
 
-export let currentBotState = {
-    price: 0,
-    sstate: 'STOPPED',
-    lstate: 'STOPPED',
-    config: {}
-};
-
+// Variables globales para lógica de UI
+let lastPrice = 0;
 let logQueue = [];
 let isProcessingLog = false;
-let connectionWatchdog = null;
-let errorInterval = null;
 
+// Registro de módulos para carga dinámica
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
-    autobot: () => import('./modules/autobot.js'),    
+    autobot: () => import('./modules/autobot.js'),
     aibot: () => import('./modules/aibot.js')
 };
 
-function updateConnectionStatus(connected) {
-    const statusDot = document.getElementById('status-dot');
+/**
+ * Actualiza el indicador visual de conexión
+ */
+function updateConnectionStatusBall(source) {
+    const statusDot = document.getElementById('status-dot'); 
     if (!statusDot) return;
+    
+    statusDot.className = 'status-dot transition-all duration-500 h-full w-full rounded-full block'; 
 
-    if (connected) {
-        statusDot.classList.remove('status-red');
-        statusDot.classList.add('status-green');
-        if (errorInterval) {
-            clearInterval(errorInterval);
-            errorInterval = null;
-            logQueue = []; 
-            logStatus("✅ Conexión restaurada", "success");
-        }
-    } else {
-        statusDot.classList.remove('status-green');
-        statusDot.classList.add('status-red');
-        if (!errorInterval) {
-            logQueue = []; 
-            const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
-            logStatus(warningMsg, "error"); 
-            errorInterval = setInterval(() => {
-                if (logQueue.length < 2) logStatus(warningMsg, "error");
-            }, 2000); 
-        }
+    switch (source) {
+        case 'API_SUCCESS':
+            statusDot.classList.add('status-green');
+            statusDot.title = 'Conectado a BitMart';
+            break;
+        case 'CACHE_FALLBACK':
+            statusDot.classList.add('status-purple');
+            statusDot.title = 'Caché / Reconectando...';
+            break;
+        default:
+            statusDot.classList.add('status-red');
+            statusDot.title = 'Servidor Offline';
     }
 }
 
-function resetWatchdog() {
-    updateConnectionStatus(true);
-    if (connectionWatchdog) clearTimeout(connectionWatchdog);
-    connectionWatchdog = setTimeout(() => {
-        updateConnectionStatus(false);
-    }, 3000);
-}
-
-// --- GESTIÓN DE LOGS ---
-export function logStatus(message, type = 'info') {
-    logQueue.push({ message, type });
-    if (logQueue.length > 20) logQueue.shift();
-    if (!isProcessingLog) processNextLog();
-}
-
+/**
+ * Sistema de gestión de Logs con retardo (Anti-Spam)
+ */
 function processNextLog() {
     if (logQueue.length === 0) {
         isProcessingLog = false;
         return;
     }
+
     isProcessingLog = true;
     const log = logQueue.shift();
     const logEl = document.getElementById('log-message');
-    const logBar = document.getElementById('log-bar');
 
-    if (logEl && logBar) {
+    if (logEl) {
         logEl.textContent = log.message;
-        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
+        
+        const colors = {
+            success: 'text-emerald-400',
+            error: 'text-red-400',
+            warning: 'text-yellow-400',
+            info: 'text-blue-400'
+        };
+        
         logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-        logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
         logEl.style.opacity = '1';
 
         setTimeout(() => {
-            if (logEl) logEl.style.opacity = '0.5';
+            logEl.style.opacity = '0.5';
             processNextLog();
-        }, 1500); 
+        }, 2500);
     } else {
         isProcessingLog = false;
     }
 }
 
-// --- INICIALIZACIÓN ---
+/**
+ * Carga el HTML y activa la lógica JS de la pestaña seleccionada
+ */
+export async function initializeTab(tabName) {
+    Object.values(intervals).forEach(clearInterval);
+    intervals = {};
+    
+    if (window.currentChart && typeof window.currentChart.remove === 'function') {
+        window.currentChart.remove();
+        window.currentChart = null;
+    }
+
+    const mainContent = document.getElementById('main-content');
+    if (!mainContent) return;
+
+    mainContent.style.opacity = '0';
+
+    try {
+        const response = await fetch(`./${tabName}.html`);
+        if (!response.ok) throw new Error("Plantilla no encontrada");
+        const html = await response.text();
+        
+        mainContent.innerHTML = html;
+        mainContent.style.opacity = '1';
+
+        if (views[tabName]) {
+            const module = await views[tabName](); 
+            const initFunctionName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+
+            if (module[initFunctionName]) {
+                await module[initFunctionName]();
+            }
+        }
+    } catch (error) {
+        console.error(`Error al cargar ${tabName}:`, error);
+        mainContent.innerHTML = `<div class="p-10 text-center text-red-400">Error cargando vista: ${tabName}</div>`;
+        mainContent.style.opacity = '1';
+    }
+}
+
+/**
+ * Inicialización completa de la App (Sockets y Eventos Globales)
+ */
 export function initializeFullApp() {
-    if (socket && socket.connected) return;
+    if (socket) return; 
+
+    updateConnectionStatusBall('DISCONNECTED'); 
 
     socket = io(BACKEND_URL, { 
-        path: '/socket.io', 
-        transports: ['websocket'], 
-        reconnection: true,
-        reconnectionAttempts: 10
+        path: '/socket.io',
+        reconnectionAttempts: 10,
+        transports: ['websocket']
     });
 
     socket.on('connect', () => {
-        updateConnectionStatus(true);
-        socket.emit('get-bot-state');
+        console.log('Real-time: Connected');
+        updateConnectionStatusBall('API_SUCCESS');
     });
 
-    socket.on('disconnect', () => {
-        updateConnectionStatus(false);
-    });
+    socket.on('disconnect', () => updateConnectionStatusBall('DISCONNECTED'));
 
     socket.on('marketData', (data) => {
-        resetWatchdog();
-        if (data && data.price != null) {
-            if (currentBotState.price !== data.price) {
-                currentBotState.price = data.price;
-                // Actualizamos la UI informativa (Precio)
-                updateBotUI(currentBotState);
+        const newPrice = parseFloat(data.price);
+        if (isNaN(newPrice)) return;
+
+        const auPriceEl = document.getElementById('auprice');
+        if (auPriceEl) {
+            const formatter = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            auPriceEl.textContent = formatter.format(newPrice);
+
+            if (lastPrice > 0) {
+                if (newPrice > lastPrice) {
+                    auPriceEl.style.setProperty('color', '#34d399', 'important');
+                } else if (newPrice < lastPrice) {
+                    auPriceEl.style.setProperty('color', '#f87171', 'important');
+                }
             }
         }
+
+        const percentEl = document.getElementById('price-percent');
+        const iconEl = document.getElementById('price-icon');
+        
+        if (percentEl && data.priceChangePercent !== undefined) {
+            const change = parseFloat(data.priceChangePercent);
+            const isUp = change >= 0;
+            percentEl.textContent = `${Math.abs(change).toFixed(2)}%`;
+            percentEl.style.color = isUp ? '#34d399' : '#f87171';
+            if (iconEl) {
+                iconEl.className = `fas ${isUp ? 'fa-caret-up' : 'fa-caret-down'}`;
+                iconEl.style.color = isUp ? '#34d399' : '#f87171';
+            }
+        }
+        lastPrice = newPrice;
+    });
+
+    socket.on('bot-stats', (data) => {
+        const profitEl = document.getElementById('auprofit');
+        if (profitEl) {
+            const val = parseFloat(data.totalProfit || 0);
+            profitEl.textContent = `${val >= 0 ? '+' : '-'}$${Math.abs(val).toFixed(2)}`;
+            profitEl.style.setProperty('color', val >= 0 ? '#34d399' : '#f87171', 'important');
+        }
+    });
+
+    socket.on('balance-real-update', (data) => {
+        updateConnectionStatusBall(data.source);
+        updateBotBalances([
+            { currency: 'USDT', available: data.lastAvailableUSDT },
+            { currency: 'BTC', available: data.lastAvailableBTC }
+        ]);
+
+        const elements = {
+            'aubalance-usdt': parseFloat(data.lastAvailableUSDT || 0).toFixed(2),
+            'aubalance-btc': parseFloat(data.lastAvailableBTC || 0).toFixed(6),
+        };
+
+        Object.entries(elements).forEach(([id, val]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        });
     });
 
     socket.on('bot-log', (log) => {
-        logStatus(log.message, log.type);
-    });
-
-    // 🎯 MANDO ÚNICO DE ESTADO (Sincronización Reactiva)
-    socket.on('bot-state-update', (state) => {
-        resetWatchdog();
-        if (state) {
-            // Fusionamos el nuevo estado asegurando la persistencia de datos previos
-            currentBotState = { ...currentBotState, ...state };
-            
-            console.log("📥 [SOCKET] Nuevo Estado Recibido:", {
-                Long: currentBotState.lstate,
-                Short: currentBotState.sstate
-            });
-            
-            // Sincronización mandatoria de toda la UI
-            updateBotUI(currentBotState); 
-            updateControlsState(currentBotState); 
-            
-            logStatus("🔄 Interfaz sincronizada", "info");
-        }
+        logQueue.push(log);
+        if (logQueue.length > 20) logQueue.shift();
+        if (!isProcessingLog) processNextLog();
     });
 
     setupNavTabs(initializeTab);
 }
 
-export async function initializeTab(tabName) {
-    const mainContent = document.getElementById('main-content');
-    if (!mainContent) return;
-    try {
-        const response = await fetch(`./${tabName}.html`);
-        const html = await response.text();
-        mainContent.innerHTML = html;
-        if (views[tabName]) {
-            const module = await views[tabName]();
-            const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-            if (typeof module[initFnName] === 'function') {
-                await module[initFnName](currentBotState); 
-                updateBotUI(currentBotState);
-                updateControlsState(currentBotState);
-            }
-        }
-    } catch (error) { console.error("❌ Error cargando vista:", error); }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-    if (localStorage.getItem('token')) { 
-        initializeFullApp(); 
-    } else { 
+
+    if (localStorage.getItem('token')) {
+        initializeFullApp();
+    } else {
         initializeTab('dashboard'); 
     }
 });

@@ -4,42 +4,61 @@
     <link rel="icon" href="/images/bsb-logo.png" type="image/png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BSB - Bitmart Spot Bots (Test Mode)</title>
+    <title>BSB - Bitmart Spot Bots</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .overflow-y-auto::-webkit-scrollbar { width: 6px; }
+        .overflow-y-auto::-webkit-scrollbar-track { background: #1f2937; }
+        .overflow-y-auto::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .nav-tab.active { border-bottom: 2px solid #10b981; color: #10b981; font-weight: bold; }
+        .nav-tab { padding: 10px 15px; color: #9ca3af; transition: all 0.3s ease; cursor: pointer; }
+        .nav-tab:hover { color: white; }
+        #main-content { min-height: calc(100vh - 100px); }
+        .modal {
+            position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.8); display: none; justify-content: center; align-items: center;
+        }
+        .modal-content { background-color: #1f2937; padding: 25px; border-radius: 12px; width: 90%; max-width: 450px; }
+        .status-ball-container { position: relative; width: 12px; height: 12px; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } }
+        .status-green { background-color: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
+        .status-red { background-color: #ef4444; }
+        .status-purple { background-color: #a855f7; box-shadow: 0 0 8px #a855f7; animation: pulse 2s infinite; }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans">
 
-    <header class="h-16 flex items-center justify-between px-4 md:px-6 bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
-    <div class="flex items-center space-x-3 shrink-0">
-        <img src="images/bsb-logo.png" alt="Logo" class="w-9 h-9">
-        <span class="hidden sm:block font-bold text-lg md:text-xl tracking-tight">
-            Bitmart <span class="text-emerald-500">Spot Bots</span>
-        </span>
-    </div>
-    
-    <nav id="main-nav" class="flex space-x-1">
-        <a class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
-        <a class="nav-tab" data-tab="autobot">AUTOBOT</a>            
-        <a class="nav-tab" data-tab="aibot">AIBOT</a>
-    </nav>
-    
-    <div class="flex items-center space-x-3 md:space-x-5 text-gray-400">
-        <div class="status-ball-container">
-            <span id="status-dot" class="status-dot-base status-red" title="Estado de Conexión"></span>
+    <header class="h-16 flex items-center justify-between px-6 bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <img src="images/bsb-logo.png" alt="Logo" class="w-10 h-10">
+            <span class="hidden md:block font-bold text-xl tracking-tight">Bitmart <span class="text-emerald-500">Spot Bots</span></span>
+            <div class="status-ball-container ml-2">
+                <span id="status-dot" class="h-full w-full rounded-full status-red block" title="Estado de Conexión"></span>
+            </div>
         </div>
         
-        <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
-        <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
-    </div>
-</header>
+        <nav id="main-nav" class="flex space-x-1">
+            <a class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
+            <a class="nav-tab" data-tab="autobot">AUTOBOT</a>
+            <a class="nav-tab" data-tab="aibot">AIBOT</a>
+        </nav>
+        
+        <div class="flex items-center space-x-5 text-gray-400">
+            <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
+            <i class="fas fa-cog cursor-pointer hover:text-white transition" title="Settings"></i>
+            <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
+        </div>
+    </header>
 
-    <div id="log-bar" class="log-bar">
-        <p id="log-message">Sincronizando con Bitmart API...</p>
-    </div>
+    <div id="log-bar" class="sticky top-16 z-40 bg-gray-900/90 backdrop-blur-sm py-1 px-6 border-b border-gray-800 text-[11px] text-gray-500 font-mono italic">
+    <p id="log-message">Sincronizando con Bitmart API...</p>
+</div>
 
-    <main id="main-content" class="relative overflow-x-hidden p-4 md:p-6 min-h-[calc(100vh-4rem)]">
+    <main id="main-content" class="relative overflow-x-hidden">
         <div class="flex items-center justify-center h-64">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
         </div>
@@ -49,11 +68,11 @@
         <div class="modal-content">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-bold">BitMart API</h2>
-                <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-api-modal"></i>
+                <i class="fas fa-times cursor-pointer" id="close-api-modal"></i>
             </div>
             <form id="api-form" class="space-y-4">
-                <input type="text" id="api-key" placeholder="API Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                <input type="password" id="secret-key" placeholder="Secret Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+                <input type="text" id="api-key" placeholder="API Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500">
+                <input type="password" id="secret-key" placeholder="Secret Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500">
                 <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">VALIDAR CONEXIÓN</button>
                 <p id="api-status-message" class="text-xs text-center text-gray-500"></p>
             </form>
@@ -61,7 +80,7 @@
     </div>
 
     <div id="auth-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content animate-fadeIn">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-bold">Acceso de Usuario</h2>
                 <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-auth-modal"></i>
@@ -75,7 +94,7 @@
                 <div id="token-section" style="display: none;">
                     <label class="text-xs text-gray-400 block mb-1">Código de Verificación</label>
                     <input type="text" id="token" placeholder="Ingresa el código" 
-                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none font-mono text-center text-lg tracking-widest">
+                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
                 </div>
                 <button type="submit" id="auth-button" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">CONTINUAR</button>
                 <p id="auth-message" class="text-xs text-center"></p>
@@ -84,20 +103,19 @@
     </div>
 
     <div id="logout-modal" class="modal">
-        <div class="modal-content border border-red-900/30">
-            <h2 class="text-xl font-bold text-white mb-2">Sign Out?</h2>
-            <p class="text-gray-400 text-sm mb-6">Necesitarás un nuevo código para volver a entrar.</p>
-            <div class="flex space-x-3">
-                <button id="cancel-logout" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold transition">CANCELAR</button>
-                <button id="confirm-logout" class="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold transition">LOG OUT</button>
-            </div>
+    <div class="modal-content animate-fadeIn border border-red-900/30">
+        <h2 class="text-xl font-bold text-white mb-2">Sign Out?</h2>
+        <p class="text-gray-400 text-sm mb-6">You will need to request a new token to access the dashboard again.</p>
+        <div class="flex space-x-3">
+            <button id="cancel-logout" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold transition">CANCEL</button>
+            <button id="confirm-logout" class="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold transition">LOG OUT</button>
         </div>
     </div>
+</div>
 
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

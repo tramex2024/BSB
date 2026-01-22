@@ -10,9 +10,8 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
  * Delega la lógica de parada o reinicio al LongDataManager.
  */
 async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
-    
-    // ✅ CAMBIO: Ahora leemos la orden directamente de la raíz (llastOrder)
-    const lastOrder = botState.llastOrder;
+    const lStateData = botState.lStateData;
+    const lastOrder = lStateData.lastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false; 
@@ -43,11 +42,12 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
                 updateBotState, 
                 updateLStateData, 
                 updateGeneralBotState, 
-                logSuccessfulCycle, // Inyectamos la función para asegurar el registro en tradecycles
-                config: botState.config // Contiene la nueva jerarquía config.long
+                logSuccessfulCycle, // 🟢 CORRECCIÓN: Inyectamos la función para asegurar el registro en tradecycles
+                config: botState.config 
             };
             
-            // ✅ handleSuccessfulSell se encargará de resetear las siglas de raíz (lac, lai, etc.)
+            // Centralizamos aquí la lógica de STOPPED o reinicio a BUYING.
+            // Esto evita que el bot reciba órdenes contradictorias.
             await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
 
             return true;
@@ -61,9 +61,7 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
         // === CASO C: FALLO O CANCELACIÓN SIN EJECUCIÓN ===
         if (isCanceled && filledVolume === 0) {
             log(`❌ [L-SELL-FAIL] Venta cancelada sin ejecución. Liberando para reintento...`, 'error');
-            
-            // ✅ CAMBIO: Limpiamos llastOrder en la raíz
-            await updateGeneralBotState({ llastOrder: null });
+            await updateLStateData({ 'lastOrder': null });
             return true;
         }
 
