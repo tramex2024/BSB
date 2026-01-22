@@ -1,6 +1,6 @@
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
-import { updateBotUI, displayMessage } from './uiManager.js';
+import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, socket } from '../main.js';
 
