@@ -159,6 +159,7 @@ export async function initializeAutobotView() {
         socket.off('bot-state-update');
         socket.on('bot-state-update', (state) => {
             updateBotUI(state);
+            updateControlsState(state);
         });
     }
 }
