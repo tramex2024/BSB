@@ -63,11 +63,21 @@ export function updateBotUI(state) {
         const element = document.getElementById(elementId);
         if (!element) continue;
         
-        // Búsqueda flexible de datos (directo o en sub-objeto balances)
+        // Búsqueda Ultra-Flexible de datos
         let rawValue = state[dataKey];
-        if (rawValue === undefined && state.balances) {
-            if (elementId.includes('usdt')) rawValue = state.balances.USDT;
-            if (elementId.includes('btc')) rawValue = state.balances.BTC;
+
+        // Si no lo encuentra con el nombre corto, probamos con nombres comunes de DB
+        if (rawValue === undefined) {
+            const alternativeKeys = {
+                lbalance: state.long_balance || state.longBalance,
+                sbalance: state.short_balance || state.shortBalance,
+                lppc: state.long_avg_price || state.lppc,
+                sppc: state.short_avg_price || state.sppc,
+                total_profit: state.totalProfit || state.profit_total,
+                lastAvailableUSDT: state.balances?.USDT || state.usdt_balance,
+                lastAvailableBTC: state.balances?.BTC || state.btc_balance
+            };
+            rawValue = alternativeKeys[dataKey] ?? state[dataKey];
         }
 
         if (rawValue === undefined || rawValue === null) continue;

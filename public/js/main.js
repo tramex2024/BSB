@@ -125,10 +125,14 @@ export async function initializeTab(tabName) {
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             
             if (typeof module[initFnName] === 'function') {
+                // 1. Iniciamos la lógica de la vista
                 await module[initFnName](currentBotState); 
-                // Renderizado inmediato al cambiar de pestaña
-                updateBotUI(currentBotState);
-                updateControlsState(currentBotState);
+                
+                // 2. IMPORTANTE: Pedimos al servidor los datos de la DB inmediatamente
+                if (socket && socket.connected) {
+                    console.log(`Solicitando estado para la pestaña: ${tabName}`);
+                    socket.emit('get-bot-state'); 
+                }
             }
         }
     } catch (error) { 
