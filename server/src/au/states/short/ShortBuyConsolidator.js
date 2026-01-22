@@ -2,19 +2,17 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulShortBuy } = require('../../managers/shortDataManager');
-// 🟢 CORRECCIÓN: Importación esencial para que el historial de ciclos (tradecycles) no quede vacío
 const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
 
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
- * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy).
- * Delega la lógica de reinicio exponencial o parada al ShortDataManager.
+ * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy Market).
  */
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
-    const sStateData = botState.sStateData;
-    const lastOrder = sStateData.lastOrder;
+    // ✅ MIGRADO: Leemos directamente de la raíz de la Estructura Plana
+    const lastOrder = botState.slastOrder;
 
-    // En Short, el ciclo se cierra con una compra (buy) para cubrir la venta previa
+    // Un ciclo Short termina con una orden 'buy' (recompra para cerrar)
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false; 
     }
@@ -23,55 +21,76 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
 
     try {
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
-        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
+        
+        // Bitmart puede devolver el volumen lleno en diferentes propiedades según el endpoint
+        let filledVolume = parseFloat(
+            finalDetails?.filledSize || 
+            finalDetails?.filled_volume || 
+            finalDetails?.filledVolume || 0
+        );
 
-        // Verificación de respaldo en historial
+        // Fallback: Si no hay detalles, buscamos en las órdenes recientes del exchange
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
-            if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+            if (finalDetails) {
+                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+            }
         }
 
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: RECOMPRA EXITOSA (Take Profit) ===
+        // =================================================================
+        // CASO A: RECOMPRA EXITOSA (Cierre de Ciclo con Profit)
+        // =================================================================
         if (isFilled) {
-            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. Finalizando ciclo Short...`, 'success');
+            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. Procesando cierre de ciclo Short...`, 'success');
             
             const handlerDependencies = { 
                 log, 
                 updateBotState, 
                 updateSStateData, 
                 updateGeneralBotState, 
-                logSuccessfulCycle, // 🟢 CORRECCIÓN: Inyectamos el servicio para guardar el profit en la DB
+                logSuccessfulCycle, 
                 config: botState.config 
             };
             
-            // Centralizamos la decisión: ¿Ir a SELLING (Exponencial) o a STOPPED?
-            // Esta lógica ya está blindada dentro del ShortDataManager que corregimos.
+            /**
+             * handleSuccessfulShortBuy realizará:
+             * 1. Cálculo de profit real (sai - costo de recompra).
+             * 2. Registro en cycleLogService (Historial).
+             * 3. Reset total de raíz: sac=0, sai=0, sppc=0, socc=0, slastOrder=null.
+             * 4. Transición de estado: SELLING (si es exponencial continuo) o STOPPED.
+             */
             await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
 
             return true;
         }
 
-        // === CASO B: ORDEN PENDIENTE EN LIBRO ===
+        // =================================================================
+        // CASO B: ORDEN PENDIENTE (En el Order Book)
+        // =================================================================
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
+            // El bot simplemente espera en el siguiente tick.
             return true; 
         }
 
-        // === CASO C: ORDEN FALLIDA O CANCELADA ===
+        // =================================================================
+        // CASO C: ORDEN CANCELADA O FALLIDA
+        // =================================================================
         if (isCanceled && filledVolume === 0) {
-            log(`❌ [S-BUY-FAIL] Recompra cancelada sin ejecución. Reintentando...`, 'error');
-            await updateSStateData({ 'lastOrder': null });
-            // El bot volverá a intentar poner la compra de cierre en el próximo ciclo
+            log(`❌ [S-BUY-FAIL] La recompra fue cancelada sin ejecutarse. Liberando slastOrder para reintento.`, 'error');
+            // ✅ MIGRADO: Limpieza de slastOrder en raíz para permitir que el bot lo intente de nuevo
+            await updateGeneralBotState({ 'slastOrder': null });
             return true;
         }
 
         return true;
 
     } catch (error) {
-        log(`[S-BUY-ERROR] Error en consolidación Short Buy: ${error.message}`, 'error');
+        log(`[S-BUY-ERROR] Error crítico en consolidación Short Buy: ${error.message}`, 'error');
+        // Retornamos true para no bloquear el ciclo por un error de red temporal
         return true; 
     }
 }

@@ -1,41 +1,93 @@
-<div class="p-6 space-y-6">
-    <div class="flex justify-between items-center bg-gray-900 p-4 rounded-xl border border-blue-500/30">
+<div class="p-6 space-y-6 bg-gray-900 animate-fadeIn h-full overflow-y-auto custom-scrollbar">
+    
+    <div class="flex justify-between items-center bg-gray-800 p-5 rounded-2xl border-2 border-blue-500/30 shadow-lg shadow-blue-500/5">
         <div>
-            <h2 class="text-2xl font-bold text-blue-400">AI Autonomous Engine</h2>
-            <p class="text-xs text-gray-400">Modo: <span id="ai-mode-status" class="text-yellow-500 font-mono">SIMULACIÓN VIRTUAL</span></p>
+            <h2 class="text-2xl font-black text-blue-400 tracking-tighter uppercase">AI Autonomous Engine</h2>
+            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                Modo: <span id="ai-mode-status" class="text-yellow-500 font-mono">Simulación Virtual</span>
+            </p>
         </div>
         <div class="text-right">
-            <div id="ai-status-dot" class="inline-block w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span class="text-sm font-mono ml-2">MODELO: NEURAL-V1</span>
+            <div class="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-xl border border-blue-500/20">
+                <div id="ai-status-dot" class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                <span class="text-[10px] font-black text-gray-300 tracking-widest">MODELO: NEURAL-V2.6</span>
+            </div>
         </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 flex flex-col items-center">
-            <h3 class="text-gray-400 text-sm mb-4">NIVEL DE CONFIANZA</h3>
-            <div class="relative w-32 h-32">
-                <div id="ai-confidence-value" class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-blue-500">
+        
+        <div class="bg-gray-800 p-6 rounded-3xl border-2 border-blue-500/20 flex flex-col items-center justify-center relative overflow-hidden group">
+            <div class="absolute inset-0 bg-blue-500/5 radial-gradient opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <h3 class="text-blue-500/60 text-[10px] font-black mb-4 tracking-widest uppercase">Nivel de Confianza</h3>
+            <div class="relative w-32 h-32 flex items-center justify-center">
+                <svg class="absolute w-full h-full -rotate-90" viewBox="0 0 128 128">
+                    <circle cx="64" cy="64" r="58" stroke="currentColor" stroke-width="6" fill="transparent" class="text-gray-900" />
+                    <circle id="ai-confidence-circle" cx="64" cy="64" r="58" stroke="currentColor" stroke-width="6" fill="transparent" class="text-blue-500 transition-all duration-1000" stroke-dasharray="364.4" stroke-dashoffset="364.4" stroke-linecap="round" />
+                </svg>
+                <div id="ai-confidence-value" class="text-3xl font-mono font-black text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
                     0%
                 </div>
             </div>
-            <p id="ai-prediction-text" class="mt-4 text-xs font-mono text-center text-gray-500 italic">Analizando mercado...</p>
+            <p id="ai-prediction-text" class="mt-4 text-[9px] font-mono text-center text-blue-300 italic uppercase tracking-tighter">
+                >> Calibrando Redes Neuronales...
+            </p>
         </div>
 
-        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 space-y-4">
-            <h3 class="text-gray-400 text-sm">CONTROL DE ENTRENAMIENTO</h3>
-            <button id="btn-start-ai" class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold transition-all">
-                ACTIVAR NÚCLEO IA
+        <div class="bg-gray-800 p-6 rounded-3xl border-2 border-blue-500/20 space-y-4 flex flex-col justify-center">
+            <h3 class="text-gray-400 text-[10px] font-black text-center uppercase tracking-widest">Training Control</h3>
+            <button id="btn-start-ai" class="w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-900/40 border border-blue-400/30 uppercase tracking-widest active:scale-95">
+                Activar Núcleo IA
             </button>
-            <div class="flex items-center justify-between text-xs px-2">
-                <span>Saldo Virtual:</span>
-                <span class="text-emerald-400 font-mono">$10,000.00 USDT</span>
+            <div class="bg-black/40 p-3 rounded-xl border border-blue-500/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[9px] text-gray-500 uppercase font-black">Saldo Virtual</span>
+                    <span id="ai-virtual-balance" class="text-emerald-400 font-mono font-black text-sm">$1,000.00</span>
+                </div>
             </div>
         </div>
 
-        <div class="bg-black p-4 rounded-2xl border border-gray-800 font-mono text-[10px] h-48 overflow-y-auto">
-            <div class="text-blue-500">[SYSTEM] Iniciando secuencia de IA...</div>
-            <div id="ai-log-container" class="space-y-1 mt-2">
+        <div class="bg-black p-4 rounded-3xl border-2 border-blue-500/20 font-mono text-[10px] h-48 overflow-hidden flex flex-col shadow-inner">
+            <div class="text-blue-500 border-b border-blue-500/20 pb-1 mb-2 shrink-0 font-bold flex justify-between">
+                <span>[LOG_NEURAL_STREAM]</span>
+                <span class="animate-pulse">_</span>
+            </div>
+            <div id="ai-log-container" class="space-y-1 overflow-y-auto flex-grow text-gray-400 custom-scrollbar">
                 </div>
+        </div>
+    </div>
+
+    <div class="mt-8">
+        <div class="flex items-center justify-between mb-4 px-2">
+            <div class="flex items-center gap-2">
+                <div class="w-1.5 h-4 bg-blue-500 rounded-full"></div>
+                <h3 class="text-white text-xs font-black tracking-widest uppercase">Registro de Operaciones Neurales</h3>
+            </div>
+            <div class="flex space-x-2 items-center bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span class="text-[9px] text-blue-300 font-black uppercase">Sync OK</span>
+            </div>
+        </div>
+        
+        <div class="bg-gray-800/50 rounded-3xl border-2 border-blue-500/10 overflow-hidden backdrop-blur-sm shadow-2xl">
+            <table class="w-full text-[11px] font-mono text-left">
+                <thead>
+                    <tr class="text-blue-400/70 border-b border-blue-500/10 bg-blue-500/5">
+                        <th class="px-6 py-4 font-black uppercase tracking-widest">Timestamp</th>
+                        <th class="px-6 py-4 font-black uppercase tracking-widest">Operación</th>
+                        <th class="px-6 py-4 font-black uppercase tracking-widest text-right">Precio</th>
+                        <th class="px-6 py-4 font-black uppercase tracking-widest text-right">Monto</th>
+                        <th class="px-6 py-4 font-black uppercase tracking-widest text-center">IA Conf.</th>
+                    </tr>
+                </thead>
+                <tbody id="ai-history-table-body" class="divide-y divide-blue-500/5">
+                    <tr class="text-gray-500">
+                        <td colspan="5" class="px-6 py-10 text-center italic tracking-widest uppercase text-[10px]">
+                            Esperando datos del flujo neural...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

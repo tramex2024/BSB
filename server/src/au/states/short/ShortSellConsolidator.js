@@ -7,8 +7,8 @@ const { handleSuccessfulShortSell } = require('../../managers/shortDataManager')
  * Monitorea órdenes de VENTA (apertura o DCA de Short).
  */
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
-    const sStateData = botState.sStateData;
-    const lastOrder = sStateData?.lastOrder;
+    // ✅ CAMBIO DE PARÁMETRO: Referencia a raíz slastOrder
+    const lastOrder = botState.slastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false;
@@ -19,7 +19,7 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
     try {
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
         
-        // 🟢 MEJORA: BitMart V2/V4 usa campos distintos. Aseguramos capturar el tamaño ejecutado.
+        // Aseguramos capturar el tamaño ejecutado (BTC vendidos)
         let filledSize = parseFloat(
             finalDetails?.filledSize || 
             finalDetails?.filled_volume || 
@@ -35,36 +35,36 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
             }
         }
 
-        // En BitMart, una orden market suele pasar a 'filled' casi instantáneamente
         const isFilled = finalDetails?.state === 'filled' || (finalDetails?.state === 'completed') || filledSize > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // --- CASO 1: VENTA EXITOSA ---
+        // --- CASO 1: VENTA EXITOSA (Apertura o Cobertura) ---
         if (isFilled) {
-            // Si la API no nos dio el size pero sabemos que es filled, usamos el del lastOrder como fallback
             const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
 
-            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada (${finalExecutedQty} BTC).`, 'success');
+            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada (${finalExecutedQty} BTC). Actualizando promedios...`, 'success');
             
-            // 🟢 Inyectamos el detalle procesado al DataManager
+            // Inyectamos el detalle al DataManager
+            // El DataManager usará botState.config.short para recalcular el TP y el DCA Exponencial
             await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
                 updateGeneralBotState, 
                 updateSStateData 
             }); 
             
-            // Importante: retornamos false para que el bucle de SSelling.js continúe
+            // Retornamos false para que el bucle de SSelling.js sepa que ya no hay orden pendiente
             return false; 
         } 
 
-        // --- CASO 2: ORDEN ACTIVA ---
+        // --- CASO 2: ORDEN ACTIVA (Esperando en el libro) ---
         if (finalDetails && ['new', 'partially_filled', '8'].includes(String(finalDetails.state))) {
-            return true; // Bloquea hasta que se llene
+            return true; // Mantiene el bloqueo en SSelling
         } 
 
         // --- CASO 3: ORDEN CANCELADA ---
         if (isCanceled) {
-            log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada sin ejecutarse.`, 'error');
-            await updateSStateData({ 'lastOrder': null });
+            log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada sin ejecutarse. Liberando estado.`, 'error');
+            // ✅ CAMBIO DE PARÁMETRO: Limpieza de slastOrder en raíz
+            await updateSStateData({ 'slastOrder': null });
             return false;
         }
 

@@ -3,135 +3,159 @@
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 const { calculateShortCoverage, parseNumber, getExponentialAmount } = require('../../../autobotCalculations'); 
-const { CLEAN_STRATEGY_DATA, CLEAN_SHORT_ROOT } = require('../utils/cleanState');
 
 const SSTATE = 'short';
-const BUY_FEE_PERCENT = 0.001; 
+const BUY_FEE_PERCENT = 0.001; // Comisión estimada de BitMart (0.1%)
 
 /**
- * Maneja el éxito de una VENTA (Apertura o DCA).
+ * Maneja el éxito de una VENTA (Apertura o DCA Short).
+ * Recalcula PPC, cobertura y siguiente precio de disparo.
  */
 async function handleSuccessfulShortSell(botState, orderDetails, log, dependencies = {}) {
-    const { updateGeneralBotState, updateSStateData } = dependencies;
+    const { updateGeneralBotState } = dependencies;
     
     const executedQty = parseFloat(orderDetails.filledSize || 0);
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
 
     if (executedQty <= 0 || executedPrice <= 0) {
-        log('[S-DATA] ⚠️ Ejecución inválida.', 'error');
-        if (updateSStateData) await updateSStateData({ 'lastOrder': null });
+        log('[S-DATA] ⚠️ Ejecución Short inválida (Qty o Price en 0).', 'error');
         return;
     }
 
-    // --- SANEAMIENTO DE BALANCE ---
+    // --- 1. ACTUALIZACIÓN DE BALANCE Y ACUMULADOS EN RAÍZ ---
     const currentSBalance = parseFloat(botState.sbalance || 0);
     const finalizedSBalance = parseFloat((currentSBalance - baseExecutedValue).toFixed(8));
 
-    const currentSData = botState.sStateData;
-    const isFirstOrder = (currentSData.orderCountInCycle || 0) === 0;
+    const currentAC = parseFloat(botState.sac || 0);  // Cantidad acumulada (BTC)
+    const currentAI = parseFloat(botState.sai || 0);  // Inversión acumulada (USDT)
+    const currentOCC = parseInt(botState.socc || 0);  // Contador de órdenes
     
-    const currentTotalQty = isFirstOrder ? 0 : parseFloat(currentSData.ac || 0);
-    const currentAI = isFirstOrder ? 0 : parseFloat(currentSData.ai || 0);
+    const isFirstOrder = currentOCC === 0;
     
-    const newTotalQty = parseFloat((currentTotalQty + executedQty).toFixed(8)); 
+    const newAC = parseFloat((currentAC + executedQty).toFixed(8)); 
     const newAI = currentAI + baseExecutedValue;
-    const newPPC = newAI / newTotalQty;
-    const newOrderCount = (currentSData.orderCountInCycle || 0) + 1;
+    const newPPC = newAI / newAC; // Nuevo Precio Promedio
+    const newOCC = currentOCC + 1;
 
-    // Target de recompra (precio menor al promedio de venta)
-    const profitPercent = parseNumber(botState.config.short.profit_percent) / 100;
-    const newSTPrice = newPPC * (1 - profitPercent);
+    // --- 2. LÓGICA EXPONENCIAL Y TARGETS ---
+    // Usamos profit_percent (nuevo campo 2026) o trigger como fallback
+    const profitTrigger = parseNumber(botState.config.short?.profit_percent || botState.config.short?.trigger || 0) / 100;
+    const newSPC = newPPC * (1 - profitTrigger); // Target Price para la recompra (Take Profit)
 
-    const { price_var, size_var, purchaseUsdt } = botState.config.short;
-    const newNextPrice = executedPrice * (1 + (parseNumber(price_var) / 100));
-    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount);
+    const { price_var, size_var, purchaseUsdt } = botState.config.short || {};
     
+    // Siguiente precio de cobertura: El precio de ejecución actual + la variación porcentual
+    const newNCP = executedPrice * (1 + (parseNumber(price_var) / 100)); 
+
+    // Monto para la siguiente orden DCA (Exponencial)
+    const nextRCA = getExponentialAmount(purchaseUsdt, newOCC, size_var);
+    
+    // --- 3. RECALCULAR RESISTENCIA (Coverage) ---
     const { coveragePrice, numberOfOrders } = calculateShortCoverage(
         finalizedSBalance, 
-        newPPC, 
+        executedPrice, 
         purchaseUsdt, 
-        parseNumber(price_var)/100, 
-        parseNumber(size_var)/100
+        parseNumber(price_var) / 100, 
+        parseNumber(size_var),
+        newOCC
     );
 
+    // --- 4. PERSISTENCIA ATÓMICA EN RAÍZ ---
     await saveExecutedOrder({ ...orderDetails, side: 'sell' }, SSTATE);
 
     await updateGeneralBotState({
-        scoverage: coveragePrice,
-        snorder: numberOfOrders,
+        sac: newAC,
+        sai: newAI,
+        sppc: newPPC,
+        socc: newOCC,        
+        slep: executedPrice, // Último precio ejecutado
+        sncp: newNCP,        // Siguiente precio de cobertura
+        srca: nextRCA,       // Siguiente monto de cobertura
+        spc: newSPC,         // Short Profit Check (Target Price)
         sbalance: finalizedSBalance,
-        stprice: newSTPrice,
-        sStateData: {
-            ...currentSData,
-            ac: newTotalQty,
-            ai: newAI,
-            ppc: newPPC,
-            lastOrder: null,
-            lastExecutionPrice: executedPrice,
-            nextCoveragePrice: newNextPrice,
-            requiredCoverageAmount: nextRequiredAmount,
-            orderCountInCycle: newOrderCount,
-            cycleStartTime: isFirstOrder ? new Date() : currentSData.cycleStartTime
-        }
+        scoverage: coveragePrice, 
+        snorder: numberOfOrders,   
+        sstartTime: isFirstOrder ? new Date() : botState.sstartTime,
+        slastOrder: null     // Limpiamos la orden para permitir el siguiente tick
     });
     
-    log(`✅ [S-DATA] Orden #${newOrderCount} (Venta). Nuevo Bal: ${finalizedSBalance.toFixed(2)}. Target TP: ${newSTPrice.toFixed(2)}`, 'success');
+    log(`✅ [S-DATA] DCA #${newOCC} Confirmado. PPC: ${newPPC.toFixed(2)}. Sig. DCA: $${newNCP.toFixed(2)} (${nextRCA.toFixed(2)} USDT).`, 'success');
 }
 
 /**
  * Maneja el éxito de una COMPRA (Take Profit).
+ * Cierra el ciclo, registra el beneficio y resetea indicadores.
  */
 async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies) {
-    const { config, log, updateBotState, updateSStateData, updateGeneralBotState } = dependencies;
+    const { config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
     
     try {
-        const currentSData = botStateObj.sStateData;
         const buyPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         const filledSize = parseFloat(orderDetails.filledSize || 0); 
         
-        // AI es el capital que entró por las ventas previas
-        const totalUsdtReceivedFromSales = parseFloat(currentSData.ai || 0); 
-
-        // Costo real de cerrar la deuda en BitMart
+        // El Short es rentable si: (Lo que recibimos al vender > Lo que gastamos al recomprar)
+        const totalUsdtReceivedFromSales = parseFloat(botStateObj.sai || 0); 
         const totalSpentToCover = (filledSize * buyPrice) * (1 + BUY_FEE_PERCENT);
         const profitNeto = totalUsdtReceivedFromSales - totalSpentToCover;
 
-        // RECUPERACIÓN DE BALANCE:
-        // El sbalance ya fue restado en cada venta. Al cerrar, devolvemos el capital 
-        // inicial más el profit generado.
+        // Recuperamos el balance: Balance actual + Inversión retornada + Profit Neto
         const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
 
         await saveExecutedOrder({ ...orderDetails, side: 'buy' }, SSTATE);
 
-        if (currentSData.cycleStartTime) {
-            await logSuccessfulCycle({
-                strategy: 'Short',
-                cycleIndex: (botStateObj.scycle || 0) + 1,
-                netProfit: profitNeto,
-                initialInvestment: totalUsdtReceivedFromSales,
-                finalRecovery: totalSpentToCover
-            });
+        // --- REGISTRO DE CICLO EN HISTORIAL ---
+        if (logSuccessfulCycle && botStateObj.sstartTime) {
+            try {
+                await logSuccessfulCycle({
+                    autobotId: botStateObj._id,
+                    symbol: botStateObj.config?.symbol || 'BTC_USDT',
+                    strategy: 'Short',
+                    cycleIndex: (botStateObj.scycle || 0) + 1,
+                    startTime: botStateObj.sstartTime,
+                    endTime: new Date(),
+                    averagePPC: parseFloat(botStateObj.sppc || 0),
+                    finalSellPrice: buyPrice, // Precio de recompra
+                    orderCount: parseInt(botStateObj.socc || 0),
+                    initialInvestment: totalUsdtReceivedFromSales,
+                    finalRecovery: totalSpentToCover,
+                    netProfit: profitNeto,
+                    profitPercentage: (profitNeto / totalUsdtReceivedFromSales) * 100
+                });
+            } catch (dbError) {
+                log(`⚠️ Historial Short: Error al guardar, pero el ciclo continúa.`, 'error');
+            }
         }
 
-        const shouldStopShort = config.short.stopAtCycle === true;
+        const shouldStopShort = config.short?.stopAtCycle === true;
 
+        // --- RESETEO TOTAL DE LA RAÍZ (Tabula Rasa) ---
         await updateGeneralBotState({
-            ...CLEAN_SHORT_ROOT,
+            sac: 0,
+            sai: 0,
+            sppc: 0,
+            socc: 0,
+            slep: 0,
+            sncp: 0,
+            srca: 0,
+            spc: 0,
+            sstartTime: null,
+            scoverage: 0,
+            snorder: 0,
+            slastOrder: null, 
             sbalance: finalizedSBalance,
             total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
             scycle: (Number(botStateObj.scycle || 0) + 1),
-            'config.short.enabled': !shouldStopShort 
+            'config.short.enabled': !shouldStopShort
         });
 
-        await updateSStateData(CLEAN_STRATEGY_DATA);
-
-        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT. Nuevo Bal: ${finalizedSBalance.toFixed(2)}`, 'success');
+        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT. Balance: ${finalizedSBalance.toFixed(2)}`, 'success');
+        
+        // Transición de estado: Si stopAtCycle es true, va a STOPPED, si no, a RUNNING para empezar otro
         await updateBotState(shouldStopShort ? 'STOPPED' : 'RUNNING', SSTATE);
 
     } catch (error) {
         log(`❌ [S-DATA] Error crítico en cierre Short: ${error.message}`, 'error');
-        if (updateSStateData) await updateSStateData({ 'lastOrder': null });
         throw error;
     }
 }

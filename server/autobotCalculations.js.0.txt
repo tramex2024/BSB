@@ -1,11 +1,7 @@
 /**
  * BSB/server/autobotCalculations.js
  * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
- */
-
-/**
- * BSB/server/autobotCalculations.js
- * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
+ * BASADO EN LÓGICA EXPONENCIAL DINÁMICA.
  */
 
 const parseNumber = (val) => {
@@ -13,122 +9,161 @@ const parseNumber = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
+/**
+ * LÓGICA EXPONENCIAL DINÁMICA
+ */
+function getExponentialAmount(baseAmount, orderCount, sizeVar) {
+    const base = parseNumber(baseAmount);
+    const count = parseNumber(orderCount);
+    const sVar = parseNumber(sizeVar || 100);
+
+    const multiplier = 1 + (sVar / 100);
+
+    if (base <= 0) return 0;
+    if (multiplier <= 1) return base;
+
+    return base * Math.pow(multiplier, count);
+}
+
 // ==========================================
-//        LÓGICA PARA LONG (COMPRA)
+//          LÓGICA PARA LONG (COMPRA)
 // ==========================================
 
-function calculateLongTargets(ppc, profit_percent, price_var, size_var, purchaseUsdt, currentOrderCount, balance) {
-    const profitDec = parseNumber(profit_percent) / 100;
+function calculateLongTargets(lastPrice, profit_percent, price_var, size_var, orderCount, baseAmount) {
+    const p = parseNumber(lastPrice);
     const priceVarDec = parseNumber(price_var) / 100;
-    const sizeVarDec = parseNumber(size_var) / 100;
-
-    // Cantidad requerida para la PRÓXIMA orden (Martingala)
-    const requiredAmount = parseNumber(purchaseUsdt) * Math.pow(1 + sizeVarDec, currentOrderCount);
-
-    return {
-        takeProfitPrice: ppc * (1 + profitDec),
-        nextCoveragePrice: ppc * (1 - priceVarDec),
-        requiredCoverageAmount: requiredAmount
-    };
-}
-
-function calculateLongCoverage(balance, basePrice, initialAmount, priceVarDec, sizeVarDec, currentOrderCount = 0) {
-    let remainingBalance = parseNumber(balance);
-    let nextPrice = parseNumber(basePrice);
-    let nextAmount = parseNumber(initialAmount) * Math.pow(1 + sizeVarDec, currentOrderCount);
-    let numberOfOrders = 0;
-
-    while (remainingBalance >= nextAmount && numberOfOrders < 50) {
-        remainingBalance -= nextAmount;
-        nextPrice = nextPrice * (1 - priceVarDec);
-        nextAmount = nextAmount * (1 + sizeVarDec);
-        numberOfOrders++;
-    }
-
-    return { 
-        coveragePrice: nextPrice, 
-        numberOfOrders: numberOfOrders 
-    };
-}
-
-// ==========================================
-//        LÓGICA PARA SHORT (VENTA)
-// ==========================================
-
-function calculateShortTargets(ppc, profit_percent, price_var, size_var, purchaseUsdt, currentOrderCount, balance) {
     const profitDec = parseNumber(profit_percent) / 100;
-    const priceVarDec = parseNumber(price_var) / 100;
-    const sizeVarDec = parseNumber(size_var) / 100;
-
-    const requiredAmount = parseNumber(purchaseUsdt) * Math.pow(1 + sizeVarDec, currentOrderCount);
 
     return {
-        takeProfitPrice: ppc * (1 - profitDec), // Profit hacia abajo
-        nextCoveragePrice: ppc * (1 + priceVarDec), // Cobertura hacia arriba
-        requiredCoverageAmount: requiredAmount
-    };
-}
-
-function calculateShortCoverage(balance, basePrice, initialAmount, priceVarDec, sizeVarDec, currentOrderCount = 0) {
-    let remainingBalance = parseNumber(balance);
-    let nextPrice = parseNumber(basePrice);
-    let nextAmount = parseNumber(initialAmount) * Math.pow(1 + sizeVarDec, currentOrderCount);
-    let numberOfOrders = 0;
-
-    while (remainingBalance >= nextAmount && numberOfOrders < 50) {
-        remainingBalance -= nextAmount;
-        nextPrice = nextPrice * (1 + priceVarDec); // El peligro está en la subida
-        nextAmount = nextAmount * (1 + sizeVarDec);
-        numberOfOrders++;
-    }
-
-    return { 
-        coveragePrice: nextPrice, 
-        numberOfOrders: numberOfOrders 
-    };
-}
-
-// ==========================================
-//        INICIALIZACIÓN Y UTILIDADES
-// ==========================================
-
-function calculateInitialState(config, currentPrice) {
-    const l_purchase = parseNumber(config.long.purchaseUsdt);
-    const s_purchase = parseNumber(config.short.purchaseUsdt);
-    const l_pvar = parseNumber(config.long.price_var) / 100;
-    const s_pvar = parseNumber(config.short.price_var) / 100;
-
-    return {
-        lbalance: l_purchase,
-        sbalance: s_purchase,
-        lcoverage: currentPrice * (1 - l_pvar),
-        scoverage: currentPrice * (1 + s_pvar),
-        lnorder: 1,
-        snorder: 1
+        targetSellPrice: p * (1 + profitDec),
+        nextCoveragePrice: p * (1 - priceVarDec),
+        requiredCoverageAmount: getExponentialAmount(baseAmount, orderCount, size_var)
     };
 }
 
 /**
- * Calcula la ganancia o pérdida flotante en tiempo real.
- * @param {number} currentPrice - Precio actual de mercado.
- * @param {number} ppc - Precio promedio de compra/venta.
- * @param {number} ac - Cantidad acumulada de activos.
- * @param {string} strategy - 'long' o 'short'.
+ * LÓGICA DE RESISTENCIA LONG (ESPEJO DEL SHORT)
  */
-function calculatePotentialProfit(ppc, ac, currentPrice, feeRate = 0.001) {
+function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
+    let remainingBalance = parseNumber(balance);
+    let simulationPrice = parseNumber(currentMarketPrice); 
+    let orderCount = parseNumber(currentOrderCount);
+    let numberOfExtraOrders = 0;
+
+    let firstOrderCost = getExponentialAmount(baseAmount, orderCount, sizeVar);
+    if (remainingBalance < firstOrderCost) {
+        return { coveragePrice: simulationPrice, numberOfOrders: 0 };
+    }
+
+    while (numberOfExtraOrders < 20) {
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
+
+        if (remainingBalance < nextOrderAmount) break;
+
+        remainingBalance -= nextOrderAmount;
+        
+        // La primera orden ocurre al precio actual. Las siguientes bajan el precio.
+        if (numberOfExtraOrders > 0) {
+            simulationPrice = simulationPrice * (1 - parseNumber(priceVarDec));
+        }
+
+        orderCount++;
+        numberOfExtraOrders++;
+    }
+
+    return { 
+        coveragePrice: simulationPrice, 
+        numberOfOrders: numberOfExtraOrders 
+    };
+}
+
+// ==========================================
+//          LÓGICA PARA SHORT (VENTA)
+// ==========================================
+
+function calculateShortTargets(lastPrice, profit_percent, price_var, size_var, baseAmount, orderCount) {
+    const p = parseNumber(lastPrice);
+    const pVar = parseNumber(price_var) / 100;
+    const profitDec = parseNumber(profit_percent) / 100;
+
+    return {
+        targetBuyPrice: p * (1 - profitDec),
+        nextCoveragePrice: p * (1 + pVar), 
+        requiredCoverageAmount: getExponentialAmount(baseAmount, orderCount, size_var)
+    };
+}
+
+function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount) {
+    let remainingBalance = parseNumber(balance);
+    let simulationPrice = parseNumber(currentMarketPrice); 
+    let orderCount = parseNumber(currentOrderCount);
+    let numberOfExtraOrders = 0;
+
+    let firstOrderCost = getExponentialAmount(baseAmount, orderCount, sizeVar);
+    if (remainingBalance < firstOrderCost) {
+        return { coveragePrice: simulationPrice, numberOfOrders: 0 };
+    }
+
+    while (numberOfExtraOrders < 20) {
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
+
+        if (remainingBalance < nextOrderAmount) break;
+
+        remainingBalance -= nextOrderAmount;
+        
+        if (numberOfExtraOrders > 0) {
+            simulationPrice = simulationPrice * (1 + parseNumber(priceVarDec));
+        }
+
+        orderCount++;
+        numberOfExtraOrders++;
+    }
+
+    return { 
+        coveragePrice: simulationPrice, 
+        numberOfOrders: numberOfExtraOrders 
+    };
+}
+
+// ==========================================
+//          PNL Y UTILIDADES
+// ==========================================
+
+function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
     const p = parseFloat(currentPrice);
     const entry = parseFloat(ppc);
     const qty = parseFloat(ac);
     
     if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
 
-    // Beneficio bruto (Long)
-    const grossProfit = (p - entry) * qty;
+    let grossProfit = (strategy === 'long') 
+        ? (p - entry) * qty 
+        : (entry - p) * qty;
     
-    // Estimación de comisión (entrada + salida)
-    const fees = (entry * qty * feeRate) + (p * qty * feeRate);
+    const entryValue = entry * qty;
+    const exitValue = p * qty;
+    const totalFees = (entryValue + exitValue) * feeRate;
 
-    return grossProfit - fees;
+    return grossProfit - totalFees;
+}
+
+function calculateInitialState(config, currentPrice) {
+    const p = parseNumber(currentPrice);
+    const lBase = parseNumber(config.long?.purchaseUsdt || 0);
+    const sBase = parseNumber(config.short?.purchaseUsdt || 0);
+    const lSizeVar = parseNumber(config.long?.size_var || 100);
+    const sSizeVar = parseNumber(config.short?.size_var || 100);
+
+    return {
+        long: {
+            nextCoveragePrice: p * (1 - (parseNumber(config.long?.price_var || 0) / 100)),
+            requiredCoverageAmount: getExponentialAmount(lBase, 1, lSizeVar)
+        },
+        short: {
+            nextCoveragePrice: p * (1 + (parseNumber(config.short?.price_var || 0) / 100)),
+            requiredCoverageAmount: getExponentialAmount(sBase, 1, sSizeVar)
+        }
+    };
 }
 
 module.exports = {
@@ -137,6 +172,7 @@ module.exports = {
     calculateLongCoverage,
     calculateShortTargets,
     calculateShortCoverage,
+    calculatePotentialProfit,
     calculateInitialState,
-    calculatePotentialProfit
+    getExponentialAmount
 };

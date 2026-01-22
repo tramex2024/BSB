@@ -1,4 +1,6 @@
-/* --- VARIABLES Y RESET --- */
+/* ============================================================
+   BSB - GLOBAL STYLES & VARIABLES
+   ============================================================ */
 :root {
     --dark-bg: #0a0a12;
     --dark-header-bg: #121220;
@@ -11,12 +13,10 @@
     --success: #10b981;
     --danger: #ef4444;
     --warning: #f59e0b;
-    --special: #a855f7; /* Púrpura para CACHE_FALLBACK y Shorts */
+    --special: #a855f7; /* Púrpura para CACHE_FALLBACK */
 }
 
-* {
-    box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
     background-color: var(--dark-bg);
@@ -27,32 +27,17 @@ body {
     overflow-x: hidden;
 }
 
-/* --- HEADER --- */
-.fixed-header {
+/* --- HEADER & NAVIGATION --- */
+header, .fixed-header {
     position: sticky;
     top: 0;
     width: 100%;
-    height: 64px;
-    background-color: var(--dark-header-bg);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    z-index: 1000;
-}
-
-.header-left {
+    height: 64px; /* 4rem en Tailwind */
+    z-index: 1000; /* La capa más alta */
+    background-color: #1f2937; /* gray-800 */
     display: flex;
     align-items: center;
-    gap: 12px;
-}
-
-.logo {
-    width: 38px;
-    height: 38px;
-    object-fit: contain;
-    border-radius: 4px;
+    border-bottom: 1px solid #374151;
 }
 
 .nav-tab {
@@ -66,10 +51,7 @@ body {
     cursor: pointer;
 }
 
-.nav-tab:hover {
-    color: white;
-    background-color: var(--dark-accent);
-}
+.nav-tab:hover { color: white; background-color: var(--dark-accent); }
 
 .nav-tab.active {
     color: white !important;
@@ -78,29 +60,155 @@ body {
     border-bottom: 2px solid var(--success) !important;
 }
 
-/* --- MODALES (NUEVO) --- */
+/* --- SISTEMA DE SALUD (LA BOLITA) --- */
+/* --- FIX PARA VISIBILIDAD EN MÓVIL --- */
+.status-ball-container {
+    position: relative;
+    width: 14px;  /* Un poco más grande para móvil */
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0; /* Evita que el flexbox la aplaste */
+    z-index: 9999;  /* Asegura que esté por encima de todo */
+}
+
+.status-dot-base {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-color: #4b5563; /* Gris por defecto si nada carga */
+    transition: all 0.3s ease;
+}
+
+/* Estados de color con !important para ganar a Tailwind */
+.status-green { 
+    background-color: var(--success) !important; 
+    box-shadow: 0 0 10px var(--success); 
+    animation: pulse-green 2s infinite; 
+}
+
+.status-red { 
+    background-color: var(--danger) !important; 
+    box-shadow: 0 0 10px var(--danger);
+    animation: blink-red 1s infinite;
+}
+
+.status-purple { 
+    background-color: var(--special) !important; 
+    box-shadow: 0 0 10px var(--special); 
+    animation: pulse-purple 2s infinite; 
+}
+
+/* --- ANIMACIONES DE LA BOLITA --- */
+@keyframes pulse-green {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.25); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes blink-red {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+@keyframes pulse-purple {
+    0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(168, 85, 247, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+}
+
+/* --- LOG BAR REFINADA --- */
+.log-bar, #log-bar {
+    position: sticky;
+    top: 64px !important; 
+    width: 100%;
+    height: 32px;
+    background-color: rgba(11, 15, 25, 0.98);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    padding: 0 16px; /* Un poco menos de padding en los lados */
+    z-index: 900;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden; /* Evita que el texto ensucie el diseño */
+}
+
+#log-message {
+    margin: 0;
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+    color: #9ca3af;
+    white-space: nowrap; /* Fuerza al texto a quedarse en una sola línea */
+    text-overflow: ellipsis; /* Si el mensaje es muy largo, pone "..." al final */
+    
+    /* Fuente responsiva: */
+    font-size: 11px; /* Tamaño por defecto para PC */
+}
+
+/* Clase para campos editables 'al vuelo' */
+.editable-running {
+    border-bottom: 2px dashed var(--warning) !important;
+    cursor: edit;
+}
+
+.editable-running:focus {
+    background-color: rgba(245, 158, 11, 0.1);
+    outline: none;
+    border-bottom: 2px solid var(--warning) !important;
+}
+
+/* Añade esto a tu archivo de estilos principal si quieres suavidad */
+input:disabled {
+    transition: all 0.3s ease;
+    filter: grayscale(1);
+}
+
+/* Ajuste específico para celulares (pantallas menores a 640px) */
+@media (max-width: 640px) {
+    #log-message {
+        font-size: 10px; /* Un poco más pequeña para que encaje perfecto */
+        letter-spacing: -0.02em; /* Junta un poquito las letras para ganar espacio */
+    }
+    
+    .log-bar {
+        padding: 0 10px; /* Más espacio para el texto en móviles */
+    }
+}
+
+/* --- MODALES --- */
 .modal {
-    display: none; /* Controlado por JS */
+    display: none;
     position: fixed;
     inset: 0;
-    background-color: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(5px);
+    background-color: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(6px);
     z-index: 2000;
     justify-content: center;
     align-items: center;
-    padding: 20px;
 }
 
 .modal-content {
-    background-color: var(--dark-header-bg);
+    background-color: #1f2937;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
     border-radius: 16px;
-    width: 100%;
-    max-width: 400px;
-    padding: 30px;
-    position: relative;
+    padding: 24px;
+    width: 90%;
+    max-width: 450px;
     animation: slideUp 0.3s ease-out;
+}
+
+.autobot-tab-btn {
+    transition: all 0.2s ease-in-out;
+}
+.autobot-tab-btn:hover:not(.text-emerald-500) {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+
+/* Ajuste para el contenido principal para que no se pegue arriba */
+main#main-content {
+    margin-top: 0; /* Ya que usamos sticky, no necesita padding extra */
 }
 
 @keyframes slideUp {
@@ -108,92 +216,12 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- LOG BAR --- */
-.log-bar {
-    position: sticky;
-    top: 64px;
-    width: 100%;
-    height: 28px;
-    background-color: var(--log-bar-bg);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    font-size: 0.7rem;
-    z-index: 999;
-    overflow: hidden;
-}
-
-#log-message {
-    margin: 0;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.02em;
-    transition: opacity 0.3s ease;
-}
-
-.log-success { color: var(--success); }
-.log-error { color: var(--danger); }
-
-/* --- ESTADOS DE CONEXIÓN --- */
-#status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    transition: all 0.3s ease;
-}
-
-.status-green { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
-.status-red { background-color: var(--danger); box-shadow: 0 0 8px var(--danger); animation: blink-fast 1.5s infinite; }
-.status-purple { background-color: var(--special); animation: pulse-purple 2s infinite; }
-
-/* --- BOTONES Y UI --- */
-button {
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-button:active { transform: scale(0.97); }
-
-.start-btn { background-color: var(--success); color: white; }
-.start-btn:hover { background-color: #059669; }
-
-.stop-btn { background-color: var(--danger); color: white; }
-.stop-btn:hover { background-color: #dc2626; }
-
-/* --- ANIMACIONES --- */
-@keyframes pulse-purple {
-    0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
-}
-
-@keyframes blink-fast {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-/* --- TRADINGVIEW & TABLAS --- */
-.chart-container {
-    background: var(--dark-header-bg);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    overflow: hidden;
-}
-
+/* --- UTILIDADES Y SCROLLBAR --- */
 .font-mono { font-family: 'JetBrains Mono', monospace !important; }
 
-/* Forzar colores de texto específicos */
-.text-emerald-400 { color: #34d399 !important; }
-.text-red-400 { color: #f87171 !important; }
-
-/* Scrollbar personalizado */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--dark-bg); }
 ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
 
-/* --- RESPONSIVE --- */
-@media (max-width: 768px) {
-    .fixed-header { height: auto; padding: 12px; flex-direction: column; gap: 12px; }
-    .nav-tab { padding: 8px 4px; font-size: 0.75rem; }
-}
+.text-emerald-400 { color: #34d399 !important; }
+.text-red-400 { color: #f87171 !important; }
