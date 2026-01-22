@@ -70,11 +70,10 @@ function processNextLog() {
 // --- INICIALIZACIÓN DE SOCKETS ---
 export function initializeFullApp() {
     if (socket && socket.connected) return;
-
     if (typeof io === 'undefined') return;
 
     socket = io(BACKEND_URL, { 
-        transports: ['websocket', 'polling'], // Añadimos polling por si acaso
+        transports: ['websocket', 'polling'],
         reconnection: true 
     });
 
@@ -84,15 +83,13 @@ export function initializeFullApp() {
         socket.emit('get-bot-state');
     });
 
-    // === AGREGAR ESTO PARA EL PRECIO ===
     socket.on('marketData', (data) => {
-        resetWatchdog(); // Esto mantiene la bolita verde
+        resetWatchdog();
         if (data && data.price) {
             currentBotState.price = parseFloat(data.price);
-            updateBotUI(currentBotState); // Esta función dibuja el precio en pantalla
+            updateBotUI(currentBotState);
         }
     });
-    // ===================================
 
     socket.on('bot-state-update', (state) => {
         resetWatchdog();
@@ -125,12 +122,12 @@ export async function initializeTab(tabName) {
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
             
             if (typeof module[initFnName] === 'function') {
-    await module[initFnName](currentBotState); 
-    
-    // Forzamos la actualización visual inmediata de la pestaña recién cargada
-    updateBotUI(currentBotState);
-    updateControlsState(currentBotState); // <--- Asegúrate de que esta línea esté aquí
-}
+                await module[initFnName](currentBotState); 
+                updateBotUI(currentBotState);
+                updateControlsState(currentBotState);
+                
+                // Pedir estado fresco al entrar a la pestaña
+                if (socket && socket.connected) socket.emit('get-bot-state');
             }
         }
     } catch (error) { 
@@ -139,9 +136,7 @@ export async function initializeTab(tabName) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Le pasamos initializeTab para que sepa cómo cambiar de página
     setupNavTabs(initializeTab); 
-    
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
     
