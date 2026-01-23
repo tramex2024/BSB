@@ -2,10 +2,10 @@
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
-// Mapeo de colores hexadecimales (Inmunes al CSS blanco)
+// Mapeo corregido: RUNNING = ROJO (Para indicar que se puede detener), STOPPED = VERDE (Listo)
 const STATUS_COLORS = {
-    'RUNNING': '#34d399',      // Esmeralda
-    'STOPPED': '#f87171',      // Rojo
+    'RUNNING': '#ef4444',      // Rojo (Tailwind red-500)
+    'STOPPED': '#10b981',      // Esmeralda (Tailwind emerald-500)
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo
     'NO_COVERAGE': '#a78bfa',  // Púrpura
@@ -16,54 +16,56 @@ const STATUS_COLORS = {
  * Actualiza el estado visual de los botones y labels
  */
 export function updateButtonState(btnId, status, type, inputIds = []) {
-    // Si status es null o undefined, forzamos STOPPED por seguridad
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    const labelId = `aubot-${type.toLowerCase()}state`;
-    const label = document.getElementById(labelId);
+    // Intentamos ambos formatos de ID por si acaso
+    const label = document.getElementById(`aubot-${type.toLowerCase()}state`) || 
+                  document.getElementById(`${type.toLowerCase()}-status-label`);
     
-    // 1. GESTIÓN DEL BOTÓN
+    // 1. GESTIÓN DEL BOTÓN (Sincronizado con el fondo y el texto)
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
-        btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
+        
+        // Limpieza de clases de fondo
+        btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600', 'bg-gray-600');
         
         if (isBusy) {
-            btn.classList.add('bg-red-600'); 
+            btn.classList.add('bg-red-600'); // Si corre, botón rojo para parar
         } else {
+            // Si está parado, verde para empezar (o índigo si es AI)
             btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
         }
+        
         btn.disabled = false;
         btn.style.opacity = "1";
     }
 
-    // 2. GESTIÓN DEL LABEL (COLORES)
+    // 2. GESTIÓN DEL LABEL (COLORES DINÁMICOS)
     if (label) {
         label.textContent = currentStatus;
-        
-        // Reset de estilos para evitar el color blanco heredado
-        label.style.fontSize = "12px";
         label.style.fontWeight = "bold";
         label.style.fontFamily = "monospace";
         
-        // Aplicamos color desde el mapa STATUS_COLORS
+        // Aplicamos el color del mapa
         const color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
-        label.style.color = color; // Esto sobreescribe cualquier CSS
+        label.style.color = color;
     }
 
-    // 3. GESTIÓN DE INPUTS
+    // 3. GESTIÓN DE INPUTS (Bloqueo si está activo)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = isBusy;
-            el.style.opacity = isBusy ? "0.5" : "1";
+            el.style.opacity = isBusy ? "0.6" : "1";
+            el.style.cursor = isBusy ? "not-allowed" : "text";
         }
     });
 }
 
 /**
- * Sincroniza los valores de los inputs con la configuración de la DB
+ * Sincroniza los valores de los inputs con la configuración de la DB (Mismo mapping)
  */
 export function syncInputsFromConfig(conf) {
     if (!conf) return;
@@ -86,6 +88,7 @@ export function syncInputsFromConfig(conf) {
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
         if (input && value !== undefined && document.activeElement !== input) {
+            // Solo actualizamos si el cambio es significativo para no molestar al usuario
             const currentVal = parseFloat(input.value) || 0;
             const newVal = parseFloat(value) || 0;
             if (Math.abs(newVal - currentVal) > 0.000001) {
@@ -94,6 +97,7 @@ export function syncInputsFromConfig(conf) {
         }
     }
     
+    // Sincronización de Checkboxes (Auto-stop)
     ['long', 'short', 'ai'].forEach(side => {
         const el = document.getElementById(`au-stop-${side}-at-cycle`);
         const checked = !!conf[side]?.stopAtCycle;
