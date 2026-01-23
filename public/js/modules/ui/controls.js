@@ -33,38 +33,51 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 1. Actualizar el Botón
+    // 1. Actualizar el Botón (Acción: START o STOP)
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-        if (isBusy) btn.classList.add('bg-red-600'); 
-        else btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+        
+        if (isBusy) {
+            btn.classList.add('bg-red-600'); // Rojo cuando el bot está trabajando para poder detenerlo
+        } else {
+            // Color según el bot (Esmeralda para Autobot, Índigo para AI) al estar detenido
+            btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+        }
+        
+        btn.disabled = false;
+        btn.style.opacity = "1";
     }
 
-    // 2. Actualizar el Label (AQUÍ ESTÁ LA CORRECCIÓN)
+    // 2. Actualizar el Label de Estado (Color específico y Tamaño aumentado)
     if (label) {
         label.textContent = currentStatus;
         
-        // Eliminamos FORZOSAMENTE cualquier clase de color previa
-        // Esto evita que 'text-red-400' se quede pegado cuando llega 'text-emerald-400'
+        // --- MEJORA DE TAMAÑO ---
+        // Eliminamos clases de tamaño pequeñas y forzamos text-[12px] (un punto más)
+        label.classList.remove('text-[9px]', 'text-[10px]', 'text-xs');
+        label.classList.add('text-[12px]'); 
+
+        // --- CORRECCIÓN DE COLOR ---
+        // Eliminamos CUALQUIER rastro de color previo para que no haya conflicto
         label.classList.remove(
             'text-emerald-400', 'text-red-400', 'text-blue-400', 
             'text-yellow-400', 'text-purple-400', 'text-orange-400', 'text-gray-400'
         );
         
-        // Aplicamos el color del mapeo
+        // Aplicamos el color que le corresponde según tu objeto STATUS_COLORS
         const colorClass = STATUS_COLORS[currentStatus];
         
         if (colorClass) {
             label.classList.add(colorClass);
         } else {
-            // Si el estado no está en el mapa, lo ponemos gris para saber que algo falla
+            // Si el estado es nuevo o desconocido, gris por seguridad
             label.classList.add('text-gray-400');
-            console.warn(`Estado desconocido para color: "${currentStatus}"`);
+            console.warn(`⚠️ Estado sin color definido: "${currentStatus}"`);
         }
     }
 
-    // 3. Gestión de Bloqueo de Inputs
+    // 3. Gestión de Bloqueo de Inputs (Deshabilitar si el bot está operando)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
