@@ -19,47 +19,46 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${type.toLowerCase()}state`;
     const label = document.getElementById(labelId);
     
-    // Forzamos limpieza de strings
     const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 1. Botón (Fondo Rojo o Esmeralda)
+    // --- BOTONES (VOLVEMOS A LA LÓGICA QUE TE FUNCIONABA BIEN) ---
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
+        
+        // Colores de fondo del botón
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-        if (isBusy) btn.classList.add('bg-red-600');
-        else btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+        if (isBusy) {
+            btn.classList.add('bg-red-600'); 
+        } else {
+            btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+        }
+        
+        btn.disabled = false;
+        btn.style.opacity = "1";
     }
 
-    // 2. Label (Color del Texto y Tamaño)
+    // --- TEXTOS DE ESTADO (LABEL) ---
     if (label) {
         label.textContent = currentStatus;
         
-        // Aumentar tamaño (Ya dijiste que esto está perfecto)
-        label.classList.remove('text-[9px]', 'text-[10px]', 'text-xs');
-        label.classList.add('text-[12px]', 'font-bold'); 
+        // Tamaño un punto más grande (12px)
+        label.style.fontSize = "12px"; 
+        label.classList.add('font-bold', 'font-mono');
 
-        // LIMPIEZA DE COLORES (Incluyendo text-white por si acaso)
-        label.classList.remove(
-            'text-white', 'text-gray-400',
-            'text-emerald-400', 'text-red-400', 'text-blue-400', 
-            'text-yellow-400', 'text-purple-400', 'text-orange-400'
-        );
+        // Limpieza y aplicación de color
+        // Quitamos manualmente las clases de color que Tailwind pueda tener fijas
+        label.classList.remove('text-red-400', 'text-emerald-400', 'text-white', 'text-gray-400');
         
-        // ASIGNACIÓN DE COLOR
         const colorClass = STATUS_COLORS[currentStatus];
-        
         if (colorClass) {
             label.classList.add(colorClass);
-            // Consola para debuguear si sigue fallando
-            console.log(`Aplicando color ${colorClass} al estado ${currentStatus}`);
         } else {
             label.classList.add('text-gray-400');
-            console.warn(`No se encontró color para: "${currentStatus}"`);
         }
     }
 
-    // 3. Inputs
+    // --- INPUTS ---
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
