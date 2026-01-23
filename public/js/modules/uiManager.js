@@ -16,7 +16,7 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, state.price, lastPrice);
     }
 
-    // 2. Mapping de valores numéricos
+    // 2. Mapping de valores numéricos (Mantenido según tu lógica actual)
     const elements = {
         auprofit: 'total_profit', 
         aulbalance: 'lbalance', 
@@ -56,28 +56,27 @@ export function updateBotUI(state) {
     if (state.config) syncInputsFromConfig(state.config);
 }
 
-// public/js/modules/ui/uiManager.js
-
+/**
+ * Sincroniza estados de ejecución con la interfaz
+ */
 export function updateControlsState(state) {
     if (!state) return;
     
-    // 1. Normalizamos estados
+    // 1. Extracción directa del JSON (lstate y sstate coinciden con tu DB)
+    // El operador || 'STOPPED' asegura que no se rompa si el campo falta
     const lState = state.lstate || 'STOPPED';
     const sState = state.sstate || 'STOPPED';
     const aiState = state.aistate || 'STOPPED';
 
-    // 2. Definimos inputs
+    // 2. Definición de grupos de inputs para bloqueo
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
 
-    // 3. LLAMADA ÚNICA (Delegamos todo a controls.js)
-    // Esta función ya gestiona el botón, los inputs y el LABEL de color
+    // 3. Delegación a controls.js
+    // Esta llamada actualiza: Texto del botón, Color del Label y Bloqueo de Inputs
     updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
-    
-    // --- BORRAMOS LAS LÍNEAS DE ABAJO QUE SOBRESCRIBÍAN LOS LABELS ---
-    // (Ya no hacemos textContent aquí, porque matamos el color de updateButtonState)
 }
 
 export { displayMessage };
