@@ -1,10 +1,10 @@
 /**
- * dashboard.js - Controlador de Interfaz y Eventos
+ * dashboard.js - Controlador de Interfaz y Eventos (Versión Protegida)
  */
 import { fetchEquityCurveData } from './apiService.js'; 
-import { socket } from '../main.js'; 
+import { socket, currentBotState } from '../main.js'; 
 import { updateBotUI } from './uiManager.js';
-import * as Metrics from './metricsManager.js'; // Importamos la lógica de métricas
+import * as Metrics from './metricsManager.js';
 
 let balanceChart = null; 
 
@@ -19,48 +19,45 @@ export function initializeDashboardView(initialState) {
 
     initBalanceChart();
 
-    if (initialState) {
-        updateBotUI(initialState);
-        updateDistributionWidget(initialState);
+    // Sincronización inicial inmediata
+    const stateToUse = initialState || currentBotState;
+    if (stateToUse) {
+        updateBotUI(stateToUse);
+        updateDistributionWidget(stateToUse);
     }
 
     setupSocketListeners();
     setupChartSelectors();
     setupTestButton(); 
     
-    // Carga inicial de analítica
+    // Carga inicial de analítica protegida
     refreshAnalytics();
 
     updateHealthStatus('health-market-ws-text', socket?.connected);
 }
 
-// --- GESTIÓN DE ANALÍTICA ---
-
 async function refreshAnalytics() {
     try {
         const curveData = await fetchEquityCurveData();
-        Metrics.setAnalyticsData(curveData);
-    } catch (e) { console.error("Error cargando analítica:", e); }
+        // Verificamos que sea un objeto válido antes de pasarlo
+        if (curveData) {
+            Metrics.setAnalyticsData(curveData);
+        }
+    } catch (e) { 
+        console.error("❌ Error en Dashboard Metrics:", e.message); 
+        // El error muere aquí y no detiene la aplicación
+    }
 }
-
-function setupChartSelectors() {
-    const paramSelector = document.getElementById('chart-param-selector');
-    const botSelector = document.getElementById('chart-bot-selector');
-
-    paramSelector?.addEventListener('change', (e) => Metrics.setChartParameter(e.target.value));
-    botSelector?.addEventListener('change', (e) => Metrics.setBotFilter(e.target.value));
-}
-
-// --- SOCKETS Y EVENTOS ---
 
 function setupSocketListeners() {
     if (!socket) return;
 
-    // Limpieza selectiva para evitar duplicados
-    socket.removeAllListeners('market-signal-update');
-    socket.removeAllListeners('order-executed');
-    socket.removeAllListeners('bot-state-update');
-    socket.removeAllListeners('cycle-closed');
+    // EVITAMOS removeAllListeners que borran el flujo principal de main.js
+    // En su lugar, usamos .off() solo para los que este módulo maneja específicamente
+    socket.off('market-signal-update');
+    socket.off('order-executed');
+    socket.off('cycle-closed');
+    socket.off('ai-decision-update');
 
     socket.on('market-signal-update', (analysis) => {
         const signalEl = document.getElementById('health-analyzer-signal');
@@ -71,22 +68,22 @@ function setupSocketListeners() {
     });
 
     socket.on('order-executed', (order) => {
-        order.side.toLowerCase() === 'buy' ? sounds.buy.play() : sounds.sell.play();
-        flashElement('auprice', order.side.toLowerCase() === 'buy' ? 'bg-emerald-500/20' : 'bg-orange-500/20');
+        try {
+            order.side.toLowerCase() === 'buy' ? sounds.buy.play() : sounds.sell.play();
+            flashElement('auprice', order.side.toLowerCase() === 'buy' ? 'bg-emerald-500/20' : 'bg-orange-500/20');
+        } catch (e) {}
     });
     
-    socket.on('bot-state-update', (fullState) => {
-        updateBotUI(fullState);
-        updateDistributionWidget(fullState); 
-    });
- 
+    // El listener de 'bot-state-update' ya vive en main.js, 
+    // no necesitamos duplicarlo aquí a menos que Dashboard haga algo extra.
+    // Si lo necesitas, asegúrate de NO borrar el de main.js.
+
     socket.on('cycle-closed', () => {
         sounds.sell.play();
         flashElement('auprofit', 'bg-yellow-500/30');
-        refreshAnalytics(); // Recarga automática al cerrar ciclo
+        refreshAnalytics(); 
     });
 
-    // Lógica IA
     socket.on('ai-decision-update', (data) => {
         const confidenceVal = Math.round(data.confidence * 100);
         updateElementText('ai-mini-confidence', `${confidenceVal}%`);
