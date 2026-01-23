@@ -30,20 +30,17 @@ async function privateFetch(endpoint, options = {}) {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
         clearTimeout(timeoutId);
         
-        // Manejo de expiración de token
         if (response.status === 401) {
             logStatus("⚠️ Sesión expirada.", "error");
-            localStorage.removeItem('token'); // Limpieza de token inválido
+            localStorage.removeItem('token');
             return { success: false, message: "Unauthorized" };
         }
 
-        // Parseo seguro de JSON
         const result = await response.json().catch(() => ({ 
             success: response.ok, 
             message: response.statusText 
         }));
 
-        // Estandarización de la respuesta
         return result; 
 
     } catch (error) {
@@ -68,9 +65,6 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
-/**
- * Obtiene el estado actual de los inputs de la UI para enviarlos al backend
- */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -108,9 +102,6 @@ export function getBotConfiguration() {
     };
 }
 
-/**
- * Persistencia: Guarda la configuración en el backend
- */
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
     return await privateFetch('/api/autobot/update-config', {
@@ -136,11 +127,10 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     
     const btn = document.getElementById(btnMap[sideKey]);
     
-    // Bloqueo visual preventivo
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = "0.5";
-        btn.textContent = "Starting...";
+        btn.textContent = "WAIT...";
     }
 
     logStatus(`⏳ Enviando orden ${action.toUpperCase()} para ${sideKey.toUpperCase()}...`, "info");
@@ -151,28 +141,38 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             body: JSON.stringify({ config }) 
         });
 
-        // BSB/public/js/modules/apiService.js
+        if (data && data.success) { 
+            const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+            displayMessage(msg, 'success');
+            
+            // --- ACTUALIZACIÓN INDEPENDIENTE ---
+            import('./uiManager.js').then(m => {
+                const otherSide = sideKey === 'long' ? 'short' : 'long';
+                const otherBtn = document.getElementById(otherSide === 'long' ? 'austartl-btn' : 'austarts-btn');
+                const otherIsRunning = otherBtn?.classList.contains('bg-red-600');
 
-if (data && data.success) { 
-    const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
-    displayMessage(msg, 'success');
-    
-    // --- ACTUALIZACIÓN INDEPENDIENTE ---
-    // Importamos la función y le pasamos el estado actual capturado de la UI
-    // para no sobrescribir el otro botón con un valor vacío.
-    import('./uiManager.js').then(m => {
-        // Obtenemos qué dice el OTRO botón antes de actualizar
-        const otherSide = sideKey === 'long' ? 'short' : 'long';
-        const otherBtn = document.getElementById(otherSide === 'long' ? 'austartl-btn' : 'austarts-btn');
-        const otherIsRunning = otherBtn?.classList.contains('bg-red-600');
+                const stateUpdate = {
+                    lstate: sideKey === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED'),
+                    sstate: sideKey === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED')
+                };
+                
+                m.updateControlsState(stateUpdate);
+            });
 
-        const stateUpdate = {
-            lstate: sideKey === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED'),
-            sstate: sideKey === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED')
-        };
-        
-        m.updateControlsState(stateUpdate);
-    });
-
-    return data;
+            return data;
+        } else {
+            const errorMsg = data?.message || 'Error en respuesta del servidor';
+            displayMessage(`Error: ${errorMsg}`, 'error');
+            return { success: false, message: errorMsg };
+        }
+    } catch (err) {
+        console.error(`Error en toggle (${sideKey}):`, err);
+        displayMessage("Error crítico de conexión", "error");
+        return { success: false };
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+        }
+    }
 }
