@@ -2,16 +2,19 @@
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
-// ASEGÚRATE DE QUE ESTE OBJETO ESTÉ EXACTAMENTE ASÍ
-const STATUS_COLORS = {
-    RUNNING: 'text-emerald-400',
-    STOPPED: 'text-red-400',
-    BUYING: 'text-blue-400',
-    SELLING: 'text-yellow-400',
-    NO_COVERAGE: 'text-purple-400',
-    PAUSED: 'text-orange-400'
+// Mapeo de colores hexadecimales para asegurar que se vean (Emerald, Red, Blue, etc.)
+const STATUS_HEX = {
+    'RUNNING': '#34d399',      // text-emerald-400
+    'STOPPED': '#f87171',      // text-red-400
+    'BUYING': '#60a5fa',       // text-blue-400
+    'SELLING': '#fbbf24',      // text-yellow-400
+    'NO_COVERAGE': '#a78bfa',  // text-purple-400
+    'PAUSED': '#fb923c'        // text-orange-400
 };
 
+/**
+ * Actualiza el estado visual de los botones y labels
+ */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     if (status === undefined || status === null) return;
 
@@ -22,11 +25,11 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // --- BOTONES (VOLVEMOS A LA LÓGICA QUE TE FUNCIONABA BIEN) ---
+    // --- LÓGICA DE BOTONES (Restablecida a como te funcionaba) ---
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
         
-        // Colores de fondo del botón
+        // Colores de fondo de Tailwind para los botones
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
         if (isBusy) {
             btn.classList.add('bg-red-600'); 
@@ -38,27 +41,23 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         btn.style.opacity = "1";
     }
 
-    // --- TEXTOS DE ESTADO (LABEL) ---
+    // --- LÓGICA DE TEXTOS DE ESTADO (Label) ---
     if (label) {
         label.textContent = currentStatus;
         
-        // Tamaño un punto más grande (12px)
-        label.style.fontSize = "12px"; 
-        label.classList.add('font-bold', 'font-mono');
+        // 1. Tamaño corregido (un punto más)
+        label.style.fontSize = "12px";
+        label.style.fontWeight = "bold";
 
-        // Limpieza y aplicación de color
-        // Quitamos manualmente las clases de color que Tailwind pueda tener fijas
+        // 2. Forzar el color eliminando clases de Tailwind y usando Style directo
+        // Esto soluciona definitivamente el problema de las letras blancas
         label.classList.remove('text-red-400', 'text-emerald-400', 'text-white', 'text-gray-400');
         
-        const colorClass = STATUS_COLORS[currentStatus];
-        if (colorClass) {
-            label.classList.add(colorClass);
-        } else {
-            label.classList.add('text-gray-400');
-        }
+        const hexColor = STATUS_HEX[currentStatus] || '#9ca3af'; // Color del mapa o gris
+        label.style.color = hexColor;
     }
 
-    // --- INPUTS ---
+    // --- LÓGICA DE INPUTS ---
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
