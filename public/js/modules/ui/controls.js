@@ -2,14 +2,14 @@
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
-// Mapeo de colores hexadecimales para asegurar que se vean (Emerald, Red, Blue, etc.)
-const STATUS_HEX = {
-    'RUNNING': '#34d399',      // text-emerald-400
-    'STOPPED': '#f87171',      // text-red-400
-    'BUYING': '#60a5fa',       // text-blue-400
-    'SELLING': '#fbbf24',      // text-yellow-400
-    'NO_COVERAGE': '#a78bfa',  // text-purple-400
-    'PAUSED': '#fb923c'        // text-orange-400
+// Mapeo exacto a las clases que tienen !important en tu style.css
+const STATUS_CLASSES = {
+    'RUNNING': 'text-emerald-400',
+    'STOPPED': 'text-red-400',
+    'BUYING': 'text-blue-400',
+    'SELLING': 'text-yellow-400',
+    'NO_COVERAGE': 'text-purple-400',
+    'PAUSED': 'text-orange-400'
 };
 
 /**
@@ -44,24 +44,21 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         btn.style.opacity = "1";
     }
 
-    // 3. GESTIÓN DEL LABEL (Elimina el blanco heredado)
+   // 3. GESTIÓN DEL LABEL (DENTRO DE updateButtonState)
     if (label) {
         label.textContent = currentStatus;
 
-        /**
-         * className limpia CUALQUIER clase previa (como text-white o el color del body).
-         * Esto garantiza que el estilo parta de cero.
-         */
+        // Limpieza total de clases previas
         label.className = "text-[12px] font-bold font-mono"; 
 
-        // Buscamos la clase en STATUS_COLORS (ej: 'text-red-400')
-        const colorClass = STATUS_COLORS[currentStatus];
+        // Usamos el nuevo nombre del objeto: STATUS_CLASSES
+        const colorClass = STATUS_CLASSES[currentStatus];
 
         if (colorClass) {
-            // El !important que añadimos al CSS hará que este color gane siempre
             label.classList.add(colorClass);
         } else {
-            label.classList.add('text-gray-400');
+            // Si el estado es STOPPED pero algo falló en el mapa, forzamos rojo
+            label.classList.add(currentStatus === 'STOPPED' ? 'text-red-400' : 'text-gray-400');
         }
     }
 
