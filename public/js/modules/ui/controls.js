@@ -2,19 +2,18 @@
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
-// Mapeo exacto a las clases que tienen !important en tu style.css
-const STATUS_CLASSES = {
-    'RUNNING': 'text-emerald-400',
-    'STOPPED': 'text-red-400',
-    'BUYING': 'text-blue-400',
-    'SELLING': 'text-yellow-400',
-    'NO_COVERAGE': 'text-purple-400',
-    'PAUSED': 'text-orange-400'
+// Mapeo de colores para los estados
+const STATUS_COLORS = {
+    'RUNNING': '#34d399',      // Emerald
+    'STOPPED': '#f87171',      // Red
+    'BUYING': '#60a5fa',       // Blue
+    'SELLING': '#fbbf24',      // Yellow
+    'NO_COVERAGE': '#a78bfa',  // Purple
+    'PAUSED': '#fb923c'        // Orange
 };
 
 /**
  * Actualiza el estado visual de los botones y labels
- * Blindada contra el color blanco por defecto del CSS global
  */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     if (status === undefined || status === null) return;
@@ -23,17 +22,15 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${type.toLowerCase()}state`;
     const label = document.getElementById(labelId);
     
-    // 1. Normalización de datos
     const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 2. GESTIÓN DEL BOTÓN (START/STOP)
+    // --- LÓGICA DE BOTONES ---
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
         
-        // Reset de colores de fondo
+        // Colores de fondo de Tailwind para los botones
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-        
         if (isBusy) {
             btn.classList.add('bg-red-600'); 
         } else {
@@ -44,25 +41,24 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         btn.style.opacity = "1";
     }
 
-   // 3. GESTIÓN DEL LABEL (DENTRO DE updateButtonState)
+    // --- LÓGICA DE TEXTOS DE ESTADO (Label) ---
     if (label) {
         label.textContent = currentStatus;
-
-        // Limpieza total de clases previas
-        label.className = "text-[12px] font-bold font-mono"; 
-
-        // Usamos el nuevo nombre del objeto: STATUS_CLASSES
-        const colorClass = STATUS_CLASSES[currentStatus];
-
-        if (colorClass) {
-            label.classList.add(colorClass);
-        } else {
-            // Si el estado es STOPPED pero algo falló en el mapa, forzamos rojo
-            label.classList.add(currentStatus === 'STOPPED' ? 'text-red-400' : 'text-gray-400');
-        }
+        
+        // Aplicamos estilos base
+        label.style.fontSize = "12px";
+        label.style.fontWeight = "bold";
+        label.style.fontFamily = "monospace";
+        
+        // IMPORTANTE: Limpiamos clases de color de Tailwind previas para evitar conflictos
+        label.classList.remove('text-white', 'text-gray-400', 'text-red-400', 'text-emerald-400');
+        
+        // Aplicamos el color desde el mapa (Inmune al CSS blanco del body)
+        const color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
+        label.style.color = color;
     }
 
-    // 4. GESTIÓN DE INPUTS (Bloqueo por actividad)
+    // --- LÓGICA DE INPUTS ---
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
