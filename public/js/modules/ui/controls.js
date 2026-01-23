@@ -3,11 +3,12 @@
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
 const STATUS_COLORS = {
-    'RUNNING': '#ef4444',      // Rojo (Para indicar que está activo)
-    'STOPPED': '#10b981',      // Esmeralda
+    'RUNNING': '#10b981',      // Esmeralda
+    'STOPPED': '#ef4444',      // Rojo
     'BUYING': '#60a5fa',       // Azul
-    'SELLING': '#fbbf24',      // Amarillo
-    'PAUSED': '#fb923c'
+    'SELLING': '#fbbf24',      // Amarillo    
+    'PAUSED': '#fb923c',
+    'NO_COVERAGE': '#fb923c',
 };
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
