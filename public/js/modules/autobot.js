@@ -10,9 +10,6 @@ const MIN_USDT_AMOUNT = 5.00;
 let currentTab = 'opened';
 let configDebounceTimeout = null;
 
-/**
- * Valida los inputs de una estrategia (Long o Short)
- */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
     const fields = [`auamount${suffix}-usdt`, `aupurchase${suffix}-usdt`];
@@ -32,9 +29,6 @@ function validateSideInputs(side) {
     return isValid;
 }
 
-/**
- * Escucha cambios en los inputs y guarda con Debounce
- */
 function setupConfigListeners() {
     const configIds = [
         'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
@@ -45,12 +39,10 @@ function setupConfigListeners() {
     configIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
-
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
-            
             configDebounceTimeout = setTimeout(async () => {
                 try {
                     await sendConfigToBackend();
@@ -68,18 +60,17 @@ export async function initializeAutobotView() {
 
     setupConfigListeners();
 
-    // 1. LÓGICA DE BOTONES (Primero los preparamos)
+    // 1. DEFINICIÓN Y LIMPIEZA DE BOTONES
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
         if (!btn) return;
 
-        // Clonamos para limpiar eventos viejos
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            // Verificamos el estado actual por la clase que pone controls.js
+            // Verificamos si está RUNNING por la clase que pone uiManager/controls
             const isRunning = newBtn.classList.contains('bg-red-600') || newBtn.textContent.includes('STOP');
             
             if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
@@ -100,17 +91,18 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializamos los clones
+    // Reemplazamos los botones primero
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai');
 
-    // 2. AHORA SÍ: Pintamos los botones recién creados con el estado real
-    // Esto sobreescribe el verde inicial si el bot está RUNNING
+    // 2. SINCRONIZACIÓN VISUAL INMEDIATA
+    // Esto se ejecuta DESPUÉS de haber creado los botones nuevos, 
+    // así que los pintará de ROJO si el bot está corriendo.
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // 3. RESTO DE LA VISTA (Gráfico y Órdenes)
+    // 3. GRÁFICO
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -121,47 +113,8 @@ export async function initializeAutobotView() {
         }
     }, 500);
 
-    // 3. LÓGICA DE BOTONES (Limpieza de listeners previos)
-    const setupSideBtn = (id, sideName) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-
-        newBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            
-            // Detectamos estado actual para saber si vamos a frenar o arrancar
-            const isRunning = newBtn.classList.contains('bg-red-600') || newBtn.textContent.includes('STOP');
-            
-            if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
-                displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
-                return;
-            }
-
-            try {
-                newBtn.disabled = true;
-                newBtn.textContent = isRunning ? "Stopping..." : "Starting...";
-                
-                await toggleBotSideState(isRunning, sideName);
-                // No tocamos nada más, el socket hará el cambio de color real.
-            } catch (err) {
-                displayMessage(`Error en ${sideName}`, 'error');
-                updateControlsState(currentBotState); // Revertimos visualmente si falló el API
-            } finally {
-                newBtn.disabled = false;
-            }
-        });
-    };
-
-    setupSideBtn('austartl-btn', 'long');
-    setupSideBtn('austarts-btn', 'short');
-    setupSideBtn('austartai-btn', 'ai');
-
     // 4. GESTIÓN DE PESTAÑAS DE ÓRDENES
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
-    
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
             btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
@@ -184,6 +137,4 @@ export async function initializeAutobotView() {
 
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
-    
-    // NOTA: Eliminamos el socket.on de aquí para que no choque con main.js
 }
