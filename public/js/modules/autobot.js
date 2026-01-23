@@ -68,12 +68,49 @@ export async function initializeAutobotView() {
 
     setupConfigListeners();
 
-    // 1. SINCRONIZACIÓN INICIAL: Pintamos la UI con lo que ya tenemos en main.js
-    // Esto evita que al entrar aparezca todo en STOPPED/Blanco por un segundo.
+    // 1. LÓGICA DE BOTONES (Primero los preparamos)
+    const setupSideBtn = (id, sideName) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+
+        // Clonamos para limpiar eventos viejos
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+
+        newBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            // Verificamos el estado actual por la clase que pone controls.js
+            const isRunning = newBtn.classList.contains('bg-red-600') || newBtn.textContent.includes('STOP');
+            
+            if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
+                displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
+                return;
+            }
+
+            try {
+                newBtn.disabled = true;
+                newBtn.textContent = isRunning ? "Stopping..." : "Starting...";
+                await toggleBotSideState(isRunning, sideName);
+            } catch (err) {
+                displayMessage(`Error en ${sideName}`, 'error');
+                updateControlsState(currentBotState); 
+            } finally {
+                newBtn.disabled = false;
+            }
+        });
+    };
+
+    // Inicializamos los clones
+    setupSideBtn('austartl-btn', 'long');
+    setupSideBtn('austarts-btn', 'short');
+    setupSideBtn('austartai-btn', 'ai');
+
+    // 2. AHORA SÍ: Pintamos los botones recién creados con el estado real
+    // Esto sobreescribe el verde inicial si el bot está RUNNING
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // 2. INICIALIZACIÓN DE GRÁFICO
+    // 3. RESTO DE LA VISTA (Gráfico y Órdenes)
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
