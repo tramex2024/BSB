@@ -29,34 +29,39 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${type.toLowerCase()}state`;
     const label = document.getElementById(labelId);
     
-    const currentStatus = status.toString().toUpperCase();
+    // .trim() elimina espacios invisibles que rompen el mapeo de colores
+    const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 1. Actualizar el Botón (Rojo para STOP, Verde/Índigo para START)
+    // 1. Actualizar el Botón
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-        
-        if (isBusy) {
-            btn.classList.add('bg-red-600'); 
-        } else {
-            btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
-        }
-        
-        btn.disabled = false;
-        btn.style.opacity = "1";
+        if (isBusy) btn.classList.add('bg-red-600'); 
+        else btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
     }
 
-    // 2. Actualizar el Label de Estado Informativo con Colores Específicos
+    // 2. Actualizar el Label (AQUÍ ESTÁ LA CORRECCIÓN)
     if (label) {
         label.textContent = currentStatus;
         
-        // Removemos los colores anteriores para evitar conflictos
-        label.classList.remove(...Object.values(STATUS_COLORS));
+        // Eliminamos FORZOSAMENTE cualquier clase de color previa
+        // Esto evita que 'text-red-400' se quede pegado cuando llega 'text-emerald-400'
+        label.classList.remove(
+            'text-emerald-400', 'text-red-400', 'text-blue-400', 
+            'text-yellow-400', 'text-purple-400', 'text-orange-400', 'text-gray-400'
+        );
         
-        // Aplicamos el color exacto definido en STATUS_COLORS
-        const colorClass = STATUS_COLORS[currentStatus] || 'text-gray-400';
-        label.classList.add(colorClass);
+        // Aplicamos el color del mapeo
+        const colorClass = STATUS_COLORS[currentStatus];
+        
+        if (colorClass) {
+            label.classList.add(colorClass);
+        } else {
+            // Si el estado no está en el mapa, lo ponemos gris para saber que algo falla
+            label.classList.add('text-gray-400');
+            console.warn(`Estado desconocido para color: "${currentStatus}"`);
+        }
     }
 
     // 3. Gestión de Bloqueo de Inputs
