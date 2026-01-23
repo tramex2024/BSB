@@ -140,7 +140,7 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = "0.5";
-        btn.textContent = "WAIT...";
+        btn.textContent = "Starting...";
     }
 
     logStatus(`⏳ Enviando orden ${action.toUpperCase()} para ${sideKey.toUpperCase()}...`, "info");
@@ -151,30 +151,28 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             body: JSON.stringify({ config }) 
         });
 
-        if (data && data.success) { 
-            const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
-            displayMessage(msg, 'success');
-            
-            // --- AGREGA ESTA LÍNEA AQUÍ PARA FORZAR EL CAMBIO VISUAL ---
-            const newState = { 
-                lstate: sideKey === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : undefined,
-                sstate: sideKey === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : undefined
-            };
-            import('./uiManager.js').then(m => m.updateControlsState(newState));
-            // ----------------------------------------------------------
+        // BSB/public/js/modules/apiService.js
 
-            return data;
-        }
-    } catch (err) {
-        console.error(`Error en toggle (${sideKey}):`, err);
-        displayMessage("Error crítico de conexión", "error");
-        return { success: false };
-    } finally {
-        // El desbloqueo del botón ocurrirá aquí, pero recuerda que 
-        // bot-state-update (vía Socket) eventualmente sobreescribirá el texto del botón.
-        if (btn) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-        }
-    }
+if (data && data.success) { 
+    const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+    displayMessage(msg, 'success');
+    
+    // --- ACTUALIZACIÓN INDEPENDIENTE ---
+    // Importamos la función y le pasamos el estado actual capturado de la UI
+    // para no sobrescribir el otro botón con un valor vacío.
+    import('./uiManager.js').then(m => {
+        // Obtenemos qué dice el OTRO botón antes de actualizar
+        const otherSide = sideKey === 'long' ? 'short' : 'long';
+        const otherBtn = document.getElementById(otherSide === 'long' ? 'austartl-btn' : 'austarts-btn');
+        const otherIsRunning = otherBtn?.classList.contains('bg-red-600');
+
+        const stateUpdate = {
+            lstate: sideKey === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED'),
+            sstate: sideKey === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED')
+        };
+        
+        m.updateControlsState(stateUpdate);
+    });
+
+    return data;
 }
