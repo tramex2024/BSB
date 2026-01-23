@@ -2,40 +2,44 @@
 
 /**
  * ESTADOS ACTIVOS (BUSY)
- * Si el bot está en cualquiera de estos 4 estados, el botón debe ser ROJO (STOP)
- * y los inputs deben estar bloqueados para evitar errores en las órdenes.
+ * Si el bot está en cualquiera de estos estados, el botón debe ser ROJO (STOP)
+ * y los inputs deben estar bloqueados.
  */
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
+
+/**
+ * Mapeo de estados a clases CSS de Tailwind originales
+ */
+const STATUS_COLORS = {
+    RUNNING: 'text-emerald-400',
+    STOPPED: 'text-red-400',
+    BUYING: 'text-blue-400',
+    SELLING: 'text-yellow-400',
+    NO_COVERAGE: 'text-purple-400',
+    PAUSED: 'text-orange-400'
+};
 
 /**
  * Actualiza el estado visual de los botones y labels según la base de datos
  */
 export function updateButtonState(btnId, status, type, inputIds = []) {
-    // Si no hay estado definido (carga inicial), no hacemos cambios erróneos
     if (status === undefined || status === null) return;
 
     const btn = document.getElementById(btnId);
     const labelId = `aubot-${type.toLowerCase()}state`;
     const label = document.getElementById(labelId);
     
-    // Normalizamos el estado que viene del servidor (tus 5 estados originales)
     const currentStatus = status.toString().toUpperCase();
-    
-    // Evaluamos si el estado actual pertenece a los que bloquean la UI
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 1. Actualizar el Botón (Visual y Texto)
+    // 1. Actualizar el Botón (Rojo para STOP, Verde/Índigo para START)
     if (btn) {
-        // Si está ocupado (RUNNING/BUYING/etc), el botón permite DETENER (STOP)
-        // Si no está en la lista (STOPPED), el botón permite INICIAR (START)
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
-        
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
         
         if (isBusy) {
-            btn.classList.add('bg-red-600'); // Rojo para acción de parada
+            btn.classList.add('bg-red-600'); 
         } else {
-            // Color según el tipo de bot cuando está en STOPPED
             btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
         }
         
@@ -43,14 +47,16 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         btn.style.opacity = "1";
     }
 
-    // 2. Actualizar el Label de Estado Informativo
+    // 2. Actualizar el Label de Estado Informativo con Colores Específicos
     if (label) {
-        // Mostramos el estado real (STOPPED, BUYING, SELLING, etc.)
-        label.textContent = currentStatus; 
-        label.classList.remove('text-emerald-400', 'text-red-400');
+        label.textContent = currentStatus;
         
-        // Verde para estados de actividad, Rojo para estado detenido
-        label.classList.add(isBusy ? 'text-emerald-400' : 'text-red-400');
+        // Removemos los colores anteriores para evitar conflictos
+        label.classList.remove(...Object.values(STATUS_COLORS));
+        
+        // Aplicamos el color exacto definido en STATUS_COLORS
+        const colorClass = STATUS_COLORS[currentStatus] || 'text-gray-400';
+        label.classList.add(colorClass);
     }
 
     // 3. Gestión de Bloqueo de Inputs
