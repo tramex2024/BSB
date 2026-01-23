@@ -42,20 +42,19 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     }
 
     // --- LÓGICA DE TEXTOS DE ESTADO (Label) ---
-    if (label) {
-        label.textContent = currentStatus;
-        
-        // 1. Tamaño corregido (un punto más)
-        label.style.fontSize = "12px";
-        label.style.fontWeight = "bold";
-
-        // 2. Forzar el color eliminando clases de Tailwind y usando Style directo
-        // Esto soluciona definitivamente el problema de las letras blancas
-        label.classList.remove('text-red-400', 'text-emerald-400', 'text-white', 'text-gray-400');
-        
-        const hexColor = STATUS_HEX[currentStatus] || '#9ca3af'; // Color del mapa o gris
-        label.style.color = hexColor;
-    }
+    
+if (label) {
+    label.textContent = currentStatus;
+    label.style.fontSize = "12px"; // Tamaño corregido
+    label.style.fontWeight = "bold";
+    
+    // Limpiamos clases de color de Tailwind para que no interfieran
+    label.classList.remove('text-white', 'text-gray-400', 'text-red-400', 'text-emerald-400');
+    
+    // Aplicamos el color desde tu mapa de constantes (STATUS_COLORS o STATUS_HEX)
+    const color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
+    label.style.color = color; // Usar .style.color es infalible
+}
 
     // --- LÓGICA DE INPUTS ---
     inputIds.forEach(id => {

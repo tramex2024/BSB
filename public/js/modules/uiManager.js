@@ -56,29 +56,28 @@ export function updateBotUI(state) {
     if (state.config) syncInputsFromConfig(state.config);
 }
 
+// public/js/modules/ui/uiManager.js
+
 export function updateControlsState(state) {
     if (!state) return;
     
-    // Normalizamos estados para evitar undefined (Causa de botones rojos erróneos)
+    // 1. Normalizamos estados
     const lState = state.lstate || 'STOPPED';
     const sState = state.sstate || 'STOPPED';
     const aiState = state.aistate || 'STOPPED';
 
-    // Lista completa de inputs para bloquear/desbloquear
+    // 2. Definimos inputs
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
 
-    // Actualización de Botones y Labels (updateButtonState debe manejar el label internamente)
+    // 3. LLAMADA ÚNICA (Delegamos todo a controls.js)
+    // Esta función ya gestiona el botón, los inputs y el LABEL de color
     updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
     
-    // Sincronización extra de Labels de texto para asegurar persistencia visual
-    const lLabel = document.getElementById('aubot-lstate');
-    if (lLabel) lLabel.textContent = lState;
-    
-    const sLabel = document.getElementById('aubot-sstate');
-    if (sLabel) sLabel.textContent = sState;
+    // --- BORRAMOS LAS LÍNEAS DE ABAJO QUE SOBRESCRIBÍAN LOS LABELS ---
+    // (Ya no hacemos textContent aquí, porque matamos el color de updateButtonState)
 }
 
 export { displayMessage };
