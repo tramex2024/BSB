@@ -1,6 +1,6 @@
 // public/js/modules/ui/controls.js - Gestión de estados visuales basada en los IDs reales del HTML
 
-const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
+const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'NO_COVERAGE'];
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      // Esmeralda
