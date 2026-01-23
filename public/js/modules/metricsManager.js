@@ -1,5 +1,5 @@
 /**
- * metricsManager.js - Especializado en cálculos de eficiencia y rentabilidad
+ * //BSB/public/js/modules/metricsManager.js - Especializado en cálculos de eficiencia y rentabilidad
  */
 import { renderEquityCurve } from './chart.js';
 
@@ -8,7 +8,16 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 export function setAnalyticsData(data) {
-    if (data) cycleHistoryData = data;
+    // CORRECCIÓN: Validamos si la data viene envuelta en un objeto { data: [] } o es el array directo
+    if (data && Array.isArray(data)) {
+        cycleHistoryData = data;
+    } else if (data && data.success && Array.isArray(data.data)) {
+        cycleHistoryData = data.data;
+    } else {
+        console.warn("⚠️ Metrics: Datos recibidos no tienen formato de array válido");
+        cycleHistoryData = [];
+    }
+    
     updateMetricsDisplay();
 }
 
@@ -23,12 +32,15 @@ export function setBotFilter(filter) {
 }
 
 function updateMetricsDisplay() {
-    if (!cycleHistoryData || cycleHistoryData.length === 0) return resetKPIs();
+    // BLINDAJE: Si no es un array o está vacío, reseteamos y salimos
+    if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
+        return resetKPIs();
+    }
 
     // 1. Filtrar por estrategia (campo "strategy" de tu MongoDB)
     const filtered = currentBotFilter === 'all' 
         ? cycleHistoryData 
-        : cycleHistoryData.filter(c => c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
+        : cycleHistoryData.filter(c => c && c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
 
     const totalCycles = filtered.length;
     if (totalCycles === 0) return resetKPIs();
@@ -39,20 +51,23 @@ function updateMetricsDisplay() {
     let winningCycles = 0;
     let totalTimeMs = 0;
 
+    // Ahora es seguro usar forEach porque garantizamos que filtered es un Array
     filtered.forEach(cycle => {
-        // Sumamos Profit base
+        if (!cycle) return;
+
         totalProfitPct += (parseFloat(cycle.profitPercentage) || 0);
         totalNetProfitUsdt += (parseFloat(cycle.netProfit) || 0);
         
-        // Win Rate
         if ((parseFloat(cycle.netProfit) || 0) > 0) winningCycles++;
 
-        // Cálculo de Tiempo (Precisión de milisegundos)
-        const start = cycle.startTime?.$date ? new Date(cycle.startTime.$date) : null;
-        const end = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : null;
+        // Manejo robusto de fechas de MongoDB ($date)
+        const start = cycle.startTime?.$date ? new Date(cycle.startTime.$date) : 
+                     (cycle.startTime ? new Date(cycle.startTime) : null);
+        const end = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : 
+                   (cycle.endTime ? new Date(cycle.endTime) : null);
 
-        if (start && end && !isNaN(start) && !isNaN(end)) {
-            const diff = end - start;
+        if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            const diff = end.getTime() - start.getTime();
             if (diff > 0) totalTimeMs += diff;
         }
     });
@@ -60,8 +75,6 @@ function updateMetricsDisplay() {
     // Conversiones finales
     const avgProfit = totalProfitPct / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
-    
-    // Profit por Hora (totalNetProfit / totalHours)
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const profitPerHour = totalHours > 0.01 ? (totalNetProfitUsdt / totalHours) : totalNetProfitUsdt;
 
@@ -81,7 +94,11 @@ function updateMetricsDisplay() {
     );
 
     // 4. Renderizar Gráfico
-    renderEquityCurve(filtered, currentChartParameter);
+    try {
+        renderEquityCurve(filtered, currentChartParameter);
+    } catch (chartError) {
+        console.error("Error renderizando curva de equidad:", chartError);
+    }
 }
 
 function resetKPIs() {
