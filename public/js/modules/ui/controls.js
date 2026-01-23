@@ -1,56 +1,51 @@
-// public/js/modules/ui/controls.js
+// public/js/modules/ui/controls.js - Gestión de estados visuales basada en los IDs reales del HTML
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
-// Mapeo corregido: RUNNING = ROJO (Para indicar que se puede detener), STOPPED = VERDE (Listo)
 const STATUS_COLORS = {
-    'RUNNING': '#ef4444',      // Rojo (Tailwind red-500)
-    'STOPPED': '#10b981',      // Esmeralda (Tailwind emerald-500)
+    'RUNNING': '#ef4444',      // Rojo (Para indicar que está activo)
+    'STOPPED': '#10b981',      // Esmeralda
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo
-    'NO_COVERAGE': '#a78bfa',  // Púrpura
-    'PAUSED': '#fb923c'        // Naranja
+    'PAUSED': '#fb923c'
 };
 
-/**
- * Actualiza el estado visual de los botones y labels
- */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    // Intentamos ambos formatos de ID por si acaso
-    const label = document.getElementById(`aubot-${type.toLowerCase()}state`) || 
-                  document.getElementById(`${type.toLowerCase()}-status-label`);
     
-    // 1. GESTIÓN DEL BOTÓN (Sincronizado con el fondo y el texto)
+    // CORRECCIÓN DE ID: Tu HTML usa 'aubot-lstate' y 'aubot-sstate'
+    // 'type' viene como 'LONG' o 'SHORT', así que tomamos la primera letra:
+    const typeKey = type.charAt(0).toLowerCase(); // 'l' o 's'
+    const labelId = `aubot-${typeKey}state`; 
+    const label = document.getElementById(labelId);
+
+    // 1. ACTUALIZAR ETIQUETA (LState / SState)
+    if (label) {
+        label.textContent = currentStatus;
+        label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
+        // Forzamos visibilidad para asegurar que no sea tapado por CSS
+        label.style.fontWeight = "bold";
+    }
+
+    // 2. ACTUALIZAR BOTÓN
     if (btn) {
-        btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
+        btn.textContent = isBusy ? `STOP ${type.charAt(0)}` : `START ${type.charAt(0)}`;
         
-        // Limpieza de clases de fondo
-        btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600', 'bg-gray-600');
-        
+        // Manejo de clases de Tailwind
         if (isBusy) {
-            btn.classList.add('bg-red-600'); // Si corre, botón rojo para parar
+            btn.classList.replace('bg-emerald-600', 'bg-red-600');
+            // Si no existía bg-emerald, forzamos:
+            btn.classList.add('bg-red-600');
         } else {
-            // Si está parado, verde para empezar (o índigo si es AI)
-            btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
+            btn.classList.replace('bg-red-600', 'bg-emerald-600');
+            btn.classList.add('bg-emerald-600');
         }
         
         btn.disabled = false;
         btn.style.opacity = "1";
-    }
-
-    // 2. GESTIÓN DEL LABEL (COLORES DINÁMICOS)
-    if (label) {
-        label.textContent = currentStatus;
-        label.style.fontWeight = "bold";
-        label.style.fontFamily = "monospace";
-        
-        // Aplicamos el color del mapa
-        const color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
-        label.style.color = color;
     }
 
     // 3. GESTIÓN DE INPUTS (Bloqueo si está activo)
