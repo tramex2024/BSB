@@ -92,15 +92,19 @@ export function initializeFullApp() {
     });
 
     socket.on('bot-state-update', (state) => {
-    console.log("📡 Estado recibido del servidor:", state);
-    
-    // 1. Actualiza números, balances y profits
-    uiManager.updateBotUI(state);
-    
-    // 2. Actualiza botones (Colores/Textos) y estados (RUNNING/STOPPED)
-    // Esto es lo que desbloquea el "WAIT..." y pone el botón en rojo o verde
-    uiManager.updateControlsState(state);
-});
+        console.log("📡 Estado recibido del servidor:", state);
+        
+        // Sincronizamos el objeto global con los nuevos datos
+        if (state) {
+            Object.assign(currentBotState, state);
+        }
+        
+        // 1. Actualiza números, balances y profits (Corrección de referencia uiManager)
+        updateBotUI(currentBotState);
+        
+        // 2. Actualiza botones y bloqueos (Corrección de referencia uiManager)
+        updateControlsState(currentBotState);
+    });
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
@@ -124,6 +128,8 @@ export async function initializeTab(tabName) {
             
             if (typeof module[initFnName] === 'function') {
                 await module[initFnName](currentBotState); 
+                
+                // Actualizamos con el estado global actual antes de esperar al socket
                 updateBotUI(currentBotState);
                 updateControlsState(currentBotState);
                 

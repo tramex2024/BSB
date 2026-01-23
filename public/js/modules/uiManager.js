@@ -1,6 +1,5 @@
 /**
  * uiManager.js - Orquestador Atómico de Interfaz
- * Refactorizado para máxima independencia y modularidad.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -17,7 +16,7 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, state.price, lastPrice);
     }
 
-    // 2. Mapping de valores numéricos con búsqueda flexible
+    // 2. Mapping de valores numéricos
     const elements = {
         auprofit: 'total_profit', 
         aulbalance: 'lbalance', 
@@ -42,11 +41,8 @@ export function updateBotUI(state) {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // Búsqueda profunda de datos (Persistencia de DB)
         let val = state[key];
-        
         if (val === undefined) {
-            // Si el backend envía los datos dentro de un objeto 'stats' o con prefijos
             val = state.stats?.[key] || 
                   state.balances?.[key.replace('lastAvailable', '')] ||
                   state[`long_${key}`] || state[`short_${key}`];
@@ -56,26 +52,33 @@ export function updateBotUI(state) {
         else formatValue(el, val, id.includes('btc'), id.match(/norder|cycle/));
     });
 
-    // IMPORTANTE: Actualizar los Labels de estado lstate/sstate informativos
-    if (state.lstate) {
-        const lLabel = document.getElementById('aubot-lstate');
-        if (lLabel) lLabel.textContent = state.lstate;
-    }
-    if (state.sstate) {
-        const sLabel = document.getElementById('aubot-sstate');
-        if (sLabel) sLabel.textContent = state.sstate;
-    }
-
+    // 3. Sincronización de Configuración
     if (state.config) syncInputsFromConfig(state.config);
 }
 
 export function updateControlsState(state) {
     if (!state) return;
     
-    // Ejecutamos cada actualización de forma totalmente aislada
-    updateButtonState('austartl-btn', state.lstate, 'LONG', ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl']);
-    updateButtonState('austarts-btn', state.sstate, 'SHORT', ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements']);
-    updateButtonState('austartai-btn', state.aistate, 'AI', ['auamountai-usdt']);
+    // Normalizamos estados para evitar undefined (Causa de botones rojos erróneos)
+    const lState = state.lstate || 'STOPPED';
+    const sState = state.sstate || 'STOPPED';
+    const aiState = state.aistate || 'STOPPED';
+
+    // Lista completa de inputs para bloquear/desbloquear
+    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
+    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
+
+    // Actualización de Botones y Labels (updateButtonState debe manejar el label internamente)
+    updateButtonState('austartl-btn', lState, 'LONG', longInputs);
+    updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
+    updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
+    
+    // Sincronización extra de Labels de texto para asegurar persistencia visual
+    const lLabel = document.getElementById('aubot-lstate');
+    if (lLabel) lLabel.textContent = lState;
+    
+    const sLabel = document.getElementById('aubot-sstate');
+    if (sLabel) sLabel.textContent = sState;
 }
 
 export { displayMessage };
