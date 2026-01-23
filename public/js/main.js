@@ -92,14 +92,15 @@ export function initializeFullApp() {
     });
 
     socket.on('bot-state-update', (state) => {
-        resetWatchdog();
-        if (state) {
-            Object.assign(currentBotState, state); 
-            updateBotUI(currentBotState); 
-            updateControlsState(currentBotState); 
-            console.log("🔄 UI Sincronizada:", state.lstate, state.sstate);
-        }
-    });
+    console.log("📡 Estado recibido del servidor:", state);
+    
+    // 1. Actualiza números, balances y profits
+    uiManager.updateBotUI(state);
+    
+    // 2. Actualiza botones (Colores/Textos) y estados (RUNNING/STOPPED)
+    // Esto es lo que desbloquea el "WAIT..." y pone el botón en rojo o verde
+    uiManager.updateControlsState(state);
+});
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }

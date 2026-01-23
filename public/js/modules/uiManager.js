@@ -19,26 +19,53 @@ export function updateBotUI(state) {
 
     // 2. Mapping de valores numéricos con búsqueda flexible
     const elements = {
-        auprofit: 'total_profit', aulbalance: 'lbalance', ausbalance: 'sbalance',
-        aultprice: 'lppc', austprice: 'sppc', aulsprice: 'lsprice',
-        ausbprice: 'sbprice', aulcycle: 'lcycle', auscycle: 'scycle',
-        aulcoverage: 'lcoverage', auscoverage: 'scoverage',
-        'aulprofit-val': 'lprofit', 'ausprofit-val': 'sprofit',
-        aulnorder: 'lnorder', ausnorder: 'snorder',
-        'aubalance-usdt': 'lastAvailableUSDT', 'aubalance-btc': 'lastAvailableBTC'
+        auprofit: 'total_profit', 
+        aulbalance: 'lbalance', 
+        ausbalance: 'sbalance',
+        aultprice: 'lppc', 
+        austprice: 'sppc', 
+        aulsprice: 'lsprice',
+        ausbprice: 'sbprice', 
+        aulcycle: 'lcycle', 
+        auscycle: 'scycle',
+        aulcoverage: 'lcoverage', 
+        auscoverage: 'scoverage',
+        'aulprofit-val': 'lprofit', 
+        'ausprofit-val': 'sprofit',
+        aulnorder: 'lnorder', 
+        ausnorder: 'snorder',
+        'aubalance-usdt': 'lastAvailableUSDT', 
+        'aubalance-btc': 'lastAvailableBTC'
     };
 
     Object.entries(elements).forEach(([id, key]) => {
         const el = document.getElementById(id);
         if (!el) return;
         
-        const val = state[key] ?? state.balances?.[key] ?? state.long_balance ?? state.short_balance;
+        // Búsqueda profunda de datos (Persistencia de DB)
+        let val = state[key];
+        
+        if (val === undefined) {
+            // Si el backend envía los datos dentro de un objeto 'stats' o con prefijos
+            val = state.stats?.[key] || 
+                  state.balances?.[key.replace('lastAvailable', '')] ||
+                  state[`long_${key}`] || state[`short_${key}`];
+        }
 
         if (id.includes('profit')) formatProfit(el, val);
         else formatValue(el, val, id.includes('btc'), id.match(/norder|cycle/));
     });
 
-    // 3. Sincronización de Inputs
+    // IMPORTANTE: Actualizar los Labels de estado lstate/sstate informativos
+    if (state.lstate) {
+        const lLabel = document.getElementById('aubot-lstate');
+        if (lLabel) lLabel.textContent = state.lstate;
+    }
+    if (state.sstate) {
+        const sLabel = document.getElementById('aubot-sstate');
+        if (sLabel) sLabel.textContent = state.sstate;
+    }
+
     if (state.config) syncInputsFromConfig(state.config);
 }
 

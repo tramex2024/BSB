@@ -114,65 +114,41 @@ export async function sendConfigToBackend() {
  * Activa o desactiva una estrategia (Long, Short o AI)
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
-    const action = isRunning ? 'stop' : 'start';
     const sideKey = side.toLowerCase(); 
-    const endpoint = `/api/autobot/${action}/${sideKey}`;
-    const config = providedConfig || getBotConfiguration();
+    const action = isRunning ? 'stop' : 'start';
+    const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
+    const btn = document.getElementById(btnId);
 
-    const btnMap = {
-        'long': 'austartl-btn',
-        'short': 'austarts-btn',
-        'ai': 'austartai-btn'
-    };
-    
-    const btn = document.getElementById(btnMap[sideKey]);
-    
+    // 1. Bloqueo visual inmediato (Feedback al usuario)
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = "0.5";
         btn.textContent = "WAIT...";
     }
 
-    logStatus(`⏳ Enviando orden ${action.toUpperCase()} para ${sideKey.toUpperCase()}...`, "info");
-
     try {
-        const data = await privateFetch(endpoint, {
+        const config = providedConfig || getBotConfiguration();
+        const data = await privateFetch(`/api/autobot/${action}/${sideKey}`, {
             method: 'POST',
             body: JSON.stringify({ config }) 
         });
 
-        if (data && data.success) { 
-            const msg = data.message || `${sideKey.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
-            displayMessage(msg, 'success');
-            
-            // --- ACTUALIZACIÓN INDEPENDIENTE ---
-            import('./uiManager.js').then(m => {
-                const otherSide = sideKey === 'long' ? 'short' : 'long';
-                const otherBtn = document.getElementById(otherSide === 'long' ? 'austartl-btn' : 'austarts-btn');
-                const otherIsRunning = otherBtn?.classList.contains('bg-red-600');
-
-                const stateUpdate = {
-                    lstate: sideKey === 'long' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED'),
-                    sstate: sideKey === 'short' ? (isRunning ? 'STOPPED' : 'RUNNING') : (otherIsRunning ? 'RUNNING' : 'STOPPED')
-                };
-                
-                m.updateControlsState(stateUpdate);
-            });
-
+        if (data && data.success) {
+            displayMessage(data.message || 'Operación exitosa', 'success');
+            // NO actualizamos botones aquí. El socket 'bot-state-update' 
+            // lo hará automáticamente al recibir la confirmación de la DB.
             return data;
         } else {
-            const errorMsg = data?.message || 'Error en respuesta del servidor';
-            displayMessage(`Error: ${errorMsg}`, 'error');
-            return { success: false, message: errorMsg };
+            throw new Error(data?.message || 'Error en servidor');
         }
     } catch (err) {
-        console.error(`Error en toggle (${sideKey}):`, err);
-        displayMessage("Error crítico de conexión", "error");
-        return { success: false };
-    } finally {
+        displayMessage(err.message, 'error');
+        // Si hay error, sí rehabilitamos el botón manualmente
         if (btn) {
             btn.disabled = false;
             btn.style.opacity = "1";
+            btn.textContent = isRunning ? `STOP ${sideKey.toUpperCase()}` : `START ${sideKey.toUpperCase()}`;
         }
+        return { success: false };
     }
 }

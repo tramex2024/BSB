@@ -1,27 +1,34 @@
-const RUNNING_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
+// public/js/modules/ui/controls.js
+
+const RUNNING_STATES = ['RUNNING', 'BUYING', 'SELLING', 'STOPPED', 'NO_COVERAGE'];
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
-    // Si el estado no viene definido, ignoramos por completo para no afectar al botón vecino
     if (status === undefined) return;
 
     const btn = document.getElementById(btnId);
+    // Buscamos el label de estado (aubot-lstate o aubot-sstate)
+    const labelId = `aubot-${type.toLowerCase()}state`;
+    const label = document.getElementById(labelId);
+    
     const isAlive = RUNNING_STATES.includes(status.toUpperCase());
 
+    // 1. Actualizar el Botón
     if (btn) {
         btn.textContent = isAlive ? `STOP ${type}` : `START ${type}`;
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-        
-        if (isAlive) {
-            btn.classList.add('bg-red-600');
-        } else {
-            btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
-        }
-        
+        btn.classList.add(isAlive ? 'bg-red-600' : (type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600'));
         btn.disabled = false;
         btn.style.opacity = "1";
     }
 
-    // Bloqueo selectivo de inputs asociados a este botón
+    // 2. Actualizar el Label de Estado (Persistencia Visual)
+    if (label) {
+        label.textContent = isAlive ? 'RUNNING' : 'STOPPED';
+        label.classList.remove('text-emerald-400', 'text-red-400', 'text-blue-400');
+        label.classList.add(isAlive ? 'text-emerald-400' : 'text-red-400');
+    }
+
+    // 3. Bloqueo de inputs
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
