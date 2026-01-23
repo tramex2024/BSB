@@ -12,28 +12,19 @@ const bitmartService = require('../services/bitmartService');
 router.use(authMiddleware);
 
 /**
- * Utility para emitir el estado del bot por Sockets
- * Usamos req.app.get('io') para garantizar que usamos la instancia activa del servidor.
+ * Utility para emitir el estado COMPLETO del bot por Sockets
  */
 const emitBotState = (autobot, req) => {
     try {
         const io = req.app.get('io');
-        if (!io) {
-            console.error("⚠️ Socket.io no encontrado en req.app");
-            return;
-        }
+        if (!io) return;
 
-        const payload = {
-            lstate: autobot.lstate,
-            sstate: autobot.sstate,
-            config: autobot.config,
-            total_profit: autobot.total_profit,
-            lastAvailableUSDT: autobot.lastAvailableUSDT,
-            // Sincronizado: eliminamos lStateData/sStateData para Arquitectura Plana
-        };
+        // Convertimos el documento de Mongoose a un objeto plano de JS
+        // Esto asegura que se envíen TODOS los campos (balances, ciclos, profits, etc.)
+        const payload = autobot.toObject ? autobot.toObject() : autobot;
 
         io.emit('bot-state-update', payload);
-        console.log(`📡 Broadcast Socket: L:${payload.lstate} S:${payload.sstate}`);
+        console.log(`📡 Broadcast Socket Completo: L:${payload.lstate} S:${payload.sstate}`);
     } catch (err) {
         console.error("❌ Error en emitBotState:", err.message);
     }
