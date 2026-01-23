@@ -14,6 +14,7 @@ const STATUS_HEX = {
 
 /**
  * Actualiza el estado visual de los botones y labels
+ * Blindada contra el color blanco por defecto del CSS global
  */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     if (status === undefined || status === null) return;
@@ -22,15 +23,17 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${type.toLowerCase()}state`;
     const label = document.getElementById(labelId);
     
+    // 1. Normalización de datos
     const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // --- LÓGICA DE BOTONES (Restablecida a como te funcionaba) ---
+    // 2. GESTIÓN DEL BOTÓN (START/STOP)
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
         
-        // Colores de fondo de Tailwind para los botones
+        // Reset de colores de fondo
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
+        
         if (isBusy) {
             btn.classList.add('bg-red-600'); 
         } else {
@@ -41,22 +44,28 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         btn.style.opacity = "1";
     }
 
-    // --- LÓGICA DE TEXTOS DE ESTADO (Label) ---
-    
-if (label) {
-    label.textContent = currentStatus;
-    label.style.fontSize = "12px"; // Tamaño corregido
-    label.style.fontWeight = "bold";
-    
-    // Limpiamos clases de color de Tailwind para que no interfieran
-    label.classList.remove('text-white', 'text-gray-400', 'text-red-400', 'text-emerald-400');
-    
-    // Aplicamos el color desde tu mapa de constantes (STATUS_COLORS o STATUS_HEX)
-    const color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
-    label.style.color = color; // Usar .style.color es infalible
-}
+    // 3. GESTIÓN DEL LABEL (Elimina el blanco heredado)
+    if (label) {
+        label.textContent = currentStatus;
 
-    // --- LÓGICA DE INPUTS ---
+        /**
+         * className limpia CUALQUIER clase previa (como text-white o el color del body).
+         * Esto garantiza que el estilo parta de cero.
+         */
+        label.className = "text-[12px] font-bold font-mono"; 
+
+        // Buscamos la clase en STATUS_COLORS (ej: 'text-red-400')
+        const colorClass = STATUS_COLORS[currentStatus];
+
+        if (colorClass) {
+            // El !important que añadimos al CSS hará que este color gane siempre
+            label.classList.add(colorClass);
+        } else {
+            label.classList.add('text-gray-400');
+        }
+    }
+
+    // 4. GESTIÓN DE INPUTS (Bloqueo por actividad)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
