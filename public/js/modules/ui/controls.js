@@ -1,15 +1,8 @@
 // public/js/modules/ui/controls.js
 
-/**
- * ESTADOS ACTIVOS (BUSY)
- * Si el bot está en cualquiera de estos estados, el botón debe ser ROJO (STOP)
- * y los inputs deben estar bloqueados.
- */
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'NO_COVERAGE'];
 
-/**
- * Mapeo de estados a clases CSS de Tailwind originales
- */
+// ASEGÚRATE DE QUE ESTE OBJETO ESTÉ EXACTAMENTE ASÍ
 const STATUS_COLORS = {
     RUNNING: 'text-emerald-400',
     STOPPED: 'text-red-400',
@@ -19,9 +12,6 @@ const STATUS_COLORS = {
     PAUSED: 'text-orange-400'
 };
 
-/**
- * Actualiza el estado visual de los botones y labels según la base de datos
- */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     if (status === undefined || status === null) return;
 
@@ -29,55 +19,47 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${type.toLowerCase()}state`;
     const label = document.getElementById(labelId);
     
-    // .trim() elimina espacios invisibles que rompen el mapeo de colores
+    // Forzamos limpieza de strings
     const currentStatus = status.toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 1. Actualizar el Botón (Acción: START o STOP)
+    // 1. Botón (Fondo Rojo o Esmeralda)
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type}` : `START ${type}`;
         btn.classList.remove('bg-emerald-600', 'bg-red-600', 'bg-indigo-600');
-        
-        if (isBusy) {
-            btn.classList.add('bg-red-600'); // Rojo cuando el bot está trabajando para poder detenerlo
-        } else {
-            // Color según el bot (Esmeralda para Autobot, Índigo para AI) al estar detenido
-            btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
-        }
-        
-        btn.disabled = false;
-        btn.style.opacity = "1";
+        if (isBusy) btn.classList.add('bg-red-600');
+        else btn.classList.add(type === 'AI' ? 'bg-indigo-600' : 'bg-emerald-600');
     }
 
-    // 2. Actualizar el Label de Estado (Color específico y Tamaño aumentado)
+    // 2. Label (Color del Texto y Tamaño)
     if (label) {
         label.textContent = currentStatus;
         
-        // --- MEJORA DE TAMAÑO ---
-        // Eliminamos clases de tamaño pequeñas y forzamos text-[12px] (un punto más)
+        // Aumentar tamaño (Ya dijiste que esto está perfecto)
         label.classList.remove('text-[9px]', 'text-[10px]', 'text-xs');
-        label.classList.add('text-[12px]'); 
+        label.classList.add('text-[12px]', 'font-bold'); 
 
-        // --- CORRECCIÓN DE COLOR ---
-        // Eliminamos CUALQUIER rastro de color previo para que no haya conflicto
+        // LIMPIEZA DE COLORES (Incluyendo text-white por si acaso)
         label.classList.remove(
+            'text-white', 'text-gray-400',
             'text-emerald-400', 'text-red-400', 'text-blue-400', 
-            'text-yellow-400', 'text-purple-400', 'text-orange-400', 'text-gray-400'
+            'text-yellow-400', 'text-purple-400', 'text-orange-400'
         );
         
-        // Aplicamos el color que le corresponde según tu objeto STATUS_COLORS
+        // ASIGNACIÓN DE COLOR
         const colorClass = STATUS_COLORS[currentStatus];
         
         if (colorClass) {
             label.classList.add(colorClass);
+            // Consola para debuguear si sigue fallando
+            console.log(`Aplicando color ${colorClass} al estado ${currentStatus}`);
         } else {
-            // Si el estado es nuevo o desconocido, gris por seguridad
             label.classList.add('text-gray-400');
-            console.warn(`⚠️ Estado sin color definido: "${currentStatus}"`);
+            console.warn(`No se encontró color para: "${currentStatus}"`);
         }
     }
 
-    // 3. Gestión de Bloqueo de Inputs (Deshabilitar si el bot está operando)
+    // 3. Inputs
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
