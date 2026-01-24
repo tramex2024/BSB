@@ -189,24 +189,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`👤 Usuario desconectado: ${socket.id}`));
 });
 
-
-async function fixDatabaseFields() {
-    try {
-        await Autobot.updateMany({}, { 
-            $set: { 
-                lpm: 0, 
-                lpc: 0, 
-                spm: 0, 
-                spc: 0 
-            } 
-        });
-        console.log("✅ Campos de Trailing restaurados correctamente.");
-    } catch (err) {
-        console.error("❌ Error al actualizar:", err.message);
-    }
-}
-fixDatabaseFields();
-
 server.listen(PORT, () => {
     console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });
