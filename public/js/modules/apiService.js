@@ -112,6 +112,7 @@ export async function sendConfigToBackend() {
 
 /**
  * Activa o desactiva una estrategia (Long, Short o AI)
+ * Ajustado para feedback visual inmediato y sincronización de DB
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const sideKey = side.toLowerCase(); 
@@ -119,31 +120,34 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
     const btn = document.getElementById(btnId);
 
-    // 1. Bloqueo visual inmediato (Feedback al usuario)
+    // 1. Bloqueo visual inmediato
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = "0.5";
-        btn.textContent = "WAIT...";
+        btn.innerHTML = `<span class="animate-pulse">WAIT...</span>`;
     }
 
     try {
         const config = providedConfig || getBotConfiguration();
-        const data = await privateFetch(`/api/autobot/${action}/${sideKey}`, {
+        
+        // Ajustamos la ruta para que coincida con el backend (start-long / stop-long)
+        const endpoint = `/api/autobot/${action}-${sideKey}`; 
+        
+        const data = await privateFetch(endpoint, {
             method: 'POST',
             body: JSON.stringify({ config }) 
         });
 
         if (data && data.success) {
-            displayMessage(data.message || 'Operación exitosa', 'success');
-            // NO actualizamos botones aquí. El socket 'bot-state-update' 
-            // lo hará automáticamente al recibir la confirmación de la DB.
+            displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
             return data;
         } else {
             throw new Error(data?.message || 'Error en servidor');
         }
     } catch (err) {
         displayMessage(err.message, 'error');
-        // Si hay error, sí rehabilitamos el botón manualmente
+        // Revertimos el botón solo si falla, porque si tiene éxito, 
+        // el socket 'bot-state-update' lo actualizará automáticamente.
         if (btn) {
             btn.disabled = false;
             btn.style.opacity = "1";

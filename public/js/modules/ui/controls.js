@@ -1,4 +1,4 @@
-// public/js/modules/ui/controls.js - Gestión de estados visuales basada en los IDs reales del HTML
+// public/js/modules/ui/controls.js
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'NO_COVERAGE'];
 
@@ -16,18 +16,14 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    
-    // CORRECCIÓN DE ID: Tu HTML usa 'aubot-lstate' y 'aubot-sstate'
-    // 'type' viene como 'LONG' o 'SHORT', así que tomamos la primera letra:
     const typeKey = type.charAt(0).toLowerCase(); // 'l' o 's'
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. ACTUALIZAR ETIQUETA (LState / SState)
+    // 1. ACTUALIZAR ETIQUETA
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
-        // Forzamos visibilidad para asegurar que no sea tapado por CSS
         label.style.fontWeight = "bold";
     }
 
@@ -35,21 +31,17 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     if (btn) {
         btn.textContent = isBusy ? `STOP ${type.charAt(0)}` : `START ${type.charAt(0)}`;
         
-        // Manejo de clases de Tailwind
         if (isBusy) {
-            btn.classList.replace('bg-emerald-600', 'bg-red-600');
-            // Si no existía bg-emerald, forzamos:
+            btn.classList.remove('bg-emerald-600');
             btn.classList.add('bg-red-600');
         } else {
-            btn.classList.replace('bg-red-600', 'bg-emerald-600');
+            btn.classList.remove('bg-red-600');
             btn.classList.add('bg-emerald-600');
         }
-        
         btn.disabled = false;
-        btn.style.opacity = "1";
     }
 
-    // 3. GESTIÓN DE INPUTS (Bloqueo si está activo)
+    // 3. GESTIÓN DE INPUTS
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -61,7 +53,35 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
 }
 
 /**
- * Sincroniza los valores de los inputs con la configuración de la DB (Mismo mapping)
+ * ✅ NUEVA FUNCIÓN: Recolecta los datos de la web para enviarlos al servidor.
+ * Úsala en main.js antes de hacer el POST a /api/autobot/update-config
+ */
+export function collectConfigFromUI() {
+    return {
+        symbol: "BTC_USDT",
+        long: {
+            amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
+            size_var: parseFloat(document.getElementById('auincrementl')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrementl')?.value) || 0,
+            price_step_inc: parseFloat(document.getElementById('aupricestep-l')?.value) || 0,
+            profit_percent: parseFloat(document.getElementById('autriggerl')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false
+        },
+        short: {
+            amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
+            size_var: parseFloat(document.getElementById('auincrements')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrements')?.value) || 0,
+            price_step_inc: parseFloat(document.getElementById('aupricestep-s')?.value) || 0,
+            profit_percent: parseFloat(document.getElementById('autriggers')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false
+        }
+    };
+}
+
+/**
+ * Sincroniza los valores de los inputs con la configuración de la DB
  */
 export function syncInputsFromConfig(conf) {
     if (!conf) return;
@@ -77,26 +97,22 @@ export function syncInputsFromConfig(conf) {
         'auincrements': conf.short?.size_var,
         'audecrements': conf.short?.price_var,
         'aupricestep-s': conf.short?.price_step_inc,
-        'autriggers': conf.short?.profit_percent,
-        'auamountai-usdt': conf.ai?.amountUsdt
+        'autriggers': conf.short?.profit_percent
     };
 
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
         if (input && value !== undefined && document.activeElement !== input) {
-            // Solo actualizamos si el cambio es significativo para no molestar al usuario
-            const currentVal = parseFloat(input.value) || 0;
             const newVal = parseFloat(value) || 0;
-            if (Math.abs(newVal - currentVal) > 0.000001) {
-                input.value = value;
-            }
+            input.value = newVal;
         }
     }
     
-    // Sincronización de Checkboxes (Auto-stop)
-    ['long', 'short', 'ai'].forEach(side => {
+    // Checkboxes
+    ['long', 'short'].forEach(side => {
         const el = document.getElementById(`au-stop-${side}-at-cycle`);
-        const checked = !!conf[side]?.stopAtCycle;
-        if (el && document.activeElement !== el) el.checked = checked;
+        if (el && document.activeElement !== el) {
+            el.checked = !!conf[side]?.stopAtCycle;
+        }
     });
 }
