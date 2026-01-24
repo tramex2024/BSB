@@ -65,8 +65,8 @@ async function run(dependencies) {
                 
                 // Si el error es por falta de balance real en el exchange, detenemos para evitar bucles
                 if (error.message.includes('Balance not enough') || error.message.includes('volume too small')) {
-                    log('⚠️ Desfase de inventario detectado. Estado: NO_COVERAGE.', 'error');
-                    await updateBotState('NO_COVERAGE', LSTATE); 
+                    log('⚠️ Desfase de inventario detectado. Estado: PAUSED.', 'error');
+                    await updateBotState('PAUSED', LSTATE); 
                 }
             }
         } else {

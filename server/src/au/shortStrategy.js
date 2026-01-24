@@ -4,7 +4,7 @@
 const SRunning = require('./states/short/SRunning'); // Vigilante de señal
 const SSelling = require('./states/short/SSelling'); // Entrando/Promediando Short (Venta)
 const SBuying = require('./states/short/SBuying');   // Cerrando Short con ganancia (Compra)
-const SNoCoverage = require('./states/short/SNoCoverage');
+const SPaused = require('./states/short/SPaused');
 const SStopped = require('./states/short/SStopped');
 
 let dependencies = {};
@@ -26,8 +26,8 @@ async function runShortStrategy() {
         case 'BUYING':
             await SBuying.run(dependencies);
             break;
-        case 'NO_COVERAGE':
-            await SNoCoverage.run(dependencies);
+        case 'PAUSED':
+            await SPaused.run(dependencies);
             break;
         case 'STOPPED':
             await SStopped.run(dependencies); // RE-ACTIVADO

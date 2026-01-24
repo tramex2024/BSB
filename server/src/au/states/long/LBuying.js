@@ -46,7 +46,7 @@ async function run(dependencies) {
                 await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState); 
             } else {
                 log(`⚠️ [L-BUY] Fondos insuficientes para apertura.`, 'warning');
-                await updateBotState('NO_COVERAGE', LSTATE); 
+                await updateBotState('PAUSED', LSTATE); 
             }
             return; 
         }
@@ -92,7 +92,7 @@ async function run(dependencies) {
                 }
             } else {
                 log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial.`, 'error');
-                await updateBotState('NO_COVERAGE', LSTATE);
+                await updateBotState('PAUSED', LSTATE);
             }
             return;
         }

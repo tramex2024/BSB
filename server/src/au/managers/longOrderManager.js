@@ -14,7 +14,7 @@ async function placeFirstLongOrder(config, botState, log, updateBotState, update
 
     if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
         log(`[L-FIRST] ❌ Error: Monto $${amountNominal} inferior al mínimo BitMart.`, 'error');
-        await updateBotState('NO_COVERAGE', 'long');
+        await updateBotState('PAUSED', 'long');
         return;
     }
 

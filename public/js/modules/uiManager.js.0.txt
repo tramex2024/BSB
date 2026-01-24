@@ -10,7 +10,7 @@ const STATUS_COLORS = {
     STOPPED: 'text-red-400',
     BUYING: 'text-blue-400',
     SELLING: 'text-yellow-400',
-    NO_COVERAGE: 'text-purple-400',
+//    NO_COVERAGE: 'text-purple-400',
     PAUSED: 'text-orange-400'
 };
 

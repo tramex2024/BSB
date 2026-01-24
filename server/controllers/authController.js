@@ -1,7 +1,5 @@
 // src/server/controllers/authController.js
 
-// src/server/controllers/authController.js
-
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const Autobot = require('../models/Autobot');

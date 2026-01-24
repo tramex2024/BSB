@@ -1,4 +1,4 @@
-// BSB/server/src/au/states/long/LNoCoverage.js
+// BSB/server/src/au/states/long/LPaused.js
 
 const { calculateLongTargets } = require('../../../../autobotCalculations');
 const MIN_USDT_VALUE_FOR_BITMART = 5.0;
@@ -63,7 +63,7 @@ async function run(dependencies) {
         await updateBotState('BUYING', 'long');
     } else {
         const sizeInfo = config.long?.size_var || 0;
-        log(`[L-NO_COVERAGE] En espera... Saldo: ${currentLBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Sig. Orden #${orderCountInCycle + 1})`, 'debug');
+        log(`[L-PAUSED] En espera... Saldo: ${currentLBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Sig. Orden #${orderCountInCycle + 1})`, 'debug');
     }
 } 
 

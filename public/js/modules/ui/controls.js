@@ -1,14 +1,13 @@
 // public/js/modules/ui/controls.js
 
-const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'NO_COVERAGE'];
+const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'STOPPED'];
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      // Esmeralda
     'STOPPED': '#ef4444',      // Rojo
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo    
-    'PAUSED': '#fb923c',
-    'NO_COVERAGE': '#fb923c',
+    'PAUSED': '#fb923c'    
 };
 
 export function updateButtonState(btnId, status, type, inputIds = []) {

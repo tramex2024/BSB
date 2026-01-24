@@ -3,7 +3,7 @@
 const LRunning = require('./states/long/LRunning');
 const LBuying = require('./states/long/LBuying');
 const LSelling = require('./states/long/LSelling');
-const LNoCoverage = require('./states/long/LNoCoverage');
+const LPaused = require('./states/long/LPaused');
 const LStopped = require('./states/long/LStopped');
 
 let dependencies = {};
@@ -49,9 +49,9 @@ async function runLongStrategy() {
                 await LSelling.run(dependencies);
                 break;
                 
-            case 'NO_COVERAGE':
+            case 'PAUSED':
                 // Estado crítico: Se alcanzó el límite de órdenes o no hay saldo en Bitmart.
-                await LNoCoverage.run(dependencies);
+                await LPaused.run(dependencies);
                 break;
                 
             case 'STOPPED':

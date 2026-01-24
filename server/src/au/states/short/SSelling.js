@@ -92,7 +92,7 @@ async function run(dependencies) {
                 }
             } else {
                 log(`🚫 [S-SELL] DCA fallido por balance insuficiente.`, 'error');
-                await updateBotState('NO_COVERAGE', SSTATE);
+                await updateBotState('PAUSED', SSTATE);
             }
             return;
         }

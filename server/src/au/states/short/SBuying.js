@@ -70,7 +70,7 @@ async function run(dependencies) {
                 
                 if (error.message.includes('Balance not enough')) {
                     log('⚠️ Saldo USDT insuficiente para cerrar el Short.', 'error');
-                    await updateBotState('NO_COVERAGE', SSTATE); 
+                    await updateBotState('PAUSED', SSTATE); 
                 }
             }
         } else {

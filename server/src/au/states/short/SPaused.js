@@ -1,4 +1,4 @@
-// BSB/server/src/au/states/short/SNoCoverage.js
+// BSB/server/src/au/states/short/SPaused.js
 
 const { calculateShortTargets } = require('../../../../autobotCalculations');
 const MIN_USDT_VALUE_FOR_BITMART = 5.0;
@@ -63,7 +63,7 @@ async function run(dependencies) {
         await updateBotState('SELLING', 'short');
     } else {
         const sizeInfo = config.short?.size_var || 0;
-        log(`[S-NO_COVERAGE] Esperando... Balance: ${currentSBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Var: ${sizeInfo}%)`, 'debug');
+        log(`[S-PAUSED] Esperando... Balance: ${currentSBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Var: ${sizeInfo}%)`, 'debug');
     }
 } 
 
