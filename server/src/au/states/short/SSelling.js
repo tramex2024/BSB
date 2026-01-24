@@ -14,18 +14,17 @@ async function run(dependencies) {
     const SSTATE = 'short';
 
     try {
-        // 1. MONITOREO DE ÓRDENES ACTIVAS (Ventas o DCAs en proceso)
+        // 1. MONITOREO DE ÓRDENES ACTIVAS
         const orderIsActive = await monitorShortSell(
             botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState
         );
         if (orderIsActive) return; 
 
-        // 2. LOG DE MONITOREO (Visualización en Dashboard)
+        // 2. LOG DE MONITOREO
         if (botState.sppc > 0) {
             const nextPrice = botState.sncp || 0; 
             const targetPrice = botState.spc || 0; 
             
-            // Distancia al siguiente DCA (arriba) y al Take Profit (abajo)
             const distToDCA = nextPrice > 0 ? (((nextPrice / currentPrice) - 1) * 100).toFixed(2) : "0.00";
             const distToTP = targetPrice > 0 ? (((currentPrice / targetPrice) - 1) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.sprofit || 0;
@@ -33,7 +32,7 @@ async function run(dependencies) {
             log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP: ${targetPrice.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }   
 
-        // 3. LÓGICA DE APERTURA (Si no hay posición activa)
+        // 3. LÓGICA DE APERTURA
         const currentPPC = parseFloat(botState.sppc || 0);
         const pendingOrder = botState.slastOrder; 
 
@@ -46,7 +45,7 @@ async function run(dependencies) {
                 await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice);
             } else {
                 log(`⚠️ [S-SELL] Fondos insuficientes para abrir Short.`, 'warning');
-                await updateBotState('NO_COVERAGE', SSTATE);
+                await updateBotState('STOPPED', SSTATE);
             }
             return;
         }
@@ -55,44 +54,44 @@ async function run(dependencies) {
         const targetPrice = botState.spc || 0;
         if (targetPrice > 0 && currentPrice <= targetPrice) {
             log(`💰 [S-SELL] Target Short alcanzado. Entrando a modo RECOMPRA (BUYING).`, 'success');
-            // Transicionamos a BUYING donde vive el Trailing Stop de Short
             await updateBotState('BUYING', SSTATE);
             return;
         }
 
-        // 5. DCA EXPONENCIAL (Protección ante subidas)
+        // 5. DCA EXPONENCIAL (Protección ante subidas con Candado de Seguridad)
         const requiredAmount = parseFloat(botState.srca || 0); 
         const nextCoveragePrice = parseFloat(botState.sncp || 0); 
-        const lastExecutionPrice = parseFloat(botState.slep || 0); // Precio de la última orden real
+        const lastExecutionPrice = parseFloat(botState.slep || 0);
 
-        // Verificamos si se cumplen las condiciones de precio para el DCA
         const isPriceHighEnough = nextCoveragePrice > 0 && currentPrice >= nextCoveragePrice;
 
         if (!pendingOrder && isPriceHighEnough) {
             
-            // 🛡️ CANDADO DE SEGURIDAD 2026:
-            // En Short, el DCA solo es válido si el precio actual es SUPERIOR al de la última venta.
-            // Si el precio es menor o igual, el cálculo de NCP fue erróneo o el mercado no ha subido.
+            // 🛡️ CANDADO DE SEGURIDAD: Evita DCA en el mismo nivel o inferior
             if (currentPrice <= lastExecutionPrice) {
-                log(`[S-SELL] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es superior al de la última ejecución (${lastExecutionPrice.toFixed(2)}). Evitando DCA en el mismo nivel.`, 'warning');
+                log(`[S-SELL] 🛑 Bloqueo de seguridad: Precio actual (${currentPrice.toFixed(2)}) no es superior al anterior (${lastExecutionPrice.toFixed(2)}).`, 'warning');
                 return; 
             }
 
             const hasBalance = botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount;
 
             if (hasBalance && requiredAmount > 0) {
-                log(`📈 [S-SELL] Precio superó DCA Exponencial (${nextCoveragePrice.toFixed(2)}). Incrementando cobertura...`, 'warning');
+                log(`📈 [S-SELL] Precio superó DCA. Incrementando cobertura...`, 'warning');
                 try {
-                    // Esta función registra el slastOrder en la raíz automáticamente
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice);
                 } catch (error) {
                     log(`❌ [S-SELL] Fallo al colocar cobertura: ${error.message}`, 'error');
                 }
             } else {
-                log(`🚫 [S-SELL] DCA fallido por balance insuficiente. Pasando a NO_COVERAGE.`, 'error');
+                log(`🚫 [S-SELL] DCA fallido por balance insuficiente.`, 'error');
                 await updateBotState('NO_COVERAGE', SSTATE);
             }
             return;
         }
+
+    } catch (criticalError) {
+        log(`🔥 [CRITICAL] SSelling: ${criticalError.message}`, 'error');
+    }
+}
 
 module.exports = { run };
