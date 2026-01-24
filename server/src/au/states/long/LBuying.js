@@ -19,80 +19,79 @@ async function run(dependencies) {
 
     try {
         // 1. MONITOREO DE ORDEN PENDIENTE
-        // Verifica si una compra previa se completó para actualizar lppc y lac.
         const orderIsActive = await monitorAndConsolidate(
             botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState
         );
         
         if (orderIsActive) return; 
         
-        // 2. LOG DE MONITOREO (DASHBOARD BEAT)
+        // 2. LOG DE MONITOREO
         if (parseFloat(botState.lppc || 0) > 0) {
             const nextPrice = parseFloat(botState.lncp || 0);
             const targetTP = parseFloat(botState.ltprice || 0);
             
-            // Distancia porcentual al DCA y al Profit
             const distToDCA = (nextPrice > 0) ? (((currentPrice / nextPrice) - 1) * 100).toFixed(2) : "0.00";
             const distToTP = (targetTP > 0) ? (((targetTP / currentPrice) - 1) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.lprofit || 0;
 
-            log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${distToDCA}%) | TP: ${targetTP.toFixed(2)} (${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+            log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }
   
-        // 3. LÓGICA DE APERTURA (Si no hay posición activa)
+        // 3. LÓGICA DE APERTURA
         if (parseFloat(botState.lppc || 0) === 0 && !botState.llastOrder) {
             const purchaseAmount = parseFloat(config.long.purchaseUsdt);
             
-            // Verificamos solvencia en el bot y en el saldo real de Bitmart
             if (availableUSDT >= purchaseAmount && botState.lbalance >= purchaseAmount) {
                 log("🚀 [L-BUY] Iniciando ciclo Long. Colocando primera compra exponencial...", 'info');
                 await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState); 
             } else {
-                log(`⚠️ [L-BUY] Fondos insuficientes para apertura. Necesita: ${purchaseAmount} USDT. Saldo real: ${availableUSDT}.`, 'warning');
+                log(`⚠️ [L-BUY] Fondos insuficientes para apertura.`, 'warning');
                 await updateBotState('NO_COVERAGE', LSTATE); 
             }
             return; 
         }
 
-        // 4. EVALUACIÓN DE SALIDA HACIA SELLING
+        // 4. EVALUACIÓN DE SALIDA HACIA SELLING (Con Limpieza de Trailing)
         // Si el precio cruza el target, pasamos al estado SELLING donde LSelling.js aplicará el Trailing Stop.
         if (botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-            log(`💰 [L-BUY] Target Profit tocado (${currentPrice.toFixed(2)}). Activando Trailing Stop en SELLING...`, 'success');
+            log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) alcanzado. Activando Trailing Stop en SELLING...`, 'success');
+            
+            // 🧹 LIMPIEZA PREVENTIVA: Aseguramos que el Trailing empiece de cero
+            await updateGeneralBotState({
+                lpm: 0,
+                lpc: 0
+            });
+
             await updateBotState('SELLING', LSTATE);
             return;
         }
 
         // 5. DISPARO DE DCA EXPONENCIAL (Con Candado de Seguridad 2026)
-        // lrca: Long Required Coverage Amount | lncp: Long Next Coverage Price
         const requiredAmount = parseFloat(botState.lrca || 0);
         const nextPriceThreshold = parseFloat(botState.lncp || 0);
-        const lastExecutionPrice = parseFloat(botState.llep || 0); // Último precio de compra real
+        const lastExecutionPrice = parseFloat(botState.llep || 0); 
         
-        // Condición base: el precio cruzó el umbral hacia abajo
         const isPriceLowEnough = nextPriceThreshold > 0 && currentPrice <= nextPriceThreshold;
 
         if (!botState.llastOrder && isPriceLowEnough) {
             
-            // 🛡️ CANDADO DE SEGURIDAD:
-            // En Long, el DCA solo es válido si el precio actual es INFERIOR al de la última compra.
-            // Si lastExecutionPrice es 0 (primera orden), permitimos pasar.
+            // 🛡️ CANDADO DE SEGURIDAD
             if (lastExecutionPrice > 0 && currentPrice >= lastExecutionPrice) {
-                log(`[L-BUY] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es inferior al de la última compra (${lastExecutionPrice.toFixed(2)}). Evitando acumulación en el mismo nivel.`, 'warning');
+                log(`[L-BUY] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es inferior al de la última compra (${lastExecutionPrice.toFixed(2)}).`, 'warning');
                 return; 
             }
 
             const hasFunds = (availableUSDT >= requiredAmount && botState.lbalance >= requiredAmount);
 
             if (hasFunds && requiredAmount > 0) {
-                log(`📉 [L-BUY] Disparando DCA Exponencial: ${requiredAmount.toFixed(2)} USDT. Precio: ${currentPrice.toFixed(2)}`, 'warning');
+                log(`📉 [L-BUY] Disparando DCA Exponencial: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
                 try {
-                    // El manager coloca la orden y la registra en llastOrder de la raíz
                     await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState);
                 } catch (error) {
                     log(`❌ [L-BUY] Error en ejecución de DCA: ${error.message}`, 'error');
                 }
             } else {
-                log(`🚫 [L-BUY] Saldo insuficiente para mantener la progresión exponencial (${requiredAmount.toFixed(2)} USDT necesarios).`, 'error');
+                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial.`, 'error');
                 await updateBotState('NO_COVERAGE', LSTATE);
             }
             return;

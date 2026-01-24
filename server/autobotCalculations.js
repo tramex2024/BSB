@@ -22,18 +22,15 @@ function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     const multiplier = 1 + (sVar / 100);
     
     // Si count es 0 (primera orden), devuelve base. 
-    // Si es 1, ya aplica la primera expansión exponencial.
     return base * Math.pow(multiplier, count);
 }
 
 /**
  * LÓGICA DE DISTANCIA DE PRECIO (Price Var Increment)
- * Multiplica la distancia base por el incremento exponencial según el índice de cobertura.
  */
 function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncrement = 0) {
     const baseStep = parseNumber(basePriceVarDec);
     const increment = 1 + (parseNumber(priceVarIncrement) / 100);
-    // coverageIndex 0 es el primer DCA (la distancia inicial definida en price_var)
     return baseStep * Math.pow(increment, coverageIndex);
 }
 
@@ -62,11 +59,10 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const profitPercent = parseNumber(config.profit_percent || config.trigger);
     const feeRate = 0.001;
 
-    // Calculamos el paso de precio actual basado en cuántas órdenes ya lleva
     const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount - 1, priceVarInc);
 
     return {
-        targetSellPrice: calculateTargetWithFees(p, profitPercent, 'long', feeRate),
+        ltprice: calculateTargetWithFees(p, profitPercent, 'long', feeRate), // ✅ Coherente con Manager
         nextCoveragePrice: p * (1 - currentStep),
         requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, currentOrderCount, config.size_var)
     };
@@ -78,26 +74,18 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // Simulación de "Survival": Cuántos golpes aguanta el balance
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
-
         if (remainingBalance < nextOrderAmount) break;
-
         remainingBalance -= nextOrderAmount;
         
-        // La distancia al suelo aumenta en cada paso si priceVarIncrement > 0
         const currentStep = getExponentialPriceStep(priceVarDec, orderCount - 1, priceVarIncrement);
         simulationPrice = simulationPrice * (1 - currentStep);
-
         orderCount++;
         numberOfExtraOrders++;
     }
 
-    return { 
-        coveragePrice: simulationPrice, 
-        numberOfOrders: numberOfExtraOrders 
-    };
+    return { coveragePrice: simulationPrice, numberOfOrders: numberOfExtraOrders };
 }
 
 // ==========================================
@@ -114,7 +102,7 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const currentStep = getExponentialPriceStep(pVarDec, currentOrderCount - 1, priceVarInc);
 
     return {
-        targetBuyPrice: calculateTargetWithFees(p, profitPercent, 'short', feeRate),
+        stprice: calculateTargetWithFees(p, profitPercent, 'short', feeRate), // ✅ Coherente con Manager
         nextCoveragePrice: p * (1 + currentStep), 
         requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, currentOrderCount, config.size_var)
     };
@@ -128,22 +116,16 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
-
         if (remainingBalance < nextOrderAmount) break;
-
         remainingBalance -= nextOrderAmount;
         
         const currentStep = getExponentialPriceStep(priceVarDec, orderCount - 1, priceVarIncrement);
         simulationPrice = simulationPrice * (1 + currentStep);
-
         orderCount++;
         numberOfExtraOrders++;
     }
 
-    return { 
-        coveragePrice: simulationPrice, 
-        numberOfOrders: numberOfExtraOrders 
-    };
+    return { coveragePrice: simulationPrice, numberOfOrders: numberOfExtraOrders };
 }
 
 // ==========================================
@@ -157,12 +139,10 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
     
     if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
 
-    // Profit Bruto
     let grossProfit = (strategy === 'long') 
         ? (p - entry) * qty 
         : (entry - p) * qty;
     
-    // Comisiones estimadas (Entrada + Salida)
     const entryValue = entry * qty;
     const exitValue = p * qty;
     const totalFees = (entryValue + exitValue) * feeRate;
