@@ -26,6 +26,10 @@ async function run(dependencies) {
 
         // 3. VALIDACIÓN DE FRESCURA
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
+
+        // Log informativo para el dashboard
+        log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Tendencia: ${globalSignal.signal}`, 'debug');
+
         if (!signalTime) {
             log("[L-RUNNING] ⚠️ Señal sin marca de tiempo. Esperando actualización...", 'warning');
             return;
