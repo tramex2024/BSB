@@ -62,16 +62,28 @@ async function run(dependencies) {
             return;
         }
 
-        // 5. DISPARO DE DCA EXPONENCIAL
+        // 5. DISPARO DE DCA EXPONENCIAL (Con Candado de Seguridad 2026)
         // lrca: Long Required Coverage Amount | lncp: Long Next Coverage Price
         const requiredAmount = parseFloat(botState.lrca || 0);
         const nextPriceThreshold = parseFloat(botState.lncp || 0);
+        const lastExecutionPrice = parseFloat(botState.llep || 0); // Último precio de compra real
         
-        if (!botState.llastOrder && nextPriceThreshold > 0 && currentPrice <= nextPriceThreshold) {
+        // Condición base: el precio cruzó el umbral hacia abajo
+        const isPriceLowEnough = nextPriceThreshold > 0 && currentPrice <= nextPriceThreshold;
+
+        if (!botState.llastOrder && isPriceLowEnough) {
             
+            // 🛡️ CANDADO DE SEGURIDAD:
+            // En Long, el DCA solo es válido si el precio actual es INFERIOR al de la última compra.
+            // Si lastExecutionPrice es 0 (primera orden), permitimos pasar.
+            if (lastExecutionPrice > 0 && currentPrice >= lastExecutionPrice) {
+                log(`[L-BUY] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es inferior al de la última compra (${lastExecutionPrice.toFixed(2)}). Evitando acumulación en el mismo nivel.`, 'warning');
+                return; 
+            }
+
             const hasFunds = (availableUSDT >= requiredAmount && botState.lbalance >= requiredAmount);
 
-            if (hasFunds) {
+            if (hasFunds && requiredAmount > 0) {
                 log(`📉 [L-BUY] Disparando DCA Exponencial: ${requiredAmount.toFixed(2)} USDT. Precio: ${currentPrice.toFixed(2)}`, 'warning');
                 try {
                     // El manager coloca la orden y la registra en llastOrder de la raíz
