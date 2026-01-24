@@ -48,10 +48,16 @@ function resetWatchdog() {
 }
 
 export function logStatus(message, type = 'info') {
-    logQueue.push({ message, type });
+    // Si el mensaje nuevo es un error, lo ponemos al principio o limpiamos lo demás
+    if (type === 'error') {
+        logQueue = [{ message, type }]; // Prioridad absoluta: borra todo y muestra el error
+    } else {
+        if (logQueue.length >= 2) logQueue.shift();
+        logQueue.push({ message, type });
+    }
+
     if (!isProcessingLog) processNextLog();
 }
-
 function processNextLog() {
     if (logQueue.length === 0) { isProcessingLog = false; return; }
     const logEl = document.getElementById('log-message');
@@ -91,18 +97,19 @@ export function initializeFullApp() {
         }
     });
 
+    // 🟢 ESCUCHAR LOGS DEL BACKEND
+    socket.on('bot-log', (data) => {
+        if (data && data.message) {
+            logStatus(data.message, data.type || 'info');
+        }
+    });
+
     socket.on('bot-state-update', (state) => {
         console.log("📡 Estado recibido del servidor:", state);
-        
-        // Sincronizamos el objeto global con los nuevos datos
         if (state) {
             Object.assign(currentBotState, state);
         }
-        
-        // 1. Actualiza números, balances y profits (Corrección de referencia uiManager)
         updateBotUI(currentBotState);
-        
-        // 2. Actualiza botones y bloqueos (Corrección de referencia uiManager)
         updateControlsState(currentBotState);
     });
 

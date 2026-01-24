@@ -27,9 +27,20 @@ let lastCyclePrice = 0;
 function setIo(socketIo) { io = socketIo; }
 function getLastPrice() { return lastCyclePrice; }
 
+// Esta es la función que usan todos los Managers y States
 function log(message, type = 'info') {
-    if (io) io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
-    console.log(`[${type.toUpperCase()}]: ${message}`);
+    const timestamp = new Date().toLocaleTimeString();
+    
+    // 1. Log en la consola de Render/Terminal (servidor)
+    console.log(`[${timestamp}] [${type.toUpperCase()}] ${message}`);
+
+    // 2. 📢 ENVÍO AL FRONTEND (lo que verás en tu barra de 2.5s)
+    if (io) {
+        io.emit('bot-log', { 
+            message: message, 
+            type: type 
+        });
+    }
 }
 
 /**
