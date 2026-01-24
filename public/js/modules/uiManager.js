@@ -64,19 +64,18 @@ export function updateBotUI(state) {
         }
 
         // --- Lógica de Formateo Inteligente ---
-        if (id.includes('profit')) {
-            // Formato moneda con color (verde/rojo)
-            formatProfit(el, val);
-        } else if (id.includes('btc') || id === 'aulbalance' || id === 'ausbalance') {
-            // Formato precisión 8 decimales para cripto
-            formatValue(el, val, true, false);
-        } else if (id.match(/norder|cycle/)) {
-            // Formato entero simple
-            formatValue(el, val, false, true);
-        } else {
-            // Formato moneda estándar
-            formatValue(el, val, false, false);
-        }
+       if (id.includes('profit')) {
+    formatProfit(el, val);
+} else if (id.includes('btc') || id.includes('sac') || id.includes('lac')) {
+    // ₿ Solo lo que es cantidad de monedas (BTC) lleva 8 decimales
+    formatValue(el, val, true, false);
+} else if (id.match(/norder|cycle/)) {
+    // # Números enteros
+    formatValue(el, val, false, true);
+} else {
+    // 💵 TODO LO DEMÁS (incluyendo lbalance y sbalance) a 2 decimales
+    formatValue(el, val, false, false);
+}
     });
 
     // 3. Sincronización de Controles y Configuración

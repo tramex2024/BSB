@@ -87,6 +87,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
 
 /**
  * Procesa el cierre de ciclo (Take Profit) del Long.
+ * Actualizada para persistir la orden de venta en el historial local.
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     const { config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
@@ -98,6 +99,21 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const totalUsdtReceived = (totalBtcToSell * sellPrice) * (1 - SELL_FEE_PERCENT);
         const totalInvestment = parseFloat(botStateObj.lai || 0);
         const profitNeto = totalUsdtReceived - totalInvestment;
+
+        // 🚀 NUEVO: Guardar la orden de venta en el historial de órdenes (Persistence Service)
+        // Esto garantiza que la venta aparezca en el Dashboard junto con las compras.
+        try {
+            await saveExecutedOrder({ 
+                ...orderDetails, 
+                side: 'sell', 
+                status: 'filled',
+                filledSize: totalBtcToSell,
+                priceAvg: sellPrice,
+                timestamp: Date.now()
+            }, LSTATE);
+        } catch (saveError) {
+            log(`⚠️ Error al persistir orden de venta en BD: ${saveError.message}`, 'error');
+        }
 
         if (logSuccessfulCycle && botStateObj.lstartTime) {
             try {
@@ -117,7 +133,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
                     profitPercentage: totalInvestment > 0 ? (profitNeto / totalInvestment) * 100 : 0
                 });
             } catch (dbError) {
-                log(`⚠️ Error al guardar historial Long: ${dbError.message}`, 'error');
+                log(`⚠️ Error al guardar historial de Ciclo Long: ${dbError.message}`, 'error');
             }
         }
 

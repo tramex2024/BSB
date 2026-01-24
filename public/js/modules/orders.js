@@ -113,9 +113,18 @@ export async function fetchOrders(status, orderListElement) {
 
     try {
         const endpoint = status === 'all' ? 'filled' : status; 
-        const response = await fetch(`${BACKEND_URL}/api/orders/${endpoint}`, {
+        
+        // --- CÁLCULO DE RANGO DE 15 DÍAS ---
+        const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
+        
+        // Añadimos el parámetro start_time a la URL
+        const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
+        url.searchParams.append('startTime', fifteenDaysAgo); 
+
+        const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
+
         if (!response.ok) throw new Error("Error en API de órdenes");
         const data = await response.json();
         const orders = Array.isArray(data) ? data : (data.orders || []);

@@ -108,7 +108,19 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
 
         const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
 
-        await saveExecutedOrder({ ...orderDetails, side: 'buy' }, SSTATE);
+        // 🚀 PERSISTENCIA DE LA ORDEN DE COMPRA (TAKE PROFIT)
+        try {
+            await saveExecutedOrder({ 
+                ...orderDetails, 
+                side: 'buy',
+                status: 'filled',
+                filledSize: filledSize,
+                priceAvg: buyPrice,
+                timestamp: Date.now()
+            }, SSTATE);
+        } catch (saveError) {
+            log(`⚠️ Error al persistir compra Short en BD: ${saveError.message}`, 'error');
+        }
 
         if (logSuccessfulCycle && botStateObj.sstartTime) {
             try {
