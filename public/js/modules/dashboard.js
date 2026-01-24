@@ -27,7 +27,8 @@ export function initializeDashboardView(initialState) {
     }
 
     setupSocketListeners();
-    setupChartSelectors();
+    // ✅ CORRECCIÓN: Se agrega la función faltante al final del archivo para evitar el ReferenceError
+    setupChartSelectors(); 
     setupTestButton(); 
     
     // Carga inicial de analítica protegida
@@ -39,21 +40,17 @@ export function initializeDashboardView(initialState) {
 async function refreshAnalytics() {
     try {
         const curveData = await fetchEquityCurveData();
-        // Verificamos que sea un objeto válido antes de pasarlo
         if (curveData) {
             Metrics.setAnalyticsData(curveData);
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
-        // El error muere aquí y no detiene la aplicación
     }
 }
 
 function setupSocketListeners() {
     if (!socket) return;
 
-    // EVITAMOS removeAllListeners que borran el flujo principal de main.js
-    // En su lugar, usamos .off() solo para los que este módulo maneja específicamente
     socket.off('market-signal-update');
     socket.off('order-executed');
     socket.off('cycle-closed');
@@ -73,10 +70,6 @@ function setupSocketListeners() {
             flashElement('auprice', order.side.toLowerCase() === 'buy' ? 'bg-emerald-500/20' : 'bg-orange-500/20');
         } catch (e) {}
     });
-    
-    // El listener de 'bot-state-update' ya vive en main.js, 
-    // no necesitamos duplicarlo aquí a menos que Dashboard haga algo extra.
-    // Si lo necesitas, asegúrate de NO borrar el de main.js.
 
     socket.on('cycle-closed', () => {
         sounds.sell.play();
@@ -91,7 +84,7 @@ function setupSocketListeners() {
     });
 }
 
-// --- UTILIDADES DE UI (Mantenidas del original) ---
+// --- UTILIDADES DE UI ---
 
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
@@ -107,11 +100,17 @@ function initBalanceChart() {
     });
 }
 
+/**
+ * ✅ CORRECCIÓN: Sincronizado con la Estructura Plana 2026
+ */
 function updateDistributionWidget(state) {
     if (!balanceChart) return;
-    const usdt = parseFloat(state.balances?.USDT || 0);
-    const btcAmount = parseFloat(state.balances?.BTC || 0);
-    const price = parseFloat(state.marketPrice || 0);
+    
+    // Usamos los campos que limpiamos en la DB
+    const usdt = parseFloat(state.lastAvailableUSDT || 0);
+    const btcAmount = parseFloat(state.lastAvailableBTC || 0);
+    const price = parseFloat(state.price || 0); // main.js envía .price
+    
     const btcInUsdt = btcAmount * price;
     const total = usdt + btcInUsdt;
 
@@ -120,8 +119,11 @@ function updateDistributionWidget(state) {
         const btcPct = (btcInUsdt / total) * 100;
         balanceChart.data.datasets[0].data = [usdtPct, btcPct];
         balanceChart.update();
-        document.getElementById('usdt-bar').style.width = `${usdtPct}%`;
-        document.getElementById('btc-bar').style.width = `${btcPct}%`;
+        
+        const usdtBar = document.getElementById('usdt-bar');
+        const btcBar = document.getElementById('btc-bar');
+        if (usdtBar) usdtBar.style.width = `${usdtPct}%`;
+        if (btcBar) btcBar.style.width = `${btcPct}%`;
     }
 }
 
@@ -134,7 +136,8 @@ function updateHealthStatus(textId, isOnline) {
 }
 
 function flashElement(id, colorClass) {
-    const container = document.getElementById(id)?.parentElement;
+    const el = document.getElementById(id);
+    const container = el ? el.parentElement : null;
     if (container) {
         container.classList.add(colorClass);
         setTimeout(() => container.classList.remove(colorClass), 800);
@@ -150,4 +153,18 @@ function setupTestButton() {
     const testBtn = document.getElementById('test-notification-btn');
     if (!testBtn) return;
     testBtn.onclick = () => flashElement('auprice', 'bg-emerald-500/40');
+}
+
+/**
+ * ✅ FUNCIÓN AGREGADA: Para evitar el ReferenceError
+ */
+function setupChartSelectors() {
+    const selectors = document.querySelectorAll('.chart-range-selector');
+    selectors.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectors.forEach(s => s.classList.remove('active'));
+            btn.classList.add('active');
+            refreshAnalytics(); // Recarga datos según el rango seleccionado
+        });
+    });
 }

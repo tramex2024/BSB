@@ -12,39 +12,42 @@ export function updateBotUI(state) {
 
     // 1. Precio con detección de tendencia (BTC actual)
     const priceEl = document.getElementById('auprice');
-    if (priceEl && state.price != null) {
-        lastPrice = formatCurrency(priceEl, state.price, lastPrice);
+    // Sincronizamos con 'price' que viene del WebSocket vía main.js
+    const currentMarketPrice = state.price || state.marketPrice || lastPrice;
+    
+    if (priceEl && currentMarketPrice) {
+        lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 2. Mapping de valores numéricos (CORREGIDO PARA ESTRUCTURA PLANA)
+    // 2. Mapping de valores numéricos (SINCRONIZADO CON PURGE 2026)
     const elements = {
         auprofit: 'total_profit', 
         aulbalance: 'lbalance', 
         ausbalance: 'sbalance',
         
-        // 🎯 CORRECCIÓN: Ahora muestran el TARGET (Objetivo), no el promedio
-        aultprice: 'ltprice',  // Long Target Price
-        austprice: 'stprice',  // Short Target Price
+        // 🎯 TARGETS: Precios objetivo de venta/compra
+        aultprice: 'ltprice',  
+        austprice: 'stprice',  
         
-        // 📉 OPCIONAL: Precios Promedio (PPC)
+        // 📈 PROMEDIOS Y TRAILING:
         aultppc: 'lppc',       
         austppc: 'sppc',       
-
-        aulsprice: 'lsprice',  // Precio de corte Trailing Long
-        ausbprice: 'sbprice',  // Precio de corte Trailing Short
+        aulsprice: 'lsprice',  
+        ausbprice: 'sbprice',  
         
+        // 🔄 CICLOS Y COBERTURAS:
         aulcycle: 'lcycle', 
         auscycle: 'scycle',
-        
         aulcoverage: 'lcoverage', 
         auscoverage: 'scoverage',
         
+        // 💰 PROFITS INDIVIDUALES:
         'aulprofit-val': 'lprofit', 
         'ausprofit-val': 'sprofit',
         
+        // 📊 ÓRDENES Y BALANCES REALES:
         aulnorder: 'lnorder', 
         ausnorder: 'snorder',
-        
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC'
     };
@@ -55,24 +58,30 @@ export function updateBotUI(state) {
         
         let val = state[key];
         
-        // Búsqueda profunda si no está en la raíz
+        // Búsqueda de seguridad si el valor viene en un objeto anidado por error
         if (val === undefined || val === null) {
-            val = state.stats?.[key] || 
-                  state.balances?.[key.replace('lastAvailable', '')];
+            val = state.stats?.[key] || 0;
         }
 
-        // Aplicar formato según el tipo de dato
+        // --- Lógica de Formateo Inteligente ---
         if (id.includes('profit')) {
+            // Formato moneda con color (verde/rojo)
             formatProfit(el, val);
+        } else if (id.includes('btc') || id === 'aulbalance' || id === 'ausbalance') {
+            // Formato precisión 8 decimales para cripto
+            formatValue(el, val, true, false);
+        } else if (id.match(/norder|cycle/)) {
+            // Formato entero simple
+            formatValue(el, val, false, true);
         } else {
-            const isBTC = id.includes('btc') || id.includes('sac') || id.includes('lac');
-            const isSimple = id.match(/norder|cycle/);
-            formatValue(el, val, isBTC, isSimple);
+            // Formato moneda estándar
+            formatValue(el, val, false, false);
         }
     });
 
-    // 3. Sincronización de Configuración
+    // 3. Sincronización de Controles y Configuración
     if (state.config) syncInputsFromConfig(state.config);
+    updateControlsState(state);
 }
 
 /**
@@ -85,12 +94,24 @@ export function updateControlsState(state) {
     const sState = state.sstate || 'STOPPED';
     const aiState = state.aistate || 'STOPPED';
 
+    // IDs de los inputs que se bloquean cuando el bot está RUNNING
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
 
     updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
+    
+    // Actualización de badges de estado visual (si existen)
+    updateStatusBadge('lstate-badge', lState);
+    updateStatusBadge('sstate-badge', sState);
+}
+
+function updateStatusBadge(id, status) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = status;
+    el.className = `badge ${status === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-500'}`;
 }
 
 export { displayMessage };
