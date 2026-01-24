@@ -46,8 +46,8 @@ async function run(dependencies) {
 
         await updateGeneralBotState({ 
             spm: newPm, 
-            spc: newPc,
-            sbprice: newPc // Para visualización en el front
+            spc: newPc
+            // ✅ sbprice ELIMINADO: Usaremos spc en el Dashboard
         });
     }
 

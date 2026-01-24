@@ -42,8 +42,8 @@ async function run(dependencies) {
 
         await updateGeneralBotState({ 
             lpm: newPm, 
-            lpc: newPc,
-            lsprice: newPc // Reflejo visual para el Dashboard
+            lpc: newPc
+            // ✅ lsprice ELIMINADO: Ya no ensuciamos la base de datos
         });
     }
 

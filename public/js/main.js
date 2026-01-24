@@ -10,6 +10,10 @@ export const currentBotState = {
     price: 0,
     sstate: 'STOPPED',
     lstate: 'STOPPED',
+    lpc: 0, // Añadido para consistencia
+    spc: 0, // Añadido para consistencia
+    lpm: 0,
+    spm: 0,
     config: {}
 };
 

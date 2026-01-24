@@ -15,15 +15,9 @@ async function runPurge() {
         
         const update = {
             $unset: { 
-                lStateData: "", 
-                sStateData: "", 
-                lreqAmount: "", 
-                sreqAmount: "",
-                lpc: "", 
-                lpm: "", 
-                spc: "", 
-                spm: ""
-            }
+      		lsprice: "", 
+      		sbprice: "" 
+    		}
         };
 
         console.log("🧹 Ejecutando purga en el documento especificado...");

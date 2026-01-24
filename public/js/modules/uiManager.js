@@ -12,14 +12,13 @@ export function updateBotUI(state) {
 
     // 1. Precio con detección de tendencia (BTC actual)
     const priceEl = document.getElementById('auprice');
-    // Sincronizamos con 'price' que viene del WebSocket vía main.js
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     
     if (priceEl && currentMarketPrice) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 2. Mapping de valores numéricos (SINCRONIZADO CON PURGE 2026)
+    // 2. Mapping de valores numéricos (OPTIMIZADO: lpc y spc)
     const elements = {
         auprofit: 'total_profit', 
         aulbalance: 'lbalance', 
@@ -32,8 +31,8 @@ export function updateBotUI(state) {
         // 📈 PROMEDIOS Y TRAILING:
         aultppc: 'lppc',       
         austppc: 'sppc',       
-        aulsprice: 'lsprice',  
-        ausbprice: 'sbprice',  
+        aulsprice: 'lpc',  // ✅ Actualizado a variable real
+        ausbprice: 'spc',  // ✅ Actualizado a variable real
         
         // 🔄 CICLOS Y COBERTURAS:
         aulcycle: 'lcycle', 
@@ -58,24 +57,35 @@ export function updateBotUI(state) {
         
         let val = state[key];
         
-        // Búsqueda de seguridad si el valor viene en un objeto anidado por error
+        // Búsqueda de seguridad si el valor viene en un objeto anidado
         if (val === undefined || val === null) {
             val = state.stats?.[key] || 0;
         }
 
+        // ✨ NUEVO: Lógica de Pulso Visual para el Trailing Stop
+        // Si el precio de corte cambia, el elemento destella en color esmeralda
+        if (id === 'aulsprice' || id === 'ausbprice') {
+            const oldVal = parseFloat(el.textContent.replace(/[^0-9.-]+/g,"")) || 0;
+            const newVal = parseFloat(val);
+            if (oldVal !== 0 && newVal !== oldVal) {
+                el.classList.add('pulse-update');
+                setTimeout(() => el.classList.remove('pulse-update'), 1000);
+            }
+        }
+
         // --- Lógica de Formateo Inteligente ---
-       if (id.includes('profit')) {
-    formatProfit(el, val);
-} else if (id.includes('btc') || id.includes('sac') || id.includes('lac')) {
-    // ₿ Solo lo que es cantidad de monedas (BTC) lleva 8 decimales
-    formatValue(el, val, true, false);
-} else if (id.match(/norder|cycle/)) {
-    // # Números enteros
-    formatValue(el, val, false, true);
-} else {
-    // 💵 TODO LO DEMÁS (incluyendo lbalance y sbalance) a 2 decimales
-    formatValue(el, val, false, false);
-}
+        if (id.includes('profit')) {
+            formatProfit(el, val);
+        } else if (id.includes('btc') || id.includes('sac') || id.includes('lac')) {
+            // ₿ Cantidad de monedas (BTC) lleva 8 decimales
+            formatValue(el, val, true, false);
+        } else if (id.match(/norder|cycle/)) {
+            // # Números enteros (Ciclos, Órdenes)
+            formatValue(el, val, false, true);
+        } else {
+            // 💵 Precios y Balances USDT a 2 decimales
+            formatValue(el, val, false, false);
+        }
     });
 
     // 3. Sincronización de Controles y Configuración
@@ -93,7 +103,6 @@ export function updateControlsState(state) {
     const sState = state.sstate || 'STOPPED';
     const aiState = state.aistate || 'STOPPED';
 
-    // IDs de los inputs que se bloquean cuando el bot está RUNNING
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
 
@@ -101,7 +110,6 @@ export function updateControlsState(state) {
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
     
-    // Actualización de badges de estado visual (si existen)
     updateStatusBadge('lstate-badge', lState);
     updateStatusBadge('sstate-badge', sState);
 }
@@ -110,7 +118,7 @@ function updateStatusBadge(id, status) {
     const el = document.getElementById(id);
     if (!el) return;
     el.textContent = status;
-    el.className = `badge ${status === 'RUNNING' ? 'bg-emerald-500' : 'bg-slate-500'}`;
+    el.className = `badge ${status === 'RUNNING' || status === 'BUYING' || status === 'SELLING' ? 'bg-emerald-500' : 'bg-slate-500'}`;
 }
 
 export { displayMessage };
