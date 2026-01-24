@@ -63,12 +63,25 @@ async function run(dependencies) {
         // 5. DCA EXPONENCIAL (Protección ante subidas)
         const requiredAmount = parseFloat(botState.srca || 0); 
         const nextCoveragePrice = parseFloat(botState.sncp || 0); 
+        const lastExecutionPrice = parseFloat(botState.slep || 0); // Precio de la última orden real
 
-        if (!pendingOrder && nextCoveragePrice > 0 && currentPrice >= nextCoveragePrice) {
+        // Verificamos si se cumplen las condiciones de precio para el DCA
+        const isPriceHighEnough = nextCoveragePrice > 0 && currentPrice >= nextCoveragePrice;
+
+        if (!pendingOrder && isPriceHighEnough) {
+            
+            // 🛡️ CANDADO DE SEGURIDAD 2026:
+            // En Short, el DCA solo es válido si el precio actual es SUPERIOR al de la última venta.
+            // Si el precio es menor o igual, el cálculo de NCP fue erróneo o el mercado no ha subido.
+            if (currentPrice <= lastExecutionPrice) {
+                log(`[S-SELL] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es superior al de la última ejecución (${lastExecutionPrice.toFixed(2)}). Evitando DCA en el mismo nivel.`, 'warning');
+                return; 
+            }
+
             const hasBalance = botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount;
 
             if (hasBalance && requiredAmount > 0) {
-                log(`📈 [S-SELL] Precio superó DCA Exponencial. Incrementando cobertura...`, 'warning');
+                log(`📈 [S-SELL] Precio superó DCA Exponencial (${nextCoveragePrice.toFixed(2)}). Incrementando cobertura...`, 'warning');
                 try {
                     // Esta función registra el slastOrder en la raíz automáticamente
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice);
@@ -81,10 +94,5 @@ async function run(dependencies) {
             }
             return;
         }
-
-    } catch (criticalError) {
-        log(`🔥 [CRITICAL] SSelling: ${criticalError.message}`, 'error');
-    }
-}
 
 module.exports = { run };
