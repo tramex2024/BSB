@@ -11,15 +11,15 @@ class AIEngine {
 
         this.history = [];
         this.tradeLog = [];
-        this.virtualBalance = 1000.00; // Valor inicial por defecto
+        this.virtualBalance = 100.00; // Valor inicial por defecto
         this.lastEntryPrice = 0;
         this.highestPrice = 0;
 
         // PARÁMETROS PROFESIONALES
         this.TRAILING_PERCENT = 0.003; // 0.3%
         this.RISK_PER_TRADE = 0.10;    
-        this.PANIC_STOP_BALANCE = 800.00; 
-        this.MIN_TRADE_AMOUNT = 10.00;
+        this.PANIC_STOP_BALANCE = 80.00; 
+        this.MIN_TRADE_AMOUNT = 6.00;
         this.EXCHANGE_FEE = 0.001; // 0.1% comisión (Maker/Taker promedio)
     }
 
@@ -37,9 +37,9 @@ class AIEngine {
                 this._log(`Sistema Recuperado: Balance actual $${this.virtualBalance.toFixed(2)}`, 0.5);
             } else {
                 // Si no existe el campo, lo inicializamos
-                await Autobot.updateOne({}, { $set: { virtualAiBalance: 1000.00 } });
-                this.virtualBalance = 1000.00;
-                this._log(`Sistema Inicializado: Balance $1,000.00`, 0.5);
+                await Autobot.updateOne({}, { $set: { virtualAiBalance: 100.00 } });
+                this.virtualBalance = 100.00;
+                this._log(`Sistema Inicializado: Balance $100.00`, 0.5);
             }
         } catch (e) {
             console.error("Error en init de AIEngine:", e);

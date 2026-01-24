@@ -16,7 +16,7 @@ const getAIStatus = async (req, res) => {
             success: true,
             isRunning: aiEngine.isRunning,
             isVirtual: aiEngine.IS_VIRTUAL_MODE,
-            virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 1000.00,
+            virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 100.00,
             config: {
                 risk: aiEngine.RISK_PER_TRADE,
                 trailing: aiEngine.TRAILING_PERCENT,

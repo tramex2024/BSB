@@ -204,7 +204,7 @@ io.on('connection', (socket) => {
             const state = await Autobot.findOne({}).lean();
             socket.emit('ai-status-init', {
                 isRunning: aiEngine.isRunning,
-                virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 1000.00,
+                virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 100.00,
                 isVirtual: aiEngine.IS_VIRTUAL_MODE
             });
         } catch (err) {
