@@ -181,6 +181,9 @@ setupMarketWS(io);
 io.on('connection', (socket) => {
     console.log(`👤 Usuario conectado: ${socket.id}`);
 
+    /**
+     * Envía el estado completo del Autobot (Pestaña normal)
+     */
     const sendFullBotStatus = async () => {
         try {
             const state = await Autobot.findOne({}).lean();
@@ -188,15 +191,60 @@ io.on('connection', (socket) => {
                 const currentPrice = autobotLogic.getLastPrice() || lastKnownPrice;
                 socket.emit('bot-state-update', { ...state, price: currentPrice });
             }
-        } catch (err) { console.error("❌ Error Status Socket:", err); }
+        } catch (err) { 
+            console.error("❌ Error Status Socket:", err); 
+        }
     };
 
-    sendFullBotStatus();
+    /**
+     * Envía el estado inicial de la IA (Pestaña AI Bot)
+     */
+    const sendAiStatus = async () => {
+        try {
+            const state = await Autobot.findOne({}).lean();
+            socket.emit('ai-status-init', {
+                isRunning: aiEngine.isRunning,
+                virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 1000.00,
+                isVirtual: aiEngine.IS_VIRTUAL_MODE
+            });
+        } catch (err) {
+            console.error("❌ Error AI Status Socket:", err);
+        }
+    };
 
+    // Al conectarse, enviamos los estados básicos
+    sendFullBotStatus();
+    sendAiStatus();
+
+    // Listeners de peticiones manuales desde el Front-end
     socket.on('get-bot-state', () => sendFullBotStatus());
-    socket.on('disconnect', () => console.log(`👤 Usuario desconectado: ${socket.id}`));
+    
+    socket.on('get-ai-status', () => sendAiStatus());
+
+    socket.on('get-ai-history', async () => {
+        try {
+            const AIBotOrder = require('./models/AIBotOrder');
+            const history = await AIBotOrder.find({ isVirtual: true })
+                .sort({ timestamp: -1 })
+                .limit(30);
+            socket.emit('ai-history-data', history);
+        } catch (err) {
+            console.error("❌ Error al cargar historial IA:", err);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`👤 Usuario desconectado: ${socket.id}`);
+    });
 });
 
+// --- 11. ARRANQUE DEL SERVIDOR ---
 server.listen(PORT, () => {
-    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
+    console.log(`
+    🚀 ==========================================
+    🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}
+    🚀 MODO: ${process.env.NODE_ENV || 'development'}
+    🚀 IA CORE: ${aiEngine.isRunning ? 'RUNNING' : 'STANDBY'}
+    🚀 ==========================================
+    `);
 });

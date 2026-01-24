@@ -1,15 +1,27 @@
-// server/routes/aiRoutes.js
+// BSB/server/routes/aiRoutes.js
 
 const express = require('express');
 const router = express.Router();
 const aiController = require('../controllers/aiController');
-const authMiddleware = require('../middleware/authMiddleware');
+// Si usas autenticación, puedes importar tu middleware aquí
+// const { protect } = require('../middleware/authMiddleware');
 
-router.get('/status', authMiddleware, aiController.getAIStatus);
-router.post('/toggle', authMiddleware, aiController.toggleAI);
-router.get('/history', authMiddleware, aiController.getVirtualHistory);
+/**
+ * RUTA: GET /api/ai/status
+ * DESCRIPCIÓN: Obtiene balance, estado de ejecución y configuración.
+ */
+router.get('/status', aiController.getAIStatus);
 
-// Útil para cuando quieras volver a empezar el paper trading de la IA
-router.post('/reset', authMiddleware, aiController.resetAIBalance);
+/**
+ * RUTA: GET /api/ai/history
+ * DESCRIPCIÓN: Obtiene los últimos trades virtuales realizados por la IA.
+ */
+router.get('/history', aiController.getVirtualHistory);
+
+/**
+ * RUTA: POST /api/ai/toggle
+ * DESCRIPCIÓN: Enciende o apaga el motor neuronal.
+ */
+router.post('/toggle', aiController.toggleAI);
 
 module.exports = router;

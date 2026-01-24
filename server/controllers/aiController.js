@@ -5,7 +5,10 @@ const aiEngine = require('../src/ai/aiEngine');
 const AIBotOrder = require('../models/AIBotOrder');
 const Autobot = require('../models/Autobot');
 
-exports.getAIStatus = async (req, res) => {
+/**
+ * Obtiene el estado actual de la IA (Saldo, si está corriendo, config)
+ */
+const getAIStatus = async (req, res) => {
     try {
         const state = await Autobot.findOne({});
         
@@ -17,24 +20,30 @@ exports.getAIStatus = async (req, res) => {
             config: {
                 risk: aiEngine.RISK_PER_TRADE,
                 trailing: aiEngine.TRAILING_PERCENT,
-                // Si aún no defines CONFIDENCE_THRESHOLD en el constructor de aiEngine, 
-                // asegúrate de agregarlo o usar un valor por defecto.
                 threshold: aiEngine.CONFIDENCE_THRESHOLD || 0.7 
             }
         });
     } catch (error) {
+        console.error("Error en getAIStatus:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-exports.toggleAI = async (req, res) => {
+/**
+ * Activa o desactiva el motor de IA
+ */
+const toggleAI = async (req, res) => {
     try {
-        const { action } = req.body; // Se espera 'start' o 'stop'
+        const { action } = req.body; // 'start' o 'stop'
         
-        // Usamos el método interno del motor para mantener la coherencia de logs
+        if (!action) {
+            return res.status(400).json({ success: false, message: "Acción no proporcionada" });
+        }
+
+        // Usamos el método interno del motor
         const result = aiEngine.toggle(action);
         
-        // Si arrancamos, nos aseguramos de que el balance esté fresco desde la DB
+        // Si arrancamos, inicializamos balance y configuración
         if (result.isRunning) {
             await aiEngine.init();
         }
@@ -46,17 +55,32 @@ exports.toggleAI = async (req, res) => {
             message: result.isRunning ? "IA Activada - Escaneando Mercado" : "IA Detenida" 
         });
     } catch (error) {
+        console.error("Error en toggleAI:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-exports.getVirtualHistory = async (req, res) => {
+/**
+ * Obtiene el historial de órdenes virtuales de la base de datos
+ */
+const getVirtualHistory = async (req, res) => {
     try {
         const history = await AIBotOrder.find({ isVirtual: true })
             .sort({ timestamp: -1 })
-            .limit(30); // Subimos a 30 para tener una gráfica más rica
+            .limit(30); 
+            
         res.json({ success: true, data: history });
     } catch (error) {
+        console.error("Error en getVirtualHistory:", error);
         res.status(500).json({ success: false, error: error.message });
     }
+};
+
+// --- EXPORTACIÓN ROBUSTA ---
+// Esto asegura que al importar el archivo en aiRoutes.js, 
+// las funciones no lleguen como 'undefined'.
+module.exports = {
+    getAIStatus,
+    toggleAI,
+    getVirtualHistory
 };
