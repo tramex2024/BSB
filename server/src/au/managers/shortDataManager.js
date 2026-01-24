@@ -14,30 +14,44 @@ const BUY_FEE_PERCENT = 0.001; // Comisión estimada de BitMart (0.1%)
 async function handleSuccessfulShortSell(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState } = dependencies;
     
+    // 1. EXTRAER DATOS REALES DE LA ORDEN
+    const orderId = String(orderDetails.orderId || orderDetails.order_id);
     const executedQty = parseFloat(orderDetails.filledSize || 0);
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
+
+    // 🛡️ SEGURIDAD: Evitar doble procesamiento
+    // Si el slep (último precio) es igual al actual y el slastOrder ya es null, 
+    // o si el ID coincide con algún registro previo, abortamos.
+    if (botState.slastOrder === null && botState.slep === executedPrice) {
+        log(`[S-DATA] ⚠️ Intento de duplicado detectado para orden ${orderId}. Ignorando...`, 'warning');
+        return;
+    }
 
     if (executedQty <= 0 || executedPrice <= 0) {
         log('[S-DATA] ⚠️ Ejecución Short inválida (Qty o Price en 0).', 'error');
         return;
     }
 
-    // --- 1. ACTUALIZACIÓN DE BALANCE Y ACUMULADOS EN RAÍZ ---
+    // --- CONTINUAR CON CÁLCULOS USANDO VALORES REALES ---
+    // En lugar de usar montos teóricos (6 USDT), usamos el valor real del exchange
     const currentSBalance = parseFloat(botState.sbalance || 0);
+    
+    // IMPORTANTE: Aquí restamos el valor REAL que Bitmart nos confirma (5.389...)
     const finalizedSBalance = parseFloat((currentSBalance - baseExecutedValue).toFixed(8));
 
-    const currentAC = parseFloat(botState.sac || 0);  // Cantidad acumulada (BTC)
-    const currentAI = parseFloat(botState.sai || 0);  // Inversión acumulada (USDT)
-    const currentOCC = parseInt(botState.socc || 0);  // Contador de órdenes
+    const currentAC = parseFloat(botState.sac || 0); 
+    const currentAI = parseFloat(botState.sai || 0); 
+    const currentOCC = parseInt(botState.socc || 0); 
     
     const isFirstOrder = currentOCC === 0;
     
     const newAC = parseFloat((currentAC + executedQty).toFixed(8)); 
     const newAI = currentAI + baseExecutedValue;
-    const newPPC = newAI / newAC; // Nuevo Precio Promedio
+    const newPPC = newAI / newAC; 
     const newOCC = currentOCC + 1;
 
+    
     // --- 2. LÓGICA EXPONENCIAL Y TARGETS ---
     // Usamos profit_percent (nuevo campo 2026) o trigger como fallback
     const profitTrigger = parseNumber(botState.config.short?.profit_percent || botState.config.short?.trigger || 0) / 100;
