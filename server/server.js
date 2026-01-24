@@ -189,7 +189,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`👤 Usuario desconectado: ${socket.id}`));
 });
 
-const Autobot = require('./models/Autobot'); // Ajusta la ruta a tu modelo
 
 async function fixDatabaseFields() {
     try {
