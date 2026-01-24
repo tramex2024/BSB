@@ -9,4 +9,7 @@ router.get('/status', authMiddleware, aiController.getAIStatus);
 router.post('/toggle', authMiddleware, aiController.toggleAI);
 router.get('/history', authMiddleware, aiController.getVirtualHistory);
 
+// Útil para cuando quieras volver a empezar el paper trading de la IA
+router.post('/reset', authMiddleware, aiController.resetAIBalance);
+
 module.exports = router;

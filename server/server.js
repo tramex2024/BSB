@@ -1,5 +1,3 @@
-// BSB/server/server.js
-
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -28,12 +26,11 @@ const allowedOrigins = [
     'https://bsb-lime.vercel.app', 
     'http://localhost:3000', 
     'http://127.0.0.1:3000',
-    'http://localhost:5500', // Agregado para Live Server de VS Code
-    'http://127.0.0.1:5500'  // Agregado para Live Server de VS Code
+    'http://localhost:5500', 
+    'http://127.0.0.1:5500'  
 ];
 app.use(cors({
     origin: function (origin, callback) {
-        // Permitir peticiones sin origen (como Postman o apps móviles)
         if (!origin) return callback(null, true);
         if (allowedOrigins.indexOf(origin) === -1) {
             const msg = 'El protocolo CORS de esta API no permite acceso desde el origen especificado.';
@@ -69,6 +66,7 @@ app.use('/api/autobot', require('./routes/autobotRoutes'));
 app.use('/api/v1/config', require('./routes/configRoutes'));
 app.use('/api/v1/balance', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
@@ -82,7 +80,7 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
 
-// --- 7. WEBSOCKET BITMART (FLUJO DE PRECIOS) ---
+// --- 7. WEBSOCKET BITMART (FLUJO DE PRECIOS Y VOLUMEN) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
@@ -111,6 +109,10 @@ function setupMarketWS(io) {
             if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
                 const ticker = parsed.data[0];
                 const price = parseFloat(ticker.last_price);
+                
+                // ✅ MEJORA 2026: Captura de Volumen para StrategyManager
+                const volume = parseFloat(ticker.base_volume_24h || 0);
+                
                 const open24h = parseFloat(ticker.open_24h);
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
@@ -138,9 +140,15 @@ function setupMarketWS(io) {
                 // Notificar Front-end
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
-                // 🚀 GATILLO DEL BOT
-                if (mongoose.connection.readyState === 1) { // Solo si DB está conectada
-                    try { aiEngine.analyze(price); } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                // 🚀 GATILLO DE LOS BOTS
+                if (mongoose.connection.readyState === 1) { 
+                    try { 
+                        // ✅ INTEGRACIÓN IA: Pasamos precio y volumen detectado
+                        aiEngine.analyze(price, volume); 
+                    } catch (aiErr) { 
+                        console.error("⚠️ AI Error:", aiErr.message); 
+                    }
+                    // Gatillo para lógica Long/Short automática
                     await autobotLogic.botCycle(price);
                 }
             }

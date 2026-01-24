@@ -1,6 +1,7 @@
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
+import aiBotUI from './modules/aiBotUI.js';
 
 // --- CONFIGURACIÓN ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -10,8 +11,8 @@ export const currentBotState = {
     price: 0,
     sstate: 'STOPPED',
     lstate: 'STOPPED',
-    lpc: 0, // Añadido para consistencia
-    spc: 0, // Añadido para consistencia
+    lpc: 0, 
+    spc: 0, 
     lpm: 0,
     spm: 0,
     config: {}
@@ -52,16 +53,15 @@ function resetWatchdog() {
 }
 
 export function logStatus(message, type = 'info') {
-    // Si el mensaje nuevo es un error, lo ponemos al principio o limpiamos lo demás
     if (type === 'error') {
-        logQueue = [{ message, type }]; // Prioridad absoluta: borra todo y muestra el error
+        logQueue = [{ message, type }]; 
     } else {
         if (logQueue.length >= 2) logQueue.shift();
         logQueue.push({ message, type });
     }
-
     if (!isProcessingLog) processNextLog();
 }
+
 function processNextLog() {
     if (logQueue.length === 0) { isProcessingLog = false; return; }
     const logEl = document.getElementById('log-message');
@@ -101,7 +101,6 @@ export function initializeFullApp() {
         }
     });
 
-    // 🟢 ESCUCHAR LOGS DEL BACKEND
     socket.on('bot-log', (data) => {
         if (data && data.message) {
             logStatus(data.message, data.type || 'info');
@@ -109,12 +108,34 @@ export function initializeFullApp() {
     });
 
     socket.on('bot-state-update', (state) => {
-        console.log("📡 Estado recibido del servidor:", state);
         if (state) {
             Object.assign(currentBotState, state);
+            // Sincronizar balance de IA si viene en el estado
+            if(state.virtualAiBalance) {
+                const balEl = document.getElementById('ai-virtual-balance');
+                if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
+            }
         }
         updateBotUI(currentBotState);
         updateControlsState(currentBotState);
+    });
+
+    // 🧠 LISTENERS ESPECÍFICOS DE IA (Dentro de la inicialización)
+    socket.on('ai-decision-update', (data) => {
+        aiBotUI.updateConfidence(data.confidence);
+        aiBotUI.addLog(data.message);
+    });
+
+    socket.on('ai-history-update', (trades) => {
+        aiBotUI.updateHistoryTable(trades);
+    });
+
+    socket.on('ai-status-change', (status) => {
+        aiBotUI.setRunningStatus(status.isRunning);
+        const balEl = document.getElementById('ai-virtual-balance');
+        if(status.virtualBalance && balEl) {
+            balEl.innerText = `$${status.virtualBalance.toFixed(2)}`;
+        }
     });
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
@@ -134,20 +155,42 @@ export async function initializeTab(tabName) {
         mainContent.innerHTML = html;
         
         if (views[tabName]) {
-            const module = await views[tabName]();
-            const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-            
-            if (typeof module[initFnName] === 'function') {
-                await module[initFnName](currentBotState); 
-                
-                // Actualizamos con el estado global actual antes de esperar al socket
-                updateBotUI(currentBotState);
-                updateControlsState(currentBotState);
-                
-                // Pedir estado fresco al entrar a la pestaña
-                if (socket && socket.connected) socket.emit('get-bot-state');
+    const module = await views[tabName]();
+    // Esto buscará initializeAibotView y la ejecutará
+    const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+    if (typeof module[initFnName] === 'function') {
+        await module[initFnName](currentBotState); 
+    }
+        }
+
+        // 🟢 Lógica especial para el botón de la pestaña AIBOT
+        if (tabName === 'aibot') {
+            const btnAi = document.getElementById('btn-start-ai');
+            if (btnAi) {
+                // Actualizar estado visual inicial según currentBotState
+                aiBotUI.setRunningStatus(currentBotState.isRunning); 
+
+                btnAi.onclick = async () => {
+                    const isRunning = btnAi.innerText.includes("DETENER");
+                    const action = isRunning ? 'stop' : 'start';
+                    try {
+                        const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                            },
+                            body: JSON.stringify({ action })
+                        });
+                        const data = await res.json();
+                        if(data.success) aiBotUI.addLog(`Solicitud de ${action} enviada...`);
+                    } catch (e) {
+                        aiBotUI.addLog("Error al conectar con el núcleo");
+                    }
+                };
             }
         }
+
     } catch (error) { 
         console.error("❌ Error cargando vista:", error); 
     }

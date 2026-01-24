@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-async function runPurge() {
+async function runPurgeAndInit() {
     try {
         const uri = 'mongodb+srv://tramex2024:vIHKxhFCqFOXC4tf@cluster0.y0qkdw4.mongodb.net/bsb?retryWrites=true&w=majority&appName=Cluster0';
         
@@ -8,25 +8,38 @@ async function runPurge() {
         await mongoose.connect(uri);
         console.log("✅ Conexión establecida.");
 
-        // Accedemos a la colección 'autobots' directamente (sin usar el Modelo de archivo)
+        // Accedemos a la colección 'autobots' directamente
         const collection = mongoose.connection.collection('autobots');
 
+        // Tu ID específico detectado en el JSON anterior
         const filter = { _id: new mongoose.Types.ObjectId("690fd622ced7eb324d1ffa2f") };
         
         const update = {
+            // 1. ELIMINAMOS los campos duplicados/viejos
             $unset: { 
-      		lsprice: "", 
-      		sbprice: "" 
-    		}
+                lsprice: "", 
+                sbprice: "" 
+            },
+            // 2. INICIALIZAMOS los campos de Trailing en 0
+            $set: {
+                lpm: 0,
+                lpc: 0,
+                spm: 0,
+                spc: 0
+            }
         };
 
-        console.log("🧹 Ejecutando purga en el documento especificado...");
+        console.log("🧹 Limpiando redundancias e inicializando campos de Trailing...");
         const result = await collection.updateOne(filter, update);
 
-        if (result.modifiedCount > 0) {
-            console.log("✨ ¡Limpieza total completada con éxito!");
+        if (result.matchedCount > 0) {
+            console.log(`✨ ¡Proceso completado!`);
+            console.log(`- Documentos encontrados: ${result.matchedCount}`);
+            console.log(`- Documentos modificados: ${result.modifiedCount}`);
+            console.log("\nCampos eliminados: lsprice, sbprice");
+            console.log("Campos creados: lpm, lpc, spm, spc (seteados en 0)");
         } else {
-            console.log("⚠️ No se realizaron cambios (tal vez los campos ya no existían o el ID es incorrecto).");
+            console.log("⚠️ No se encontró el documento con el ID: 690fd622ced7eb324d1ffa2f");
         }
 
     } catch (err) {
@@ -38,4 +51,4 @@ async function runPurge() {
     }
 }
 
-runPurge();
+runPurgeAndInit();
