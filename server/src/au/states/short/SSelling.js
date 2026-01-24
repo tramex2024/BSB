@@ -23,14 +23,14 @@ async function run(dependencies) {
         // 2. LOG DE MONITOREO
         if (botState.sppc > 0) {
             const nextPrice = botState.sncp || 0; 
-            const targetPrice = botState.spc || 0; 
+            const targetActivation = botState.stprice || 0; // 🎯 CAMBIO: Usamos stprice
             
             const distToDCA = nextPrice > 0 ? (((nextPrice / currentPrice) - 1) * 100).toFixed(2) : "0.00";
-            const distToTP = targetPrice > 0 ? (((currentPrice / targetPrice) - 1) * 100).toFixed(2) : "0.00";
+            const distToTP = targetActivation > 0 ? (((currentPrice / targetActivation) - 1) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.sprofit || 0;
             
-            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP: ${targetPrice.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
-        }   
+            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+        }
 
         // 3. LÓGICA DE APERTURA
         const currentPPC = parseFloat(botState.sppc || 0);
@@ -50,10 +50,18 @@ async function run(dependencies) {
             return;
         }
 
-        // 4. EVALUACIÓN DE SALIDA (Take Profit / Trailing Stop)
-        const targetPrice = botState.spc || 0;
-        if (targetPrice > 0 && currentPrice <= targetPrice) {
-            log(`💰 [S-SELL] Target Short alcanzado. Entrando a modo RECOMPRA (BUYING).`, 'success');
+        // 4. EVALUACIÓN DE ACTIVACIÓN (Hacia S-BUYING para Trailing Stop)
+        const targetActivation = botState.stprice || 0; // 🎯 CAMBIO: Usamos stprice
+        if (targetActivation > 0 && currentPrice <= targetActivation) {
+            log(`💰 [S-SELL] Target (${targetActivation.toFixed(2)}) alcanzado. Iniciando Trailing Stop en BUYING...`, 'success');
+            
+            // 🧹 LIMPIEZA Y TRANSICIÓN
+            // Al entrar a BUYING, spm se inicializará con el precio actual en el siguiente tick.
+            await updateGeneralBotState({
+                spm: 0, 
+                spc: 0 
+            });
+
             await updateBotState('BUYING', SSTATE);
             return;
         }
