@@ -105,6 +105,67 @@ async function slowBalanceCacheUpdate() {
     return apiSuccess;
 }
 
+/**
+ * ACTUALIZACIONES MANUALES DESDE RUTAS (API)
+ */
+
+async function updateConfig(newConfig) {
+    const currentPrice = lastCyclePrice;
+    const bot = await Autobot.findOneAndUpdate({}, { 
+        $set: { config: newConfig, lastUpdate: new Date() } 
+    }, { new: true }).lean();
+
+    log('⚙️ Configuración actualizada y recalculando targets...', 'info');
+    
+    if (bot) {
+        // Disparamos un ciclo con el último precio conocido para actualizar LTPrice/STPrice inmediatamente
+        await botCycle(currentPrice); 
+    }
+    return bot;
+}
+
+async function startSide(side, config) {
+    const update = {};
+    if (side === 'long') {
+        update.lstate = 'RUNNING';
+        if (config.long) config.long.enabled = true;
+    } else {
+        update.sstate = 'RUNNING';
+        if (config.short) config.short.enabled = true;
+    }
+    update.config = config;
+
+    const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
+    log(`🚀 Estrategia ${side.toUpperCase()} activada`, 'success');
+    
+    await slowBalanceCacheUpdate();
+    return bot;
+}
+
+async function stopSide(side) {
+    const botState = await Autobot.findOne({}).lean();
+    if (!botState) throw new Error("Bot no encontrado");
+
+    const update = {};
+    const newConfig = { ...botState.config };
+
+    if (side === 'long') {
+        update.lstate = 'STOPPED';
+        if (newConfig.long) newConfig.long.enabled = false;
+    } else {
+        update.sstate = 'STOPPED';
+        if (newConfig.short) newConfig.short.enabled = false;
+    }
+    update.config = newConfig;
+
+    const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
+    log(`🛑 Estrategia ${side.toUpperCase()} detenida`, 'warning');
+    return bot;
+}
+
+/**
+ * CICLO PRINCIPAL DE LÓGICA
+ */
 async function botCycle(priceFromWebSocket) {
     if (isProcessing) return;
 
@@ -200,7 +261,6 @@ async function botCycle(priceFromWebSocket) {
         
     } catch (error) {
         log(`❌ Error crítico en ciclo: ${error.message}`, 'error');
-        // Fallback para no dejar la UI bloqueada en caso de error
         const errState = await Autobot.findOne({}).lean();
         if (errState) await syncFrontendState(priceFromWebSocket, errState);
     } finally {
@@ -212,5 +272,12 @@ module.exports = {
     setIo, 
     start: () => log('🚀 Autobot Iniciado', 'success'), 
     stop: () => log('🛑 Autobot Detenido', 'warning'),
-    log, botCycle, slowBalanceCacheUpdate, syncFrontendState, getLastPrice 
+    log, 
+    botCycle, 
+    slowBalanceCacheUpdate, 
+    syncFrontendState, 
+    getLastPrice,
+    updateConfig,
+    startSide,
+    stopSide
 };

@@ -3,28 +3,21 @@
 const express = require('express');
 const router = express.Router();
 const Autobot = require('../models/Autobot');
-const MarketSignal = require('../models/MarketSignal');
 const authMiddleware = require('../middleware/authMiddleware');
-const configController = require('../controllers/configController');
 const autobotLogic = require('../autobotLogic');
 const bitmartService = require('../services/bitmartService');
 
 router.use(authMiddleware);
 
 /**
- * Utility para emitir el estado COMPLETO del bot por Sockets
+ * Emite el estado COMPLETO del bot por Sockets
  */
 const emitBotState = (autobot, req) => {
     try {
         const io = req.app.get('io');
         if (!io) return;
-
-        // Convertimos el documento de Mongoose a un objeto plano de JS
-        // Esto asegura que se envíen TODOS los campos (balances, ciclos, profits, etc.)
         const payload = autobot.toObject ? autobot.toObject() : autobot;
-
         io.emit('bot-state-update', payload);
-        console.log(`📡 Broadcast Socket Completo: L:${payload.lstate} S:${payload.sstate}`);
     } catch (err) {
         console.error("❌ Error en emitBotState:", err.message);
     }
@@ -37,13 +30,11 @@ router.post('/update-config', async (req, res) => {
         const { config } = req.body;
         if (!config) return res.status(400).json({ success: false, message: "No config provided" });
 
-        const updatedBot = await Autobot.findOneAndUpdate(
-            {}, 
-            { $set: { config: config, lastUpdate: new Date() } },
-            { new: true }
-        );
+        // 1. Notificar a la lógica del bot para recalcular Targets (ltprice/stprice)
+        // Esta es la función clave que creamos en autobotLogic
+        const updatedBot = await autobotLogic.updateConfig(config);
 
-        // Notificar cambio de config
+        // 2. Notificar al Frontend vía Socket
         emitBotState(updatedBot, req);
 
         res.json({ success: true, data: updatedBot });
@@ -58,43 +49,22 @@ router.post('/start/:side', async (req, res) => {
     const { side } = req.params;
     try {
         const { config } = req.body;
-        const symbol = "BTC_USDT";
-
-        let currentPrice = 0;
-        try {
-            const tickerData = await bitmartService.getTicker(symbol);
-            currentPrice = parseFloat(tickerData.last_price);
-        } catch (tickerErr) {
-            console.warn("⚠️ Bitmart Ticker Error, continuando...");
-        }
-
-        let autobot = await Autobot.findOne({});
-        if (!autobot) {
-            autobot = new Autobot({ config: config });
-        } else {
-            autobot.config = config;
-        }
-
-        // CAMBIO DE ESTADO
-        if (side === 'long') {
-            autobot.lstate = 'RUNNING';
-            if(autobot.config.long) autobot.config.long.enabled = true;
-        } else {
-            autobot.sstate = 'RUNNING';
-            if(autobot.config.short) autobot.config.short.enabled = true;
-        }
-
-        autobot.markModified('config');
-        await autobot.save();
         
-        // EMISIÓN OFICIAL (Desbloquea el botón en el front)
-        emitBotState(autobot, req);
+        // Usamos la lógica centralizada para iniciar
+        // Esto asegura que se verifiquen balances y se pongan las órdenes iniciales si es necesario
+        const updatedBot = await autobotLogic.startSide(side, config);
 
-        return res.json({ success: true, message: `Estrategia ${side} iniciada.`, price: currentPrice });
+        emitBotState(updatedBot, req);
+
+        return res.json({ 
+            success: true, 
+            message: `Estrategia ${side} iniciada.`, 
+            price: autobotLogic.getLastPrice() 
+        });
         
     } catch (error) {
         console.error(`Error Crítico Start ${side}:`, error.message);
-        return res.status(500).json({ success: false, message: "Error al procesar el inicio." });
+        return res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -103,29 +73,15 @@ router.post('/start/:side', async (req, res) => {
 router.post('/stop/:side', async (req, res) => {
     const { side } = req.params;
     try {
-        const bot = await Autobot.findOne({});
-        
-        if (bot) {
-            if (side === 'long') {
-                bot.lstate = 'STOPPED';
-                if(bot.config.long) bot.config.long.enabled = false;
-            } else if (side === 'short') {
-                bot.sstate = 'STOPPED';
-                if(bot.config.short) bot.config.short.enabled = false;
-            }
+        // Usamos la lógica centralizada para detener
+        const updatedBot = await autobotLogic.stopSide(side);
 
-            bot.markModified('config');
-            await bot.save();
+        emitBotState(updatedBot, req);
 
-            // EMISIÓN OFICIAL (Desbloquea el botón en el front)
-            emitBotState(bot, req);
-
-            return res.json({ success: true, message: `${side} detenido correctamente.` });
-        }
-        res.status(404).json({ message: "Bot no encontrado" });
+        return res.json({ success: true, message: `${side} detenido correctamente.` });
     } catch (error) {
         console.error(`Error Stop ${side}:`, error.message);
-        return res.status(500).json({ success: false, message: `Error al detener ${side}.` });
+        return res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -134,18 +90,11 @@ router.post('/stop/:side', async (req, res) => {
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
-        let autobot = await Autobot.findOne({});
-        if (!autobot) autobot = new Autobot({ config });
-        else autobot.config = config;
+        // Iniciamos ambos lados
+        await autobotLogic.startSide('long', config);
+        const updatedBot = await autobotLogic.startSide('short', config);
 
-        autobot.lstate = 'RUNNING';
-        autobot.sstate = 'RUNNING';
-        if(autobot.config.long) autobot.config.long.enabled = true;
-        if(autobot.config.short) autobot.config.short.enabled = true;
-
-        await autobot.save();
-        emitBotState(autobot, req);
-
+        emitBotState(updatedBot, req);
         return res.json({ success: true, message: 'Bot global iniciado.' });
     } catch (error) {
         return res.status(500).json({ success: false, message: error.message });
@@ -154,20 +103,13 @@ router.post('/start', async (req, res) => {
 
 router.post('/stop', async (req, res) => {
     try {
-        const botState = await Autobot.findOne({});
-        if (botState) {
-            botState.lstate = 'STOPPED';
-            botState.sstate = 'STOPPED';
-            if(botState.config.long) botState.config.long.enabled = false;
-            if(botState.config.short) botState.config.short.enabled = false;
-            
-            await botState.save();
-            emitBotState(botState, req);
-            return res.json({ success: true, message: 'Bot global detenido.' });
-        }
-        res.status(404).json({ message: "Bot no encontrado" });
+        await autobotLogic.stopSide('long');
+        const updatedBot = await autobotLogic.stopSide('short');
+
+        emitBotState(updatedBot, req);
+        return res.json({ success: true, message: 'Bot global detenido.' });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        return res.status(500).json({ success: false, message: error.message });
     }
 });
 
