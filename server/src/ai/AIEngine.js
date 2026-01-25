@@ -99,16 +99,12 @@ class AIEngine {
 
         const analysis = StrategyManager.calculate(this.history);
         
-        // --- ESTA ES LA PARTE QUE CORREGIMOS ---
-        // Si analysis no existe o le faltan datos, evitamos el error .toFixed
         if (!analysis || analysis.rsi === undefined || analysis.adx === undefined) {
             this._log("⚙️ Calculando indicadores técnicos...", 0.1);
             return;
         }
 
         const { rsi, adx, trend, confidence } = analysis;
-        
-        // Usamos (rsi || 0) para que nunca sea 'undefined'
         let pensamiento = `Análisis: RSI(${(rsi || 0).toFixed(1)}) | ADX(${(adx || 0).toFixed(1)}) | Trend: ${(trend || 'Buscando').toUpperCase()}`;
         
         if (this.lastEntryPrice === 0) {
@@ -124,9 +120,6 @@ class AIEngine {
         }
     }
 
-    /**
-     * Lógica interna para ejecutar trades virtuales
-     */
     async _trade(side, price, confidence) {
         try {
             const amountInUSDT = this.virtualBalance * this.RISK_PER_TRADE;
@@ -135,7 +128,7 @@ class AIEngine {
             if (side === 'BUY') {
                 this.lastEntryPrice = price;
                 this.highestPrice = price;
-                this.virtualBalance -= fee; // Descontar comisión
+                this.virtualBalance -= fee;
                 this._log(`🔥 COMPRA VIRTUAL: $${price} (Confianza: ${Math.round(confidence * 100)}%)`, 1);
             } else {
                 const profitPct = (price - this.lastEntryPrice) / this.lastEntryPrice;
@@ -146,7 +139,6 @@ class AIEngine {
                 this._log(`💰 VENTA VIRTUAL (Exit): $${price} | Resultado: ${profitAmount.toFixed(2)} USDT`, 0.5);
             }
 
-            // Guardar en MongoDB
             await AIBotOrder.create({
                 side,
                 price,
@@ -162,7 +154,6 @@ class AIEngine {
                 highestPrice: this.highestPrice
             });
 
-            // Notificar al Frontend
             if (this.io) {
                 this.io.emit('ai-order-executed', {
                     side,
@@ -179,19 +170,15 @@ class AIEngine {
 
     _log(msg, conf, isAnalyzing = false) {
         if (this.io) {
-            // Enviamos la decisión (para el círculo y los textos)
             this.io.emit('ai-decision-update', { 
                 confidence: conf, 
                 message: msg, 
                 isAnalyzing: isAnalyzing 
             });
-
-            // --- AÑADE ESTO: Enviamos el estado (para el botón y balance) ---
             this._broadcastStatus();
         }
     }
 
-    // --- NUEVA FUNCIÓN AUXILIAR ---
     _broadcastStatus() {
         if (this.io) {
             this.io.emit('ai-status-change', {
@@ -201,6 +188,7 @@ class AIEngine {
             });
         }
     }
+}
 
 const engine = new AIEngine();
 module.exports = engine;
