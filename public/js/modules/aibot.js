@@ -1,6 +1,7 @@
 // public/js/modules/aibot.js
 
 import { socket } from '../main.js';
+import aiBotUI from './aiBotUI.js'; // <--- ESTA ES LA LÍNEA QUE FALTA
 
 export function initializeAibotView() {
     console.log("🚀 Sistema IA: Conectando interfaz...");
