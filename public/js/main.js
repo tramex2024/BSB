@@ -88,10 +88,11 @@ export function initializeFullApp() {
     });
 
     socket.on('connect', () => {
-        updateConnectionStatus('CONNECTED');
-        logStatus("✅ Servidor conectado", "success");
-        socket.emit('get-bot-state');
-    });
+    updateConnectionStatus('CONNECTED');
+    // Pedir estados de ambos bots al conectar
+    socket.emit('get-bot-state');
+    socket.emit('get-ai-status'); 
+});
 
     socket.on('marketData', (data) => {
         resetWatchdog();
