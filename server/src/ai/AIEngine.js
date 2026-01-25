@@ -96,17 +96,22 @@ class AIEngine {
         }
 
         const analysis = StrategyManager.calculate(this.history);
-        if (!analysis) {
-            this._log("⚠️ Datos insuficientes para indicadores.", 0.1);
+        
+        // --- ESTA ES LA PARTE QUE CORREGIMOS ---
+        // Si analysis no existe o le faltan datos, evitamos el error .toFixed
+        if (!analysis || analysis.rsi === undefined || analysis.adx === undefined) {
+            this._log("⚙️ Calculando indicadores técnicos...", 0.1);
             return;
         }
 
         const { rsi, adx, trend, confidence } = analysis;
-        let pensamiento = `Análisis: RSI(${rsi.toFixed(1)}) | ADX(${adx.toFixed(1)}) | Trend: ${trend.toUpperCase()}`;
+        
+        // Usamos (rsi || 0) para que nunca sea 'undefined'
+        let pensamiento = `Análisis: RSI(${(rsi || 0).toFixed(1)}) | ADX(${(adx || 0).toFixed(1)}) | Trend: ${(trend || 'Buscando').toUpperCase()}`;
         
         if (this.lastEntryPrice === 0) {
             if (confidence < 0.7) {
-                pensamiento += ` | Confianza ${(confidence * 100).toFixed(0)}% (Mín. 70%)`;
+                pensamiento += ` | Confianza ${((confidence || 0) * 100).toFixed(0)}% (Mín. 70%)`;
                 this._log(pensamiento, confidence);
             } else {
                 await this._trade('BUY', price, confidence);
