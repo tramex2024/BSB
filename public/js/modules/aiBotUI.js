@@ -71,7 +71,7 @@ const aiBotUI = {
                     <td class="px-6 py-3 text-right font-mono text-white">$${trade.price.toFixed(2)}</td>
                     <td class="px-6 py-3 text-right font-mono text-gray-300">$${trade.amount.toFixed(2)}</td>
                     <td class="px-6 py-3 text-center">
-                        <span class="text-blue-400 font-bold">${(trade.confidence * 100).toFixed(0)}%</span>
+                        <span class="text-blue-400 font-bold">${((trade.confidence || trade.confidenceScore || 0) * (trade.confidence <= 1 ? 100 : 1)).toFixed(0)}%</span>
                     </td>
                 </tr>
             `;

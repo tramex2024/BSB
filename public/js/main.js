@@ -87,11 +87,10 @@ export function initializeFullApp() {
         reconnection: true 
     });
 
-    socket.on('connect', () => {
+   socket.on('connect', () => {
     updateConnectionStatus('CONNECTED');
-    // Pedir estados de ambos bots al conectar
-    socket.emit('get-bot-state');
-    socket.emit('get-ai-status'); 
+    socket.emit('get-bot-state'); // Para el Autobot
+    socket.emit('get-ai-status');  // Para el AI Bot
 });
 
     socket.on('marketData', (data) => {
@@ -207,5 +206,14 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTab('autobot'); 
     } else { 
         initializeTab('dashboard'); 
+    }
+});
+
+// Detectar cuando el usuario vuelve a la pestaña
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && socket && socket.connected) {
+        console.log("🔄 Sincronizando estados de bots...");
+        socket.emit('get-bot-state');
+        socket.emit('get-ai-status');
     }
 });

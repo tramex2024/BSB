@@ -44,19 +44,31 @@ function setupAISocketListeners() {
         }
     });
 
-    socket.on('ai-status-update', (data) => {
-        const btn = document.getElementById('btn-start-ai');
-        if (btn) {
-            if (data.isRunning && (data.historyCount < 30)) {
-                btn.textContent = `ANALIZANDO... (${data.historyCount}/30)`;
-                btn.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse";
-            } else {
-                setBtnUI(btn, data.isRunning);
-            }
-            btn.disabled = false;
+   // En aibot.js solo dejas los .on (escuchadores)
+// 🧠 ESTADO GLOBAL DE IA (Recibe progreso 1/30, balance y estado)
+socket.on('ai-status-update', (data) => {
+    // 1. Actualizar Balance Global
+    const balEl = document.getElementById('ai-virtual-balance');
+    if (balEl && data.virtualBalance !== undefined) {
+        balEl.innerText = `$${data.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+    }
+
+    // 2. Actualizar Botón (Si estamos en la pestaña AIBot)
+    const btnAi = document.getElementById('btn-start-ai');
+    if (btnAi) {
+        if (data.isRunning && data.historyCount < 30) {
+            btnAi.textContent = `ANALIZANDO... (${data.historyCount}/30)`;
+            btnAi.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse";
+        } else {
+            // Aquí llamarías a una función que ponga el botón Azul (Start) o Rojo (Stop)
+            const isRunning = data.isRunning;
+            btnAi.textContent = isRunning ? "STOP AI" : "ACTIVAR NÚCLEO IA";
+            btnAi.className = isRunning 
+                ? "w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs" 
+                : "w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs";
         }
-        updateAIBalance(data);
-    });
+    }
+});
 
     socket.on('ai-history-data', (history) => {
         const tableBody = document.getElementById('ai-history-table-body');
@@ -66,9 +78,14 @@ function setupAISocketListeners() {
         }
     });
     
-    socket.on('ai-decision-update', (data) => {
-        updateAIUI(data); 
-    });
+    // 📊 LOGS Y DECISIONES (Para el flujo de pensamiento)
+socket.on('ai-decision-update', (data) => {
+    // Si tienes un módulo aiBotUI, úsalo, si no, usa el log directo
+    if (aiBotUI && typeof aiBotUI.updateConfidence === 'function') {
+        aiBotUI.updateConfidence(data.confidence);
+        aiBotUI.addLog(data.message);
+    }
+});
 
     socket.on('ai-order-executed', (data) => {
         updateAIBalance(data);
