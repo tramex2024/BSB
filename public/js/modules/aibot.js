@@ -6,7 +6,6 @@ export function initializeAibotView() {
     console.log("🚀 Sistema IA: Conectando interfaz...");
     
     if (socket) {
-        // Limpieza de listeners para evitar duplicidad
         socket.off('ai-status-init');
         socket.off('ai-status-update');
         socket.off('ai-history-data');
@@ -26,7 +25,6 @@ export function initializeAibotView() {
 function setupAISocketListeners() {
     if (!socket) return;
 
-    // Estado inicial al cargar la página o conectar
     socket.on('ai-status-init', (state) => {
         const btn = document.getElementById('btn-start-ai');
         const balanceEl = document.getElementById('ai-virtual-balance');
@@ -36,7 +34,6 @@ function setupAISocketListeners() {
         }
 
         if (btn) {
-            // Si está corriendo pero aún en fase de análisis (<30 velas)
             if (state.isRunning && state.historyCount < 30) {
                 btn.textContent = `ANALIZANDO... (${state.historyCount}/30)`;
                 btn.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse";
@@ -47,7 +44,6 @@ function setupAISocketListeners() {
         }
     });
 
-    // Actualizaciones de estado en tiempo real (progreso y toggle)
     socket.on('ai-status-update', (data) => {
         const btn = document.getElementById('btn-start-ai');
         if (btn) {
@@ -71,13 +67,13 @@ function setupAISocketListeners() {
     });
     
     socket.on('ai-decision-update', (data) => {
-        updateAIUI(data); // Actualiza círculo de confianza y logs
+        updateAIUI(data); 
     });
 
     socket.on('ai-order-executed', (data) => {
         updateAIBalance(data);
         appendOrderToTable(data);
-        showAiToast(data); // Notificación visual
+        showAiToast(data); 
         playNeuralSound(data.side);
     });
 }
@@ -90,7 +86,6 @@ function setupAIControls() {
     btn.parentNode.replaceChild(newBtn, btn);
 
     newBtn.addEventListener('click', () => {
-        // Detectamos si el botón está en modo STOP (rojo) o START (azul/verde)
         const isRunning = newBtn.classList.contains('bg-red-600') || newBtn.classList.contains('bg-emerald-500');
         const action = isRunning ? 'stop' : 'start';
 
@@ -108,37 +103,39 @@ function updateAIUI(data) {
     const predictionText = document.getElementById('ai-prediction-text');
     const logContainer = document.getElementById('ai-log-container');
 
+    // 1. Círculo de Confianza Dinámico
     if (confidenceEl && circle) {
         const percent = (data.confidence || 0) * 100;
         confidenceEl.textContent = `${Math.round(percent)}%`;
         
-        // 1. CÁLCULO DE COLOR DINÁMICO
-        let circleColor = "#3b82f6"; // Azul (Baja confianza/Neutral)
-        
-        if (percent >= 85) {
-            circleColor = "#a855f7"; // Púrpura (¡Confianza Extrema!)
-        } else if (percent >= 70) {
-            circleColor = "#f97316"; // Naranja (Señal Fuerte)
-        } else if (percent >= 50) {
-            circleColor = "#10b981"; // Verde (Tendencia estable)
-        }
+        let circleColor = "#3b82f6"; // Azul por defecto
+        if (percent >= 85) circleColor = "#a855f7"; // Púrpura
+        else if (percent >= 70) circleColor = "#f97316"; // Naranja
+        else if (percent >= 50) circleColor = "#10b981"; // Verde
 
-        // 2. APLICAR COLOR Y SOMBRA (GLOW)
         circle.style.stroke = circleColor;
         circle.style.filter = `drop-shadow(0 0 8px ${circleColor}66)`;
         confidenceEl.style.color = circleColor;
 
-        // 3. ACTUALIZAR OFFSET DEL CÍRCULO (Perímetro 364.4)
         const offset = 364.4 - (percent / 100) * 364.4;
         circle.style.strokeDashoffset = offset;
     }
 
     if (predictionText) predictionText.textContent = data.message || "Analizando mercado...";
 
+    // 2. LOG DE MONITOREO INFORMATIVO (Lo que me pediste)
     if (logContainer && data.message) {
         const log = document.createElement('div');
-        log.className = "text-[9px] border-l-2 border-blue-500 pl-2 mb-1 py-1 bg-blue-500/5 animate-fadeIn";
-        log.innerHTML = `<span class="text-blue-500 font-bold">[${new Date().toLocaleTimeString()}]</span> <span class="text-gray-300">${data.message}</span>`;
+        const isAnalyzing = data.isAnalyzing; 
+        
+        // Estilo tipo terminal
+        log.className = `text-[9px] font-mono border-l-2 ${isAnalyzing ? 'border-emerald-500 bg-emerald-500/5' : 'border-blue-500 bg-blue-500/5'} pl-2 mb-1 py-1 animate-fadeIn`;
+        
+        log.innerHTML = `
+            <span class="text-gray-500">[${new Date().toLocaleTimeString([], {hour12:false})}]</span> 
+            <span class="${isAnalyzing ? 'text-emerald-400' : 'text-blue-300'}">${data.message}</span>
+        `;
+
         logContainer.prepend(log);
         if (logContainer.childNodes.length > 20) logContainer.lastChild.remove();
     }
@@ -155,11 +152,9 @@ function updateAIBalance(data) {
 function setBtnUI(btn, isRunning) {
     btn.disabled = false;
     if (isRunning) {
-        // Modo Activo (STOP)
         btn.textContent = "STOP AI";
         btn.className = "w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-red-900/40 border border-red-400/30 uppercase tracking-widest active:scale-95 cursor-pointer";
     } else {
-        // Modo Detenido (START)
         btn.textContent = "ACTIVAR NÚCLEO IA";
         btn.className = "w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-900/40 border border-blue-400/30 uppercase tracking-widest active:scale-95 cursor-pointer";
     }
