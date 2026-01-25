@@ -212,13 +212,36 @@ io.on('connection', (socket) => {
         }
     };
 
-    // Al conectarse, enviamos los estados básicos
+    // Al conectarse, enviamos los estados básicos de inmediato
     sendFullBotStatus();
     sendAiStatus();
 
-    // Listeners de peticiones manuales desde el Front-end
+    // --- LOGICA DE CONTROL DE BOTÓN (PASO 1 Y 2) ---
+    socket.on('toggle-ai', async (data) => {
+        try {
+            // 1. Ejecutamos la acción en el motor (start/stop)
+            const result = aiEngine.toggle(data.action);
+            
+            // 2. Si arrancamos, inicializamos balance
+            if (result.isRunning) {
+                await aiEngine.init();
+            }
+
+            // 3. Emitimos a TODOS los clientes conectados para que el botón cambie
+            // Usamos 'ai-status-update' para que el botón salga de "Procesando"
+            io.emit('ai-status-update', { 
+                isRunning: result.isRunning, 
+                virtualBalance: result.virtualBalance 
+            });
+            
+            console.log(`[SOCKET] IA Core ${data.action.toUpperCase()} por usuario ${socket.id}`);
+        } catch (err) {
+            console.error("❌ Error en toggle-ai socket:", err);
+        }
+    });
+
+    // Listeners de peticiones manuales
     socket.on('get-bot-state', () => sendFullBotStatus());
-    
     socket.on('get-ai-status', () => sendAiStatus());
 
     socket.on('get-ai-history', async () => {
@@ -243,7 +266,6 @@ server.listen(PORT, () => {
     console.log(`
     🚀 ==========================================
     🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}
-    🚀 MODO: ${process.env.NODE_ENV || 'development'}
     🚀 IA CORE: ${aiEngine.isRunning ? 'RUNNING' : 'STANDBY'}
     🚀 ==========================================
     `);

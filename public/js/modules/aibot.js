@@ -65,14 +65,20 @@ function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
+    // Limpiamos eventos previos para evitar duplicados
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
     newBtn.addEventListener('click', () => {
-        const isCurrentlyRunning = newBtn.textContent.includes("DETENER");
-        const action = isCurrentlyRunning ? 'stop' : 'start';
+        // Paso 2: Si el botón es Rojo (STOP), mandamos 'stop'. Si es Azul, mandamos 'start'.
+        const isRunning = newBtn.classList.contains('bg-red-600');
+        const action = isRunning ? 'stop' : 'start';
+
+        // Paso 1: Estado intermedio (Verde + Procesando)
         newBtn.disabled = true;
         newBtn.textContent = "PROCESANDO...";
+        newBtn.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
+
         socket.emit('toggle-ai', { action: action });
     });
 }
@@ -112,12 +118,16 @@ function updateAIBalance(data) {
 }
 
 function setBtnUI(btn, isRunning) {
+    btn.disabled = false; // Reactivamos el botón siempre que recibamos estado del server
+    
     if (isRunning) {
-        btn.textContent = "DETENER NÚCLEO IA";
-        btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-red-900/40 border border-red-400/30 uppercase tracking-widest active:scale-95";
+        // PASO 2: Estado Activo (ROJO)
+        btn.textContent = "STOP AI";
+        btn.className = "w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-red-900/40 border border-red-400/30 uppercase tracking-widest active:scale-95 cursor-pointer";
     } else {
+        // PASO 1 y 2: Estado Inicial/Detenido (AZUL)
         btn.textContent = "ACTIVAR NÚCLEO IA";
-        btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-900/40 border border-blue-400/30 uppercase tracking-widest active:scale-95";
+        btn.className = "w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-900/40 border border-blue-400/30 uppercase tracking-widest active:scale-95 cursor-pointer";
     }
 }
 
