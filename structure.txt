@@ -48,6 +48,8 @@ BSB/			    # Bitmart Spot Bots
      │   └── BotState.js
      │   └── TradeCycle.js
      │   └── MarketSignal.js
+     │   └── AIBotOrder.js
+     │   └── Aibot.js
      ├── middleware/
      │   └── bitmartAuthMiddleware.js
      │   └── authMiddleware.js
@@ -65,6 +67,7 @@ BSB/			    # Bitmart Spot Bots
      │   └── configRoutes.js
      │   └── balanceRoutes.js
      │   └── analyticsRoutes.js
+     │   └── aiRoutes.js
      ├── controllers/
      │   └── authController.js
      │   └── userController.js
@@ -73,6 +76,7 @@ BSB/			    # Bitmart Spot Bots
      │   └── bitmartController.js
      │   └── analyticsController.js
      │   └── configController.js
+     │   └── aiController.js
      ├── utils/
      │   └── encryption.js
      │   └── cryptoUtils.js

@@ -1,28 +1,29 @@
 // BSB/server/controllers/aiController.js
 
-const aiEngine = require('../src/ai/AIEngine'); 
+const path = require('path');
+// Importación dinámica para evitar errores de ruta en Linux/Render
+const aiEngine = require(path.join(__dirname, '..', 'src', 'ai', 'AIEngine'));
+
 const AIBotOrder = require('../models/AIBotOrder');
-const Aibot = require('../models/Aibot'); // <--- Nueva Fuente de la Verdad
+const Aibot = require('../models/Aibot'); 
 
 /**
  * Obtiene el estado actual de la IA (Desde la DB para persistencia)
  */
 const getAIStatus = async (req, res) => {
     try {
-        // Buscamos el estado persistente
         let state = await Aibot.findOne({});
         
-        // Si no existe, lo creamos para evitar errores de null
         if (!state) {
             state = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
         }
         
         res.json({
             success: true,
-            isRunning: state.isRunning, // Priorizamos lo que dice la DB
+            isRunning: state.isRunning,
             isVirtual: aiEngine.IS_VIRTUAL_MODE,
             virtualBalance: state.virtualBalance,
-            historyCount: state.historyPoints.length, // Para que el front sepa el progreso (X/30)
+            historyCount: state.historyPoints ? state.historyPoints.length : 0,
             config: {
                 risk: aiEngine.RISK_PER_TRADE,
                 trailing: aiEngine.TRAILING_PERCENT,
@@ -46,14 +47,11 @@ const toggleAI = async (req, res) => {
             return res.status(400).json({ success: false, message: "Acción no proporcionada" });
         }
 
-        // 1. Ejecutamos cambio en el motor
         const result = await aiEngine.toggle(action);
         
-        // 2. Persistimos el cambio en la base de datos de IA
-        // Guardamos si está corriendo y, si se apaga, podríamos resetear el historial
         const updateData = { isRunning: result.isRunning };
         if (action === 'stop') {
-            updateData.historyPoints = []; // Reinicia análisis al apagar
+            updateData.historyPoints = []; 
         }
 
         const updatedDB = await Aibot.findOneAndUpdate(
