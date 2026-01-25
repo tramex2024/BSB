@@ -1,6 +1,6 @@
 // BSB/server/controllers/aiController.js
 
-const aiEngine = require('../../src/ai/aiEngine'); // Ajusta la ruta si es necesario
+const aiEngine = require('../src/ai/AIEngine'); // Ajusta la ruta si es necesario
 const AIBotOrder = require('../models/AIBotOrder');
 const Aibot = require('../models/Aibot'); // <--- Nueva Fuente de la Verdad
 
