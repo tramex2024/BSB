@@ -1,4 +1,5 @@
 // public/js/modules/aibot.js
+
 import { socket } from '../main.js';
 
 export function initializeAibotView() {
@@ -49,10 +50,22 @@ function setupAISocketListeners() {
             history.forEach(order => appendOrderToTable(order));
         }
     });
-
-    socket.on('ai-decision-update', (data) => {
-        updateAIUI(data);
-    });
+    
+socket.on('ai-decision-update', (data) => {
+    const btn = document.getElementById('btn-start-ai');
+    
+    if (data.isAnalyzing) {
+        // PASO 1: Si está analizando (<30 velas), se pone VERDE
+        btn.textContent = `ANALIZANDO... (${data.message.split('(')[1]}`;
+        btn.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse";
+    } else {
+        // PASO 2: Si ya está listo o ya pasó los 30, se pone ROJO (STOP)
+        btn.textContent = "STOP AI";
+        btn.className = "w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs";
+    }
+    
+    updateAIUI(data); // Actualiza círculo y logs
+});
 
     socket.on('ai-order-executed', (data) => {
         updateAIBalance(data);

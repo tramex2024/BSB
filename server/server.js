@@ -13,7 +13,9 @@ const aiEngine = require('./src/ai/aiEngine');
 
 // Modelos
 const Autobot = require('./models/Autobot');
+const Aibot = require('./models/Aibot'); // Modelo de persistencia para IA
 const MarketSignal = require('./models/MarketSignal');
+const AIBotOrder = require('./models/AIBotOrder');
 const analyzer = require('./src/bitmart_indicator_analyzer'); 
 
 dotenv.config();
@@ -21,7 +23,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// --- 2. CONFIGURACIÓN DE MIDDLEWARES (CORRECCIÓN CORS) ---
+// --- 2. CONFIGURACIÓN DE MIDDLEWARES (CORS) ---
 const allowedOrigins = [
     'https://bsb-lime.vercel.app', 
     'http://localhost:3000', 
@@ -33,8 +35,7 @@ app.use(cors({
     origin: function (origin, callback) {
         if (!origin) return callback(null, true);
         if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'El protocolo CORS de esta API no permite acceso desde el origen especificado.';
-            return callback(new Error(msg), false);
+            return callback(new Error('CORS no permitido'), false);
         }
         return callback(null, true);
     },
@@ -70,7 +71,7 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Root Structure)...'))
+    .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Persistencia Total)...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --- 6. VARIABLES GLOBALES DE ESTADO ---
@@ -80,7 +81,7 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
 
-// --- 7. WEBSOCKET BITMART (FLUJO DE PRECIOS Y VOLUMEN) ---
+// --- 7. WEBSOCKET BITMART ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
@@ -91,7 +92,7 @@ function setupMarketWS(io) {
     
     marketWs.on('open', () => {
         isMarketConnected = true; 
-        console.log("📡 [MARKET_WS] ✅ Conectado. Suscribiendo a BTC_USDT...");
+        console.log("📡 [MARKET_WS] Conectado. Suscribiendo BTC_USDT...");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
         if (marketHeartbeat) clearInterval(marketHeartbeat);
@@ -109,18 +110,13 @@ function setupMarketWS(io) {
             if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
                 const ticker = parsed.data[0];
                 const price = parseFloat(ticker.last_price);
-                
-                // ✅ MEJORA 2026: Captura de Volumen para StrategyManager
                 const volume = parseFloat(ticker.base_volume_24h || 0);
-                
                 const open24h = parseFloat(ticker.open_24h);
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
                 lastKnownPrice = price; 
-                const now = new Date();
-                const currentMinute = now.getMinutes();
+                const currentMinute = new Date().getMinutes();
 
-                // Análisis de indicadores (1 vez por minuto)
                 if (currentMinute !== lastProcessedMinute) {
                     lastProcessedMinute = currentMinute;
                     const analysis = await analyzer.runAnalysis(price);
@@ -137,22 +133,18 @@ function setupMarketWS(io) {
                     io.emit('market-signal-update', analysis);
                 }
 
-                // Notificar Front-end
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
-                // 🚀 GATILLO DE LOS BOTS
                 if (mongoose.connection.readyState === 1) { 
                     try { 
-                        // ✅ INTEGRACIÓN IA: Pasamos precio y volumen detectado
                         aiEngine.analyze(price, volume); 
                     } catch (aiErr) { 
                         console.error("⚠️ AI Error:", aiErr.message); 
                     }
-                    // Gatillo para lógica Long/Short automática
                     await autobotLogic.botCycle(price);
                 }
             }
-        } catch (e) { console.error("❌ Error WS Message:", e.message); }
+        } catch (e) { console.error("❌ WS Msg Error:", e.message); }
     });
 
     marketWs.on('close', () => {
@@ -166,7 +158,7 @@ bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 9. BUCLE SALDOS (Sync cada 10s) ---
+// --- 9. BUCLE SALDOS (Cada 10s) ---
 setInterval(async () => {
     try {
         if (mongoose.connection.readyState === 1) {
@@ -181,9 +173,6 @@ setupMarketWS(io);
 io.on('connection', (socket) => {
     console.log(`👤 Usuario conectado: ${socket.id}`);
 
-    /**
-     * Envía el estado completo del Autobot (Pestaña normal)
-     */
     const sendFullBotStatus = async () => {
         try {
             const state = await Autobot.findOne({}).lean();
@@ -191,78 +180,58 @@ io.on('connection', (socket) => {
                 const currentPrice = autobotLogic.getLastPrice() || lastKnownPrice;
                 socket.emit('bot-state-update', { ...state, price: currentPrice });
             }
-        } catch (err) { 
-            console.error("❌ Error Status Socket:", err); 
-        }
+        } catch (err) { console.error("❌ Error Status Socket:", err); }
     };
 
-    /**
-     * Envía el estado inicial de la IA (Pestaña AI Bot)
-     */
     const sendAiStatus = async () => {
         try {
-            const state = await Autobot.findOne({}).lean();
+            let aiState = await Aibot.findOne({});
+            if (!aiState) aiState = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
+
             socket.emit('ai-status-init', {
                 isRunning: aiEngine.isRunning,
-                virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 100.00,
-                isVirtual: aiEngine.IS_VIRTUAL_MODE
+                virtualBalance: aiEngine.virtualBalance || aiState.virtualBalance,
+                historyCount: aiEngine.history ? aiEngine.history.length : (aiState.historyPoints?.length || 0)
             });
-        } catch (err) {
-            console.error("❌ Error AI Status Socket:", err);
-        }
+        } catch (err) { console.error("❌ Error AI Status Socket:", err); }
     };
 
-    // Al conectarse, enviamos los estados básicos de inmediato
     sendFullBotStatus();
     sendAiStatus();
 
-    // --- LOGICA DE CONTROL DE BOTÓN (PASO 1 Y 2) ---
     socket.on('toggle-ai', async (data) => {
         try {
-            // 1. Ejecutamos la acción en el motor (start/stop)
-            const result = aiEngine.toggle(data.action);
-            
-            // 2. Si arrancamos, inicializamos balance
-            if (result.isRunning) {
-                await aiEngine.init();
-            }
+            const result = await aiEngine.toggle(data.action);
+            if (result.isRunning) await aiEngine.init();
 
-            // 3. Emitimos a TODOS los clientes conectados para que el botón cambie
-            // Usamos 'ai-status-update' para que el botón salga de "Procesando"
             io.emit('ai-status-update', { 
                 isRunning: result.isRunning, 
                 virtualBalance: result.virtualBalance 
             });
-            
-            console.log(`[SOCKET] IA Core ${data.action.toUpperCase()} por usuario ${socket.id}`);
-        } catch (err) {
-            console.error("❌ Error en toggle-ai socket:", err);
-        }
+            console.log(`[SOCKET] IA Core ${data.action.toUpperCase()} por ${socket.id}`);
+        } catch (err) { console.error("❌ Error toggle-ai:", err); }
     });
 
-    // Listeners de peticiones manuales
     socket.on('get-bot-state', () => sendFullBotStatus());
     socket.on('get-ai-status', () => sendAiStatus());
-
     socket.on('get-ai-history', async () => {
         try {
-            const AIBotOrder = require('./models/AIBotOrder');
-            const history = await AIBotOrder.find({ isVirtual: true })
-                .sort({ timestamp: -1 })
-                .limit(30);
+            const history = await AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(30);
             socket.emit('ai-history-data', history);
-        } catch (err) {
-            console.error("❌ Error al cargar historial IA:", err);
-        }
+        } catch (err) { console.error("❌ Error Historial IA:", err); }
     });
 
-    socket.on('disconnect', () => {
-        console.log(`👤 Usuario desconectado: ${socket.id}`);
-    });
+    socket.on('disconnect', () => console.log(`👤 Usuario desconectado: ${socket.id}`));
 });
 
 // --- 11. ARRANQUE DEL SERVIDOR ---
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
+    try {
+        await aiEngine.init();
+        console.log("🧠 [IA-CORE] Memoria recuperada desde MongoDB");
+    } catch (e) {
+        console.error("❌ Error inicializando IA:", e);
+    }
     console.log(`
     🚀 ==========================================
     🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}

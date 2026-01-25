@@ -1,22 +1,28 @@
 // BSB/server/controllers/aiController.js
 
-
-const aiEngine = require('../src/ai/aiEngine');
+const aiEngine = require('../../src/ai/aiEngine'); // Ajusta la ruta si es necesario
 const AIBotOrder = require('../models/AIBotOrder');
-const Autobot = require('../models/Autobot');
+const Aibot = require('../models/Aibot'); // <--- Nueva Fuente de la Verdad
 
 /**
- * Obtiene el estado actual de la IA (Saldo, si está corriendo, config)
+ * Obtiene el estado actual de la IA (Desde la DB para persistencia)
  */
 const getAIStatus = async (req, res) => {
     try {
-        const state = await Autobot.findOne({});
+        // Buscamos el estado persistente
+        let state = await Aibot.findOne({});
+        
+        // Si no existe, lo creamos para evitar errores de null
+        if (!state) {
+            state = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
+        }
         
         res.json({
             success: true,
-            isRunning: aiEngine.isRunning,
+            isRunning: state.isRunning, // Priorizamos lo que dice la DB
             isVirtual: aiEngine.IS_VIRTUAL_MODE,
-            virtualBalance: aiEngine.virtualBalance || state?.virtualAiBalance || 100.00,
+            virtualBalance: state.virtualBalance,
+            historyCount: state.historyPoints.length, // Para que el front sepa el progreso (X/30)
             config: {
                 risk: aiEngine.RISK_PER_TRADE,
                 trailing: aiEngine.TRAILING_PERCENT,
@@ -30,29 +36,37 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA
+ * Activa o desactiva el motor de IA y guarda el estado
  */
 const toggleAI = async (req, res) => {
     try {
-        const { action } = req.body; // 'start' o 'stop'
+        const { action } = req.body; 
         
         if (!action) {
             return res.status(400).json({ success: false, message: "Acción no proporcionada" });
         }
 
-        // Usamos el método interno del motor
-        const result = aiEngine.toggle(action);
+        // 1. Ejecutamos cambio en el motor
+        const result = await aiEngine.toggle(action);
         
-        // Si arrancamos, inicializamos balance y configuración
-        if (result.isRunning) {
-            await aiEngine.init();
+        // 2. Persistimos el cambio en la base de datos de IA
+        // Guardamos si está corriendo y, si se apaga, podríamos resetear el historial
+        const updateData = { isRunning: result.isRunning };
+        if (action === 'stop') {
+            updateData.historyPoints = []; // Reinicia análisis al apagar
         }
 
+        const updatedDB = await Aibot.findOneAndUpdate(
+            {}, 
+            updateData, 
+            { upsert: true, new: true }
+        );
+        
         res.json({ 
             success: true, 
-            isRunning: result.isRunning,
-            virtualBalance: result.virtualBalance,
-            message: result.isRunning ? "IA Activada - Escaneando Mercado" : "IA Detenida" 
+            isRunning: updatedDB.isRunning,
+            virtualBalance: updatedDB.virtualBalance,
+            message: updatedDB.isRunning ? "IA Activada - Analizando mercado" : "IA Detenida" 
         });
     } catch (error) {
         console.error("Error en toggleAI:", error);
@@ -61,7 +75,7 @@ const toggleAI = async (req, res) => {
 };
 
 /**
- * Obtiene el historial de órdenes virtuales de la base de datos
+ * Obtiene el historial de órdenes
  */
 const getVirtualHistory = async (req, res) => {
     try {
@@ -76,9 +90,6 @@ const getVirtualHistory = async (req, res) => {
     }
 };
 
-// --- EXPORTACIÓN ROBUSTA ---
-// Esto asegura que al importar el archivo en aiRoutes.js, 
-// las funciones no lleguen como 'undefined'.
 module.exports = {
     getAIStatus,
     toggleAI,
