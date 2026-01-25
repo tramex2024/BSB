@@ -5,15 +5,18 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require("socket.io");
 const WebSocket = require('ws');
+const path = require('path');
 
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const aiEngine = require('./src/ai/AIEngine'); 
+
+// IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
+const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 
 // Modelos
 const Autobot = require('./models/Autobot');
-const Aibot = require('./models/Aibot'); // Modelo de persistencia para IA
+const Aibot = require('./models/Aibot'); 
 const MarketSignal = require('./models/MarketSignal');
 const AIBotOrder = require('./models/AIBotOrder');
 const analyzer = require('./src/bitmart_indicator_analyzer'); 
@@ -23,7 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
-// --- 2. CONFIGURACIÓN DE MIDDLEWARES (CORS) ---
+// --- 2. CONFIGURACIÓN DE MIDDLEWARES ---
 const allowedOrigins = [
     'https://bsb-lime.vercel.app', 
     'http://localhost:3000', 
@@ -33,11 +36,11 @@ const allowedOrigins = [
 ];
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
-            return callback(new Error('CORS no permitido'), false);
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('CORS no permitido'), false);
         }
-        return callback(null, true);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -48,18 +51,14 @@ app.use(express.json());
 
 // --- 3. CONFIGURACIÓN DE SOCKET.IO ---
 const io = new Server(server, {
-    cors: { 
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true
-    },
+    cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
     path: '/socket.io'
 });
 
 autobotLogic.setIo(io);
 aiEngine.setIo(io); 
 
-// --- 4. DEFINICIÓN DE RUTAS API ---
+// --- 4. RUTAS API ---
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/orders', require('./routes/ordersRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
@@ -74,7 +73,7 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Persistencia Total)...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
-// --- 6. VARIABLES GLOBALES DE ESTADO ---
+// --- 6. VARIABLES GLOBALES ---
 let lastKnownPrice = 0;
 let lastProcessedMinute = -1;
 let marketWs = null;
@@ -85,9 +84,7 @@ let isMarketConnected = false;
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
-    if (marketWs) {
-        try { marketWs.terminate(); } catch (e) {}
-    }
+    if (marketWs) { try { marketWs.terminate(); } catch (e) {} }
     marketWs = new WebSocket(bitmartWsUrl);
     
     marketWs.on('open', () => {
@@ -135,12 +132,20 @@ function setupMarketWS(io) {
 
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
+                // 🚀 GATILLO DE IA Y BOT
                 if (mongoose.connection.readyState === 1) { 
                     try { 
-                        aiEngine.analyze(price, volume); 
-                    } catch (aiErr) { 
-                        console.error("⚠️ AI Error:", aiErr.message); 
-                    }
+                        await aiEngine.analyze(price, volume); 
+                        
+                        // Sincronización de progreso (X/30) para el front-end
+                        if (aiEngine.isRunning && aiEngine.history.length <= 30) {
+                            io.emit('ai-status-update', { 
+                                isRunning: true, 
+                                historyCount: aiEngine.history.length,
+                                virtualBalance: aiEngine.virtualBalance
+                            });
+                        }
+                    } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
                     await autobotLogic.botCycle(price);
                 }
             }
@@ -153,89 +158,59 @@ function setupMarketWS(io) {
     });
 }
 
-// --- 8. WEBSOCKET ÓRDENES PRIVADAS ---
+// --- 8. WS ÓRDENES PRIVADAS ---
 bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 9. BUCLE SALDOS (Cada 10s) ---
+// --- 9. BUCLE SALDOS ---
 setInterval(async () => {
     try {
-        if (mongoose.connection.readyState === 1) {
-            await autobotLogic.slowBalanceCacheUpdate();
-        }
+        if (mongoose.connection.readyState === 1) await autobotLogic.slowBalanceCacheUpdate();
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
 setupMarketWS(io);
 
-// --- 10. GESTIÓN DE EVENTOS SOCKET.IO ---
+// --- 10. SOCKET.IO EVENTS ---
 io.on('connection', (socket) => {
-    console.log(`👤 Usuario conectado: ${socket.id}`);
-
-    const sendFullBotStatus = async () => {
-        try {
-            const state = await Autobot.findOne({}).lean();
-            if (state) {
-                const currentPrice = autobotLogic.getLastPrice() || lastKnownPrice;
-                socket.emit('bot-state-update', { ...state, price: currentPrice });
-            }
-        } catch (err) { console.error("❌ Error Status Socket:", err); }
-    };
+    console.log(`👤 Conectado: ${socket.id}`);
 
     const sendAiStatus = async () => {
         try {
-            let aiState = await Aibot.findOne({});
-            if (!aiState) aiState = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
-
+            let state = await Aibot.findOne({});
+            if (!state) state = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
             socket.emit('ai-status-init', {
                 isRunning: aiEngine.isRunning,
-                virtualBalance: aiEngine.virtualBalance || aiState.virtualBalance,
-                historyCount: aiEngine.history ? aiEngine.history.length : (aiState.historyPoints?.length || 0)
+                virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
+                historyCount: aiEngine.history ? aiEngine.history.length : (state.historyPoints?.length || 0)
             });
-        } catch (err) { console.error("❌ Error AI Status Socket:", err); }
+        } catch (err) { console.error("❌ Error AI Socket:", err); }
     };
 
-    sendFullBotStatus();
     sendAiStatus();
 
     socket.on('toggle-ai', async (data) => {
         try {
             const result = await aiEngine.toggle(data.action);
             if (result.isRunning) await aiEngine.init();
-
-            io.emit('ai-status-update', { 
-                isRunning: result.isRunning, 
-                virtualBalance: result.virtualBalance 
-            });
-            console.log(`[SOCKET] IA Core ${data.action.toUpperCase()} por ${socket.id}`);
-        } catch (err) { console.error("❌ Error toggle-ai:", err); }
+            io.emit('ai-status-update', { isRunning: result.isRunning, virtualBalance: result.virtualBalance });
+        } catch (err) { console.error("❌ Error toggle:", err); }
     });
 
-    socket.on('get-bot-state', () => sendFullBotStatus());
-    socket.on('get-ai-status', () => sendAiStatus());
     socket.on('get-ai-history', async () => {
-        try {
-            const history = await AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(30);
-            socket.emit('ai-history-data', history);
-        } catch (err) { console.error("❌ Error Historial IA:", err); }
+        const history = await AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(30);
+        socket.emit('ai-history-data', history);
     });
 
-    socket.on('disconnect', () => console.log(`👤 Usuario desconectado: ${socket.id}`));
+    socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
 });
 
-// --- 11. ARRANQUE DEL SERVIDOR ---
+// --- 11. START ---
 server.listen(PORT, async () => {
     try {
         await aiEngine.init();
-        console.log("🧠 [IA-CORE] Memoria recuperada desde MongoDB");
-    } catch (e) {
-        console.error("❌ Error inicializando IA:", e);
-    }
-    console.log(`
-    🚀 ==========================================
-    🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}
-    🚀 IA CORE: ${aiEngine.isRunning ? 'RUNNING' : 'STANDBY'}
-    🚀 ==========================================
-    `);
+        console.log("🧠 [IA-CORE] Memoria recuperada satisfactoriamente.");
+    } catch (e) { console.error("❌ Error inicialización:", e); }
+    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });
