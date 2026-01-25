@@ -9,7 +9,7 @@ const WebSocket = require('ws');
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const aiEngine = require('./src/ai/aiEngine'); 
+const aiEngine = require('./src/ai/AIEngine'); 
 
 // Modelos
 const Autobot = require('./models/Autobot');
