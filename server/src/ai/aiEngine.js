@@ -18,7 +18,7 @@ class AIEngine {
         // PARÁMETROS PROFESIONALES
         this.TRAILING_PERCENT = 0.003; // 0.3%
         this.RISK_PER_TRADE = 0.10;    
-        this.PANIC_STOP_BALANCE = 80.00; 
+        this.PANIC_STOP_BALANCE = 20.00; 
         this.MIN_TRADE_AMOUNT = 6.00;
         this.EXCHANGE_FEE = 0.001; // 0.1% comisión (Maker/Taker promedio)
     }
