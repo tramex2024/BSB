@@ -111,6 +111,24 @@ function updateAIUI(data) {
     if (confidenceEl && circle) {
         const percent = (data.confidence || 0) * 100;
         confidenceEl.textContent = `${Math.round(percent)}%`;
+        
+        // 1. CÁLCULO DE COLOR DINÁMICO
+        let circleColor = "#3b82f6"; // Azul (Baja confianza/Neutral)
+        
+        if (percent >= 85) {
+            circleColor = "#a855f7"; // Púrpura (¡Confianza Extrema!)
+        } else if (percent >= 70) {
+            circleColor = "#f97316"; // Naranja (Señal Fuerte)
+        } else if (percent >= 50) {
+            circleColor = "#10b981"; // Verde (Tendencia estable)
+        }
+
+        // 2. APLICAR COLOR Y SOMBRA (GLOW)
+        circle.style.stroke = circleColor;
+        circle.style.filter = `drop-shadow(0 0 8px ${circleColor}66)`;
+        confidenceEl.style.color = circleColor;
+
+        // 3. ACTUALIZAR OFFSET DEL CÍRCULO (Perímetro 364.4)
         const offset = 364.4 - (percent / 100) * 364.4;
         circle.style.strokeDashoffset = offset;
     }
