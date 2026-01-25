@@ -58,6 +58,8 @@ class AIEngine {
             highestPrice: this.highestPrice
         });
 
+        this._broadcastStatus();
+
         this._log(this.isRunning ? "🚀 NÚCLEO IA: ONLINE" : "🛑 NÚCLEO IA: OFFLINE", this.isRunning ? 1 : 0);
         return { isRunning: this.isRunning, virtualBalance: this.virtualBalance };
     }
@@ -177,14 +179,28 @@ class AIEngine {
 
     _log(msg, conf, isAnalyzing = false) {
         if (this.io) {
+            // Enviamos la decisión (para el círculo y los textos)
             this.io.emit('ai-decision-update', { 
                 confidence: conf, 
                 message: msg, 
                 isAnalyzing: isAnalyzing 
             });
+
+            // --- AÑADE ESTO: Enviamos el estado (para el botón y balance) ---
+            this._broadcastStatus();
         }
     }
-}
+
+    // --- NUEVA FUNCIÓN AUXILIAR ---
+    _broadcastStatus() {
+        if (this.io) {
+            this.io.emit('ai-status-change', {
+                isRunning: this.isRunning,
+                virtualBalance: this.virtualBalance,
+                historyCount: this.history.length
+            });
+        }
+    }
 
 const engine = new AIEngine();
 module.exports = engine;
