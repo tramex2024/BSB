@@ -136,5 +136,5 @@ export async function initializeAutobotView() {
     });
 
     setActiveTabStyle('tab-all');
-    fetchOrders('opened', auOrderList);
+fetchOrders('all', auOrderList);
 }
