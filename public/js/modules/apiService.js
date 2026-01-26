@@ -120,40 +120,49 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
     const btn = document.getElementById(btnId);
 
-    // 1. Bloqueo visual inmediato
+    // 1. ESTADO TRANSITORIO (Gris con "Starting..." o "Stopping...")
     if (btn) {
         btn.disabled = true;
-        btn.style.opacity = "0.5";
-        btn.innerHTML = `<span class="animate-pulse">WAIT...</span>`;
+        // Quitamos los colores de éxito/error para poner el gris de espera
+        btn.classList.remove('bg-emerald-600', 'bg-red-600');
+        btn.classList.add('bg-slate-600'); 
+        btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
     }
 
-   try {
-    const config = providedConfig || getBotConfiguration();
-    
-    // ✅ USAMOS BARRA (/) PARA COINCIDIR CON EL ROUTER DE EXPRESS
-    const endpoint = `/api/autobot/${action}/${sideKey}`; 
-    
-    console.log(`📡 Enviando petición a: ${endpoint}`); // Para que lo veas en consola
+    try {
+        const config = providedConfig || getBotConfiguration();
+        const endpoint = `/api/autobot/${action}/${sideKey}`; 
+        
+        console.log(`📡 Enviando petición a: ${endpoint}`);
 
-    const data = await privateFetch(endpoint, {
-        method: 'POST',
-        body: JSON.stringify({ config }) 
-    });
+        const data = await privateFetch(endpoint, {
+            method: 'POST',
+            body: JSON.stringify({ config }) 
+        });
 
         if (data && data.success) {
             displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
+            // Nota: No quitamos el color gris aquí porque el Socket llegará en milisegundos 
+            // y ejecutará updateButtonState() poniendo el color final (Verde o Rojo).
             return data;
         } else {
             throw new Error(data?.message || 'Error en servidor');
         }
     } catch (err) {
         displayMessage(err.message, 'error');
-        // Revertimos el botón solo si falla, porque si tiene éxito, 
-        // el socket 'bot-state-update' lo actualizará automáticamente.
+        
+        // REVERSIÓN EN CASO DE ERROR
         if (btn) {
             btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.textContent = isRunning ? `STOP ${sideKey.toUpperCase()}` : `START ${sideKey.toUpperCase()}`;
+            btn.classList.remove('bg-slate-600');
+            // Si falla, vuelve a su color lógico
+            if (isRunning) {
+                btn.classList.add('bg-red-600');
+                btn.textContent = `STOP ${sideKey.toUpperCase()}`;
+            } else {
+                btn.classList.add('bg-emerald-600');
+                btn.textContent = `START ${sideKey.toUpperCase()}`;
+            }
         }
         return { success: false };
     }
