@@ -106,25 +106,24 @@ export function updateControlsState(state) {
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
 
-    // 1. Ejecutamos tu lógica original (No tocamos nada de lo que ya tenías)
+    // 1. Ejecutamos la lógica de controles
     updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
     
-    // 2. 🔥 REFUERZO DE SEGURIDAD (Para que el botón "se entere" pase lo que pase)
-    // Esto asegura que si el estado es STOPPED, el botón cambie visualmente
+    // 2. REFUERZO CORREGIDO (Sin colores grises)
     const btnShort = document.getElementById('austarts-btn');
     if (btnShort && sState === 'STOPPED') {
-        btnShort.innerHTML = `<i class="fas fa-play mr-2"></i> START SHORT`;
-        btnShort.classList.remove('bg-red-500', 'hover:bg-red-600');
-        btnShort.classList.add('bg-slate-600', 'hover:bg-slate-700');
+        btnShort.textContent = `START SHORT`;
+        btnShort.classList.remove('bg-red-600', 'bg-slate-600');
+        btnShort.classList.add('bg-emerald-600'); // <--- VERDE
     }
 
     const btnLong = document.getElementById('austartl-btn');
     if (btnLong && lState === 'STOPPED') {
-        btnLong.innerHTML = `<i class="fas fa-play mr-2"></i> START LONG`;
-        btnLong.classList.remove('bg-red-500', 'hover:bg-red-600');
-        btnLong.classList.add('bg-slate-600', 'hover:bg-slate-700');
+        btnLong.textContent = `START LONG`;
+        btnLong.classList.remove('bg-red-600', 'bg-slate-600');
+        btnLong.classList.add('bg-emerald-600'); // <--- VERDE
     }
     
     updateStatusBadge('lstate-badge', lState);
