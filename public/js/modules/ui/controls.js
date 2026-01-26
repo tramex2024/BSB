@@ -3,8 +3,8 @@
 const ACTIVE_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
 
 const STATUS_COLORS = {
-    'RUNNING': '#10b981',      // Esmeralda
-    'STOPPED': '#9ca3af',      // Gris para el texto de estado
+    'RUNNING': '#10b981',      // Esmeralda (Vivo)
+    'STOPPED': '#475569',      // Slate (Un gris azulado más profesional, no "muerto")
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo    
     'PAUSED': '#fb923c'    
