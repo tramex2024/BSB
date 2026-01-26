@@ -29,23 +29,22 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     }
 
     // 2. El Botón: Forzamos Verde o Rojo
-    if (btn) {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        
-        // Limpiamos CUALQUIER clase de color previa para evitar el gris
-        btn.classList.remove('bg-gray-500', 'bg-slate-600', 'bg-red-600', 'bg-emerald-600');
-
-        if (isBusy) {
-            // ESTADO ACTIVO -> BOTÓN ROJO
-            btn.textContent = `STOP ${typeLabel}`;
-            btn.classList.add('bg-red-600');
-        } else {
-            // ESTADO DETENIDO -> BOTÓN VERDE
-            btn.textContent = `START ${typeLabel}`;
-            btn.classList.add('bg-emerald-600');
-        }
+   if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    
+    // Cambiamos el texto
+    btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
+    
+    // REEMPLAZO DINÁMICO DE CLASES
+    if (isBusy) {
+        // Si está corriendo, quitamos verde y ponemos rojo
+        btn.classList.replace('bg-emerald-600', 'bg-red-600');
+    } else {
+        // Si está detenido, quitamos rojo y ponemos verde
+        btn.classList.replace('bg-red-600', 'bg-emerald-600');
     }
+}
 
     // 3. Inputs: Se habilitan si NO está busy
     inputIds.forEach(id => {
