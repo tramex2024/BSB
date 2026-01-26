@@ -1,10 +1,11 @@
 // public/js/modules/ui/controls.js
 
-const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'STOPPED'];
+// ✅ QUITAMOS 'STOPPED' DE ESTA LISTA
+const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      // Esmeralda
-    'STOPPED': '#ef4444',      // Rojo
+    'STOPPED': '#9ca3af',      // Gris (Cambiado de rojo a gris para que no asuste)
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo    
     'PAUSED': '#fb923c'    
@@ -12,10 +13,12 @@ const STATUS_COLORS = {
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
+    
+    // Ahora 'STOPPED' devolverá FALSE aquí
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    const typeKey = type.charAt(0).toLowerCase(); // 'l' o 's'
+    const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
@@ -23,24 +26,25 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
-        label.style.fontWeight = "bold";
     }
 
     // 2. ACTUALIZAR BOTÓN
     if (btn) {
+        // Si no está busy (ej: STOPPED), dirá "START"
         btn.textContent = isBusy ? `STOP ${type.charAt(0)}` : `START ${type.charAt(0)}`;
         
         if (isBusy) {
             btn.classList.remove('bg-emerald-600');
             btn.classList.add('bg-red-600');
         } else {
+            // Cuando sea STOPPED, entrará aquí y se pondrá verde/esmeralda para invitar a iniciar
             btn.classList.remove('bg-red-600');
             btn.classList.add('bg-emerald-600');
         }
         btn.disabled = false;
     }
 
-    // 3. GESTIÓN DE INPUTS
+    // 3. GESTIÓN DE INPUTS (Ahora se desbloquean al estar STOPPED)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {

@@ -7,6 +7,7 @@ const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
 
 const { 
     calculateLongCoverage, 
@@ -48,34 +49,68 @@ function log(message, type = 'info') {
  */
 async function syncFrontendState(currentPrice, botState) {
     if (io && botState) {
-        // Consolidamos todo en un solo evento para evitar ráfagas que bloqueen la UI
+        // Forzamos el parseo para evitar que strings ensucien el Dashboard
+        const priceToEmit = parseFloat(currentPrice || lastCyclePrice || 0);
+
         io.emit('bot-state-update', { 
             ...botState, 
-            price: currentPrice || lastCyclePrice 
+            price: priceToEmit,
+            // Agregamos un timestamp para que el Front sepa que es data fresca
+            serverTime: Date.now() 
         });
     }
 }
 
 /**
  * Persistencia Atómica: Guarda cambios y garantiza el desbloqueo del Front
+ * Optimizada para evitar que ciclos automáticos sobreescriban el STOP manual.
  */
 async function commitChanges(changeSet, currentPrice) {
     try {
         let updated;
+        
+        // --- PROTECCIÓN DE ESTADO (Anti-Rebote) ---
+        // Si el changeSet intenta poner RUNNING pero en la base de datos ya está STOPPED,
+        // respetamos el STOPPED manual del usuario.
+        const currentState = await Autobot.findOne({}).lean();
+        
+        if (currentState) {
+            if (currentState.lstate === 'STOPPED' && changeSet.lstate === 'RUNNING') {
+                delete changeSet.lstate; 
+            }
+            if (currentState.sstate === 'STOPPED' && changeSet.sstate === 'RUNNING') {
+                delete changeSet.sstate;
+            }
+        }
+
         if (Object.keys(changeSet).length > 0) {
             changeSet.lastUpdate = new Date();
-            updated = await Autobot.findOneAndUpdate({}, { $set: changeSet }, { new: true }).lean();
+            
+            // Usamos $set para actualizar solo los campos modificados
+            updated = await Autobot.findOneAndUpdate(
+                {}, 
+                { $set: changeSet }, 
+                { new: true, runValidators: true }
+            ).lean();
+            
+            // Debug opcional para ver qué está enviando el motor al socket
+            // console.log(`[COMMIT] L:${updated.lstate} S:${updated.sstate} Price:${currentPrice}`);
         } else {
-            // Si no hay cambios, buscamos el estado actual para confirmar al front
-            updated = await Autobot.findOne({}).lean();
+            // Si no hay cambios (ciclo sin trades), usamos el estado actual para refrescar el Front
+            updated = currentState;
         }
 
         if (updated) {
+            // 📢 Esta es la llamada que "despierta" al botón en el Frontend
             await syncFrontendState(currentPrice, updated);
         }
+        
         return updated;
     } catch (error) {
-        console.error(`[DB ATOMIC ERROR]: ${error.message}`);
+        console.error(`❌ [DB ATOMIC ERROR]: ${error.message}`);
+        // Intentamos al menos sincronizar el estado actual para no dejar el front colgado
+        const fallback = await Autobot.findOne({}).lean();
+        if (fallback) await syncFrontendState(currentPrice, fallback);
         return null;
     }
 }
@@ -125,18 +160,19 @@ async function updateConfig(newConfig) {
 }
 
 async function startSide(side, config) {
-    const update = {};
-    if (side === 'long') {
-        update.lstate = 'RUNNING';
-        if (config.long) config.long.enabled = true;
-    } else {
-        update.sstate = 'RUNNING';
-        if (config.short) config.short.enabled = true;
-    }
-    update.config = config;
+    const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
+    const update = {
+        ...cleanData, // 🔥 Limpia rastro antes de arrancar
+        [side === 'long' ? 'lstate' : 'sstate']: 'RUNNING',
+        config: config
+    };
+    
+    // Aseguramos que el flag de habilitado esté sincronizado
+    if (side === 'long' && update.config.long) update.config.long.enabled = true;
+    if (side === 'short' && update.config.short) update.config.short.enabled = true;
 
     const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
-    log(`🚀 Estrategia ${side.toUpperCase()} activada`, 'success');
+    log(`🚀 Estrategia ${side.toUpperCase()} activada y estado reseteado`, 'success');
     
     await slowBalanceCacheUpdate();
     return bot;
@@ -146,20 +182,40 @@ async function stopSide(side) {
     const botState = await Autobot.findOne({}).lean();
     if (!botState) throw new Error("Bot no encontrado");
 
-    const update = {};
-    const newConfig = { ...botState.config };
+    // 1. Identificar qué limpiar según el lado
+    const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
+    const stateField = side === 'long' ? 'lstate' : 'sstate'; 
 
-    if (side === 'long') {
-        update.lstate = 'STOPPED';
-        if (newConfig.long) newConfig.long.enabled = false;
-    } else {
-        update.sstate = 'STOPPED';
-        if (newConfig.short) newConfig.short.enabled = false;
+    // 2. Construir el objeto de actualización con limpieza profunda
+    const update = {
+        ...cleanData,
+        [stateField]: 'STOPPED',
+        lastUpdate: new Date()
+    };
+    
+    // 3. Sincronizar la configuración para que el flag 'enabled' coincida
+    const newConfig = { ...botState.config };
+    if (side === 'long' && newConfig.long) {
+        newConfig.long.enabled = false;
+    } else if (side === 'short' && newConfig.short) {
+        newConfig.short.enabled = false;
     }
     update.config = newConfig;
 
-    const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
-    log(`🛑 Estrategia ${side.toUpperCase()} detenida`, 'warning');
+    // 4. Persistir en Base de Datos
+    const bot = await Autobot.findOneAndUpdate(
+        {}, 
+        { $set: update }, 
+        { new: true }
+    ).lean();
+    
+    // 🔥 SOLUCIÓN MAESTRA: Notificar inmediatamente al socket.
+    // Sin esto, el frontend se queda "congelado" esperando al siguiente botCycle.
+    if (bot) {
+        await syncFrontendState(lastCyclePrice, bot);
+    }
+
+    log(`🛑 Estrategia ${side.toUpperCase()} detenida y datos purgados.`, 'warning');
     return bot;
 }
 

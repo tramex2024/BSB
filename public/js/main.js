@@ -107,17 +107,22 @@ export function initializeFullApp() {
         }
     });
 
-    socket.on('bot-state-update', (state) => {
+   socket.on('bot-state-update', (state) => {
         if (state) {
+            // ✅ Mezcla el estado nuevo con el actual
             Object.assign(currentBotState, state);
-            // Sincronizar balance de IA si viene en el estado
+            
+            // Sincronizar balance de IA... (tu código actual)
             if(state.virtualAiBalance) {
                 const balEl = document.getElementById('ai-virtual-balance');
                 if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
             }
         }
+
+        // 🔥 CRÍTICO: Estas dos funciones deben ser capaces de encontrar los botones
+        // aunque se acabe de cambiar de pestaña.
         updateBotUI(currentBotState);
-        updateControlsState(currentBotState);
+        updateControlsState(currentBotState); 
     });
 
     // 🧠 LISTENERS ESPECÍFICOS DE IA (Dentro de la inicialización)
@@ -212,8 +217,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // Detectar cuando el usuario vuelve a la pestaña
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && socket && socket.connected) {
-        console.log("🔄 Sincronizando estados de bots...");
-        socket.emit('get-bot-state');
-        socket.emit('get-ai-status');
+        console.log("🔄 Sincronizando estados de bots (Autobot + AI)...");
+        
+        // 1. Pedir estados actualizados al servidor
+        socket.emit('get-bot-state'); // Para el Autobot (Long/Short)
+        socket.emit('get-ai-status');  // Para el AI Bot
+        
+        // 2. Opcional: Refresco visual inmediato con lo que hay en memoria
+        // Esto evita que el usuario vea datos viejos mientras el socket responde
+        updateControlsState(currentBotState);
+        if (typeof aiBotUI !== 'undefined') {
+            aiBotUI.setRunningStatus(currentBotState.isRunning);
+        }
     }
 });

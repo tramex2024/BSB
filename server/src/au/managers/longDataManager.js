@@ -142,15 +142,12 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
 
         // ✅ RESET TOTAL A RAÍZ
         await updateGeneralBotState({
-            ...CLEAN_LONG_ROOT,
-            lbalance: newLBalance,
-            lpc: 0,
-            lpm: 0,
-            ltprice: 0,
-            total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
-            lcycle: (Number(botStateObj.lcycle || 0) + 1),
-            'config.long.enabled': !shouldStopLong 
-        });
+    ...CLEAN_LONG_ROOT, 
+    lbalance: newLBalance, // Este valor es vital mantenerlo
+    total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
+    lcycle: (Number(botStateObj.lcycle || 0) + 1),
+    'config.long.enabled': !shouldStopLong 
+});
         
         log(`💰 [L-DATA] Ciclo Long Cerrado: +${profitNeto.toFixed(2)} USDT.`, 'success');
         
