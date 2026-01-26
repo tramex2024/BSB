@@ -12,46 +12,47 @@ const STATUS_COLORS = {
 };
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
-    // 1. Validar estado y definir si el bot está ocupado
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
+    const typeLabel = type.toUpperCase();
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 2. Actualizar etiqueta de estado
+    // 1. Etiqueta de estado (texto arriba del botón)
     if (label) {
         label.textContent = currentStatus;
-        label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
+        // Verde si está activo, gris azulado si está parado
+        label.style.color = isBusy ? '#10b981' : '#64748b'; 
     }
 
-    // 3. Restaurar Botón Verde/Rojo original
+    // 2. El Botón: Forzamos Verde o Rojo
     if (btn) {
         btn.disabled = false;
         btn.style.opacity = "1";
         
-        // Texto: START SHORT / STOP SHORT
-        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
-        
+        // Limpiamos CUALQUIER clase de color previa para evitar el gris
+        btn.classList.remove('bg-gray-500', 'bg-slate-600', 'bg-red-600', 'bg-emerald-600');
+
         if (isBusy) {
-            // Si está corriendo -> Rojo
-            btn.classList.remove('bg-emerald-600');
+            // ESTADO ACTIVO -> BOTÓN ROJO
+            btn.textContent = `STOP ${typeLabel}`;
             btn.classList.add('bg-red-600');
         } else {
-            // Si está detenido -> Verde
-            btn.classList.remove('bg-red-600');
+            // ESTADO DETENIDO -> BOTÓN VERDE
+            btn.textContent = `START ${typeLabel}`;
             btn.classList.add('bg-emerald-600');
         }
     }
 
-    // 4. Gestión de Inputs
+    // 3. Inputs: Se habilitan si NO está busy
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = isBusy;
-            el.style.opacity = isBusy ? "0.6" : "1";
+            el.style.opacity = isBusy ? "0.5" : "1";
         }
     });
 }
