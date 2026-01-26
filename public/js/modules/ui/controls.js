@@ -33,16 +33,16 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     btn.disabled = false;
     btn.style.opacity = "1";
     
-    // Cambiamos el texto
-    btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
+    // 1. Siempre quitamos ambos colores para limpiar el rastro
+    btn.classList.remove('bg-emerald-600', 'bg-red-600');
     
-    // REEMPLAZO DINÁMICO DE CLASES
+    // 2. Aplicamos el que corresponde según el estado
     if (isBusy) {
-        // Si está corriendo, quitamos verde y ponemos rojo
-        btn.classList.replace('bg-emerald-600', 'bg-red-600');
+        btn.textContent = `STOP ${type.toUpperCase()}`;
+        btn.classList.add('bg-red-600');
     } else {
-        // Si está detenido, quitamos rojo y ponemos verde
-        btn.classList.replace('bg-red-600', 'bg-emerald-600');
+        btn.textContent = `START ${type.toUpperCase()}`;
+        btn.classList.add('bg-emerald-600');
     }
 }
 
