@@ -3,51 +3,49 @@
 const ACTIVE_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
 
 const STATUS_COLORS = {
-    'RUNNING': '#10b981',      // Esmeralda (Vivo)
-    'STOPPED': '#475569',      // Slate (Un gris azulado más profesional, no "muerto")
-    'BUYING': '#60a5fa',       // Azul
-    'SELLING': '#fbbf24',      // Amarillo    
+    'RUNNING': '#10b981',
+    'STOPPED': '#ef4444',
+    'BUYING': '#60a5fa',
+    'SELLING': '#fbbf24',    
     'PAUSED': '#fb923c'    
 };
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
-    const isActive = ACTIVE_STATES.includes(currentStatus);
+    const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    const typeLabel = type.toUpperCase(); 
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. Etiqueta de estado (texto arriba del botón)
+    // 1. Etiqueta de estado
     if (label) {
         label.textContent = currentStatus;
-        label.style.color = isActive ? '#10b981' : '#9ca3af'; // Verde si corre, gris si no
+        label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
-    // 2. El Botón: Verde para START, Rojo para STOP
+    // 2. Botón (Verde para START, Rojo para STOP)
     if (btn) {
+        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
+        
+        if (isBusy) {
+            btn.classList.remove('bg-emerald-600');
+            btn.classList.add('bg-red-600');
+        } else {
+            btn.classList.remove('bg-red-600');
+            btn.classList.add('bg-emerald-600');
+        }
         btn.disabled = false;
         btn.style.opacity = "1";
-
-        if (isActive) {
-            // ESTADO ACTIVO -> BOTÓN ROJO
-            btn.textContent = `STOP ${typeLabel}`;
-            btn.className = "w-full py-3 rounded-xl font-bold transition-all duration-200 bg-red-600 hover:bg-red-700 text-white";
-        } else {
-            // ESTADO DETENIDO -> BOTÓN VERDE (ESMERALDA)
-            btn.textContent = `START ${typeLabel}`;
-            btn.className = "w-full py-3 rounded-xl font-bold transition-all duration-200 bg-emerald-600 hover:bg-emerald-700 text-white";
-        }
     }
 
-    // 3. Inputs (Se habilitan solo si está detenido)
+    // 3. Inputs
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            el.disabled = isActive;
-            el.style.opacity = isActive ? "0.5" : "1";
+            el.disabled = isBusy;
+            el.style.opacity = isBusy ? "0.6" : "1";
         }
     });
 }
