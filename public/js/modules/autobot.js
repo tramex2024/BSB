@@ -7,7 +7,7 @@ import { sendConfigToBackend, toggleBotSideState } from './apiService.js';
 import { TRADE_SYMBOL_TV, socket, currentBotState } from '../main.js';
 
 const MIN_USDT_AMOUNT = 5.00;
-let currentTab = 'opened';
+let currentTab = 'All';
 let configDebounceTimeout = null;
 
 function validateSideInputs(side) {
