@@ -127,16 +127,18 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         btn.innerHTML = `<span class="animate-pulse">WAIT...</span>`;
     }
 
-    try {
-        const config = providedConfig || getBotConfiguration();
-        
-        // Ajustamos la ruta para que coincida con el backend (start-long / stop-long)
-        const endpoint = `/api/autobot/${action}-${sideKey}`; 
-        
-        const data = await privateFetch(endpoint, {
-            method: 'POST',
-            body: JSON.stringify({ config }) 
-        });
+   try {
+    const config = providedConfig || getBotConfiguration();
+    
+    // ✅ USAMOS BARRA (/) PARA COINCIDIR CON EL ROUTER DE EXPRESS
+    const endpoint = `/api/autobot/${action}/${sideKey}`; 
+    
+    console.log(`📡 Enviando petición a: ${endpoint}`); // Para que lo veas en consola
+
+    const data = await privateFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ config }) 
+    });
 
         if (data && data.success) {
             displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
