@@ -13,47 +13,41 @@ const STATUS_COLORS = {
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isActive = ACTIVE_STATES.includes(currentStatus);
-    const isStopped = currentStatus === 'STOPPED';
 
     const btn = document.getElementById(btnId);
-    const typeLabel = type.toUpperCase(); // Ej: "SHORT" o "LONG"
+    const typeLabel = type.toUpperCase(); 
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. ACTUALIZAR ETIQUETA DE TEXTO (Encima del botón)
+    // 1. Etiqueta de estado (texto arriba del botón)
     if (label) {
         label.textContent = currentStatus;
-        label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
+        label.style.color = isActive ? '#10b981' : '#9ca3af'; // Verde si corre, gris si no
     }
 
-    // 2. ACTUALIZAR BOTÓN (Colores y Texto)
+    // 2. El Botón: Verde para START, Rojo para STOP
     if (btn) {
-        // Aseguramos que el botón esté habilitado y con opacidad normal
         btn.disabled = false;
         btn.style.opacity = "1";
 
         if (isActive) {
-            // EL BOTÓN ESTÁ CORRIENDO -> ROJO PARA DETENER
+            // ESTADO ACTIVO -> BOTÓN ROJO
             btn.textContent = `STOP ${typeLabel}`;
-            btn.classList.remove('bg-emerald-600', 'bg-slate-600', 'hover:bg-emerald-700');
-            btn.classList.add('bg-red-600', 'hover:bg-red-700');
+            btn.className = "w-full py-3 rounded-xl font-bold transition-all duration-200 bg-red-600 hover:bg-red-700 text-white";
         } else {
-            // EL BOTÓN ESTÁ DETENIDO -> VERDE PARA INICIAR
+            // ESTADO DETENIDO -> BOTÓN VERDE (ESMERALDA)
             btn.textContent = `START ${typeLabel}`;
-            btn.classList.remove('bg-red-600', 'bg-slate-600', 'hover:bg-red-700');
-            btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+            btn.className = "w-full py-3 rounded-xl font-bold transition-all duration-200 bg-emerald-600 hover:bg-emerald-700 text-white";
         }
     }
 
-    // 3. GESTIÓN DE INPUTS
+    // 3. Inputs (Se habilitan solo si está detenido)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            // Si el bot está activo, bloqueamos la edición
             el.disabled = isActive;
-            el.style.opacity = isActive ? "0.6" : "1";
-            el.style.cursor = isActive ? "not-allowed" : "text";
+            el.style.opacity = isActive ? "0.5" : "1";
         }
     });
 }
