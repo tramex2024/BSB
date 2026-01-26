@@ -112,10 +112,12 @@ export async function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-20 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
 
     try {
-        // ✅ CORRECCIÓN: Si es 'all', usamos un endpoint que traiga todo, o manejamos la lógica de filtrado global
-        const endpoint = (status === 'all') ? 'history' : status; 
+        const endpoint = status === 'all' ? 'filled' : status; 
         
+        // --- CÁLCULO DE RANGO DE 15 DÍAS ---
         const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
+        
+        // Añadimos el parámetro start_time a la URL
         const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
         url.searchParams.append('startTime', fifteenDaysAgo); 
 
@@ -126,8 +128,6 @@ export async function fetchOrders(status, orderListElement) {
         if (!response.ok) throw new Error("Error en API de órdenes");
         const data = await response.json();
         const orders = Array.isArray(data) ? data : (data.orders || []);
-        
-        // Pasamos 'status' (que será 'all') para que displayOrders no filtre nada
         displayOrders(orders, orderListElement, status);
     } catch (error) {
         console.error("Fetch error:", error);
@@ -138,17 +138,12 @@ export async function fetchOrders(status, orderListElement) {
 export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
     const orderListElement = document.getElementById(listElementId);
     if (!orderListElement) return;
-
-    // ✅ CORRECCIÓN: Permitimos que 'all' también se actualice en tiempo real
-    if (activeOrderTab !== 'opened' && activeOrderTab !== 'all') return;
-
+    if (activeOrderTab === 'all') return; 
+    if (activeOrderTab !== 'opened') return;
     const orders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
-    
-    if (orders.length === 0 && activeOrderTab === 'opened') {
+    if (orders.length === 0) {
         orderListElement.innerHTML = `<div class="py-12 text-center text-gray-600 font-bold uppercase text-[10px]">No hay órdenes abiertas</div>`;
         return;
     }
-    
-    // Renderizamos según el filtro actual
-    displayOrders(orders, orderListElement, activeOrderTab);
+    orderListElement.innerHTML = orders.map(order => createOrderHtml(order)).join('');
 }
