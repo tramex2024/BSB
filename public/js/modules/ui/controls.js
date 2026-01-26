@@ -14,44 +14,42 @@ const STATUS_COLORS = {
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
-
     const btn = document.getElementById(btnId);
-    const typeLabel = type.toUpperCase();
-    const typeKey = type.charAt(0).toLowerCase(); 
-    const labelId = `aubot-${typeKey}state`; 
-    const label = document.getElementById(labelId);
 
-    // 1. Etiqueta de estado (texto arriba del botón)
-    if (label) {
-        label.textContent = currentStatus;
-        // Verde si está activo, gris azulado si está parado
-        label.style.color = isBusy ? '#10b981' : '#64748b'; 
+    if (!btn) return;
+
+    // 1. ANALIZAR Y LIMPIAR: Eliminamos cualquier clase que empiece por 'bg-'
+    // Esto garantiza que no haya colisiones de colores.
+    const classesToRemove = Array.from(btn.classList).filter(c => c.startsWith('bg-'));
+    if (classesToRemove.length > 0) {
+        btn.classList.remove(...classesToRemove);
     }
 
-    // 2. El Botón: Forzamos Verde o Rojo
-   if (btn) {
-    btn.disabled = false;
-    btn.style.opacity = "1";
-    
-    // 1. Siempre quitamos ambos colores para limpiar el rastro
-    btn.classList.remove('bg-emerald-600', 'bg-red-600');
-    
-    // 2. Aplicamos el que corresponde según el estado
+    // 2. APLICAR LÓGICA DE ESTADO
     if (isBusy) {
+        // ESTADO ACTIVO -> ROJO
         btn.textContent = `STOP ${type.toUpperCase()}`;
         btn.classList.add('bg-red-600');
     } else {
+        // ESTADO DETENIDO -> VERDE
         btn.textContent = `START ${type.toUpperCase()}`;
         btn.classList.add('bg-emerald-600');
     }
-}
 
-    // 3. Inputs: Se habilitan si NO está busy
+    // 3. ACTUALIZAR ETIQUETA DE ESTADO (Texto pequeño)
+    const typeKey = type.charAt(0).toLowerCase(); 
+    const label = document.getElementById(`aubot-${typeKey}state`);
+    if (label) {
+        label.textContent = currentStatus;
+        label.style.color = isBusy ? '#10b981' : '#ef4444'; 
+    }
+
+    // 4. INPUTS
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = isBusy;
-            el.style.opacity = isBusy ? "0.5" : "1";
+            el.style.opacity = isBusy ? "0.6" : "1";
         }
     });
 }
