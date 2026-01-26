@@ -1,52 +1,52 @@
 // public/js/modules/ui/controls.js
 
-const ACTIVE_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
+// ✅ Restauramos la constante vital que faltaba
+const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      // Esmeralda
-    'STOPPED': '#ef4444',      // Rojo (Para el texto de estado)
+    'STOPPED': '#ef4444',      // Rojo
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo    
     'PAUSED': '#fb923c'    
 };
 
-/**
- * Actualiza el botón y los inputs según el estado del bot
- */
 export function updateButtonState(btnId, status, type, inputIds = []) {
+    // 1. Validar estado y definir si el bot está ocupado
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    const typeLabel = type.toUpperCase();
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. Etiqueta de texto (arriba del botón)
+    // 2. Actualizar etiqueta de estado
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
-    // 2. Botón (VERDE para Start, ROJO para Stop)
+    // 3. Restaurar Botón Verde/Rojo original
     if (btn) {
         btn.disabled = false;
         btn.style.opacity = "1";
         
-        // Texto dinámico: START LONG / STOP LONG etc.
-        btn.textContent = isBusy ? `STOP ${typeLabel}` : `START ${typeLabel}`;
+        // Texto: START SHORT / STOP SHORT
+        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
         
         if (isBusy) {
+            // Si está corriendo -> Rojo
             btn.classList.remove('bg-emerald-600');
             btn.classList.add('bg-red-600');
         } else {
+            // Si está detenido -> Verde
             btn.classList.remove('bg-red-600');
             btn.classList.add('bg-emerald-600');
         }
     }
 
-    // 3. Gestión de Inputs (Se desbloquean si no está Busy)
+    // 4. Gestión de Inputs
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -57,34 +57,37 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
 }
 
 /**
- * Recolecta los datos de la web para enviarlos al servidor.
+ * Recolecta datos de la UI
  */
 export function collectConfigFromUI() {
+    const getVal = (id) => parseFloat(document.getElementById(id)?.value) || 0;
+    const getCheck = (id) => document.getElementById(id)?.checked || false;
+
     return {
         symbol: "BTC_USDT",
         long: {
-            amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
-            purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
-            size_var: parseFloat(document.getElementById('auincrementl')?.value) || 0,
-            price_var: parseFloat(document.getElementById('audecrementl')?.value) || 0,
-            price_step_inc: parseFloat(document.getElementById('aupricestep-l')?.value) || 0,
-            profit_percent: parseFloat(document.getElementById('autriggerl')?.value) || 0,
-            stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false
+            amountUsdt: getVal('auamountl-usdt'),
+            purchaseUsdt: getVal('aupurchasel-usdt'),
+            size_var: getVal('auincrementl'),
+            price_var: getVal('audecrementl'),
+            price_step_inc: getVal('aupricestep-l'),
+            profit_percent: getVal('autriggerl'),
+            stopAtCycle: getCheck('au-stop-long-at-cycle')
         },
         short: {
-            amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
-            purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
-            size_var: parseFloat(document.getElementById('auincrements')?.value) || 0,
-            price_var: parseFloat(document.getElementById('audecrements')?.value) || 0,
-            price_step_inc: parseFloat(document.getElementById('aupricestep-s')?.value) || 0,
-            profit_percent: parseFloat(document.getElementById('autriggers')?.value) || 0,
-            stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false
+            amountUsdt: getVal('auamounts-usdt'),
+            purchaseUsdt: getVal('aupurchases-usdt'),
+            size_var: getVal('auincrements'),
+            price_var: getVal('audecrements'),
+            price_step_inc: getVal('aupricestep-s'),
+            profit_percent: getVal('autriggers'),
+            stopAtCycle: getCheck('au-stop-short-at-cycle')
         }
     };
 }
 
 /**
- * Sincroniza los valores de los inputs con la configuración de la DB
+ * Sincroniza inputs desde la configuración
  */
 export function syncInputsFromConfig(conf) {
     if (!conf) return;
@@ -106,7 +109,7 @@ export function syncInputsFromConfig(conf) {
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
         if (input && value !== undefined && document.activeElement !== input) {
-            input.value = parseFloat(value) || 0;
+            input.value = value;
         }
     }
     
