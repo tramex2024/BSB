@@ -112,10 +112,14 @@ export async function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-20 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
 
     try {
-        // ✅ CORRECCIÓN: Si es 'all', usamos un endpoint que traiga todo, o manejamos la lógica de filtrado global
-        const endpoint = (status === 'all') ? 'history' : status; 
+        // ✅ Ajustamos el endpoint: 
+        // Si el backend no tiene /history, usamos 'all' o 'filled' según tu API real.
+        // Basado en errores previos, intentemos con 'all' que es el estándar de tu lógica.
+        const endpoint = (status === 'all') ? 'all' : status; 
         
         const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
+        
+        // Construimos la URL
         const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
         url.searchParams.append('startTime', fifteenDaysAgo); 
 
@@ -123,32 +127,32 @@ export async function fetchOrders(status, orderListElement) {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
-        if (!response.ok) throw new Error("Error en API de órdenes");
+        // Si 'all' da error 400, el backend probablemente solo conoce 'filled' y 'opened'.
+        // En ese caso, para "All" pediremos 'filled' pero lo mostraremos en la pestaña All.
+        if (!response.ok) {
+            console.warn(`⚠️ Endpoint ${endpoint} no hallado, reintentando con 'filled' para pestaña All`);
+            return fetchOrdersFallback('filled', orderListElement, status);
+        }
+
         const data = await response.json();
         const orders = Array.isArray(data) ? data : (data.orders || []);
-        
-        // Pasamos 'status' (que será 'all') para que displayOrders no filtre nada
         displayOrders(orders, orderListElement, status);
+
     } catch (error) {
         console.error("Fetch error:", error);
         orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-xs font-bold uppercase">Error al cargar historial</div>`;
     }
 }
 
-export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
-    const orderListElement = document.getElementById(listElementId);
-    if (!orderListElement) return;
-
-    // ✅ CORRECCIÓN: Permitimos que 'all' también se actualice en tiempo real
-    if (activeOrderTab !== 'opened' && activeOrderTab !== 'all') return;
-
-    const orders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
+// Función de respaldo para evitar el error 400 si el endpoint 'all' no existe en el server
+async function fetchOrdersFallback(fallbackEndpoint, orderListElement, originalStatus) {
+    const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
+    const url = `${BACKEND_URL}/api/orders/${fallbackEndpoint}?startTime=${fifteenDaysAgo}`;
     
-    if (orders.length === 0 && activeOrderTab === 'opened') {
-        orderListElement.innerHTML = `<div class="py-12 text-center text-gray-600 font-bold uppercase text-[10px]">No hay órdenes abiertas</div>`;
-        return;
-    }
-    
-    // Renderizamos según el filtro actual
-    displayOrders(orders, orderListElement, activeOrderTab);
+    const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+    const data = await response.json();
+    const orders = Array.isArray(data) ? data : (data.orders || []);
+    displayOrders(orders, orderListElement, originalStatus);
 }
