@@ -1,11 +1,10 @@
 // public/js/modules/ui/controls.js
 
-// ✅ QUITAMOS 'STOPPED' DE ESTA LISTA
-const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
+const ACTIVE_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      // Esmeralda
-    'STOPPED': '#9ca3af',      // Gris (Cambiado de rojo a gris para que no asuste)
+    'STOPPED': '#9ca3af',      // Gris para el texto de estado
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo    
     'PAUSED': '#fb923c'    
@@ -13,44 +12,48 @@ const STATUS_COLORS = {
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
-    
-    // Ahora 'STOPPED' devolverá FALSE aquí
-    const isBusy = BUSY_STATES.includes(currentStatus);
+    const isActive = ACTIVE_STATES.includes(currentStatus);
+    const isStopped = currentStatus === 'STOPPED';
 
     const btn = document.getElementById(btnId);
+    const typeLabel = type.toUpperCase(); // Ej: "SHORT" o "LONG"
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. ACTUALIZAR ETIQUETA
+    // 1. ACTUALIZAR ETIQUETA DE TEXTO (Encima del botón)
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
-    // 2. ACTUALIZAR BOTÓN
+    // 2. ACTUALIZAR BOTÓN (Colores y Texto)
     if (btn) {
-        // Si no está busy (ej: STOPPED), dirá "START"
-        btn.textContent = isBusy ? `STOP ${type.charAt(0)}` : `START ${type.charAt(0)}`;
-        
-        if (isBusy) {
-            btn.classList.remove('bg-emerald-600');
-            btn.classList.add('bg-red-600');
-        } else {
-            // Cuando sea STOPPED, entrará aquí y se pondrá verde/esmeralda para invitar a iniciar
-            btn.classList.remove('bg-red-600');
-            btn.classList.add('bg-emerald-600');
-        }
+        // Aseguramos que el botón esté habilitado y con opacidad normal
         btn.disabled = false;
+        btn.style.opacity = "1";
+
+        if (isActive) {
+            // EL BOTÓN ESTÁ CORRIENDO -> ROJO PARA DETENER
+            btn.textContent = `STOP ${typeLabel}`;
+            btn.classList.remove('bg-emerald-600', 'bg-slate-600', 'hover:bg-emerald-700');
+            btn.classList.add('bg-red-600', 'hover:bg-red-700');
+        } else {
+            // EL BOTÓN ESTÁ DETENIDO -> VERDE PARA INICIAR
+            btn.textContent = `START ${typeLabel}`;
+            btn.classList.remove('bg-red-600', 'bg-slate-600', 'hover:bg-red-700');
+            btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        }
     }
 
-    // 3. GESTIÓN DE INPUTS (Ahora se desbloquean al estar STOPPED)
+    // 3. GESTIÓN DE INPUTS
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            el.disabled = isBusy;
-            el.style.opacity = isBusy ? "0.6" : "1";
-            el.style.cursor = isBusy ? "not-allowed" : "text";
+            // Si el bot está activo, bloqueamos la edición
+            el.disabled = isActive;
+            el.style.opacity = isActive ? "0.6" : "1";
+            el.style.cursor = isActive ? "not-allowed" : "text";
         }
     });
 }
