@@ -3,31 +3,39 @@
 const ACTIVE_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
 
 const STATUS_COLORS = {
-    'RUNNING': '#10b981',
-    'STOPPED': '#ef4444',
-    'BUYING': '#60a5fa',
-    'SELLING': '#fbbf24',    
+    'RUNNING': '#10b981',      // Esmeralda
+    'STOPPED': '#ef4444',      // Rojo (Para el texto de estado)
+    'BUYING': '#60a5fa',       // Azul
+    'SELLING': '#fbbf24',      // Amarillo    
     'PAUSED': '#fb923c'    
 };
 
+/**
+ * Actualiza el botón y los inputs según el estado del bot
+ */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
+    const typeLabel = type.toUpperCase();
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. Etiqueta de estado
+    // 1. Etiqueta de texto (arriba del botón)
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
-    // 2. Botón (Verde para START, Rojo para STOP)
+    // 2. Botón (VERDE para Start, ROJO para Stop)
     if (btn) {
-        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        
+        // Texto dinámico: START LONG / STOP LONG etc.
+        btn.textContent = isBusy ? `STOP ${typeLabel}` : `START ${typeLabel}`;
         
         if (isBusy) {
             btn.classList.remove('bg-emerald-600');
@@ -36,11 +44,9 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
             btn.classList.remove('bg-red-600');
             btn.classList.add('bg-emerald-600');
         }
-        btn.disabled = false;
-        btn.style.opacity = "1";
     }
 
-    // 3. Inputs
+    // 3. Gestión de Inputs (Se desbloquean si no está Busy)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -51,8 +57,7 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
 }
 
 /**
- * ✅ NUEVA FUNCIÓN: Recolecta los datos de la web para enviarlos al servidor.
- * Úsala en main.js antes de hacer el POST a /api/autobot/update-config
+ * Recolecta los datos de la web para enviarlos al servidor.
  */
 export function collectConfigFromUI() {
     return {
@@ -101,12 +106,10 @@ export function syncInputsFromConfig(conf) {
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
         if (input && value !== undefined && document.activeElement !== input) {
-            const newVal = parseFloat(value) || 0;
-            input.value = newVal;
+            input.value = parseFloat(value) || 0;
         }
     }
     
-    // Checkboxes
     ['long', 'short'].forEach(side => {
         const el = document.getElementById(`au-stop-${side}-at-cycle`);
         if (el && document.activeElement !== el) {
