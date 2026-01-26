@@ -6,8 +6,8 @@ import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, socket, currentBotState } from '../main.js';
 
-const MIN_USDT_AMOUNT = 5.00;
-let currentTab = 'All';
+const MIN_USDT_AMOUNT = 6.00;
+let currentTab = 'all';
 let configDebounceTimeout = null;
 
 function validateSideInputs(side) {
@@ -135,6 +135,6 @@ export async function initializeAutobotView() {
         };
     });
 
-    setActiveTabStyle('tab-opened');
+    setActiveTabStyle('tab-all');
     fetchOrders('opened', auOrderList);
 }
