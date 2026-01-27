@@ -34,8 +34,11 @@ async function run(dependencies) {
             const distToTP = (targetTP > 0) ? (((targetTP / currentPrice) - 1) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.lprofit || 0;
 
-            log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
-        }
+            // Cálculo de signos para el log de Long
+const signDCA = nextPrice > currentPrice ? '+' : ''; // Normalmente será vacío o '-' en Long, pero ponemos esto por seguridad
+const signTP = targetTP > currentPrice ? '+' : '';
+
+log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${nextPrice < currentPrice ? '-' : '+'}${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${targetTP < currentPrice ? '-' : '+'}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
   
         // 3. LÓGICA DE APERTURA
         if (parseFloat(botState.lppc || 0) === 0 && !botState.llastOrder) {
