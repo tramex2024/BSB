@@ -74,8 +74,12 @@ async function run(dependencies) {
             const profitActual = (((currentPrice / botState.lppc) - 1) * 100).toFixed(2);
             const distToStop = (((currentPrice / currentStop) - 1) * 100).toFixed(2);
             
-            log(`[L-SELLING] Monitoreando: ${currentPrice.toFixed(2)} (Profit: +${profitActual}%) | Stop: ${currentStop.toFixed(2)} (Dist: ${distToStop}%)`, 'info');
-        }
+            // En Selling Long, el Stop siempre está abajo, por eso forzamos el '-' 
+    // pero mantenemos la lógica de comparación por seguridad.
+    const signStop = currentStop > currentPrice ? '+' : '-';
+
+    log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Profit: +${profitActual}% | Stop: ${currentStop.toFixed(2)} (${signStop}${distToStop}%)`, 'info');
+}
     } else {
         log(`[L-SELLING] ⚠️ No hay suficiente cantidad acumulada (lac) para vender.`, 'warning');
         // Opcional: Si lac es 0, volver a estado inicial para evitar quedarse atrapado
