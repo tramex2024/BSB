@@ -40,20 +40,20 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
         // --- CASO 1: VENTA EXITOSA (Apertura o Cobertura) ---
         if (isFilled) {
-            const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
+    const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
 
-            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada (${finalExecutedQty} BTC). Actualizando promedios...`, 'success');
-            
-            // Inyectamos el detalle al DataManager
-            // El DataManager usará botState.config.short para recalcular el TP y el DCA Exponencial
-            await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
-                updateGeneralBotState, 
-                updateSStateData 
-            }); 
-            
-            // Retornamos false para que el bucle de SSelling.js sepa que ya no hay orden pendiente
-            return false; 
-        } 
+    log(`[S-CONSOLIDATOR] ✅ Venta confirmada. Consolidando...`, 'success');
+    
+    // 🔥 PASO CLAVE: Limpiamos slastOrder ANTES para que ninguna otra vuelta del bucle entre aquí.
+    await updateGeneralBotState({ slastOrder: null });
+
+    await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
+        updateGeneralBotState, 
+        updateSStateData 
+    }); 
+    
+    return false; 
+}
 
         // --- CASO 2: ORDEN ACTIVA (Esperando en el libro) ---
         if (finalDetails && ['new', 'partially_filled', '8'].includes(String(finalDetails.state))) {

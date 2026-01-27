@@ -42,19 +42,16 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcSize); 
 
         if (orderResult && orderResult.order_id) {
-            // ✅ PERSISTENCIA ATÓMICA EN RAÍZ:
-            // Al ser la primera orden, inicializamos los contadores del ciclo (sac, sai, sppc, socc)
+            // ✅ CONCILIACIÓN: No inicializamos sac ni sai aquí con valores teóricos.
+            // Solo marcamos el inicio del ciclo y la orden pendiente.
             await updateGeneralBotState({
-                sac: btcSize,                // Short Accumulated Quantity (BTC)
-                sai: amountNominal,          // Short Accumulated Investment (USDT)
-                sppc: currentPrice,          // Short Price Per Coin (Promedio)
-                sstartTime: new Date(),      // Timestamp de inicio de ciclo
-                socc: 1,                     // Short Order Cycle Count
-                slastOrder: {                
+                sstartTime: new Date(),
+                socc: 1, 
+                slastOrder: {                               
                     order_id: orderResult.order_id,
                     side: 'sell',
                     btc_size: btcSize,
-                    usdt_amount: amountNominal,
+                    usdt_amount: amountNominal, // Esto es solo informativo para el log
                     timestamp: new Date()
                 }
             });
