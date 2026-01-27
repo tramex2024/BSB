@@ -1,5 +1,3 @@
-// BSB/server/src/au/states/long/LBuying.js
-
 const { placeFirstLongOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 
@@ -30,16 +28,17 @@ async function run(dependencies) {
             const nextPrice = parseFloat(botState.lncp || 0);
             const targetTP = parseFloat(botState.ltprice || 0);
             
-            const distToDCA = (nextPrice > 0) ? (((currentPrice / nextPrice) - 1) * 100).toFixed(2) : "0.00";
-            const distToTP = (targetTP > 0) ? (((targetTP / currentPrice) - 1) * 100).toFixed(2) : "0.00";
+            const distToDCA = (nextPrice > 0) ? Math.abs(((currentPrice / nextPrice) - 1) * 100).toFixed(2) : "0.00";
+            const distToTP = (targetTP > 0) ? Math.abs(((targetTP / currentPrice) - 1) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.lprofit || 0;
 
-            // Cálculo de signos para el log de Long
-const signDCA = nextPrice > currentPrice ? '+' : ''; // Normalmente será vacío o '-' en Long, pero ponemos esto por seguridad
-const signTP = targetTP > currentPrice ? '+' : '';
+            // Determinación de signos según posición relativa al precio actual
+            const signDCA = nextPrice > currentPrice ? '+' : '-';
+            const signTP = targetTP > currentPrice ? '+' : '-';
 
-log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${nextPrice < currentPrice ? '-' : '+'}${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${targetTP < currentPrice ? '-' : '+'}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
-  
+            log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${signDCA}${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${signTP}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+        } // <--- AQUÍ FALTABA ESTA LLAVE PARA CERRAR EL BLOQUE DE LOG
+
         // 3. LÓGICA DE APERTURA
         if (parseFloat(botState.lppc || 0) === 0 && !botState.llastOrder) {
             const purchaseAmount = parseFloat(config.long.purchaseUsdt);
@@ -55,11 +54,9 @@ log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFix
         }
 
         // 4. EVALUACIÓN DE SALIDA HACIA SELLING (Con Limpieza de Trailing)
-        // Si el precio cruza el target, pasamos al estado SELLING donde LSelling.js aplicará el Trailing Stop.
         if (botState.ltprice > 0 && currentPrice >= botState.ltprice) {
             log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) alcanzado. Activando Trailing Stop en SELLING...`, 'success');
             
-            // 🧹 LIMPIEZA PREVENTIVA: Aseguramos que el Trailing empiece de cero
             await updateGeneralBotState({
                 lpm: 0,
                 lpc: 0
@@ -69,7 +66,7 @@ log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFix
             return;
         }
 
-        // 5. DISPARO DE DCA EXPONENCIAL (Con Candado de Seguridad 2026)
+        // 5. DISPARO DE DCA EXPONENCIAL
         const requiredAmount = parseFloat(botState.lrca || 0);
         const nextPriceThreshold = parseFloat(botState.lncp || 0);
         const lastExecutionPrice = parseFloat(botState.llep || 0); 
@@ -77,8 +74,6 @@ log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFix
         const isPriceLowEnough = nextPriceThreshold > 0 && currentPrice <= nextPriceThreshold;
 
         if (!botState.llastOrder && isPriceLowEnough) {
-            
-            // 🛡️ CANDADO DE SEGURIDAD
             if (lastExecutionPrice > 0 && currentPrice >= lastExecutionPrice) {
                 log(`[L-BUY] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es inferior al de la última compra (${lastExecutionPrice.toFixed(2)}).`, 'warning');
                 return; 
