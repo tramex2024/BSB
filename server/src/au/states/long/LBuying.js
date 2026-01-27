@@ -37,7 +37,7 @@ async function run(dependencies) {
             const signTP = targetTP > currentPrice ? '+' : '-';
 
             log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${signDCA}${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${signTP}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
-        } // <--- AQUÍ FALTABA ESTA LLAVE PARA CERRAR EL BLOQUE DE LOG
+        } 
 
         // 3. LÓGICA DE APERTURA
         if (parseFloat(botState.lppc || 0) === 0 && !botState.llastOrder) {
