@@ -1,5 +1,3 @@
-// BSB/server/src/au/states/long/LPaused.js
-
 const { calculateLongTargets } = require('../../../../autobotCalculations');
 const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 
@@ -14,20 +12,18 @@ async function run(dependencies) {
     const availableUSDT = parseFloat(realUSDT || 0);
     const currentLBalance = parseFloat(botState.lbalance || 0);
 
-    // ✅ MIGRADO: Referencias directas a raíz
     const ac = parseFloat(botState.lac || 0);
     const ppc = parseFloat(botState.lppc || 0);
     const orderCountInCycle = parseInt(botState.locc || 0);
 
-    // --- 1. ¿PODEMOS VENDER AUNQUE NO TENGAMOS FONDOS PARA COMPRAR? ---
-    // Si el precio sube y toca el target, salimos del modo espera hacia SELLING
+    // --- 1. RECOVERY LOGIC (EXIT TO SELLING) ---
     if (ac > 0 && botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-        log(`🚀 [L-RECOVERY] ¡Precio alcanzó objetivo (${botState.ltprice.toFixed(2)})! Volviendo a SELLING.`, 'success');
+        log(`🚀 [L-RECOVERY] Target reached (${botState.ltprice.toFixed(2)})! Switching to SELLING.`, 'success');
         await updateBotState('SELLING', 'long'); 
         return;
     }
 
-    // --- 2. RECALCULO DE REQUERIMIENTOS (Ajustado a siglas de raíz) ---
+    // --- 2. CALCULATE REQUIREMENTS ---
     const recalculation = calculateLongTargets(
         ppc,
         config.long?.trigger || 0,
@@ -40,30 +36,29 @@ async function run(dependencies) {
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
-    // ✅ ACTUALIZACIÓN EN RAÍZ: lrca (Required Amount) y lncp (Next Coverage Price)
     await updateGeneralBotState({ 
         lrca: requiredAmount, 
         lncp: recalculation.nextCoveragePrice 
     });
 
-    // --- 3. RESETEO CRÍTICO DE INDICADORES ---
+    // --- 3. INDICATORS RESET ---
     if (ac <= 0 && currentLBalance < requiredAmount && botState.lnorder !== 0) {
-        log(`[L-RESET] Limpiando indicadores: LBalance (${currentLBalance.toFixed(2)}) < Mínimo (${requiredAmount.toFixed(2)}).`, 'warning');
+        log(`[L-RESET] Cleaning indicators: LBalance (${currentLBalance.toFixed(2)}) < Required (${requiredAmount.toFixed(2)}).`, 'warning');
         await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
         return; 
     }
 
-    // --- 4. VERIFICACIÓN DE TRANSICIÓN ---
+    // --- 4. RESUME VERIFICATION ---
     const canResume = currentLBalance >= requiredAmount && 
                       availableUSDT >= requiredAmount && 
                       requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
 
     if (canResume) {
-        log(`✅ [L-FONDOS] Capital recuperado (${availableUSDT.toFixed(2)} USDT). Reanudando BUYING...`, 'success');
+        log(`✅ [L-FUNDS] Capital recovered (${availableUSDT.toFixed(2)} USDT). Resuming BUYING...`, 'success');
         await updateBotState('BUYING', 'long');
     } else {
-        const sizeInfo = config.long?.size_var || 0;
-        log(`[L-PAUSED] En espera... Saldo: ${currentLBalance.toFixed(2)} | Necesita: ${requiredAmount.toFixed(2)} (Sig. Orden #${orderCountInCycle + 1})`, 'debug');
+        // Uniform format with emojis and bars
+        log(`[L-PAUSED] ⏸️ Waiting for Funds | Balance: ${currentLBalance.toFixed(2)} | Required: ${requiredAmount.toFixed(2)} | Next: #${orderCountInCycle + 1}`, 'debug');
     }
 } 
 

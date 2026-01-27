@@ -2,8 +2,8 @@ const { placeFirstLongOrder, placeCoverageBuyOrder } = require('../../managers/l
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 
 /**
- * ESTADO BUYING (LONG):
- * Monitorea el mercado para ejecutar compras iniciales o promediar (DCA) exponencialmente.
+ * BUYING STATE (LONG):
+ * Monitors market to execute initial purchases or exponential averaging (DCA).
  */
 async function run(dependencies) {
     const {
@@ -16,14 +16,14 @@ async function run(dependencies) {
     const LSTATE = 'long';
 
     try {
-        // 1. MONITOREO DE ORDEN PENDIENTE
+        // 1. PENDING ORDER MONITORING
         const orderIsActive = await monitorAndConsolidate(
             botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState
         );
         
         if (orderIsActive) return; 
         
-        // 2. LOG DE MONITOREO
+        // 2. MONITORING LOG
         if (parseFloat(botState.lppc || 0) > 0) {
             const nextPrice = parseFloat(botState.lncp || 0);
             const targetTP = parseFloat(botState.ltprice || 0);
@@ -32,30 +32,29 @@ async function run(dependencies) {
             const distToTP = (targetTP > 0) ? Math.abs(((targetTP / currentPrice) - 1) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.lprofit || 0;
 
-            // Determinación de signos según posición relativa al precio actual
             const signDCA = nextPrice > currentPrice ? '+' : '-';
             const signTP = targetTP > currentPrice ? '+' : '-';
 
             log(`[L-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${signDCA}${distToDCA}%) | TP Target: ${targetTP.toFixed(2)} (${signTP}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         } 
 
-        // 3. LÓGICA DE APERTURA
+        // 3. OPENING LOGIC
         if (parseFloat(botState.lppc || 0) === 0 && !botState.llastOrder) {
             const purchaseAmount = parseFloat(config.long.purchaseUsdt);
             
             if (availableUSDT >= purchaseAmount && botState.lbalance >= purchaseAmount) {
-                log("🚀 [L-BUY] Iniciando ciclo Long. Colocando primera compra exponencial...", 'info');
+                log("🚀 [L-BUY] Starting Long cycle. Placing first exponential buy...", 'info');
                 await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState); 
             } else {
-                log(`⚠️ [L-BUY] Fondos insuficientes para apertura.`, 'warning');
+                log(`⚠️ [L-BUY] Insufficient funds for opening.`, 'warning');
                 await updateBotState('PAUSED', LSTATE); 
             }
             return; 
         }
 
-        // 4. EVALUACIÓN DE SALIDA HACIA SELLING (Con Limpieza de Trailing)
+        // 4. EXIT TO SELLING EVALUATION (With Trailing Cleanup)
         if (botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-            log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) alcanzado. Activando Trailing Stop en SELLING...`, 'success');
+            log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) reached. Activating Trailing Stop in SELLING...`, 'success');
             
             await updateGeneralBotState({
                 lpm: 0,
@@ -66,7 +65,7 @@ async function run(dependencies) {
             return;
         }
 
-        // 5. DISPARO DE DCA EXPONENCIAL
+        // 5. EXPONENTIAL DCA TRIGGER
         const requiredAmount = parseFloat(botState.lrca || 0);
         const nextPriceThreshold = parseFloat(botState.lncp || 0);
         const lastExecutionPrice = parseFloat(botState.llep || 0); 
@@ -75,21 +74,21 @@ async function run(dependencies) {
 
         if (!botState.llastOrder && isPriceLowEnough) {
             if (lastExecutionPrice > 0 && currentPrice >= lastExecutionPrice) {
-                log(`[L-BUY] 🛑 Bloqueo de seguridad: El precio actual (${currentPrice.toFixed(2)}) no es inferior al de la última compra (${lastExecutionPrice.toFixed(2)}).`, 'warning');
+                log(`[L-BUY] 🛑 Security Lock: Current price (${currentPrice.toFixed(2)}) is not lower than last purchase (${lastExecutionPrice.toFixed(2)}).`, 'warning');
                 return; 
             }
 
             const hasFunds = (availableUSDT >= requiredAmount && botState.lbalance >= requiredAmount);
 
             if (hasFunds && requiredAmount > 0) {
-                log(`📉 [L-BUY] Disparando DCA Exponencial: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
+                log(`📉 [L-BUY] Triggering Exponential DCA: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
                 try {
                     await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState);
                 } catch (error) {
-                    log(`❌ [L-BUY] Error en ejecución de DCA: ${error.message}`, 'error');
+                    log(`❌ [L-BUY] DCA Execution Error: ${error.message}`, 'error');
                 }
             } else {
-                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial.`, 'error');
+                log(`🚫 [L-BUY] Insufficient balance for exponential DCA.`, 'error');
                 await updateBotState('PAUSED', LSTATE);
             }
             return;
