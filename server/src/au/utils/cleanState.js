@@ -25,7 +25,8 @@ const CLEAN_LONG_ROOT = {
     lsprice: 0,       // Stop Price visual
     lprofit: 0,       // Profit acumulado en el ciclo actual
     lnorder: 0,       // Contador visual de órdenes
-    lcoverage: 0      // Precio de resistencia/cobertura visual
+    lcoverage: 0,     // Precio de resistencia/cobertura visual
+    llep: 0           //✅ AGREGAR: Reset del Last Execution Price (Long)
 };
 
 /**
@@ -46,7 +47,8 @@ const CLEAN_SHORT_ROOT = {
     sbprice: 0,       // Stop/Buy Price visual (Dashboard)
     sprofit: 0,       // Profit acumulado en el ciclo actual
     snorder: 0,       // Contador visual de órdenes
-    scoverage: 0      // Precio de resistencia/cobertura visual
+    scoverage: 0,     // Precio de resistencia/cobertura visual
+    slep: 0           // ✅ AGREGAR: Reset del Last Execution Price (Short)
 };
 
 module.exports = {
