@@ -15,6 +15,7 @@ export const currentBotState = {
     spc: 0, 
     lpm: 0,
     spm: 0,
+    isRunning: false,
     config: {}
 };
 
@@ -135,8 +136,13 @@ export function initializeFullApp() {
         aiBotUI.updateHistoryTable(trades);
     });
 
-    socket.on('ai-status-change', (status) => {
+   socket.on('ai-status-change', (status) => {
+        // ✅ GUARDA EL ESTADO EN LA MEMORIA GLOBAL
+        currentBotState.isRunning = status.isRunning; 
+        
+        // Actualiza la UI si la pestaña está abierta
         aiBotUI.setRunningStatus(status.isRunning);
+        
         const balEl = document.getElementById('ai-virtual-balance');
         if(status.virtualBalance && balEl) {
             balEl.innerText = `$${status.virtualBalance.toFixed(2)}`;
@@ -172,12 +178,19 @@ export async function initializeTab(tabName) {
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             if (btnAi) {
-                // Actualizar estado visual inicial según currentBotState
+                // 1. FORZAR ESTADO INMEDIATO (Sincronía total)
+                // Usamos el estado guardado en el objeto global
                 aiBotUI.setRunningStatus(currentBotState.isRunning); 
 
                 btnAi.onclick = async () => {
+                    // Evitar múltiples clics cambiando el estado visual antes de la petición
                     const isRunning = btnAi.innerText.includes("DETENER");
                     const action = isRunning ? 'stop' : 'start';
+                    
+                    // Feedback visual inmediato (Optimismo)
+                    btnAi.disabled = true;
+                    btnAi.innerText = "PROCESANDO...";
+
                     try {
                         const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
                             method: 'POST',
@@ -188,9 +201,17 @@ export async function initializeTab(tabName) {
                             body: JSON.stringify({ action })
                         });
                         const data = await res.json();
-                        if(data.success) aiBotUI.addLog(`Solicitud de ${action} enviada...`);
+                        
+                        // Actualizamos nuestro estado global con la respuesta del servidor
+                        if(data.success) {
+                            currentBotState.isRunning = data.isRunning;
+                            aiBotUI.setRunningStatus(data.isRunning);
+                            aiBotUI.addLog(`Solicitud de ${action} enviada...`);
+                        }
                     } catch (e) {
                         aiBotUI.addLog("Error al conectar con el núcleo");
+                    } finally {
+                        btnAi.disabled = false;
                     }
                 };
             }

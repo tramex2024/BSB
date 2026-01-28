@@ -1,39 +1,35 @@
 /**
- * Módulo de Interfaz para el AI Bot
- * Maneja el círculo de confianza, logs y tabla de operaciones.
+ * Módulo de Interfaz para el AI Bot - Versión Optimizada
  */
 
 const aiBotUI = {
-    // 1. Actualiza el Círculo de Progreso y el Texto de Predicción
     updateConfidence: (confidence) => {
         const circle = document.getElementById('ai-confidence-circle');
         const valueText = document.getElementById('ai-confidence-value');
         const predictionText = document.getElementById('ai-prediction-text');
         
-        if (!circle || !valueText) return;
+        if (!circle || !valueText || !predictionText) return;
 
-        // Convertir de 0-1 a 0-100 si es necesario
         const percent = confidence <= 1 ? confidence * 100 : confidence;
-        
-        // Cálculo del offset (364.4 es el perímetro total)
         const offset = 364.4 - (percent / 100) * 364.4;
         circle.style.strokeDashoffset = offset;
         valueText.innerText = `${Math.round(percent)}%`;
 
-        // Mensajes dinámicos según confianza
+        // Ajuste de clases más robusto
+        predictionText.classList.remove('text-blue-300', 'text-emerald-400', 'text-gray-500');
+
         if (percent > 75) {
             predictionText.innerText = ">> FUERTE IMPULSO: EJECUTANDO ESTRATEGIA";
-            predictionText.classList.replace('text-blue-300', 'text-emerald-400');
+            predictionText.classList.add('text-emerald-400');
         } else if (percent > 50) {
             predictionText.innerText = ">> SEÑAL EN FORMACIÓN: MONITOREANDO";
-            predictionText.classList.replace('text-emerald-400', 'text-blue-300');
+            predictionText.classList.add('text-blue-300');
         } else {
             predictionText.innerText = ">> CALIBRANDO: SIN SEÑAL CLARA";
-            predictionText.className = "mt-4 text-[9px] font-mono text-center text-gray-500 italic uppercase";
+            predictionText.classList.add('text-gray-500');
         }
     },
 
-    // 2. Añade una línea al LOG negro de la IA
     addLog: (message) => {
         const container = document.getElementById('ai-log-container');
         if (!container) return;
@@ -45,21 +41,25 @@ const aiBotUI = {
         
         container.prepend(logEntry);
 
-        // Mantener solo los últimos 20 logs para no saturar la memoria
         if (container.children.length > 20) {
             container.removeChild(container.lastChild);
         }
     },
 
-    // 3. Actualiza la tabla de historial de trades
     updateHistoryTable: (trades) => {
         const tbody = document.getElementById('ai-history-table-body');
         if (!tbody) return;
 
-        if (!trades || trades.length === 0) return;
+        // Si trades viene dentro de un objeto 'data' (común en tu controlador)
+        const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
+        if (tradesList.length === 0) return;
 
-        tbody.innerHTML = trades.map(trade => {
+        tbody.innerHTML = tradesList.map(trade => {
             const isBuy = trade.side.toLowerCase() === 'buy';
+            // Normalizar el score para evitar NaN
+            const score = trade.confidenceScore || trade.confidence || 0;
+            const displayScore = score <= 1 ? score * 100 : score;
+
             return `
                 <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5">
                     <td class="px-6 py-3 text-gray-400 text-[9px]">${new Date(trade.timestamp).toLocaleString()}</td>
@@ -68,17 +68,16 @@ const aiBotUI = {
                             ${trade.side.toUpperCase()}
                         </span>
                     </td>
-                    <td class="px-6 py-3 text-right font-mono text-white">$${trade.price.toFixed(2)}</td>
-                    <td class="px-6 py-3 text-right font-mono text-gray-300">$${trade.amount.toFixed(2)}</td>
+                    <td class="px-6 py-3 text-right font-mono text-white">$${(trade.price || 0).toFixed(2)}</td>
+                    <td class="px-6 py-3 text-right font-mono text-gray-300">$${(trade.amount || 0).toFixed(2)}</td>
                     <td class="px-6 py-3 text-center">
-                        <span class="text-blue-400 font-bold">${((trade.confidence || trade.confidenceScore || 0) * (trade.confidence <= 1 ? 100 : 1)).toFixed(0)}%</span>
+                        <span class="text-blue-400 font-bold">${Math.round(displayScore)}%</span>
                     </td>
                 </tr>
             `;
         }).join('');
     },
 
-    // 4. Cambia el estado visual del botón y luces
     setRunningStatus: (isRunning) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');
@@ -105,5 +104,4 @@ const aiBotUI = {
     }
 };
 
-// Exportamos para usarlo en el script principal
 export default aiBotUI;
