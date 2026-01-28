@@ -13,23 +13,26 @@ const Aibot = require('../models/Aibot');
  */
 const getAIStatus = async (req, res) => {
     try {
-        // Obtenemos el estado más fresco directamente de la instancia en memoria
-        // que es la que está corriendo en el botCycle
+        // 1. Buscamos el estado y los últimos 5 trades en paralelo
+        const [state, recentTrades] = await Promise.all([
+            Aibot.findOne({}),
+            AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(5)
+        ]);
+
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
             isVirtual: aiEngine.IS_VIRTUAL_MODE,
             virtualBalance: aiEngine.virtualBalance,
             historyCount: aiEngine.history.length,
-            lastEntryPrice: aiEngine.lastEntryPrice,
+            // 🟢 AQUÍ ENVIAMOS LOS 5 TRADES
+            recentHistory: recentTrades, 
             config: {
                 risk: aiEngine.RISK_PER_TRADE,
-                trailing: aiEngine.TRAILING_PERCENT,
                 threshold: 0.7 
             }
         });
     } catch (error) {
-        console.error("Error en getAIStatus:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

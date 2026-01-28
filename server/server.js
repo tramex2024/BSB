@@ -198,10 +198,13 @@ io.on('connection', (socket) => {
         } catch (err) { console.error("❌ Error toggle:", err); }
     });
 
-    socket.on('get-ai-history', async () => {
-        const history = await AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(30);
-        socket.emit('ai-history-data', history);
-    });
+    // En tu lógica de Socket en el servidor
+socket.on('get-ai-history', async () => {
+    const trades = await AIBotOrder.find({ isVirtual: true })
+        .sort({ timestamp: -1 }) // Los más recientes primero
+        .limit(5);
+    socket.emit('ai-history-data', trades);
+});
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
 });
