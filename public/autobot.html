@@ -96,76 +96,82 @@
     </div>
 </div>
 
-        <div id="autobot-settings" class="bg-gray-800 p-3 rounded-xl border-2 border-emerald-500/20 space-y-3">    
-            <h3 class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1.5">Strategy Variables</h3>
-            
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Amount-L</label>
-                    <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500"/>
-                </div>
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Amount-S</label>
-                    <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500"/>
-                </div>
+        <div id="autobot-settings" class="bg-gray-800/50 p-3 rounded-xl border-2 border-emerald-500/20 space-y-3 backdrop-blur-sm">    
+    <h3 class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1.5 flex justify-between">
+        <span>Strategy Controls</span>
+        <span class="text-gray-600 text-[7px]">v2.6 Auto-Sync</span>
+    </h3>
+    
+    <div class="space-y-1">
+        <span class="text-[7px] text-gray-400 uppercase font-bold tracking-tighter">Budget Allocation (USDT)</span>
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="block text-[8px] text-emerald-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-L</label>
+                <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-emerald-400 text-[10px] text-center outline-none focus:border-emerald-500 transition-colors"/>
             </div>
+            <div>
+                <label class="block text-[8px] text-rose-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-S</label>
+                <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-rose-400 text-[10px] text-center outline-none focus:border-rose-500 transition-colors"/>
+            </div>
+        </div>
+    </div>
 
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Purchase-L</label>
-                    <input id="aupurchasel-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Purchase-S</label>
-                    <input id="aupurchases-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-            </div>
+    <div class="grid grid-cols-2 gap-2">
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-L</label>
+            <input id="aupurchasel-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+        </div>
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-S</label>
+            <input id="aupurchases-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+        </div>
+    </div>
 
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Var-L %</label>
-                    <input id="auincrementl" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Var-S %</label>
-                    <input id="auincrements" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Price Var-L %</label>
-                    <input id="audecrementl" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Price Var-S %</label>
-                    <input id="audecrements" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-            </div>            
+    <div class="grid grid-cols-2 gap-2">
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-L %</label>
+            <input id="auincrementl" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+        </div>
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-S %</label>
+            <input id="auincrements" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-2 gap-2">
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Drop-L %</label>
+            <input id="audecrementl" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+        </div>
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Rise-S %</label>
+            <input id="audecrements" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+        </div>
+    </div>            
 
-            <div class="grid grid-cols-2 gap-2"> 
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Trigger-L %</label>
-                    <input id="autriggerl" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Trigger-S %</label>
-                    <input id="autriggers" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-            </div>
-           
-            <div class="grid grid-cols-2 gap-2"> 
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Price Step-L %</label>
-                    <input id="aupricestep-l" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-                <div>
-                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Price Step-S %</label>
-                    <input id="aupricestep-s" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center"/>
-                </div>
-            </div> 
- 
-        </div>                
+    <div class="grid grid-cols-2 gap-2"> 
+        <div>
+            <label class="block text-[8px] text-emerald-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-L %</label>
+            <input id="autriggerl" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-emerald-900/20 border border-emerald-500/30 text-emerald-400 text-[10px] text-center outline-none"/>
+        </div>
+        <div>
+            <label class="block text-[8px] text-rose-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-S %</label>
+            <input id="autriggers" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-rose-900/20 border border-rose-500/30 text-rose-400 text-[10px] text-center outline-none"/>
+        </div>
+    </div>
+   
+    <div class="grid grid-cols-2 gap-2"> 
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-L %</label>
+            <input id="aupricestep-l" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+        </div>
+        <div>
+            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-S %</label>
+            <input id="aupricestep-s" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+        </div>
+    </div> 
+
+</div>          
         
         
     </div>
