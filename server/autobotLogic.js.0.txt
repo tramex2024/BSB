@@ -1,14 +1,12 @@
 /**
  * Archivo: BSB/server/autobotLogic.js
  * Motor de Ciclos - Sincronizado con Lógica Exponencial 2026
- * INTEGRACIÓN UNIFICADA: Long, Short & AI Strategy
  */
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
-const { runAIStrategy, setDependencies: setAIDeps } = require('./src/au/aiStrategy'); // 🔥 INTEGRACIÓN AI
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
 
 const { 
@@ -30,14 +28,14 @@ let lastCyclePrice = 0;
 function setIo(socketIo) { io = socketIo; }
 function getLastPrice() { return lastCyclePrice; }
 
-// Función de Log Unificada
+// Esta es la función que usan todos los Managers y States
 function log(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
     
     // 1. Log en la consola de Render/Terminal (servidor)
     console.log(`[${timestamp}] [${type.toUpperCase()}] ${message}`);
 
-    // 2. 📢 ENVÍO AL FRONTEND
+    // 2. 📢 ENVÍO AL FRONTEND (lo que verás en tu barra de 2.5s)
     if (io) {
         io.emit('bot-log', { 
             message: message, 
@@ -51,22 +49,29 @@ function log(message, type = 'info') {
  */
 async function syncFrontendState(currentPrice, botState) {
     if (io && botState) {
+        // Forzamos el parseo para evitar que strings ensucien el Dashboard
         const priceToEmit = parseFloat(currentPrice || lastCyclePrice || 0);
 
         io.emit('bot-state-update', { 
             ...botState, 
             price: priceToEmit,
+            // Agregamos un timestamp para que el Front sepa que es data fresca
             serverTime: Date.now() 
         });
     }
 }
 
 /**
- * Persistencia Atómica
+ * Persistencia Atómica: Guarda cambios y garantiza el desbloqueo del Front
+ * Optimizada para evitar que ciclos automáticos sobreescriban el STOP manual.
  */
 async function commitChanges(changeSet, currentPrice) {
     try {
         let updated;
+        
+        // --- PROTECCIÓN DE ESTADO (Anti-Rebote) ---
+        // Si el changeSet intenta poner RUNNING pero en la base de datos ya está STOPPED,
+        // respetamos el STOPPED manual del usuario.
         const currentState = await Autobot.findOne({}).lean();
         
         if (currentState) {
@@ -81,22 +86,29 @@ async function commitChanges(changeSet, currentPrice) {
         if (Object.keys(changeSet).length > 0) {
             changeSet.lastUpdate = new Date();
             
+            // Usamos $set para actualizar solo los campos modificados
             updated = await Autobot.findOneAndUpdate(
                 {}, 
                 { $set: changeSet }, 
                 { new: true, runValidators: true }
             ).lean();
+            
+            // Debug opcional para ver qué está enviando el motor al socket
+            // console.log(`[COMMIT] L:${updated.lstate} S:${updated.sstate} Price:${currentPrice}`);
         } else {
+            // Si no hay cambios (ciclo sin trades), usamos el estado actual para refrescar el Front
             updated = currentState;
         }
 
         if (updated) {
+            // 📢 Esta es la llamada que "despierta" al botón en el Frontend
             await syncFrontendState(currentPrice, updated);
         }
         
         return updated;
     } catch (error) {
         console.error(`❌ [DB ATOMIC ERROR]: ${error.message}`);
+        // Intentamos al menos sincronizar el estado actual para no dejar el front colgado
         const fallback = await Autobot.findOne({}).lean();
         if (fallback) await syncFrontendState(currentPrice, fallback);
         return null;
@@ -122,6 +134,7 @@ async function slowBalanceCacheUpdate() {
         $set: { lastAvailableUSDT: availableUSDT, lastAvailableBTC: availableBTC, lastBalanceCheck: new Date() }
     }, { new: true, upsert: true, lean: true });
 
+    // Sincronizamos usando el canal principal para mantener coherencia
     if (updated) await syncFrontendState(lastCyclePrice, updated);
 
     return apiSuccess;
@@ -130,6 +143,7 @@ async function slowBalanceCacheUpdate() {
 /**
  * ACTUALIZACIONES MANUALES DESDE RUTAS (API)
  */
+
 async function updateConfig(newConfig) {
     const currentPrice = lastCyclePrice;
     const bot = await Autobot.findOneAndUpdate({}, { 
@@ -139,6 +153,7 @@ async function updateConfig(newConfig) {
     log('⚙️ Configuración actualizada y recalculando targets...', 'info');
     
     if (bot) {
+        // Disparamos un ciclo con el último precio conocido para actualizar LTPrice/STPrice inmediatamente
         await botCycle(currentPrice); 
     }
     return bot;
@@ -147,11 +162,12 @@ async function updateConfig(newConfig) {
 async function startSide(side, config) {
     const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
     const update = {
-        ...cleanData, 
+        ...cleanData, // 🔥 Limpia rastro antes de arrancar
         [side === 'long' ? 'lstate' : 'sstate']: 'RUNNING',
         config: config
     };
     
+    // Aseguramos que el flag de habilitado esté sincronizado
     if (side === 'long' && update.config.long) update.config.long.enabled = true;
     if (side === 'short' && update.config.short) update.config.short.enabled = true;
 
@@ -166,15 +182,18 @@ async function stopSide(side) {
     const botState = await Autobot.findOne({}).lean();
     if (!botState) throw new Error("Bot no encontrado");
 
+    // 1. Identificar qué limpiar según el lado
     const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
     const stateField = side === 'long' ? 'lstate' : 'sstate'; 
 
+    // 2. Construir el objeto de actualización con limpieza profunda
     const update = {
         ...cleanData,
         [stateField]: 'STOPPED',
         lastUpdate: new Date()
     };
     
+    // 3. Sincronizar la configuración para que el flag 'enabled' coincida
     const newConfig = { ...botState.config };
     if (side === 'long' && newConfig.long) {
         newConfig.long.enabled = false;
@@ -183,12 +202,15 @@ async function stopSide(side) {
     }
     update.config = newConfig;
 
+    // 4. Persistir en Base de Datos
     const bot = await Autobot.findOneAndUpdate(
         {}, 
         { $set: update }, 
         { new: true }
     ).lean();
     
+    // 🔥 SOLUCIÓN MAESTRA: Notificar inmediatamente al socket.
+    // Sin esto, el frontend se queda "congelado" esperando al siguiente botCycle.
     if (bot) {
         await syncFrontendState(lastCyclePrice, bot);
     }
@@ -235,7 +257,6 @@ async function botCycle(priceFromWebSocket) {
 
         setLongDeps(dependencies);
         setShortDeps(dependencies);
-        setAIDeps(dependencies); // 🔥 Inyección a la IA
 
         // 1. CONSOLIDACIÓN
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
@@ -287,12 +308,11 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 3. ESTRATEGIAS (HILOS SIMULTÁNEOS)
+        // 3. ESTRATEGIAS
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
-        await runAIStrategy(); // 🔥 La IA se suma al ciclo
 
-        // 4. PERSISTENCIA
+        // 4. PERSISTENCIA Y NOTIFICACIÓN SIEMPRE
         await commitChanges(changeSet, currentPrice);
         
     } catch (error) {

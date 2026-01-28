@@ -1,7 +1,4 @@
-/**
- * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual
- */
+//server/src/ai/AIEngine.js
 
 const Aibot = require('../../models/Aibot');
 const AIBotOrder = require('../../models/AIBotOrder');
@@ -174,10 +171,11 @@ class AIEngine {
     _log(msg, conf, isAnalyzing = false) {
         const timestamp = new Date().toLocaleTimeString();
         
-        // 1. Log unificado para Render (Visibilidad en servidor)
+        // 1. Log para Render / Terminal (Consistencia con L-BUYING/S-SELLING)
+        // Usamos el prefijo [AI-VIRTUAL] para distinguirlo
         console.log(`[${timestamp}] [INFO] [AI-VIRTUAL] 🧠 ${msg}`);
 
-        // 2. Envío al Dashboard (Socket)
+        // 2. Log para el Frontend (Socket existente)
         if (this.io) {
             this.io.emit('ai-decision-update', { 
                 confidence: conf, 
