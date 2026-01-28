@@ -1,9 +1,9 @@
 /**
- * Archivo: server/src/au/aiStrategy.js
+ * Archivo: server/src/aiStrategy.js
  * Wrapper para integrar el AIEngine en el ciclo secuencial del Autobot.
  */
 
-const aiEngine = require('../../src/ai/AIEngine');
+const aiEngine = require('./ai/AIEngine');
 
 let deps = {};
 

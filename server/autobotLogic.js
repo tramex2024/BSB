@@ -6,9 +6,9 @@
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
-const { runAIStrategy, setDependencies: setAIDeps } = require('./src/au/aiStrategy'); // 🔥 INTEGRACIÓN AI
+const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
+const { runAIStrategy, setDependencies: setAIDeps } = require('./src/aiStrategy'); // 🔥 INTEGRACIÓN AI
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
 
 const { 

@@ -1,10 +1,10 @@
-// BSB/server/src/au/longStrategy.js
+// BSB/server/src/longStrategy.js
 
-const LRunning = require('./states/long/LRunning');
-const LBuying = require('./states/long/LBuying');
-const LSelling = require('./states/long/LSelling');
-const LPaused = require('./states/long/LPaused');
-const LStopped = require('./states/long/LStopped');
+const LRunning = require('./au/states/long/LRunning');
+const LBuying = require('./au/states/long/LBuying');
+const LSelling = require('./au/states/long/LSelling');
+const LPaused = require('./au/states/long/LPaused');
+const LStopped = require('./au/states/long/LStopped');
 
 let dependencies = {};
 

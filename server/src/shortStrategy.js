@@ -1,11 +1,11 @@
-// BSB/server/src/au/shortStrategy.js (ESPEJO DE longStrategy.js)
+// BSB/server/src/shortStrategy.js (ESPEJO DE longStrategy.js)
 
 // Importa los módulos de cada estado para SHORT
-const SRunning = require('./states/short/SRunning'); // Vigilante de señal
-const SSelling = require('./states/short/SSelling'); // Entrando/Promediando Short (Venta)
-const SBuying = require('./states/short/SBuying');   // Cerrando Short con ganancia (Compra)
-const SPaused = require('./states/short/SPaused');
-const SStopped = require('./states/short/SStopped');
+const SRunning = require('./au/states/short/SRunning'); // Vigilante de señal
+const SSelling = require('./au/states/short/SSelling'); // Entrando/Promediando Short (Venta)
+const SBuying = require('./au/states/short/SBuying');   // Cerrando Short con ganancia (Compra)
+const SPaused = require('./au/states/short/SPaused');
+const SStopped = require('./au/states/short/SStopped');
 
 let dependencies = {};
 
