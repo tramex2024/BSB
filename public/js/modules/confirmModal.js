@@ -6,16 +6,17 @@ export function askConfirmation(sideName) {
     const btnDeny = document.getElementById('modal-deny');
     const msgEl = document.getElementById('modal-message');
 
-    // Si por error el modal no está en el HTML actual, dejamos pasar la acción
+    // If for some reason the modal is not in the current HTML, allow the action
     if (!modal) return Promise.resolve(true);
 
     return new Promise((resolve) => {
-        msgEl.innerText = `¿Estás seguro de que deseas DETENER la estrategia ${sideName.toUpperCase()}? Esto podría dejar órdenes huérfanas en el exchange.`;
+        // Updated text to English
+        msgEl.innerText = `Are you sure you want to STOP the ${sideName.toUpperCase()} strategy? This may leave orphan orders on the exchange and require manual cleanup.`;
         
-        // Mostrar modal
+        // Show modal
         modal.classList.remove('hidden');
 
-        // Definir qué pasa al hacer clic
+        // Handle clicks
         btnAccept.onclick = () => {
             modal.classList.add('hidden');
             resolve(true);
