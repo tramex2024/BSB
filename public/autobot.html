@@ -1,4 +1,4 @@
-<div id="autobot-section" class="flex flex-col lg:flex-row h-full animate-fadeIn bg-gray-900 p-1 gap-2 overflow-hidden">
+<div id="autobot-section" class="flex flex-col lg:flex-row h-full animate-fadeIn bg-gray-900 p-1 gap-2 overflow-hidden relative">
     
     <div class="w-full lg:w-[350px] bg-gray-800 p-3 space-y-2 border border-emerald-500/20 overflow-y-auto custom-scrollbar rounded-xl flex flex-col">
         
@@ -36,13 +36,12 @@
                     <span class="text-[10px] text-gray-500 uppercase font-bold">LState:</span>
                     <span id="aubot-lstate" class="text-[12px] font-bold font-mono">STOPPED</span>
                 </div>
-
                 <div class="flex items-center gap-2 bg-gray-800/50 p-1.5 rounded-lg border border-gray-600/50 justify-end">
                     <span class="text-[10px] text-gray-500 uppercase font-bold">SState:</span>
                     <span id="aubot-sstate" class="text-[12px] font-bold text-right font-mono">STOPPED</span>
                 </div>
             </div>
-           
+            
             <div class="grid grid-cols-2 gap-2">
                 <div class="flex items-center space-x-2 bg-gray-900/60 p-1.5 rounded-lg border border-gray-700">
                     <input type="checkbox" id="au-stop-long-at-cycle" class="w-3 h-3 bg-gray-800 border-gray-600 rounded text-emerald-500 cursor-pointer">
@@ -55,146 +54,166 @@
             </div>            
 
             <div class="flex gap-2 pt-1">
-                <button id="austartl-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg">Start L</button>     
-                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg">Start S</button>                                                 
+                <button id="austartl-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start L</button>     
+                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start S</button>                                                 
             </div>
-
         </div>
 
         <div class="bg-gray-900/60 p-3 rounded-xl border border-gray-700 space-y-1.5 font-mono text-[10px] backdrop-blur-sm"> 
-    <div class="flex justify-between">
-        <span><b class="text-amber-500/80">L-PNL:</b> <span id="aulprofit-val" class="text-emerald-400 font-bold">0.00</span></span>
-        <span><b class="text-amber-500/80">S-PNL:</b> <span id="ausprofit-val" class="text-emerald-400 font-bold">0.00</span></span>
-    </div>
-    <div class="flex justify-between">
-        <span><b class="text-amber-200/50">L-Wallet:</b> <span id="aulbalance" class="text-white">0.00</span></span>
-        <span><b class="text-amber-200/50">S-Wallet:</b> <span id="ausbalance" class="text-white">0.00</span></span>
-    </div>
-    <div class="flex justify-between">
-        <span><b class="text-slate-500">L-Cycle:</b> <span id="aulcycle" class="text-slate-300">0</span></span>
-        <span><b class="text-slate-500">S-Cycle:</b> <span id="auscycle" class="text-slate-300">0</span></span>
-    </div>            
-    <div class="flex justify-between border-t border-gray-800 pt-1.5">
-        <span><b class="text-blue-500/70">L-Stop:</b> <span id="aulsprice" class="text-blue-400">0.00</span></span>
-        <span><b class="text-purple-500/70">S-Stop:</b> <span id="ausbprice" class="text-purple-400">0.00</span></span>
-    </div>            
-    <div class="flex justify-between">
-        <span><b class="text-cyan-600/70">L-Target:</b> <span id="aultprice" class="text-cyan-100/80">0.00</span></span>
-        <span><b class="text-cyan-600/70">S-Target:</b> <span id="austprice" class="text-cyan-100/80">0.00</span></span>
-    </div>
-    <div class="flex justify-between">
-        <span><b class="text-cyan-700/60">L-AvgPx:</b> <span id="aultppc" class="text-gray-300">0.00</span></span>
-        <span><b class="text-cyan-700/60">S-AvgPx:</b> <span id="austppc" class="text-gray-300">0.00</span></span>
-    </div>
-    <div class="flex justify-between border-t border-gray-800/50 pt-1.5">
-        <span><b class="text-rose-900/80">L-Cover:</b> <span id="aulcoverage" class="text-rose-200/60">0.00</span></span>
-        <span><b class="text-rose-900/80">S-Cover:</b> <span id="auscoverage" class="text-rose-200/60">0.00</span></span>
-    </div>
-    <div class="flex justify-between">
-        <span><b class="text-slate-600">L-MaxSO:</b> <span id="aulnorder" class="text-slate-400">0</span></span>
-        <span><b class="text-slate-600">S-MaxSO:</b> <span id="ausnorder" class="text-slate-400">0</span></span>
-    </div>
-</div>
+            <div class="flex justify-between">
+                <span><b class="text-amber-500/80">L-PNL:</b> <span id="aulprofit-val" class="text-emerald-400 font-bold">0.00</span></span>
+                <span><b class="text-amber-500/80">S-PNL:</b> <span id="ausprofit-val" class="text-emerald-400 font-bold">0.00</span></span>
+            </div>
+            <div class="flex justify-between">
+                <span><b class="text-amber-200/50">L-Wallet:</b> <span id="aulbalance" class="text-white">0.00</span></span>
+                <span><b class="text-amber-200/50">S-Wallet:</b> <span id="ausbalance" class="text-white">0.00</span></span>
+            </div>
+            <div class="flex justify-between">
+                <span><b class="text-slate-500">L-Cycle:</b> <span id="aulcycle" class="text-slate-300">0</span></span>
+                <span><b class="text-slate-500">S-Cycle:</b> <span id="auscycle" class="text-slate-300">0</span></span>
+            </div>            
+            <div class="flex justify-between border-t border-gray-800 pt-1.5">
+                <span><b class="text-blue-500/70">L-Stop:</b> <span id="aulsprice" class="text-blue-400">0.00</span></span>
+                <span><b class="text-purple-500/70">S-Stop:</b> <span id="ausbprice" class="text-purple-400">0.00</span></span>
+            </div>            
+            <div class="flex justify-between">
+                <span><b class="text-cyan-600/70">L-Target:</b> <span id="aultprice" class="text-cyan-100/80">0.00</span></span>
+                <span><b class="text-cyan-600/70">S-Target:</b> <span id="austprice" class="text-cyan-100/80">0.00</span></span>
+            </div>
+            <div class="flex justify-between">
+                <span><b class="text-cyan-700/60">L-AvgPx:</b> <span id="aultppc" class="text-gray-300">0.00</span></span>
+                <span><b class="text-cyan-700/60">S-AvgPx:</b> <span id="austppc" class="text-gray-300">0.00</span></span>
+            </div>
+            <div class="flex justify-between border-t border-gray-800/50 pt-1.5">
+                <span><b class="text-rose-900/80">L-Cover:</b> <span id="aulcoverage" class="text-rose-200/60">0.00</span></span>
+                <span><b class="text-rose-900/80">S-Cover:</b> <span id="auscoverage" class="text-rose-200/60">0.00</span></span>
+            </div>
+            <div class="flex justify-between">
+                <span><b class="text-slate-600">L-MaxSO:</b> <span id="aulnorder" class="text-slate-400">0</span></span>
+                <span><b class="text-slate-600">S-MaxSO:</b> <span id="ausnorder" class="text-slate-400">0</span></span>
+            </div>
+        </div>
 
         <div id="autobot-settings" class="bg-gray-800/50 p-3 rounded-xl border-2 border-emerald-500/20 space-y-3 backdrop-blur-sm">    
-    <h3 class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1.5 flex justify-between">
-        <span>Strategy Controls</span>
-        <span class="text-gray-600 text-[7px]">v2.6 Auto-Sync</span>
-    </h3>
-    
-    <div class="space-y-1">
-        <span class="text-[7px] text-gray-400 uppercase font-bold tracking-tighter">Budget Allocation (USDT)</span>
-        <div class="grid grid-cols-2 gap-2">
-            <div>
-                <label class="block text-[8px] text-emerald-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-L</label>
-                <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-emerald-400 text-[10px] text-center outline-none focus:border-emerald-500 transition-colors"/>
+            <h3 class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1.5 flex justify-between">
+                <span>Strategy Controls</span>
+                <span class="text-gray-600 text-[7px]">v2.6 Auto-Sync</span>
+            </h3>
+            
+            <div class="space-y-1">
+                <span class="text-[7px] text-gray-400 uppercase font-bold tracking-tighter">Budget Allocation (USDT)</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[8px] text-emerald-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-L</label>
+                        <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-emerald-400 text-[10px] text-center outline-none focus:border-emerald-500 transition-colors"/>
+                    </div>
+                    <div>
+                        <label class="block text-[8px] text-rose-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-S</label>
+                        <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-rose-400 text-[10px] text-center outline-none focus:border-rose-500 transition-colors"/>
+                    </div>
+                </div>
             </div>
-            <div>
-                <label class="block text-[8px] text-rose-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-S</label>
-                <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-rose-400 text-[10px] text-center outline-none focus:border-rose-500 transition-colors"/>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-L</label>
+                    <input id="aupurchasel-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-S</label>
+                    <input id="aupurchases-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
             </div>
-        </div>
-    </div>
 
-    <div class="grid grid-cols-2 gap-2">
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-L</label>
-            <input id="aupurchasel-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
-        </div>
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-S</label>
-            <input id="aupurchases-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
-        </div>
-    </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-L %</label>
+                    <input id="auincrementl" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-S %</label>
+                    <input id="auincrements" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Drop-L %</label>
+                    <input id="audecrementl" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Rise-S %</label>
+                    <input id="audecrements" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div>            
 
-    <div class="grid grid-cols-2 gap-2">
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-L %</label>
-            <input id="auincrementl" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
-        </div>
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-S %</label>
-            <input id="auincrements" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
-        </div>
-    </div>
-    
-    <div class="grid grid-cols-2 gap-2">
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Drop-L %</label>
-            <input id="audecrementl" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
-        </div>
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Rise-S %</label>
-            <input id="audecrements" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
-        </div>
-    </div>            
-
-    <div class="grid grid-cols-2 gap-2"> 
-        <div>
-            <label class="block text-[8px] text-emerald-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-L %</label>
-            <input id="autriggerl" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-emerald-900/20 border border-emerald-500/30 text-emerald-400 text-[10px] text-center outline-none"/>
-        </div>
-        <div>
-            <label class="block text-[8px] text-rose-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-S %</label>
-            <input id="autriggers" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-rose-900/20 border border-rose-500/30 text-rose-400 text-[10px] text-center outline-none"/>
-        </div>
-    </div>
-   
-    <div class="grid grid-cols-2 gap-2"> 
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-L %</label>
-            <input id="aupricestep-l" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
-        </div>
-        <div>
-            <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-S %</label>
-            <input id="aupricestep-s" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
-        </div>
-    </div> 
-
-</div>          
-        
-        
+            <div class="grid grid-cols-2 gap-2"> 
+                <div>
+                    <label class="block text-[8px] text-emerald-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-L %</label>
+                    <input id="autriggerl" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-emerald-900/20 border border-emerald-500/30 text-emerald-400 text-[10px] text-center outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-rose-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-S %</label>
+                    <input id="autriggers" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-rose-900/20 border border-rose-500/30 text-rose-400 text-[10px] text-center outline-none"/>
+                </div>
+            </div>
+           
+            <div class="grid grid-cols-2 gap-2"> 
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-L %</label>
+                    <input id="aupricestep-l" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-S %</label>
+                    <input id="aupricestep-s" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div> 
+        </div>          
     </div>
     
     <div class="flex-grow flex flex-col gap-2 h-full min-h-0">
     
-    <div id="au-tvchart" class="bg-gray-800 rounded-xl border border-gray-700 min-h-[550px] lg:flex-grow relative overflow-hidden"></div>
+        <div id="au-tvchart" class="bg-gray-800 rounded-xl border border-gray-700 min-h-[550px] lg:flex-grow relative overflow-hidden"></div>
 
-    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col h-[300px] lg:h-[340px]"> 
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
-            <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
-            
-            <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
-                <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
-                <button id="tab-filled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Filled</button>
-                <button id="tab-cancelled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Canceled</button>
-                <button id="tab-all" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">All</button>
+        <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col h-[300px] lg:h-[340px]"> 
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
+                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
+                
+                <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
+                    <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
+                    <button id="tab-filled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Filled</button>
+                    <button id="tab-cancelled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Canceled</button>
+                    <button id="tab-all" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">All</button>
+                </div>
+            </div>
+
+            <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
+                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
             </div>
         </div>
+    </div>
 
-        <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
-            <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
+    <div id="confirm-modal" class="fixed inset-0 z-[9999] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div class="bg-gray-900 border border-emerald-500/30 w-full max-w-xs rounded-2xl p-6 shadow-2xl shadow-black ring-1 ring-white/10">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-rose-500/20 rounded-full mb-3">
+                    <i class="fas fa-exclamation-triangle text-rose-500 text-xl"></i>
+                </div>
+                <h3 class="text-white text-base font-black uppercase tracking-tight mb-1">Confirmar Acción</h3>
+                <p id="modal-message" class="text-gray-400 text-[10px] leading-relaxed mb-6 px-2">
+                    ¿Estás seguro de que deseas detener esta estrategia? Esto podría consolidar pérdidas o dejar órdenes huérfanas en el exchange.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button id="modal-deny" class="py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold text-[10px] uppercase transition-all active:scale-95 border border-gray-700">
+                    Deny
+                </button>
+                <button id="modal-accept" class="py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-900/40 transition-all active:scale-95">
+                    Accept
+                </button>
+            </div>
         </div>
     </div>
-</div>
+
 </div>
