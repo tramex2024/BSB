@@ -26,14 +26,11 @@ async function run(dependencies) {
     }
 
     // --- 2. CALCULATE REQUIREMENTS ---
-    const recalculation = calculateShortTargets(
-        ppc || currentPrice,
-        config.short?.trigger || 0,
-        config.short?.price_var || 0,
-        config.short?.size_var || 0,
-        orderCountInCycle || 0,
-        parseFloat(config.short?.purchaseUsdt || 0)
-    );
+   const recalculation = calculateShortTargets(
+    ppc || currentPrice,
+    config.short, 
+    orderCountInCycle
+);
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 

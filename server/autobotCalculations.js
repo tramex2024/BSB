@@ -97,19 +97,24 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
 //            LÓGICA PARA SHORT
 // ==========================================
 
+// Dentro de autobotCalculations.js
 function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
-    const pVarDec = parseNumber(config.price_var) / 100;
-    const priceVarInc = parseNumber(config.price_step_inc || 0);
-    const profitPercent = parseNumber(config.profit_percent || config.trigger);
-    const feeRate = 0.001;
+    const conf = config || {}; // Protección si config llega null
+    
+    const priceVarDec = parseNumber(conf.price_var) / 100;
+    const priceVarInc = parseNumber(conf.price_step_inc || 0);
+    // Busca ambos nombres por si acaso
+    const profitPercent = parseNumber(conf.profit_percent || conf.trigger || 0);
+    const sizeVar = parseNumber(conf.size_var || 0);
+    const purchaseUsdt = parseNumber(conf.purchaseUsdt || 0);
 
-    const currentStep = getExponentialPriceStep(pVarDec, currentOrderCount - 1, priceVarInc);
+    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
 
     return {
-        stprice: calculateTargetWithFees(p, profitPercent, 'short', feeRate), // ✅ Coherente con Manager
-        nextCoveragePrice: p * (1 + currentStep), 
-        requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, currentOrderCount, config.size_var)
+        stprice: calculateTargetWithFees(p, profitPercent, 'short', 0.001),
+        nextCoveragePrice: p * (1 + currentStep),
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
     };
 }
 
