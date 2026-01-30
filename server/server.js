@@ -21,7 +21,7 @@ const MarketSignal = require('./models/MarketSignal');
 const AIBotOrder = require('./models/AIBotOrder');
 const analyzer = require('./src/bitmart_indicator_analyzer'); 
 
-const centralAnalyzer = require('./src/services/CentralAnalyzer');
+const centralAnalyzer = require('./services/CentralAnalyzer');
 
 dotenv.config();
 const app = express();
