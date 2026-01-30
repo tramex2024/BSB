@@ -10,7 +10,7 @@ const path = require('path');
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const centralAnalyzer = require('./src/services/CentralAnalyzer'); // <--- El nuevo cerebro
+const centralAnalyzer = require('./services/CentralAnalyzer'); // <--- El nuevo cerebro
 
 // IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
@@ -20,7 +20,6 @@ const Autobot = require('./models/Autobot');
 const Aibot = require('./models/Aibot'); 
 const MarketSignal = require('./models/MarketSignal');
 const AIBotOrder = require('./models/AIBotOrder');
-// ELIMINADO: const analyzer = require('./src/bitmart_indicator_analyzer'); <--- Fuera
 
 dotenv.config();
 const app = express();
