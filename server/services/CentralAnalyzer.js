@@ -76,7 +76,7 @@ class CentralAnalyzer {
                 console.error("❌ [CENTRAL-ANALYZER] Error:", err.message);
             }
             // Latido de 5 segundos para no saturar la API
-            await new Promise(r => setTimeout(r, 5000));
+            await new Promise(r => setTimeout(r, 15000));
         }
     }
 
