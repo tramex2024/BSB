@@ -10,7 +10,7 @@ const path = require('path');
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const centralAnalyzer = require('./services/CentralAnalyzer'); // <--- El nuevo cerebro
+const centralAnalyzer = require('./services/CentralAnalyzer'); 
 
 // IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
@@ -58,7 +58,7 @@ const io = new Server(server, {
 autobotLogic.setIo(io);
 aiEngine.setIo(io); 
 
-// --- 4. RUTAS API --- (Mantenidas íntegras)
+// --- 4. RUTAS API ---
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/orders', require('./routes/ordersRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
@@ -75,10 +75,11 @@ mongoose.connect(process.env.MONGO_URI)
 
 // --- 6. VARIABLES GLOBALES ---
 let lastKnownPrice = 0;
-// ELIMINADO: lastProcessedMinute = -1; <--- Ya no se necesita aquí
 let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
+let lastExecutionTime = 0;
+const EXECUTION_THROTTLE_MS = 2000; // Control de frecuencia para Bots e IA
 
 // --- 7. WEBSOCKET BITMART ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
@@ -113,25 +114,30 @@ function setupMarketWS(io) {
 
                 lastKnownPrice = price; 
 
-                // --- LÓGICA DE INDICADORES ELIMINADA DE AQUÍ ---
-                // El CentralAnalyzer se encarga de esto de forma independiente.
-                
+                // Emitimos SIEMPRE al dashboard para fluidez visual
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
-                // 🚀 GATILLO DE IA Y BOT
-                if (mongoose.connection.readyState === 1) { 
-                    try { 
-                        await aiEngine.analyze(price, volume); 
+                // 🚀 GATILLO CONTROLADO (THROTTLE) PARA IA Y BOT
+                const now = Date.now();
+                if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
+                    lastExecutionTime = now;
+
+                    if (mongoose.connection.readyState === 1) { 
+                        try { 
+                            await aiEngine.analyze(price, volume); 
+                            
+                            if (aiEngine.isRunning) {
+                                io.emit('ai-status-update', { 
+                                    isRunning: true, 
+                                    historyCount: aiEngine.history.length,
+                                    virtualBalance: aiEngine.virtualBalance
+                                });
+                            }
+                        } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
                         
-                        if (aiEngine.isRunning) {
-                            io.emit('ai-status-update', { 
-                                isRunning: true, 
-                                historyCount: aiEngine.history.length,
-                                virtualBalance: aiEngine.virtualBalance
-                            });
-                        }
-                    } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
-                    await autobotLogic.botCycle(price);
+                        // Ejecución de ciclos de Autobot (LRunning, SRunning, etc)
+                        await autobotLogic.botCycle(price);
+                    }
                 }
             }
         } catch (e) { console.error("❌ WS Msg Error:", e.message); }
@@ -157,7 +163,7 @@ setInterval(async () => {
 
 setupMarketWS(io);
 
-// --- 10. SOCKET.IO EVENTS --- (Mantenidos todos tus eventos)
+// --- 10. SOCKET.IO EVENTS ---
 io.on('connection', (socket) => {
     console.log(`👤 Conectado: ${socket.id}`);
 
@@ -168,7 +174,7 @@ io.on('connection', (socket) => {
             socket.emit('ai-status-init', {
                 isRunning: aiEngine.isRunning,
                 virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
-                historyCount: aiEngine.history ? aiEngine.history.length : (state.historyPoints?.length || 0)
+                historyCount: aiEngine.history ? aiEngine.history.length : 0
             });
         } catch (err) { console.error("❌ Error AI Socket:", err); }
     };

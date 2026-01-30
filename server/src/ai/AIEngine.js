@@ -1,11 +1,11 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual (Optimizado)
+ * Núcleo de Inteligencia Artificial - Modo Virtual (Sincronizado)
  */
 
 const Aibot = require('../../models/Aibot');
 const AIBotOrder = require('../../models/AIBotOrder');
-const MarketSignal = require('../../models/MarketSignal'); // NUEVO: Nuestra fuente de verdad
+const MarketSignal = require('../../models/MarketSignal'); 
 const StrategyManager = require('./StrategyManager');
 
 class AIEngine {
@@ -17,10 +17,10 @@ class AIEngine {
         this.lastEntryPrice = 0;
         this.highestPrice = 0;
 
-        // PARÁMETROS
-        this.TRAILING_PERCENT = 0.003; 
-        this.RISK_PER_TRADE = 0.10;    
-        this.EXCHANGE_FEE = 0.001;     
+        // PARÁMETROS DE GESTIÓN
+        this.TRAILING_PERCENT = 0.003; // 0.3%
+        this.RISK_PER_TRADE = 0.10;    // 10% del capital virtual
+        this.EXCHANGE_FEE = 0.001;     // 0.1% Comisión simulada
     }
 
     setIo(io) { 
@@ -30,6 +30,7 @@ class AIEngine {
 
     async init() {
         try {
+            // 1. Recuperar Estado de la Cuenta (Persistent)
             let state = await Aibot.findOne({});
             if (!state) state = await Aibot.create({});
 
@@ -38,11 +39,10 @@ class AIEngine {
             this.lastEntryPrice = state.lastEntryPrice || 0;
             this.highestPrice = state.highestPrice || 0;
 
-            // 🚀 CARGA DE CONTEXTO INICIAL DESDE LA DB CENTRAL
+            // 2. Recuperar Estado del Mercado (Contexto)
             const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
             if (marketData && marketData.history) {
                 this.history = marketData.history;
-                this._log(`Contexto recuperado: ${this.history.length} velas disponibles.`, 0.5);
             }
 
             this._log(this.isRunning ? "🚀 Núcleo IA Online" : "💤 Núcleo en Standby", 0.5);
@@ -54,15 +54,17 @@ class AIEngine {
     async toggle(action) {
         this.isRunning = (action === 'start');
         
-        // Si arrancamos, forzamos refresco de historial
         if (this.isRunning) {
+            // Al encender, refrescamos contexto inmediatamente
             const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
             if (marketData) this.history = marketData.history || [];
         } else {
+            // Reset de posición al apagar (opcional, por seguridad)
             this.lastEntryPrice = 0;
             this.highestPrice = 0;
         }
         
+        // Actualizamos el modelo Aibot (Sin historyPoints)
         await Aibot.updateOne({}, { 
             isRunning: this.isRunning, 
             lastEntryPrice: this.lastEntryPrice,
@@ -77,7 +79,7 @@ class AIEngine {
     async analyze(price) {
         if (!this.isRunning) return;
 
-        // 1. Gestión de Trailing Stop (Prioridad máxima)
+        // 1. Gestión de Salida (Trailing Stop)
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) this.highestPrice = price;
             const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
@@ -88,46 +90,36 @@ class AIEngine {
             }
         }
 
-        // 2. Sincronización con CentralAnalyzer
-        // Obtenemos el historial ya procesado por el backend central
+        // 2. Obtener señales y velas del CentralAnalyzer (Sincronización)
         const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
         
         if (marketData && marketData.history && marketData.history.length > 0) {
             this.history = marketData.history;
-            
-            // Ejecutamos estrategia con el historial actualizado
             await this._executeStrategy(price);
         }
     }
 
     async _executeStrategy(price) {
-        // Ahora currentProgress rara vez será menor a 30 gracias al CentralAnalyzer
-        const currentProgress = this.history.length;
-        
-        if (currentProgress < 20) { // Bajamos el umbral mínimo para ser más ágiles
-            this._log(`Sincronizando... (${currentProgress}/20)`, 0.2, true);
+        if (this.history.length < 20) {
+            this._log(`Sincronizando mercado... (${this.history.length}/20)`, 0.2, true);
             return;
         }
 
         const analysis = StrategyManager.calculate(this.history);
-        
-        if (!analysis || analysis.rsi === undefined) return;
+        if (!analysis || analysis.confidence === undefined) return;
 
-        const { rsi, adx, trend, confidence } = analysis;
+        const { rsi, adx, confidence } = analysis;
         
         if (this.lastEntryPrice === 0) {
-            // Lógica de Compra
-            if (confidence >= 0.7) { // Umbral de confianza
+            if (confidence >= 0.7) {
                 await this._trade('BUY', price, confidence);
             } else {
-                // Log de pensamiento para el dashboard
-                const pensamiento = `RSI:${rsi.toFixed(1)} | ADX:${adx.toFixed(1)} | Conf:${(confidence*100).toFixed(0)}%`;
-                this._log(pensamiento, confidence);
+                const msg = `RSI:${rsi.toFixed(1)} | ADX:${adx.toFixed(1)} | Conf:${(confidence*100).toFixed(0)}%`;
+                this._log(msg, confidence);
             }
         } else {
-            // Monitoreo de posición abierta
             const profit = ((price - this.lastEntryPrice) / this.lastEntryPrice * 100).toFixed(2);
-            this._log(`Profit: ${profit}% | Trailing Stop activo`, 0.9);
+            this._log(`Posición: ${profit}% | TrailStop activo`, 0.9);
         }
     }
 
@@ -140,16 +132,17 @@ class AIEngine {
                 this.lastEntryPrice = price;
                 this.highestPrice = price;
                 this.virtualBalance -= fee;
-                this._log(`🔥 COMPRA VIRTUAL: $${price} (Confianza: ${Math.round(confidence * 100)}%)`, 1);
+                this._log(`🔥 COMPRA VIRTUAL: $${price}`, 1);
             } else {
                 const profitPct = (price - this.lastEntryPrice) / this.lastEntryPrice;
                 const profitAmount = (amountInUSDT * profitPct) - fee;
                 this.virtualBalance += profitAmount;
                 this.lastEntryPrice = 0;
                 this.highestPrice = 0;
-                this._log(`💰 VENTA VIRTUAL (Exit): $${price} | Resultado: ${profitAmount.toFixed(2)} USDT`, 0.5);
+                this._log(`💰 VENTA VIRTUAL: $${price} | Neto: ${profitAmount.toFixed(2)} USDT`, 0.5);
             }
 
+            // Persistencia en Historial de Órdenes
             await AIBotOrder.create({
                 side,
                 price,
@@ -159,40 +152,24 @@ class AIEngine {
                 timestamp: new Date()
             });
 
+            // Persistencia en Estado de la IA
             await Aibot.updateOne({}, { 
                 virtualBalance: this.virtualBalance,
                 lastEntryPrice: this.lastEntryPrice,
-                highestPrice: this.highestPrice
+                highestPrice: this.highestPrice,
+                lastUpdate: new Date()
             });
 
-            if (this.io) {
-                this.io.emit('ai-order-executed', {
-                    side,
-                    price,
-                    amount: amountInUSDT,
-                    virtualBalance: this.virtualBalance,
-                    timestamp: new Date()
-                });
-            }
+            this._broadcastStatus();
         } catch (error) {
-            console.error("Error en _trade:", error);
+            console.error("Error en _trade AI:", error);
         }
     }
 
     _log(msg, conf, isAnalyzing = false) {
-        const timestamp = new Date().toLocaleTimeString();
-        
-        // 1. Log unificado para Render (Visibilidad en servidor)
-        console.log(`[${timestamp}] [INFO] [AI-VIRTUAL] 🧠 ${msg}`);
-
-        // 2. Envío al Dashboard (Socket)
+        console.log(`[${new Date().toLocaleTimeString()}] [AI-VIRTUAL] 🧠 ${msg}`);
         if (this.io) {
-            this.io.emit('ai-decision-update', { 
-                confidence: conf, 
-                message: msg, 
-                isAnalyzing: isAnalyzing 
-            });
-            this._broadcastStatus();
+            this.io.emit('ai-decision-update', { confidence: conf, message: msg, isAnalyzing });
         }
     }
 
