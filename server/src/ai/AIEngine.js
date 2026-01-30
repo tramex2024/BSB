@@ -1,27 +1,26 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual
+ * Núcleo de Inteligencia Artificial - Modo Virtual (Optimizado)
  */
 
 const Aibot = require('../../models/Aibot');
 const AIBotOrder = require('../../models/AIBotOrder');
+const MarketSignal = require('../../models/MarketSignal'); // NUEVO: Nuestra fuente de verdad
 const StrategyManager = require('./StrategyManager');
-const CandleBuilder = require('./CandleBuilder');
 
 class AIEngine {
     constructor() {
         this.isRunning = false;
         this.io = null;
-        this.IS_VIRTUAL_MODE = true; 
         this.history = [];
         this.virtualBalance = 100.00;
         this.lastEntryPrice = 0;
         this.highestPrice = 0;
 
         // PARÁMETROS
-        this.TRAILING_PERCENT = 0.003; // 0.3%
-        this.RISK_PER_TRADE = 0.10;    // Usar 10% del capital por trade
-        this.EXCHANGE_FEE = 0.001;     // 0.1% comisión
+        this.TRAILING_PERCENT = 0.003; 
+        this.RISK_PER_TRADE = 0.10;    
+        this.EXCHANGE_FEE = 0.001;     
     }
 
     setIo(io) { 
@@ -36,11 +35,17 @@ class AIEngine {
 
             this.isRunning = state.isRunning;
             this.virtualBalance = state.virtualBalance || 100.00;
-            this.history = state.historyPoints || [];
             this.lastEntryPrice = state.lastEntryPrice || 0;
             this.highestPrice = state.highestPrice || 0;
 
-            this._log(this.isRunning ? "🚀 Núcleo IA Recuperado" : "💤 Núcleo en Standby", 0.5);
+            // 🚀 CARGA DE CONTEXTO INICIAL DESDE LA DB CENTRAL
+            const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+            if (marketData && marketData.history) {
+                this.history = marketData.history;
+                this._log(`Contexto recuperado: ${this.history.length} velas disponibles.`, 0.5);
+            }
+
+            this._log(this.isRunning ? "🚀 Núcleo IA Online" : "💤 Núcleo en Standby", 0.5);
         } catch (e) {
             console.error("Error en init de AIEngine:", e);
         }
@@ -48,21 +53,23 @@ class AIEngine {
 
     async toggle(action) {
         this.isRunning = (action === 'start');
-        if (!this.isRunning) {
-            this.history = [];
+        
+        // Si arrancamos, forzamos refresco de historial
+        if (this.isRunning) {
+            const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+            if (marketData) this.history = marketData.history || [];
+        } else {
             this.lastEntryPrice = 0;
             this.highestPrice = 0;
         }
         
         await Aibot.updateOne({}, { 
             isRunning: this.isRunning, 
-            historyPoints: this.history,
             lastEntryPrice: this.lastEntryPrice,
             highestPrice: this.highestPrice
         });
 
         this._broadcastStatus();
-
         this._log(this.isRunning ? "🚀 NÚCLEO IA: ONLINE" : "🛑 NÚCLEO IA: OFFLINE", this.isRunning ? 1 : 0);
         return { isRunning: this.isRunning, virtualBalance: this.virtualBalance };
     }
@@ -70,7 +77,7 @@ class AIEngine {
     async analyze(price) {
         if (!this.isRunning) return;
 
-        // Gestión de Trailing Stop para posiciones abiertas
+        // 1. Gestión de Trailing Stop (Prioridad máxima)
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) this.highestPrice = price;
             const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
@@ -81,45 +88,46 @@ class AIEngine {
             }
         }
 
-        const closedCandle = CandleBuilder.processTick(price);
-        if (closedCandle) {
-            this.history.push(closedCandle);
-            if (this.history.length > 50) this.history.shift();
-
-            // Persistencia del progreso
-            await Aibot.updateOne({}, { historyPoints: this.history });
+        // 2. Sincronización con CentralAnalyzer
+        // Obtenemos el historial ya procesado por el backend central
+        const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
+        
+        if (marketData && marketData.history && marketData.history.length > 0) {
+            this.history = marketData.history;
+            
+            // Ejecutamos estrategia con el historial actualizado
             await this._executeStrategy(price);
         }
     }
 
     async _executeStrategy(price) {
+        // Ahora currentProgress rara vez será menor a 30 gracias al CentralAnalyzer
         const currentProgress = this.history.length;
         
-        if (currentProgress < 30) {
-            this._log(`Analizando mercado... (${currentProgress}/30)`, 0.2, true);
+        if (currentProgress < 20) { // Bajamos el umbral mínimo para ser más ágiles
+            this._log(`Sincronizando... (${currentProgress}/20)`, 0.2, true);
             return;
         }
 
         const analysis = StrategyManager.calculate(this.history);
         
-        if (!analysis || analysis.rsi === undefined || analysis.adx === undefined) {
-            this._log("⚙️ Calculando indicadores técnicos...", 0.1);
-            return;
-        }
+        if (!analysis || analysis.rsi === undefined) return;
 
         const { rsi, adx, trend, confidence } = analysis;
-        let pensamiento = `Análisis: RSI(${(rsi || 0).toFixed(1)}) | ADX(${(adx || 0).toFixed(1)}) | Trend: ${(trend || 'Buscando').toUpperCase()}`;
         
         if (this.lastEntryPrice === 0) {
-            if (confidence < 0.7) {
-                pensamiento += ` | Confianza ${((confidence || 0) * 100).toFixed(0)}% (Mín. 70%)`;
-                this._log(pensamiento, confidence);
-            } else {
+            // Lógica de Compra
+            if (confidence >= 0.7) { // Umbral de confianza
                 await this._trade('BUY', price, confidence);
+            } else {
+                // Log de pensamiento para el dashboard
+                const pensamiento = `RSI:${rsi.toFixed(1)} | ADX:${adx.toFixed(1)} | Conf:${(confidence*100).toFixed(0)}%`;
+                this._log(pensamiento, confidence);
             }
         } else {
+            // Monitoreo de posición abierta
             const profit = ((price - this.lastEntryPrice) / this.lastEntryPrice * 100).toFixed(2);
-            this._log(`Posición Abierta: ${profit}% | TrailStop: $${(this.highestPrice * (1-this.TRAILING_PERCENT)).toFixed(2)}`, 0.9);
+            this._log(`Profit: ${profit}% | Trailing Stop activo`, 0.9);
         }
     }
 

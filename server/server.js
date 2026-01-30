@@ -10,6 +10,7 @@ const path = require('path');
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
+const centralAnalyzer = require('./src/services/CentralAnalyzer'); // <--- El nuevo cerebro
 
 // IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
@@ -19,9 +20,7 @@ const Autobot = require('./models/Autobot');
 const Aibot = require('./models/Aibot'); 
 const MarketSignal = require('./models/MarketSignal');
 const AIBotOrder = require('./models/AIBotOrder');
-const analyzer = require('./src/bitmart_indicator_analyzer'); 
-
-const centralAnalyzer = require('./services/CentralAnalyzer');
+// ELIMINADO: const analyzer = require('./src/bitmart_indicator_analyzer'); <--- Fuera
 
 dotenv.config();
 const app = express();
@@ -60,7 +59,7 @@ const io = new Server(server, {
 autobotLogic.setIo(io);
 aiEngine.setIo(io); 
 
-// --- 4. RUTAS API ---
+// --- 4. RUTAS API --- (Mantenidas íntegras)
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/orders', require('./routes/ordersRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
@@ -77,7 +76,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // --- 6. VARIABLES GLOBALES ---
 let lastKnownPrice = 0;
-let lastProcessedMinute = -1;
+// ELIMINADO: lastProcessedMinute = -1; <--- Ya no se necesita aquí
 let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
@@ -114,24 +113,10 @@ function setupMarketWS(io) {
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
                 lastKnownPrice = price; 
-                const currentMinute = new Date().getMinutes();
 
-                if (currentMinute !== lastProcessedMinute) {
-                    lastProcessedMinute = currentMinute;
-                    const analysis = await analyzer.runAnalysis(price);
-                    await MarketSignal.findOneAndUpdate(
-                        { symbol: 'BTC_USDT' },
-                        {
-                            currentRSI: analysis.currentRSI || 0,
-                            signal: analysis.action,
-                            reason: analysis.reason,
-                            lastUpdate: new Date()
-                        },
-                        { upsert: true }
-                    );
-                    io.emit('market-signal-update', analysis);
-                }
-
+                // --- LÓGICA DE INDICADORES ELIMINADA DE AQUÍ ---
+                // El CentralAnalyzer se encarga de esto de forma independiente.
+                
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
                 // 🚀 GATILLO DE IA Y BOT
@@ -139,8 +124,7 @@ function setupMarketWS(io) {
                     try { 
                         await aiEngine.analyze(price, volume); 
                         
-                        // Sincronización de progreso (X/30) para el front-end
-                        if (aiEngine.isRunning && aiEngine.history.length <= 30) {
+                        if (aiEngine.isRunning) {
                             io.emit('ai-status-update', { 
                                 isRunning: true, 
                                 historyCount: aiEngine.history.length,
@@ -174,7 +158,7 @@ setInterval(async () => {
 
 setupMarketWS(io);
 
-// --- 10. SOCKET.IO EVENTS ---
+// --- 10. SOCKET.IO EVENTS --- (Mantenidos todos tus eventos)
 io.on('connection', (socket) => {
     console.log(`👤 Conectado: ${socket.id}`);
 
@@ -200,13 +184,12 @@ io.on('connection', (socket) => {
         } catch (err) { console.error("❌ Error toggle:", err); }
     });
 
-    // En tu lógica de Socket en el servidor
-socket.on('get-ai-history', async () => {
-    const trades = await AIBotOrder.find({ isVirtual: true })
-        .sort({ timestamp: -1 }) // Los más recientes primero
-        .limit(5);
-    socket.emit('ai-history-data', trades);
-});
+    socket.on('get-ai-history', async () => {
+        const trades = await AIBotOrder.find({ isVirtual: true })
+            .sort({ timestamp: -1 })
+            .limit(5);
+        socket.emit('ai-history-data', trades);
+    });
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
 });
@@ -214,8 +197,10 @@ socket.on('get-ai-history', async () => {
 // --- 11. START ---
 server.listen(PORT, async () => {
     try {
-        centralAnalyzer.init(io); // <--- ESTO ACTIVA EL CEREBRO
-        console.log(`🚀 CENTRAL ANALYZER ACTIVO`);
+        // INICIO DE SERVICIOS CENTRALIZADOS
+        centralAnalyzer.init(io); 
+        console.log("🧠 [CENTRAL-ANALYZER] Iniciado correctamente.");
+
         await aiEngine.init();
         console.log("🧠 [IA-CORE] Memoria recuperada satisfactoriamente.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
