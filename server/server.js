@@ -21,6 +21,8 @@ const MarketSignal = require('./models/MarketSignal');
 const AIBotOrder = require('./models/AIBotOrder');
 const analyzer = require('./src/bitmart_indicator_analyzer'); 
 
+const centralAnalyzer = require('./src/services/CentralAnalyzer');
+
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -212,6 +214,8 @@ socket.on('get-ai-history', async () => {
 // --- 11. START ---
 server.listen(PORT, async () => {
     try {
+        centralAnalyzer.init(io); // <--- ESTO ACTIVA EL CEREBRO
+        console.log(`🚀 CENTRAL ANALYZER ACTIVO`);
         await aiEngine.init();
         console.log("🧠 [IA-CORE] Memoria recuperada satisfactoriamente.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
