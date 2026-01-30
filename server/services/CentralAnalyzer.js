@@ -2,7 +2,7 @@
 
 const { RSI } = require('technicalindicators');
 const bitmartService = require('./bitmartService'); // Ajusta la ruta según tu estructura
-const MarketSignal = require('../../models/MarketSignal');
+const MarketSignal = require('../models/MarketSignal');
 
 class CentralAnalyzer {
     constructor() {
