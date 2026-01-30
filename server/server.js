@@ -111,8 +111,10 @@ function setupMarketWS(io) {
                 const volume = parseFloat(ticker.base_volume_24h || 0);
                 const open24h = parseFloat(ticker.open_24h);
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
-
+   
                 lastKnownPrice = price; 
+
+                centralAnalyzer.updatePrice(price);
 
                 // Emitimos SIEMPRE al dashboard para fluidez visual
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
