@@ -54,17 +54,22 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
-    const priceVarDec = parseNumber(config.price_var) / 100;
-    const priceVarInc = parseNumber(config.price_step_inc || 0);
-    const profitPercent = parseNumber(config.profit_percent || config.trigger);
+    // Añadimos valores por defecto para evitar NaN
+    const priceVarDec = parseNumber(config?.price_var || 0) / 100;
+    const priceVarInc = parseNumber(config?.price_step_inc || 0);
+    const profitPercent = parseNumber(config?.profit_percent || config?.trigger || 0);
+    const sizeVar = parseNumber(config?.size_var || 0);
+    const purchaseUsdt = parseNumber(config?.purchaseUsdt || 0);
+    
     const feeRate = 0.001;
 
-    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount - 1, priceVarInc);
+    // Usamos currentOrderCount para la siguiente cobertura
+    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
 
     return {
-        ltprice: calculateTargetWithFees(p, profitPercent, 'long', feeRate), // ✅ Coherente con Manager
+        ltprice: calculateTargetWithFees(p, profitPercent, 'long', feeRate),
         nextCoveragePrice: p * (1 - currentStep),
-        requiredCoverageAmount: getExponentialAmount(config.purchaseUsdt, currentOrderCount, config.size_var)
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
     };
 }
 

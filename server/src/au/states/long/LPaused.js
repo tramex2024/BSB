@@ -24,15 +24,11 @@ async function run(dependencies) {
     }
 
     // --- 2. CALCULATE REQUIREMENTS ---
-    const recalculation = calculateLongTargets(
-        ppc,
-        config.long?.trigger || 0,
-        config.long?.price_var || 0,
-        config.long?.size_var || 0,
-        config.long?.purchaseUsdt || 0,
-        orderCountInCycle,
-        currentLBalance
-    );
+   const recalculation = calculateLongTargets(
+    ppc, 
+    config.long, 
+    orderCountInCycle
+);
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
