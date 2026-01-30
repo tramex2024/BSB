@@ -1,15 +1,19 @@
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
 class StrategyManager {
+    /**
+     * Calcula la estrategia basada en indicadores técnicos
+     * @param {Array} history - Velas de 1m (OHLC)
+     */
     static calculate(history) {
-        // Ahora history.length siempre será ~50 gracias al CentralAnalyzer
-        if (history.length < 30) return null;
+        // Necesitamos al menos 30 velas para que el ADX y Stoch sean estables
+        if (!history || history.length < 30) return null;
 
         const closeValues = history.map(c => c.close);
         const highValues = history.map(c => c.high);
         const lowValues = history.map(c => c.low);
         
-        // 1. ADX (Fuerza de tendencia)
+        // 1. ADX (Fuerza de tendencia) - Periodo 14
         const adxResult = ADX.calculate({
             high: highValues,
             low: lowValues,
@@ -27,39 +31,64 @@ class StrategyManager {
             dPeriod: 3
         });
         const latestStoch = stochResult[stochResult.length - 1];
+        const prevStoch = stochResult[stochResult.length - 2];
 
-        // 3. EMAs (Dirección)
+        // 3. EMAs (Dirección de tendencia)
         const ema9 = EMA.calculate({ period: 9, values: closeValues });
         const ema21 = EMA.calculate({ period: 21, values: closeValues });
-        const isBullish = ema9[ema9.length - 1] > ema21[ema21.length - 1];
+        
+        const lastEma9 = ema9[ema9.length - 1];
+        const lastEma21 = ema21[ema21.length - 1];
+        const currentPrice = closeValues[closeValues.length - 1];
 
-        // --- SISTEMA DE PUNTUACIÓN DE CONFIANZA ---
+        const isBullish = lastEma9 > lastEma21;
+
+        // --- SISTEMA DE PUNTUACIÓN DE CONFIANZA (OPTIMIZADO) ---
         let score = 0;
-        let totalWeight = 0;
+        let totalWeight = 100;
 
-        // Criterio 1: Tendencia (EMA) - Peso: 40%
-        totalWeight += 40;
-        if (isBullish) score += 40;
+        // Criterio 1: Estructura de Tendencia (40%)
+        // Puntuamos si la tendencia es alcista Y el precio está por encima de la media rápida
+        if (isBullish) {
+            score += 25; 
+            if (currentPrice > lastEma9) score += 15;
+        }
 
-        // Criterio 2: Momentum (Stochastic RSI) - Peso: 30%
-        totalWeight += 30;
-        // Si K < 20 (Sobreventa) y está subiendo
-        if (latestStoch && latestStoch.k < 25) score += 30;
-        else if (latestStoch && latestStoch.k < 50) score += 15; // Zona neutral-baja
+        // Criterio 2: Momentum y Giro (35%)
+        // No solo buscamos sobreventa, buscamos que el K esté subiendo (Confirmación)
+        if (latestStoch && prevStoch) {
+            if (latestStoch.k < 20 && latestStoch.k > prevStoch.k) {
+                // Sobreventa con giro al alza (Señal fuerte)
+                score += 35;
+            } else if (latestStoch.k < 50 && latestStoch.k > prevStoch.k) {
+                // Zona neutral con impulso alcista
+                score += 20;
+            } else if (latestStoch.k > 80) {
+                // Sobrecompra: reducimos score para evitar comprar en el techo
+                score -= 20;
+            }
+        }
 
-        // Criterio 3: Fuerza (ADX) - Peso: 30%
-        totalWeight += 30;
-        if (latestADX && latestADX.adx > 25) score += 30; // Tendencia fuerte
-        else if (latestADX && latestADX.adx > 18) score += 15; // Iniciando tendencia
+        // Criterio 3: Fuerza del Movimiento (25%)
+        if (latestADX) {
+            if (latestADX.adx > 25) {
+                score += 25; // Tendencia muy fuerte
+            } else if (latestADX.adx > 18) {
+                score += 15; // Tendencia naciendo
+            }
+        }
 
-        const confidence = score / totalWeight;
+        // Normalizamos la confianza entre 0 y 1
+        const confidence = Math.max(0, score / totalWeight);
 
         return {
-            rsi: latestStoch ? latestStoch.k : 50, // Usamos K como referencia de RSI
+            rsi: latestStoch ? latestStoch.k : 50,
             adx: latestADX ? latestADX.adx : 0,
             trend: isBullish ? 'bullish' : 'bearish',
-            confidence: confidence, // <--- Esto es lo que el AIEngine necesita
-            price: closeValues[closeValues.length - 1]
+            confidence: confidence,
+            price: currentPrice,
+            ema9: lastEma9,
+            ema21: lastEma21
         };
     }
 }
