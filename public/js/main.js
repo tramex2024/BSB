@@ -1,3 +1,5 @@
+// BSB/server/public/js/main.js
+
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
@@ -16,6 +18,7 @@ export const currentBotState = {
     lpm: 0,
     spm: 0,
     isRunning: false, // Estado de la IA
+    virtualBalance: 10000.00,
     config: {}
 };
 
@@ -81,7 +84,10 @@ function processNextLog() {
 // --- INICIALIZACIÓN DE SOCKETS ---
 export function initializeFullApp() {
     if (socket && socket.connected) return;
-    if (typeof io === 'undefined') return;
+    if (typeof io === 'undefined') {
+        console.error("Socket.io no detectado. Revisa el script en index.html");
+        return;
+    }
 
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
@@ -94,6 +100,16 @@ export function initializeFullApp() {
         socket.emit('get-ai-status');  
     });
 
+    // Evento unificado del MarketWorker
+    socket.on('market-update', (data) => {
+        resetWatchdog();
+        if (data && data.price) {
+            currentBotState.price = parseFloat(data.price);
+            updateBotUI(currentBotState);
+        }
+    });
+
+    // Backup para eventos antiguos
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data && data.price) {
@@ -111,43 +127,61 @@ export function initializeFullApp() {
     socket.on('bot-state-update', (state) => {
         if (state) {
             Object.assign(currentBotState, state);
-            if(state.virtualAiBalance) {
-                const balEl = document.getElementById('ai-virtual-balance');
-                if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
-            }
         }
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
     });
 
     // 🧠 LISTENERS ESPECÍFICOS DE IA
-    socket.on('ai-decision-update', (data) => {
-        aiBotUI.updateConfidence(data.confidence);
-        aiBotUI.addLog(data.message);
-    });
-
-    socket.on('ai-history-update', (trades) => {
-        aiBotUI.updateHistoryTable(trades);
-    });
-
-    // Sincronización de estado IA (Garantiza que el botón no rebote)
-    socket.on('ai-status-update', (data) => {
-    currentBotState.virtualBalance = data.virtualBalance;
-    currentBotState.isRunning = data.isRunning;
-    
-    // Si estamos en el dashboard, actualizamos el widget
-    const canvas = document.getElementById('balanceDonutChart');
-    if (canvas) {
-        // Esta función debe estar expuesta o llamada desde el dashboard
-        updateDistributionWidget(currentBotState); 
+socket.on('ai-decision-update', (data) => {
+    if (aiBotUI) {
+        // Cambiamos a los nombres reales de tu módulo:
+        if (typeof aiBotUI.updateConfidence === 'function') {
+            aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        }
+        if (typeof aiBotUI.addLogEntry === 'function') { // <--- Antes era addLog
+            aiBotUI.addLogEntry(data.message, data.confidence);
+        }
+        if (data.indicators) {
+    const adxEl = document.getElementById('ai-adx-val');
+    const stochEl = document.getElementById('ai-stoch-val');
+    if (adxEl) adxEl.innerText = data.indicators.adx.toFixed(1);
+    if (stochEl) stochEl.innerText = data.indicators.stochRsi.toFixed(1);
+}
     }
 });
+
+socket.on('ai-history-update', (trades) => {
+    if (aiBotUI && typeof aiBotUI.updateHistoryTable === 'function') {
+        aiBotUI.updateHistoryTable(trades);
+    }
+});
+
+    socket.on('ai-order-executed', (data) => {
+        if (aiBotUI && typeof aiBotUI.addLog === 'function') {
+            aiBotUI.addLog(`🚀 ORDEN EJECUTADA: ${data.side} @ $${data.price}`, 1);
+        }
+    });
+
+    socket.on('ai-status-update', (data) => {
+        currentBotState.virtualBalance = data.virtualBalance;
+        currentBotState.isRunning = data.isRunning;
+        
+        // Actualizar UI si el elemento existe
+        const balEl = document.getElementById('ai-virtual-balance');
+        if (balEl) balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
+
+        if (aiBotUI && typeof aiBotUI.setRunningStatus === 'function') {
+            aiBotUI.setRunningStatus(data.isRunning);
+        }
+    });
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
 
 // --- GESTIÓN DE PESTAÑAS ---
 export async function initializeTab(tabName) {
+    // Limpiar intervalos de la pestaña anterior
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
 
@@ -167,46 +201,9 @@ export async function initializeTab(tabName) {
             }
         }
 
-        // Lógica del botón de la IA
+        // Lógica específica de la vista de IA
         if (tabName === 'aibot') {
-            const btnAi = document.getElementById('btn-start-ai');
-            if (btnAi) {
-                aiBotUI.setRunningStatus(currentBotState.isRunning); 
-
-                btnAi.onclick = async () => {
-                    const action = currentBotState.isRunning ? 'stop' : 'start';
-                    
-                    // Feedback visual inmediato (Bloqueo preventivo)
-                    btnAi.disabled = true;
-                    btnAi.innerText = "PROCESANDO...";
-                    btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
-
-                    try {
-                        const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                            method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('token')}`
-                            },
-                            body: JSON.stringify({ action })
-                        });
-                        const data = await res.json();
-                        
-                        if(data.success) {
-                            // Actualización forzada
-                            currentBotState.isRunning = data.isRunning;
-                            aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`);
-                        }
-                    } catch (e) {
-                        aiBotUI.addLog("Error de conexión con el núcleo");
-                        // Revertir estado visual en caso de error
-                        aiBotUI.setRunningStatus(currentBotState.isRunning);
-                    } finally {
-                        btnAi.disabled = false;
-                    }
-                };
-            }
+            setupAiToggleLogic();
         }
 
     } catch (error) { 
@@ -214,6 +211,46 @@ export async function initializeTab(tabName) {
     }
 }
 
+function setupAiToggleLogic() {
+    const btnAi = document.getElementById('btn-start-ai');
+    if (!btnAi) return;
+
+    if (aiBotUI && typeof aiBotUI.setRunningStatus === 'function') {
+        aiBotUI.setRunningStatus(currentBotState.isRunning); 
+    }
+
+    btnAi.onclick = async () => {
+        const action = currentBotState.isRunning ? 'stop' : 'start';
+        
+        btnAi.disabled = true;
+        btnAi.innerText = "PROCESANDO...";
+
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ action })
+            });
+            const data = await res.json();
+            
+            if(data.success) {
+                currentBotState.isRunning = data.isRunning;
+                if (aiBotUI && typeof aiBotUI.setRunningStatus === 'function') {
+                    aiBotUI.setRunningStatus(data.isRunning);
+                }
+            }
+        } catch (e) {
+            console.error("Error toggle IA:", e);
+        } finally {
+            btnAi.disabled = false;
+        }
+    };
+}
+
+// --- ARRANQUE ---
 document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
@@ -227,16 +264,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Sincronización al volver a la pestaña o app
+// Sincronización al recuperar foco
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && socket && socket.connected) {
         socket.emit('get-bot-state'); 
         socket.emit('get-ai-status'); 
-        
-        // Refresco visual basado en memoria persistente
-        updateControlsState(currentBotState);
-        if (typeof aiBotUI !== 'undefined') {
-            aiBotUI.setRunningStatus(currentBotState.isRunning);
-        }
     }
 });
