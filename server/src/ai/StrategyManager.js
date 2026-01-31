@@ -1,28 +1,26 @@
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
 class StrategyManager {
-    /**
-     * Calcula la estrategia basada en indicadores técnicos
-     * @param {Array} history - Velas de 1m (OHLC)
-     */
     static calculate(history) {
-        // Aumentamos el requisito a 50 velas para tener una EMA 50 estable
+        // Necesitamos al menos 50 velas para que la EMA50 sea precisa
         if (!history || history.length < 50) return null;
 
         const closeValues = history.map(c => c.close);
         const highValues = history.map(c => c.high);
         const lowValues = history.map(c => c.low);
         
-        // 1. ADX (Fuerza de tendencia)
+        // 1. ADX - Fuerza de tendencia
         const adxResult = ADX.calculate({
             high: highValues,
             low: lowValues,
             close: closeValues,
             period: 14
         });
-        const latestADX = adxResult[adxResult.length - 1];
+        // ✅ CORRECCIÓN: ADX devuelve un objeto {adx, pdi, mdi}. Accedemos a .adx
+        const latestADXData = adxResult[adxResult.length - 1];
+        const latestADX = latestADXData ? latestADXData.adx : 0;
 
-        // 2. Stochastic RSI (Momentum con mayor exigencia)
+        // 2. Stochastic RSI
         const stochResult = StochasticRSI.calculate({
             values: closeValues,
             rsiPeriod: 14,
@@ -33,7 +31,7 @@ class StrategyManager {
         const latestStoch = stochResult[stochResult.length - 1];
         const prevStoch = stochResult[stochResult.length - 2];
 
-        // 3. EMAs - Tres capas de confirmación
+        // 3. EMAs
         const ema9 = EMA.calculate({ period: 9, values: closeValues });
         const ema21 = EMA.calculate({ period: 21, values: closeValues });
         const ema50 = EMA.calculate({ period: 50, values: closeValues });
@@ -43,57 +41,63 @@ class StrategyManager {
         const lastEma50 = ema50[ema50.length - 1];
         const currentPrice = closeValues[closeValues.length - 1];
 
-        // Tendencia de corto plazo (Cruce) y largo plazo (EMA 50)
+        // Lógica de cruces y tendencia
         const isBullishCross = lastEma9 > lastEma21;
         const isAboveLongTerm = currentPrice > lastEma50;
 
-        // --- SISTEMA DE PUNTUACIÓN DE CONFIANZA (SÚPER SELECTIVO) ---
+        // --- SISTEMA DE PUNTUACIÓN (Total Max: 100) ---
         let score = 0;
-        let totalWeight = 100;
 
-        // Criterio 1: Estructura y Tendencia Mayor (50%)
-        // Si el precio está bajo la EMA 50, el riesgo de "trampa para toros" es muy alto.
+        // Criterio 1: Estructura EMA (50%)
         if (isAboveLongTerm) {
-            score += 30; // Tendencia mayor a favor
-            if (isBullishCross) score += 20; // Cruce de corto plazo confirmado
+            score += 30; 
+            if (isBullishCross) score += 20; 
         } else {
-            // Penalizamos fuertemente si estamos en tendencia bajista mayor
-            score -= 10;
+            score -= 20; // Penalización por tendencia bajista
         }
 
-        // Criterio 2: Momentum de Giro Real (30%)
+        // Criterio 2: Stochastic RSI (30%)
         if (latestStoch && prevStoch) {
-            // Buscamos que K no solo suba, sino que cruce con fuerza desde abajo
             const kDiff = latestStoch.k - prevStoch.k;
             
-            if (latestStoch.k < 30 && kDiff > 5) {
-                score += 30; // Giro potente desde sobreventa
-            } else if (latestStoch.k < 50 && kDiff > 2) {
+            if (latestStoch.k < 25 && kDiff > 3) {
+                score += 30; // Giro en sobreventa
+            } else if (latestStoch.k < 50 && kDiff > 1) {
                 score += 15; // Recuperación moderada
-            } else if (latestStoch.k > 75) {
-                score -= 30; // EVITAR comprar en la cima
+            } else if (latestStoch.k > 80) {
+                score -= 40; // Bloqueo total si está sobrecomprado
             }
         }
 
         // Criterio 3: Fuerza ADX (20%)
-        if (latestADX) {
-            if (latestADX.adx > 25) score += 20; // Movimiento con fuerza
-            else if (latestADX.adx < 15) score -= 10; // Rango lateral (Peligro de señales falsas)
+        if (latestADX > 25) {
+            score += 20; 
+        } else if (latestADX < 18) {
+            score -= 15; // Rango lateral: ignorar señales
         }
 
-        // Normalizamos la confianza
-        const confidence = Math.max(0, score / totalWeight);
+        // Normalización de confianza (0.0 a 1.0)
+        const confidence = Math.max(0, Math.min(1, score / 100));
 
         return {
             rsi: latestStoch ? latestStoch.k : 50,
-            adx: latestADX ? latestADX.adx : 0,
-            trend: isAboveLongTerm ? 'bullish_strong' : 'bearish_weak',
+            adx: latestADX,
+            trend: isAboveLongTerm ? 'bullish' : 'bearish',
             confidence: confidence,
             price: currentPrice,
             ema9: lastEma9,
             ema21: lastEma21,
-            ema50: lastEma50
+            ema50: lastEma50,
+            message: this._generateMessage(isAboveLongTerm, latestADX, latestStoch, confidence)
         };
+    }
+
+    static _generateMessage(bullish, adx, stoch, conf) {
+        if (conf > 0.8) return "🚀 Señal fuerte: Tendencia y Momentum alineados.";
+        if (stoch && stoch.k > 80) return "⚠️ Sobrecompra: Esperando retroceso.";
+        if (adx < 20) return "😴 Mercado lateral: ADX muy bajo.";
+        if (!bullish) return "📉 Tendencia bajista: Buscando rebotes cortos.";
+        return "⚖️ Analizando oportunidad...";
     }
 }
 
