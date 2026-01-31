@@ -1,10 +1,8 @@
-//server/src/ai/StrategyManager.js
-
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
 class StrategyManager {
     static calculate(history) {
-        // Validación de seguridad: Necesitamos suficientes velas
+        // Necesitamos al menos 50 velas para que la EMA50 sea precisa
         if (!history || history.length < 50) return null;
 
         const closeValues = history.map(c => c.close);
@@ -18,6 +16,7 @@ class StrategyManager {
             close: closeValues,
             period: 14
         });
+        // ✅ CORRECCIÓN: ADX devuelve un objeto {adx, pdi, mdi}. Accedemos a .adx
         const latestADXData = adxResult[adxResult.length - 1];
         const latestADX = latestADXData ? latestADXData.adx : 0;
 
@@ -42,7 +41,7 @@ class StrategyManager {
         const lastEma50 = ema50[ema50.length - 1];
         const currentPrice = closeValues[closeValues.length - 1];
 
-        // --- Lógica de cruces y tendencia ---
+        // Lógica de cruces y tendencia
         const isBullishCross = lastEma9 > lastEma21;
         const isAboveLongTerm = currentPrice > lastEma50;
 
@@ -54,27 +53,27 @@ class StrategyManager {
             score += 30; 
             if (isBullishCross) score += 20; 
         } else {
-            score -= 30; // Penalización más fuerte si estamos bajo la EMA50
+            score -= 20; // Penalización por tendencia bajista
         }
 
-        // Criterio 2: Stochastic RSI (30%) - El "Timing"
+        // Criterio 2: Stochastic RSI (30%)
         if (latestStoch && prevStoch) {
             const kDiff = latestStoch.k - prevStoch.k;
             
-            if (latestStoch.k < 20 && kDiff > 2) {
-                score += 30; // Sobreventa extrema con giro alcista
+            if (latestStoch.k < 25 && kDiff > 3) {
+                score += 30; // Giro en sobreventa
             } else if (latestStoch.k < 50 && kDiff > 1) {
-                score += 15; // Zona neutral-baja recuperándose
-            } else if (latestStoch.k > 85) {
-                score -= 50; // BLOQUEO: No compramos en el techo
+                score += 15; // Recuperación moderada
+            } else if (latestStoch.k > 80) {
+                score -= 40; // Bloqueo total si está sobrecomprado
             }
         }
 
         // Criterio 3: Fuerza ADX (20%)
         if (latestADX > 25) {
-            score += 20; // Tendencia confirmada
+            score += 20; 
         } else if (latestADX < 18) {
-            score -= 20; // Mercado "picado" o lateral, alta probabilidad de fallar
+            score -= 15; // Rango lateral: ignorar señales
         }
 
         // Normalización de confianza (0.0 a 1.0)
@@ -94,11 +93,11 @@ class StrategyManager {
     }
 
     static _generateMessage(bullish, adx, stoch, conf) {
-        if (conf >= 0.85) return "🚀 SEÑAL ÓPTIMA: Alta probabilidad detectada.";
-        if (stoch && stoch.k > 80) return "⚠️ AGUARDANDO: Precio en zona de sobrecompra.";
-        if (adx < 20) return "😴 LATERALIZADO: Falta fuerza en el volumen.";
-        if (!bullish) return "📉 BAJISTA: No hay soporte en temporalidad mayor.";
-        return "⚖️ ESCANEANDO: Buscando confluencia de indicadores...";
+        if (conf > 0.8) return "🚀 Señal fuerte: Tendencia y Momentum alineados.";
+        if (stoch && stoch.k > 80) return "⚠️ Sobrecompra: Esperando retroceso.";
+        if (adx < 20) return "😴 Mercado lateral: ADX muy bajo.";
+        if (!bullish) return "📉 Tendencia bajista: Buscando rebotes cortos.";
+        return "⚖️ Analizando oportunidad...";
     }
 }
 

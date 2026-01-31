@@ -1,16 +1,15 @@
 /**
  * Archivo: BSB/server/controllers/aiController.js
- * Versión: Presupuesto Dinámico & Persistencia 2026
  */
+const path = require('path');
+// Usamos require directo para evitar problemas de caché de módulos
 const aiEngine = require('../src/ai/AIEngine'); 
 const AIBotOrder = require('../models/AIBotOrder');
 const Aibot = require('../models/Aibot'); 
 
 const getAIStatus = async (req, res) => {
     try {
-        // Buscamos la configuración guardada en la DB (Persistencia)
-        const configDB = await Aibot.findOne() || {};
-
+        // Obtenemos los trades más recientes
         const recentTrades = await AIBotOrder.find({ isVirtual: true })
             .sort({ timestamp: -1 })
             .limit(5);
@@ -18,13 +17,12 @@ const getAIStatus = async (req, res) => {
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
-            virtualBalance: aiEngine.virtualBalance || configDB.virtualBalance || 0,
-            historyCount: aiEngine.history ? aiEngine.history.length : 0,
+            virtualBalance: aiEngine.virtualBalance,
+            historyCount: aiEngine.history.length,
             recentHistory: recentTrades, 
             config: {
-                risk: aiEngine.RISK_PER_TRADE || 0.1,
-                threshold: 0.85,
-                savedBudget: configDB.virtualBalance || 0 // Enviamos el valor guardado
+                risk: aiEngine.RISK_PER_TRADE,
+                threshold: 0.85 // Actualizado a nuestro nuevo estándar selectivo
             }
         });
     } catch (error) {
@@ -34,46 +32,28 @@ const getAIStatus = async (req, res) => {
 
 const toggleAI = async (req, res) => {
     try {
-        const { action, budget } = req.body;
+        const { action } = req.body; 
         
         if (!action) {
             return res.status(400).json({ success: false, message: "Acción no proporcionada" });
         }
 
-        let numericBudget = parseFloat(budget);
+        console.log(`[AI-CONTROLLER] Comando recibido: ${action}`);
 
-        if (action === 'start') {
-            if (!numericBudget || numericBudget <= 0) {
-                return res.status(400).json({ success: false, message: "Presupuesto inicial requerido" });
-            }
-
-            // --- PERSISTENCIA PROACTIVA ---
-            // Guardamos o actualizamos en la DB para que al recargar la web el valor siga ahí
-            await Aibot.findOneAndUpdate(
-                {}, 
-                { virtualBalance: numericBudget, lastUpdate: new Date() },
-                { upsert: true, new: true }
-            );
-            console.log(`[AI-DATABASE] Presupuesto de $${numericBudget} guardado con éxito.`);
-        }
-
-        console.log(`[AI-CONTROLLER] Comando: ${action}${action === 'start' ? ` con Budget: $${numericBudget}` : ''}`);
-
-        // 1. Iniciamos/Detenemos el motor
-        await aiEngine.toggle(action, numericBudget);
+        // Forzamos la actualización en el Engine
+        const result = await aiEngine.toggle(action);
         
-        // 2. Sincronización de seguridad
+        // Verificación de seguridad: si mandamos parar, forzamos isRunning a false
         if (action === 'stop') aiEngine.isRunning = false;
 
         res.json({ 
             success: true, 
             isRunning: aiEngine.isRunning,
             virtualBalance: aiEngine.virtualBalance,
-            message: aiEngine.isRunning ? `IA Activada con $${aiEngine.virtualBalance}` : "IA Detenida" 
+            message: aiEngine.isRunning ? "IA Activada" : "IA Detenida" 
         });
-
     } catch (error) {
-        console.error("❌ Error en toggleAI:", error);
+        console.error("Error en toggleAI:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
