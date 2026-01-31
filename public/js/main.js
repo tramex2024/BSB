@@ -1,3 +1,5 @@
+//BSB/public/js/main.js
+
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
@@ -7,6 +9,7 @@ import aiBotUI from './modules/aiBotUI.js';
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 
+// ✅ RESTAURADO: Se incluyen todos los parámetros para Autobot L/S
 export const currentBotState = {
     price: 0,
     sstate: 'STOPPED',
@@ -15,7 +18,16 @@ export const currentBotState = {
     spc: 0, 
     lpm: 0,
     spm: 0,
-    isRunning: false, // Estado de la IA
+    // Parámetros Autobot
+    tbal: 0, tbas: 0,    // Total Budget L/S
+    fbal: 0, fbas: 0,    // First Buy L/S
+    smal: 0, smas: 0,    // Size Multiplier L/S
+    sdal: 0, sdas: 0,    // Safety Drop/Rise
+    tpl: 0, tps: 0,      // Take Profit
+    sgl: 0, sgs: 0,      // Step Growth
+    // IA
+    isRunning: false, 
+    virtualAiBalance: 0,
     config: {}
 };
 
@@ -111,7 +123,9 @@ export function initializeFullApp() {
     socket.on('bot-state-update', (state) => {
         if (state) {
             Object.assign(currentBotState, state);
+            // Sincronización balance IA desde el estado general si viniera ahí
             if(state.virtualAiBalance) {
+                currentBotState.virtualAiBalance = state.virtualAiBalance;
                 const balEl = document.getElementById('ai-virtual-balance');
                 if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
             }
@@ -122,26 +136,34 @@ export function initializeFullApp() {
 
     // 🧠 LISTENERS ESPECÍFICOS DE IA
     socket.on('ai-decision-update', (data) => {
-        aiBotUI.updateConfidence(data.confidence);
-        aiBotUI.addLog(data.message);
+        if (document.getElementById('ai-confidence-value')) {
+            aiBotUI.updateConfidence(data.confidence);
+            aiBotUI.addLog(data.message);
+        }
     });
 
     socket.on('ai-history-update', (trades) => {
-        aiBotUI.updateHistoryTable(trades);
+        if (document.getElementById('ai-history-table-body')) {
+            aiBotUI.updateHistoryTable(trades);
+        }
     });
 
-    // Sincronización de estado IA (Garantiza que el botón no rebote)
     socket.on('ai-status-update', (data) => {
-    currentBotState.virtualBalance = data.virtualBalance;
-    currentBotState.isRunning = data.isRunning;
-    
-    // Si estamos en el dashboard, actualizamos el widget
-    const canvas = document.getElementById('balanceDonutChart');
-    if (canvas) {
-        // Esta función debe estar expuesta o llamada desde el dashboard
-        updateDistributionWidget(currentBotState); 
-    }
-});
+        currentBotState.virtualAiBalance = data.virtualBalance;
+        currentBotState.isRunning = data.isRunning;
+        
+        const balEl = document.getElementById('ai-virtual-balance');
+        if(balEl) balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
+
+        if (document.getElementById('btn-start-ai')) {
+            aiBotUI.setRunningStatus(data.isRunning);
+        }
+
+        const canvas = document.getElementById('balanceDonutChart');
+        if (canvas && typeof updateDistributionWidget === 'function') {
+            updateDistributionWidget(currentBotState); 
+        }
+    });
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
@@ -170,13 +192,15 @@ export async function initializeTab(tabName) {
         // Lógica del botón de la IA
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
+            const inputBudget = document.getElementById('auamountai-usdt'); // Usando el ID persistente
+
             if (btnAi) {
                 aiBotUI.setRunningStatus(currentBotState.isRunning); 
 
                 btnAi.onclick = async () => {
                     const action = currentBotState.isRunning ? 'stop' : 'start';
-                    
-                    // Feedback visual inmediato (Bloqueo preventivo)
+                    const budgetValue = inputBudget ? inputBudget.value : 0;
+
                     btnAi.disabled = true;
                     btnAi.innerText = "PROCESANDO...";
                     btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
@@ -188,19 +212,17 @@ export async function initializeTab(tabName) {
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${localStorage.getItem('token')}`
                             },
-                            body: JSON.stringify({ action })
+                            body: JSON.stringify({ action, budget: budgetValue })
                         });
                         const data = await res.json();
                         
                         if(data.success) {
-                            // Actualización forzada
                             currentBotState.isRunning = data.isRunning;
                             aiBotUI.setRunningStatus(data.isRunning);
                             aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`);
                         }
                     } catch (e) {
                         aiBotUI.addLog("Error de conexión con el núcleo");
-                        // Revertir estado visual en caso de error
                         aiBotUI.setRunningStatus(currentBotState.isRunning);
                     } finally {
                         btnAi.disabled = false;
@@ -227,15 +249,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Sincronización al volver a la pestaña o app
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && socket && socket.connected) {
         socket.emit('get-bot-state'); 
         socket.emit('get-ai-status'); 
         
-        // Refresco visual basado en memoria persistente
         updateControlsState(currentBotState);
-        if (typeof aiBotUI !== 'undefined') {
+        if (document.getElementById('btn-start-ai')) {
             aiBotUI.setRunningStatus(currentBotState.isRunning);
         }
     }
