@@ -62,7 +62,7 @@ global.io = io;
 MarketWorker.start();
 
 autobotLogic.setIo(io);
-aiEngine.setIo(io); 
+aiEngine.init(io); 
 
 // --- 4. RUTAS API ---
 app.use('/api/auth', require('./routes/authRoutes'));
