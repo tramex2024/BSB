@@ -9,7 +9,7 @@ const autobotLogic = require('../autobotLogic'); // <-- IMPORTANTE RE-INCLUIRLO
 class MarketWorker {
     constructor() {
         this.symbol = 'BTC_USDT';
-        this.interval = 2000; 
+        this.interval = 300; 
         this.timer = null;
     }
 
