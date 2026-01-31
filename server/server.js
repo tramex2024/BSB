@@ -1,3 +1,5 @@
+// BSB/server/server.js
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,6 +13,7 @@ const path = require('path');
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
+const MarketWorker = require('./workers/MarketWorker');
 
 // IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
@@ -55,6 +58,9 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
+global.io = io;
+MarketWorker.start();
+
 autobotLogic.setIo(io);
 aiEngine.setIo(io); 
 
@@ -70,19 +76,23 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Persistencia Total)...'))
+    .then(() => {
+        console.log('✅ MongoDB Connected...');
+        
+        // --- 6. INICIALIZACIÓN DE MOTORES (Después de conectar DB) ---
+        // Ya no necesitamos crear el WebSocket de Bitmart aquí.
+        // El MarketWorker se encarga de todo lo "público".
+        MarketWorker.start();
+        
+        // Inicializamos los motores con el IO
+        aiEngine.init(io); // Cambiamos setIo por init para cargar estado de DB
+        autobotLogic.setIo(io);
+    })
     .catch(err => console.error('❌ MongoDB Error:', err));
 
-// --- 6. VARIABLES GLOBALES ---
-let lastKnownPrice = 0;
-let marketWs = null;
-let marketHeartbeat = null;
-let isMarketConnected = false; 
-let lastExecutionTime = 0;
-const EXECUTION_THROTTLE_MS = 2000; // Control de frecuencia para Bots e IA
-
-// --- 7. WEBSOCKET BITMART ---
-const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
+// --- 7. ELIMINAR EL WS DE BITMART DE AQUÍ ---
+// Todo el código de 'wss://ws-manager...' debe desaparecer del server.js
+// y vivir (si decides usarlo) únicamente dentro del MarketWorker.
 
 function setupMarketWS(io) {
     if (marketWs) { try { marketWs.terminate(); } catch (e) {} }
