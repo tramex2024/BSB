@@ -75,27 +75,50 @@ function setupAISocketListeners() {
 }
 
 /**
- * Configura el botón de encendido/apagado con limpieza de eventos
+ * Configura el botón de encendido/apagado usando la API REST
  */
 function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
-    // Clonamos el botón para eliminar cualquier eventListener previo (evita clics fantasma)
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
-    newBtn.addEventListener('click', () => {
-        // Determinamos acción basándonos en la memoria global
+    newBtn.addEventListener('click', async () => {
         const action = currentBotState.isRunning ? 'stop' : 'start';
 
-        // Feedback visual inmediato (Optimismo)
+        // Feedback visual inmediato
         newBtn.disabled = true;
         newBtn.textContent = "PROCESANDO...";
         newBtn.className = "w-full py-4 bg-gray-600 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
 
-        // Emitimos la orden al backend
-        socket.emit('toggle-ai', { action: action });
+        try {
+            // 🚀 LLAMADA A LA API (Nueva lógica coherente con el servidor)
+            const response = await fetch('/api/ai/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                console.log(`✅ IA ${action === 'start' ? 'Iniciada' : 'Detenida'} correctamente`);
+                // Actualizamos el estado global localmente para respuesta instantánea
+                currentBotState.isRunning = result.isRunning;
+                aiBotUI.setRunningStatus(result.isRunning);
+            } else {
+                throw new Error(result.message);
+            }
+
+        } catch (error) {
+            console.error("❌ Error al cambiar estado de IA:", error);
+            // Si falla, revertimos el botón al estado real que tiene la memoria global
+            aiBotUI.setRunningStatus(currentBotState.isRunning);
+            alert("Error de conexión con el núcleo de IA");
+        } finally {
+            newBtn.disabled = false;
+        }
     });
 }
 
