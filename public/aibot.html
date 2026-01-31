@@ -41,16 +41,32 @@
         </div>
 
         <div class="bg-gray-800 p-6 rounded-3xl border-2 border-blue-500/20 space-y-4 flex flex-col justify-center">
-            <h3 class="text-gray-400 text-[10px] font-black text-center uppercase tracking-widest">Training Control</h3>
+            <h3 class="text-gray-400 text-[10px] font-black text-center uppercase tracking-widest">AI Strategy Control</h3>
             
+            <div class="space-y-2">
+                <label class="text-[8px] text-blue-400/70 font-black uppercase ml-1 tracking-widest text-center block">Total Budget-AI (USDT)</label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 font-mono text-xs font-bold">$</span>
+                    <input type="number" id="input-ai-budget" 
+                        class="w-full bg-black/60 border border-blue-500/30 rounded-xl py-3 pl-8 pr-4 text-white font-mono text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-all text-center"
+                        placeholder="1000.00" step="10">
+                </div>
+            </div>
+
             <button id="btn-start-ai" class="w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-900/40 border border-blue-400/30 uppercase tracking-widest active:scale-95">
                 Activar Núcleo IA
             </button>
 
             <div class="bg-black/40 p-3 rounded-xl border border-blue-500/10">
                 <div class="flex items-center justify-between">
-                    <span class="text-[9px] text-gray-500 uppercase font-black">Saldo Virtual</span>
-                    <span id="ai-virtual-balance" class="text-emerald-400 font-mono font-black text-sm">$0.00</span>
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-gray-500 uppercase font-black">Capital en Riesgo</span>
+                        <span id="ai-virtual-balance" class="text-emerald-400 font-mono font-black text-sm">$0.00</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[7px] text-gray-600 uppercase block">Drawdown</span>
+                        <span class="text-red-500 font-mono text-[10px] font-bold">0.0%</span>
+                    </div>
                 </div>
             </div>
 
