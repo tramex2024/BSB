@@ -118,7 +118,7 @@ class AIEngine {
         
         if (this.lastEntryPrice === 0) {
             // Umbral de entrada subido a 75% para mayor calidad
-            if (confidence >= 0.75) {
+            if (confidence >= 0.85) {
                 await this._trade('BUY', price, confidence);
             } else {
                 // Log reducido para no saturar consola si no hay acción
