@@ -40,10 +40,17 @@ function setupAISocketListeners() {
 
     // Monitor de estado: Progreso (1/30), Balance y Running
     socket.on('ai-status-update', (data) => {
-        // Actualizamos el balance en la UI
+        // Actualizamos memoria global para que el Dashboard también lo vea
+        currentBotState.virtualBalance = data.virtualBalance;
+        currentBotState.isRunning = data.isRunning;
+
+        // Actualización del balance en la interfaz de la IA
         const balEl = document.getElementById('ai-virtual-balance');
-        if (balEl && data.virtualBalance !== undefined) {
-            balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        if (balEl) {
+            const balance = data.virtualBalance ?? data.virtualAiBalance;
+            if (balance !== undefined) {
+                balEl.innerText = `$${parseFloat(balance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+            }
         }
 
         // Lógica del botón: Si está en fase de análisis (30 velas), mostramos progreso
@@ -74,7 +81,7 @@ function setupAISocketListeners() {
 }
 
 /**
- * Configura el botón de encendido/apagado usando la API REST (Ruta blindada)
+ * Configura el botón de encendido/apagado usando la API REST
  */
 function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
@@ -93,21 +100,16 @@ function setupAIControls() {
         newBtn.className = "w-full py-4 bg-gray-600 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
 
         try {
-            // 🚀 LLAMADA A LA API DE RENDER (No a Vercel)
             const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}` // Importante para el middleware
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify({ action: action })
             });
 
-            // Validar si la respuesta es JSON antes de parsear
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Error servidor: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Error servidor: ${response.status}`);
 
             const result = await response.json();
 
@@ -122,7 +124,7 @@ function setupAIControls() {
         } catch (error) {
             console.error("❌ Error API IA:", error);
             aiBotUI.setRunningStatus(currentBotState.isRunning);
-            alert("Error de conexión con el núcleo de IA. Revisa la consola.");
+            alert("Error de conexión con el núcleo de IA.");
         } finally {
             newBtn.disabled = false;
         }
@@ -175,7 +177,5 @@ function playNeuralSound(side) {
         gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.15);
-    } catch (e) {
-        // Ignorar si el navegador bloquea audio
-    }
+    } catch (e) {}
 }

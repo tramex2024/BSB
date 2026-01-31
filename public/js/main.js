@@ -131,17 +131,17 @@ export function initializeFullApp() {
     });
 
     // Sincronización de estado IA (Garantiza que el botón no rebote)
-    socket.on('ai-status-update', (status) => {
-        if (status.isRunning !== undefined) {
-            currentBotState.isRunning = status.isRunning; 
-            aiBotUI.setRunningStatus(status.isRunning);
-        }
-        
-        const balEl = document.getElementById('ai-virtual-balance');
-        if(status.virtualBalance !== undefined && balEl) {
-            balEl.innerText = `$${parseFloat(status.virtualBalance).toFixed(2)}`;
-        }
-    });
+    socket.on('ai-status-update', (data) => {
+    currentBotState.virtualBalance = data.virtualBalance;
+    currentBotState.isRunning = data.isRunning;
+    
+    // Si estamos en el dashboard, actualizamos el widget
+    const canvas = document.getElementById('balanceDonutChart');
+    if (canvas) {
+        // Esta función debe estar expuesta o llamada desde el dashboard
+        updateDistributionWidget(currentBotState); 
+    }
+});
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
