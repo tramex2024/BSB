@@ -162,39 +162,42 @@ setInterval(async () => {
 setupMarketWS(io);
 
 // --- 10. SOCKET.IO EVENTS ---
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     console.log(`👤 Conectado: ${socket.id}`);
 
+    // Función para enviar el estado actual de la IA de forma unificada
     const sendAiStatus = async () => {
         try {
             let state = await Aibot.findOne({});
-            if (!state) state = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
-            socket.emit('ai-status-init', {
+            if (!state) state = await Aibot.create({ isRunning: false, virtualBalance: 10000.00 }); // Balance inicial 10k sugerido
+            
+            const statusData = {
                 isRunning: aiEngine.isRunning,
                 virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
                 historyCount: aiEngine.history ? aiEngine.history.length : 0
-            });
+            };
+
+            // ✅ Enviamos AMBOS eventos para asegurar compatibilidad con Dashboard y AI Tab
+            socket.emit('ai-status-update', statusData);
+            socket.emit('ai-status-init', statusData); 
         } catch (err) { console.error("❌ Error AI Socket:", err); }
     };
 
-    sendAiStatus();
+    // Enviar balance e historial inmediatamente al conectar
+    await sendAiStatus();
 
-    // 🛑 COMENTADO PARA EVITAR CONFLICTO CON RUTA API /api/ai/toggle
-    /*
-    socket.on('toggle-ai', async (data) => {
-        try {
-            const result = await aiEngine.toggle(data.action);
-            if (result.isRunning) await aiEngine.init();
-            io.emit('ai-status-update', { isRunning: result.isRunning, virtualBalance: result.virtualBalance });
-        } catch (err) { console.error("❌ Error toggle:", err); }
+    // Responder a peticiones manuales de la UI
+    socket.on('get-ai-status', async () => {
+        await sendAiStatus();
     });
-    */
 
     socket.on('get-ai-history', async () => {
-        const trades = await AIBotOrder.find({ isVirtual: true })
-            .sort({ timestamp: -1 })
-            .limit(5);
-        socket.emit('ai-history-data', trades);
+        try {
+            const trades = await AIBotOrder.find({ isVirtual: true })
+                .sort({ timestamp: -1 })
+                .limit(10); // Aumentado a 10 para mejor visualización
+            socket.emit('ai-history-data', trades);
+        } catch (err) { console.error("❌ Error historial:", err); }
     });
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));

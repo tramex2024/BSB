@@ -1,11 +1,6 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual (Sincronizado)
- */
-
-/**
- * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual (Optimizado)
+ * Núcleo de Inteligencia Artificial - Modo Virtual (Sincronizado 2026)
  */
 
 const Aibot = require('../../models/Aibot');
@@ -22,9 +17,9 @@ class AIEngine {
         this.lastEntryPrice = 0;
         this.highestPrice = 0;
 
-        // PARÁMETROS DE GESTIÓN (Ajustados para evitar micro-ventas)
-        this.TRAILING_PERCENT = 0.005; // 0.5% (Más aire para la tendencia)
-        this.MIN_PROFIT_TO_TIGHTEN = 0.002; // 0.2% mínimo antes de ser agresivo
+        // PARÁMETROS DE GESTIÓN
+        this.TRAILING_PERCENT = 0.005; // 0.5%
+        this.MIN_PROFIT_TO_TIGHTEN = 0.002; 
         this.RISK_PER_TRADE = 0.10;    
         this.EXCHANGE_FEE = 0.001;     
     }
@@ -37,10 +32,10 @@ class AIEngine {
     async init() {
         try {
             let state = await Aibot.findOne({});
-            if (!state) state = await Aibot.create({});
+            if (!state) state = await Aibot.create({ virtualBalance: 10000.00 }); // Balance inicial recomendado
 
             this.isRunning = state.isRunning;
-            this.virtualBalance = state.virtualBalance || 100.00;
+            this.virtualBalance = state.virtualBalance || 10000.00;
             this.lastEntryPrice = state.lastEntryPrice || 0;
             this.highestPrice = state.highestPrice || 0;
 
@@ -50,6 +45,7 @@ class AIEngine {
             }
 
             this._log(this.isRunning ? "🚀 Núcleo IA Online" : "💤 Núcleo en Standby", 0.5);
+            this._broadcastStatus(); // Emitir estado inicial al cargar
         } catch (e) {
             console.error("Error en init de AIEngine:", e);
         }
@@ -80,17 +76,13 @@ class AIEngine {
     async analyze(price) {
         if (!this.isRunning) return;
 
-        // 1. GESTIÓN DE SALIDA (Trailing Stop Dinámico)
+        // 1. GESTIÓN DE SALIDA (Trailing Stop)
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) this.highestPrice = price;
 
-            const currentProfit = (price - this.lastEntryPrice) / this.lastEntryPrice;
             const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
 
-            // LOGICA: Si el precio toca el Stop Loss
             if (price <= stopPrice) {
-                // Solo vendemos si no fue una fluctuación instantánea del mismo segundo
-                // o si estamos protegiendo una pérdida mayor al 1%
                 await this._trade('SELL', price, 0.95);
                 return; 
             }
@@ -98,8 +90,7 @@ class AIEngine {
 
         // 2. OBTENER SEÑALES
         const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
-        
-        if (marketData && marketData.history && marketData.history.length > 0) {
+        if (marketData && marketData.history) {
             this.history = marketData.history;
             await this._executeStrategy(price);
         }
@@ -108,6 +99,7 @@ class AIEngine {
     async _executeStrategy(price) {
         if (this.history.length < 30) {
             this._log(`Sincronizando mercado... (${this.history.length}/30)`, 0.2, true);
+            this._broadcastStatus(); // Enviar progreso de velas (1/30)
             return;
         }
 
@@ -117,30 +109,20 @@ class AIEngine {
         const { rsi, adx, confidence } = analysis;
         
         if (this.lastEntryPrice === 0) {
-            // Umbral de entrada subido a 75% para mayor calidad
             if (confidence >= 0.85) {
                 await this._trade('BUY', price, confidence);
-            } else {
-                // Log reducido para no saturar consola si no hay acción
-                if (Math.random() > 0.8) { // Muestra solo el 20% de los HOLD para limpieza
-                    const msg = `RSI:${rsi.toFixed(1)} | ADX:${adx.toFixed(1)} | Conf:${(confidence*100).toFixed(0)}%`;
-                    this._log(msg, confidence);
-                }
+            } else if (Math.random() > 0.95) { 
+                const msg = `RSI:${rsi.toFixed(1)} | ADX:${adx.toFixed(1)} | Conf:${(confidence*100).toFixed(0)}%`;
+                this._log(msg, confidence);
             }
         } else {
-            const profit = ((price - this.lastEntryPrice) / this.lastEntryPrice * 100).toFixed(2);
-            // Solo logueamos la posición cada cierto tiempo para no saturar
-            this._log(`En Posición: ${profit}% | Pico: $${this.highestPrice}`, 0.9);
+            // Posición abierta: Actualizar UI con el profit latente si fuera necesario
+            if (Math.random() > 0.9) this._broadcastStatus(); 
         }
     }
 
     async _trade(side, price, confidence) {
         try {
-            // Evitar trades duplicados en el mismo precio/segundo
-            if (side === 'SELL' && price === this.lastEntryPrice) {
-                return; 
-            }
-
             const amountInUSDT = this.virtualBalance * this.RISK_PER_TRADE;
             const fee = amountInUSDT * this.EXCHANGE_FEE;
             
@@ -148,26 +130,18 @@ class AIEngine {
                 this.lastEntryPrice = price;
                 this.highestPrice = price;
                 this.virtualBalance -= fee;
-                this._log(`🔥 COMPRA VIRTUAL: $${price}`, 1);
             } else {
                 const profitPct = (price - this.lastEntryPrice) / this.lastEntryPrice;
-                const profitAmount = (amountInUSDT * profitPct) - (fee * 2); // Fee de entrada + salida
+                const profitAmount = (amountInUSDT * profitPct) - (fee * 2);
                 this.virtualBalance += profitAmount;
-                
-                const win = profitAmount > 0;
-                this._log(`${win ? '💰' : '📉'} VENTA VIRTUAL: $${price} | Neto: ${profitAmount.toFixed(4)} USDT`, 0.5);
-                
                 this.lastEntryPrice = 0;
                 this.highestPrice = 0;
             }
 
-            // Persistencia
+            // Persistencia en DB
             await AIBotOrder.create({
-                side,
-                price,
-                amount: amountInUSDT,
-                isVirtual: true,
-                confidenceScore: Math.round(confidence * 100),
+                side, price, amount: amountInUSDT,
+                isVirtual: true, confidenceScore: Math.round(confidence * 100),
                 timestamp: new Date()
             });
 
@@ -178,6 +152,11 @@ class AIEngine {
                 lastUpdate: new Date()
             });
 
+            // Notificar ejecución de orden para el Toast y Sonido
+            if (this.io) {
+                this.io.emit('ai-order-executed', { side, price, balance: this.virtualBalance });
+            }
+
             this._broadcastStatus();
         } catch (error) {
             console.error("Error en _trade AI:", error);
@@ -185,19 +164,24 @@ class AIEngine {
     }
 
     _log(msg, conf, isAnalyzing = false) {
-        console.log(`[${new Date().toLocaleTimeString()}] [AI-VIRTUAL] 🧠 ${msg}`);
         if (this.io) {
             this.io.emit('ai-decision-update', { confidence: conf, message: msg, isAnalyzing });
         }
     }
 
+    /**
+     * ✅ UNIFICADO: Emite el evento que Dashboard y AI Bot esperan
+     */
     _broadcastStatus() {
         if (this.io) {
-            this.io.emit('ai-status-change', {
+            const data = {
                 isRunning: this.isRunning,
                 virtualBalance: this.virtualBalance,
-                historyCount: this.history.length
-            });
+                historyCount: this.history.length,
+                lastEntryPrice: this.lastEntryPrice
+            };
+            // Emitimos con el nombre estándar para que todos los módulos se sincronicen
+            this.io.emit('ai-status-update', data);
         }
     }
 }
