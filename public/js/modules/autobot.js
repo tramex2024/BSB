@@ -65,7 +65,7 @@ export async function initializeAutobotView() {
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
         if (!btn) {
-            console.warn(`⚠️ Botón ${id} no encontrado en el DOM.`);
+            //console.warn(`⚠️ Botón ${id} no encontrado en el DOM.`);
             return;
         }
 
