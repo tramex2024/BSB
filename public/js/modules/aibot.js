@@ -1,6 +1,6 @@
 // public/js/modules/aibot.js
 
-import { socket, currentBotState } from '../main.js';
+import { socket, currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 
 /**
@@ -43,7 +43,7 @@ function setupAISocketListeners() {
         // Actualizamos el balance en la UI
         const balEl = document.getElementById('ai-virtual-balance');
         if (balEl && data.virtualBalance !== undefined) {
-            balEl.innerText = `$${data.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+            balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         }
 
         // Lógica del botón: Si está en fase de análisis (30 velas), mostramos progreso
@@ -60,27 +60,27 @@ function setupAISocketListeners() {
         }
     });
 
-    // Historial completo (usualmente al cargar la pestaña)
+    // Historial completo
     socket.on('ai-history-data', (history) => {
         aiBotUI.updateHistoryTable(history);
     });
 
-    // Ejecución en tiempo real: Cuando la IA hace un trade mientras miras la pantalla
+    // Ejecución en tiempo real
     socket.on('ai-order-executed', (order) => {
         showAiToast(order);
         playNeuralSound(order.side);
-        // Pedimos historial actualizado para que la tabla crezca
         socket.emit('get-ai-history'); 
     });
 }
 
 /**
- * Configura el botón de encendido/apagado usando la API REST
+ * Configura el botón de encendido/apagado usando la API REST (Ruta blindada)
  */
 function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
+    // Clonamos para limpiar eventos viejos
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
@@ -93,18 +93,26 @@ function setupAIControls() {
         newBtn.className = "w-full py-4 bg-gray-600 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
 
         try {
-            // 🚀 LLAMADA A LA API (Nueva lógica coherente con el servidor)
-            const response = await fetch('/api/ai/toggle', {
+            // 🚀 LLAMADA A LA API DE RENDER (No a Vercel)
+            const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}` // Importante para el middleware
+                },
                 body: JSON.stringify({ action: action })
             });
+
+            // Validar si la respuesta es JSON antes de parsear
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Error servidor: ${response.status}`);
+            }
 
             const result = await response.json();
 
             if (result.success) {
-                console.log(`✅ IA ${action === 'start' ? 'Iniciada' : 'Detenida'} correctamente`);
-                // Actualizamos el estado global localmente para respuesta instantánea
+                console.log(`✅ IA ${action} exitoso`);
                 currentBotState.isRunning = result.isRunning;
                 aiBotUI.setRunningStatus(result.isRunning);
             } else {
@@ -112,10 +120,9 @@ function setupAIControls() {
             }
 
         } catch (error) {
-            console.error("❌ Error al cambiar estado de IA:", error);
-            // Si falla, revertimos el botón al estado real que tiene la memoria global
+            console.error("❌ Error API IA:", error);
             aiBotUI.setRunningStatus(currentBotState.isRunning);
-            alert("Error de conexión con el núcleo de IA");
+            alert("Error de conexión con el núcleo de IA. Revisa la consola.");
         } finally {
             newBtn.disabled = false;
         }
@@ -123,7 +130,7 @@ function setupAIControls() {
 }
 
 /**
- * Notificación visual tipo Toast cuando ocurre un trade
+ * Notificación visual tipo Toast
  */
 function showAiToast(order) {
     const toast = document.createElement('div');
@@ -151,7 +158,7 @@ function showAiToast(order) {
 }
 
 /**
- * Sonido sutil para confirmar ejecución de la IA
+ * Sonido sutil
  */
 function playNeuralSound(side) {
     try {
@@ -163,13 +170,12 @@ function playNeuralSound(side) {
         gainNode.connect(audioCtx.destination);
         
         oscillator.type = 'sine';
-        // Agudo para compra, más grave para venta
         oscillator.frequency.setValueAtTime(side.toUpperCase() === 'BUY' ? 880 : 440, audioCtx.currentTime);
         
         gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.15);
     } catch (e) {
-        // El navegador bloquea audio sin interacción previa, se ignora silenciosamente
+        // Ignorar si el navegador bloquea audio
     }
 }
