@@ -3,7 +3,7 @@
  */
 const path = require('path');
 // Usamos require directo para evitar problemas de caché de módulos
-const aiEngine = require('../ai/AIEngine'); 
+const aiEngine = require('../src/ai/AIEngine'); 
 const AIBotOrder = require('../models/AIBotOrder');
 const Aibot = require('../models/Aibot'); 
 
