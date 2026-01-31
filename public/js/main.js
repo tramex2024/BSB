@@ -168,49 +168,65 @@ export async function initializeTab(tabName) {
         }
 
         // Lógica del botón de la IA
-        if (tabName === 'aibot') {
-            const btnAi = document.getElementById('btn-start-ai');
-            if (btnAi) {
-                aiBotUI.setRunningStatus(currentBotState.isRunning); 
+       if (tabName === 'aibot') {
+    const btnAi = document.getElementById('btn-start-ai');
+    const inputBudget = document.getElementById('input-ai-budget'); // <--- Referencia al nuevo input
 
-                btnAi.onclick = async () => {
-                    const action = currentBotState.isRunning ? 'stop' : 'start';
-                    
-                    // Feedback visual inmediato (Bloqueo preventivo)
-                    btnAi.disabled = true;
-                    btnAi.innerText = "PROCESANDO...";
-                    btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
+    if (btnAi) {
+        aiBotUI.setRunningStatus(currentBotState.isRunning); 
 
-                    try {
-                        const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                            method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('token')}`
-                            },
-                            body: JSON.stringify({ action })
-                        });
-                        const data = await res.json();
-                        
-                        if(data.success) {
-                            // Actualización forzada
-                            currentBotState.isRunning = data.isRunning;
-                            aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`);
-                        }
-                    } catch (e) {
-                        aiBotUI.addLog("Error de conexión con el núcleo");
-                        // Revertir estado visual en caso de error
-                        aiBotUI.setRunningStatus(currentBotState.isRunning);
-                    } finally {
-                        btnAi.disabled = false;
-                    }
-                };
+        btnAi.onclick = async () => {
+            const action = currentBotState.isRunning ? 'stop' : 'start';
+            const budgetValue = inputBudget ? inputBudget.value : 0; // <--- Capturamos el valor
+
+            // Validación simple antes de enviar
+            if (action === 'start' && (!budgetValue || budgetValue <= 0)) {
+                alert("⚠️ Por favor define un presupuesto (Total Budget-AI) para iniciar la estrategia.");
+                inputBudget.focus();
+                return;
             }
-        }
 
-    } catch (error) { 
-        console.error("❌ Error cargando vista:", error); 
+            // Feedback visual inmediato
+            btnAi.disabled = true;
+            btnAi.innerText = "PROCESANDO...";
+            btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    // ENVIAMOS EL ACTION Y EL BUDGET
+                    body: JSON.stringify({ action, budget: budgetValue }) 
+                });
+                
+                const data = await res.json();
+                
+                if(data.success) {
+                    currentBotState.isRunning = data.isRunning;
+                    if(data.virtualBalance) {
+                        currentBotState.virtualBalance = data.virtualBalance;
+                        // Actualizar el texto del saldo si existe el elemento
+                        const balEl = document.getElementById('ai-virtual-balance');
+                        if(balEl) balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
+                    }
+                    
+                    aiBotUI.setRunningStatus(data.isRunning);
+                    aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado con $' + data.virtualBalance : 'Detenido'}`);
+                } else {
+                    alert("Error: " + (data.message || "No se pudo cambiar el estado"));
+                    aiBotUI.setRunningStatus(currentBotState.isRunning);
+                }
+            } catch (e) {
+                console.error("Error de conexión:", e);
+                aiBotUI.addLog("Error de conexión con el núcleo");
+                aiBotUI.setRunningStatus(currentBotState.isRunning);
+            } finally {
+                btnAi.disabled = false;
+            }
+        };
     }
 }
 
