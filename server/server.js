@@ -6,7 +6,6 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require("socket.io");
-const WebSocket = require('ws');
 const path = require('path');
 
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
@@ -58,11 +57,8 @@ const io = new Server(server, {
     path: '/socket.io'
 });
 
+// Compartir io globalmente para los Workers
 global.io = io;
-MarketWorker.start();
-
-autobotLogic.setIo(io);
-aiEngine.init(io); 
 
 // --- 4. RUTAS API ---
 app.use('/api/auth', require('./routes/authRoutes'));
@@ -74,129 +70,64 @@ app.use('/api/v1/balance', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
 
-// --- 5. CONEXIÓN BASE DE DATOS ---
+// --- 5. CONEXIÓN BASE DE DATOS Y ARRANQUE DE MOTORES ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => {
-        console.log('✅ MongoDB Connected...');
+    .then(async () => {
+        console.log('✅ MongoDB Connected (BSB 2026)...');
         
-        // --- 6. INICIALIZACIÓN DE MOTORES (Después de conectar DB) ---
-        // Ya no necesitamos crear el WebSocket de Bitmart aquí.
-        // El MarketWorker se encarga de todo lo "público".
+        // --- 6. INICIALIZACIÓN DE MOTORES CENTRALIZADOS ---
+        // El MarketWorker ahora es el ÚNICO que consulta precios públicos
         MarketWorker.start();
         
-        // Inicializamos los motores con el IO
-        aiEngine.init(io); // Cambiamos setIo por init para cargar estado de DB
+        // Inicializamos CentralAnalyzer para indicadores globales
+        centralAnalyzer.init(io);
+
+        // Inicializamos la IA cargando su memoria de la DB
+        await aiEngine.init(io);
+        
+        // Inicializamos la lógica del bot real
         autobotLogic.setIo(io);
+
+        console.log("🧠 [MOTORES] Todos los servicios iniciados y sincronizados.");
     })
     .catch(err => console.error('❌ MongoDB Error:', err));
 
-// --- 7. ELIMINAR EL WS DE BITMART DE AQUÍ ---
-// Todo el código de 'wss://ws-manager...' debe desaparecer del server.js
-// y vivir (si decides usarlo) únicamente dentro del MarketWorker.
-
-function setupMarketWS(io) {
-    if (marketWs) { try { marketWs.terminate(); } catch (e) {} }
-    marketWs = new WebSocket(bitmartWsUrl);
-    
-    marketWs.on('open', () => {
-        isMarketConnected = true; 
-        console.log("📡 [MARKET_WS] Conectado. Suscribiendo BTC_USDT...");
-        marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
-
-        if (marketHeartbeat) clearInterval(marketHeartbeat);
-        marketHeartbeat = setInterval(() => {
-            if (marketWs.readyState === WebSocket.OPEN) marketWs.send("ping");
-        }, 15000);
-    });
-
-    marketWs.on('message', async (data) => {
-        try {
-            const rawData = data.toString();
-            if (rawData === 'pong') return;
-            const parsed = JSON.parse(rawData);
-            
-            if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
-                const ticker = parsed.data[0];
-                const price = parseFloat(ticker.last_price);
-                const volume = parseFloat(ticker.base_volume_24h || 0);
-                const open24h = parseFloat(ticker.open_24h);
-                const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
-   
-                lastKnownPrice = price; 
-
-                centralAnalyzer.updatePrice(price);
-
-                // Emitimos SIEMPRE al dashboard para fluidez visual
-                io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
-                
-                // 🚀 GATILLO CONTROLADO (THROTTLE) PARA IA Y BOT
-                const now = Date.now();
-                if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
-                    lastExecutionTime = now;
-
-                    if (mongoose.connection.readyState === 1) { 
-                        try { 
-                            // Analizar solo si el motor está corriendo para no procesar en vano
-                            if (aiEngine.isRunning) {
-                                await aiEngine.analyze(price, volume); 
-                                // El estado se emite desde el propio Engine si hay cambios importantes
-                            }
-                        } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
-                        
-                        // Ejecución de ciclos de Autobot (LRunning, SRunning, etc)
-                        await autobotLogic.botCycle(price);
-                    }
-                }
-            }
-        } catch (e) { console.error("❌ WS Msg Error:", e.message); }
-    });
-
-    marketWs.on('close', () => {
-        isMarketConnected = false; 
-        setTimeout(() => setupMarketWS(io), 5000);
-    });
-}
-
-// --- 8. WS ÓRDENES PRIVADAS ---
+// --- 7. WS ÓRDENES PRIVADAS (Solo para ejecución real) ---
 bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 9. BUCLE SALDOS ---
+// --- 8. BUCLE DE SALDOS (Optimizado cada 10s) ---
 setInterval(async () => {
     try {
-        if (mongoose.connection.readyState === 1) await autobotLogic.slowBalanceCacheUpdate();
+        if (mongoose.connection.readyState === 1) {
+            await autobotLogic.slowBalanceCacheUpdate();
+        }
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-setupMarketWS(io);
-
-// --- 10. SOCKET.IO EVENTS ---
+// --- 9. EVENTOS SOCKET.IO PARA CLIENTES ---
 io.on('connection', async (socket) => {
-    console.log(`👤 Conectado: ${socket.id}`);
+    console.log(`👤 Usuario Conectado: ${socket.id}`);
 
-    // Función para enviar el estado actual de la IA de forma unificada
+    // Función para enviar estado unificado de la IA
     const sendAiStatus = async () => {
         try {
-            let state = await Aibot.findOne({});
-            if (!state) state = await Aibot.create({ isRunning: false, virtualBalance: 10000.00 }); // Balance inicial 10k sugerido
-            
             const statusData = {
                 isRunning: aiEngine.isRunning,
-                virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
-                historyCount: aiEngine.history ? aiEngine.history.length : 0
+                virtualBalance: aiEngine.virtualBalance,
+                historyCount: aiEngine.history ? aiEngine.history.length : 0,
+                lastEntryPrice: aiEngine.lastEntryPrice,
+                highestPrice: aiEngine.highestPrice
             };
-
-            // ✅ Enviamos AMBOS eventos para asegurar compatibilidad con Dashboard y AI Tab
             socket.emit('ai-status-update', statusData);
             socket.emit('ai-status-init', statusData); 
-        } catch (err) { console.error("❌ Error AI Socket:", err); }
+        } catch (err) { console.error("❌ Error enviando status IA:", err); }
     };
 
-    // Enviar balance e historial inmediatamente al conectar
+    // Al conectar, enviamos el estado actual
     await sendAiStatus();
 
-    // Responder a peticiones manuales de la UI
     socket.on('get-ai-status', async () => {
         await sendAiStatus();
     });
@@ -205,23 +136,16 @@ io.on('connection', async (socket) => {
         try {
             const trades = await AIBotOrder.find({ isVirtual: true })
                 .sort({ timestamp: -1 })
-                .limit(10); // Aumentado a 10 para mejor visualización
+                .limit(10);
             socket.emit('ai-history-data', trades);
         } catch (err) { console.error("❌ Error historial:", err); }
     });
 
-    socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
+    socket.on('disconnect', () => console.log(`👤 Usuario Desconectado: ${socket.id}`));
 });
 
-// --- 11. START ---
-server.listen(PORT, async () => {
-    try {
-        // INICIO DE SERVICIOS CENTRALIZADOS
-        centralAnalyzer.init(io); 
-        console.log("🧠 [CENTRAL-ANALYZER] Iniciado correctamente.");
-
-        await aiEngine.init();
-        console.log("🧠 [IA-CORE] Memoria recuperada satisfactoriamente.");
-    } catch (e) { console.error("❌ Error inicialización:", e); }
+// --- 10. INICIO DEL SERVIDOR ---
+server.listen(PORT, () => {
     console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
+    console.log(`🛡️  Arquitectura centralizada: Filtro de IP activado.`);
 });

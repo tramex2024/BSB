@@ -2,12 +2,14 @@
 
 const bitmartService = require('../services/bitmartService');
 const MarketSignal = require('../models/MarketSignal');
-const aiEngine = require('../src/ai/AIEngine'); // Conexión directa
+// Asegúrate de que estas rutas sean correctas según tu carpeta
+const aiEngine = require('../src/ai/AIEngine'); 
+const autobotLogic = require('../autobotLogic'); // <-- IMPORTANTE RE-INCLUIRLO
 
 class MarketWorker {
     constructor() {
         this.symbol = 'BTC_USDT';
-        this.interval = 2000; // 2 segundos
+        this.interval = 2000; 
         this.timer = null;
     }
 
@@ -18,7 +20,6 @@ class MarketWorker {
 
     async run() {
         try {
-            // 1. Única llamada a la API externa
             const rawCandles = await bitmartService.getKlines(this.symbol, '1', 100);
             
             if (!rawCandles || rawCandles.length === 0) {
@@ -27,7 +28,7 @@ class MarketWorker {
 
             const lastPrice = parseFloat(rawCandles[rawCandles.length - 1].close);
 
-            // 2. Actualizar persistencia para nuevos usuarios o reinicios
+            // 1. Persistencia
             await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 { 
@@ -38,19 +39,26 @@ class MarketWorker {
                 { upsert: true }
             );
 
-            // 3. DIFUSIÓN PÚBLICA: Todos los usuarios ven el mismo precio
+            // 2. Emisión para el Dashboard (Público)
             if (global.io) {
-                global.io.emit('market-update', {
-                    symbol: this.symbol,
-                    price: lastPrice
+                // Enviamos 'market-update' para la IA
+                global.io.emit('market-update', { symbol: this.symbol, price: lastPrice });
+                
+                // Mantenemos 'marketData' para no romper tu Frontend actual
+                global.io.emit('marketData', { 
+                    price: lastPrice, 
+                    exchangeOnline: true 
                 });
             }
 
-            // 4. INYECCIÓN A LA IA: El Worker "despierta" a la IA con datos frescos
+            // 3. Ejecución de IA Virtual
             if (aiEngine.isRunning) {
-                // Pasamos las velas directamente para que la IA no haga findOne()
                 aiEngine.analyze(lastPrice, rawCandles);
             }
+
+            // 4. EJECUCIÓN DE BOT REAL (Lo que faltaba)
+            // El bot real también necesita el ciclo para revisar sus órdenes abiertas
+            await autobotLogic.botCycle(lastPrice);
 
         } catch (error) {
             console.error('❌ [MarketWorker] Error:', error.message);
