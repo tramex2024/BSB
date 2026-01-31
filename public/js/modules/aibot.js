@@ -2,6 +2,9 @@
 
 import { socket, currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
+import { sendConfigToBackend } from './apiService.js'; // Importante para la persistencia
+
+let configDebounceTimeout = null;
 
 /**
  * Inicializa la vista de la IA cada vez que el usuario entra en la pestaña.
@@ -18,20 +21,49 @@ export function initializeAibotView() {
         socket.off('market-signal-update');
     }
 
-    // 2. Configuramos los escuchadores activos
+    // 2. Configuramos los escuchadores activos del servidor
     setupAISocketListeners();
     
     // 3. Configuramos el botón de control Start/Stop
     setupAIControls();
+
+    // 4. NUEVO: Configuramos los listeners de autoguardado para los inputs (como en el autobot)
+    setupAIConfigListeners();
     
-    // 4. Sincronización inmediata con el estado global
+    // 5. Sincronización inmediata con el estado global
     aiBotUI.setRunningStatus(currentBotState.isRunning);
 
-    // 5. Solicitamos datos frescos al servidor
+    // 6. Solicitamos datos frescos al servidor
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
     }
+}
+
+/**
+ * NUEVO: Escucha cambios en los inputs para guardado automático (Persistencia BSB)
+ */
+function setupAIConfigListeners() {
+    const aiConfigIds = ['auamountai-usdt']; // El ID que pusimos en el HTML
+    
+    aiConfigIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.addEventListener('input', () => {
+            // Aplicamos el debounce de 500ms característico de tu sistema
+            if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
+            configDebounceTimeout = setTimeout(async () => {
+                try {
+                    // Reutilizamos la función central que guarda toda la configuración en la DB
+                    await sendConfigToBackend(); 
+                    console.log("✅ Configuración de IA persistida en DB");
+                } catch (err) {
+                    console.error("❌ Error guardando config IA:", err);
+                }
+            }, 500);
+        });
+    });
 }
 
 /**
@@ -40,18 +72,18 @@ export function initializeAibotView() {
 function setupAISocketListeners() {
     if (!socket) return;
 
-    // Monitor de estado: Progreso (1/50), Balance y Running
+    // Monitor de estado: Balance y Running
     socket.on('ai-status-update', (data) => {
         currentBotState.virtualBalance = data.virtualBalance;
         currentBotState.isRunning = data.isRunning;
 
-        // Actualización del balance
+        // Actualización del balance visual
         const balEl = document.getElementById('ai-virtual-balance');
         if (balEl && data.virtualBalance !== undefined) {
             balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         }
 
-        // Lógica del botón: Sincronización con el umbral de 50 velas para EMA50
+        // Lógica del botón: Sincronización con el progreso de sincronización del mercado
         const btnAi = document.getElementById('btn-start-ai');
         if (btnAi) {
             if (data.isRunning && data.historyCount < 50) {
@@ -64,27 +96,24 @@ function setupAISocketListeners() {
         }
     });
 
-    // NUEVO: Decisiones Neurales (Confianza, Mensajes y Círculo UI)
+    // Decisiones Neurales (Confianza y Logs en tiempo real)
     socket.on('ai-decision-update', (data) => {
-        // Actualiza el círculo de progreso y el texto de predicción
         if (aiBotUI.updateConfidence) {
             aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         }
         
-        // Añade la línea a la terminal de logs [LOG_NEURAL_STREAM]
         if (aiBotUI.addLogEntry) {
             aiBotUI.addLogEntry(data.message, data.confidence);
         }
     });
 
-    // NUEVO: Indicadores Técnicos en Tiempo Real (ADX / STOCH)
+    // Indicadores Técnicos (ADX / STOCH)
     socket.on('market-signal-update', (data) => {
         const adxEl = document.getElementById('ai-adx-val');
         const stochEl = document.getElementById('ai-stoch-val');
         
         if (adxEl && data.adx !== undefined) {
             adxEl.innerText = data.adx.toFixed(1);
-            // Cambio de color si la tendencia es fuerte (>25)
             adxEl.className = `text-[10px] font-mono ${data.adx > 25 ? 'text-emerald-400' : 'text-blue-400'}`;
         }
         
@@ -93,16 +122,16 @@ function setupAISocketListeners() {
         }
     });
 
-    // Historial completo de operaciones
+    // Historial de operaciones
     socket.on('ai-history-data', (history) => {
         aiBotUI.updateHistoryTable(history);
     });
 
-    // Ejecución de órdenes (Toasts y Sonidos)
+    // Ejecución de órdenes
     socket.on('ai-order-executed', (order) => {
         showAiToast(order);
         playNeuralSound(order.side);
-        socket.emit('get-ai-history'); // Refrescar tabla inmediatamente
+        socket.emit('get-ai-history'); 
     });
 }
 
@@ -113,6 +142,7 @@ function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
+    // Clonar para evitar acumulamiento de listeners
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
@@ -125,6 +155,7 @@ function setupAIControls() {
 
         try {
             const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
+                // El servidor ahora toma el capital directamente de la DB guardada por el autoguardado
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -153,7 +184,7 @@ function setupAIControls() {
 }
 
 /**
- * Notificación visual tipo Toast mejorada
+ * Notificación visual tipo Toast
  */
 function showAiToast(order) {
     const toast = document.createElement('div');
@@ -181,7 +212,7 @@ function showAiToast(order) {
 }
 
 /**
- * Feedback auditivo "Neural"
+ * Feedback auditivo
  */
 function playNeuralSound(side) {
     try {
@@ -193,7 +224,6 @@ function playNeuralSound(side) {
         gainNode.connect(audioCtx.destination);
         
         oscillator.type = 'sine';
-        // Frecuencia alta para compra, baja para venta
         oscillator.frequency.setValueAtTime(side.toUpperCase() === 'BUY' ? 880 : 440, audioCtx.currentTime);
         
         gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
@@ -201,7 +231,5 @@ function playNeuralSound(side) {
         
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.2);
-    } catch (e) {
-        // Silencio si el navegador bloquea el audio sin interacción previa
-    }
+    } catch (e) { }
 }
