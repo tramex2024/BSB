@@ -126,14 +126,10 @@ function setupMarketWS(io) {
 
                     if (mongoose.connection.readyState === 1) { 
                         try { 
-                            await aiEngine.analyze(price, volume); 
-                            
+                            // Analizar solo si el motor está corriendo para no procesar en vano
                             if (aiEngine.isRunning) {
-                                io.emit('ai-status-update', { 
-                                    isRunning: true, 
-                                    historyCount: aiEngine.history.length,
-                                    virtualBalance: aiEngine.virtualBalance
-                                });
+                                await aiEngine.analyze(price, volume); 
+                                // El estado se emite desde el propio Engine si hay cambios importantes
                             }
                         } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
                         
@@ -183,6 +179,8 @@ io.on('connection', (socket) => {
 
     sendAiStatus();
 
+    // 🛑 COMENTADO PARA EVITAR CONFLICTO CON RUTA API /api/ai/toggle
+    /*
     socket.on('toggle-ai', async (data) => {
         try {
             const result = await aiEngine.toggle(data.action);
@@ -190,6 +188,7 @@ io.on('connection', (socket) => {
             io.emit('ai-status-update', { isRunning: result.isRunning, virtualBalance: result.virtualBalance });
         } catch (err) { console.error("❌ Error toggle:", err); }
     });
+    */
 
     socket.on('get-ai-history', async () => {
         const trades = await AIBotOrder.find({ isVirtual: true })
