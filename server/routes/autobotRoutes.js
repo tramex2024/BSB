@@ -7,9 +7,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 const autobotLogic = require('../autobotLogic');
 const bitmartService = require('../services/bitmartService');
 
-// 🛡️ IMPORTANTE: Conexión con el controlador que acabas de compartir
-const configController = require('../controllers/configController');
-
 router.use(authMiddleware);
 
 /**
@@ -28,11 +25,23 @@ const emitBotState = (autobot, req) => {
 
 // --- CONFIGURACIÓN ---
 
-/**
- * Reemplazamos la lógica interna por la del controlador
- * Esto resuelve el problema de los ceros al guardar.
- */
-router.post('/update-config', configController.updateBotConfig);
+router.post('/update-config', async (req, res) => {
+    try {
+        const { config } = req.body;
+        if (!config) return res.status(400).json({ success: false, message: "No config provided" });
+
+        // 1. Notificar a la lógica del bot para recalcular Targets (ltprice/stprice)
+        // Esta es la función clave que creamos en autobotLogic
+        const updatedBot = await autobotLogic.updateConfig(config);
+
+        // 2. Notificar al Frontend vía Socket
+        emitBotState(updatedBot, req);
+
+        res.json({ success: true, data: updatedBot });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 // --- RUTAS DE INICIO (START) ---
 
@@ -41,23 +50,15 @@ router.post('/start/:side', async (req, res) => {
     try {
         const { config } = req.body;
         
-        // Sincronizamos configuración antes de arrancar para evitar desfases
-        if (config) {
-            // Llamada interna al controlador para persistir datos
-            await Autobot.findOneAndUpdate({}, { 
-                $set: { 
-                    [`config.${side}.profit_percent`]: parseFloat(config[side]?.profit_percent || 1.5),
-                    [`config.${side}.price_step_inc`]: parseFloat(config[side]?.price_step_inc || 0)
-                }
-            });
-        }
-
+        // Usamos la lógica centralizada para iniciar
+        // Esto asegura que se verifiquen balances y se pongan las órdenes iniciales si es necesario
         const updatedBot = await autobotLogic.startSide(side, config);
+
         emitBotState(updatedBot, req);
 
         return res.json({ 
             success: true, 
-            message: `Estrategia ${side.toUpperCase()} iniciada.`, 
+            message: `Estrategia ${side} iniciada.`, 
             price: autobotLogic.getLastPrice() 
         });
         
@@ -72,9 +73,12 @@ router.post('/start/:side', async (req, res) => {
 router.post('/stop/:side', async (req, res) => {
     const { side } = req.params;
     try {
+        // Usamos la lógica centralizada para detener
         const updatedBot = await autobotLogic.stopSide(side);
+
         emitBotState(updatedBot, req);
-        return res.json({ success: true, message: `${side.toUpperCase()} detenido correctamente.` });
+
+        return res.json({ success: true, message: `${side} detenido correctamente.` });
     } catch (error) {
         console.error(`Error Stop ${side}:`, error.message);
         return res.status(500).json({ success: false, message: error.message });
@@ -86,8 +90,10 @@ router.post('/stop/:side', async (req, res) => {
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
+        // Iniciamos ambos lados
         await autobotLogic.startSide('long', config);
         const updatedBot = await autobotLogic.startSide('short', config);
+
         emitBotState(updatedBot, req);
         return res.json({ success: true, message: 'Bot global iniciado.' });
     } catch (error) {
@@ -99,6 +105,7 @@ router.post('/stop', async (req, res) => {
     try {
         await autobotLogic.stopSide('long');
         const updatedBot = await autobotLogic.stopSide('short');
+
         emitBotState(updatedBot, req);
         return res.json({ success: true, message: 'Bot global detenido.' });
     } catch (error) {
@@ -106,9 +113,19 @@ router.post('/stop', async (req, res) => {
     }
 });
 
-/**
- * Sincronizado con getBotConfig para evitar el error de Render
- */
-router.get('/config-and-state', configController.getBotConfig);
+router.get('/config-and-state', async (req, res) => {
+    try {
+        const autobot = await Autobot.findOne({});
+        res.json({ 
+            success: !!autobot, 
+            config: autobot?.config, 
+            lstate: autobot?.lstate, 
+            sstate: autobot?.sstate,
+            lastAvailableUSDT: autobot?.lastAvailableUSDT 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    }
+});
 
 module.exports = router;

@@ -8,7 +8,7 @@ const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
 const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
 const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
-const { runAIStrategy, setDependencies: setAIDeps } = require('./src/aiStrategy'); 
+const { runAIStrategy, setDependencies: setAIDeps } = require('./src/aiStrategy'); // 🔥 INTEGRACIÓN AI
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
 
 const { 
@@ -33,8 +33,11 @@ function getLastPrice() { return lastCyclePrice; }
 // Función de Log Unificada
 function log(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
+    
+    // 1. Log en la consola de Render/Terminal (servidor)
     console.log(`[${timestamp}] [${type.toUpperCase()}] ${message}`);
 
+    // 2. 📢 ENVÍO AL FRONTEND
     if (io) {
         io.emit('bot-log', { 
             message: message, 
@@ -126,34 +129,16 @@ async function slowBalanceCacheUpdate() {
 
 /**
  * ACTUALIZACIONES MANUALES DESDE RUTAS (API)
- * 🛡️ Blindado contra ceros mediante parseFloat forzado
  */
 async function updateConfig(newConfig) {
     const currentPrice = lastCyclePrice;
-
-    // Aseguramos que los valores críticos nunca sean 0 por error de mapeo
-    const sanitizedConfig = {
-        ...newConfig,
-        long: {
-            ...newConfig.long,
-            profit_percent: parseFloat(newConfig.long?.profit_percent || 1.5),
-            price_step_inc: parseFloat(newConfig.long?.price_step_inc || 0)
-        },
-        short: {
-            ...newConfig.short,
-            profit_percent: parseFloat(newConfig.short?.profit_percent || 1.5),
-            price_step_inc: parseFloat(newConfig.short?.price_step_inc || 0)
-        }
-    };
-
     const bot = await Autobot.findOneAndUpdate({}, { 
-        $set: { config: sanitizedConfig, lastUpdate: new Date() } 
+        $set: { config: newConfig, lastUpdate: new Date() } 
     }, { new: true }).lean();
 
-    log('⚙️ Configuración sincronizada y motor actualizado.', 'info');
+    log('⚙️ Configuración actualizada y recalculando targets...', 'info');
     
     if (bot) {
-        await syncFrontendState(currentPrice, bot);
         await botCycle(currentPrice); 
     }
     return bot;
@@ -161,25 +146,17 @@ async function updateConfig(newConfig) {
 
 async function startSide(side, config) {
     const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
-    
-    // Si se pasa una config, nos aseguramos de que los porcentajes no sean 0
-    let finalConfig = config;
-    if (config && config[side]) {
-        config[side].profit_percent = parseFloat(config[side].profit_percent || 1.5);
-        config[side].price_step_inc = parseFloat(config[side].price_step_inc || 0);
-    }
-
     const update = {
         ...cleanData, 
         [side === 'long' ? 'lstate' : 'sstate']: 'RUNNING',
-        config: finalConfig
+        config: config
     };
     
     if (side === 'long' && update.config.long) update.config.long.enabled = true;
     if (side === 'short' && update.config.short) update.config.short.enabled = true;
 
     const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
-    log(`🚀 Estrategia ${side.toUpperCase()} activada.`, 'success');
+    log(`🚀 Estrategia ${side.toUpperCase()} activada y estado reseteado`, 'success');
     
     await slowBalanceCacheUpdate();
     return bot;
@@ -216,7 +193,7 @@ async function stopSide(side) {
         await syncFrontendState(lastCyclePrice, bot);
     }
 
-    log(`🛑 Estrategia ${side.toUpperCase()} detenida.`, 'warning');
+    log(`🛑 Estrategia ${side.toUpperCase()} detenida y datos purgados.`, 'warning');
     return bot;
 }
 
@@ -258,7 +235,7 @@ async function botCycle(priceFromWebSocket) {
 
         setLongDeps(dependencies);
         setShortDeps(dependencies);
-        setAIDeps(dependencies); 
+        setAIDeps(dependencies); // 🔥 Inyección a la IA
 
         // 1. CONSOLIDACIÓN
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
@@ -310,10 +287,10 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 3. ESTRATEGIAS
+        // 3. ESTRATEGIAS (HILOS SIMULTÁNEOS)
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
-        await runAIStrategy(); 
+        await runAIStrategy(); // 🔥 La IA se suma al ciclo
 
         // 4. PERSISTENCIA
         await commitChanges(changeSet, currentPrice);

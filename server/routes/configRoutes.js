@@ -1,18 +1,18 @@
-// server/routes/configRoutes.js
+// /BSB/server/routes/configRoutes.js (MODIFICADO)
+
 const express = require('express');
 const router = express.Router();
-const configController = require('../controllers/configController');
 
-/**
- * @route   GET /api/autobot (o la ruta base definida en server.js)
- * @desc    Obtiene la configuración actual del bot
- */
+// 🛑 IMPORTAR EL NUEVO CONTROLADOR
+const configController = require('../controllers/configController'); 
+const { log } = require('../autobotLogic'); 
+
+// Ruta GET: Obtiene la configuración actual del bot
+// Usa el método del controlador
 router.get('/', configController.getBotConfig); 
 
-/**
- * @route   POST /api/autobot/update-config
- * @desc    Actualiza la configuración y recalculas balances
- */
-router.post('/update-config', configController.updateBotConfig); 
+// Ruta POST: Actualiza la configuración con validación y establece LBalance/SBalance
+// Usa el método del controlador
+router.post('/', configController.updateBotConfig); 
 
 module.exports = router;

@@ -1,6 +1,6 @@
 // public/js/modules/aibot.js
 
-import { socket, currentBotState, BACKEND_URL } from '../main.js';
+import { socket, currentBotState } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 
 /**
@@ -14,8 +14,6 @@ export function initializeAibotView() {
         socket.off('ai-status-update');
         socket.off('ai-history-data');
         socket.off('ai-order-executed');
-        socket.off('ai-decision-update');
-        socket.off('market-signal-update');
     }
 
     // 2. Configuramos los escuchadores activos
@@ -24,10 +22,10 @@ export function initializeAibotView() {
     // 3. Configuramos el botón de control Start/Stop
     setupAIControls();
     
-    // 4. Sincronización inmediata con el estado global
+    // 4. Sincronización inmediata con el estado global (Evita el lag visual)
     aiBotUI.setRunningStatus(currentBotState.isRunning);
 
-    // 5. Solicitamos datos frescos al servidor
+    // 5. Solicitamos datos frescos al servidor para llenar la tabla y el balance
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
@@ -40,134 +38,83 @@ export function initializeAibotView() {
 function setupAISocketListeners() {
     if (!socket) return;
 
-    // Monitor de estado: Progreso (1/50), Balance y Running
+    // Monitor de estado: Progreso (1/30), Balance y Running
     socket.on('ai-status-update', (data) => {
-        currentBotState.virtualBalance = data.virtualBalance;
-        currentBotState.isRunning = data.isRunning;
-
-        // Actualización del balance
+        // Actualizamos el balance en la UI
         const balEl = document.getElementById('ai-virtual-balance');
         if (balEl && data.virtualBalance !== undefined) {
-            balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+            balEl.innerText = `$${data.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         }
 
-        // Lógica del botón: Sincronización con el umbral de 50 velas para EMA50
+        // Lógica del botón: Si está en fase de análisis (30 velas), mostramos progreso
         const btnAi = document.getElementById('btn-start-ai');
         if (btnAi) {
-            if (data.isRunning && data.historyCount < 50) {
-                btnAi.textContent = `ANALIZANDO... (${data.historyCount}/50)`;
-                btnAi.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse";
+            if (data.isRunning && data.historyCount < 30) {
+                btnAi.textContent = `ANALIZANDO... (${data.historyCount}/30)`;
+                btnAi.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse";
                 btnAi.disabled = false;
             } else {
+                // Si ya pasó el análisis o está apagado, delegamos al módulo UI principal
                 aiBotUI.setRunningStatus(data.isRunning);
             }
         }
     });
 
-    // NUEVO: Decisiones Neurales (Confianza, Mensajes y Círculo UI)
-    socket.on('ai-decision-update', (data) => {
-        // Actualiza el círculo de progreso y el texto de predicción
-        if (aiBotUI.updateConfidence) {
-            aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
-        }
-        
-        // Añade la línea a la terminal de logs [LOG_NEURAL_STREAM]
-        if (aiBotUI.addLogEntry) {
-            aiBotUI.addLogEntry(data.message, data.confidence);
-        }
-    });
-
-    // NUEVO: Indicadores Técnicos en Tiempo Real (ADX / STOCH)
-    socket.on('market-signal-update', (data) => {
-        const adxEl = document.getElementById('ai-adx-val');
-        const stochEl = document.getElementById('ai-stoch-val');
-        
-        if (adxEl && data.adx !== undefined) {
-            adxEl.innerText = data.adx.toFixed(1);
-            // Cambio de color si la tendencia es fuerte (>25)
-            adxEl.className = `text-[10px] font-mono ${data.adx > 25 ? 'text-emerald-400' : 'text-blue-400'}`;
-        }
-        
-        if (stochEl && data.stochK !== undefined) {
-            stochEl.innerText = data.stochK.toFixed(1);
-        }
-    });
-
-    // Historial completo de operaciones
+    // Historial completo (usualmente al cargar la pestaña)
     socket.on('ai-history-data', (history) => {
         aiBotUI.updateHistoryTable(history);
     });
 
-    // Ejecución de órdenes (Toasts y Sonidos)
+    // Ejecución en tiempo real: Cuando la IA hace un trade mientras miras la pantalla
     socket.on('ai-order-executed', (order) => {
         showAiToast(order);
         playNeuralSound(order.side);
-        socket.emit('get-ai-history'); // Refrescar tabla inmediatamente
+        // Pedimos historial actualizado para que la tabla crezca
+        socket.emit('get-ai-history'); 
     });
 }
 
 /**
- * Configura el botón de encendido/apagado usando la API REST
+ * Configura el botón de encendido/apagado con limpieza de eventos
  */
 function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
+    // Clonamos el botón para eliminar cualquier eventListener previo (evita clics fantasma)
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
-    newBtn.addEventListener('click', async () => {
+    newBtn.addEventListener('click', () => {
+        // Determinamos acción basándonos en la memoria global
         const action = currentBotState.isRunning ? 'stop' : 'start';
 
+        // Feedback visual inmediato (Optimismo)
         newBtn.disabled = true;
         newBtn.textContent = "PROCESANDO...";
         newBtn.className = "w-full py-4 bg-gray-600 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
 
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ action: action })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                currentBotState.isRunning = result.isRunning;
-                aiBotUI.setRunningStatus(result.isRunning);
-            } else {
-                throw new Error(result.message);
-            }
-
-        } catch (error) {
-            console.error("❌ Error API IA:", error);
-            aiBotUI.setRunningStatus(currentBotState.isRunning);
-            alert("Error de conexión con el núcleo de IA.");
-        } finally {
-            newBtn.disabled = false;
-        }
+        // Emitimos la orden al backend
+        socket.emit('toggle-ai', { action: action });
     });
 }
 
 /**
- * Notificación visual tipo Toast mejorada
+ * Notificación visual tipo Toast cuando ocurre un trade
  */
 function showAiToast(order) {
     const toast = document.createElement('div');
     const isBuy = order.side.toUpperCase() === 'BUY';
     
-    toast.className = `fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border backdrop-blur-md ${
-        isBuy ? 'bg-emerald-900/90 border-emerald-400 shadow-emerald-500/20' : 'bg-red-900/90 border-red-400 shadow-red-500/20'
+    toast.className = `fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border ${
+        isBuy ? 'bg-emerald-900/90 border-emerald-400' : 'bg-red-900/90 border-red-400'
     } text-white animate-bounceIn`;
     
     toast.innerHTML = `
         <div class="flex items-center gap-3">
-            <div class="p-2 bg-white/10 rounded-full text-lg">${isBuy ? '🚀' : '💰'}</div>
+            <div class="p-2 bg-white/10 rounded-full">🤖</div>
             <div>
-                <p class="text-[10px] font-bold uppercase tracking-tighter opacity-70">IA Core Execution</p>
+                <p class="text-[10px] font-bold uppercase tracking-tighter">IA Ejecución Virtual</p>
                 <p class="text-xs font-black">${order.side} BTC @ $${parseFloat(order.price).toLocaleString()}</p>
             </div>
         </div>
@@ -175,13 +122,13 @@ function showAiToast(order) {
     
     document.body.appendChild(toast);
     setTimeout(() => {
-        toast.classList.replace('animate-bounceIn', 'animate-fadeOut');
+        toast.classList.add('animate-fadeOut');
         setTimeout(() => toast.remove(), 500);
     }, 4000);
 }
 
 /**
- * Feedback auditivo "Neural"
+ * Sonido sutil para confirmar ejecución de la IA
  */
 function playNeuralSound(side) {
     try {
@@ -193,15 +140,13 @@ function playNeuralSound(side) {
         gainNode.connect(audioCtx.destination);
         
         oscillator.type = 'sine';
-        // Frecuencia alta para compra, baja para venta
+        // Agudo para compra, más grave para venta
         oscillator.frequency.setValueAtTime(side.toUpperCase() === 'BUY' ? 880 : 440, audioCtx.currentTime);
         
-        gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
-        
+        gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
         oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.2);
+        oscillator.stop(audioCtx.currentTime + 0.15);
     } catch (e) {
-        // Silencio si el navegador bloquea el audio sin interacción previa
+        // El navegador bloquea audio sin interacción previa, se ignora silenciosamente
     }
 }

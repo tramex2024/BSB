@@ -5,9 +5,6 @@
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
-// 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI con datos viejos mientras guardamos
-export let isSavingConfig = false;
-
 /**
  * Función base para peticiones privadas con Timeout y AbortController
  */
@@ -68,17 +65,10 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
-/**
- * Recolecta la configuración de la UI asegurando que las llaves
- * coincidan exactamente con el Schema de Mongoose en el Backend.
- */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
-        if (!el) return 0;
-        // Limpiamos el valor para asegurar que sea un float válido
-        const val = parseFloat(el.value.replace(/[^0-9.-]+/g,""));
-        return isNaN(val) ? 0 : val;
+        return el ? parseFloat(el.value) || 0 : 0;
     };
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
@@ -90,7 +80,7 @@ export function getBotConfiguration() {
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
             profit_percent: getNum('autriggerl'),   
-            price_step_inc: getNum('aupricestep-l'), 
+            price_step_inc: getNum('aupricestep-l'),
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -100,7 +90,7 @@ export function getBotConfiguration() {
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
             profit_percent: getNum('autriggers'),   
-            price_step_inc: getNum('aupricestep-s'), 
+            price_step_inc: getNum('aupricestep-s'),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         },
@@ -112,38 +102,17 @@ export function getBotConfiguration() {
     };
 }
 
-/**
- * Envía la configuración al Backend bloqueando actualizaciones de socket
- */
 export async function sendConfigToBackend() {
-    isSavingConfig = true; // 🛡️ Activamos el escudo
-    
-    try {
-        const config = getBotConfiguration();
-        // Sincronizado con la ruta unificada en autobotRoutes.js
-        const data = await privateFetch('/api/autobot/update-config', {
-            method: 'POST',
-            body: JSON.stringify({ config })
-        });
-
-        if (data && data.success) {
-            displayMessage("✅ Configuración guardada correctamente", 'success');
-        } else {
-            displayMessage(data?.message || "Error al guardar configuración", 'error');
-        }
-        return data;
-    } catch (err) {
-        displayMessage("Error crítico de conexión", 'error');
-        return { success: false };
-    } finally {
-        // El retraso de 800ms permite que el servidor procese, guarde en DB 
-        // y emita el nuevo estado por socket antes de que la UI acepte cambios.
-        setTimeout(() => { isSavingConfig = false; }, 800);
-    }
+    const config = getBotConfiguration();
+    return await privateFetch('/api/autobot/update-config', {
+        method: 'POST',
+        body: JSON.stringify({ config })
+    });
 }
 
 /**
  * Activa o desactiva una estrategia (Long, Short o AI)
+ * Ajustado para feedback visual inmediato y sincronización de DB
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const sideKey = side.toLowerCase(); 
@@ -151,17 +120,21 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
     const btn = document.getElementById(btnId);
 
+    // 1. ESTADO TRANSITORIO (Gris con "Starting..." o "Stopping...")
     if (btn) {
         btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        // Quitamos los colores de éxito/error para poner el gris de espera
+        btn.classList.remove('bg-emerald-600', 'bg-red-600');
+        btn.classList.add('bg-slate-600'); 
         btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
     }
 
     try {
         const config = providedConfig || getBotConfiguration();
-        // Endpoint unificado: /api/autobot/start/long, etc.
         const endpoint = `/api/autobot/${action}/${sideKey}`; 
         
+        console.log(`📡 Enviando petición a: ${endpoint}`);
+
         const data = await privateFetch(endpoint, {
             method: 'POST',
             body: JSON.stringify({ config }) 
@@ -169,19 +142,28 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
 
         if (data && data.success) {
             displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
+            // Nota: No quitamos el color gris aquí porque el Socket llegará en milisegundos 
+            // y ejecutará updateButtonState() poniendo el color final (Verde o Rojo).
             return data;
         } else {
-            throw new Error(data?.message || 'Error en respuesta del motor');
+            throw new Error(data?.message || 'Error en servidor');
         }
     } catch (err) {
         displayMessage(err.message, 'error');
-        return { success: false };
-    } finally {
+        
+        // REVERSIÓN EN CASO DE ERROR
         if (btn) {
             btn.disabled = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            // Nota: El color del botón lo actualizará socketManager.js 
-            // al recibir el bot-state-update, por eso no lo cambiamos aquí manualmente.
+            btn.classList.remove('bg-slate-600');
+            // Si falla, vuelve a su color lógico
+            if (isRunning) {
+                btn.classList.add('bg-red-600');
+                btn.textContent = `STOP ${sideKey.toUpperCase()}`;
+            } else {
+                btn.classList.add('bg-emerald-600');
+                btn.textContent = `START ${sideKey.toUpperCase()}`;
+            }
         }
+        return { success: false };
     }
 }
