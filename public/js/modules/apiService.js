@@ -5,6 +5,9 @@
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
+// 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI con datos viejos mientras guardamos
+export let isSavingConfig = false;
+
 /**
  * Función base para peticiones privadas con Timeout y AbortController
  */
@@ -72,7 +75,8 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
-        return el ? parseFloat(el.value) || 0 : 0;
+        // Eliminamos cualquier caracter no numérico excepto el punto y el signo menos
+        return el ? parseFloat(el.value.replace(/[^0-9.-]+/g,"")) || 0 : 0;
     };
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
@@ -83,8 +87,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchasel-usdt'),
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
-            profit_percent: getNum('autriggerl'),   // Sincronizado con Schema
-            price_step_inc: getNum('aupricestep-l'), // Sincronizado con Schema
+            profit_percent: getNum('autriggerl'),   // Sincronizado: Frontend -> Backend
+            price_step_inc: getNum('aupricestep-l'), // Sincronizado: Frontend -> Backend
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -93,8 +97,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchases-usdt'),
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
-            profit_percent: getNum('autriggers'),   // Sincronizado con Schema
-            price_step_inc: getNum('aupricestep-s'), // Sincronizado con Schema
+            profit_percent: getNum('autriggers'),   // Sincronizado: Frontend -> Backend
+            price_step_inc: getNum('aupricestep-s'), // Sincronizado: Frontend -> Backend
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         },
@@ -106,12 +110,32 @@ export function getBotConfiguration() {
     };
 }
 
+/**
+ * Envía la configuración al Backend bloqueando actualizaciones de socket
+ */
 export async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    return await privateFetch('/api/autobot/update-config', {
-        method: 'POST',
-        body: JSON.stringify({ config })
-    });
+    isSavingConfig = true; // 🛡️ Bloqueamos actualizaciones de UI entrantes
+    
+    try {
+        const config = getBotConfiguration();
+        const data = await privateFetch('/api/autobot/update-config', {
+            method: 'POST',
+            body: JSON.stringify({ config })
+        });
+
+        if (data && data.success) {
+            displayMessage("✅ Configuración guardada correctamente", 'success');
+        } else {
+            displayMessage(data?.message || "Error al guardar", 'error');
+        }
+        return data;
+    } catch (err) {
+        displayMessage("Error de conexión al guardar", 'error');
+        return { success: false };
+    } finally {
+        // Retraso de 800ms para permitir que el socket reciba el nuevo estado antes de desbloquear la UI
+        setTimeout(() => { isSavingConfig = false; }, 800);
+    }
 }
 
 /**
@@ -134,8 +158,6 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         const config = providedConfig || getBotConfiguration();
         const endpoint = `/api/autobot/${action}/${sideKey}`; 
         
-        console.log(`📡 Enviando petición a: ${endpoint}`);
-
         const data = await privateFetch(endpoint, {
             method: 'POST',
             body: JSON.stringify({ config }) 
@@ -153,13 +175,8 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('bg-slate-600');
-            if (isRunning) {
-                btn.classList.add('bg-red-600');
-                btn.textContent = `STOP ${sideKey.toUpperCase()}`;
-            } else {
-                btn.classList.add('bg-emerald-600');
-                btn.textContent = `START ${sideKey.toUpperCase()}`;
-            }
+            btn.classList.add(isRunning ? 'bg-red-600' : 'bg-emerald-600');
+            btn.textContent = isRunning ? `STOP ${sideKey.toUpperCase()}` : `START ${sideKey.toUpperCase()}`;
         }
         return { success: false };
     }
