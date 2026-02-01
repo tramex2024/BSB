@@ -1,3 +1,5 @@
+//BSB/public/js/main.js
+
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
@@ -15,7 +17,7 @@ export const currentBotState = {
     spc: 0, 
     lpm: 0,
     spm: 0,
-    isRunning: false,
+    isRunning: false, // Estado de la IA
     config: {}
 };
 
@@ -88,11 +90,11 @@ export function initializeFullApp() {
         reconnection: true 
     });
 
-   socket.on('connect', () => {
-    updateConnectionStatus('CONNECTED');
-    socket.emit('get-bot-state'); // Para el Autobot
-    socket.emit('get-ai-status');  // Para el AI Bot
-});
+    socket.on('connect', () => {
+        updateConnectionStatus('CONNECTED');
+        socket.emit('get-bot-state'); 
+        socket.emit('get-ai-status');  
+    });
 
     socket.on('marketData', (data) => {
         resetWatchdog();
@@ -108,25 +110,24 @@ export function initializeFullApp() {
         }
     });
 
-   socket.on('bot-state-update', (state) => {
+    socket.on('bot-state-update', (state) => {
         if (state) {
-            // ✅ Mezcla el estado nuevo con el actual
+            // ✅ BLINDAJE: Solo sobreescribimos si state trae datos válidos
+            // Esto evita que una respuesta vacía del server limpie los valores de la UI
             Object.assign(currentBotState, state);
             
-            // Sincronizar balance de IA... (tu código actual)
             if(state.virtualAiBalance) {
                 const balEl = document.getElementById('ai-virtual-balance');
                 if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
             }
         }
-
-        // 🔥 CRÍTICO: Estas dos funciones deben ser capaces de encontrar los botones
-        // aunque se acabe de cambiar de pestaña.
+        
+        // El uiManager usará currentBotState.config para llenar los inputs vía syncInputsFromConfig
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
     });
 
-    // 🧠 LISTENERS ESPECÍFICOS DE IA (Dentro de la inicialización)
+    // 🧠 LISTENERS ESPECÍFICOS DE IA
     socket.on('ai-decision-update', (data) => {
         aiBotUI.updateConfidence(data.confidence);
         aiBotUI.addLog(data.message);
@@ -136,16 +137,13 @@ export function initializeFullApp() {
         aiBotUI.updateHistoryTable(trades);
     });
 
-   socket.on('ai-status-change', (status) => {
-        // ✅ GUARDA EL ESTADO EN LA MEMORIA GLOBAL
-        currentBotState.isRunning = status.isRunning; 
+    socket.on('ai-status-update', (data) => {
+        currentBotState.virtualBalance = data.virtualBalance;
+        currentBotState.isRunning = data.isRunning;
         
-        // Actualiza la UI si la pestaña está abierta
-        aiBotUI.setRunningStatus(status.isRunning);
-        
-        const balEl = document.getElementById('ai-virtual-balance');
-        if(status.virtualBalance && balEl) {
-            balEl.innerText = `$${status.virtualBalance.toFixed(2)}`;
+        const canvas = document.getElementById('balanceDonutChart');
+        if (canvas && typeof updateDistributionWidget === 'function') {
+            updateDistributionWidget(currentBotState); 
         }
     });
 
@@ -166,30 +164,25 @@ export async function initializeTab(tabName) {
         mainContent.innerHTML = html;
         
         if (views[tabName]) {
-    const module = await views[tabName]();
-    // Esto buscará initializeAibotView y la ejecutará
-    const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-    if (typeof module[initFnName] === 'function') {
-        await module[initFnName](currentBotState); 
-    }
+            const module = await views[tabName]();
+            const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            if (typeof module[initFnName] === 'function') {
+                await module[initFnName](currentBotState); 
+            }
         }
 
-        // 🟢 Lógica especial para el botón de la pestaña AIBOT
+        // Lógica del botón de la IA
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             if (btnAi) {
-                // 1. FORZAR ESTADO INMEDIATO (Sincronía total)
-                // Usamos el estado guardado en el objeto global
                 aiBotUI.setRunningStatus(currentBotState.isRunning); 
 
                 btnAi.onclick = async () => {
-                    // Evitar múltiples clics cambiando el estado visual antes de la petición
-                    const isRunning = btnAi.innerText.includes("DETENER");
-                    const action = isRunning ? 'stop' : 'start';
+                    const action = currentBotState.isRunning ? 'stop' : 'start';
                     
-                    // Feedback visual inmediato (Optimismo)
                     btnAi.disabled = true;
                     btnAi.innerText = "PROCESANDO...";
+                    btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
 
                     try {
                         const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
@@ -202,14 +195,14 @@ export async function initializeTab(tabName) {
                         });
                         const data = await res.json();
                         
-                        // Actualizamos nuestro estado global con la respuesta del servidor
                         if(data.success) {
                             currentBotState.isRunning = data.isRunning;
                             aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Solicitud de ${action} enviada...`);
+                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`);
                         }
                     } catch (e) {
-                        aiBotUI.addLog("Error al conectar con el núcleo");
+                        aiBotUI.addLog("Error de conexión con el núcleo");
+                        aiBotUI.setRunningStatus(currentBotState.isRunning);
                     } finally {
                         btnAi.disabled = false;
                     }
@@ -235,17 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Detectar cuando el usuario vuelve a la pestaña
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && socket && socket.connected) {
-        console.log("🔄 Sincronizando estados de bots (Autobot + AI)...");
+        socket.emit('get-bot-state'); 
+        socket.emit('get-ai-status'); 
         
-        // 1. Pedir estados actualizados al servidor
-        socket.emit('get-bot-state'); // Para el Autobot (Long/Short)
-        socket.emit('get-ai-status');  // Para el AI Bot
-        
-        // 2. Opcional: Refresco visual inmediato con lo que hay en memoria
-        // Esto evita que el usuario vea datos viejos mientras el socket responde
         updateControlsState(currentBotState);
         if (typeof aiBotUI !== 'undefined') {
             aiBotUI.setRunningStatus(currentBotState.isRunning);

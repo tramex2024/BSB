@@ -1,27 +1,26 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual
+ * Núcleo de Inteligencia Artificial - Modo Virtual (Sincronizado 2026)
  */
 
 const Aibot = require('../../models/Aibot');
 const AIBotOrder = require('../../models/AIBotOrder');
+const MarketSignal = require('../../models/MarketSignal'); 
 const StrategyManager = require('./StrategyManager');
-const CandleBuilder = require('./CandleBuilder');
 
 class AIEngine {
     constructor() {
         this.isRunning = false;
         this.io = null;
-        this.IS_VIRTUAL_MODE = true; 
         this.history = [];
-        this.virtualBalance = 100.00;
+        this.virtualBalance = 10000.00; // Iniciamos con un valor por defecto realista
         this.lastEntryPrice = 0;
         this.highestPrice = 0;
 
-        // PARÁMETROS
-        this.TRAILING_PERCENT = 0.003; // 0.3%
-        this.RISK_PER_TRADE = 0.10;    // Usar 10% del capital por trade
-        this.EXCHANGE_FEE = 0.001;     // 0.1% comisión
+        // PARÁMETROS DE GESTIÓN (0.5% trailing es ideal para BTC en 1m)
+        this.TRAILING_PERCENT = 0.005; 
+        this.RISK_PER_TRADE = 0.10; // Usar el 10% del balance por trade
+        this.EXCHANGE_FEE = 0.001;     
     }
 
     setIo(io) { 
@@ -32,37 +31,52 @@ class AIEngine {
     async init() {
         try {
             let state = await Aibot.findOne({});
-            if (!state) state = await Aibot.create({});
+            if (!state) state = await Aibot.create({ virtualBalance: 10000.00 });
 
             this.isRunning = state.isRunning;
-            this.virtualBalance = state.virtualBalance || 100.00;
-            this.history = state.historyPoints || [];
+            this.virtualBalance = state.virtualBalance || 10000.00;
             this.lastEntryPrice = state.lastEntryPrice || 0;
             this.highestPrice = state.highestPrice || 0;
 
-            this._log(this.isRunning ? "🚀 Núcleo IA Recuperado" : "💤 Núcleo en Standby", 0.5);
+            const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+            if (marketData && marketData.history) {
+                this.history = marketData.history;
+            }
+
+            this._log(this.isRunning ? "🚀 Núcleo IA Online" : "💤 Núcleo en Standby", 0.5);
+            this._broadcastStatus();
         } catch (e) {
             console.error("Error en init de AIEngine:", e);
         }
     }
 
     async toggle(action) {
-        this.isRunning = (action === 'start');
-        if (!this.isRunning) {
-            this.history = [];
+        const targetState = (action === 'start');
+        
+        // Si vamos a apagar y hay una posición abierta, cerramos sesión virtualmente
+        if (!targetState && this.lastEntryPrice > 0) {
+            this._log("⚠️ Apagado detectado con posición abierta. Liquidando...", 0.9);
+            // Podrías llamar a this._trade('SELL', precioActual, 1.0) aquí si tienes el precio
+        }
+
+        this.isRunning = targetState;
+        
+        if (this.isRunning) {
+            const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+            if (marketData) this.history = marketData.history || [];
+        } else {
+            // Limpieza de estados de sesión al detener
             this.lastEntryPrice = 0;
             this.highestPrice = 0;
         }
         
         await Aibot.updateOne({}, { 
             isRunning: this.isRunning, 
-            historyPoints: this.history,
             lastEntryPrice: this.lastEntryPrice,
             highestPrice: this.highestPrice
         });
 
         this._broadcastStatus();
-
         this._log(this.isRunning ? "🚀 NÚCLEO IA: ONLINE" : "🛑 NÚCLEO IA: OFFLINE", this.isRunning ? 1 : 0);
         return { isRunning: this.isRunning, virtualBalance: this.virtualBalance };
     }
@@ -70,56 +84,60 @@ class AIEngine {
     async analyze(price) {
         if (!this.isRunning) return;
 
-        // Gestión de Trailing Stop para posiciones abiertas
+        // 1. GESTIÓN DE SALIDA (Trailing Stop Dinámico)
         if (this.lastEntryPrice > 0) {
-            if (price > this.highestPrice) this.highestPrice = price;
+            // Actualizar el pico máximo alcanzado desde la compra
+            if (price > this.highestPrice) {
+                this.highestPrice = price;
+                // Opcional: Persistir el nuevo pico para evitar pérdidas en reinicios
+                Aibot.updateOne({}, { highestPrice: this.highestPrice }).catch(()=>{});
+            }
+
             const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
-            
+
+            // Si el precio cae por debajo del stop dinámico
             if (price <= stopPrice) {
-                await this._trade('SELL', price, 0.95);
+                this._log(`🎯 Trailing Stop activado en $${price}`, 0.9);
+                await this._trade('SELL', price, 1.0); // Confianza máxima en la salida
                 return; 
             }
         }
 
-        const closedCandle = CandleBuilder.processTick(price);
-        if (closedCandle) {
-            this.history.push(closedCandle);
-            if (this.history.length > 50) this.history.shift();
-
-            // Persistencia del progreso
-            await Aibot.updateOne({}, { historyPoints: this.history });
+        // 2. OBTENER SEÑALES (Contexto de mercado)
+        const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
+        if (marketData && marketData.history) {
+            this.history = marketData.history;
             await this._executeStrategy(price);
         }
     }
 
     async _executeStrategy(price) {
-        const currentProgress = this.history.length;
-        
-        if (currentProgress < 30) {
-            this._log(`Analizando mercado... (${currentProgress}/30)`, 0.2, true);
+        // AJUSTE: Ahora requerimos 50 para EMA 50 del StrategyManager
+        if (this.history.length < 50) {
+            this._log(`Sincronizando mercado... (${this.history.length}/50)`, 0.2, true);
+            this._broadcastStatus(); 
             return;
         }
 
         const analysis = StrategyManager.calculate(this.history);
-        
-        if (!analysis || analysis.rsi === undefined || analysis.adx === undefined) {
-            this._log("⚙️ Calculando indicadores técnicos...", 0.1);
-            return;
-        }
+        if (!analysis || analysis.confidence === undefined) return;
 
-        const { rsi, adx, trend, confidence } = analysis;
-        let pensamiento = `Análisis: RSI(${(rsi || 0).toFixed(1)}) | ADX(${(adx || 0).toFixed(1)}) | Trend: ${(trend || 'Buscando').toUpperCase()}`;
+        const { confidence, message } = analysis;
         
+        // Entrada en posición USDT -> BTC
         if (this.lastEntryPrice === 0) {
-            if (confidence < 0.7) {
-                pensamiento += ` | Confianza ${((confidence || 0) * 100).toFixed(0)}% (Mín. 70%)`;
-                this._log(pensamiento, confidence);
-            } else {
+            if (confidence >= 0.85) {
                 await this._trade('BUY', price, confidence);
+            } else if (Math.random() > 0.98) { // Reducido frecuencia de logs de análisis
+                this._log(message || "Buscando entrada...", confidence);
             }
         } else {
-            const profit = ((price - this.lastEntryPrice) / this.lastEntryPrice * 100).toFixed(2);
-            this._log(`Posición Abierta: ${profit}% | TrailStop: $${(this.highestPrice * (1-this.TRAILING_PERCENT)).toFixed(2)}`, 0.9);
+            // Monitoreo de posición abierta (Profit latente)
+            if (Math.random() > 0.95) {
+                const profit = ((price - this.lastEntryPrice) / this.lastEntryPrice * 100).toFixed(2);
+                this._log(`Posición activa: ${profit}% | Stop en: $${(this.highestPrice * (1 - this.TRAILING_PERCENT)).toFixed(2)}`, 1);
+                this._broadcastStatus(); 
+            }
         }
     }
 
@@ -131,69 +149,65 @@ class AIEngine {
             if (side === 'BUY') {
                 this.lastEntryPrice = price;
                 this.highestPrice = price;
-                this.virtualBalance -= fee;
-                this._log(`🔥 COMPRA VIRTUAL: $${price} (Confianza: ${Math.round(confidence * 100)}%)`, 1);
+                this.virtualBalance -= fee; // Descontamos comisión de entrada
+                this._log(`🔥 COMPRA VIRTUAL: BTC @ $${price}`, 1);
             } else {
                 const profitPct = (price - this.lastEntryPrice) / this.lastEntryPrice;
-                const profitAmount = (amountInUSDT * profitPct) - fee;
-                this.virtualBalance += profitAmount;
+                const netProfit = (amountInUSDT * profitPct) - (fee * 2); // Entrada + Salida
+                
+                this.virtualBalance += netProfit;
+                this._log(`💰 VENTA VIRTUAL: BTC @ $${price} | Resultado: ${netProfit.toFixed(4)} USDT`, 1);
+                
                 this.lastEntryPrice = 0;
                 this.highestPrice = 0;
-                this._log(`💰 VENTA VIRTUAL (Exit): $${price} | Resultado: ${profitAmount.toFixed(2)} USDT`, 0.5);
             }
 
+            // Guardar orden en historial
             await AIBotOrder.create({
-                side,
-                price,
-                amount: amountInUSDT,
-                isVirtual: true,
-                confidenceScore: Math.round(confidence * 100),
+                side, price, amount: amountInUSDT,
+                isVirtual: true, confidenceScore: Math.round(confidence * 100),
                 timestamp: new Date()
             });
 
+            // Persistencia del estado global de la IA
             await Aibot.updateOne({}, { 
                 virtualBalance: this.virtualBalance,
                 lastEntryPrice: this.lastEntryPrice,
-                highestPrice: this.highestPrice
+                highestPrice: this.highestPrice,
+                lastUpdate: new Date()
             });
 
+            // Notificar al Frontend (Toast y Sonido)
             if (this.io) {
-                this.io.emit('ai-order-executed', {
-                    side,
-                    price,
-                    amount: amountInUSDT,
-                    virtualBalance: this.virtualBalance,
-                    timestamp: new Date()
+                this.io.emit('ai-order-executed', { 
+                    side, 
+                    price, 
+                    balance: this.virtualBalance,
+                    profit: side === 'SELL' ? (price - this.lastEntryPrice) : 0 
                 });
             }
+
+            this._broadcastStatus();
         } catch (error) {
-            console.error("Error en _trade:", error);
+            console.error("❌ Error en ejecución de Trade IA:", error);
         }
     }
 
     _log(msg, conf, isAnalyzing = false) {
-        const timestamp = new Date().toLocaleTimeString();
-        
-        // 1. Log unificado para Render (Visibilidad en servidor)
-        console.log(`[${timestamp}] [INFO] [AI-VIRTUAL] 🧠 ${msg}`);
-
-        // 2. Envío al Dashboard (Socket)
         if (this.io) {
-            this.io.emit('ai-decision-update', { 
-                confidence: conf, 
-                message: msg, 
-                isAnalyzing: isAnalyzing 
-            });
-            this._broadcastStatus();
+            this.io.emit('ai-decision-update', { confidence: conf, message: msg, isAnalyzing });
         }
+        console.log(`[IA-ENGINE] ${msg}`);
     }
 
     _broadcastStatus() {
         if (this.io) {
-            this.io.emit('ai-status-change', {
+            this.io.emit('ai-status-update', {
                 isRunning: this.isRunning,
                 virtualBalance: this.virtualBalance,
-                historyCount: this.history.length
+                historyCount: this.history.length,
+                lastEntryPrice: this.lastEntryPrice,
+                highestPrice: this.highestPrice
             });
         }
     }
