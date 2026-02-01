@@ -1,3 +1,5 @@
+//BSB/public/js/main.js
+
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
@@ -110,12 +112,17 @@ export function initializeFullApp() {
 
     socket.on('bot-state-update', (state) => {
         if (state) {
+            // ✅ BLINDAJE: Solo sobreescribimos si state trae datos válidos
+            // Esto evita que una respuesta vacía del server limpie los valores de la UI
             Object.assign(currentBotState, state);
+            
             if(state.virtualAiBalance) {
                 const balEl = document.getElementById('ai-virtual-balance');
                 if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
             }
         }
+        
+        // El uiManager usará currentBotState.config para llenar los inputs vía syncInputsFromConfig
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
     });
@@ -130,18 +137,15 @@ export function initializeFullApp() {
         aiBotUI.updateHistoryTable(trades);
     });
 
-    // Sincronización de estado IA (Garantiza que el botón no rebote)
     socket.on('ai-status-update', (data) => {
-    currentBotState.virtualBalance = data.virtualBalance;
-    currentBotState.isRunning = data.isRunning;
-    
-    // Si estamos en el dashboard, actualizamos el widget
-    const canvas = document.getElementById('balanceDonutChart');
-    if (canvas) {
-        // Esta función debe estar expuesta o llamada desde el dashboard
-        updateDistributionWidget(currentBotState); 
-    }
-});
+        currentBotState.virtualBalance = data.virtualBalance;
+        currentBotState.isRunning = data.isRunning;
+        
+        const canvas = document.getElementById('balanceDonutChart');
+        if (canvas && typeof updateDistributionWidget === 'function') {
+            updateDistributionWidget(currentBotState); 
+        }
+    });
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
@@ -176,7 +180,6 @@ export async function initializeTab(tabName) {
                 btnAi.onclick = async () => {
                     const action = currentBotState.isRunning ? 'stop' : 'start';
                     
-                    // Feedback visual inmediato (Bloqueo preventivo)
                     btnAi.disabled = true;
                     btnAi.innerText = "PROCESANDO...";
                     btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
@@ -193,14 +196,12 @@ export async function initializeTab(tabName) {
                         const data = await res.json();
                         
                         if(data.success) {
-                            // Actualización forzada
                             currentBotState.isRunning = data.isRunning;
                             aiBotUI.setRunningStatus(data.isRunning);
                             aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`);
                         }
                     } catch (e) {
                         aiBotUI.addLog("Error de conexión con el núcleo");
-                        // Revertir estado visual en caso de error
                         aiBotUI.setRunningStatus(currentBotState.isRunning);
                     } finally {
                         btnAi.disabled = false;
@@ -227,13 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Sincronización al volver a la pestaña o app
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && socket && socket.connected) {
         socket.emit('get-bot-state'); 
         socket.emit('get-ai-status'); 
         
-        // Refresco visual basado en memoria persistente
         updateControlsState(currentBotState);
         if (typeof aiBotUI !== 'undefined') {
             aiBotUI.setRunningStatus(currentBotState.isRunning);

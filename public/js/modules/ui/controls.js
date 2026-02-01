@@ -1,6 +1,5 @@
 // public/js/modules/ui/controls.js
 
-// ✅ QUITAMOS 'STOPPED' DE ESTA LISTA
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
@@ -8,13 +7,11 @@ const STATUS_COLORS = {
     'STOPPED': '#ef4444',      // Rojo
     'BUYING': '#60a5fa',       // Azul
     'SELLING': '#fbbf24',      // Amarillo    
-    'PAUSED': '#fb923c'        // 
+    'PAUSED': '#fb923c'        
 };
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
-    
-    // Ahora 'STOPPED' devolverá FALSE aquí
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
@@ -22,31 +19,25 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    // 1. ACTUALIZAR ETIQUETA
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
-    // 2. ACTUALIZAR BOTÓN
     if (btn) {
-        // Si no está busy (ej: STOPPED), dirá "START"
         btn.textContent = isBusy ? `STOP ${type.charAt(0).toUpperCase()}` : `START ${type.charAt(0).toUpperCase()}`;
         
         if (isBusy) {
             btn.classList.remove('bg-emerald-600');
             btn.classList.add('bg-red-600');
         } else {
-            // Cuando sea STOPPED, entrará aquí y se pondrá verde/esmeralda para invitar a iniciar
             btn.classList.remove('bg-red-600');
             btn.classList.add('bg-emerald-600');
         }
-        // ✅ EL BOTÓN SIEMPRE QUEDA HABILITADO SEGÚN TU LÓGICA ORIGINAL
         btn.disabled = false;
         btn.style.opacity = "1";
     }
 
-    // 3. GESTIÓN DE INPUTS (Ahora se desbloquean al estar STOPPED)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -57,10 +48,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     });
 }
 
-/**
- * ✅ NUEVA FUNCIÓN: Recolecta los datos de la web para enviarlos al servidor.
- * Úsala en main.js antes de hacer el POST a /api/autobot/update-config
- */
 export function collectConfigFromUI() {
     return {
         symbol: "BTC_USDT",
@@ -87,9 +74,12 @@ export function collectConfigFromUI() {
 
 /**
  * Sincroniza los valores de los inputs con la configuración de la DB
+ * BLINDAJE: Si el valor es undefined o null, no modifica el input.
  */
 export function syncInputsFromConfig(conf) {
-    if (!conf) return;
+    // Si no hay configuración o viene vacía, abortamos para no borrar con ceros
+    if (!conf || (!conf.long && !conf.short)) return;
+
     const mapping = {
         'auamountl-usdt': conf.long?.amountUsdt,
         'aupurchasel-usdt': conf.long?.purchaseUsdt,
@@ -107,16 +97,15 @@ export function syncInputsFromConfig(conf) {
 
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
-        if (input && value !== undefined && document.activeElement !== input) {
-            const newVal = parseFloat(value) || 0;
-            input.value = newVal;
+        // Solo actualizamos si el valor existe en la DB y el usuario no está escribiendo
+        if (input && value !== undefined && value !== null && document.activeElement !== input) {
+            input.value = value; 
         }
     }
     
-    // Checkboxes
     ['long', 'short'].forEach(side => {
         const el = document.getElementById(`au-stop-${side}-at-cycle`);
-        if (el && document.activeElement !== el) {
+        if (el && conf[side]?.stopAtCycle !== undefined && document.activeElement !== el) {
             el.checked = !!conf[side]?.stopAtCycle;
         }
     });
