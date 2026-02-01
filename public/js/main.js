@@ -41,13 +41,17 @@ const views = {
 // --- GESTIÓN DE CONEXIÓN ---
 function updateConnectionStatus(status) {
     const statusDot = document.getElementById('status-dot');
-    if (!statusDot) return;
-    statusDot.classList.remove('status-red', 'status-green', 'status-purple');
+    const aiSyncDot = document.getElementById('ai-sync-dot');
+    const aiSyncText = document.getElementById('ai-sync-text');
 
     if (status === 'CONNECTED') {
-        statusDot.classList.add('status-green');
+        if (statusDot) statusDot.className = "w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]";
+        if (aiSyncDot) aiSyncDot.classList.replace('bg-gray-500', 'bg-emerald-500');
+        if (aiSyncText) aiSyncText.innerText = "AI CORE LINKED";
     } else {
-        statusDot.classList.add('status-red');
+        if (statusDot) statusDot.className = "w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
+        if (aiSyncDot) aiSyncDot.classList.replace('bg-emerald-500', 'bg-gray-500');
+        if (aiSyncText) aiSyncText.innerText = "DISCONNECTED";
     }
 }
 
@@ -56,7 +60,7 @@ function resetWatchdog() {
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
     connectionWatchdog = setTimeout(() => {
         updateConnectionStatus('DISCONNECTED');
-    }, 5000);
+    }, 10000); // 10 segundos de margen para Render (latencia)
 }
 
 export function logStatus(message, type = 'info') {
@@ -91,11 +95,12 @@ export function initializeFullApp() {
 
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
-        reconnection: true 
+        reconnection: true,
+        reconnectionAttempts: 5
     });
 
     socket.on('connect', () => {
-        updateConnectionStatus('CONNECTED');
+        resetWatchdog();
         socket.emit('get-bot-state'); 
         socket.emit('get-ai-status');  
     });
@@ -111,35 +116,44 @@ export function initializeFullApp() {
     socket.on('bot-log', (data) => {
         if (data && data.message) {
             logStatus(data.message, data.type || 'info');
+            // Sincronizar también con la terminal de IA si está activa
+            if (aiBotUI && typeof aiBotUI.addLog === 'function') {
+                aiBotUI.addLog(data.message, data.type);
+            }
         }
     });
 
     socket.on('bot-state-update', (state) => {
         if (state) {
-            // ✅ CORRECCIÓN DE MEZCLA PROFUNDA:
-            // Usamos una mezcla manual para asegurar que si 'state' no trae 'config',
-            // no borremos el objeto 'config' que ya tenemos en memoria.
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
-                delete state.config; // Lo quitamos para no duplicar en el Object.assign de abajo
+                delete state.config;
             }
-            
             Object.assign(currentBotState, state);
             
-            if(state.virtualAiBalance) {
+            // Actualizar balance virtual de IA si viene en el estado global
+            if(state.virtualAiBalance !== undefined) {
                 const balEl = document.getElementById('ai-virtual-balance');
                 if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
             }
         }
-        
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
     });
 
     // 🧠 LISTENERS ESPECÍFICOS DE IA
     socket.on('ai-decision-update', (data) => {
-        aiBotUI.updateConfidence(data.confidence);
-        aiBotUI.addLog(data.message);
+        if (!data) return;
+        aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        aiBotUI.addLog(data.message, data.confidence >= 0.85 ? 'success' : 'info');
+
+        // Actualizar indicadores ADX/Stoch
+        if (data.indicators) {
+            const adxEl = document.getElementById('ai-adx-val');
+            const stochEl = document.getElementById('ai-stoch-val');
+            if (adxEl) adxEl.innerText = (data.indicators.adx || 0).toFixed(1);
+            if (stochEl) stochEl.innerText = (data.indicators.stochRsi || 0).toFixed(1);
+        }
     });
 
     socket.on('ai-history-update', (trades) => {
@@ -147,12 +161,22 @@ export function initializeFullApp() {
     });
 
     socket.on('ai-status-update', (data) => {
+        if (!data) return;
         currentBotState.virtualBalance = data.virtualBalance;
         currentBotState.isRunning = data.isRunning;
         
-        const canvas = document.getElementById('balanceDonutChart');
-        if (canvas && typeof updateDistributionWidget === 'function') {
-            updateDistributionWidget(currentBotState); 
+        aiBotUI.setRunningStatus(data.isRunning);
+        
+        const balEl = document.getElementById('ai-virtual-balance');
+        if (balEl && data.virtualBalance !== undefined) {
+            balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
+        }
+
+        // Actualizar modo Visual (Simulación/Real)
+        const modeEl = document.getElementById('ai-mode-status');
+        if (modeEl) {
+            modeEl.innerText = data.isRealMoney ? 'Live Exchange' : 'Simulación Virtual';
+            modeEl.className = data.isRealMoney ? 'text-red-500 font-mono animate-pulse' : 'text-yellow-500 font-mono';
         }
     });
 
@@ -180,9 +204,11 @@ export async function initializeTab(tabName) {
             }
         }
 
+        // Configuración específica de la vista de IA
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             if (btnAi) {
+                // Sincronizar estado inicial del botón
                 aiBotUI.setRunningStatus(currentBotState.isRunning); 
 
                 btnAi.onclick = async () => {
@@ -206,10 +232,12 @@ export async function initializeTab(tabName) {
                         if(data.success) {
                             currentBotState.isRunning = data.isRunning;
                             aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`);
+                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`, 'success');
+                        } else {
+                            throw new Error(data.message);
                         }
                     } catch (e) {
-                        aiBotUI.addLog("Error de conexión con el núcleo");
+                        aiBotUI.addLog(`Error: ${e.message || "Fallo de conexión"}`);
                         aiBotUI.setRunningStatus(currentBotState.isRunning);
                     } finally {
                         btnAi.disabled = false;
@@ -223,6 +251,7 @@ export async function initializeTab(tabName) {
     }
 }
 
+// --- EVENTOS DE INICIO ---
 document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
@@ -242,7 +271,7 @@ document.addEventListener('visibilitychange', () => {
         socket.emit('get-ai-status'); 
         
         updateControlsState(currentBotState);
-        if (typeof aiBotUI !== 'undefined') {
+        if (aiBotUI) {
             aiBotUI.setRunningStatus(currentBotState.isRunning);
         }
     }

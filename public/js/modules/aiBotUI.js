@@ -1,5 +1,6 @@
 /**
  * Módulo de Interfaz para el AI Bot - Versión Optimizada 2026
+ * Corrección: Sincronización de funciones de Log y Renderizado Neural
  */
 
 const aiBotUI = {
@@ -38,7 +39,6 @@ const aiBotUI = {
             predictionText.innerText = `>> ${serverMessage.toUpperCase()}`;
             predictionText.classList.add(percent >= 85 ? 'text-emerald-400' : 'text-blue-300');
         } else {
-            // Fallback si no viene mensaje del servidor
             if (percent >= 85) {
                 predictionText.innerText = ">> FUERTE IMPULSO: SEÑAL DE ENTRADA";
                 predictionText.classList.add('text-emerald-400');
@@ -47,6 +47,16 @@ const aiBotUI = {
                 predictionText.classList.add('text-gray-500');
             }
         }
+    },
+
+    /**
+     * Alias compatible con main.js y socket.js
+     * Resuelve el error: "aiBotUI.addLog is not a function"
+     */
+    addLog: function(message, type = 'info') {
+        // Mapeamos 'success' a alta confianza para el color verde, otros a azul
+        const mockConfidence = (type === 'success') ? 0.90 : 0.50;
+        this.addLogEntry(message, mockConfidence);
     },
 
     /**
@@ -141,7 +151,6 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
             
-            // Opcional: Resetear círculo si se apaga
             const circle = document.getElementById('ai-confidence-circle');
             if (circle) circle.style.strokeDashoffset = 364.4;
         }
