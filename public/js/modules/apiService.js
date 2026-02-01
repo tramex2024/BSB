@@ -1,9 +1,11 @@
+// public/js/modules/apiService.js
+
 /**
  * apiService.js - Comunicaciones REST
  * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
  */
 import { displayMessage } from './uiManager.js';
-import { BACKEND_URL, logStatus } from '../main.js';
+import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
 // 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI con datos viejos mientras guardamos
 export let isSavingConfig = false;
@@ -70,42 +72,51 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 /**
  * Recolecta la configuración de la UI asegurando que las llaves
- * coincidan exactamente con el Schema de Mongoose en el Backend.
+ * coincidan exactamente con el Schema de Mongoose.
  */
 export function getBotConfiguration() {
-    const getNum = (id) => {
+    // 🛡️ MEJORA: Evita enviar ceros si el usuario está borrando el input
+    const getNum = (id, path) => {
         const el = document.getElementById(id);
         if (!el) return 0;
-        // Limpiamos el valor para asegurar que sea un float válido
-        const val = parseFloat(el.value.replace(/[^0-9.-]+/g,""));
+        
+        const rawValue = el.value.trim();
+        if (rawValue === "") {
+            // Si el campo está vacío, usamos el valor que ya teníamos en memoria para no romper la DB con un 0
+            const parts = path.split('.');
+            return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
+        }
+
+        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
         return isNaN(val) ? 0 : val;
     };
+
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
         symbol: "BTC_USDT", 
         long: {
-            amountUsdt: getNum('auamountl-usdt'),
-            purchaseUsdt: getNum('aupurchasel-usdt'),
-            price_var: getNum('audecrementl'),
-            size_var: getNum('auincrementl'),
-            profit_percent: getNum('autriggerl'),   
-            price_step_inc: getNum('aupricestep-l'), 
+            amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt'),
+            purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt'),
+            price_var: getNum('audecrementl', 'long.price_var'),
+            size_var: getNum('auincrementl', 'long.size_var'),
+            profit_percent: getNum('autriggerl', 'long.profit_percent'),   
+            price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
         short: {
-            amountUsdt: getNum('auamounts-usdt'),
-            purchaseUsdt: getNum('aupurchases-usdt'),
-            price_var: getNum('audecrements'),
-            size_var: getNum('auincrements'),
-            profit_percent: getNum('autriggers'),   
-            price_step_inc: getNum('aupricestep-s'), 
+            amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
+            purchaseUsdt: getNum('aupurchases-usdt', 'short.purchaseUsdt'),
+            price_var: getNum('audecrements', 'short.price_var'),
+            size_var: getNum('auincrements', 'short.size_var'),
+            profit_percent: getNum('autriggers', 'short.profit_percent'),   
+            price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         },
         ai: {
-            amountUsdt: getNum('auamountai-usdt'),
+            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt'),
             stopAtCycle: getCheck('au-stop-ai-at-cycle'),
             enabled: true
         }
@@ -116,18 +127,17 @@ export function getBotConfiguration() {
  * Envía la configuración al Backend bloqueando actualizaciones de socket
  */
 export async function sendConfigToBackend() {
-    isSavingConfig = true; // 🛡️ Activamos el escudo
+    isSavingConfig = true; 
     
     try {
         const config = getBotConfiguration();
-        // Sincronizado con la ruta unificada en autobotRoutes.js
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
             body: JSON.stringify({ config })
         });
 
         if (data && data.success) {
-            displayMessage("✅ Configuración guardada correctamente", 'success');
+            displayMessage("✅ Configuración sincronizada", 'success');
         } else {
             displayMessage(data?.message || "Error al guardar configuración", 'error');
         }
@@ -136,9 +146,8 @@ export async function sendConfigToBackend() {
         displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        // El retraso de 800ms permite que el servidor procese, guarde en DB 
-        // y emita el nuevo estado por socket antes de que la UI acepte cambios.
-        setTimeout(() => { isSavingConfig = false; }, 800);
+        // Mantenemos el bloqueo un poco más para que el socket no gane la carrera
+        setTimeout(() => { isSavingConfig = false; }, 1000);
     }
 }
 
@@ -159,7 +168,6 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
 
     try {
         const config = providedConfig || getBotConfiguration();
-        // Endpoint unificado: /api/autobot/start/long, etc.
         const endpoint = `/api/autobot/${action}/${sideKey}`; 
         
         const data = await privateFetch(endpoint, {
@@ -180,8 +188,6 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            // Nota: El color del botón lo actualizará socketManager.js 
-            // al recibir el bot-state-update, por eso no lo cambiamos aquí manualmente.
         }
     }
 }

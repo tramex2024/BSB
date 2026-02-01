@@ -18,23 +18,29 @@ BSB/			    # Bitmart Spot Bots
 │   │   └── bsb-logo.png
 │   ├── js/
 │        ├── main.js
-│        ├── modules/
-│       	  └── login.js
-│        	  └── logout.js
-│       	  └── auth.js
-│        	  └── orders.js
-│       	  └── navigation.js
-│       	  └── autobot.js
-│       	  └── aibot.js
-│       	  └── dashboard.js
-│       	  └── network.js
-│       	  └── balance.js
-│       	  └── api.js
-│       	  └── apiService.js
-│       	  └── uiManager.js
-│       	  └── chart.js
-│       	  └── appEvents.js
-│       	  └── metricsManager.js 
+│        └── modules/
+│       	   ├── ui/
+│       	   │   └── controls.js
+│       	   │   └── formatters.js
+│       	   │   └── notifications.js
+│       	   ├── login.js
+│        	   ├── logout.js
+│       	   ├── auth.js
+│        	   ├── orders.js
+│       	   ├── navigation.js
+│       	   ├── autobot.js
+│       	   ├── aibot.js
+│       	   ├── aiBotUI.js
+│       	   ├── dashboard.js
+│       	   ├── network.js
+│       	   ├── balance.js
+│       	   ├── api.js
+│       	   ├── apiService.js
+│       	   ├── uiManager.js
+│       	   ├── chart.js
+│       	   ├── appEvents.js
+│       	   ├── confirmModal.js
+│       	   └── metricsManager.js 
 │
 ├── server/                # Backend files - Deployed on Render
      ├── server.js
@@ -56,6 +62,7 @@ BSB/			    # Bitmart Spot Bots
      ├── services/
      │   └── orderPersistenceService.js
      │   └── cycleLogService.js
+     │   └── CentralAnalyzer.js
      │   └── bitmartService.js
      │   └── bitmartWs.js
      │   └── botStats.js          
@@ -85,13 +92,15 @@ BSB/			    # Bitmart Spot Bots
      ├── seeders/
      │   └── seed.js
      ├── src/
-          ├── bitmart_indicator_analyzer.js
-          ├── bitmart_entry_point.json          
+          ├── aiStrategy.js
+          ├── longStrategy.js
+          ├── shortStrategy.js
           ├── logger.js
                ├── ai/
+ 	       │    └── AIEngine.js
+ 	       │    └── CandleBuilder.js          
+	       │    └── StrategyManager.js
                ├── au/
-                    ├── longStrategy.js
-                    ├── shortStrategy.js
  	            ├── managers/
  	            │    └── longDataManager.js
  	            │    └── longOrderManager.js          

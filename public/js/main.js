@@ -18,7 +18,11 @@ export const currentBotState = {
     lpm: 0,
     spm: 0,
     isRunning: false, // Estado de la IA
-    config: {}
+    config: {
+        long: {},
+        short: {},
+        ai: {}
+    }
 };
 
 export let socket = null;
@@ -112,8 +116,14 @@ export function initializeFullApp() {
 
     socket.on('bot-state-update', (state) => {
         if (state) {
-            // ✅ BLINDAJE: Solo sobreescribimos si state trae datos válidos
-            // Esto evita que una respuesta vacía del server limpie los valores de la UI
+            // ✅ CORRECCIÓN DE MEZCLA PROFUNDA:
+            // Usamos una mezcla manual para asegurar que si 'state' no trae 'config',
+            // no borremos el objeto 'config' que ya tenemos en memoria.
+            if (state.config) {
+                currentBotState.config = { ...currentBotState.config, ...state.config };
+                delete state.config; // Lo quitamos para no duplicar en el Object.assign de abajo
+            }
+            
             Object.assign(currentBotState, state);
             
             if(state.virtualAiBalance) {
@@ -122,7 +132,6 @@ export function initializeFullApp() {
             }
         }
         
-        // El uiManager usará currentBotState.config para llenar los inputs vía syncInputsFromConfig
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
     });
@@ -171,7 +180,6 @@ export async function initializeTab(tabName) {
             }
         }
 
-        // Lógica del botón de la IA
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             if (btnAi) {

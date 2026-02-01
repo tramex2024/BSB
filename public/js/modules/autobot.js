@@ -6,6 +6,7 @@ import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
 import { askConfirmation } from './confirmModal.js';
+import { activeEdits } from './ui/controls.js'; // 👈 Importamos el registro
 
 const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'all';
@@ -43,19 +44,27 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
+            // 🛡️ Marcamos que este input está siendo manipulado por el humano
+            activeEdits[id] = Date.now();
+
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             configDebounceTimeout = setTimeout(async () => {
+                // Solo enviamos si el valor no es un string vacío (evita ceros accidentales)
+                if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) {
+                    return; 
+                }
+
                 try {
                     await sendConfigToBackend();
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
                 }
-            }, 500);
+            }, 800); // Subimos a 800ms para dar más aire al escribir decimales
         });
     });
 }
 
-// Cambiamos la lógica interna para asegurar que encuentre los elementos recién inyectados
+// ... (Resto de la función initializeAutobotView permanece igual que tu original)
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
@@ -64,24 +73,17 @@ export async function initializeAutobotView() {
 
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
-        if (!btn) {
-            //console.warn(`⚠️ Botón ${id} no encontrado en el DOM.`);
-            return;
-        }
+        if (!btn) return;
 
-        // Limpiamos listeners previos clonando
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            
-            // Detectar estado por color o texto (clase de uiManager)
             const isRunning = newBtn.classList.contains('bg-red-600') || 
                             newBtn.textContent.includes('STOP') ||
                             (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : currentBotState.sstate !== 'STOPPED');
             
-            // LOGICA DEL MODAL
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
                 if (!confirmed) return;
@@ -105,16 +107,13 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai');
 
-    // Sincronizar UI
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Gráfico con delay para asegurar contenedor
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -125,7 +124,6 @@ export async function initializeAutobotView() {
         }
     }, 500);
 
-    // Gestión de pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {

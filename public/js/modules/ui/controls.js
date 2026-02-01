@@ -10,6 +10,9 @@ const STATUS_COLORS = {
     'PAUSED': '#fb923c'        
 };
 
+// 🛡️ Registro de campos que el usuario está editando actualmente
+export const activeEdits = {};
+
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
@@ -48,36 +51,11 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     });
 }
 
-export function collectConfigFromUI() {
-    return {
-        symbol: "BTC_USDT",
-        long: {
-            amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
-            purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
-            size_var: parseFloat(document.getElementById('auincrementl')?.value) || 0,
-            price_var: parseFloat(document.getElementById('audecrementl')?.value) || 0,
-            price_step_inc: parseFloat(document.getElementById('aupricestep-l')?.value) || 0,
-            profit_percent: parseFloat(document.getElementById('autriggerl')?.value) || 0,
-            stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false
-        },
-        short: {
-            amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
-            purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
-            size_var: parseFloat(document.getElementById('auincrements')?.value) || 0,
-            price_var: parseFloat(document.getElementById('audecrements')?.value) || 0,
-            price_step_inc: parseFloat(document.getElementById('aupricestep-s')?.value) || 0,
-            profit_percent: parseFloat(document.getElementById('autriggers')?.value) || 0,
-            stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false
-        }
-    };
-}
-
 /**
  * Sincroniza los valores de los inputs con la configuración de la DB
- * BLINDAJE: Si el valor es undefined o null, no modifica el input.
+ * BLINDAJE: Implementa un periodo de gracia de 3 segundos tras editar.
  */
 export function syncInputsFromConfig(conf) {
-    // Si no hay configuración o viene vacía, abortamos para no borrar con ceros
     if (!conf || (!conf.long && !conf.short)) return;
 
     const mapping = {
@@ -95,18 +73,33 @@ export function syncInputsFromConfig(conf) {
         'autriggers': conf.short?.profit_percent
     };
 
+    const now = Date.now();
+
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
-        // Solo actualizamos si el valor existe en la DB y el usuario no está escribiendo
-        if (input && value !== undefined && value !== null && document.activeElement !== input) {
-            input.value = value; 
+        if (!input || value === undefined || value === null) continue;
+
+        // 🛡️ ESCUDO: Si el input está enfocado O fue editado hace menos de 3 seg, NO TOCAR.
+        const lastEdit = activeEdits[id] || 0;
+        if (document.activeElement === input || (now - lastEdit < 3000)) {
+            continue; 
+        }
+
+        // Solo actualizamos si el valor es realmente distinto para evitar parpadeos
+        if (parseFloat(input.value) !== parseFloat(value)) {
+            input.value = value;
         }
     }
     
+    // Checkboxes (lógica similar)
     ['long', 'short'].forEach(side => {
-        const el = document.getElementById(`au-stop-${side}-at-cycle`);
-        if (el && conf[side]?.stopAtCycle !== undefined && document.activeElement !== el) {
-            el.checked = !!conf[side]?.stopAtCycle;
+        const id = `au-stop-${side}-at-cycle`;
+        const el = document.getElementById(id);
+        const val = !!conf[side]?.stopAtCycle;
+        const lastEdit = activeEdits[id] || 0;
+
+        if (el && document.activeElement !== el && (now - lastEdit < 3000)) {
+            if (el.checked !== val) el.checked = val;
         }
     });
 }
