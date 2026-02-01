@@ -1,17 +1,29 @@
 // public/js/modules/ui/controls.js
 
-const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
+// public/js/modules/ui/controls.js
+
+const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'WAITING']; 
 
 const STATUS_COLORS = {
-    'RUNNING': '#10b981',      // Esmeralda
-    'STOPPED': '#ef4444',      // Rojo
-    'BUYING': '#60a5fa',       // Azul
-    'SELLING': '#fbbf24',      // Amarillo    
-    'PAUSED': '#fb923c'        
+    'RUNNING': '#10b981',      
+    'STOPPED': '#ef4444',      
+    'BUYING': '#60a5fa',        
+    'SELLING': '#fbbf24',      
+    'PAUSED': '#fb923c',
+    'WAITING': '#8b5cf6'      
 };
 
 // 🛡️ Registro de campos que el usuario está editando actualmente
 export const activeEdits = {};
+
+/**
+ * Escucha cambios en los inputs para activar el periodo de gracia
+ */
+document.addEventListener('input', (e) => {
+    if (e.target.tagName === 'INPUT') {
+        activeEdits[e.target.id] = Date.now();
+    }
+});
 
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
@@ -28,7 +40,7 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     }
 
     if (btn) {
-        btn.textContent = isBusy ? `STOP ${type.charAt(0).toUpperCase()}` : `START ${type.charAt(0).toUpperCase()}`;
+        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
         
         if (isBusy) {
             btn.classList.remove('bg-emerald-600');
@@ -70,7 +82,8 @@ export function syncInputsFromConfig(conf) {
         'auincrements': conf.short?.size_var,
         'audecrements': conf.short?.price_var,
         'aupricestep-s': conf.short?.price_step_inc,
-        'autriggers': conf.short?.profit_percent
+        'autriggers': conf.short?.profit_percent,
+        'auamountai-usdt': conf.ai?.amountUsdt
     };
 
     const now = Date.now();
@@ -81,24 +94,35 @@ export function syncInputsFromConfig(conf) {
 
         // 🛡️ ESCUDO: Si el input está enfocado O fue editado hace menos de 3 seg, NO TOCAR.
         const lastEdit = activeEdits[id] || 0;
-        if (document.activeElement === input || (now - lastEdit < 3000)) {
+        const isFreshlyEdited = (now - lastEdit < 3000);
+
+        if (document.activeElement === input || isFreshlyEdited) {
             continue; 
         }
 
+        // 🛡️ VALIDACIÓN ANTI-CERO: Si el servidor manda un 0 pero el input tiene algo, 
+        // y el bot está corriendo, sospechamos de un error de carga y no sobreescribimos.
+        if (parseFloat(value) === 0 && parseFloat(input.value) > 0) {
+            continue;
+        }
+
         // Solo actualizamos si el valor es realmente distinto para evitar parpadeos
-        if (parseFloat(input.value) !== parseFloat(value)) {
+        const currentVal = parseFloat(input.value) || 0;
+        const newVal = parseFloat(value) || 0;
+
+        if (Math.abs(currentVal - newVal) > 0.000001) {
             input.value = value;
         }
     }
     
-    // Checkboxes (lógica similar)
-    ['long', 'short'].forEach(side => {
+    // Checkboxes
+    ['long', 'short', 'ai'].forEach(side => {
         const id = `au-stop-${side}-at-cycle`;
         const el = document.getElementById(id);
         const val = !!conf[side]?.stopAtCycle;
         const lastEdit = activeEdits[id] || 0;
 
-        if (el && document.activeElement !== el && (now - lastEdit < 3000)) {
+        if (el && document.activeElement !== el && (now - lastEdit >= 3000)) {
             if (el.checked !== val) el.checked = val;
         }
     });

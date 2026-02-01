@@ -102,26 +102,27 @@ async function slowBalanceCacheUpdate() {
 }
 
 /**
- * ACTUALIZACIONES MANUALES (Merge Inteligente)
+ * ACTUALIZACIONES MANUALES (Merge Profundo)
+ * Blindado para evitar el reseteo de parámetros a 0
  */
 async function updateConfig(newConfig) {
     const currentPrice = lastCyclePrice;
     const currentBot = await Autobot.findOne({}).lean();
     if (!currentBot) return null;
 
-    const sanitizedConfig = {
-        ...currentBot.config, // Mantener lo existente
-        ...newConfig,
-        long: { ...currentBot.config.long, ...newConfig.long },
-        short: { ...currentBot.config.short, ...newConfig.short },
-        ai: { ...currentBot.config.ai, ...newConfig.ai }
-    };
+    // 🛡️ Clonación profunda para evitar que el spread operator rompa objetos anidados
+    const sanitizedConfig = JSON.parse(JSON.stringify(currentBot.config));
+
+    // Merge manual campo por campo para asegurar integridad
+    if (newConfig.long) Object.assign(sanitizedConfig.long, newConfig.long);
+    if (newConfig.short) Object.assign(sanitizedConfig.short, newConfig.short);
+    if (newConfig.ai) Object.assign(sanitizedConfig.ai, newConfig.ai);
 
     const bot = await Autobot.findOneAndUpdate({}, { 
         $set: { config: sanitizedConfig, lastUpdate: new Date() } 
     }, { new: true }).lean();
 
-    log('⚙️ Configuración sincronizada.', 'info');
+    log('⚙️ Parámetros de estrategia actualizados.', 'success');
     if (bot) await syncFrontendState(currentPrice, bot);
     return bot;
 }
@@ -130,7 +131,12 @@ async function startSide(side, config) {
     const botState = await Autobot.findOne({}).lean();
     const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
     
-    const finalConfig = config || botState.config;
+    // Si se provee una configuración parcial, hacer merge profundo con la existente
+    const finalConfig = JSON.parse(JSON.stringify(botState.config));
+    if (config && config[side]) {
+        Object.assign(finalConfig[side], config[side]);
+    }
+    
     if (finalConfig[side]) {
         finalConfig[side].enabled = true;
     }
@@ -154,7 +160,7 @@ async function stopSide(side) {
     const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
     const stateField = side === 'long' ? 'lstate' : 'sstate'; 
 
-    const newConfig = { ...botState.config };
+    const newConfig = JSON.parse(JSON.stringify(botState.config));
     if (newConfig[side]) newConfig[side].enabled = false;
 
     const update = {
@@ -227,7 +233,7 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 2. RECALCULAR INDICADORES (Usando merge dinámico para no perder datos)
+        // 2. RECALCULAR INDICADORES
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
             const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
             if (activeLPPC > 0) {

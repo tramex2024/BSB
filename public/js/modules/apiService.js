@@ -147,7 +147,7 @@ export async function sendConfigToBackend() {
         return { success: false };
     } finally {
         // Mantenemos el bloqueo un poco más para que el socket no gane la carrera
-        setTimeout(() => { isSavingConfig = false; }, 1000);
+        setTimeout(() => { isSavingConfig = false; }, 300);
     }
 }
 
