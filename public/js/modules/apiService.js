@@ -75,8 +75,10 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
-        // Eliminamos cualquier caracter no numérico excepto el punto y el signo menos
-        return el ? parseFloat(el.value.replace(/[^0-9.-]+/g,"")) || 0 : 0;
+        if (!el) return 0;
+        // Limpiamos el valor para asegurar que sea un float válido
+        const val = parseFloat(el.value.replace(/[^0-9.-]+/g,""));
+        return isNaN(val) ? 0 : val;
     };
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
@@ -87,8 +89,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchasel-usdt'),
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
-            profit_percent: getNum('autriggerl'),   // Sincronizado: Frontend -> Backend
-            price_step_inc: getNum('aupricestep-l'), // Sincronizado: Frontend -> Backend
+            profit_percent: getNum('autriggerl'),   
+            price_step_inc: getNum('aupricestep-l'), 
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -97,8 +99,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchases-usdt'),
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
-            profit_percent: getNum('autriggers'),   // Sincronizado: Frontend -> Backend
-            price_step_inc: getNum('aupricestep-s'), // Sincronizado: Frontend -> Backend
+            profit_percent: getNum('autriggers'),   
+            price_step_inc: getNum('aupricestep-s'), 
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         },
@@ -114,10 +116,11 @@ export function getBotConfiguration() {
  * Envía la configuración al Backend bloqueando actualizaciones de socket
  */
 export async function sendConfigToBackend() {
-    isSavingConfig = true; // 🛡️ Bloqueamos actualizaciones de UI entrantes
+    isSavingConfig = true; // 🛡️ Activamos el escudo
     
     try {
         const config = getBotConfiguration();
+        // Sincronizado con la ruta unificada en autobotRoutes.js
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
             body: JSON.stringify({ config })
@@ -126,14 +129,15 @@ export async function sendConfigToBackend() {
         if (data && data.success) {
             displayMessage("✅ Configuración guardada correctamente", 'success');
         } else {
-            displayMessage(data?.message || "Error al guardar", 'error');
+            displayMessage(data?.message || "Error al guardar configuración", 'error');
         }
         return data;
     } catch (err) {
-        displayMessage("Error de conexión al guardar", 'error');
+        displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        // Retraso de 800ms para permitir que el socket reciba el nuevo estado antes de desbloquear la UI
+        // El retraso de 800ms permite que el servidor procese, guarde en DB 
+        // y emita el nuevo estado por socket antes de que la UI acepte cambios.
         setTimeout(() => { isSavingConfig = false; }, 800);
     }
 }
@@ -149,13 +153,13 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
 
     if (btn) {
         btn.disabled = true;
-        btn.classList.remove('bg-emerald-600', 'bg-red-600');
-        btn.classList.add('bg-slate-600'); 
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
         btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
     }
 
     try {
         const config = providedConfig || getBotConfiguration();
+        // Endpoint unificado: /api/autobot/start/long, etc.
         const endpoint = `/api/autobot/${action}/${sideKey}`; 
         
         const data = await privateFetch(endpoint, {
@@ -167,17 +171,17 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
             return data;
         } else {
-            throw new Error(data?.message || 'Error en servidor');
+            throw new Error(data?.message || 'Error en respuesta del motor');
         }
     } catch (err) {
         displayMessage(err.message, 'error');
-        
+        return { success: false };
+    } finally {
         if (btn) {
             btn.disabled = false;
-            btn.classList.remove('bg-slate-600');
-            btn.classList.add(isRunning ? 'bg-red-600' : 'bg-emerald-600');
-            btn.textContent = isRunning ? `STOP ${sideKey.toUpperCase()}` : `START ${sideKey.toUpperCase()}`;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            // Nota: El color del botón lo actualizará socketManager.js 
+            // al recibir el bot-state-update, por eso no lo cambiamos aquí manualmente.
         }
-        return { success: false };
     }
 }

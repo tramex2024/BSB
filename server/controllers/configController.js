@@ -3,8 +3,27 @@
 const Autobot = require('../models/Autobot'); 
 const bitmartService = require('../services/bitmartService'); 
 const { calculateLongCoverage, parseNumber } = require('../autobotCalculations'); 
-const autobotLogic = require('../autobotLogic'); // Importante para sincronizar el socket inmediatamente
+const autobotLogic = require('../autobotLogic'); 
 
+/**
+ * Obtiene la configuración actual para el frontend
+ */
+async function getBotConfig(req, res) {
+    try {
+        const botState = await Autobot.findOne({}).lean();
+        if (!botState) {
+            return res.status(404).json({ success: false, message: "No se encontró la configuración del bot." });
+        }
+        return res.json({ success: true, config: botState.config });
+    } catch (error) {
+        console.error("❌ Error en getBotConfig:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+}
+
+/**
+ * Actualiza la configuración y sincroniza con el motor
+ */
 async function updateBotConfig(req, res) {
     try {
         const { config: newConfig } = req.body; 
@@ -20,12 +39,11 @@ async function updateBotConfig(req, res) {
         const assignedUSDT_Long = parseFloat(newConfig.long?.amountUsdt || 0);
         const assignedUSDT_Short = parseFloat(newConfig.short?.amountUsdt || 0);
         
-        if ((assignedUSDT_Long + assignedUSDT_Short) > (availableUSDT + 5)) { // Margen de 5 USDT
-             return res.status(400).json({ success: false, message: `Fondos insuficientes: ${availableUSDT} USDT disponibles.` });
+        if ((assignedUSDT_Long + assignedUSDT_Short) > (availableUSDT + 5)) {
+             return res.status(400).json({ success: false, message: `Fondos insuficientes: ${availableUSDT.toFixed(2)} USDT disponibles.` });
         }
 
-        // 2. ACTUALIZACIÓN DE CONFIGURACIÓN (Mapeo idéntico al Frontend)
-        // Usamos un objeto intermedio para asegurar la limpieza de datos
+        // 2. ACTUALIZACIÓN DE CONFIGURACIÓN (Mapeo exacto con Schema)
         const update = {
             'config.long.amountUsdt': assignedUSDT_Long,
             'config.long.purchaseUsdt': parseFloat(newConfig.long?.purchaseUsdt || 0),
@@ -44,22 +62,21 @@ async function updateBotConfig(req, res) {
             'config.short.stopAtCycle': !!newConfig.short?.stopAtCycle
         };
 
-        // 3. ACTUALIZACIÓN ATÓMICA Y RETORNO DE DATOS LIMPIOS
+        // 3. PERSISTENCIA ATÓMICA
         const updatedBot = await Autobot.findOneAndUpdate(
             {}, 
             { $set: update }, 
             { new: true, runValidators: true }
         ).lean();
 
-        // 4. 🔥 EL TRUCO MAESTRO: Sincronizar el socket ANTES de responder a la API
-        // Esto evita que el socket mande datos viejos mientras el usuario espera la respuesta
+        // 4. SINCRONIZACIÓN INMEDIATA DEL SOCKET
         if (updatedBot) {
             await autobotLogic.syncFrontendState(null, updatedBot);
         }
 
         return res.json({ 
             success: true, 
-            message: "Configuración sincronizada en servidor y base de datos.", 
+            message: "Configuración guardada y motor sincronizado.", 
             data: updatedBot.config 
         });
 
@@ -69,4 +86,7 @@ async function updateBotConfig(req, res) {
     }
 }
 
-module.exports = { updateBotConfig };
+module.exports = { 
+    updateBotConfig, 
+    getBotConfig 
+};
