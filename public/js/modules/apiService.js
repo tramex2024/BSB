@@ -65,6 +65,10 @@ export async function fetchEquityCurveData(strategy = 'Long') {
 
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
+/**
+ * Recolecta la configuración de la UI asegurando que las llaves
+ * coincidan exactamente con el Schema de Mongoose en el Backend.
+ */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -79,8 +83,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchasel-usdt'),
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
-            profit_percent: getNum('autriggerl'),   
-            price_step_inc: getNum('aupricestep-l'),
+            profit_percent: getNum('autriggerl'),   // Sincronizado con Schema
+            price_step_inc: getNum('aupricestep-l'), // Sincronizado con Schema
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -89,8 +93,8 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchases-usdt'),
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
-            profit_percent: getNum('autriggers'),   
-            price_step_inc: getNum('aupricestep-s'),
+            profit_percent: getNum('autriggers'),   // Sincronizado con Schema
+            price_step_inc: getNum('aupricestep-s'), // Sincronizado con Schema
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         },
@@ -112,7 +116,6 @@ export async function sendConfigToBackend() {
 
 /**
  * Activa o desactiva una estrategia (Long, Short o AI)
- * Ajustado para feedback visual inmediato y sincronización de DB
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const sideKey = side.toLowerCase(); 
@@ -120,10 +123,8 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
     const btn = document.getElementById(btnId);
 
-    // 1. ESTADO TRANSITORIO (Gris con "Starting..." o "Stopping...")
     if (btn) {
         btn.disabled = true;
-        // Quitamos los colores de éxito/error para poner el gris de espera
         btn.classList.remove('bg-emerald-600', 'bg-red-600');
         btn.classList.add('bg-slate-600'); 
         btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
@@ -142,8 +143,6 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
 
         if (data && data.success) {
             displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
-            // Nota: No quitamos el color gris aquí porque el Socket llegará en milisegundos 
-            // y ejecutará updateButtonState() poniendo el color final (Verde o Rojo).
             return data;
         } else {
             throw new Error(data?.message || 'Error en servidor');
@@ -151,11 +150,9 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     } catch (err) {
         displayMessage(err.message, 'error');
         
-        // REVERSIÓN EN CASO DE ERROR
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('bg-slate-600');
-            // Si falla, vuelve a su color lógico
             if (isRunning) {
                 btn.classList.add('bg-red-600');
                 btn.textContent = `STOP ${sideKey.toUpperCase()}`;
