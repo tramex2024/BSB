@@ -75,6 +75,11 @@ const autobotSchema = new mongoose.Schema({
             profit_percent: { type: Number, default: 1.5 },
             price_step_inc: { type: Number, default: 2.0 },
             stopAtCycle: { type: Boolean, default: false }
+        },
+        ai: {
+            enabled: { type: Boolean, default: false },
+            amountUsdt: { type: Number, default: 0 },
+            stopAtCycle: { type: Boolean, default: false }
         }
     },
 
