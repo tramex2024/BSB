@@ -44,6 +44,8 @@ function log(message, type = 'info') {
 async function syncFrontendState(currentPrice, botState) {
     if (io && botState) {
         const priceToEmit = parseFloat(currentPrice || lastCyclePrice || 0);
+        
+        // 🛡️ Aseguramos que el objeto emitido tenga la estructura completa
         io.emit('bot-state-update', { 
             ...botState, 
             price: priceToEmit,
@@ -57,11 +59,16 @@ async function syncFrontendState(currentPrice, botState) {
  */
 async function commitChanges(changeSet, currentPrice) {
     try {
-        if (Object.keys(changeSet).length === 0) return null;
+        // Si no hay cambios operativos, igual sincronizamos el estado actual de la DB para el frontend
+        if (Object.keys(changeSet).length === 0) {
+            const current = await Autobot.findOne({}).lean();
+            if (current) await syncFrontendState(currentPrice, current);
+            return null;
+        }
 
         changeSet.lastUpdate = new Date();
         
-        // 🛡️ Actualización directa sin lectura previa para evitar condiciones de carrera
+        // Actualización directa
         const updated = await Autobot.findOneAndUpdate(
             {}, 
             { $set: changeSet }, 
@@ -103,26 +110,42 @@ async function slowBalanceCacheUpdate() {
 
 /**
  * ACTUALIZACIONES MANUALES (Merge Profundo)
- * Blindado para evitar el reseteo de parámetros a 0
  */
 async function updateConfig(newConfig) {
     const currentPrice = lastCyclePrice;
+    
+    // 1. Buscamos el documento actual
     const currentBot = await Autobot.findOne({}).lean();
     if (!currentBot) return null;
 
-    // 🛡️ Clonación profunda para evitar que el spread operator rompa objetos anidados
-    const sanitizedConfig = JSON.parse(JSON.stringify(currentBot.config));
+    // 2. Creamos una copia profunda de la config que YA existe en la DB
+    const finalConfig = JSON.parse(JSON.stringify(currentBot.config || {}));
 
-    // Merge manual campo por campo para asegurar integridad
-    if (newConfig.long) Object.assign(sanitizedConfig.long, newConfig.long);
-    if (newConfig.short) Object.assign(sanitizedConfig.short, newConfig.short);
-    if (newConfig.ai) Object.assign(sanitizedConfig.ai, newConfig.ai);
+    // 3. Solo sobreescribimos si el valor que viene es un NÚMERO VÁLIDO y mayor a 0
+    const mergeSide = (side) => {
+        if (newConfig[side]) {
+            for (const key in newConfig[side]) {
+                const val = newConfig[side][key];
+                // 🛡️ Filtro crítico: No permitimos que un undefined o un 0 accidental 
+                // pise la configuración que ya está funcionando en el bot.
+                if (val !== undefined && val !== null && val !== "") {
+                    finalConfig[side][key] = val;
+                }
+            }
+        }
+    };
 
+    mergeSide('long');
+    mergeSide('short');
+    if (newConfig.ai) Object.assign(finalConfig.ai, newConfig.ai);
+    if (newConfig.symbol) finalConfig.symbol = newConfig.symbol;
+
+    // 4. Guardado atómico
     const bot = await Autobot.findOneAndUpdate({}, { 
-        $set: { config: sanitizedConfig, lastUpdate: new Date() } 
+        $set: { config: finalConfig, lastUpdate: new Date() } 
     }, { new: true }).lean();
 
-    log('⚙️ Parámetros de estrategia actualizados.', 'success');
+    log('✅ Configuración sincronizada con éxito.', 'success');
     if (bot) await syncFrontendState(currentPrice, bot);
     return bot;
 }
@@ -131,7 +154,6 @@ async function startSide(side, config) {
     const botState = await Autobot.findOne({}).lean();
     const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
     
-    // Si se provee una configuración parcial, hacer merge profundo con la existente
     const finalConfig = JSON.parse(JSON.stringify(botState.config));
     if (config && config[side]) {
         Object.assign(finalConfig[side], config[side]);
@@ -148,7 +170,7 @@ async function startSide(side, config) {
     };
     
     const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
-    log(`🚀 Estrategia ${side.toUpperCase()} activada.`, 'success');
+    log(`🚀 Estrategia ${side.toUpperCase()} iniciada.`, 'success');
     await slowBalanceCacheUpdate();
     return bot;
 }
@@ -157,14 +179,11 @@ async function stopSide(side) {
     const botState = await Autobot.findOne({}).lean();
     if (!botState) throw new Error("Bot no encontrado");
 
-    const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
     const stateField = side === 'long' ? 'lstate' : 'sstate'; 
-
     const newConfig = JSON.parse(JSON.stringify(botState.config));
     if (newConfig[side]) newConfig[side].enabled = false;
 
     const update = {
-        ...cleanData,
         [stateField]: 'STOPPED',
         config: newConfig,
         lastUpdate: new Date()
@@ -186,6 +205,8 @@ async function botCycle(priceFromWebSocket) {
     try {
         isProcessing = true; 
         const changeSet = {}; 
+        
+        // 1. Obtener estado fresco de la DB
         let botState = await Autobot.findOne({}).lean();
         const currentPrice = parseFloat(priceFromWebSocket);
         
@@ -216,7 +237,7 @@ async function botCycle(priceFromWebSocket) {
         setShortDeps(dependencies);
         setAIDeps(dependencies); 
 
-        // 1. CONSOLIDACIÓN
+        // 1. CONSOLIDACIÓN DE ÓRDENES
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
             if (botState.llastOrder.side === 'buy') {
                 await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
@@ -233,7 +254,7 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 2. RECALCULAR INDICADORES
+        // 2. RECALCULAR INDICADORES EN TIEMPO REAL
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
             const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
             if (activeLPPC > 0) {
@@ -266,16 +287,16 @@ async function botCycle(priceFromWebSocket) {
             }
         }
 
-        // 3. ESTRATEGIAS
+        // 3. EJECUTAR ESTRATEGIAS
         if (botState.lstate !== 'STOPPED') await runLongStrategy();
         if (botState.sstate !== 'STOPPED') await runShortStrategy();
         await runAIStrategy(); 
 
-        // 4. PERSISTENCIA
+        // 4. PERSISTENCIA Y SINCRONIZACIÓN FRONTAL
         await commitChanges(changeSet, currentPrice);
         
     } catch (error) {
-        log(`❌ Error crítico en ciclo: ${error.message}`, 'error');
+        log(`❌ Error en botCycle: ${error.message}`, 'error');
     } finally {
         isProcessing = false; 
     }

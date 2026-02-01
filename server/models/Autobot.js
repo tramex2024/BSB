@@ -1,8 +1,5 @@
 const mongoose = require('mongoose');
 
-// =========================================================================
-// ESQUEMA PRINCIPAL (Estructura Plana 2026 - Lógica Exponencial)
-// =========================================================================
 const autobotSchema = new mongoose.Schema({
     total_profit: { type: Number, default: 0 },
     lstate: { type: String, default: 'STOPPED' },
@@ -53,27 +50,27 @@ const autobotSchema = new mongoose.Schema({
     lastAvailableBTC: { type: Number, default: 0 },
     lastBalanceCheck: { type: Date, default: Date.now },
 
-    // --- CONFIGURACIÓN (Lógica Exponencial) ---
+    // --- CONFIGURACIÓN (🛡️ Optimizada para no sobreescribir con defaults) ---
     config: {
         symbol: { type: String, default: "BTC_USDT" },
         long: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number, default: 6.00 },
-            purchaseUsdt: { type: Number, default: 6.00 },
-            price_var: { type: Number, default: 0.5 },
-            size_var: { type: Number, default: 100 },
-            profit_percent: { type: Number, default: 1.5 },
-            price_step_inc: { type: Number, default: 2.0 },
+            amountUsdt: { type: Number }, // Eliminamos default forzado
+            purchaseUsdt: { type: Number },
+            price_var: { type: Number },
+            size_var: { type: Number },
+            profit_percent: { type: Number },
+            price_step_inc: { type: Number },
             stopAtCycle: { type: Boolean, default: false }
         },
         short: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number, default: 6.00 },
-            purchaseUsdt: { type: Number, default: 6.00 },
-            price_var: { type: Number, default: 0.5 },
-            size_var: { type: Number, default: 100 },
-            profit_percent: { type: Number, default: 1.5 },
-            price_step_inc: { type: Number, default: 2.0 },
+            amountUsdt: { type: Number },
+            purchaseUsdt: { type: Number },
+            price_var: { type: Number },
+            size_var: { type: Number },
+            profit_percent: { type: Number },
+            price_step_inc: { type: Number },
             stopAtCycle: { type: Boolean, default: false }
         },
         ai: {
@@ -85,6 +82,8 @@ const autobotSchema = new mongoose.Schema({
 
     lastUpdate: { type: Date, default: Date.now },
     lastUpdateTime: { type: Date, default: Date.now }
+}, { 
+    minimize: false // 🛡️ EVITA que Mongoose borre objetos vacíos en la DB
 });
 
 // Middleware de actualización automática

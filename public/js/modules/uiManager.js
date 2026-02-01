@@ -14,6 +14,10 @@ export function updateBotUI(state) {
         // console.log("⏳ UI Bloqueada: Sincronizando o Guardando...");
         return;
     }
+   
+    if (state.config) {
+        console.log("📦 Config recibida de DB:", state.config.long.amountUsdt);
+    }
 
     // 2. Precio con detección de tendencia
     const priceEl = document.getElementById('auprice');
