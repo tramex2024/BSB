@@ -1,5 +1,3 @@
-// public/js/modules/aibot.js
-
 /**
  * Archivo: public/js/modules/aibot.js
  * Gestión de Interfaz y Sincronización del Núcleo IA
@@ -14,7 +12,6 @@ import aiBotUI from './aiBotUI.js';
 export function initializeAibotView() {
     console.log("🚀 Sistema IA: Sincronizando interfaz...");
     
-    // Limpiar listeners previos para evitar duplicidad de logs y memoria
     if (socket) {
         socket.off('ai-status-update');
         socket.off('ai-history-data');
@@ -26,10 +23,10 @@ export function initializeAibotView() {
     setupAISocketListeners();
     setupAIControls();
     
-    // Estado inicial visual
-    aiBotUI.setRunningStatus(currentBotState.isRunning);
+    // Estado inicial visual basado en la memoria actual
+    const stopAtCycle = currentBotState.config?.ai?.stopAtCycle || false;
+    aiBotUI.setRunningStatus(currentBotState.isRunning, stopAtCycle);
 
-    // Solicitar datos frescos al servidor
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
@@ -53,30 +50,18 @@ function setupAISocketListeners() {
             balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         }
 
-        // 2. Sincronizar Switch de Ciclo (Por si el bot se auto-apagó)
-        const stopCycleCheck = document.getElementById('au-stop-ai-at-cycle');
-        if (stopCycleCheck && data.stopAtCycle !== undefined) {
-            stopCycleCheck.checked = data.stopAtCycle;
-        }
-
-        // 3. Gestionar Estado del Botón Principal
+        // 2. Gestionar Estado General (Incluye el switch stopAtCycle)
         const btnAi = document.getElementById('btn-start-ai');
-        const aiInput = document.getElementById('ai-amount-usdt');
-
-        if (btnAi) {
-            if (data.isRunning && data.historyCount < 50) {
+        
+        // Si está analizando (menos de 50 velas), mostramos estado intermedio
+        if (data.isRunning && data.historyCount < 50) {
+            if (btnAi) {
                 btnAi.textContent = `ANALIZANDO... (${data.historyCount}/50)`;
                 btnAi.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse";
-            } else {
-                aiBotUI.setRunningStatus(data.isRunning);
             }
-        }
-
-        // 4. Bloquear/Desbloquear edición de monto si la IA está activa
-        if (aiInput) {
-            aiInput.disabled = data.isRunning;
-            aiInput.classList.toggle('opacity-40', data.isRunning);
-            aiInput.classList.toggle('cursor-not-allowed', data.isRunning);
+        } else {
+            // Sincronización COMPLETA (Botón + Switch + Input)
+            aiBotUI.setRunningStatus(data.isRunning, data.stopAtCycle);
         }
     });
 
@@ -104,7 +89,7 @@ function setupAISocketListeners() {
     socket.on('ai-order-executed', (order) => {
         showAiToast(order);
         playNeuralSound(order.side);
-        socket.emit('get-ai-history'); // Refrescar tabla inmediatamente
+        socket.emit('get-ai-history'); 
     });
 }
 
@@ -119,18 +104,16 @@ function setupAIControls() {
     
     if (!btn) return;
 
-    // Clonar para evitar acumulamiento de eventos click
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
-    // Sincronización inicial desde el estado global cargado
+    // Sincronización inicial desde el estado cargado al iniciar la APP
     if (currentBotState.config && currentBotState.config.ai) {
         const aiConfig = currentBotState.config.ai;
         if (aiInput && aiConfig.amountUsdt) aiInput.value = aiConfig.amountUsdt;
         if (stopCycleCheck && aiConfig.stopAtCycle !== undefined) stopCycleCheck.checked = aiConfig.stopAtCycle;
     }
 
-    // EVENTO: Cambio de Monto
     if (aiInput) {
         aiInput.addEventListener('change', async () => {
             const amount = parseFloat(aiInput.value);
@@ -139,14 +122,12 @@ function setupAIControls() {
         });
     }
 
-    // EVENTO: Cambio de Stop at Cycle (Switch)
     if (stopCycleCheck) {
         stopCycleCheck.addEventListener('change', async () => {
             await saveAIConfig({ stopAtCycle: stopCycleCheck.checked });
         });
     }
 
-    // EVENTO: Toggle Start/Stop
     newBtn.addEventListener('click', async () => {
         const action = currentBotState.isRunning ? 'stop' : 'start';
         newBtn.disabled = true;
@@ -165,17 +146,17 @@ function setupAIControls() {
             const result = await response.json();
             if (result.success) {
                 currentBotState.isRunning = result.isRunning;
-                aiBotUI.setRunningStatus(result.isRunning);
+                // Al encender/apagar pasamos el estado actual del switch
+                aiBotUI.setRunningStatus(result.isRunning, stopCycleCheck?.checked);
             }
         } catch (error) {
             console.error("❌ Error API IA Toggle:", error);
-            aiBotUI.setRunningStatus(currentBotState.isRunning);
+            aiBotUI.setRunningStatus(currentBotState.isRunning, stopCycleCheck?.checked);
         } finally {
             newBtn.disabled = false;
         }
     });
 
-    // EVENTO: Panic Sell (Botón Rojo)
     if (btnPanic) {
         btnPanic.addEventListener('click', async () => {
             if (!confirm("🚨 ¿VENTA DE EMERGENCIA? Se liquidarán posiciones y se detendrá la IA inmediatamente.")) return;
@@ -193,14 +174,16 @@ function setupAIControls() {
                 });
                 
                 const result = await response.json();
-                if (result.success && aiBotUI.addLogEntry) {
-                    aiBotUI.addLogEntry("🚨 OPERACIÓN DE EMERGENCIA COMPLETADA", 1);
+                if (result.success) {
+                    currentBotState.isRunning = false;
+                    aiBotUI.setRunningStatus(false, false); // Apagamos todo
+                    if (aiBotUI.addLogEntry) aiBotUI.addLogEntry("🚨 OPERACIÓN DE EMERGENCIA COMPLETADA", 1);
                 }
             } catch (error) {
                 console.error("❌ Error en Panic Sell:", error);
             } finally {
                 btnPanic.disabled = false;
-                btnPanic.innerHTML = "PANIC SELL";
+                btnPanic.innerHTML = "PANIC SELL & STOP";
             }
         });
     }
@@ -233,9 +216,6 @@ async function saveAIConfig(payload) {
     }
 }
 
-/**
- * Notificación visual de ejecución de orden
- */
 function showAiToast(order) {
     const toast = document.createElement('div');
     const isBuy = order.side.toUpperCase() === 'BUY';
@@ -261,27 +241,18 @@ function showAiToast(order) {
     }, 4000);
 }
 
-/**
- * Feedback auditivo sutil para operaciones
- */
 function playNeuralSound(side) {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
-        
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
-        
         oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(side.toUpperCase() === 'BUY' ? 880 : 440, audioCtx.currentTime);
-        
         gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
-        
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.2);
-    } catch (e) {
-        // El navegador bloquea audio sin interacción previa, ignoramos.
-    }
+    } catch (e) {}
 }

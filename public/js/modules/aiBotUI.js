@@ -110,14 +110,20 @@ const aiBotUI = {
     },
 
     /**
-     * Actualiza el estado visual global de la IA y bloquea/desbloquea configuración
+     * ACTUALIZADO: Sincronización visual global e inversa (Backend -> Frontend)
      */
-    setRunningStatus: (isRunning) => {
+    setRunningStatus: (isRunning, stopAtCycle = null) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');
         const syncDot = document.getElementById('ai-sync-dot');
         const syncText = document.getElementById('ai-sync-text');
-        const aiInput = document.getElementById('ai-amount-usdt'); // Referencia al input de balance
+        const aiInput = document.getElementById('ai-amount-usdt');
+        const stopCycleCheck = document.getElementById('au-stop-ai-at-cycle');
+
+        // 1. Sincronización del Switch Stop At Cycle (Inversa)
+        if (stopCycleCheck && stopAtCycle !== null) {
+            stopCycleCheck.checked = stopAtCycle;
+        }
 
         if (isRunning) {
             if (btn) {
@@ -128,7 +134,6 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
             
-            // Bloqueo de seguridad del input mientras corre la IA
             if (aiInput) {
                 aiInput.disabled = true;
                 aiInput.classList.add('opacity-40', 'cursor-not-allowed');
@@ -142,7 +147,6 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
             
-            // Desbloqueo del input
             if (aiInput) {
                 aiInput.disabled = false;
                 aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
