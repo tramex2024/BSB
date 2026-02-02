@@ -25,8 +25,13 @@ router.post('/toggle', aiController.toggleAI);
 /**
  * ✅ RUTA: POST /api/ai/config
  * DESCRIPCIÓN: Actualiza el monto de entrenamiento (amountUsdt) y otros parámetros.
- * NOTA: Se cambió de 'update-config' a 'config' para sincronizar con la petición del frontend.
  */
 router.post('/config', aiController.updateAIConfig);
+
+/**
+ * 🚨 RUTA: POST /api/ai/panic
+ * DESCRIPCIÓN: Cierra cualquier posición abierta al precio actual y apaga el bot.
+ */
+router.post('/panic', aiController.panicSell);
 
 module.exports = router;

@@ -41,19 +41,19 @@ class StrategyManager {
         const lastEma50 = ema50[ema50.length - 1];
         const currentPrice = closeValues[closeValues.length - 1];
 
-        // Lógica de cruces
+        // Lógica de cruces y posición
         const isBullishCross = lastEma9 > lastEma21;
         const isAboveLongTerm = currentPrice > lastEma50;
 
-        // --- SISTEMA DE PUNTUACIÓN OPTIMIZADO ---
+        // --- SISTEMA DE PUNTUACIÓN ---
         let score = 0;
 
-        // Criterio 1: Estructura EMA (Base de la señal)
+        // Criterio 1: Estructura EMA
         if (isAboveLongTerm) {
-            score += 30; // Tendencia macro alcista
-            if (isBullishCross) score += 20; // Momentum de corto plazo
+            score += 30; 
+            if (isBullishCross) score += 20; 
         } else {
-            score -= 25; // Penalización agresiva si estamos bajo la EMA50
+            score -= 25; 
         }
 
         // Criterio 2: Momentum Stochastic RSI
@@ -61,44 +61,42 @@ class StrategyManager {
             const kDiff = latestStoch.k - prevStoch.k;
             
             if (latestStoch.k < 20 && kDiff > 2) {
-                score += 35; // COMPRA: Salida de sobreventa extrema (Oro puro)
+                score += 35; // Rebote en sobreventa
             } else if (latestStoch.k < 50 && kDiff > 5) {
-                score += 15; // Momentum ascendente
+                score += 15; // Impulso alcista
             } else if (latestStoch.k > 85) {
-                score -= 45; // BLOQUEO: Riesgo de retroceso inmediato
+                score -= 45; // Sobrecompra (Peligro)
             }
         }
 
         // Criterio 3: Filtro de Volatilidad ADX
         if (latestADX > 22) {
-            score += 15; // Hay tendencia clara
+            score += 15; 
         } else if (latestADX < 15) {
-            score -= 30; // MERCADO MUERTO: Evitar señales falsas por falta de volumen
+            score -= 30; // Mercado muy lateral
         }
 
         // Normalización (0.0 a 1.0)
         const confidence = Math.max(0, Math.min(1, score / 100));
 
         return {
-            rsi: latestStoch ? latestStoch.k : 50,
+            rsiK: latestStoch ? latestStoch.k : 50,
+            rsiD: latestStoch ? latestStoch.d : 50,
             adx: latestADX,
             trend: isAboveLongTerm ? 'bullish' : 'bearish',
             confidence: confidence,
             price: currentPrice,
-            ema9: lastEma9,
-            ema21: lastEma21,
-            ema50: lastEma50,
             message: this._generateMessage(isAboveLongTerm, latestADX, latestStoch, confidence)
         };
     }
 
     static _generateMessage(bullish, adx, stoch, conf) {
         if (conf >= 0.85) return "🚀 ALTA CONFIANZA: Patrón Neural Detectado.";
-        if (stoch && stoch.k > 80) return "⚠️ MOMENTUM AGOTADO: Esperando corrección.";
-        if (adx < 18) return "😴 RANGO LATERAL: Sin fuerza para operar.";
-        if (!bullish) return "📉 FILTRO EMA: Tendencia principal bajista.";
-        if (conf > 0.6) return "⚖️ SEÑAL DÉBIL: Esperando confirmación.";
-        return "🔍 ESCANEANDO: Buscando anomalías de mercado...";
+        if (stoch && stoch.k > 80) return "⚠️ MOMENTUM AGOTADO: Riesgo de corrección.";
+        if (adx < 18) return "😴 RANGO LATERAL: Sin fuerza en la tendencia.";
+        if (!bullish) return "📉 FILTRO EMA: Bajo la media de 50 periodos.";
+        if (conf > 0.6) return "⚖️ SEÑAL DÉBIL: Esperando mayor volumen.";
+        return "🔍 ESCANEANDO: Buscando ineficiencias...";
     }
 }
 

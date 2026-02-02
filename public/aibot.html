@@ -56,6 +56,22 @@
                 Activar Núcleo IA
             </button>
 
+            <button id="btn-panic-ai" class="w-full py-2 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl font-black text-[10px] transition-all border border-red-500/30 uppercase tracking-[0.2em] active:scale-95 group flex items-center justify-center gap-2">
+                <span class="w-2 h-2 bg-red-500 rounded-full animate-ping group-hover:bg-white"></span>
+                Panic Sell & Stop
+            </button>
+
+            <div class="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-blue-500/10">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-blue-400 uppercase font-black">Ciclo Inteligente</span>
+                    <span class="text-[7px] text-gray-500 uppercase tracking-tighter">Detener al finalizar ciclo</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="au-stop-ai-at-cycle" class="sr-only peer">
+                    <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+                </label>
+            </div>
+
             <div class="bg-black/40 p-3 rounded-xl border border-blue-500/10">
                 <div class="flex items-center justify-between">
                     <span class="text-[9px] text-gray-500 uppercase font-black">Saldo Actual</span>
@@ -76,15 +92,14 @@
         </div>
 
         <div class="bg-black p-4 rounded-3xl border-2 border-blue-500/20 font-mono text-[10px] h-64 md:h-[450px] overflow-hidden flex flex-col shadow-inner">
-    <div class="text-blue-500 border-b border-blue-500/20 pb-1 mb-2 shrink-0 font-bold flex justify-between">
-        <span>[LOG_NEURAL_STREAM]</span>
-        <span class="animate-pulse">_</span>
-    </div>
-    
-    <div id="ai-log-container" class="space-y-1 overflow-y-auto flex-1 text-gray-400 custom-scrollbar pr-1 scroll-smooth">
-        <p class="text-gray-600 italic">>> Estableciendo enlace con el motor de IA...</p>
-    </div>
-</div>
+            <div class="text-blue-500 border-b border-blue-500/20 pb-1 mb-2 shrink-0 font-bold flex justify-between">
+                <span>[LOG_NEURAL_STREAM]</span>
+                <span class="animate-pulse">_</span>
+            </div>
+            <div id="ai-log-container" class="space-y-1 overflow-y-auto flex-1 text-gray-400 custom-scrollbar pr-1 scroll-smooth">
+                <p class="text-gray-600 italic">>> Estableciendo enlace con el motor de IA...</p>
+            </div>
+        </div>
     </div>
 
     <div class="mt-8">
