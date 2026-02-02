@@ -18,6 +18,7 @@ export const currentBotState = {
     lpm: 0,
     spm: 0,
     isRunning: false, // Estado de la IA
+    stopAtCycle: false,
     config: {
         long: {},
         short: {},
@@ -161,24 +162,31 @@ export function initializeFullApp() {
     });
 
     socket.on('ai-status-update', (data) => {
-        if (!data) return;
-        currentBotState.virtualBalance = data.virtualBalance;
-        currentBotState.isRunning = data.isRunning;
-        
-        aiBotUI.setRunningStatus(data.isRunning);
-        
-        const balEl = document.getElementById('ai-virtual-balance');
-        if (balEl && data.virtualBalance !== undefined) {
-            balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
-        }
+    if (!data) return;
 
-        // Actualizar modo Visual (Simulación/Real)
-        const modeEl = document.getElementById('ai-mode-status');
-        if (modeEl) {
-            modeEl.innerText = data.isRealMoney ? 'Live Exchange' : 'Simulación Virtual';
-            modeEl.className = data.isRealMoney ? 'text-red-500 font-mono animate-pulse' : 'text-yellow-500 font-mono';
-        }
-    });
+    // 1. Sincronizar el Almacén Central (currentBotState)
+    currentBotState.virtualBalance = data.virtualBalance;
+    currentBotState.isRunning = data.isRunning;
+    currentBotState.stopAtCycle = data.stopAtCycle; // <--- GUARDAMOS EL VALOR DE LA DB
+    currentBotState.amountUsdt = data.amountUsdt;   // También guardamos el monto
+
+    // 2. Notificar a la Interfaz pasándole AMBOS estados
+    // Pasamos (¿Está corriendo?, ¿Debe detenerse al final?)
+    aiBotUI.setRunningStatus(data.isRunning, data.stopAtCycle);
+    
+    // 3. Actualizar Balance
+    const balEl = document.getElementById('ai-virtual-balance');
+    if (balEl && data.virtualBalance !== undefined) {
+        balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
+    }
+
+    // 4. Actualizar modo Visual
+    const modeEl = document.getElementById('ai-mode-status');
+    if (modeEl) {
+        modeEl.innerText = data.isRealMoney ? 'Live Exchange' : 'Simulación Virtual';
+        modeEl.className = data.isRealMoney ? 'text-red-500 font-mono animate-pulse' : 'text-yellow-500 font-mono';
+    }
+});
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
@@ -214,7 +222,7 @@ export async function initializeTab(tabName) {
 
             // --- SINCRONIZACIÓN INICIAL ---
             // Aplicar estilos y estados (bloqueo de input si está corriendo)
-            aiBotUI.setRunningStatus(currentBotState.isRunning); 
+            aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle); 
             
             // Cargar valor de balance desde la configuración global
             if (aiInput && currentBotState.config.ai && currentBotState.config.ai.amountUsdt) {
@@ -320,7 +328,7 @@ document.addEventListener('visibilitychange', () => {
         
         updateControlsState(currentBotState);
         if (aiBotUI) {
-            aiBotUI.setRunningStatus(currentBotState.isRunning);
+            aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle);
         }
     }
 });

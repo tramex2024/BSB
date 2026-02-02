@@ -6,12 +6,10 @@
 import { socket, currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 
-/**
- * Inicializa la vista de la IA cada vez que el usuario entra en la pestaña.
- */
 export function initializeAibotView() {
     console.log("🚀 Sistema IA: Sincronizando interfaz...");
     
+    // 1. Limpiar listeners (lo mantienes igual)
     if (socket) {
         socket.off('ai-status-update');
         socket.off('ai-history-data');
@@ -23,10 +21,21 @@ export function initializeAibotView() {
     setupAISocketListeners();
     setupAIControls();
     
-    // Estado inicial visual basado en la memoria actual
-    const stopAtCycle = currentBotState.config?.ai?.stopAtCycle || false;
-    aiBotUI.setRunningStatus(currentBotState.isRunning, stopAtCycle);
+    // 2. SINCRONIZACIÓN DESDE EL ESTADO GLOBAL (main.js)
+    // Según tu JSON, los datos están en la raíz de currentBotState
+    const isRunning = currentBotState.isRunning;
+    const stopAtCycle = currentBotState.stopAtCycle; // Sin '.config'
+    const amount = currentBotState.amountUsdt;       // Sin '.config'
 
+    // Aplicar al input de monto
+    const aiInput = document.getElementById('ai-amount-usdt');
+    if (aiInput && amount !== undefined) aiInput.value = amount;
+
+    // Aplicar estado visual (Botón y Switch)
+    // Pasamos los valores que main.js ya tiene guardados
+    aiBotUI.setRunningStatus(isRunning, stopAtCycle);
+
+    // 3. Solicitar actualización fresca (lo mantienes igual)
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
