@@ -1,6 +1,6 @@
 /**
  * Módulo de Interfaz para el AI Bot - Versión Optimizada 2026
- * Corrección: Sincronización de funciones de Log y Renderizado Neural
+ * Integración: Control de Input de Balance y Sincronización Neural
  */
 
 const aiBotUI = {
@@ -14,19 +14,16 @@ const aiBotUI = {
         
         if (!circle || !valueText || !predictionText) return;
 
-        // Normalización de confianza (soporta 0-1 o 0-100)
         const percent = confidence <= 1 ? confidence * 100 : confidence;
         const offset = 364.4 - (percent / 100) * 364.4;
         
         circle.style.strokeDashoffset = offset;
         valueText.innerText = `${Math.round(percent)}%`;
 
-        // Color del círculo según confianza
-        if (percent >= 85) circle.style.stroke = "#10b981"; // Emerald
-        else if (percent >= 50) circle.style.stroke = "#3b82f6"; // Blue
-        else circle.style.stroke = "#6366f1"; // Indigo
+        if (percent >= 85) circle.style.stroke = "#10b981"; 
+        else if (percent >= 50) circle.style.stroke = "#3b82f6"; 
+        else circle.style.stroke = "#6366f1"; 
 
-        // Gestión de mensajes
         predictionText.classList.remove('text-blue-300', 'text-emerald-400', 'text-gray-500', 'animate-pulse');
 
         if (isAnalyzing) {
@@ -49,19 +46,11 @@ const aiBotUI = {
         }
     },
 
-    /**
-     * Alias compatible con main.js y socket.js
-     * Resuelve el error: "aiBotUI.addLog is not a function"
-     */
     addLog: function(message, type = 'info') {
-        // Mapeamos 'success' a alta confianza para el color verde, otros a azul
         const mockConfidence = (type === 'success') ? 0.90 : 0.50;
         this.addLogEntry(message, mockConfidence);
     },
 
-    /**
-     * Añade entradas a la terminal de log neural
-     */
     addLogEntry: (message, confidence = 0) => {
         const container = document.getElementById('ai-log-container');
         if (!container) return;
@@ -69,7 +58,6 @@ const aiBotUI = {
         const time = new Date().toLocaleTimeString([], { hour12: false });
         const logEntry = document.createElement('div');
         
-        // Color dinámico para el log según importancia
         const borderColor = confidence >= 0.85 ? 'border-emerald-500' : 'border-blue-500';
         const textColor = confidence >= 0.85 ? 'text-emerald-400' : 'text-gray-300';
 
@@ -81,15 +69,11 @@ const aiBotUI = {
         
         container.prepend(logEntry);
 
-        // Mantener solo los últimos 25 registros para rendimiento
         if (container.children.length > 25) {
             container.removeChild(container.lastChild);
         }
     },
 
-    /**
-     * Renderiza la tabla de historial de operaciones
-     */
     updateHistoryTable: (trades) => {
         const tbody = document.getElementById('ai-history-table-body');
         if (!tbody) return;
@@ -126,13 +110,14 @@ const aiBotUI = {
     },
 
     /**
-     * Actualiza el estado visual global de la IA (On/Off)
+     * Actualiza el estado visual global de la IA y bloquea/desbloquea configuración
      */
     setRunningStatus: (isRunning) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');
         const syncDot = document.getElementById('ai-sync-dot');
         const syncText = document.getElementById('ai-sync-text');
+        const aiInput = document.getElementById('ai-amount-usdt'); // Referencia al input de balance
 
         if (isRunning) {
             if (btn) {
@@ -142,6 +127,12 @@ const aiBotUI = {
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
+            
+            // Bloqueo de seguridad del input mientras corre la IA
+            if (aiInput) {
+                aiInput.disabled = true;
+                aiInput.classList.add('opacity-40', 'cursor-not-allowed');
+            }
         } else {
             if (btn) {
                 btn.innerText = "ACTIVAR NÚCLEO IA";
@@ -151,6 +142,12 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
             
+            // Desbloqueo del input
+            if (aiInput) {
+                aiInput.disabled = false;
+                aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
+            }
+
             const circle = document.getElementById('ai-confidence-circle');
             if (circle) circle.style.strokeDashoffset = 364.4;
         }

@@ -3,8 +3,6 @@
 const express = require('express');
 const router = express.Router();
 const aiController = require('../controllers/aiController');
-// Si usas autenticación, puedes importar tu middleware aquí
-// const { protect } = require('../middleware/authMiddleware');
 
 /**
  * RUTA: GET /api/ai/status
@@ -23,5 +21,11 @@ router.get('/history', aiController.getVirtualHistory);
  * DESCRIPCIÓN: Enciende o apaga el motor neuronal.
  */
 router.post('/toggle', aiController.toggleAI);
+
+/**
+ * ✅ RUTA: POST /api/ai/update-config
+ * DESCRIPCIÓN: Actualiza el monto inicial (amountUsdt) y parámetros de la IA.
+ */
+router.post('/update-config', aiController.updateAIConfig);
 
 module.exports = router;

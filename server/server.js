@@ -165,23 +165,32 @@ setupMarketWS(io);
 io.on('connection', async (socket) => {
     console.log(`👤 Conectado: ${socket.id}`);
 
-    // Función para enviar el estado actual de la IA de forma unificada
     const sendAiStatus = async () => {
         try {
+            // Buscamos la configuración en la DB
             let state = await Aibot.findOne({});
-            if (!state) state = await Aibot.create({ isRunning: false, virtualBalance: 10000.00 }); // Balance inicial 10k sugerido
+            if (!state) {
+                // Si no existe, creamos el registro inicial con el balance virtual
+                state = await Aibot.create({ 
+                    isRunning: false, 
+                    virtualBalance: 100.00, 
+                    amountUsdt: 100.00 
+                });
+            }
             
             const statusData = {
                 isRunning: aiEngine.isRunning,
+                // Prioridad al balance en memoria del engine, si no, al de la DB
                 virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
+                amountUsdt: state.amountUsdt, // ✅ ENVIAMOS EL MONTO DEFINIDO
+                stopAtCycle: state.stopAtCycle,
                 historyCount: aiEngine.history ? aiEngine.history.length : 0
             };
 
-            // ✅ Enviamos AMBOS eventos para asegurar compatibilidad con Dashboard y AI Tab
             socket.emit('ai-status-update', statusData);
             socket.emit('ai-status-init', statusData); 
         } catch (err) { console.error("❌ Error AI Socket:", err); }
-    };
+    };    
 
     // Enviar balance e historial inmediatamente al conectar
     await sendAiStatus();

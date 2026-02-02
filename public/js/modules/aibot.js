@@ -107,18 +107,65 @@ function setupAISocketListeners() {
 }
 
 /**
- * Configura el botón de encendido/apagado usando la API REST
+ * Configura el botón de encendido/apagado y el input de configuración (USDT)
  */
 function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
+    const aiInput = document.getElementById('ai-amount-usdt'); // Referencia al nuevo input
     if (!btn) return;
 
+    // 1. LIMPIEZA DE LISTENERS: Clonamos el botón para evitar duplicidad de eventos
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
+    // 2. LOGICA DEL INPUT (Monto USDT)
+    if (aiInput) {
+        // Sincronizar valor inicial desde el estado global si existe
+        if (currentBotState.config && currentBotState.config.ai && currentBotState.config.ai.amountUsdt) {
+            aiInput.value = currentBotState.config.ai.amountUsdt;
+        }
+
+        // Bloquear input si la IA ya está corriendo al cargar la vista
+        if (currentBotState.isRunning) {
+            aiInput.disabled = true;
+            aiInput.classList.add('opacity-40', 'cursor-not-allowed');
+        }
+
+        // Evento de guardado automático al cambiar el valor
+        aiInput.addEventListener('change', async () => {
+            const amount = parseFloat(aiInput.value);
+            if (isNaN(amount) || amount <= 0) return;
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ amountUsdt: amount })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    if (aiBotUI.addLogEntry) {
+                        aiBotUI.addLogEntry(`Configuración: Monto actualizado a $${amount} USDT`, 0.5);
+                    }
+                    // Actualizamos el estado local para mantener coherencia
+                    if (!currentBotState.config.ai) currentBotState.config.ai = {};
+                    currentBotState.config.ai.amountUsdt = amount;
+                }
+            } catch (error) {
+                console.error("❌ Error guardando monto IA:", error);
+            }
+        });
+    }
+
+    // 3. LOGICA DEL BOTÓN DE ACCIÓN (Start/Stop)
     newBtn.addEventListener('click', async () => {
         const action = currentBotState.isRunning ? 'stop' : 'start';
 
+        // UI State: Procesando
         newBtn.disabled = true;
         newBtn.textContent = "PROCESANDO...";
         newBtn.className = "w-full py-4 bg-gray-600 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
@@ -136,16 +183,25 @@ function setupAIControls() {
             const result = await response.json();
 
             if (result.success) {
+                // Actualizar estado global
                 currentBotState.isRunning = result.isRunning;
+                
+                // Actualizar Interfaz (Botón, dots y bloqueo de input)
                 aiBotUI.setRunningStatus(result.isRunning);
+                
+                if (aiBotUI.addLogEntry) {
+                    const statusMsg = result.isRunning ? "NÚCLEO IA ACTIVADO" : "NÚCLEO IA EN STANDBY";
+                    aiBotUI.addLogEntry(statusMsg, result.isRunning ? 0.9 : 0.4);
+                }
             } else {
                 throw new Error(result.message);
             }
 
         } catch (error) {
             console.error("❌ Error API IA:", error);
+            // Revertir UI al estado actual conocido en caso de fallo
             aiBotUI.setRunningStatus(currentBotState.isRunning);
-            alert("Error de conexión con el núcleo de IA.");
+            alert(`Error de conexión: ${error.message || "No se pudo contactar con el núcleo"}`);
         } finally {
             newBtn.disabled = false;
         }

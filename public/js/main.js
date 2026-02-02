@@ -183,8 +183,9 @@ export function initializeFullApp() {
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
 
-// --- GESTIÓN DE PESTAÑAS ---
+// --- GESTIÓN DE PESTAÑAS (Versión Completa con IA Engine) ---
 export async function initializeTab(tabName) {
+    // Limpiar intervalos previos para evitar fugas de memoria
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
 
@@ -192,10 +193,12 @@ export async function initializeTab(tabName) {
     if (!mainContent) return;
 
     try {
+        // 1. Cargar el HTML de la pestaña
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         mainContent.innerHTML = html;
         
+        // 2. Importar e inicializar el módulo de la vista si existe
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
@@ -204,16 +207,60 @@ export async function initializeTab(tabName) {
             }
         }
 
-        // Configuración específica de la vista de IA
+        // 3. CONFIGURACIÓN ESPECÍFICA DE LA VISTA DE IA
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
-            if (btnAi) {
-                // Sincronizar estado inicial del botón
-                aiBotUI.setRunningStatus(currentBotState.isRunning); 
+            const aiInput = document.getElementById('ai-amount-usdt');
 
+            // --- SINCRONIZACIÓN INICIAL ---
+            // Aplicar estilos y estados (bloqueo de input si está corriendo)
+            aiBotUI.setRunningStatus(currentBotState.isRunning); 
+            
+            // Cargar valor de balance desde la configuración global
+            if (aiInput && currentBotState.config.ai && currentBotState.config.ai.amountUsdt) {
+                aiInput.value = currentBotState.config.ai.amountUsdt;
+            }
+
+            // --- GESTIÓN DEL INPUT (MONTO USDT) ---
+            if (aiInput) {
+                let aiConfigTimeout;
+                aiInput.addEventListener('input', () => {
+                    clearTimeout(aiConfigTimeout);
+                    // Esperar 1.5 segundos después de que el usuario deje de escribir
+                    aiConfigTimeout = setTimeout(async () => {
+                        const amount = parseFloat(aiInput.value);
+                        if (isNaN(amount) || amount <= 0) return;
+
+                        try {
+                            const res = await fetch(`${BACKEND_URL}/api/ai/config`, {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                },
+                                body: JSON.stringify({ amountUsdt: amount })
+                            });
+                            const data = await res.json();
+                            if(data.success) {
+                                aiBotUI.addLog(`Configuración: Monto de entrenamiento actualizado a $${amount}`, 'info');
+                                // Actualizar estado local
+                                if (!currentBotState.config.ai) currentBotState.config.ai = {};
+                                currentBotState.config.ai.amountUsdt = amount;
+                            }
+                        } catch (e) {
+                            console.error("Error al sincronizar configuración de IA:", e);
+                            aiBotUI.addLog("Error al sincronizar monto con el servidor", "error");
+                        }
+                    }, 1500);
+                });
+            }
+
+            // --- GESTIÓN DEL BOTÓN DE ENCENDIDO/APAGADO ---
+            if (btnAi) {
                 btnAi.onclick = async () => {
                     const action = currentBotState.isRunning ? 'stop' : 'start';
                     
+                    // Estado visual de carga
                     btnAi.disabled = true;
                     btnAi.innerText = "PROCESANDO...";
                     btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
@@ -231,13 +278,15 @@ export async function initializeTab(tabName) {
                         
                         if(data.success) {
                             currentBotState.isRunning = data.isRunning;
+                            // Actualizar UI a través del módulo especializado
                             aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'Iniciado' : 'Detenido'}`, 'success');
+                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'NÚCLEO ACTIVADO' : 'NÚCLEO DETENIDO'}`, 'success');
                         } else {
                             throw new Error(data.message);
                         }
                     } catch (e) {
-                        aiBotUI.addLog(`Error: ${e.message || "Fallo de conexión"}`);
+                        aiBotUI.addLog(`Error de Conexión: ${e.message || "Fallo en el servidor"}`);
+                        // Revertir UI al estado actual conocido
                         aiBotUI.setRunningStatus(currentBotState.isRunning);
                     } finally {
                         btnAi.disabled = false;
@@ -247,10 +296,9 @@ export async function initializeTab(tabName) {
         }
 
     } catch (error) { 
-        console.error("❌ Error cargando vista:", error); 
+        console.error("❌ Error crítico cargando vista:", error); 
     }
 }
-
 // --- EVENTOS DE INICIO ---
 document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
