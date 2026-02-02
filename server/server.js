@@ -1,3 +1,4 @@
+// BSB/server/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,8 +12,6 @@ const path = require('path');
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
-
-// IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 
 // Modelos
@@ -79,7 +78,7 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
 let lastExecutionTime = 0;
-const EXECUTION_THROTTLE_MS = 2000; // Control de frecuencia para Bots e IA
+const EXECUTION_THROTTLE_MS = 2000; 
 
 // --- 7. WEBSOCKET BITMART ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
@@ -113,27 +112,21 @@ function setupMarketWS(io) {
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
    
                 lastKnownPrice = price; 
-
                 centralAnalyzer.updatePrice(price);
 
-                // Emitimos SIEMPRE al dashboard para fluidez visual
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
-                // 🚀 GATILLO CONTROLADO (THROTTLE) PARA IA Y BOT
                 const now = Date.now();
                 if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
                     lastExecutionTime = now;
 
                     if (mongoose.connection.readyState === 1) { 
                         try { 
-                            // Analizar solo si el motor está corriendo para no procesar en vano
                             if (aiEngine.isRunning) {
                                 await aiEngine.analyze(price, volume); 
-                                // El estado se emite desde el propio Engine si hay cambios importantes
                             }
                         } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
                         
-                        // Ejecución de ciclos de Autobot (LRunning, SRunning, etc)
                         await autobotLogic.botCycle(price);
                     }
                 }
@@ -167,10 +160,8 @@ io.on('connection', async (socket) => {
 
     const sendAiStatus = async () => {
         try {
-            // Buscamos la configuración en la DB
             let state = await Aibot.findOne({});
             if (!state) {
-                // Si no existe, creamos el registro inicial con el balance virtual
                 state = await Aibot.create({ 
                     isRunning: false, 
                     virtualBalance: 100.00, 
@@ -180,9 +171,8 @@ io.on('connection', async (socket) => {
             
             const statusData = {
                 isRunning: aiEngine.isRunning,
-                // Prioridad al balance en memoria del engine, si no, al de la DB
                 virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
-                amountUsdt: state.amountUsdt, // ✅ ENVIAMOS EL MONTO DEFINIDO
+                amountUsdt: state.amountUsdt || 100.00, // ✅ Consistencia con UI
                 stopAtCycle: state.stopAtCycle,
                 historyCount: aiEngine.history ? aiEngine.history.length : 0
             };
@@ -192,10 +182,8 @@ io.on('connection', async (socket) => {
         } catch (err) { console.error("❌ Error AI Socket:", err); }
     };    
 
-    // Enviar balance e historial inmediatamente al conectar
     await sendAiStatus();
 
-    // Responder a peticiones manuales de la UI
     socket.on('get-ai-status', async () => {
         await sendAiStatus();
     });
@@ -204,7 +192,7 @@ io.on('connection', async (socket) => {
         try {
             const trades = await AIBotOrder.find({ isVirtual: true })
                 .sort({ timestamp: -1 })
-                .limit(10); // Aumentado a 10 para mejor visualización
+                .limit(10);
             socket.emit('ai-history-data', trades);
         } catch (err) { console.error("❌ Error historial:", err); }
     });
@@ -215,12 +203,12 @@ io.on('connection', async (socket) => {
 // --- 11. START ---
 server.listen(PORT, async () => {
     try {
-        // INICIO DE SERVICIOS CENTRALIZADOS
         centralAnalyzer.init(io); 
-        console.log("🧠 [CENTRAL-ANALYZER] Iniciado correctamente.");
+        console.log("🧠 [CENTRAL-ANALYZER] Iniciado.");
 
+        // Importante: Inicializar el motor de IA al arrancar el servidor
         await aiEngine.init();
-        console.log("🧠 [IA-CORE] Memoria recuperada satisfactoriamente.");
+        console.log("🧠 [IA-CORE] Motor y Balance recuperados.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
     console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });
