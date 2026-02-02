@@ -1,6 +1,6 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Núcleo de Inteligencia Artificial - Modo Virtual (Sincronizado 2026)
+ * Versión Corregida: Sincronización DB + Memoria
  */
 
 const Aibot = require('../../models/Aibot');
@@ -19,10 +19,9 @@ class AIEngine {
         this.highestPrice = 0;
         this.stopAtCycle = false;
 
-        // PARÁMETROS DE GESTIÓN
         this.TRAILING_PERCENT = 0.005; // 0.5%
-        this.RISK_PER_TRADE = 1.0;     // 100% del monto (Interés compuesto)
-        this.EXCHANGE_FEE = 0.001;     // 0.1% comisión simulación
+        this.RISK_PER_TRADE = 1.0;     // 100%
+        this.EXCHANGE_FEE = 0.001;     // 0.1%
     }
 
     setIo(io) { 
@@ -30,9 +29,6 @@ class AIEngine {
         this.init(); 
     }
 
-    /**
-     * Inicialización: Carga el estado persistente desde MongoDB
-     */
     async init() {
         try {
             let state = await Aibot.findOne({});
@@ -60,42 +56,51 @@ class AIEngine {
     }
 
     /**
-     * Control Maestro: Encendido y Apagado
+     * CORRECCIÓN: Ahora sincroniza stopAtCycle correctamente al encender/apagar
      */
     async toggle(action) {
         const targetState = (action === 'start');
+        
+        // Obtenemos configuración fresca de la DB antes de arrancar
         const state = await Aibot.findOne({});
         
         if (state) {
             this.amountUsdt = state.amountUsdt;
-            this.stopAtCycle = state.stopAtCycle;
+            this.stopAtCycle = state.stopAtCycle; // <--- LEER EL SWITCH DE LA DB
+            
+            // Si el bot estaba apagado y va a encender, tomamos el balance guardado
             if (!this.isRunning && targetState) {
                 this.virtualBalance = state.virtualBalance || state.amountUsdt;
             }
         }
 
         this.isRunning = targetState;
-        await Aibot.updateOne({}, { isRunning: this.isRunning });
+
+        // ACTUALIZACIÓN COMPLETA: Guardamos el estado actual de memoria en la DB
+        await Aibot.updateOne({}, { 
+            isRunning: this.isRunning,
+            stopAtCycle: this.stopAtCycle,
+            virtualBalance: this.virtualBalance
+        });
 
         this._broadcastStatus();
         this._log(this.isRunning ? "🚀 NÚCLEO IA: ACTIVADO" : "🛑 NÚCLEO IA: DETENIDO", this.isRunning ? 0.9 : 0);
-        return { isRunning: this.isRunning, virtualBalance: this.virtualBalance };
+        
+        return { 
+            isRunning: this.isRunning, 
+            virtualBalance: this.virtualBalance,
+            stopAtCycle: this.stopAtCycle 
+        };
     }
 
-    /**
-     * Ciclo de Vida: Analiza cada tick de precio recibido
-     */
     async analyze(price) {
         if (!this.isRunning) return;
 
-        // 1. GESTIÓN DE SALIDA (Trailing Stop Dinámico)
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) {
                 this.highestPrice = price;
             }
-
             const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
-
             if (price <= stopPrice) {
                 this._log(`🎯 Trailing Stop activado en $${price}`, 0.95);
                 await this._trade('SELL', price, 1.0);
@@ -103,7 +108,6 @@ class AIEngine {
             }
         }
 
-        // 2. PROCESAR ESTRATEGIA NEURAL
         const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
         if (marketData && marketData.history) {
             this.history = marketData.history;
@@ -136,37 +140,27 @@ class AIEngine {
         }
     }
 
-    /**
-     * Venta de Emergencia: Cierra todo y apaga el motor
-     */
     async panicSell() {
         try {
-            if (this.lastEntryPrice === 0) {
-                this.isRunning = false;
-                await Aibot.updateOne({}, { isRunning: false });
-                this._broadcastStatus();
-                return { success: true, message: "IA Detenida (Sin posiciones)" };
+            const currentPrice = this.history.length > 0 ? this.history[this.history.length - 1].close : 0;
+            
+            if (this.lastEntryPrice > 0) {
+                this._log("🚨 PANIC SELL: Liquidando posición...", 1);
+                await this._trade('SELL', currentPrice, 0);
             }
 
-            const currentPrice = this.history.length > 0 ? this.history[this.history.length - 1].close : 0;
-            this._log("🚨 PANIC SELL: Liquidando posición inmediatamente...", 1);
-            
-            await this._trade('SELL', currentPrice, 0);
-            
             this.isRunning = false;
+            // Aseguramos que se guarde el apagado en la DB
             await Aibot.updateOne({}, { isRunning: false });
             this._broadcastStatus();
             
-            return { success: true, message: "Posición cerrada y motor en Standby" };
+            return { success: true, message: "IA Detenida y Posiciones Cerradas" };
         } catch (error) {
             console.error("❌ Error en Panic Sell:", error);
             throw error;
         }
     }
 
-    /**
-     * Ejecutor de Órdenes Virtuales
-     */
     async _trade(side, price, confidence) {
         try {
             const tradeAmountUSDT = this.virtualBalance;
@@ -187,13 +181,15 @@ class AIEngine {
                 this.lastEntryPrice = 0;
                 this.highestPrice = 0;
 
+                // Si stopAtCycle estaba activo, apagamos el motor después de esta venta
                 if (this.stopAtCycle) {
                     this.isRunning = false;
-                    this.stopAtCycle = false;
+                    this.stopAtCycle = false; // Se resetea para el próximo arranque manual
                     this._log("🛑 CICLO COMPLETADO: Auto-apagado activado.", 0.5);
                 }
             }
 
+            // Persistencia TOTAL en cada operación
             await Aibot.updateOne({}, { 
                 virtualBalance: this.virtualBalance,
                 lastEntryPrice: this.lastEntryPrice,
@@ -222,7 +218,7 @@ class AIEngine {
                 amountUsdt: this.amountUsdt,
                 historyCount: this.history.length,
                 lastEntryPrice: this.lastEntryPrice,
-                stopAtCycle: this.stopAtCycle
+                stopAtCycle: this.stopAtCycle // Enviamos el estado del switch al front
             });
         }
     }

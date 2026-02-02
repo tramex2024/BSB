@@ -30,7 +30,7 @@ const getAIStatus = async (req, res) => {
                 risk: aiEngine.RISK_PER_TRADE || 1.0,
                 threshold: 0.85,
                 amountUsdt: dbConfig ? dbConfig.amountUsdt : 0,
-                stopAtCycle: aiEngine.stopAtCycle // Priorizamos la memoria del engine
+                stopAtCycle: aiEngine.stopAtCycle // Prioridad absoluta a la memoria del motor
             }
         });
     } catch (error) {
@@ -49,7 +49,7 @@ const toggleAI = async (req, res) => {
             return res.status(400).json({ success: false, message: "Acción no proporcionada" });
         }
 
-        // Ejecutamos el cambio en el motor (él ya se encarga de persistir en DB)
+        // El motor gestiona la lógica interna y persiste el cambio en DB
         const result = await aiEngine.toggle(action);
 
         res.json({ 
@@ -104,12 +104,12 @@ const updateAIConfig = async (req, res) => {
         const { amountUsdt, stopAtCycle } = req.body;
         const updateFields = {};
 
-        // 1. Manejo del Monto/Balance
+        // 1. Manejo del Monto / Reset de Balance
         if (amountUsdt !== undefined) {
             const parsedAmount = parseFloat(amountUsdt);
             updateFields.amountUsdt = parsedAmount;
             
-            // Si el bot NO está corriendo, reseteamos el balance al nuevo monto
+            // Solo permitimos resetear el balance si la IA no está operando
             if (!aiEngine.isRunning) {
                 updateFields.virtualBalance = parsedAmount;
                 aiEngine.virtualBalance = parsedAmount;
@@ -117,31 +117,39 @@ const updateAIConfig = async (req, res) => {
             }
         }
 
-        // 2. Manejo del Switch StopAtCycle
+        // 2. Sincronización del Switch 'Stop at Cycle'
         if (stopAtCycle !== undefined) {
             const isStopActive = !!stopAtCycle;
             updateFields.stopAtCycle = isStopActive;
-            aiEngine.stopAtCycle = isStopActive; // Sincronización inmediata
+            
+            // Actualización inmediata en la RAM del motor
+            aiEngine.stopAtCycle = isStopActive;
         }
 
         if (Object.keys(updateFields).length === 0) {
-            return res.status(400).json({ success: false, message: "Campos no válidos" });
+            return res.status(400).json({ success: false, message: "No se enviaron campos válidos" });
         }
 
         updateFields.lastUpdate = new Date();
 
+        // Persistencia en MongoDB
         const updatedBot = await Aibot.findOneAndUpdate(
             {}, 
             { $set: updateFields }, 
             { upsert: true, new: true }
         );
 
+        // NOTIFICACIÓN PUSH: Avisar al front-end vía Sockets del cambio de configuración
+        if (aiEngine._broadcastStatus) {
+            aiEngine._broadcastStatus();
+        }
+
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
             virtualBalance: aiEngine.virtualBalance,
             stopAtCycle: updatedBot.stopAtCycle,
-            message: "Sincronización Neural Exitosa"
+            message: "Configuración Neural Sincronizada"
         });
     } catch (error) {
         console.error("❌ Error en updateAIConfig:", error);
@@ -152,7 +160,7 @@ const updateAIConfig = async (req, res) => {
 module.exports = { 
     getAIStatus, 
     toggleAI, 
-    panicSell, // Nuevo export
+    panicSell, 
     getVirtualHistory, 
     updateAIConfig 
 };
