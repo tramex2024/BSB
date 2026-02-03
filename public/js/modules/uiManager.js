@@ -101,3 +101,5 @@ export function updateControlsState(state) {
         engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
     }
 }
+
+export { displayMessage } from './ui/notifications.js';
