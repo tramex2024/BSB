@@ -12,22 +12,17 @@ const Autobot = require('../models/Autobot');  // 👈 Cambiado
  */
 const getAIStatus = async (req, res) => {
     try {
-        // Buscamos órdenes con estrategia 'ai'
-        const recentTrades = await Order.find({ strategy: 'ai' })
-            .sort({ orderTime: -1 })
-            .limit(10);
-
         const bot = await Autobot.findOne({}).lean();
+        const recentTrades = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(10);
 
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
+            // CAMBIO AQUÍ: Usar aibalance para que coincida con el modelo
             virtualBalance: aiEngine.virtualBalance || (bot ? bot.aibalance : 0),
             historyCount: aiEngine.history ? aiEngine.history.length : 0,
             recentHistory: recentTrades, 
             config: {
-                risk: aiEngine.RISK_PER_TRADE || 1.0,
-                threshold: 0.85,
                 amountUsdt: bot?.config?.ai?.amountUsdt || 0,
                 stopAtCycle: aiEngine.stopAtCycle 
             }

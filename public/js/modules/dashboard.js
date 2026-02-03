@@ -22,7 +22,7 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Sincronizando sistema...");
 
-    // 1. Inicializar Gráficos
+    // 1. Inicializar Gráficos (Corregido con destrucción de instancia)
     initBalanceChart();
     initEquityChart();
 
@@ -55,12 +55,17 @@ async function refreshAnalytics() {
         const curveData = await fetchEquityCurveData();
         if (curveData) {
             Metrics.setAnalyticsData(curveData);
-            // Actualizamos el gráfico con los datos recién traídos
+            
+            const bSel = document.getElementById('chart-bot-selector');
+            const pSel = document.getElementById('chart-param-selector');
+
             const currentFilter = {
-                bot: document.getElementById('chart-bot-selector')?.value || 'all',
-                param: document.getElementById('chart-param-selector')?.value || 'accumulatedProfit'
+                bot: bSel?.value || 'all',
+                param: pSel?.value || 'accumulatedProfit'
             };
             const filteredData = Metrics.getFilteredData(currentFilter);
+            
+            if (!equityChart) initEquityChart();
             updateEquityChart(filteredData);
         }
     } catch (e) { 
@@ -109,7 +114,6 @@ function setupSocketListeners() {
         const msgEl = document.getElementById('ai-engine-msg');
         if (msgEl) msgEl.textContent = data.message || "NEURAL CORE ANALYZING...";
         
-        // Actualizar barra de confianza si existe en el Dashboard
         const confBar = document.getElementById('ai-confidence-fill');
         if (confBar) confBar.style.width = `${Math.round(data.confidence * 100)}%`;
     });
@@ -128,7 +132,7 @@ function setupSocketListeners() {
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
-    if (balanceChart) balanceChart.destroy();
+    if (balanceChart) balanceChart.destroy(); // Fix: Evita "Canvas in use"
     
     balanceChart = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
@@ -152,6 +156,7 @@ function initBalanceChart() {
 function initEquityChart() {
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
+    if (equityChart) equityChart.destroy(); // Fix: Evita "Canvas in use"
 
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
@@ -211,7 +216,6 @@ function updateDistributionWidget(state) {
     if (usdtBar) usdtBar.style.width = `${displayUsdt}%`;
     if (btcBar) btcBar.style.width = `${displayBtc}%`;
 
-    // Actualizar etiquetas numéricas en Dashboard
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
     if(uText) uText.innerText = usdt.toFixed(2);

@@ -168,8 +168,9 @@ io.on('connection', async (socket) => {
             if (!bot) {
                 // Si no existe, lo creamos con la estructura unificada
                 bot = await Autobot.create({
-                    'config.ai': { enabled: false, amountUsdt: 100.00 }
-                });
+    aibalance: 100.00, // No virtualBalance
+    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
+});
             }
             
             const statusData = {

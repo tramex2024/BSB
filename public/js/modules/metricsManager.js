@@ -8,7 +8,6 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 export function setAnalyticsData(data) {
-    // CORRECCIÓN: Validamos si la data viene envuelta en un objeto { data: [] } o es el array directo
     if (data && Array.isArray(data)) {
         cycleHistoryData = data;
     } else if (data && data.success && Array.isArray(data.data)) {
@@ -32,12 +31,10 @@ export function setBotFilter(filter) {
 }
 
 function updateMetricsDisplay() {
-    // BLINDAJE: Si no es un array o está vacío, reseteamos y salimos
     if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
         return resetKPIs();
     }
 
-    // 1. Filtrar por estrategia (campo "strategy" de tu MongoDB)
     const filtered = currentBotFilter === 'all' 
         ? cycleHistoryData 
         : cycleHistoryData.filter(c => c && c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
@@ -45,13 +42,11 @@ function updateMetricsDisplay() {
     const totalCycles = filtered.length;
     if (totalCycles === 0) return resetKPIs();
 
-    // 2. CÁLCULOS DE ALTA PRECISIÓN
     let totalProfitPct = 0;
     let totalNetProfitUsdt = 0;
     let winningCycles = 0;
     let totalTimeMs = 0;
 
-    // Ahora es seguro usar forEach porque garantizamos que filtered es un Array
     filtered.forEach(cycle => {
         if (!cycle) return;
 
@@ -60,7 +55,6 @@ function updateMetricsDisplay() {
         
         if ((parseFloat(cycle.netProfit) || 0) > 0) winningCycles++;
 
-        // Manejo robusto de fechas de MongoDB ($date)
         const start = cycle.startTime?.$date ? new Date(cycle.startTime.$date) : 
                      (cycle.startTime ? new Date(cycle.startTime) : null);
         const end = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : 
@@ -72,13 +66,11 @@ function updateMetricsDisplay() {
         }
     });
 
-    // Conversiones finales
     const avgProfit = totalProfitPct / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const profitPerHour = totalHours > 0.01 ? (totalNetProfitUsdt / totalHours) : totalNetProfitUsdt;
 
-    // 3. ACTUALIZAR INTERFAZ
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', 
         `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
@@ -93,7 +85,6 @@ function updateMetricsDisplay() {
         `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`
     );
 
-    // 4. Renderizar Gráfico
     try {
         renderEquityCurve(filtered, currentChartParameter);
     } catch (chartError) {
@@ -118,29 +109,33 @@ function renderText(id, text, className = null) {
 
 /**
  * Procesa los datos para que el Dashboard pueda renderizar el gráfico
- * @param {Object} filter - { bot: 'all'|'long'|'short'|'ai', param: 'accumulatedProfit'|'durationHours' }
  */
 export function getFilteredData(filter) {
     if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
         return { points: [] };
     }
 
-    // 1. Filtrar por bot/estrategia
     const filtered = filter.bot === 'all' 
         ? cycleHistoryData 
         : cycleHistoryData.filter(c => c && c.strategy?.toLowerCase() === filter.bot.toLowerCase());
 
-    // 2. Transformar datos para Chart.js
     let accumulated = 0;
     const points = filtered.map(cycle => {
         const val = parseFloat(cycle.netProfit || 0);
         accumulated += val;
 
+        // --- CORRECCIÓN CRÍTICA: Formateo de fecha manual para evitar error de rango "22" ---
+        const rawDate = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : (cycle.endTime ? new Date(cycle.endTime) : new Date());
+        
+        let timeLabel = "00:00";
+        if (!isNaN(rawDate.getTime())) {
+            const h = rawDate.getHours().toString().padStart(2, '0');
+            const m = rawDate.getMinutes().toString().padStart(2, '0');
+            timeLabel = `${h}:${m}`;
+        }
+
         return {
-            // Usamos la hora de fin como etiqueta del eje X
-            time: cycle.endTime?.$date ? new Date(cycle.endTime.$date).toLocaleTimeString([], {hour: '22', minute:'2b'}) : 
-                  (cycle.endTime ? new Date(cycle.endTime).toLocaleTimeString([], {hour: '22', minute:'2b'}) : ''),
-            // Si el parámetro es profit acumulado, usamos la suma, si no, el valor individual o duración
+            time: timeLabel,
             value: filter.param === 'accumulatedProfit' ? accumulated : (parseFloat(cycle.profitPercentage) || 0)
         };
     });
