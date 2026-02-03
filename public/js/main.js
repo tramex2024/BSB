@@ -9,20 +9,18 @@ import aiBotUI from './modules/aiBotUI.js';
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 
+// Estructura limpia que refleja exactamente el modelo Autobot.js de la DB
 export const currentBotState = {
     price: 0,
-    sstate: 'STOPPED',
     lstate: 'STOPPED',
-    lpc: 0, 
-    spc: 0, 
-    lpm: 0,
-    spm: 0,
-    isRunning: false, // Estado de la IA
-    stopAtCycle: false,
+    sstate: 'STOPPED',
+    aibalance: 0, // Balance operativo de la IA (mapeado de la DB)
+    lastAvailableUSDT: 0,
     config: {
-        long: {},
-        short: {},
-        ai: {}
+        symbol: 'BTCUSDT',
+        long: { amountUsdt: 0, enabled: false },
+        short: { amountUsdt: 0, enabled: false },
+        ai: { amountUsdt: 0, enabled: false, stopAtCycle: false }
     }
 };
 
@@ -45,29 +43,23 @@ function updateConnectionStatus(status) {
     const aiSyncDot = document.getElementById('ai-sync-dot');
     const aiSyncText = document.getElementById('ai-sync-text');
 
-    if (status === 'CONNECTED') {
-        if (statusDot) statusDot.className = "w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]";
-        if (aiSyncDot) aiSyncDot.classList.replace('bg-gray-500', 'bg-emerald-500');
-        if (aiSyncText) aiSyncText.innerText = "AI CORE LINKED";
-    } else {
-        if (statusDot) statusDot.className = "w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
-        if (aiSyncDot) aiSyncDot.classList.replace('bg-emerald-500', 'bg-gray-500');
-        if (aiSyncText) aiSyncText.innerText = "DISCONNECTED";
-    }
+    const isConnected = status === 'CONNECTED';
+    
+    if (statusDot) statusDot.className = `w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`;
+    if (aiSyncDot) aiSyncDot.classList.toggle('bg-emerald-500', isConnected);
+    if (aiSyncDot) aiSyncDot.classList.toggle('bg-gray-500', !isConnected);
+    if (aiSyncText) aiSyncText.innerText = isConnected ? "AI CORE LINKED" : "DISCONNECTED";
 }
 
 function resetWatchdog() {
     updateConnectionStatus('CONNECTED');
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
-    connectionWatchdog = setTimeout(() => {
-        updateConnectionStatus('DISCONNECTED');
-    }, 10000); // 10 segundos de margen para Render (latencia)
+    connectionWatchdog = setTimeout(() => updateConnectionStatus('DISCONNECTED'), 15000);
 }
 
 export function logStatus(message, type = 'info') {
-    if (type === 'error') {
-        logQueue = [{ message, type }]; 
-    } else {
+    if (type === 'error') logQueue = [{ message, type }]; 
+    else {
         if (logQueue.length >= 2) logQueue.shift();
         logQueue.push({ message, type });
     }
@@ -86,13 +78,12 @@ function processNextLog() {
     const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
     logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
     
-    setTimeout(() => { processNextLog(); }, 2500);
+    setTimeout(() => processNextLog(), 2500);
 }
 
 // --- INICIALIZACIÓN DE SOCKETS ---
 export function initializeFullApp() {
-    if (socket && socket.connected) return;
-    if (typeof io === 'undefined') return;
+    if (socket?.connected || typeof io === 'undefined') return;
 
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
@@ -102,53 +93,52 @@ export function initializeFullApp() {
 
     socket.on('connect', () => {
         resetWatchdog();
-        socket.emit('get-bot-state'); 
-        socket.emit('get-ai-status');  
+        socket.emit('get-bot-state'); // Esto traerá el Autobot.findOne({})
     });
 
     socket.on('marketData', (data) => {
         resetWatchdog();
-        if (data && data.price) {
+        if (data?.price) {
             currentBotState.price = parseFloat(data.price);
             updateBotUI(currentBotState);
         }
     });
 
     socket.on('bot-log', (data) => {
-        if (data && data.message) {
-            logStatus(data.message, data.type || 'info');
-            // Sincronizar también con la terminal de IA si está activa
-            if (aiBotUI && typeof aiBotUI.addLog === 'function') {
-                aiBotUI.addLog(data.message, data.type);
-            }
-        }
+        if (!data?.message) return;
+        logStatus(data.message, data.type || 'info');
+        if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
 
+    // RECEPTOR CENTRAL DE ESTADO (UNIFICADO)
     socket.on('bot-state-update', (state) => {
-        if (state) {
-            if (state.config) {
-                currentBotState.config = { ...currentBotState.config, ...state.config };
-                delete state.config;
-            }
-            Object.assign(currentBotState, state);
-            
-            // Actualizar balance virtual de IA si viene en el estado global
-            if(state.virtualAiBalance !== undefined) {
-                const balEl = document.getElementById('ai-virtual-balance');
-                if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
-            }
-        }
-        updateBotUI(currentBotState);
-        updateControlsState(currentBotState); 
-    });
+    if (!state) return;
 
-    // 🧠 LISTENERS ESPECÍFICOS DE IA
+    // Sincronización de Configuración
+    if (state.config) {
+        currentBotState.config = { ...currentBotState.config, ...state.config };
+        delete state.config;
+    }
+
+    Object.assign(currentBotState, state);
+    
+    // UI Global
+    updateBotUI(currentBotState);
+    updateControlsState(currentBotState); 
+
+    // IA específica: Usamos un selector de clase para actualizar TODOS los espejos de balance
+    const balances = document.querySelectorAll('.ai-balance-val');
+    const formattedBal = `$${(currentBotState.aibalance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+    balances.forEach(el => el.innerText = formattedBal);
+    
+    if (aiBotUI) {
+        aiBotUI.setRunningStatus(currentBotState.config.ai.enabled, currentBotState.config.ai.stopAtCycle);
+    }
+});
+
     socket.on('ai-decision-update', (data) => {
         if (!data) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
-        aiBotUI.addLog(data.message, data.confidence >= 0.85 ? 'success' : 'info');
-
-        // Actualizar indicadores ADX/Stoch
         if (data.indicators) {
             const adxEl = document.getElementById('ai-adx-val');
             const stochEl = document.getElementById('ai-stoch-val');
@@ -157,43 +147,13 @@ export function initializeFullApp() {
         }
     });
 
-    socket.on('ai-history-update', (trades) => {
-        aiBotUI.updateHistoryTable(trades);
-    });
-
-    socket.on('ai-status-update', (data) => {
-    if (!data) return;
-
-    // 1. Sincronizar el Almacén Central (currentBotState)
-    currentBotState.virtualBalance = data.virtualBalance;
-    currentBotState.isRunning = data.isRunning;
-    currentBotState.stopAtCycle = data.stopAtCycle; // <--- GUARDAMOS EL VALOR DE LA DB
-    currentBotState.amountUsdt = data.amountUsdt;   // También guardamos el monto
-
-    // 2. Notificar a la Interfaz pasándole AMBOS estados
-    // Pasamos (¿Está corriendo?, ¿Debe detenerse al final?)
-    aiBotUI.setRunningStatus(data.isRunning, data.stopAtCycle);
-    
-    // 3. Actualizar Balance
-    const balEl = document.getElementById('ai-virtual-balance');
-    if (balEl && data.virtualBalance !== undefined) {
-        balEl.innerText = `$${data.virtualBalance.toFixed(2)}`;
-    }
-
-    // 4. Actualizar modo Visual
-    const modeEl = document.getElementById('ai-mode-status');
-    if (modeEl) {
-        modeEl.innerText = data.isRealMoney ? 'Live Exchange' : 'Simulación Virtual';
-        modeEl.className = data.isRealMoney ? 'text-red-500 font-mono animate-pulse' : 'text-yellow-500 font-mono';
-    }
-});
+    socket.on('ai-history-update', (trades) => aiBotUI.updateHistoryTable(trades));
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
 
-// --- GESTIÓN DE PESTAÑAS (Versión Completa con IA Engine) ---
+// --- GESTIÓN DE PESTAÑAS ---
 export async function initializeTab(tabName) {
-    // Limpiar intervalos previos para evitar fugas de memoria
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
 
@@ -201,113 +161,85 @@ export async function initializeTab(tabName) {
     if (!mainContent) return;
 
     try {
-        // 1. Cargar el HTML de la pestaña
         const response = await fetch(`./${tabName}.html`);
-        const html = await response.text();
-        mainContent.innerHTML = html;
+        mainContent.innerHTML = await response.text();
         
-        // 2. Importar e inicializar el módulo de la vista si existe
         if (views[tabName]) {
             const module = await views[tabName]();
-            const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-            if (typeof module[initFnName] === 'function') {
-                await module[initFnName](currentBotState); 
-            }
+            const initFn = module[`initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`];
+            if (initFn) await initFn(currentBotState); 
         }
 
-        // 3. CONFIGURACIÓN ESPECÍFICA DE LA VISTA DE IA
+        // LÓGICA ESPECÍFICA PESTAÑA AIBOT
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             const aiInput = document.getElementById('ai-amount-usdt');
+            const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-            // --- SINCRONIZACIÓN INICIAL ---
-            // Aplicar estilos y estados (bloqueo de input si está corriendo)
-            aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle); 
-            
-            // Cargar valor de balance desde la configuración global
-            if (aiInput && currentBotState.config.ai && currentBotState.config.ai.amountUsdt) {
-                aiInput.value = currentBotState.config.ai.amountUsdt;
-            }
+            // Sincronización Inicial de UI IA
+            aiBotUI.setRunningStatus(currentBotState.config.ai.enabled, currentBotState.config.ai.stopAtCycle);
+            if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
+            if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
 
-            // --- GESTIÓN DEL INPUT (MONTO USDT) ---
+            // 1. Evento Monto USDT (Debounce 1.5s)
             if (aiInput) {
-                let aiConfigTimeout;
+                let timeout;
                 aiInput.addEventListener('input', () => {
-                    clearTimeout(aiConfigTimeout);
-                    // Esperar 1.5 segundos después de que el usuario deje de escribir
-                    aiConfigTimeout = setTimeout(async () => {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(async () => {
                         const amount = parseFloat(aiInput.value);
                         if (isNaN(amount) || amount <= 0) return;
-
-                        try {
-                            const res = await fetch(`${BACKEND_URL}/api/ai/config`, {
-                                method: 'POST',
-                                headers: { 
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                },
-                                body: JSON.stringify({ amountUsdt: amount })
-                            });
-                            const data = await res.json();
-                            if(data.success) {
-                                aiBotUI.addLog(`Configuración: Monto de entrenamiento actualizado a $${amount}`, 'info');
-                                // Actualizar estado local
-                                if (!currentBotState.config.ai) currentBotState.config.ai = {};
-                                currentBotState.config.ai.amountUsdt = amount;
-                            }
-                        } catch (e) {
-                            console.error("Error al sincronizar configuración de IA:", e);
-                            aiBotUI.addLog("Error al sincronizar monto con el servidor", "error");
-                        }
+                        
+                        const res = await fetch(`${BACKEND_URL}/api/ai/config`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                            body: JSON.stringify({ amountUsdt: amount })
+                        });
+                        if ((await res.json()).success) aiBotUI.addLog(`IA: Capital actualizado a $${amount}`, 'info');
                     }, 1500);
                 });
             }
 
-            // --- GESTIÓN DEL BOTÓN DE ENCENDIDO/APAGADO ---
+            // 2. Evento Switch "Stop at Cycle"
+            if (stopAtCycleCheck) {
+                stopAtCycleCheck.onchange = async () => {
+                    const active = stopAtCycleCheck.checked;
+                    const res = await fetch(`${BACKEND_URL}/api/ai/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                        body: JSON.stringify({ stopAtCycle: active })
+                    });
+                    if (!(await res.json()).success) stopAtCycleCheck.checked = !active;
+                    else aiBotUI.addLog(`IA: Stop at Cycle ${active ? 'Activado' : 'Desactivado'}`, 'warning');
+                };
+            }
+
+            // 3. Evento Botón Start/Stop
             if (btnAi) {
                 btnAi.onclick = async () => {
-                    const action = currentBotState.isRunning ? 'stop' : 'start';
-                    
-                    // Estado visual de carga
+                    const action = currentBotState.config.ai.enabled ? 'stop' : 'start';
                     btnAi.disabled = true;
                     btnAi.innerText = "PROCESANDO...";
-                    btnAi.className = "w-full py-4 bg-gray-700 text-white rounded-2xl font-black text-xs animate-pulse";
 
-                    try {
-                        const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                            method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('token')}`
-                            },
-                            body: JSON.stringify({ action })
-                        });
-                        const data = await res.json();
-                        
-                        if(data.success) {
-                            currentBotState.isRunning = data.isRunning;
-                            // Actualizar UI a través del módulo especializado
-                            aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Sistema IA: ${action === 'start' ? 'NÚCLEO ACTIVADO' : 'NÚCLEO DETENIDO'}`, 'success');
-                        } else {
-                            throw new Error(data.message);
-                        }
-                    } catch (e) {
-                        aiBotUI.addLog(`Error de Conexión: ${e.message || "Fallo en el servidor"}`);
-                        // Revertir UI al estado actual conocido
-                        aiBotUI.setRunningStatus(currentBotState.isRunning);
-                    } finally {
-                        btnAi.disabled = false;
+                    const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                        body: JSON.stringify({ action })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        currentBotState.config.ai.enabled = data.isRunning;
+                        aiBotUI.setRunningStatus(data.isRunning, currentBotState.config.ai.stopAtCycle);
                     }
+                    btnAi.disabled = false;
                 };
             }
         }
 
-    } catch (error) { 
-        console.error("❌ Error crítico cargando vista:", error); 
-    }
+    } catch (error) { console.error("❌ Error cargando vista:", error); }
 }
-// --- EVENTOS DE INICIO ---
+
+// --- EVENTOS INICIALES ---
 document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
@@ -318,17 +250,5 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeTab('autobot'); 
     } else { 
         initializeTab('dashboard'); 
-    }
-});
-
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && socket && socket.connected) {
-        socket.emit('get-bot-state'); 
-        socket.emit('get-ai-status'); 
-        
-        updateControlsState(currentBotState);
-        if (aiBotUI) {
-            aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle);
-        }
     }
 });

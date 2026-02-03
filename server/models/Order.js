@@ -1,53 +1,29 @@
-// server/models/Order.js
+// BSB/server/models/Order.js
+
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
-    strategy: { // Define si pertenece a Long o Short
+    strategy: { 
         type: String,
-        enum: ['long', 'short'], // Restringe los valores posibles
-        required: true
-    },
-    orderId: {
-        type: String,
+        enum: ['long', 'short', 'ai'],
         required: true,
-        unique: true,
         index: true
     },
-    symbol: {
-        type: String,
-        required: true
+    executionMode: { 
+        type: String, 
+        enum: ['REAL', 'SIMULATED'], 
+        default: 'SIMULATED' // Por ahora todo será SIMULATED hasta que conectes el cable
     },
-    side: { // 'buy' or 'sell'
-        type: String,
-        required: true
-    },
-    type: { // 'limit' or 'market'
-        type: String,
-        required: true
-    },
-    size: { // Quantity of base currency for sell, or base currency for limit buy. For market buy, this is notional.
-        type: Number,
-        required: true
-    },
-    notional: { // USDT amount for market buy, or value of the order
-        type: Number
-    },
-    price: { // Price for limit orders or average filled price for market orders
-        type: Number
-    },
-    filledSize: {
-        type: Number,
-        default: 0
-    },
-    status: { // 'Open', 'Filled', 'Canceled', 'Partially Filled', 'Partially Canceled'
-        type: String,
-        required: true
-    },
-    orderTime: {
-        type: Date,
-        required: true
-    },
-    // Removido userId temporalmente para simplificar la prueba inicial
-}, { timestamps: true }); // Mongoose adds createdAt and updatedAt
+    orderId: { type: String, required: true, unique: true },
+    symbol: { type: String, default: 'BTC_USDT' },
+    side: { type: String, enum: ['BUY', 'SELL'], uppercase: true },
+    type: { type: String, default: 'MARKET' },
+    size: { type: Number, required: true },     // Cantidad BTC
+    price: { type: Number, required: true },    // Precio de ejecución
+    notional: { type: Number },                 // Total USDT
+    status: { type: String, default: 'FILLED' },
+    confidenceScore: { type: Number },          // Solo para la estrategia AI
+    orderTime: { type: Date, default: Date.now }
+}, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);

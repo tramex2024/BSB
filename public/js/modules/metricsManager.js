@@ -115,3 +115,35 @@ function renderText(id, text, className = null) {
         if (className) el.className = className;
     }
 }
+
+/**
+ * Procesa los datos para que el Dashboard pueda renderizar el gráfico
+ * @param {Object} filter - { bot: 'all'|'long'|'short'|'ai', param: 'accumulatedProfit'|'durationHours' }
+ */
+export function getFilteredData(filter) {
+    if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
+        return { points: [] };
+    }
+
+    // 1. Filtrar por bot/estrategia
+    const filtered = filter.bot === 'all' 
+        ? cycleHistoryData 
+        : cycleHistoryData.filter(c => c && c.strategy?.toLowerCase() === filter.bot.toLowerCase());
+
+    // 2. Transformar datos para Chart.js
+    let accumulated = 0;
+    const points = filtered.map(cycle => {
+        const val = parseFloat(cycle.netProfit || 0);
+        accumulated += val;
+
+        return {
+            // Usamos la hora de fin como etiqueta del eje X
+            time: cycle.endTime?.$date ? new Date(cycle.endTime.$date).toLocaleTimeString([], {hour: '22', minute:'2b'}) : 
+                  (cycle.endTime ? new Date(cycle.endTime).toLocaleTimeString([], {hour: '22', minute:'2b'}) : ''),
+            // Si el parámetro es profit acumulado, usamos la suma, si no, el valor individual o duración
+            value: filter.param === 'accumulatedProfit' ? accumulated : (parseFloat(cycle.profitPercentage) || 0)
+        };
+    });
+
+    return { points };
+}

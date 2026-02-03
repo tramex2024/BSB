@@ -1,36 +1,35 @@
-//server/controllers/aiController.js
-
 /**
  * Archivo: server/controllers/aiController.js
- * Controlador maestro para la gestión de la IA y Órdenes Virtuales
+ * Controlador maestro para la gestión de la IA y Órdenes Integradas
  */
 
 const aiEngine = require('../src/ai/AIEngine'); 
-const AIBotOrder = require('../models/AIBotOrder');
-const Aibot = require('../models/Aibot'); 
+const Order = require('../models/Order');      // 👈 Cambiado
+const Autobot = require('../models/Autobot');  // 👈 Cambiado
 
 /**
- * Obtiene el estado actual de la IA, balance virtual y trades recientes
+ * Obtiene el estado actual de la IA desde el modelo unificado
  */
 const getAIStatus = async (req, res) => {
     try {
-        const recentTrades = await AIBotOrder.find({ isVirtual: true })
-            .sort({ timestamp: -1 })
+        // Buscamos órdenes con estrategia 'ai'
+        const recentTrades = await Order.find({ strategy: 'ai' })
+            .sort({ orderTime: -1 })
             .limit(10);
 
-        const dbConfig = await Aibot.findOne({}).lean();
+        const bot = await Autobot.findOne({}).lean();
 
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
-            virtualBalance: aiEngine.virtualBalance || (dbConfig ? dbConfig.virtualBalance : 0),
+            virtualBalance: aiEngine.virtualBalance || (bot ? bot.aibalance : 0),
             historyCount: aiEngine.history ? aiEngine.history.length : 0,
             recentHistory: recentTrades, 
             config: {
                 risk: aiEngine.RISK_PER_TRADE || 1.0,
                 threshold: 0.85,
-                amountUsdt: dbConfig ? dbConfig.amountUsdt : 0,
-                stopAtCycle: aiEngine.stopAtCycle // Prioridad absoluta a la memoria del motor
+                amountUsdt: bot?.config?.ai?.amountUsdt || 0,
+                stopAtCycle: aiEngine.stopAtCycle 
             }
         });
     } catch (error) {
@@ -39,33 +38,28 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA
+ * Activa o desactiva el motor de IA (vía AIEngine)
  */
 const toggleAI = async (req, res) => {
     try {
         const { action } = req.body; 
-        
-        if (!action) {
-            return res.status(400).json({ success: false, message: "Acción no proporcionada" });
-        }
+        if (!action) return res.status(400).json({ success: false, message: "Acción no proporcionada" });
 
-        // El motor gestiona la lógica interna y persiste el cambio en DB
         const result = await aiEngine.toggle(action);
 
         res.json({ 
             success: true, 
             isRunning: result.isRunning,
             virtualBalance: result.virtualBalance,
-            message: result.isRunning ? "IA Activada - Escaneando Mercado" : "IA Detenida - Standby" 
+            message: result.isRunning ? "IA Activada" : "IA Detenida" 
         });
     } catch (error) {
-        console.error("❌ Error en toggleAI:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
 /**
- * Cierre de Emergencia: Vende posición actual y apaga el motor
+ * Cierre de Emergencia
  */
 const panicSell = async (req, res) => {
     try {
@@ -76,18 +70,17 @@ const panicSell = async (req, res) => {
             isRunning: aiEngine.isRunning
         });
     } catch (error) {
-        console.error("❌ Error en panicSell:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
 /**
- * Obtiene el historial completo de órdenes virtuales
+ * Historial completo filtrado por estrategia AI
  */
 const getVirtualHistory = async (req, res) => {
     try {
-        const history = await AIBotOrder.find({ isVirtual: true })
-            .sort({ timestamp: -1 })
+        const history = await Order.find({ strategy: 'ai' })
+            .sort({ orderTime: -1 })
             .limit(50); 
             
         res.json({ success: true, data: history });
@@ -97,70 +90,46 @@ const getVirtualHistory = async (req, res) => {
 };
 
 /**
- * Actualiza la configuración y sincroniza con el motor en tiempo real
+ * Actualiza la configuración en la rama AI del Autobot
  */
 const updateAIConfig = async (req, res) => {
     try {
         const { amountUsdt, stopAtCycle } = req.body;
         const updateFields = {};
 
-        // 1. Manejo del Monto / Reset de Balance
         if (amountUsdt !== undefined) {
             const parsedAmount = parseFloat(amountUsdt);
-            updateFields.amountUsdt = parsedAmount;
+            updateFields['config.ai.amountUsdt'] = parsedAmount;
             
-            // Solo permitimos resetear el balance si la IA no está operando
             if (!aiEngine.isRunning) {
-                updateFields.virtualBalance = parsedAmount;
+                updateFields.aibalance = parsedAmount;
                 aiEngine.virtualBalance = parsedAmount;
-                aiEngine.amountUsdt = parsedAmount;
             }
         }
 
-        // 2. Sincronización del Switch 'Stop at Cycle'
         if (stopAtCycle !== undefined) {
-            const isStopActive = !!stopAtCycle;
-            updateFields.stopAtCycle = isStopActive;
-            
-            // Actualización inmediata en la RAM del motor
-            aiEngine.stopAtCycle = isStopActive;
+            updateFields['config.ai.stopAtCycle'] = !!stopAtCycle;
+            aiEngine.stopAtCycle = !!stopAtCycle;
         }
 
-        if (Object.keys(updateFields).length === 0) {
-            return res.status(400).json({ success: false, message: "No se enviaron campos válidos" });
-        }
-
-        updateFields.lastUpdate = new Date();
-
-        // Persistencia en MongoDB
-        const updatedBot = await Aibot.findOneAndUpdate(
+        const updatedBot = await Autobot.findOneAndUpdate(
             {}, 
             { $set: updateFields }, 
-            { upsert: true, new: true }
+            { new: true }
         );
 
-        // NOTIFICACIÓN PUSH: Avisar al front-end vía Sockets del cambio de configuración
-        if (aiEngine._broadcastStatus) {
-            aiEngine._broadcastStatus();
-        }
+        if (aiEngine._broadcastStatus) aiEngine._broadcastStatus();
 
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
             virtualBalance: aiEngine.virtualBalance,
-            stopAtCycle: updatedBot.stopAtCycle,
+            stopAtCycle: updatedBot.config.ai.stopAtCycle,
             message: "Configuración Neural Sincronizada"
         });
     } catch (error) {
-        console.error("❌ Error en updateAIConfig:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-module.exports = { 
-    getAIStatus, 
-    toggleAI, 
-    panicSell, 
-    getVirtualHistory, 
-    updateAIConfig 
-};
+module.exports = { getAIStatus, toggleAI, panicSell, getVirtualHistory, updateAIConfig };

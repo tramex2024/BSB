@@ -1,3 +1,5 @@
+// BSB/server/models/AIBotOrder.js
+
 const mongoose = require('mongoose');
 
 const AIBotOrderSchema = new mongoose.Schema({

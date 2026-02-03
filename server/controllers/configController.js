@@ -2,7 +2,6 @@
 
 const Autobot = require('../models/Autobot'); 
 const bitmartService = require('../services/bitmartService'); 
-const { calculateLongCoverage, parseNumber } = require('../autobotCalculations'); 
 const autobotLogic = require('../autobotLogic'); 
 
 /**
@@ -31,14 +30,13 @@ async function updateBotConfig(req, res) {
             return res.status(400).json({ success: false, message: "No configuration data provided." });
         }
 
-        // Recuperamos el estado actual para la fusión (Merge)
-        let botState = await Autobot.findOne({}).lean();
+        // Recuperamos el estado actual (importante para el Merge)
+        let botState = await Autobot.findOne({});
         if (!botState) return res.status(404).json({ success: false, message: "Bot no encontrado." });
 
         // 1. VALIDACIÓN DE FONDOS
         const { availableUSDT } = await bitmartService.getAvailableTradingBalances();
         
-        // Si el valor no viene en newConfig, usamos el que ya tiene el botState
         const assignedUSDT_Long = newConfig.long?.amountUsdt !== undefined ? parseFloat(newConfig.long.amountUsdt) : botState.config.long.amountUsdt;
         const assignedUSDT_Short = newConfig.short?.amountUsdt !== undefined ? parseFloat(newConfig.short.amountUsdt) : botState.config.short.amountUsdt;
         const assignedUSDT_AI = newConfig.ai?.amountUsdt !== undefined ? parseFloat(newConfig.ai.amountUsdt) : (botState.config.ai?.amountUsdt || 0);
@@ -47,14 +45,14 @@ async function updateBotConfig(req, res) {
              return res.status(400).json({ success: false, message: `Fondos insuficientes: ${availableUSDT.toFixed(2)} USDT disponibles.` });
         }
 
-        // 2. FUNCIÓN DE AYUDA PARA FUSIÓN (Evita el reseteo a 0)
+        // 2. FUNCIÓN DE AYUDA PARA FUSIÓN
         const mergeValue = (newValue, oldValue, fallback = 0) => {
             if (newValue === undefined || newValue === null || newValue === "") return oldValue;
             const parsed = parseFloat(newValue);
             return isNaN(parsed) ? oldValue : parsed;
         };
 
-        // 3. ACTUALIZACIÓN DE CONFIGURACIÓN (Incluye rama AI y protección contra ceros)
+        // 3. PREPARACIÓN DE LA ACTUALIZACIÓN
         const update = {
             // LONG
             'config.long.amountUsdt': assignedUSDT_Long,
@@ -74,11 +72,17 @@ async function updateBotConfig(req, res) {
             'config.short.price_step_inc': mergeValue(newConfig.short?.price_step_inc, botState.config.short.price_step_inc),
             'config.short.stopAtCycle': newConfig.short?.stopAtCycle !== undefined ? !!newConfig.short.stopAtCycle : botState.config.short.stopAtCycle,
 
-            // AI (Nueva rama integrada)
+            // AI
             'config.ai.amountUsdt': assignedUSDT_AI,
             'config.ai.stopAtCycle': newConfig.ai?.stopAtCycle !== undefined ? !!newConfig.ai.stopAtCycle : (botState.config.ai?.stopAtCycle || false),
             'config.ai.enabled': newConfig.ai?.enabled !== undefined ? !!newConfig.ai.enabled : (botState.config.ai?.enabled || false)
         };
+
+        // Lógica Extra: Si la IA NO tiene una posición abierta (ailastEntryPrice === 0), 
+        // actualizamos su balance operativo al nuevo monto asignado.
+        if (botState.ailastEntryPrice === 0) {
+            update.aibalance = assignedUSDT_AI;
+        }
 
         // 4. PERSISTENCIA ATÓMICA
         const updatedBot = await Autobot.findOneAndUpdate(
@@ -87,16 +91,15 @@ async function updateBotConfig(req, res) {
             { new: true, runValidators: true }
         ).lean();
 
-        // 5. SINCRONIZACIÓN INMEDIATA DEL SOCKET
+        // 5. SINCRONIZACIÓN DE MOTORES
         if (updatedBot) {
-            // Pasamos el último precio conocido para que la UI no parpadee
             const lastPrice = autobotLogic.getLastPrice();
             await autobotLogic.syncFrontendState(lastPrice, updatedBot);
         }
 
         return res.json({ 
             success: true, 
-            message: "Configuración guardada y protegida.", 
+            message: "Configuración sincronizada correctamente.", 
             data: updatedBot.config 
         });
 

@@ -1,5 +1,5 @@
 /**
- * uiManager.js - Orquestador Atómico de Interfaz (Actualizado 2026)
+ * uiManager.js - Orquestador Atómico con soporte para Dashboard AI Pulse
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -9,73 +9,58 @@ import { isSavingConfig } from './apiService.js';
 let lastPrice = 0;
 
 export function updateBotUI(state) {
-    // 1. 🛡️ FILTRO CRÍTICO: Bloqueo por guardado o estado nulo
-    if (!state || isSavingConfig) {
-        // console.log("⏳ UI Bloqueada: Sincronizando o Guardando...");
-        return;
-    }
-   
-    if (state.config) {
-        console.log("📦 Config recibida de DB:", state.config.long.amountUsdt);
-    }
-
-    // 2. Precio con detección de tendencia
+    if (!state || isSavingConfig) return;
+    
+    // 1. Precio y Tendencia Visual
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
-    
     if (priceEl && currentMarketPrice) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 3. Mapping de valores numéricos
+    // 2. Mapping Extendido (Incluyendo Dashboard New IDs)
     const elements = {
         auprofit: 'total_profit', 
-        aulbalance: 'lbalance', 
-        ausbalance: 'sbalance',
-        aultprice: 'ltprice',  
-        austprice: 'stprice',  
-        aultppc: 'lppc',       
-        austppc: 'sppc',       
-        aulsprice: 'lpc',  
-        ausbprice: 'spc',  
-        aulcycle: 'lcycle', 
-        auscycle: 'scycle',
-        aulcoverage: 'lcoverage', 
-        auscoverage: 'scoverage',
-        'aulprofit-val': 'lprofit', 
-        'ausprofit-val': 'sprofit',
-        aulnorder: 'lnorder', 
-        ausnorder: 'snorder',
         'aubalance-usdt': 'lastAvailableUSDT', 
-        'aubalance-btc': 'lastAvailableBTC'
+        'aubalance-btc': 'lastAvailableBTC',
+        'ai-virtual-balance': 'aibalance', // Para la pestaña IA
+        'ai-adx-val': 'adx',               // Para el Pulse del Dashboard
+        'ai-stoch-val': 'stochRsi'         // Para el Pulse del Dashboard
     };
 
     Object.entries(elements).forEach(([id, key]) => {
         const el = document.getElementById(id);
         if (!el) return;
         
-        let val = state[key];
-        
-        // Búsqueda de seguridad en stats si es necesario
-        if (val === undefined || val === null) {
-            val = state.stats?.[key] || 0;
-        }
+        let val = state[key] ?? state.stats?.[key] ?? state.config?.ai?.[key] ?? 0;
 
-        // --- Lógica de Formateo ---
+        // --- Lógica de Formateo Especial ---
         if (id.includes('profit')) {
             formatProfit(el, val);
-        } else if (id.includes('btc') || id.includes('sac') || id.includes('lac')) {
+        } else if (id.includes('btc')) {
             formatValue(el, val, true, false);
-        } else if (id.match(/norder|cycle/)) {
-            formatValue(el, val, false, true);
+        } else if (id.includes('adx') || id.includes('stoch')) {
+            el.textContent = parseFloat(val).toFixed(1);
+            updatePulseBars(id, val); // Actualiza las barritas del Dashboard
         } else {
             formatValue(el, val, false, false);
         }
     });
 
-    // 4. 🛡️ SINCRONIZACIÓN SEGURA DE INPUTS
-    // Validamos que la config sea real y tenga contenido antes de pisar los inputs
-    if (state.config && state.config.long && Object.keys(state.config.long).length > 2) { 
+    // 3. Sincronización de Barras de Confianza (Dashboard)
+    if (state.aiConfidence !== undefined) {
+        const bar = document.getElementById('ai-confidence-fill');
+        if (bar) bar.style.width = `${state.aiConfidence}%`;
+        
+        const aubotAiState = document.getElementById('aubot-aistate');
+        if (aubotAiState) {
+            aubotAiState.textContent = state.config?.ai?.enabled ? 'ACTIVE' : 'STOPPED';
+            aubotAiState.className = `text-[9px] font-bold font-mono uppercase ${state.config?.ai?.enabled ? 'text-purple-400' : 'text-red-400'}`;
+        }
+    }
+
+    // 4. Sincronización Segura de Config
+    if (state.config?.long && Object.keys(state.config.long).length > 2) { 
         syncInputsFromConfig(state.config); 
     }
 
@@ -83,36 +68,36 @@ export function updateBotUI(state) {
 }
 
 /**
- * Sincroniza estados de ejecución con la interfaz
+ * Actualiza las barras de progreso ADX/Stoch del Dashboard
  */
+function updatePulseBars(id, value) {
+    const barId = id.replace('-val', '-bar');
+    const bar = document.getElementById(barId);
+    if (!bar) return;
+
+    // Normalización para visualización (ADX suele ser 0-50+, Stoch 0-100)
+    let percent = id.includes('adx') ? (value / 50) * 100 : value;
+    bar.style.width = `${Math.min(percent, 100)}%`;
+}
+
 export function updateControlsState(state) {
     if (!state) return;
     
     const lState = state.lstate || 'STOPPED';
     const sState = state.sstate || 'STOPPED';
-    const aiState = state.aistate || 'STOPPED';
+    const aiEnabled = state.config?.ai?.enabled || false;
+    const aiState = aiEnabled ? 'RUNNING' : 'STOPPED';
 
-    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
-    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
+    // IDs de inputs a bloquear para la IA
+    const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
 
-    // Lógica de botones y bloqueo
-    updateButtonState('austartl-btn', lState, 'LONG', longInputs);
-    updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
-    updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
+    updateButtonState('austartl-btn', lState, 'LONG', ['auamountl-usdt']);
+    updateButtonState('austarts-btn', sState, 'SHORT', ['auamounts-usdt']);
+    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs);  // Botón unificado
     
-    // Refuerzo visual de etiquetas
-    updateStatusBadge('lstate-badge', lState);
-    updateStatusBadge('sstate-badge', sState);
+    // Mantenemos sincronizado el texto del motor en el Dashboard
+    const engineMsg = document.getElementById('ai-engine-msg');
+    if (engineMsg && aiEnabled) {
+        engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
+    }
 }
-
-function updateStatusBadge(id, status) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = status;
-    
-    // Clases dinámicas según el estado
-    const isActive = ['RUNNING', 'BUYING', 'SELLING', 'WAITING'].includes(status);
-    el.className = `badge ${isActive ? 'bg-emerald-500' : 'bg-slate-500'} text-white px-2 py-1 rounded`;
-}
-
-export { displayMessage };

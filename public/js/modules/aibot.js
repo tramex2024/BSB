@@ -102,97 +102,77 @@ function setupAISocketListeners() {
     });
 }
 
-/**
- * Configura los controles físicos del Dashboard
- */
 function setupAIControls() {
-    const btn = document.getElementById('btn-start-ai');
-    const aiInput = document.getElementById('ai-amount-usdt');
-    const stopCycleCheck = document.getElementById('au-stop-ai-at-cycle');
-    const btnPanic = document.getElementById('btn-panic-ai');
+    // Selectores de la pestaña IA y espejos en el Dashboard
+    const aiInputs = [
+        document.getElementById('ai-amount-usdt'),     // Pestaña IA
+        document.getElementById('auamountai-usdt')    // Espejo Dashboard
+    ];
     
-    if (!btn) return;
+    const stopCycleChecks = [
+        document.getElementById('au-stop-ai-at-cycle'), // Pestaña IA
+        document.getElementById('ai-stop-at-cycle')    // Espejo Dashboard
+    ];
 
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
+    const btnStartAi = document.getElementById('btn-start-ai'); // ID compartido o duplicado
 
-    // Sincronización inicial desde el estado cargado al iniciar la APP
-    if (currentBotState.config && currentBotState.config.ai) {
-        const aiConfig = currentBotState.config.ai;
-        if (aiInput && aiConfig.amountUsdt) aiInput.value = aiConfig.amountUsdt;
-        if (stopCycleCheck && aiConfig.stopAtCycle !== undefined) stopCycleCheck.checked = aiConfig.stopAtCycle;
-    }
-
-    if (aiInput) {
-        aiInput.addEventListener('change', async () => {
-            const amount = parseFloat(aiInput.value);
-            if (isNaN(amount) || amount <= 0) return;
-            await saveAIConfig({ amountUsdt: amount });
+    // 1. Sincronización de Inputs de Monto
+    aiInputs.forEach(input => {
+        if (!input) return;
+        input.addEventListener('change', async () => {
+            const val = parseFloat(input.value);
+            if (isNaN(val) || val <= 0) return;
+            
+            // Efecto espejo: actualizar el otro input
+            aiInputs.forEach(i => { if(i !== input) i.value = val; });
+            
+            await saveAIConfig({ amountUsdt: val });
         });
-    }
-
-    if (stopCycleCheck) {
-        stopCycleCheck.addEventListener('change', async () => {
-            await saveAIConfig({ stopAtCycle: stopCycleCheck.checked });
-        });
-    }
-
-    newBtn.addEventListener('click', async () => {
-        const action = currentBotState.isRunning ? 'stop' : 'start';
-        newBtn.disabled = true;
-        newBtn.textContent = "PROCESANDO...";
-
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ action })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                currentBotState.isRunning = result.isRunning;
-                // Al encender/apagar pasamos el estado actual del switch
-                aiBotUI.setRunningStatus(result.isRunning, stopCycleCheck?.checked);
-            }
-        } catch (error) {
-            console.error("❌ Error API IA Toggle:", error);
-            aiBotUI.setRunningStatus(currentBotState.isRunning, stopCycleCheck?.checked);
-        } finally {
-            newBtn.disabled = false;
-        }
     });
 
-    if (btnPanic) {
-        btnPanic.addEventListener('click', async () => {
-            if (!confirm("🚨 ¿VENTA DE EMERGENCIA? Se liquidarán posiciones y se detendrá la IA inmediatamente.")) return;
+    // 2. Sincronización de Checkboxes (Stop at Cycle)
+    stopCycleChecks.forEach(check => {
+        if (!check) return;
+        check.addEventListener('change', async () => {
+            const state = check.checked;
             
+            // Efecto espejo
+            stopCycleChecks.forEach(c => { if(c !== check) c.checked = state; });
+            
+            await saveAIConfig({ stopAtCycle: state });
+        });
+    });
+
+    // 3. Manejo del Botón Start/Stop (Optimizado con Clones para limpiar eventos)
+    if (btnStartAi) {
+        const newBtn = btnStartAi.cloneNode(true);
+        btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
+        
+        newBtn.addEventListener('click', async () => {
+            const action = currentBotState.isRunning ? 'stop' : 'start';
+            newBtn.disabled = true;
+            newBtn.textContent = "PROCESANDO...";
+
             try {
-                btnPanic.disabled = true;
-                btnPanic.innerHTML = "LIQUIDANDO...";
-                
-                const response = await fetch(`${BACKEND_URL}/api/ai/panic`, {
+                const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
                     method: 'POST',
                     headers: { 
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                        'Content-Type': 'application/json'
-                    }
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ action })
                 });
-                
+
                 const result = await response.json();
                 if (result.success) {
-                    currentBotState.isRunning = false;
-                    aiBotUI.setRunningStatus(false, false); // Apagamos todo
-                    if (aiBotUI.addLogEntry) aiBotUI.addLogEntry("🚨 OPERACIÓN DE EMERGENCIA COMPLETADA", 1);
+                    currentBotState.isRunning = result.isRunning;
+                    // Actualizamos UI usando el helper centralizado
+                    aiBotUI.setRunningStatus(result.isRunning, stopCycleChecks[0]?.checked);
                 }
             } catch (error) {
-                console.error("❌ Error en Panic Sell:", error);
+                console.error("❌ Error API IA Toggle:", error);
             } finally {
-                btnPanic.disabled = false;
-                btnPanic.innerHTML = "PANIC SELL & STOP";
+                newBtn.disabled = false;
             }
         });
     }

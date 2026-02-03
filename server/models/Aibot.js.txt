@@ -1,4 +1,4 @@
-// server/models/Aibot.js
+// BSB/server/models/Aibot.js
 
 const mongoose = require('mongoose');
 

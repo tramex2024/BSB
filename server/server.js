@@ -1,4 +1,8 @@
-// BSB/server/server.js
+/**
+ * BSB/server/server.js
+ * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada
+ */
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -14,11 +18,10 @@ const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 
-// Modelos
+// Modelos Unificados
 const Autobot = require('./models/Autobot');
-const Aibot = require('./models/Aibot'); 
+const Order = require('./models/Order'); // Ahora maneja TODAS las órdenes
 const MarketSignal = require('./models/MarketSignal');
-const AIBotOrder = require('./models/AIBotOrder');
 
 dotenv.config();
 const app = express();
@@ -160,20 +163,20 @@ io.on('connection', async (socket) => {
 
     const sendAiStatus = async () => {
         try {
-            let state = await Aibot.findOne({});
-            if (!state) {
-                state = await Aibot.create({ 
-                    isRunning: false, 
-                    virtualBalance: 100.00, 
-                    amountUsdt: 100.00 
+            // Buscamos el documento único de Autobot
+            let bot = await Autobot.findOne({});
+            if (!bot) {
+                // Si no existe, lo creamos con la estructura unificada
+                bot = await Autobot.create({
+                    'config.ai': { enabled: false, amountUsdt: 100.00 }
                 });
             }
             
             const statusData = {
                 isRunning: aiEngine.isRunning,
-                virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
-                amountUsdt: state.amountUsdt || 100.00, // ✅ Consistencia con UI
-                stopAtCycle: state.stopAtCycle,
+                aibalance: bot.aibalance || bot.config.ai.amountUsdt,
+                amountUsdt: bot.config.ai.amountUsdt,
+                stopAtCycle: bot.config.ai.stopAtCycle,
                 historyCount: aiEngine.history ? aiEngine.history.length : 0
             };
 
@@ -190,8 +193,9 @@ io.on('connection', async (socket) => {
 
     socket.on('get-ai-history', async () => {
         try {
-            const trades = await AIBotOrder.find({ isVirtual: true })
-                .sort({ timestamp: -1 })
+            // Filtramos las órdenes por la estrategia 'ai'
+            const trades = await Order.find({ strategy: 'ai' })
+                .sort({ orderTime: -1 })
                 .limit(10);
             socket.emit('ai-history-data', trades);
         } catch (err) { console.error("❌ Error historial:", err); }
@@ -206,9 +210,9 @@ server.listen(PORT, async () => {
         centralAnalyzer.init(io); 
         console.log("🧠 [CENTRAL-ANALYZER] Iniciado.");
 
-        // Importante: Inicializar el motor de IA al arrancar el servidor
+        // El aiEngine ahora debe inicializarse usando el modelo Autobot
         await aiEngine.init();
-        console.log("🧠 [IA-CORE] Motor y Balance recuperados.");
+        console.log("🧠 [IA-CORE] Motor sincronizado con Autobot Model.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
     console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });

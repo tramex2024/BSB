@@ -127,6 +127,14 @@ export function getBotConfiguration() {
  * Envía la configuración al Backend bloqueando actualizaciones de socket
  */
 export async function sendConfigToBackend() {
+    const config = getBotConfiguration();
+    
+    // Validación de seguridad: Monto mínimo (ejemplo $5 USDT)
+    if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
+        displayMessage("⚠️ El monto mínimo para Long es $5", 'error');
+        return { success: false };
+    }
+
     isSavingConfig = true; 
     
     try {

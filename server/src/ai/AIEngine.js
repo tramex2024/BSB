@@ -1,10 +1,10 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Versión Corregida: Sincronización DB + Memoria
+ * Versión: Unificada (Usa Autobot Model y Order Model)
  */
 
-const Aibot = require('../../models/Aibot');
-const AIBotOrder = require('../../models/AIBotOrder');
+const Autobot = require('../../models/Autobot');
+const Order = require('../../models/Order'); // 👈 Unificado
 const MarketSignal = require('../../models/MarketSignal'); 
 const StrategyManager = require('./StrategyManager');
 
@@ -20,7 +20,6 @@ class AIEngine {
         this.stopAtCycle = false;
 
         this.TRAILING_PERCENT = 0.005; // 0.5%
-        this.RISK_PER_TRADE = 1.0;     // 100%
         this.EXCHANGE_FEE = 0.001;     // 0.1%
     }
 
@@ -31,60 +30,58 @@ class AIEngine {
 
     async init() {
         try {
-            let state = await Aibot.findOne({});
-            if (!state) {
-                state = await Aibot.create({ 
-                    virtualBalance: 100.00, 
-                    amountUsdt: 100.00,
-                    isRunning: false,
-                    stopAtCycle: false
-                });
+            // Buscamos el estado en el documento unificado de Autobot
+            let bot = await Autobot.findOne({});
+            if (!bot) {
+                console.warn("⚠️ Autobot no inicializado. Esperando creación...");
+                return;
             }
 
-            this.isRunning = state.isRunning;
-            this.amountUsdt = state.amountUsdt || 100.00;
-            this.virtualBalance = (state.virtualBalance > 0) ? state.virtualBalance : this.amountUsdt;
-            this.lastEntryPrice = state.lastEntryPrice || 0;
-            this.highestPrice = state.highestPrice || 0;
-            this.stopAtCycle = state.stopAtCycle || false;
+            // Sincronizamos memoria con la DB (Rama AI)
+            this.isRunning = (bot.aistate === 'RUNNING');
+            this.amountUsdt = bot.config.ai?.amountUsdt || 100.00;
+            
+            // Usamos aibalance o el capital inicial si está en 0
+            this.virtualBalance = (bot.aibalance > 0) ? bot.aibalance : this.amountUsdt;
+            
+            this.lastEntryPrice = bot.ailastEntryPrice || 0;
+            this.highestPrice = bot.aihighestPrice || 0;
+            this.stopAtCycle = bot.config.ai?.stopAtCycle || false;
 
             this._broadcastStatus();
-            this._log(this.isRunning ? "🚀 Núcleo IA Online" : "💤 Núcleo en Standby", 0.5);
+            this._log(this.isRunning ? "🚀 IA Unificada Online" : "💤 IA en Standby", 0.5);
         } catch (e) {
             console.error("❌ Error en init de AIEngine:", e);
         }
     }
 
-    /**
-     * CORRECCIÓN: Ahora sincroniza stopAtCycle correctamente al encender/apagar
-     */
     async toggle(action) {
-        const targetState = (action === 'start');
+        const isStarting = (action === 'start');
         
-        // Obtenemos configuración fresca de la DB antes de arrancar
-        const state = await Aibot.findOne({});
-        
-        if (state) {
-            this.amountUsdt = state.amountUsdt;
-            this.stopAtCycle = state.stopAtCycle; // <--- LEER EL SWITCH DE LA DB
+        // Actualizamos en DB usando el esquema unificado
+        const updatedBot = await Autobot.findOneAndUpdate(
+            {},
+            { 
+                $set: { 
+                    aistate: isStarting ? 'RUNNING' : 'STOPPED',
+                    'config.ai.enabled': isStarting
+                } 
+            },
+            { new: true }
+        );
+
+        if (updatedBot) {
+            this.isRunning = isStarting;
+            this.amountUsdt = updatedBot.config.ai.amountUsdt;
+            this.stopAtCycle = updatedBot.config.ai.stopAtCycle;
             
-            // Si el bot estaba apagado y va a encender, tomamos el balance guardado
-            if (!this.isRunning && targetState) {
-                this.virtualBalance = state.virtualBalance || state.amountUsdt;
+            if (isStarting) {
+                this.virtualBalance = updatedBot.aibalance || updatedBot.config.ai.amountUsdt;
             }
         }
 
-        this.isRunning = targetState;
-
-        // ACTUALIZACIÓN COMPLETA: Guardamos el estado actual de memoria en la DB
-        await Aibot.updateOne({}, { 
-            isRunning: this.isRunning,
-            stopAtCycle: this.stopAtCycle,
-            virtualBalance: this.virtualBalance
-        });
-
         this._broadcastStatus();
-        this._log(this.isRunning ? "🚀 NÚCLEO IA: ACTIVADO" : "🛑 NÚCLEO IA: DETENIDO", this.isRunning ? 0.9 : 0);
+        this._log(this.isRunning ? "🚀 NÚCLEO IA: ACTIVADO" : "🛑 NÚCLEO IA: DETENIDO", isStarting ? 0.9 : 0);
         
         return { 
             isRunning: this.isRunning, 
@@ -96,6 +93,7 @@ class AIEngine {
     async analyze(price) {
         if (!this.isRunning) return;
 
+        // Lógica de Trailing Stop (Usando memoria sincronizada)
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) {
                 this.highestPrice = price;
@@ -116,10 +114,7 @@ class AIEngine {
     }
 
     async _executeStrategy(price) {
-        if (this.history.length < 50) {
-            this._broadcastStatus();
-            return;
-        }
+        if (this.history.length < 50) return;
 
         const analysis = StrategyManager.calculate(this.history);
         if (!analysis) return;
@@ -132,32 +127,6 @@ class AIEngine {
             } else {
                 if (Math.random() > 0.98) this._log(message, confidence);
             }
-        } else {
-            const profit = ((price - this.lastEntryPrice) / this.lastEntryPrice * 100).toFixed(2);
-            if (Math.random() > 0.95) {
-                this._log(`Holding: ${profit}% | Trail-Stop: $${(this.highestPrice * (1 - this.TRAILING_PERCENT)).toFixed(2)}`, confidence);
-            }
-        }
-    }
-
-    async panicSell() {
-        try {
-            const currentPrice = this.history.length > 0 ? this.history[this.history.length - 1].close : 0;
-            
-            if (this.lastEntryPrice > 0) {
-                this._log("🚨 PANIC SELL: Liquidando posición...", 1);
-                await this._trade('SELL', currentPrice, 0);
-            }
-
-            this.isRunning = false;
-            // Aseguramos que se guarde el apagado en la DB
-            await Aibot.updateOne({}, { isRunning: false });
-            this._broadcastStatus();
-            
-            return { success: true, message: "IA Detenida y Posiciones Cerradas" };
-        } catch (error) {
-            console.error("❌ Error en Panic Sell:", error);
-            throw error;
         }
     }
 
@@ -170,38 +139,47 @@ class AIEngine {
                 this.lastEntryPrice = price;
                 this.highestPrice = price;
                 this.virtualBalance -= fee;
-                this._log(`🔥 COMPRA VIRTUAL: BTC @ $${price}`, 1);
+                this._log(`🔥 COMPRA IA: BTC @ $${price}`, 1);
             } else {
                 const profitPct = (price - this.lastEntryPrice) / this.lastEntryPrice;
                 const netProfit = (tradeAmountUSDT * profitPct) - (fee); 
                 
                 this.virtualBalance += netProfit;
-                this._log(`💰 VENTA VIRTUAL: BTC @ $${price} | PNL: $${netProfit.toFixed(2)} USDT`, 1);
+                this._log(`💰 VENTA IA: BTC @ $${price} | PNL: $${netProfit.toFixed(2)} USDT`, 1);
                 
                 this.lastEntryPrice = 0;
                 this.highestPrice = 0;
 
-                // Si stopAtCycle estaba activo, apagamos el motor después de esta venta
                 if (this.stopAtCycle) {
                     this.isRunning = false;
-                    this.stopAtCycle = false; // Se resetea para el próximo arranque manual
-                    this._log("🛑 CICLO COMPLETADO: Auto-apagado activado.", 0.5);
+                    this.stopAtCycle = false;
+                    this._log("🛑 CICLO COMPLETADO: Auto-apagado.", 0.5);
                 }
             }
 
-            // Persistencia TOTAL en cada operación
-            await Aibot.updateOne({}, { 
-                virtualBalance: this.virtualBalance,
-                lastEntryPrice: this.lastEntryPrice,
-                highestPrice: this.highestPrice,
-                isRunning: this.isRunning,
-                stopAtCycle: this.stopAtCycle
+            // --- PERSISTENCIA EN DOCUMENTO ÚNICO ---
+            await Autobot.updateOne({}, { 
+                $set: {
+                    aibalance: this.virtualBalance,
+                    ailastEntryPrice: this.lastEntryPrice,
+                    aihighestPrice: this.highestPrice,
+                    aistate: this.isRunning ? 'RUNNING' : 'STOPPED',
+                    'config.ai.stopAtCycle': this.stopAtCycle
+                },
+                $inc: { total_profit: side === 'SELL' ? (tradeAmountUSDT * ((price - this.lastEntryPrice)/this.lastEntryPrice)) : 0 }
             });
 
-            await AIBotOrder.create({
-                side, price, amount: tradeAmountUSDT,
-                isVirtual: true, confidenceScore: Math.round(confidence * 100),
-                timestamp: new Date()
+            // --- REGISTRO EN HISTORIAL UNIFICADO ---
+            await Order.create({
+                strategy: 'ai',
+                executionMode: 'SIMULATED', // Tal como pediste
+                orderId: `ai_order_${Date.now()}`,
+                side: side,
+                price: price,
+                size: tradeAmountUSDT / price,
+                notional: tradeAmountUSDT,
+                confidenceScore: Math.round(confidence * 100),
+                status: 'FILLED'
             });
 
             this._broadcastStatus();
@@ -214,11 +192,11 @@ class AIEngine {
         if (this.io) {
             this.io.emit('ai-status-update', {
                 isRunning: this.isRunning,
-                virtualBalance: parseFloat(this.virtualBalance || 0),
+                aibalance: parseFloat(this.virtualBalance || 0),
                 amountUsdt: this.amountUsdt,
                 historyCount: this.history.length,
                 lastEntryPrice: this.lastEntryPrice,
-                stopAtCycle: this.stopAtCycle // Enviamos el estado del switch al front
+                stopAtCycle: this.stopAtCycle
             });
         }
     }

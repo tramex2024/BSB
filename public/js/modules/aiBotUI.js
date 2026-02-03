@@ -118,7 +118,7 @@ const aiBotUI = {
         const syncDot = document.getElementById('ai-sync-dot');
         const syncText = document.getElementById('ai-sync-text');
         const aiInput = document.getElementById('ai-amount-usdt');
-        const stopCycleCheck = document.getElementById('au-stop-ai-at-cycle');
+        const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
 
         // 1. Sincronización del Switch Stop At Cycle (Inversa)
         if (stopCycleCheck && stopAtCycle !== null) {

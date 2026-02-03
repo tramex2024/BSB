@@ -1,12 +1,14 @@
 /**
- * dashboard.js - Controlador de Interfaz y Eventos (Versión Optimizada 2026)
+ * dashboard.js - Controlador de Interfaz y Eventos (Versión Full Integrada 2026)
  */
 import { fetchEquityCurveData } from './apiService.js'; 
 import { socket, currentBotState } from '../main.js'; 
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 
+// Instancias globales de gráficos
 let balanceChart = null; 
+let equityChart = null;
 
 const sounds = {
     buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
@@ -20,34 +22,46 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Sincronizando sistema...");
 
+    // 1. Inicializar Gráficos
     initBalanceChart();
+    initEquityChart();
 
-    // Sincronización inmediata con el estado global
+    // 2. Sincronización inmediata con el estado global
     const stateToUse = initialState || currentBotState;
     if (stateToUse) {
         updateBotUI(stateToUse);
         updateDistributionWidget(stateToUse);
     }
 
+    // 3. Configurar Eventos
     setupSocketListeners();
     setupChartSelectors(); 
     setupTestButton(); 
+    setupAnalyticsFilters();
     
-    // Carga de analítica (Gráficos de rendimiento)
+    // 4. Carga de analítica (Gráficos de rendimiento)
     refreshAnalytics();
 
-    // Estado de conexión inicial
+    // 5. Estado de conexión inicial
     updateHealthStatus('health-market-ws-text', socket?.connected);
+    updateHealthStatus('health-user-ws-text', socket?.connected);
 }
 
 /**
- * Refresca los datos de la curva de equidad
+ * Refresca los datos de la curva de equidad desde el servidor
  */
 async function refreshAnalytics() {
     try {
         const curveData = await fetchEquityCurveData();
         if (curveData) {
             Metrics.setAnalyticsData(curveData);
+            // Actualizamos el gráfico con los datos recién traídos
+            const currentFilter = {
+                bot: document.getElementById('chart-bot-selector')?.value || 'all',
+                param: document.getElementById('chart-param-selector')?.value || 'accumulatedProfit'
+            };
+            const filteredData = Metrics.getFilteredData(currentFilter);
+            updateEquityChart(filteredData);
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -60,23 +74,22 @@ async function refreshAnalytics() {
 function setupSocketListeners() {
     if (!socket) return;
 
-    // Limpieza de duplicados
-    socket.off('market-signal-update');
-    socket.off('order-executed');
-    socket.off('cycle-closed');
-    socket.off('ai-decision-update');
-    socket.off('ai-status-update');
+    // Limpieza de duplicados para evitar fugas de memoria
+    const events = ['market-signal-update', 'order-executed', 'cycle-closed', 'ai-decision-update', 'ai-status-update'];
+    events.forEach(ev => socket.off(ev));
 
     // Señales de mercado (RSI/Análisis)
     socket.on('market-signal-update', (analysis) => {
-        const signalEl = document.getElementById('health-analyzer-signal');
+        const signalEl = document.getElementById('ai-trend-label');
         if (signalEl) {
-            signalEl.textContent = `RSI: ${analysis.currentRSI.toFixed(1)} | ${analysis.action}`;
-            signalEl.className = `text-[9px] font-bold ${analysis.action === 'BUY' ? 'text-emerald-400' : analysis.action === 'SELL' ? 'text-red-400' : 'text-blue-400'}`;
+            signalEl.textContent = analysis.trend || 'NEUTRAL';
+            signalEl.className = `text-[8px] font-bold px-1.5 py-0.5 rounded bg-gray-900 ${
+                analysis.trend === 'BULLISH' ? 'text-emerald-400' : analysis.trend === 'BEARISH' ? 'text-red-400' : 'text-gray-400'
+            }`;
         }
     });
 
-    // Ejecución de órdenes (Sonidos y efectos visuales)
+    // Ejecución de órdenes
     socket.on('order-executed', (order) => {
         try {
             order.side.toLowerCase() === 'buy' ? sounds.buy.play() : sounds.sell.play();
@@ -91,32 +104,27 @@ function setupSocketListeners() {
         refreshAnalytics(); 
     });
 
-    // Actualizaciones de pensamiento de la IA (Mini widget)
+    // Actualizaciones de pensamiento de la IA (Dashboard Pulse)
     socket.on('ai-decision-update', (data) => {
-        const confidenceVal = Math.round(data.confidence * 100);
-        updateElementText('ai-mini-confidence', `${confidenceVal}%`);
-        updateElementText('ai-mini-thought', data.message);
+        const msgEl = document.getElementById('ai-engine-msg');
+        if (msgEl) msgEl.textContent = data.message || "NEURAL CORE ANALYZING...";
+        
+        // Actualizar barra de confianza si existe en el Dashboard
+        const confBar = document.getElementById('ai-confidence-fill');
+        if (confBar) confBar.style.width = `${Math.round(data.confidence * 100)}%`;
     });
 
-    // Sincronización de balance de IA con el Widget de Distribución
+    // Sincronización de balances
     socket.on('ai-status-update', (data) => {
         if (data.virtualBalance !== undefined) {
-            // Actualizamos la memoria global y la UI
             currentBotState.virtualBalance = data.virtualBalance;
             updateDistributionWidget(currentBotState);
-            
-            // Si existe el elemento de balance en el dashboard, lo actualizamos
-            const balDash = document.getElementById('ai-virtual-balance-dash');
-            if(balDash) balDash.innerText = `$${parseFloat(data.virtualBalance).toFixed(2)}`;
         }
     });
 }
 
-// --- UTILIDADES DE UI ---
+// --- GESTIÓN DE GRÁFICOS (CHART.JS) ---
 
-/**
- * Inicializa el gráfico circular de distribución
- */
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
@@ -130,101 +138,133 @@ function initBalanceChart() {
                 data: [100, 0], 
                 backgroundColor: ['#10b981', '#f59e0b'], 
                 borderWidth: 0, 
-                cutout: '75%',
-                hoverOffset: 4
+                cutout: '75%'
             }]
         },
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function initEquityChart() {
+    const canvas = document.getElementById('equityCurveChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+
+    equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                borderColor: '#10b981',
+                borderWidth: 2,
+                fill: true,
+                backgroundColor: gradient,
+                tension: 0.4,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            animation: { duration: 800 }
+            scales: {
+                x: { display: false },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', font: { size: 9 } }
+                }
+            }
         }
     });
 }
 
 /**
- * Actualiza el Widget de Distribución de activos (USDT vs BTC)
+ * Actualiza el Widget de Distribución y las barras de progreso
  */
 function updateDistributionWidget(state) {
     if (!balanceChart) return;
     
-    // Fallback inteligente: Busca balance de IA o balance de Autobot según disponibilidad
-    const usdt = parseFloat(state.lastAvailableUSDT || state.virtualBalance || state.virtualAiBalance || 0);
+    const usdt = parseFloat(state.lastAvailableUSDT || state.virtualBalance || 0);
     const btcAmount = parseFloat(state.lastAvailableBTC || 0);
     const price = parseFloat(state.price || 0);
     
     const btcInUsdt = btcAmount * price;
     const total = usdt + btcInUsdt;
 
-    // Si no hay fondos, mostramos 100% USDT de forma visual
     const displayUsdt = total === 0 ? 100 : (usdt / total) * 100;
     const displayBtc = total === 0 ? 0 : (btcInUsdt / total) * 100;
 
     balanceChart.data.datasets[0].data = [displayUsdt, displayBtc];
     balanceChart.update();
     
-    // Actualización de barras de progreso
     const usdtBar = document.getElementById('usdt-bar');
     const btcBar = document.getElementById('btc-bar');
     if (usdtBar) usdtBar.style.width = `${displayUsdt}%`;
     if (btcBar) btcBar.style.width = `${displayBtc}%`;
 
-    // Actualización de etiquetas de porcentaje
-    updateElementText('usdt-pct-text', `${Math.round(displayUsdt)}%`);
-    updateElementText('btc-pct-text', `${Math.round(displayBtc)}%`);
+    // Actualizar etiquetas numéricas en Dashboard
+    const uText = document.getElementById('aubalance-usdt');
+    const bText = document.getElementById('aubalance-btc');
+    if(uText) uText.innerText = usdt.toFixed(2);
+    if(bText) bText.innerText = btcAmount.toFixed(6);
 }
 
 /**
- * Actualiza el texto de estado de salud del sistema
+ * Renderiza los puntos en la curva de equidad
  */
+export function updateEquityChart(data) {
+    if (!equityChart || !data || !data.points) return;
+    equityChart.data.labels = data.points.map(p => p.time);
+    equityChart.data.datasets[0].data = data.points.map(p => p.value);
+    equityChart.update('none');
+}
+
+// --- UTILIDADES ---
+
+function setupAnalyticsFilters() {
+    const bSel = document.getElementById('chart-bot-selector');
+    const pSel = document.getElementById('chart-param-selector');
+
+    const update = () => {
+        const filtered = Metrics.getFilteredData({ bot: bSel.value, param: pSel.value });
+        updateEquityChart(filtered);
+    };
+
+    if (bSel) bSel.onchange = update;
+    if (pSel) pSel.onchange = update;
+}
+
 function updateHealthStatus(textId, isOnline) {
     const txt = document.getElementById(textId);
     if (txt) {
-        txt.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
-        txt.className = `text-[9px] font-mono font-bold ${isOnline ? 'text-emerald-500' : 'text-red-400'}`;
+        txt.textContent = isOnline ? 'CONNECTED' : 'OFFLINE';
+        txt.className = `font-mono font-bold ${isOnline ? 'text-emerald-500' : 'text-red-400'}`;
     }
 }
 
-/**
- * Efecto de destello visual en elementos al recibir datos
- */
 function flashElement(id, colorClass) {
     const el = document.getElementById(id);
-    const container = el ? el.parentElement : null;
+    const container = el ? el.closest('.bg-gray-800, .bg-gray-700') : null;
     if (container) {
-        container.classList.add(colorClass, 'transition-colors', 'duration-300');
+        container.classList.add(colorClass);
         setTimeout(() => container.classList.remove(colorClass), 800);
     }
 }
 
-function updateElementText(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
-}
-
-/**
- * Botón de prueba para verificar notificaciones visuales
- */
 function setupTestButton() {
-    const testBtn = document.getElementById('test-notification-btn');
-    if (!testBtn) return;
-    testBtn.onclick = () => {
-        flashElement('auprice', 'bg-emerald-500/40');
-        if(sounds.buy) sounds.buy.play();
-    };
+    const btn = document.getElementById('test-notification-btn');
+    if (btn) btn.onclick = () => sounds.buy.play();
 }
 
-/**
- * Selectores de rango para el gráfico de rendimiento
- */
 function setupChartSelectors() {
-    const selectors = document.querySelectorAll('.chart-range-selector');
-    selectors.forEach(btn => {
-        btn.addEventListener('click', () => {
-            selectors.forEach(s => s.classList.remove('active', 'bg-blue-600'));
-            btn.classList.add('active', 'bg-blue-600');
-            refreshAnalytics(); 
-        });
-    });
+    // Implementación para botones de rango (1H, 1D, ALL) si los añades
 }
