@@ -1,4 +1,4 @@
-public/js/modules/aiBotUI.js
+//public/js/modules/aiBotUI.js
 
 /**
  * AI Bot Interface Module - Optimized 2026
