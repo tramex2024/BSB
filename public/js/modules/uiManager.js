@@ -20,70 +20,71 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-  // MAPEO MAESTRO: Coincidencia exacta con tus 3 archivos HTML
+    // MAPEO MAESTRO: Respetando la naturaleza de cada variable
     const elements = {
-        // === MARKET & GLOBALES (Se repiten en Dashboard y Autobot) ===
-        'auprice': 'price',
+        // === MARKET & GLOBALES ===
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
 
         // === AUTOBOT: ESTRATEGIA LONG ===
-        'aulprofit-val': 'lprofit',   // L-PNL
-        'aulbalance': 'lbalance',     // L-Wallet
-        'aulcycle': 'lcycle',         // L-Cycle
-        'aulsprice': 'llep',          // L-Stop
-        'aultprice': 'ltprice',       // L-Target
-        'aultppc': 'lppc',            // L-AvgPx
-        'aulcoverage': 'lcoverage',   // L-Cover
-        'aulnorder': 'locc',          // L-MaxSO
+        'aulprofit-val': 'lprofit',   
+        'aulbalance': 'lbalance',     
+        'aulcycle': 'lcycle',         
+        'aulsprice': 'llep',          
+        'aultprice': 'ltprice',       
+        'aultppc': 'lppc',            
+        'aulcoverage': 'lcoverage',   // Distancia de cobertura (Precio/Variación)
+        'aulnorder': 'aulnorder',     // L-MaxSO: Máximo de órdenes configuradas
 
         // === AUTOBOT: ESTRATEGIA SHORT ===
-        'ausprofit-val': 'sprofit',   // S-PNL
-        'ausbalance': 'sbalance',     // S-Wallet
-        'auscycle': 'scycle',         // S-Cycle
-        'ausbprice': 'slep',          // S-Stop
-        'austprice': 'stprice',       // S-Target
-        'austppc': 'sppc',            // S-AvgPx
-        'auscoverage': 'scoverage',   // S-Cover
-        'ausnorder': 'socc',          // S-MaxSO
+        'ausprofit-val': 'sprofit',   
+        'ausbalance': 'sbalance',     
+        'auscycle': 'scycle',         
+        'ausbprice': 'slep',          
+        'austprice': 'stprice',       
+        'austppc': 'sppc',            
+        'auscoverage': 'scoverage',   // Distancia de cobertura (Precio/Variación)
+        'ausnorder': 'ausnorder',     // S-MaxSO: Máximo de órdenes configuradas
 
         // === AI ENGINE (Pestaña Neural) ===
-        'ai-virtual-balance': 'aibalance', // Saldo Actual en IA
-        'ai-adx-val': 'lai',               // Usando lai/sai según corresponda
-        'ai-stoch-val': 'lac',             // O el indicador que manejes
-        'aubot-aistate': 'lstate',         // Estado del motor IA (usando lstate como proxy)
+        'ai-virtual-balance': 'aibalance', 
+        'ai-adx-val': 'lai',               
+        'ai-stoch-val': 'lac',             
+        'aubot-aistate': 'lstate',         
 
-        // === ESTADOS (Textos de estado) ===
+        // === ESTADOS ===
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
-        'ai-mode-status': 'lstate'         // Reutiliza el estado para el modo
+        'ai-mode-status': 'lstate'         
     };
 
     Object.entries(elements).forEach(([id, key]) => {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // Buscamos el valor en la raíz o en stats
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
-        // --- Lógica de Renderizado ---
+        // --- Lógica de Renderizado Atómica ---
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc')) {
             formatValue(el, val, true, false);
-        } else if (id.includes('cycle') || id.includes('maxsos')) {
-            el.textContent = Math.floor(val); // Ciclos y órdenes son enteros
+        } else if (id.includes('cycle') || id.includes('norder')) {
+            // Ciclos y MaxSO (Órdenes) siempre son enteros
+            el.textContent = Math.floor(val); 
         } else if (id.includes('adx') || id.includes('stoch')) {
             el.textContent = parseFloat(val).toFixed(1);
             updatePulseBars(id, val); 
+        } else if (id.includes('coverage')) {
+            // Cobertura se mantiene con su formato original (usualmente precio o %)
+            el.textContent = formatValue(el, val, false, true); 
         } else {
-            // Precios y Balances
             formatValue(el, val, false, false);
         }
     });
 
-    // 3. Sincronización de Barras de Confianza
+    // 3. Sincronización de Barras de Confianza (AI)
     if (state.aiConfidence !== undefined) {
         const bar = document.getElementById('ai-confidence-fill');
         if (bar) bar.style.width = `${state.aiConfidence}%`;
@@ -97,7 +98,7 @@ export function updateBotUI(state) {
     }
 
     // 4. Sincronización de Inputs (Configuración)
-    if (state.config?.long) { 
+    if (state.config) { 
         syncInputsFromConfig(state.config); 
     }
 
