@@ -20,7 +20,7 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // MAPEO MAESTRO: Respetando la naturaleza de cada variable
+    // MAPEO MAESTRO RECONSTRUIDO
     const elements = {
         // === MARKET & GLOBALES ===
         'auprofit': 'total_profit', 
@@ -34,8 +34,8 @@ export function updateBotUI(state) {
         'aulsprice': 'llep',          
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',            
-        'aulcoverage': 'lcoverage',   // Distancia de cobertura (Precio/Variación)
-        'aulnorder': 'aulnorder',     // L-MaxSO: Máximo de órdenes configuradas
+        'aulcoverage': 'lcoverage',   // <--- RESTAURADO: Cobertura de precio
+        'aulnorder': 'aulnorder',     // <--- L-MaxSO: Número de órdenes
 
         // === AUTOBOT: ESTRATEGIA SHORT ===
         'ausprofit-val': 'sprofit',   
@@ -44,8 +44,8 @@ export function updateBotUI(state) {
         'ausbprice': 'slep',          
         'austprice': 'stprice',       
         'austppc': 'sppc',            
-        'auscoverage': 'scoverage',   // Distancia de cobertura (Precio/Variación)
-        'ausnorder': 'ausnorder',     // S-MaxSO: Máximo de órdenes configuradas
+        'auscoverage': 'scoverage',   // <--- RESTAURADO: Cobertura de precio
+        'ausnorder': 'ausnorder',     // <--- S-MaxSO: Número de órdenes
 
         // === AI ENGINE (Pestaña Neural) ===
         'ai-virtual-balance': 'aibalance', 
@@ -65,21 +65,22 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
-        // --- Lógica de Renderizado Atómica ---
+        // --- Lógica de Renderizado ---
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc')) {
             formatValue(el, val, true, false);
         } else if (id.includes('cycle') || id.includes('norder')) {
-            // Ciclos y MaxSO (Órdenes) siempre son enteros
+            // Ciclos y MaxSO (Órdenes) como enteros
             el.textContent = Math.floor(val); 
         } else if (id.includes('adx') || id.includes('stoch')) {
             el.textContent = parseFloat(val).toFixed(1);
             updatePulseBars(id, val); 
         } else if (id.includes('coverage')) {
-            // Cobertura se mantiene con su formato original (usualmente precio o %)
-            el.textContent = formatValue(el, val, false, true); 
+            // Cobertura (L-Cover): Se formatea como valor numérico (usualmente %)
+            el.textContent = parseFloat(val).toFixed(2);
         } else {
+            // Precios, Balances y demás
             formatValue(el, val, false, false);
         }
     });
