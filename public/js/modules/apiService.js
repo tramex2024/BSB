@@ -58,17 +58,17 @@ async function privateFetch(endpoint, options = {}) {
     }
 }
 
-// --- SECCIÓN: ANALYTICS ---
+// --- SECCIÓN: ANALYTICS (CORREGIDA PARA SOPORTAR 'ALL' Y 'AI') ---
 
-export async function fetchCycleKpis(strategy = 'Long') {
+export async function fetchCycleKpis(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
 }
 
-export async function fetchEquityCurveData(strategy = 'Long') {
+export async function fetchEquityCurveData(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
 }
 
-// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
+// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT (ESTRUCTURA ORIGINAL) ---
 
 /**
  * Recolecta la configuración de la UI asegurando que las llaves
@@ -82,7 +82,11 @@ export function getBotConfiguration() {
         const rawValue = el.value.trim();
         if (rawValue === "") {
             const parts = path.split('.');
-            return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
+            // Intento de recuperación del estado actual si el campo está vacío
+            if (parts.length === 2) {
+                return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
+            }
+            return 0;
         }
 
         const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
@@ -91,6 +95,7 @@ export function getBotConfiguration() {
 
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
+    // Esta es la estructura masiva que mantiene la integridad de tu base de datos
     return {
         symbol: "BTC_USDT", 
         long: {
@@ -114,7 +119,6 @@ export function getBotConfiguration() {
             enabled: true
         },
         ai: {
-            // Sincronizado con el ID del Dashboard y el AI Engine
             amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
             stopAtCycle: getCheck('ai-stop-at-cycle'),
             enabled: true
@@ -163,7 +167,6 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     const sideKey = side.toLowerCase(); 
     const action = isRunning ? 'stop' : 'start';
     
-    // Mapeo exacto según tus IDs de HTML
     let btnId;
     if (sideKey === 'long') btnId = 'austartl-btn';
     else if (sideKey === 'short') btnId = 'austarts-btn';
@@ -197,7 +200,6 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('opacity-50');
-            // El texto se restaurará mediante el Socket cuando llegue el nuevo estado
         }
     }
 }
