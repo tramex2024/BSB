@@ -1,10 +1,13 @@
 /**
  * uiManager.js - Orquestador Atómico con soporte para Dashboard AI Pulse
+ * Restaurado con lógica de bloqueo de controles completa.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
-import { displayMessage } from './ui/notifications.js';
 import { isSavingConfig } from './apiService.js';
+
+// 🛡️ Re-export para que otros módulos (como apiService) tengan acceso
+export { displayMessage } from './ui/notifications.js';
 
 let lastPrice = 0;
 
@@ -18,14 +21,14 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 2. Mapping Extendido (Incluyendo Dashboard New IDs)
+    // 2. Mapping Extendido (Dashboard + Tabs)
     const elements = {
         auprofit: 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
-        'ai-virtual-balance': 'aibalance', // Para la pestaña IA
-        'ai-adx-val': 'adx',               // Para el Pulse del Dashboard
-        'ai-stoch-val': 'stochRsi'         // Para el Pulse del Dashboard
+        'ai-virtual-balance': 'aibalance', 
+        'ai-adx-val': 'adx',               
+        'ai-stoch-val': 'stochRsi'         
     };
 
     Object.entries(elements).forEach(([id, key]) => {
@@ -34,14 +37,13 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? state.config?.ai?.[key] ?? 0;
 
-        // --- Lógica de Formateo Especial ---
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc')) {
             formatValue(el, val, true, false);
         } else if (id.includes('adx') || id.includes('stoch')) {
             el.textContent = parseFloat(val).toFixed(1);
-            updatePulseBars(id, val); // Actualiza las barritas del Dashboard
+            updatePulseBars(id, val); 
         } else {
             formatValue(el, val, false, false);
         }
@@ -59,7 +61,7 @@ export function updateBotUI(state) {
         }
     }
 
-    // 4. Sincronización Segura de Config
+    // 4. Sincronización Segura de Config (Solo si hay datos válidos)
     if (state.config?.long && Object.keys(state.config.long).length > 2) { 
         syncInputsFromConfig(state.config); 
     }
@@ -75,11 +77,13 @@ function updatePulseBars(id, value) {
     const bar = document.getElementById(barId);
     if (!bar) return;
 
-    // Normalización para visualización (ADX suele ser 0-50+, Stoch 0-100)
     let percent = id.includes('adx') ? (value / 50) * 100 : value;
     bar.style.width = `${Math.min(percent, 100)}%`;
 }
 
+/**
+ * Gestiona el estado de bloqueo de botones e inputs
+ */
 export function updateControlsState(state) {
     if (!state) return;
     
@@ -88,18 +92,38 @@ export function updateControlsState(state) {
     const aiEnabled = state.config?.ai?.enabled || false;
     const aiState = aiEnabled ? 'RUNNING' : 'STOPPED';
 
-    // IDs de inputs a bloquear para la IA
+    // 🛡️ BLOQUEO INTEGRAL: Todos los parámetros de la estrategia
+    const longInputs = [
+        'auamountl-usdt', 
+        'aupurchasel-usdt', 
+        'auincrementl', 
+        'audecrementl', 
+        'autriggerl', 
+        'aupricestep-l'
+    ];
+
+    const shortInputs = [
+        'auamounts-usdt', 
+        'aupurchases-usdt', 
+        'auincrements', 
+        'audecrements', 
+        'autriggers', 
+        'aupricestep-s'
+    ];
+
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
 
-    updateButtonState('austartl-btn', lState, 'LONG', ['auamountl-usdt']);
-    updateButtonState('austarts-btn', sState, 'SHORT', ['auamounts-usdt']);
-    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs);  // Botón unificado
+    // Sincronización de botones y bloqueo de inputs correspondientes
+    updateButtonState('austartl-btn', lState, 'LONG', longInputs);
+    updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     
-    // Mantenemos sincronizado el texto del motor en el Dashboard
+    // Botones Espejo de la IA
+    updateButtonState('austartai-btn', aiState, 'AI', aiInputs); 
+    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs);
+    
+    // Mensaje del motor IA
     const engineMsg = document.getElementById('ai-engine-msg');
     if (engineMsg && aiEnabled) {
         engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
     }
 }
-
-export { displayMessage } from './ui/notifications.js';
