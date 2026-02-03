@@ -1,7 +1,5 @@
 // public/js/modules/ui/controls.js
 
-// public/js/modules/ui/controls.js
-
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'WAITING']; 
 
 const STATUS_COLORS = {
@@ -13,18 +11,17 @@ const STATUS_COLORS = {
     'WAITING': '#8b5cf6'      
 };
 
-// 🛡️ Registro de campos que el usuario está editando actualmente
 export const activeEdits = {};
 
-/**
- * Escucha cambios en los inputs para activar el periodo de gracia
- */
 document.addEventListener('input', (e) => {
     if (e.target.tagName === 'INPUT') {
         activeEdits[e.target.id] = Date.now();
     }
 });
 
+/**
+ * Bloquea estrictamente TODOS los parámetros si la estrategia no está en STOPPED
+ */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
@@ -53,6 +50,8 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         btn.style.opacity = "1";
     }
 
+    // 🛡️ BLOQUEO DE SEGURIDAD: 
+    // Si isBusy es true, se deshabilitan todos los IDs proporcionados.
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -63,10 +62,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     });
 }
 
-/**
- * Sincroniza los valores de los inputs con la configuración de la DB
- * BLINDAJE: Implementa un periodo de gracia de 3 segundos tras editar.
- */
 export function syncInputsFromConfig(conf) {
     if (!conf || (!conf.long && !conf.short)) return;
 
@@ -92,7 +87,6 @@ export function syncInputsFromConfig(conf) {
         const input = document.getElementById(id);
         if (!input || value === undefined || value === null) continue;
 
-        // 🛡️ ESCUDO: Si el input está enfocado O fue editado hace menos de 3 seg, NO TOCAR.
         const lastEdit = activeEdits[id] || 0;
         const isFreshlyEdited = (now - lastEdit < 3000);
 
@@ -100,13 +94,10 @@ export function syncInputsFromConfig(conf) {
             continue; 
         }
 
-        // 🛡️ VALIDACIÓN ANTI-CERO: Si el servidor manda un 0 pero el input tiene algo, 
-        // y el bot está corriendo, sospechamos de un error de carga y no sobreescribimos.
         if (parseFloat(value) === 0 && parseFloat(input.value) > 0) {
             continue;
         }
 
-        // Solo actualizamos si el valor es realmente distinto para evitar parpadeos
         const currentVal = parseFloat(input.value) || 0;
         const newVal = parseFloat(value) || 0;
 
@@ -115,7 +106,6 @@ export function syncInputsFromConfig(conf) {
         }
     }
     
-    // Checkboxes
     ['long', 'short', 'ai'].forEach(side => {
         const id = `au-stop-${side}-at-cycle`;
         const el = document.getElementById(id);
