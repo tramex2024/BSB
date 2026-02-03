@@ -1,11 +1,13 @@
+public/js/modules/aiBotUI.js
+
 /**
- * Módulo de Interfaz para el AI Bot - Versión Optimizada 2026
- * Integración: Control de Input de Balance y Sincronización Neural
+ * AI Bot Interface Module - Optimized 2026
+ * Integration: Balance Input Control & Neural Sync
  */
 
 const aiBotUI = {
     /**
-     * Actualiza el círculo de confianza y el texto descriptivo
+     * Updates the confidence circle and descriptive text
      */
     updateConfidence: (confidence, serverMessage = null, isAnalyzing = false) => {
         const circle = document.getElementById('ai-confidence-circle');
@@ -27,7 +29,7 @@ const aiBotUI = {
         predictionText.classList.remove('text-blue-300', 'text-emerald-400', 'text-gray-500', 'animate-pulse');
 
         if (isAnalyzing) {
-            predictionText.innerText = serverMessage || ">> ANALIZANDO FLUJO NEURAL...";
+            predictionText.innerText = serverMessage || ">> ANALYZING NEURAL FLOW...";
             predictionText.classList.add('text-blue-300', 'animate-pulse');
             return;
         }
@@ -37,10 +39,10 @@ const aiBotUI = {
             predictionText.classList.add(percent >= 85 ? 'text-emerald-400' : 'text-blue-300');
         } else {
             if (percent >= 85) {
-                predictionText.innerText = ">> FUERTE IMPULSO: SEÑAL DE ENTRADA";
+                predictionText.innerText = ">> STRONG MOMENTUM: ENTRY SIGNAL";
                 predictionText.classList.add('text-emerald-400');
             } else {
-                predictionText.innerText = ">> CALIBRANDO: ESPERANDO VOLUMEN";
+                predictionText.innerText = ">> CALIBRATING: AWAITING VOLUME";
                 predictionText.classList.add('text-gray-500');
             }
         }
@@ -81,7 +83,7 @@ const aiBotUI = {
         const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
         
         if (tradesList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-10 text-center italic text-gray-600 uppercase text-[10px]">Sin operaciones en esta sesión</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-10 text-center italic text-gray-600 uppercase text-[10px]">No trades in this session</td></tr>`;
             return;
         }
 
@@ -110,7 +112,7 @@ const aiBotUI = {
     },
 
     /**
-     * ACTUALIZADO: Sincronización visual global e inversa (Backend -> Frontend)
+     * GLOBAL SYNC: UI state driven by Backend
      */
     setRunningStatus: (isRunning, stopAtCycle = null) => {
         const btn = document.getElementById('btn-start-ai');
@@ -120,14 +122,14 @@ const aiBotUI = {
         const aiInput = document.getElementById('ai-amount-usdt');
         const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-        // 1. Sincronización del Switch Stop At Cycle (Inversa)
+        // 1. Sync Stop At Cycle Switch
         if (stopCycleCheck && stopAtCycle !== null) {
             stopCycleCheck.checked = stopAtCycle;
         }
 
         if (isRunning) {
             if (btn) {
-                btn.innerText = "DETENER NÚCLEO IA";
+                btn.innerText = "STOP AI CORE";
                 btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
             }
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
@@ -140,7 +142,7 @@ const aiBotUI = {
             }
         } else {
             if (btn) {
-                btn.innerText = "ACTIVAR NÚCLEO IA";
+                btn.innerText = "START AI CORE";
                 btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
             }
             if (dot) dot.className = "w-2.5 h-2.5 bg-gray-500 rounded-full shadow-none";

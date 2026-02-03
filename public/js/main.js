@@ -1,20 +1,24 @@
 //BSB/public/js/main.js
 
+/**
+ * main.js - Central Hub
+ * AI Core English Version 2026
+ */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
 
-// --- CONFIGURACIÓN ---
+// --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 
-// Estructura limpia que refleja exactamente el modelo Autobot.js de la DB
+// Structure reflecting the Database Model
 export const currentBotState = {
     price: 0,
     lstate: 'STOPPED',
     sstate: 'STOPPED',
-    aibalance: 0, // Balance operativo de la IA (mapeado de la DB)
+    aibalance: 0,
     lastAvailableUSDT: 0,
     config: {
         symbol: 'BTCUSDT',
@@ -37,7 +41,7 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-// --- GESTIÓN DE CONEXIÓN ---
+// --- CONNECTION MANAGEMENT ---
 function updateConnectionStatus(status) {
     const statusDot = document.getElementById('status-dot');
     const aiSyncDot = document.getElementById('ai-sync-dot');
@@ -81,7 +85,7 @@ function processNextLog() {
     setTimeout(() => processNextLog(), 2500);
 }
 
-// --- INICIALIZACIÓN DE SOCKETS ---
+// --- SOCKET INITIALIZATION ---
 export function initializeFullApp() {
     if (socket?.connected || typeof io === 'undefined') return;
 
@@ -93,7 +97,7 @@ export function initializeFullApp() {
 
     socket.on('connect', () => {
         resetWatchdog();
-        socket.emit('get-bot-state'); // Esto traerá el Autobot.findOne({})
+        socket.emit('get-bot-state'); 
     });
 
     socket.on('marketData', (data) => {
@@ -110,50 +114,49 @@ export function initializeFullApp() {
         if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
 
-    // RECEPTOR CENTRAL DE ESTADO (UNIFICADO)
+    // CENTRAL STATE RECEIVER
     socket.on('bot-state-update', (state) => {
-    //console.log("📥 DATOS RECIBIDOS DEL SERVIDOR:", state);
-    if (!state) return;
+        if (!state) return;
 
-    // Sincronización de Configuración
-    if (state.config) {
-        currentBotState.config = { ...currentBotState.config, ...state.config };
-        delete state.config;
-    }
+        if (state.config) {
+            currentBotState.config = { ...currentBotState.config, ...state.config };
+            delete state.config;
+        }
 
-    Object.assign(currentBotState, state);
-    
-    // UI Global
-    updateBotUI(currentBotState);
-    updateControlsState(currentBotState); 
+        Object.assign(currentBotState, state);
+        
+        updateBotUI(currentBotState);
+        updateControlsState(currentBotState); 
 
-    // IA específica: Usamos un selector de clase para actualizar TODOS los espejos de balance
-    const balances = document.querySelectorAll('.ai-balance-val');
-    const formattedBal = `$${(currentBotState.aibalance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
-    balances.forEach(el => el.innerText = formattedBal);
-    
-    if (aiBotUI) {
-        aiBotUI.setRunningStatus(currentBotState.config.ai.enabled, currentBotState.config.ai.stopAtCycle);
-    }
-});
-
-    socket.on('ai-decision-update', (data) => {
-        if (!data) return;
-        aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
-        if (data.indicators) {
-            const adxEl = document.getElementById('ai-adx-val');
-            const stochEl = document.getElementById('ai-stoch-val');
-            if (adxEl) adxEl.innerText = (data.indicators.adx || 0).toFixed(1);
-            if (stochEl) stochEl.innerText = (data.indicators.stochRsi || 0).toFixed(1);
+        // AI Balance Update (All mirrors)
+        const balances = document.querySelectorAll('.ai-balance-val');
+        const formattedBal = `$${(currentBotState.aibalance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        balances.forEach(el => el.innerText = formattedBal);
+        
+        if (aiBotUI) {
+            aiBotUI.setRunningStatus(currentBotState.config.ai.enabled, currentBotState.config.ai.stopAtCycle);
         }
     });
 
-    socket.on('ai-history-update', (trades) => aiBotUI.updateHistoryTable(trades));
+    socket.on('ai-decision-update', (data) => {
+        if (!data || !aiBotUI) return;
+        aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        
+        // Signal updates
+        const adxEl = document.getElementById('ai-adx-val');
+        const stochEl = document.getElementById('ai-stoch-val');
+        if (adxEl && data.indicators) adxEl.innerText = (data.indicators.adx || 0).toFixed(1);
+        if (stochEl && data.indicators) stochEl.innerText = (data.indicators.stochRsi || 0).toFixed(1);
+    });
+
+    socket.on('ai-history-update', (trades) => {
+        if(aiBotUI) aiBotUI.updateHistoryTable(trades);
+    });
 
     socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
 }
 
-// --- GESTIÓN DE PESTAÑAS ---
+// --- TAB MANAGEMENT ---
 export async function initializeTab(tabName) {
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
@@ -171,18 +174,16 @@ export async function initializeTab(tabName) {
             if (initFn) await initFn(currentBotState); 
         }
 
-        // LÓGICA ESPECÍFICA PESTAÑA AIBOT
+        // AI TAB SPECIFIC LOGIC (English Labels)
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             const aiInput = document.getElementById('ai-amount-usdt');
             const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-            // Sincronización Inicial de UI IA
             aiBotUI.setRunningStatus(currentBotState.config.ai.enabled, currentBotState.config.ai.stopAtCycle);
             if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
             if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
 
-            // 1. Evento Monto USDT (Debounce 1.5s)
             if (aiInput) {
                 let timeout;
                 aiInput.addEventListener('input', () => {
@@ -196,12 +197,12 @@ export async function initializeTab(tabName) {
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
                             body: JSON.stringify({ amountUsdt: amount })
                         });
-                        if ((await res.json()).success) aiBotUI.addLog(`IA: Capital actualizado a $${amount}`, 'info');
+                        const data = await res.json();
+                        if (data.success) aiBotUI.addLog(`AI: Capital updated to $${amount}`, 'info');
                     }, 1500);
                 });
             }
 
-            // 2. Evento Switch "Stop at Cycle"
             if (stopAtCycleCheck) {
                 stopAtCycleCheck.onchange = async () => {
                     const active = stopAtCycleCheck.checked;
@@ -210,17 +211,18 @@ export async function initializeTab(tabName) {
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
                         body: JSON.stringify({ stopAtCycle: active })
                     });
-                    if (!(await res.json()).success) stopAtCycleCheck.checked = !active;
-                    else aiBotUI.addLog(`IA: Stop at Cycle ${active ? 'Activado' : 'Desactivado'}`, 'warning');
+                    const data = await res.json();
+                    if (!data.success) stopAtCycleCheck.checked = !active;
+                    else aiBotUI.addLog(`AI: Smart Cycle ${active ? 'Enabled' : 'Disabled'}`, 'warning');
                 };
             }
 
-            // 3. Evento Botón Start/Stop
             if (btnAi) {
                 btnAi.onclick = async () => {
-                    const action = currentBotState.config.ai.enabled ? 'stop' : 'start';
+                    const isCurrentlyEnabled = currentBotState.config.ai.enabled;
+                    const action = isCurrentlyEnabled ? 'stop' : 'start';
                     btnAi.disabled = true;
-                    btnAi.innerText = "PROCESANDO...";
+                    btnAi.innerText = "PROCESSING...";
 
                     const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
                         method: 'POST',
@@ -237,10 +239,10 @@ export async function initializeTab(tabName) {
             }
         }
 
-    } catch (error) { console.error("❌ Error cargando vista:", error); }
+    } catch (error) { console.error("❌ View Loading Error:", error); }
 }
 
-// --- EVENTOS INICIALES ---
+// --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
