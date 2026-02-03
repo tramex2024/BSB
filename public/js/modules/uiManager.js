@@ -21,23 +21,23 @@ export function updateBotUI(state) {
     }
 
     // 2. MAPEO INTEGRAL DE DATOS (DB -> HTML)
-    const elements = {
-        // Generales
+   const elements = {
+        // --- GLOBALES ---
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
-        
-        // ESTRATEGIA LONG (Mapeo de tu JSON)
+
+        // --- ESTRATEGIA LONG (IDs típicos de tu Dashboard) ---
         'auprofitl': 'lprofit',      // L-PNL
         'aubalancel': 'lbalance',    // L-Wallet
         'aucyclel': 'lcycle',        // L-Cycle
-        'austopl': 'llep',           // L-Stop (Last Entry Price)
+        'austopl': 'llep',           // L-Stop
         'autargetl': 'ltprice',      // L-Target
         'auavgpxl': 'lppc',          // L-AvgPx
         'aucoverl': 'lcoverage',     // L-Cover
         'aumaxsosl': 'locc',         // L-MaxSO (Open Safety Orders)
-        
-        // ESTRATEGIA SHORT (Mapeo de tu JSON)
+
+        // --- ESTRATEGIA SHORT ---
         'auprofits': 'sprofit',      // S-PNL
         'aubalances': 'sbalance',    // S-Wallet
         'aucycles': 'scycle',        // S-Cycle
@@ -45,7 +45,7 @@ export function updateBotUI(state) {
         'autargets': 'stprice',      // S-Target
         'auavgpxs': 'sppc',          // S-AvgPx
         'aucovers': 'scoverage',     // S-Cover
-        'aumaxsoss': 'socc',         // S-MaxSO
+        'aumaxsoss': 'socc'          // S-MaxSO   
 
         // IA Dashboard
         'ai-virtual-balance': 'aibalance',
