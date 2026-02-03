@@ -46,11 +46,7 @@ export function updateBotUI(state) {
         'auavgpxs': 'sppc',          // S-AvgPx
         'aucovers': 'scoverage',     // S-Cover
         'aumaxsoss': 'socc'          // S-MaxSO   
-
-        // IA Dashboard
-        'ai-virtual-balance': 'aibalance',
-        'ai-adx-val': 'adx',               
-        'ai-stoch-val': 'stochRsi'         
+       
     };
 
     Object.entries(elements).forEach(([id, key]) => {
