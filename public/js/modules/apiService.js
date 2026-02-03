@@ -75,14 +75,12 @@ export async function fetchEquityCurveData(strategy = 'Long') {
  * coincidan exactamente con el Schema de Mongoose.
  */
 export function getBotConfiguration() {
-    // 🛡️ MEJORA: Evita enviar ceros si el usuario está borrando el input
     const getNum = (id, path) => {
         const el = document.getElementById(id);
         if (!el) return 0;
         
         const rawValue = el.value.trim();
         if (rawValue === "") {
-            // Si el campo está vacío, usamos el valor que ya teníamos en memoria para no romper la DB con un 0
             const parts = path.split('.');
             return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
         }
@@ -116,8 +114,9 @@ export function getBotConfiguration() {
             enabled: true
         },
         ai: {
-            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt'),
-            stopAtCycle: getCheck('au-stop-ai-at-cycle'),
+            // Sincronizado con el ID del Dashboard y el AI Engine
+            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
+            stopAtCycle: getCheck('ai-stop-at-cycle'),
             enabled: true
         }
     };
@@ -129,16 +128,15 @@ export function getBotConfiguration() {
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
     
-    // Validación de seguridad: Monto mínimo (ejemplo $5 USDT)
+    // Validación básica de seguridad
     if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
-        displayMessage("⚠️ El monto mínimo para Long es $5", 'error');
+        displayMessage("⚠️ El monto mínimo es $5", 'error');
         return { success: false };
     }
 
     isSavingConfig = true; 
     
     try {
-        const config = getBotConfiguration();
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
             body: JSON.stringify({ config })
@@ -147,15 +145,14 @@ export async function sendConfigToBackend() {
         if (data && data.success) {
             displayMessage("✅ Configuración sincronizada", 'success');
         } else {
-            displayMessage(data?.message || "Error al guardar configuración", 'error');
+            displayMessage(data?.message || "Error al guardar", 'error');
         }
         return data;
     } catch (err) {
         displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        // Mantenemos el bloqueo un poco más para que el socket no gane la carrera
-        setTimeout(() => { isSavingConfig = false; }, 300);
+        setTimeout(() => { isSavingConfig = false; }, 400);
     }
 }
 
@@ -165,20 +162,24 @@ export async function sendConfigToBackend() {
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const sideKey = side.toLowerCase(); 
     const action = isRunning ? 'stop' : 'start';
-    const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
+    
+    // Mapeo exacto según tus IDs de HTML
+    let btnId;
+    if (sideKey === 'long') btnId = 'austartl-btn';
+    else if (sideKey === 'short') btnId = 'austarts-btn';
+    else if (sideKey === 'ai') btnId = 'btn-start-ai'; 
+
     const btn = document.getElementById(btnId);
 
     if (btn) {
         btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.classList.add('opacity-50');
         btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
     }
 
     try {
         const config = providedConfig || getBotConfiguration();
-        const endpoint = `/api/autobot/${action}/${sideKey}`; 
-        
-        const data = await privateFetch(endpoint, {
+        const data = await privateFetch(`/api/autobot/${action}/${sideKey}`, {
             method: 'POST',
             body: JSON.stringify({ config }) 
         });
@@ -187,7 +188,7 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
             displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
             return data;
         } else {
-            throw new Error(data?.message || 'Error en respuesta del motor');
+            throw new Error(data?.message || 'Error en el motor');
         }
     } catch (err) {
         displayMessage(err.message, 'error');
@@ -195,7 +196,22 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.classList.remove('opacity-50');
+            // El texto se restaurará mediante el Socket cuando llegue el nuevo estado
         }
+    }
+}
+
+/**
+ * BOTÓN DE PÁNICO: Detiene todo inmediatamente
+ */
+export async function triggerPanicStop() {
+    try {
+        const data = await privateFetch('/api/autobot/panic-stop', { method: 'POST' });
+        if (data.success) displayMessage("🚨 PÁNICO ACTIVADO: Todo detenido", 'success');
+        return data;
+    } catch (err) {
+        displayMessage("Error al ejecutar pánico", 'error');
+        return { success: false };
     }
 }

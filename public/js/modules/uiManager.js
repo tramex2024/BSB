@@ -20,33 +20,44 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 2. MAPEO INTEGRAL DE DATOS (DB -> HTML)
-   const elements = {
-        // --- GLOBALES ---
+  // MAPEO MAESTRO: Coincidencia exacta con tus 3 archivos HTML
+    const elements = {
+        // === MARKET & GLOBALES (Se repiten en Dashboard y Autobot) ===
+        'auprice': 'price',
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
 
-        // --- ESTRATEGIA LONG (IDs típicos de tu Dashboard) ---
-        'auprofitl': 'lprofit',      // L-PNL
-        'aubalancel': 'lbalance',    // L-Wallet
-        'aucyclel': 'lcycle',        // L-Cycle
-        'austopl': 'llep',           // L-Stop
-        'autargetl': 'ltprice',      // L-Target
-        'auavgpxl': 'lppc',          // L-AvgPx
-        'aucoverl': 'lcoverage',     // L-Cover
-        'aumaxsosl': 'locc',         // L-MaxSO (Open Safety Orders)
+        // === AUTOBOT: ESTRATEGIA LONG ===
+        'aulprofit-val': 'lprofit',   // L-PNL
+        'aulbalance': 'lbalance',     // L-Wallet
+        'aulcycle': 'lcycle',         // L-Cycle
+        'aulsprice': 'llep',          // L-Stop
+        'aultprice': 'ltprice',       // L-Target
+        'aultppc': 'lppc',            // L-AvgPx
+        'aulcoverage': 'lcoverage',   // L-Cover
+        'aulnorder': 'locc',          // L-MaxSO
 
-        // --- ESTRATEGIA SHORT ---
-        'auprofits': 'sprofit',      // S-PNL
-        'aubalances': 'sbalance',    // S-Wallet
-        'aucycles': 'scycle',        // S-Cycle
-        'austops': 'slep',           // S-Stop
-        'autargets': 'stprice',      // S-Target
-        'auavgpxs': 'sppc',          // S-AvgPx
-        'aucovers': 'scoverage',     // S-Cover
-        'aumaxsoss': 'socc'          // S-MaxSO   
-       
+        // === AUTOBOT: ESTRATEGIA SHORT ===
+        'ausprofit-val': 'sprofit',   // S-PNL
+        'ausbalance': 'sbalance',     // S-Wallet
+        'auscycle': 'scycle',         // S-Cycle
+        'ausbprice': 'slep',          // S-Stop
+        'austprice': 'stprice',       // S-Target
+        'austppc': 'sppc',            // S-AvgPx
+        'auscoverage': 'scoverage',   // S-Cover
+        'ausnorder': 'socc',          // S-MaxSO
+
+        // === AI ENGINE (Pestaña Neural) ===
+        'ai-virtual-balance': 'aibalance', // Saldo Actual en IA
+        'ai-adx-val': 'lai',               // Usando lai/sai según corresponda
+        'ai-stoch-val': 'lac',             // O el indicador que manejes
+        'aubot-aistate': 'lstate',         // Estado del motor IA (usando lstate como proxy)
+
+        // === ESTADOS (Textos de estado) ===
+        'aubot-lstate': 'lstate',
+        'aubot-sstate': 'sstate',
+        'ai-mode-status': 'lstate'         // Reutiliza el estado para el modo
     };
 
     Object.entries(elements).forEach(([id, key]) => {
