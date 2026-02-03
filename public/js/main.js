@@ -112,6 +112,7 @@ export function initializeFullApp() {
 
     // RECEPTOR CENTRAL DE ESTADO (UNIFICADO)
     socket.on('bot-state-update', (state) => {
+    console.log("📥 DATOS RECIBIDOS DEL SERVIDOR:", state);
     if (!state) return;
 
     // Sincronización de Configuración
