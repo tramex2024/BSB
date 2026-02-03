@@ -37,14 +37,17 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     }
 
     if (btn) {
-        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
+        // CAMBIO AQUÍ: Si es AI, usamos "AI CORE" para que coincida con el resto de la app
+        const suffix = (type === 'AI') ? 'AI CORE' : type.toUpperCase();
+        btn.textContent = isBusy ? `STOP ${suffix}` : `START ${suffix}`;
         
         if (isBusy) {
-            btn.classList.remove('bg-emerald-600');
+            btn.classList.remove('bg-emerald-600', 'bg-blue-600');
             btn.classList.add('bg-red-600');
         } else {
             btn.classList.remove('bg-red-600');
-            btn.classList.add('bg-emerald-600');
+            // Si es AI usamos el azul que tienes en el diseño, si no, esmeralda
+            btn.classList.add(type === 'AI' ? 'bg-blue-600' : 'bg-emerald-600');
         }
         btn.disabled = false;
         btn.style.opacity = "1";

@@ -120,6 +120,7 @@ export function updateControlsState(state) {
     const lState = state.lstate || 'STOPPED';
     const sState = state.sstate || 'STOPPED';
     const aiEnabled = state.config?.ai?.enabled || false;
+    // IMPORTANTE: Mantenemos el estado coherente con BUSY_STATES
     const aiState = aiEnabled ? 'RUNNING' : 'STOPPED';
 
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
@@ -128,7 +129,7 @@ export function updateControlsState(state) {
 
     updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
-    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs);
+    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); // 'AI' aquí disparará el sufijo 'AI CORE'
     
     const engineMsg = document.getElementById('ai-engine-msg');
     if (engineMsg && aiEnabled) {
