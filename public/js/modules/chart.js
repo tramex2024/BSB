@@ -9,15 +9,12 @@ export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 1. Limpieza y preparación del contenedor
     container.innerHTML = '';
     container.style.height = "500px"; 
     container.style.width = "100%";
 
-    // 2. Recuperar preferencia de temporalidad (por defecto '1' para 1 minuto)
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
-    // 3. Crear el widget con los 3 indicadores solicitados
     new TradingView.widget({
         "autosize": true,
         "symbol": `BITMART:${symbol}`,
@@ -33,20 +30,16 @@ export function initializeChart(containerId, symbol) {
         "allow_symbol_change": true,
         "container_id": containerId,
         "support_host": "https://www.tradingview.com",
-        
-        // 🟢 INDICADORES FORZADOS POR CÓDIGO
         "studies": [
-            "RSI@tv-basicstudies",      // Índice de Fuerza Relativa
-            "BB@tv-basicstudies",       // Bandas de Bollinger
-            "MACD@tv-basicstudies"      // Convergencia/Divergencia del Promedio Móvil
+            "RSI@tv-basicstudies",      
+            "BB@tv-basicstudies",       
+            "MACD@tv-basicstudies"      
         ],
-        
         "overrides": {
             "mainSeriesProperties.style": 1,
             "paneProperties.background": "#111827",
             "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.05)",
             "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)",
-            // Ajuste para que el MACD no ocupe toda la pantalla
             "paneProperties.legendProperties.showStudyArguments": true,
             "paneProperties.legendProperties.showStudyTitles": true,
             "paneProperties.legendProperties.showStudyValues": true,
@@ -56,7 +49,7 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Muestra el historial de ganancias por ciclo.
+ * Optimizada para recibir puntos de tiempo formateados
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
@@ -64,13 +57,19 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const ctx = canvas.getContext('2d');
 
+    // Destrucción limpia de la instancia previa para evitar el error "Canvas in use"
     if (equityChartInstance) {
         equityChartInstance.destroy();
+        equityChartInstance = null;
     }
 
     if (!data || data.length === 0) return;
 
-    const labels = data.map((_, i) => `Ciclo ${i + 1}`);
+    // --- MEJORA: Lógica de Etiquetas Inteligentes ---
+    // Si la data viene procesada por getFilteredData de metricsManager, tendrá .time
+    // Si no, usamos el índice del ciclo como respaldo.
+    const labels = data.map((d, i) => d.time || `Ciclo ${i + 1}`);
+    
     let dataPoints = [];
     let labelText = '';
     let color = '#10b981'; 
@@ -87,13 +86,17 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#3b82f6';
             break;
         default:
-            dataPoints = data.map(c => parseFloat(c.accumulatedProfit || c.netProfit || 0));
+            // Soportamos tanto el objeto procesado {value} como el crudo {netProfit}
+            dataPoints = data.map(c => {
+                if (c.value !== undefined) return c.value;
+                return parseFloat(c.accumulatedProfit || c.netProfit || 0);
+            });
             labelText = 'Capital Acumulado (USDT)';
             color = '#10b981';
     }
 
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+    gradient.addColorStop(0, `${color}66`); // Color con opacidad 40%
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
     equityChartInstance = new Chart(ctx, {
@@ -105,18 +108,23 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 data: dataPoints,
                 borderColor: color,
                 backgroundColor: gradient,
-                borderWidth: 3,
+                borderWidth: 2,
                 pointBackgroundColor: color,
-                pointBorderColor: '#fff',
+                pointBorderColor: '#111827',
+                pointBorderWidth: 1,
                 pointHoverRadius: 6,
                 tension: 0.4, 
                 fill: true,
-                pointRadius: 4
+                pointRadius: labels.length > 50 ? 0 : 3 // Ocultar puntos si hay demasiada data
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -126,19 +134,30 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     borderColor: color,
                     borderWidth: 1,
                     displayColors: false,
+                    padding: 10,
                     callbacks: {
-                        label: (context) => ` ${context.parsed.y.toLocaleString()} USDT`
+                        label: (context) => ` ${context.parsed.y.toFixed(2)} USDT`
                     }
                 }
             },
             scales: {
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#9ca3af', font: { size: 10 } }
+                    ticks: { 
+                        color: '#9ca3af', 
+                        font: { size: 10 },
+                        callback: (value) => `$${value}` 
+                    }
                 },
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#9ca3af', font: { size: 10 } }
+                    ticks: { 
+                        color: '#9ca3af', 
+                        font: { size: 9 },
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 10 // No saturar el eje X
+                    }
                 }
             }
         }
