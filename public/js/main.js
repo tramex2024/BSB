@@ -1,8 +1,11 @@
 //BSB/public/js/main.js
 
+// BSB/public/js/main.js
+
 /**
  * main.js - Central Hub
  * AI Core English Version 2026
+ * Estructura original preservada con integración de Dashboard y Panic
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -114,6 +117,18 @@ export function initializeFullApp() {
         if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
 
+    // RECEPTOR DE PÁNICO (Sincronización Global)
+    socket.on('panic-executed', (data) => {
+        logStatus("🚨 PANIC STOP EXECUTED", "error");
+        currentBotState.lstate = 'STOPPED';
+        currentBotState.sstate = 'STOPPED';
+        currentBotState.config.long.enabled = false;
+        currentBotState.config.short.enabled = false;
+        currentBotState.config.ai.enabled = false;
+        updateBotUI(currentBotState);
+        updateControlsState(currentBotState);
+    });
+
     // CENTRAL STATE RECEIVER
     socket.on('bot-state-update', (state) => {
         if (!state) return;
@@ -142,7 +157,7 @@ export function initializeFullApp() {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         
-        // Signal updates
+        // Signal updates para el Widget del Dashboard y AI Tab
         const adxEl = document.getElementById('ai-adx-val');
         const stochEl = document.getElementById('ai-stoch-val');
         if (adxEl && data.indicators) adxEl.innerText = (data.indicators.adx || 0).toFixed(1);
@@ -171,10 +186,11 @@ export async function initializeTab(tabName) {
         if (views[tabName]) {
             const module = await views[tabName]();
             const initFn = module[`initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`];
+            // Aquí pasamos el currentBotState global para que la pestaña sepa qué mostrar al abrirse
             if (initFn) await initFn(currentBotState); 
         }
 
-        // AI TAB SPECIFIC LOGIC (English Labels)
+        // AI TAB SPECIFIC LOGIC (English Labels) - Se mantiene intacto
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             const aiInput = document.getElementById('ai-amount-usdt');
@@ -250,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (localStorage.getItem('token')) { 
         initializeFullApp(); 
-        initializeTab('autobot'); 
+        initializeTab('dashboard'); // Cambiado a Dashboard por defecto para ver las 3 estrategias al entrar
     } else { 
         initializeTab('dashboard'); 
     }

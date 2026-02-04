@@ -1,7 +1,7 @@
 /**
  * dashboard.js - Controlador de Interfaz y Eventos (Versión Full Integrada 2026)
  */
-import { fetchEquityCurveData } from './apiService.js'; 
+import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { socket, currentBotState } from '../main.js'; 
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
@@ -22,7 +22,7 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Sincronizando sistema...");
 
-    // 1. Inicializar Gráficos (Corregido con destrucción de instancia)
+    // 1. Inicializar Gráficos
     initBalanceChart();
     initEquityChart();
 
@@ -33,13 +33,12 @@ export function initializeDashboardView(initialState) {
         updateDistributionWidget(stateToUse);
     }
 
-    // 3. Configurar Eventos
+    // 3. Configurar Eventos y Botones
     setupSocketListeners();
-    setupChartSelectors(); 
-    setupTestButton(); 
+    setupActionButtons(); // <--- NUEVA FUNCIÓN PARA PÁNICO Y START/STOP
     setupAnalyticsFilters();
     
-    // 4. Carga de analítica (Gráficos de rendimiento)
+    // 4. Carga de analítica
     refreshAnalytics();
 
     // 5. Estado de conexión inicial
@@ -48,7 +47,41 @@ export function initializeDashboardView(initialState) {
 }
 
 /**
- * Refresca los datos de la curva de equidad desde el servidor
+ * CONFIGURACIÓN DE BOTONES (Pánico y Controles)
+ */
+function setupActionButtons() {
+    // Evento para el Botón de Pánico
+    const panicBtn = document.getElementById('panic-btn');
+    if (panicBtn) {
+        panicBtn.onclick = async () => {
+            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
+            if (confirmPanic) {
+                await triggerPanicStop();
+            }
+        };
+    }
+
+    // Eventos para Botones de Inicio (L, S, AI)
+    const btnConfigs = [
+        { id: 'austartl-btn', side: 'long' },
+        { id: 'austarts-btn', side: 'short' },
+        { id: 'btn-start-ai', side: 'ai' }
+    ];
+
+    btnConfigs.forEach(btn => {
+        const el = document.getElementById(btn.id);
+        if (el) {
+            el.onclick = async () => {
+                // Determinamos si está corriendo basado en el texto o el estado global
+                const isRunning = el.textContent.includes("STOP");
+                await toggleBotSideState(isRunning, btn.side);
+            };
+        }
+    });
+}
+
+/**
+ * Refresca los datos de la curva de equidad
  */
 async function refreshAnalytics() {
     try {
@@ -74,16 +107,14 @@ async function refreshAnalytics() {
 }
 
 /**
- * Configura los eventos en tiempo real para el Dashboard
+ * Configura los eventos en tiempo real
  */
 function setupSocketListeners() {
     if (!socket) return;
 
-    // Limpieza de duplicados para evitar fugas de memoria
     const events = ['market-signal-update', 'order-executed', 'cycle-closed', 'ai-decision-update', 'ai-status-update'];
     events.forEach(ev => socket.off(ev));
 
-    // Señales de mercado (RSI/Análisis)
     socket.on('market-signal-update', (analysis) => {
         const signalEl = document.getElementById('ai-trend-label');
         if (signalEl) {
@@ -94,7 +125,6 @@ function setupSocketListeners() {
         }
     });
 
-    // Ejecución de órdenes
     socket.on('order-executed', (order) => {
         try {
             order.side.toLowerCase() === 'buy' ? sounds.buy.play() : sounds.sell.play();
@@ -102,14 +132,12 @@ function setupSocketListeners() {
         } catch (e) {}
     });
 
-    // Cierre de ciclo de ganancias
     socket.on('cycle-closed', () => {
         if(sounds.sell) sounds.sell.play();
         flashElement('auprofit', 'bg-yellow-500/30');
         refreshAnalytics(); 
     });
 
-    // Actualizaciones de pensamiento de la IA (Dashboard Pulse)
     socket.on('ai-decision-update', (data) => {
         const msgEl = document.getElementById('ai-engine-msg');
         if (msgEl) msgEl.textContent = data.message || "NEURAL CORE ANALYZING...";
@@ -118,7 +146,6 @@ function setupSocketListeners() {
         if (confBar) confBar.style.width = `${Math.round(data.confidence * 100)}%`;
     });
 
-    // Sincronización de balances
     socket.on('ai-status-update', (data) => {
         if (data.virtualBalance !== undefined) {
             currentBotState.virtualBalance = data.virtualBalance;
@@ -127,12 +154,12 @@ function setupSocketListeners() {
     });
 }
 
-// --- GESTIÓN DE GRÁFICOS (CHART.JS) ---
+// --- GESTIÓN DE GRÁFICOS ---
 
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
-    if (balanceChart) balanceChart.destroy(); // Fix: Evita "Canvas in use"
+    if (balanceChart) balanceChart.destroy();
     
     balanceChart = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
@@ -156,7 +183,7 @@ function initBalanceChart() {
 function initEquityChart() {
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
-    if (equityChart) equityChart.destroy(); // Fix: Evita "Canvas in use"
+    if (equityChart) equityChart.destroy();
 
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
@@ -179,7 +206,7 @@ function initEquityChart() {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: false, // CLAVE PARA EL FIX DE F12
             plugins: { legend: { display: false } },
             scales: {
                 x: { display: false },
@@ -192,9 +219,6 @@ function initEquityChart() {
     });
 }
 
-/**
- * Actualiza el Widget de Distribución y las barras de progreso
- */
 function updateDistributionWidget(state) {
     if (!balanceChart) return;
     
@@ -222,17 +246,12 @@ function updateDistributionWidget(state) {
     if(bText) bText.innerText = btcAmount.toFixed(6);
 }
 
-/**
- * Renderiza los puntos en la curva de equidad
- */
 export function updateEquityChart(data) {
     if (!equityChart || !data || !data.points) return;
     equityChart.data.labels = data.points.map(p => p.time);
     equityChart.data.datasets[0].data = data.points.map(p => p.value);
     equityChart.update('none');
 }
-
-// --- UTILIDADES ---
 
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
@@ -262,13 +281,4 @@ function flashElement(id, colorClass) {
         container.classList.add(colorClass);
         setTimeout(() => container.classList.remove(colorClass), 800);
     }
-}
-
-function setupTestButton() {
-    const btn = document.getElementById('test-notification-btn');
-    if (btn) btn.onclick = () => sounds.buy.play();
-}
-
-function setupChartSelectors() {
-    // Implementación para botones de rango (1H, 1D, ALL) si los añades
 }
