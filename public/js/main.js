@@ -1,5 +1,3 @@
-//BSB/public/js/main.js
-
 // BSB/public/js/main.js
 
 /**
@@ -185,12 +183,23 @@ export async function initializeTab(tabName) {
         
         if (views[tabName]) {
             const module = await views[tabName]();
-            const initFn = module[`initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`];
-            // Aquí pasamos el currentBotState global para que la pestaña sepa qué mostrar al abrirse
-            if (initFn) await initFn(currentBotState); 
+            const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            const initFn = module[initFnName];
+            
+            if (initFn) {
+                await initFn(currentBotState);
+                
+                // INTEGRACIÓN DASHBOARD: Al cambiar a la pestaña dashboard activamos el gráfico
+                if (tabName === 'dashboard') {
+                    // Si el módulo exporta una función específica para el widget, la usamos
+                    if (module.updateDistributionWidget) {
+                        module.updateDistributionWidget(currentBotState);
+                    }
+                }
+            }
         }
 
-        // AI TAB SPECIFIC LOGIC (English Labels) - Se mantiene intacto
+        // AI TAB SPECIFIC LOGIC
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             const aiInput = document.getElementById('ai-amount-usdt');
@@ -266,7 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (localStorage.getItem('token')) { 
         initializeFullApp(); 
-        initializeTab('dashboard'); // Cambiado a Dashboard por defecto para ver las 3 estrategias al entrar
+        initializeTab('dashboard'); 
     } else { 
         initializeTab('dashboard'); 
     }

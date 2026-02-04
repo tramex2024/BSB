@@ -22,20 +22,24 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Sincronizando sistema...");
 
-    // 1. Inicializar Gráficos
-    initBalanceChart();
+    const stateToUse = initialState || currentBotState;
+
+    // 1. Inicializar Gráficos (Pasamos el estado para evitar el 100/0 inicial)
+    initBalanceChart(stateToUse);
     initEquityChart();
 
     // 2. Sincronización inmediata con el estado global
-    const stateToUse = initialState || currentBotState;
     if (stateToUse) {
         updateBotUI(stateToUse);
-        updateDistributionWidget(stateToUse);
+        // Pequeño delay para asegurar que el canvas esté listo en el DOM
+        setTimeout(() => {
+            updateDistributionWidget(stateToUse);
+        }, 100);
     }
 
     // 3. Configurar Eventos y Botones
     setupSocketListeners();
-    setupActionButtons(); // <--- NUEVA FUNCIÓN PARA PÁNICO Y START/STOP
+    setupActionButtons();
     setupAnalyticsFilters();
     
     // 4. Carga de analítica
@@ -47,10 +51,9 @@ export function initializeDashboardView(initialState) {
 }
 
 /**
- * CONFIGURACIÓN DE BOTONES (Pánico y Controles)
+ * CONFIGURACIÓN DE BOTONES
  */
 function setupActionButtons() {
-    // Evento para el Botón de Pánico
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.onclick = async () => {
@@ -61,7 +64,6 @@ function setupActionButtons() {
         };
     }
 
-    // Eventos para Botones de Inicio (L, S, AI)
     const btnConfigs = [
         { id: 'austartl-btn', side: 'long' },
         { id: 'austarts-btn', side: 'short' },
@@ -72,7 +74,6 @@ function setupActionButtons() {
         const el = document.getElementById(btn.id);
         if (el) {
             el.onclick = async () => {
-                // Determinamos si está corriendo basado en el texto o el estado global
                 const isRunning = el.textContent.includes("STOP");
                 await toggleBotSideState(isRunning, btn.side);
             };
@@ -81,7 +82,7 @@ function setupActionButtons() {
 }
 
 /**
- * Refresca los datos de la curva de equidad
+ * Refresca analítica
  */
 async function refreshAnalytics() {
     try {
@@ -107,7 +108,7 @@ async function refreshAnalytics() {
 }
 
 /**
- * Configura los eventos en tiempo real
+ * Listeners en tiempo real
  */
 function setupSocketListeners() {
     if (!socket) return;
@@ -156,18 +157,27 @@ function setupSocketListeners() {
 
 // --- GESTIÓN DE GRÁFICOS ---
 
-function initBalanceChart() {
+function initBalanceChart(state) {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
     if (balanceChart) balanceChart.destroy();
+
+    // Extraer valores reales para el inicio
+    const usdt = parseFloat(state?.lastAvailableUSDT || 0);
+    const btcAmount = parseFloat(state?.lastAvailableBTC || 0);
+    const price = parseFloat(state?.price || 0);
+    const btcInUsdt = btcAmount * price;
+    
+    // Si no hay datos aún, usamos un placeholder visual tenue
+    const initialData = (usdt + btcInUsdt === 0) ? [1, 0] : [usdt, btcInUsdt];
     
     balanceChart = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: [100, 0], 
-                backgroundColor: ['#10b981', '#f59e0b'], 
+                data: initialData, 
+                backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
             }]
@@ -175,7 +185,8 @@ function initBalanceChart() {
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
-            plugins: { legend: { display: false } }
+            plugins: { legend: { display: false } },
+            animation: { duration: 800 }
         }
     });
 }
@@ -206,7 +217,7 @@ function initEquityChart() {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false, // CLAVE PARA EL FIX DE F12
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
                 x: { display: false },
@@ -220,29 +231,33 @@ function initEquityChart() {
 }
 
 function updateDistributionWidget(state) {
-    if (!balanceChart) return;
+    if (!balanceChart || !state) return;
     
     const usdt = parseFloat(state.lastAvailableUSDT || state.virtualBalance || 0);
     const btcAmount = parseFloat(state.lastAvailableBTC || 0);
-    const price = parseFloat(state.price || 0);
+    const price = parseFloat(state.price || state.marketPrice || 0);
     
     const btcInUsdt = btcAmount * price;
     const total = usdt + btcInUsdt;
 
-    const displayUsdt = total === 0 ? 100 : (usdt / total) * 100;
-    const displayBtc = total === 0 ? 0 : (btcInUsdt / total) * 100;
-
-    balanceChart.data.datasets[0].data = [displayUsdt, displayBtc];
-    balanceChart.update();
+    // Actualizar gráfico de dona
+    if (total > 0) {
+        balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
+        balanceChart.update();
+    }
     
+    // Actualizar barras de progreso y textos
+    const displayUsdtPercent = total === 0 ? 0 : (usdt / total) * 100;
+    const displayBtcPercent = total === 0 ? 0 : (btcInUsdt / total) * 100;
+
     const usdtBar = document.getElementById('usdt-bar');
     const btcBar = document.getElementById('btc-bar');
-    if (usdtBar) usdtBar.style.width = `${displayUsdt}%`;
-    if (btcBar) btcBar.style.width = `${displayBtc}%`;
+    if (usdtBar) usdtBar.style.width = `${displayUsdtPercent}%`;
+    if (btcBar) btcBar.style.width = `${displayBtcPercent}%`;
 
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
-    if(uText) uText.innerText = usdt.toFixed(2);
+    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if(bText) bText.innerText = btcAmount.toFixed(6);
 }
 
@@ -276,7 +291,7 @@ function updateHealthStatus(textId, isOnline) {
 
 function flashElement(id, colorClass) {
     const el = document.getElementById(id);
-    const container = el ? el.closest('.bg-gray-800, .bg-gray-700') : null;
+    const container = el ? el.closest('.bg-gray-700, .bg-gray-800') : null;
     if (container) {
         container.classList.add(colorClass);
         setTimeout(() => container.classList.remove(colorClass), 800);
