@@ -1,6 +1,6 @@
 /**
- * uiManager.js - Orquestador Atómico
- * Sincronización total basada en STATUS_COLORS de controls.js
+ * uiManager.js - Orquestador Atómico (Corregido: Mapeo L-Stop/S-Stop)
+ * Sincronización total basada en STATUS_COLORS
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -29,7 +29,7 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // MAPEO MAESTRO
+    // MAPEO MAESTRO CORREGIDO
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -39,9 +39,9 @@ export function updateBotUI(state) {
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
         'aulcycle': 'lcycle',         
-        'aulsprice': 'llep',          
-        'aultprice': 'ltprice',       
-        'aultppc': 'lppc',            
+        'aulsprice': 'llep', // Entry Price          
+        'aultprice': 'ltprice', // Target Price      
+        'aultppc': 'lpc',       // <--- CORREGIDO: L-Stop ahora usa lpc (Long Price Close)
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'aulnorder',     
 
@@ -49,9 +49,9 @@ export function updateBotUI(state) {
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
         'auscycle': 'scycle',         
-        'ausbprice': 'slep',          
-        'austprice': 'stprice',       
-        'austppc': 'sppc',            
+        'ausbprice': 'slep', // Entry Price          
+        'austprice': 'stprice', // Target Price      
+        'austppc': 'spc',       // <--- CORREGIDO: S-Stop ahora usa spc (Short Price Close)
         'auscoverage': 'scoverage',   
         'ausnorder': 'ausnorder',     
 
@@ -78,9 +78,8 @@ export function updateBotUI(state) {
             const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
             el.textContent = currentStatus;
             
-            // Aplicamos el color hexadecimal de tu paleta oficial
             el.style.color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
-            el.className = "font-bold font-mono uppercase"; // Quitamos clases de color previas
+            el.className = "font-bold font-mono uppercase";
             return;
         }
 
