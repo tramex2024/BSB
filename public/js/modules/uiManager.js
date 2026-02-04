@@ -1,5 +1,5 @@
 /**
- * uiManager.js - Orquestador Atómico (Corregido: Mapeo L-Stop/S-Stop)
+ * uiManager.js - Orquestador Atómico (Versión Restaurada)
  * Sincronización total basada en STATUS_COLORS
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
@@ -29,7 +29,7 @@ export function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // MAPEO MAESTRO CORREGIDO
+    // MAPEO MAESTRO RESTAURADO (Promedios en lppc y sppc)
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -39,9 +39,9 @@ export function updateBotUI(state) {
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
         'aulcycle': 'lcycle',         
-        'aulsprice': 'llep', // Entry Price          
-        'aultprice': 'ltprice', // Target Price      
-        'aultppc': 'lpc',       // <--- CORREGIDO: L-Stop ahora usa lpc (Long Price Close)
+        'aulsprice': 'llep',          
+        'aultprice': 'ltprice',       
+        'aultppc': 'lppc',    // <--- Restaurado a Promedio Long
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'aulnorder',     
 
@@ -49,9 +49,9 @@ export function updateBotUI(state) {
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
         'auscycle': 'scycle',         
-        'ausbprice': 'slep', // Entry Price          
-        'austprice': 'stprice', // Target Price      
-        'austppc': 'spc',       // <--- CORREGIDO: S-Stop ahora usa spc (Short Price Close)
+        'ausbprice': 'slep',          
+        'austprice': 'stprice',       
+        'austppc': 'sppc',    // <--- Restaurado a Promedio Short
         'auscoverage': 'scoverage',   
         'ausnorder': 'ausnorder',     
 
