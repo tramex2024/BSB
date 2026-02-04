@@ -1,6 +1,6 @@
 // public/js/modules/ui/controls.js
 
-const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED', 'WAITING']; 
+const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
@@ -8,7 +8,7 @@ const STATUS_COLORS = {
     'BUYING': '#60a5fa',        
     'SELLING': '#fbbf24',      
     'PAUSED': '#fb923c',
-    'WAITING': '#8b5cf6'      
+ //   'WAITING': '#8b5cf6'      
 };
 
 export const activeEdits = {};
