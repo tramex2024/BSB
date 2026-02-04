@@ -1,5 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz y Eventos (Versión Full Integrada 2026)
+ * Sincronización de balances reales y estados del bot.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { socket, currentBotState } from '../main.js'; 
@@ -24,7 +25,7 @@ export function initializeDashboardView(initialState) {
 
     const stateToUse = initialState || currentBotState;
 
-    // 1. Inicializar Gráficos (Pasamos el estado para evitar el 100/0 inicial)
+    // 1. Inicializar Gráficos
     initBalanceChart(stateToUse);
     initEquityChart();
 
@@ -116,7 +117,14 @@ function setupSocketListeners() {
     const events = ['market-signal-update', 'order-executed', 'cycle-closed', 'ai-decision-update', 'ai-status-update'];
     events.forEach(ev => socket.off(ev));
 
+    // Actualización de precio y tendencia
     socket.on('market-signal-update', (analysis) => {
+        if (analysis.price) {
+            currentBotState.price = analysis.price;
+            // Actualizamos el widget para que el gráfico de dona reaccione al precio real
+            updateDistributionWidget(currentBotState);
+        }
+
         const signalEl = document.getElementById('ai-trend-label');
         if (signalEl) {
             signalEl.textContent = analysis.trend || 'NEUTRAL';
@@ -149,7 +157,7 @@ function setupSocketListeners() {
 
     socket.on('ai-status-update', (data) => {
         if (data.virtualBalance !== undefined) {
-            currentBotState.virtualBalance = data.virtualBalance;
+            currentBotState.aibalance = data.virtualBalance;
             updateDistributionWidget(currentBotState);
         }
     });
@@ -162,21 +170,12 @@ function initBalanceChart(state) {
     if (!canvas) return;
     if (balanceChart) balanceChart.destroy();
 
-    // Extraer valores reales para el inicio
-    const usdt = parseFloat(state?.lastAvailableUSDT || 0);
-    const btcAmount = parseFloat(state?.lastAvailableBTC || 0);
-    const price = parseFloat(state?.price || 0);
-    const btcInUsdt = btcAmount * price;
-    
-    // Si no hay datos aún, usamos un placeholder visual tenue
-    const initialData = (usdt + btcInUsdt === 0) ? [1, 0] : [usdt, btcInUsdt];
-    
     balanceChart = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: initialData, 
+                data: [1, 0], // Placeholder neutro
                 backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
@@ -230,31 +229,34 @@ function initEquityChart() {
     });
 }
 
-function updateDistributionWidget(state) {
+export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
     
-    const usdt = parseFloat(state.lastAvailableUSDT || state.virtualBalance || 0);
+    const usdt = parseFloat(state.lastAvailableUSDT || 0);
     const btcAmount = parseFloat(state.lastAvailableBTC || 0);
     const price = parseFloat(state.price || state.marketPrice || 0);
     
-    const btcInUsdt = btcAmount * price;
-    const total = usdt + btcInUsdt;
+    // Solo calculamos proporciones si tenemos precio de mercado real
+    if (price > 0) {
+        const btcInUsdt = btcAmount * price;
+        const total = usdt + btcInUsdt;
 
-    // Actualizar gráfico de dona
-    if (total > 0) {
-        balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-        balanceChart.update();
+        if (total > 0) {
+            balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
+            balanceChart.update('none'); // Update sin animaciones bruscas para el precio
+
+            // Actualizar barras de progreso visuales
+            const displayUsdtPercent = (usdt / total) * 100;
+            const displayBtcPercent = (btcInUsdt / total) * 100;
+
+            const usdtBar = document.getElementById('usdt-bar');
+            const btcBar = document.getElementById('btc-bar');
+            if (usdtBar) usdtBar.style.width = `${displayUsdtPercent}%`;
+            if (btcBar) btcBar.style.width = `${displayBtcPercent}%`;
+        }
     }
     
-    // Actualizar barras de progreso y textos
-    const displayUsdtPercent = total === 0 ? 0 : (usdt / total) * 100;
-    const displayBtcPercent = total === 0 ? 0 : (btcInUsdt / total) * 100;
-
-    const usdtBar = document.getElementById('usdt-bar');
-    const btcBar = document.getElementById('btc-bar');
-    if (usdtBar) usdtBar.style.width = `${displayUsdtPercent}%`;
-    if (btcBar) btcBar.style.width = `${displayBtcPercent}%`;
-
+    // Los textos de balance se actualizan siempre con los valores crudos de la BD
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
     if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
