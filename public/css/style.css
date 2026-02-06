@@ -1,4 +1,3 @@
-/* public/style.css */
 :root {
     --dark-bg: #1a1a2e;
     --dark-header-bg: #16213e;
@@ -9,6 +8,8 @@
     --button-bg: #007bff;
     --button-text: #ffffff;
     --modal-bg: #2b3a55; /* Keep this variable, but override specifically for modal-content */
+    --log-bar-bg: #2c3e50; /* Un color oscuro para la barra de logs */
+    --log-text-color: #ecf0f1; /* Color de texto claro para los logs */
 }
 
 body.dark-mode {
@@ -16,13 +17,13 @@ body.dark-mode {
     color: var(--dark-text);
     font-family: 'Arial', sans-serif;
     margin: 0;
-    padding-top: 60px; /* Space for fixed header */
+    padding-top: 0; /* Aseguramos que el body no tenga padding superior */
     overflow-x: hidden;
 }
 
 /* Header Styles */
 .fixed-header {
-    position: fixed;
+    position: sticky;
     top: 0;
     left: 0;
     width: 100%;
@@ -42,7 +43,7 @@ body.dark-mode {
 }
 
 .logo {
-    height: 40px; /* Adjust as needed */
+    height: 40px;
     margin-right: 10px;
 }
 
@@ -54,7 +55,7 @@ body.dark-mode {
 
 .header-middle {
     display: flex;
-    gap: 25px; /* Spacing between tabs */
+    gap: 25px;
 }
 
 .nav-tab {
@@ -78,7 +79,7 @@ body.dark-mode {
 
 .header-right {
     display: flex;
-    gap: 20px; /* Spacing between icons */
+    gap: 20px;
 }
 
 .header-right .icon {
@@ -92,14 +93,137 @@ body.dark-mode {
     color: var(--dark-border);
 }
 
+/* --- ESTILOS RESPONSIVOS PARA EL HEADER --- */
+@media (max-width: 768px) {
+    .fixed-header {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 10px;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .header-middle {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 5px;
+    }
+
+    .header-right {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-top: 5px;
+    }
+
+    .app-name {
+        font-size: 1.2em;
+    }
+
+    .logo {
+        height: 30px;
+    }
+
+
+}
+
+/* --- NUEVOS ESTILOS PARA LA FRANJA DE LOGS --- */
+.log-bar {
+    position: sticky;
+    top: 60px; /* Justo debajo del header de 60px */
+    left: 0;
+    width: 100%;
+    height: 30px;
+    background-color: var(--log-bar-bg);
+    color: var(--log-text-color);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+    z-index: 999;
+    /* 🛑 CAMBIO AQUÍ: Reducimos el tamaño de la fuente */
+    font-size: 0.8em; 
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Ajuste para pantallas pequeñas: la log-bar ya no será sticky sino relativa en móvil */
+@media (max-width: 768px) {
+    .log-bar {
+        position: relative; /* Cambiado a relative para fluir en móvil */
+        top: auto; /* Desactivar el top fijo */
+        padding: 5px 10px;
+        font-size: 0.8em;
+        height: auto; /* Permitir que la altura se ajuste al contenido */
+    }
+}
+
+/* * ============================================
+
+💡 ESTILOS PARA LA BOLITA DE ESTADO (au-connection-status)
+
+============================================
+*/
+#au-connection-status {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+/* ESTADO 1: ÉXITO (API_SUCCESS) */
+.status-green {
+    background-color: #4CAF50; /* Un verde sólido y visible */
+    box-shadow: 0 0 6px #4CAF50;
+}
+
+/* ESTADO 2: ADVERTENCIA (CACHE_FALLBACK) */
+.status-yellow {
+    background-color: #FFC107; /* Un amarillo sólido */
+    box-shadow: 0 0 6px #FFC107;
+}
+
+/* ESTADO 3: ERROR/DESCONEXIÓN (Desconocido / Disconnected) */
+.status-red {
+    background-color: #F44336; /* Un rojo sólido */
+    box-shadow: 0 0 6px #F44336;
+}
+
 /* Content Area */
 .content {
     padding: 20px;
+    /* Eliminamos el margin-top por defecto aquí para desktop */
+    margin-top: 0;
+    box-sizing: border-box;
 }
 
+/* Ajuste para móviles: el content necesita un margin-top solo cuando el header/log-bar no son sticky */
+@media (max-width: 768px) {
+    .content {
+        /* En móvil, los elementos superiores son relative y ocupan su espacio normalmente. */
+        /* Sumamos la altura estimada del header colapsado (aprox. 120-140px si se envuelve)
+        más la altura de la log-bar (aprox. 30px) y un pequeño extra. */
+        /* Ajusta este valor si aún ves un pequeño solapamiento o espacio. */
+        margin-top: 10px; /* Un pequeño margen para separar del flujo normal */
+        padding-top: 0; /* Quitar padding-top si ya se usa margin-top */
+    }
+}
+
+/* Resto de estilos del modal y otros sin cambios */
 .tab-content {
-    display: none; /* Hidden by default */
-    min-height: calc(100vh - 80px); /* Adjust based on header/footer if any */
+    display: none;
+    min-height: calc(100vh - 90px); /* Ajuste: 90px (header+log-bar) es lo que queda "fixed" en desktop */
+}
+
+@media (max-width: 768px) {
+    .tab-content {
+        min-height: auto;
+    }
 }
 
 .tab-content.active {
@@ -108,36 +232,36 @@ body.dark-mode {
 
 /* --- Consolidated Modal Styles (for both Auth and API modals) --- */
 .modal {
-    display: none; /* CRUCIAL: Modal está oculto por defecto en CSS. JS lo mostrará con display: flex; */
-    position: fixed; /* Posicionamiento fijo para cubrir toda la pantalla */
-    z-index: 1001; /* Asegura que esté por encima de otros elementos */
+    display: none;
+    position: fixed;
+    z-index: 1001;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto; /* Permite desplazamiento si el contenido es muy grande */
-    background-color: rgba(0, 0, 0, 0.7); /* Fondo oscuro semitransparente */
-    justify-content: center; /* Centra horizontalmente el contenido del modal (cuando display: flex) */
-    align-items: center; /* Centra verticalmente el contenido del modal (cuando display: flex) */
-    padding: 20px; /* Espaciado alrededor del modal en pantallas pequeñas */
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.7);
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
 }
 
 .modal-content {
-    background-color: #2d3748; /* Dark grey for modal content (Tailwind gray-800 equivalent) */
-    margin: auto; /* Auto margin for centering */
+    background-color: #2d3748;
+    margin: auto;
     padding: 30px;
     border-radius: 10px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     text-align: center;
-    width: 90%; /* Responsive width */
-    max-width: 400px; /* Max width for larger screens */
-    color: white; /* Text color for modal content */
-    position: relative; /* For close button positioning */
+    width: 90%;
+    max-width: 400px;
+    color: white;
+    position: relative;
 }
 
 .modal-content h3, .modal-content h2 {
     margin-bottom: 20px;
-    color: #4CAF50; /* A green color for titles */
+    color: #4CAF50;
     text-align: center;
 }
 
@@ -145,28 +269,28 @@ body.dark-mode {
     display: block;
     margin-bottom: 8px;
     font-weight: bold;
-    color: var(--dark-text); /* Use your general dark text color */
+    color: var(--dark-text);
 }
 
 .modal-content input[type="email"],
 .modal-content input[type="text"],
 .modal-content input[type="password"] {
-    width: calc(100% - 20px); /* Adjust width accounting for padding */
+    width: calc(100% - 20px);
     padding: 12px;
     margin-bottom: 15px;
-    border: 1px solid #4a5568; /* Darker border color */
+    border: 1px solid #4a5568;
     border-radius: 5px;
-    background-color: #1a202c; /* Even darker background for inputs */
-    color: white; /* Input text color */
+    background-color: #1a202c;
+    color: white;
     font-size: 1em;
 }
 
 .modal-content input::placeholder {
-    color: #999; /* Placeholder color */
+    color: #999;
 }
 
 .modal-content button {
-    background-color: #4CAF50; /* Green for buttons */
+    background-color: #4CAF50;
     color: white;
     padding: 12px 20px;
     border: none;
@@ -178,7 +302,7 @@ body.dark-mode {
 }
 
 .modal-content button:hover {
-    background-color: #45a049; /* Darker green on hover */
+    background-color: #45a049;
 }
 
 .message-text {
@@ -189,7 +313,7 @@ body.dark-mode {
 
 /* Close button for modals */
 .close-button {
-    color: #aaa; /* Light gray for the close button */
+    color: #aaa;
     font-size: 28px;
     font-weight: bold;
     position: absolute;
@@ -217,32 +341,32 @@ body.dark-mode {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background-color: #6b7280; /* Default gray */
+    background-color: #6b7280;
     display: inline-block;
     vertical-align: middle;
     margin-right: 8px;
 }
 
 .indicator-circle.bg-red-500 {
-    background-color: #ef4444; /* Tailwind red-500 */
+    background-color: #ef4444;
 }
 
 .indicator-circle.bg-green-500 {
-    background-color: #22c55e; /* Tailwind green-500 */
+    background-color: #22c55e;
 }
 
 .indicator-circle.bg-yellow-500 {
-    background-color: #eab308; /* Tailwind yellow-500 */
+    background-color: #eab308;
 }
 
 .indicator-circle.bg-gray-500 {
-    background-color: #6b7280; /* Tailwind gray-500 */
+    background-color: #6b7280;
 }
 
 .indicator-text {
     display: inline-block;
     vertical-align: middle;
-    color: #9ca3af; /* Light gray text for indicators */
+    color: #9ca3af;
     font-weight: bold;
 }
 
@@ -278,7 +402,7 @@ body.lite-mode .modal-content {
 }
 
 body.lite-mode .modal-content h3, body.lite-mode .modal-content h2 {
-    color: #4CAF50; /* Keep green for title in lite mode too */
+    color: #4CAF50;
 }
 
 body.lite-mode .modal-content input {
@@ -288,10 +412,27 @@ body.lite-mode .modal-content input {
 }
 
 body.lite-mode .modal-content button {
-    background-color: #27ae60; /* Keep green button */
+    background-color: #27ae60;
     color: white;
 }
 
 body.lite-mode .modal-content button:hover {
     background-color: #2ecc71;
+}
+
+body.lite-mode .log-bar {
+    background-color: #dcdcdc;
+    color: #333;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+}
+/* --- ESTILOS PARA LOS CONTENEDORES DE GRÁFICOS --- */
+/* Aseguramos que los divs del gráfico tengan una altura para que TradingView sepa dónde renderizar */
+#te-tvchart,
+#au-tvchart,
+#ai-tvchart {
+    width: 100%;
+    height: 500px; /* Puedes ajustar esta altura según tus preferencias */
+    background-color: var(--dark-header-bg); /* Un color de fondo para que no se vea vacío */
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
