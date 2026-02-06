@@ -115,15 +115,26 @@ export function initializeFullApp() {
         if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
     
+    // --- LÓGICA DE ÓRDENES (CON LOGS ACORDADOS) ---
+    socket.on('open-orders-update', (data) => {
+        console.log("📥 [SOCKET-MAIN] 'open-orders-update' recibido:", data);
+        logStatus("Órdenes sincronizadas", "info");
+
+        if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
+            aiBotUI.updateOpenOrdersTable(data);
+        } else {
+            console.warn("⚠️ aiBotUI.updateOpenOrdersTable no disponible para procesar órdenes.");
+        }
+    });
+
     socket.on('order-update', (data) => {
+        console.log("📥 [SOCKET-MAIN] 'order-update' recibido (genérico)");
         logStatus("Order Update Received", "success");
     
-        // Si el usuario está en la pestaña de Autobot, refrescamos la lista automáticamente
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {
-           // 'currentTab' es la variable que exportas/manejas en autobot.js
-           // Podrías necesitar importarla o manejarla globalmente
-           fetchOrders('all', auOrderList); 
+           // Si fetchOrders existe en el scope global o módulos cargados
+           if (typeof fetchOrders === 'function') fetchOrders('all', auOrderList); 
         }
     });
 
@@ -201,9 +212,7 @@ export async function initializeTab(tabName) {
             if (initFn) {
                 await initFn(currentBotState);
                 
-                // INTEGRACIÓN DASHBOARD: Al cambiar a la pestaña dashboard activamos el gráfico
                 if (tabName === 'dashboard') {
-                    // Si el módulo exporta una función específica para el widget, la usamos
                     if (module.updateDistributionWidget) {
                         module.updateDistributionWidget(currentBotState);
                     }
