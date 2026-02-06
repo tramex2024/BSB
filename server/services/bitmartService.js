@@ -128,10 +128,17 @@ const bitmartService = {
         
         console.log(`${LOG_PREFIX} [RENDER LOG] Abiertas encontradas: ${Array.isArray(rawOrders) ? rawOrders.length : 0}`);
         
+        // --- LOG DE INSPECCIÓN DE ABIERTAS ---
+        if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+            rawOrders.forEach((o, i) => {
+                console.log(`🔍 [INSPECCIÓN ABIERTA #${i+1}] ID: ${o.orderId || o.order_id} | Side: ${o.side} | Status: ${o.state || o.status}`);
+            });
+        }
+        
         return { orders: Array.isArray(rawOrders) ? rawOrders : [] };
     },
 
-    // --- Historial (Lógica Restaurada del archivo antiguo) ---
+    // --- Historial (Con LOG de Inspección Profunda) ---
     getHistoryOrders: async (options = {}) => {
         const requestBody = {
             symbol: options.symbol,
@@ -145,8 +152,14 @@ const bitmartService = {
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         const rawOrders = res.data?.data?.list || res.data || [];
         
-        // LOG DE RENDER PARA EL HISTORIAL
+        // --- LOG DE INSPECCIÓN DEL HISTORIAL ---
         console.log(`${LOG_PREFIX} [RENDER LOG] Historial (${status || 'all'}): ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems.`);
+        
+        if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+            rawOrders.forEach((o, i) => {
+                console.log(`🔍 [INSPECCIÓN HISTORIAL #${i+1}] ID: ${o.orderId || o.order_id} | Side: ${o.side} | PriceAvg: ${o.priceAvg} | Status: ${o.status || o.state}`);
+            });
+        }
         
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
             ...o,
