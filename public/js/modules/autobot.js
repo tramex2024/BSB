@@ -1,15 +1,14 @@
 // public/js/modules/autobot.js
 
-// public/js/modules/autobot.js
-
 /**
  * autobot.js - Core Logic for Trading Tabs
  * Integration: WebSocket Sync & Client-Side Filtering 2026
+ * Mantenimiento de IDs originales y lógica de control.
  */
 
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
-import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
+import { updateBotUI, updateControlsState, displayMessage, renderAutobotOpenOrders } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
 import { askConfirmation } from './confirmModal.js';
@@ -99,7 +98,7 @@ export async function initializeAutobotView() {
             
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
-                             currentBotState.config.ai.enabled);
+                             currentBotState.config?.ai?.enabled);
             
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
@@ -146,7 +145,7 @@ export async function initializeAutobotView() {
 }
 
 /**
- * Configura la navegación de pestañas con filtrado local (vía Sockets)
+ * Configura la navegación de pestañas con filtrado local
  */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
@@ -154,11 +153,10 @@ function setupOrderTabs(container) {
 
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            btn.classList.remove('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
-            btn.classList.add('text-gray-500');
+            // Restauramos las clases originales de tu HTML
+            btn.className = "px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white";
             if (btn.id === selectedId) {
-                btn.classList.remove('text-gray-500');
-                btn.classList.add('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
+                btn.className = "px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800";
             }
         });
     };
@@ -168,15 +166,19 @@ function setupOrderTabs(container) {
             const selectedId = e.currentTarget.id;
             setActiveTabStyle(selectedId);
             
-            // Extraer el nombre de la pestaña (all, filled, cancelled, opened)
             currentTab = selectedId.replace('tab-', '');
             
-            // Llamada a la nueva lógica de filtrado local en orders.js
-            fetchOrders(currentTab, container);
+            // PRIORIDAD ABIERTAS: Si es 'opened', renderizamos directo del estado socket
+            if (currentTab === 'opened') {
+                renderAutobotOpenOrders(currentBotState.openOrders || []);
+            } else {
+                // Para las demás pestañas, llamamos al fetch normal de historial
+                fetchOrders(currentTab, container);
+            }
         };
     });
 
-    // Carga inicial: No hace fetch, simplemente renderiza lo que ya hay en currentBotState.ordersHistory
-    setActiveTabStyle('tab-all');
-    fetchOrders('all', container);
+    // Estado inicial: Mostramos las abiertas para evitar el parpadeo de carga
+    setActiveTabStyle('tab-opened');
+    renderAutobotOpenOrders(currentBotState.openOrders || []);
 }

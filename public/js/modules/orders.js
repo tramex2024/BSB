@@ -1,6 +1,7 @@
 // public/js/modules/orders.js
 
 import { BACKEND_URL, currentBotState } from '../main.js';
+import { renderAutobotOpenOrders } from './uiManager.js'; // Importación necesaria para consistencia
 
 /**
  * Renderiza el HTML de una orden individual preservando IDs completos
@@ -69,7 +70,6 @@ function createOrderHtml(order) {
 
 /**
  * Filtra y muestra las órdenes basándose en el estado local (Socket data)
- * Ya no realiza peticiones fetch al servidor.
  */
 export function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
@@ -77,19 +77,22 @@ export function fetchOrders(status, orderListElement) {
     // Guardamos el estado actual para que refreshOrdersUI sepa qué filtrar
     orderListElement.dataset.currentStatus = status;
 
+    // CASO ESPECIAL: Si la pestaña es 'opened', delegamos al renderizador atómico de UI Manager
+    if (status === 'opened') {
+        renderAutobotOpenOrders(currentBotState.openOrders || []);
+        return;
+    }
+
     const allOrders = currentBotState.ordersHistory || [];
     let filteredOrders = [];
 
-    // Lógica de filtrado local
+    // Lógica de filtrado local para Historial
     if (status === 'all') {
         filteredOrders = allOrders;
     } else if (status === 'filled') {
         filteredOrders = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('FILLED'));
     } else if (status === 'cancelled') {
         filteredOrders = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('CANCELED'));
-    } else if (status === 'opened') {
-        const cancellableStates = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'];
-        filteredOrders = allOrders.filter(o => cancellableStates.includes((o.state || o.status || '').toUpperCase()));
     }
 
     if (filteredOrders.length === 0) {
@@ -101,7 +104,7 @@ export function fetchOrders(status, orderListElement) {
 }
 
 /**
- * PUENTE DE ACTUALIZACIÓN: Invocado desde main.js cuando llega el socket 'history-orders-all'
+ * PUENTE DE ACTUALIZACIÓN: Invocado desde main.js
  */
 window.refreshOrdersUI = () => {
     const container = document.getElementById('au-order-list');
@@ -130,7 +133,6 @@ window.cancelOrder = async (orderId) => {
         if (!data.success) {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }
-        // No refrescamos manualmente aquí, el socket lo hará solo en el siguiente pulso
     } catch (error) {
         console.error("Cancel Error:", error);
     }
