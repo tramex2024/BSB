@@ -3,12 +3,13 @@
 /**
  * main.js - Central Hub
  * AI Core English Version 2026
- * Estructura original preservada con integración de Datos Centralizados por Socket
+ * Estructura optimizada con integración de Datos Centralizados por Socket
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
+import { updateBotUI, updateControlsState, renderAutobotOpenOrders } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
+import './modules/orderActions.js';
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -21,7 +22,8 @@ export const currentBotState = {
     sstate: 'STOPPED',
     aibalance: 0,
     lastAvailableUSDT: 0,
-    ordersHistory: [], // NUEVO: Almacén central de historial (All, Filled, Canceled)
+    openOrders: [],
+    ordersHistory: [], // Almacén central de historial (All, Filled, Canceled)
     config: {
         symbol: 'BTCUSDT',
         long: { amountUsdt: 0, enabled: false },
@@ -121,39 +123,34 @@ export function initializeFullApp() {
     // 1. Órdenes Abiertas (Active/Open)
     socket.on('open-orders-update', (orders) => {
         console.log("📥 [SOCKET-MAIN] Órdenes abiertas recibidas:", orders);
-    
-        // 1. Guardar en el estado global
         currentBotState.openOrders = orders;
 
-        // 2. Pintar en la tabla de la IA (si existe)
+        // Pintar en la tabla de la IA
         if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
-        aiBotUI.updateOpenOrdersTable(orders);
+            aiBotUI.updateOpenOrdersTable(orders);
         }
 
-        // 3. Pintar en la tabla general de Órdenes (si tienes una sección de 'Open')
-        // Si tu uiManager tiene una función para esto, llámala aquí:
-       // uiManager.renderOpenOrders(orders); 
+        // Pintar en la lista del Autobot (UI Manager)
+        renderAutobotOpenOrders(orders); 
     });
 
-    // 2. Historial General (All, Filled, Canceled) - NUEVO RECEPTOR
+    // 2. Historial General (All, Filled, Canceled)
     socket.on('history-orders-all', (data) => {
         console.log("📥 [SOCKET-MAIN] Historial general actualizado:", data.length, "órdenes");
         currentBotState.ordersHistory = Array.isArray(data) ? data : [];
         
-        // Notificar a autobot.js si la vista está activa para que se refresque sola
-        const auOrderList = document.getElementById('au-order-list');
-        if (auOrderList && typeof window.refreshOrdersUI === 'function') {
+        // Notificar al Autobot si existe la función de refresco de historial
+        if (typeof window.refreshOrdersUI === 'function') {
             window.refreshOrdersUI();
         }
     });
 
     socket.on('order-update', (data) => {
-        console.log("📥 [SOCKET-MAIN] 'order-update' recibido (genérico)");
+        console.log("📥 [SOCKET-MAIN] Order update received");
         logStatus("Order Update Received", "success");
-        // No llamamos a fetchOrders, esperamos a que history-orders-all llegue en el siguiente pulso
     });
 
-    // RECEPTOR DE PÁNICO (Sincronización Global)
+    // RECEPTOR DE PÁNICO
     socket.on('panic-executed', (data) => {
         logStatus("🚨 PANIC STOP EXECUTED", "error");
         currentBotState.lstate = 'STOPPED';
@@ -179,7 +176,7 @@ export function initializeFullApp() {
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
 
-        // AI Balance Update (All mirrors)
+        // Actualización de balances AI
         const balances = document.querySelectorAll('.ai-balance-val');
         const formattedBal = `$${(currentBotState.aibalance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         balances.forEach(el => el.innerText = formattedBal);
@@ -225,16 +222,10 @@ export async function initializeTab(tabName) {
             
             if (initFn) {
                 await initFn(currentBotState);
-                
-                if (tabName === 'dashboard') {
-                    if (module.updateDistributionWidget) {
-                        module.updateDistributionWidget(currentBotState);
-                    }
-                }
             }
         }
 
-        // AI TAB SPECIFIC LOGIC
+        // Lógica específica si entramos a AIBOT
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             const aiInput = document.getElementById('ai-amount-usdt');

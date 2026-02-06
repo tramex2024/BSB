@@ -23,7 +23,7 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
     
-    // 1. Precio de Mercado (Siempre se actualiza, no depende de isSavingConfig)
+    // 1. Precio de Mercado
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
@@ -106,7 +106,7 @@ export function updateBotUI(state) {
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    // 4. Sincronización de Inputs (PROTEGIDA)
+    // 4. Sincronización de Inputs (PROTEGIDA durante el guardado)
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
@@ -151,4 +151,53 @@ export function updateControlsState(state) {
             engineMsg.classList.remove('animate-pulse', 'text-blue-400');
         }
     }
+}
+
+/**
+ * Renderiza las órdenes ACTIVAS en la pestaña AUTOBOT
+ * Nombre unificado con main.js para evitar errores de importación
+ */
+export function renderAutobotOpenOrders(orders) {
+    const container = document.getElementById('au-order-list');
+    if (!container) return;
+
+    const ordersList = Array.isArray(orders) ? orders : [];
+
+    if (ordersList.length === 0) {
+        container.innerHTML = `<p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">No hay órdenes activas</p>`;
+        return;
+    }
+
+    container.innerHTML = ordersList.map(order => {
+        const side = (order.side || 'BUY').toUpperCase();
+        const isBuy = side === 'BUY';
+        
+        // Limpieza de datos numéricos para evitar NaN
+        const rawPrice = parseFloat(order.price || 0);
+        const rawAmount = parseFloat(order.size || order.amount || 0);
+        const price = rawPrice.toLocaleString();
+        const amount = rawAmount;
+        const total = order.notional ? parseFloat(order.notional).toFixed(2) : (rawPrice * rawAmount).toFixed(2);
+        
+        return `
+            <div class="bg-gray-900/40 border-l-2 ${isBuy ? 'border-emerald-500' : 'border-rose-500'} p-2 rounded-r-lg flex justify-between items-center group hover:bg-gray-700/30 transition-all">
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2">
+                        <span class="${isBuy ? 'text-emerald-400' : 'text-rose-400'} font-bold text-[11px]">${side}</span>
+                        <span class="text-white font-mono text-[11px]">$${price}</span>
+                    </div>
+                    <span class="text-[8px] text-gray-500 tracking-tighter">${order.symbol || 'BTC_USDT'} | ID: ${order.orderId?.toString().slice(-6)}</span>
+                </div>
+                <div class="text-right flex items-center gap-3">
+                    <div class="flex flex-col font-mono">
+                        <span class="text-gray-300 text-[10px]">${amount} BTC</span>
+                        <span class="text-[8px] text-gray-500">$${total} USDT</span>
+                    </div>
+                    <button onclick="cancelOrder('${order.orderId}')" class="text-gray-600 hover:text-rose-500 transition-colors px-1">
+                        <i class="fas fa-times-circle text-[12px]"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
