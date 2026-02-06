@@ -91,9 +91,9 @@ const aiBotUI = {
             const isBuy = (trade.side || '').toUpperCase() === 'BUY';
             const score = trade.confidenceScore || (trade.confidence * 100) || 0;
             
-            const time = trade.orderTime 
-                ? new Date(Number(trade.orderTime)).toLocaleTimeString() 
-                : new Date(trade.timestamp).toLocaleTimeString();
+            // Normalización de tiempo para evitar Invalid Date
+            const rawTime = trade.orderTime || trade.updateTime || trade.timestamp;
+            const time = rawTime ? new Date(Number(rawTime)).toLocaleTimeString() : '---';
 
             return `
                 <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group">
@@ -123,13 +123,13 @@ const aiBotUI = {
      * MÉTODOS PARA ÓRDENES ABIERTAS (Sincronización WebSocket)
      */
     updateOpenOrdersTable: function(orders) {
-        const tbody = document.getElementById('ai-open-orders-body'); // Asegúrate de que este ID exista en tu HTML
+        const tbody = document.getElementById('ai-open-orders-body'); 
         if (!tbody) {
             console.error("❌ No se encontró el elemento 'ai-open-orders-body' en el DOM.");
             return;
         }
 
-        const ordersList = Array.isArray(orders) ? orders : [];
+        const ordersList = Array.isArray(orders) ? orders : (orders.orders || []);
         console.log(`🖥️ UI: Renderizando ${ordersList.length} órdenes abiertas.`);
 
         if (ordersList.length === 0) {
@@ -139,13 +139,14 @@ const aiBotUI = {
 
         tbody.innerHTML = ordersList.map(order => {
             const isBuy = (order.side || '').toUpperCase() === 'BUY';
+            const id = order.orderId || order.order_id || '';
             const price = parseFloat(order.price || 0);
             const amount = parseFloat(order.amount || order.size || 0);
 
             return `
                 <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
                     <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
-                        ${order.orderId ? order.orderId.slice(-6) : '---'}
+                        ${id ? id.toString().slice(-6) : '---'}
                     </td>
                     <td class="px-6 py-3">
                         <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">

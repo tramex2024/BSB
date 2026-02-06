@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Orquestador Atómico (Sincronizado con BD JSON 2026)
- * Ajuste: Se añadió 'aistate' y se corrigieron punteros de AI Engine.
+ * Ajuste: Sincronización final de estados AI y normalización de renders.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -38,32 +38,32 @@ export function updateBotUI(state) {
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
         'aulcycle': 'lcycle',         
-        'aulsprice': 'lpc',           
+        'aulsprice': 'lpc',            
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',            
         'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder', // Corregido: en tu JSON es 'lnorder', no 'aulnorder'     
+        'aulnorder': 'lnorder',      
 
         // AUTOBOT: SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
         'auscycle': 'scycle',         
-        'ausbprice': 'spc',           
+        'ausbprice': 'spc',            
         'austprice': 'stprice',       
         'austppc': 'sppc',            
         'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder', // Corregido: en tu JSON es 'snorder', no 'ausnorder'
+        'ausnorder': 'snorder',
 
         // AI ENGINE (Sincronizado con los campos específicos de tu JSON)
         'ai-virtual-balance': 'aibalance', 
-        'ai-adx-val': 'lai',               
-        'ai-stoch-val': 'lac',             
-        'aubot-aistate': 'aistate', // <-- CORREGIDO: Ahora usa el campo real de la BD
+        'ai-adx-val': 'lai',                
+        'ai-stoch-val': 'lac',              
+        'aubot-aistate': 'aistate', 
 
         // ESTADOS DE INTERFAZ
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
-        'ai-mode-status': 'aistate' // <-- CORREGIDO: Refleja el estado real de la IA
+        'ai-mode-status': 'aistate' 
     };
 
     Object.entries(elements).forEach(([id, key]) => {
@@ -85,16 +85,14 @@ export function updateBotUI(state) {
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc') || id === 'aubalance-btc') {
-            // Formato para 6-8 decimales en BTC
             el.textContent = parseFloat(val).toFixed(6);
         } else if (id.includes('cycle') || id.includes('norder')) {
             el.textContent = Math.floor(val); 
         } else if (id.includes('adx') || id.includes('stoch')) {
-            // Si el valor es pequeño (como lac: 0.002) mostramos más decimales
             el.textContent = val < 1 ? parseFloat(val).toFixed(4) : parseFloat(val).toFixed(1);
             updatePulseBars(id, val); 
         } else if (id.includes('coverage')) {
-            el.textContent = parseFloat(val).toLocaleString(); // Para ver 76,464 completo
+            el.textContent = parseFloat(val).toLocaleString(); 
         } else {
             formatValue(el, val, false, false);
         }
@@ -118,7 +116,6 @@ function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');
     const bar = document.getElementById(barId);
     if (!bar) return;
-    // Ajuste de escala para la barra visual
     let percent = id.includes('adx') ? (value / 50) * 100 : (value * 100); 
     bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
 }
@@ -128,8 +125,9 @@ export function updateControlsState(state) {
     
     const lState = state.lstate || 'STOPPED';
     const sState = state.sstate || 'STOPPED';
-    const aiState = state.aistate || 'STOPPED'; // <-- CORREGIDO: Usa aistate de la BD
+    const aiState = state.aistate || 'STOPPED';
 
+    // Selectores actualizados para coincidir con el DOM del dashboard y AI tab
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
@@ -139,7 +137,13 @@ export function updateControlsState(state) {
     updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
     
     const engineMsg = document.getElementById('ai-engine-msg');
-    if (engineMsg && state.config?.ai?.enabled) {
-        engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
+    if (engineMsg) {
+        if (state.aistate === 'RUNNING' || state.config?.ai?.enabled) {
+            engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
+            engineMsg.classList.add('animate-pulse', 'text-blue-400');
+        } else {
+            engineMsg.textContent = "AI CORE IN STANDBY";
+            engineMsg.classList.remove('animate-pulse', 'text-blue-400');
+        }
     }
 }

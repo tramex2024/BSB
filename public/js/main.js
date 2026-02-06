@@ -115,17 +115,23 @@ export function initializeFullApp() {
         if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
     
-    // --- LÓGICA DE ÓRDENES (CON LOGS ACORDADOS) ---
-    socket.on('open-orders-update', (data) => {
-        console.log("📥 [SOCKET-MAIN] 'open-orders-update' recibido:", data);
-        logStatus("Órdenes sincronizadas", "info");
+    // --- LÓGICA DE ÓRDENES (Sincronización Reforzada) ---
+socket.on('open-orders-update', (data) => {
+    console.log("📥 [SOCKET-MAIN] Órdenes recibidas:", data);
+    
+    // Si la data viene normalizada del servidor como array
+    const orders = Array.isArray(data) ? data : (data.orders || []);
 
-        if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
-            aiBotUI.updateOpenOrdersTable(data);
-        } else {
-            console.warn("⚠️ aiBotUI.updateOpenOrdersTable no disponible para procesar órdenes.");
-        }
-    });
+    if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
+        aiBotUI.updateOpenOrdersTable(orders);
+    } 
+
+    // Opcional: Si tienes una tabla de órdenes en el Dashboard general
+    const generalOrderTable = document.getElementById('general-orders-body');
+    if (generalOrderTable) {
+        // Lógica para pintar órdenes en dashboard si fuera necesario
+    }
+});
 
     socket.on('order-update', (data) => {
         console.log("📥 [SOCKET-MAIN] 'order-update' recibido (genérico)");

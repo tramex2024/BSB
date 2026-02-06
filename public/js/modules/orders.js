@@ -1,5 +1,7 @@
 // public/js/modules/orders.js
 
+// public/js/modules/orders.js
+
 import { BACKEND_URL } from '../main.js';
 
 function createOrderHtml(order) {
@@ -21,6 +23,7 @@ function createOrderHtml(order) {
     // RESTAURADO: ID completo de la orden
     const fullOrderId = (order.orderId || '').toString();
 
+    // Sincronizado con estados de BitMart v4
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
@@ -84,3 +87,32 @@ export async function fetchOrders(status, orderListElement) {
         orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
     }
 }
+
+/**
+ * BRIDGE GLOBAL: Expone la función de cancelación para los atributos 'onclick'
+ */
+window.cancelOrder = async (orderId) => {
+    if (!confirm(`Cancel order ${orderId}?`)) return;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/orders/cancel`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({ orderId })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Refrescar automáticamente la vista actual (generalmente 'all' o 'opened')
+            const activeContainer = document.getElementById('au-order-list');
+            if (activeContainer) fetchOrders('all', activeContainer);
+        } else {
+            alert(`Error: ${data.message || 'Could not cancel'}`);
+        }
+    } catch (error) {
+        console.error("Cancel Error:", error);
+    }
+};

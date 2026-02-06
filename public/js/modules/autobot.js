@@ -1,5 +1,10 @@
 // public/js/modules/autobot.js
 
+/**
+ * autobot.js - Core Logic for Trading Tabs
+ * Integration: WebSocket Sync & Dual-Button Control 2026
+ */
+
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
@@ -56,7 +61,6 @@ function setupConfigListeners() {
 
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             configDebounceTimeout = setTimeout(async () => {
-                // Evitar ceros accidentales si el campo está vacío al escribir
                 if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
 
                 try {
@@ -85,36 +89,33 @@ export async function initializeAutobotView() {
         const btn = document.getElementById(id);
         if (!btn) return;
 
-        // Limpieza de eventos previos
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            // Determinar si está corriendo por clases o estado global
-            const isRunning = newBtn.classList.contains('bg-red-600') || 
-                            (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
+            // Verificación de estado unificada
+            const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
-                             currentBotState.isRunning);
+                             currentBotState.config.ai.enabled);
             
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
                 if (!confirmed) return;
             } else {
-                // Validar solo si vamos a encender
                 if (sideName !== 'ai' && !validateSideInputs(sideName)) {
-                    displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
+                    displayMessage(`Min $${MIN_USDT_AMOUNT} USDT required for ${sideName.toUpperCase()}`, 'error');
                     return;
                 }
             }
 
             try {
                 newBtn.disabled = true;
-                newBtn.textContent = isRunning ? "Stopping..." : "Starting...";
+                newBtn.textContent = isRunning ? "STOPPING..." : "STARTING...";
                 await toggleBotSideState(isRunning, sideName);
             } catch (err) {
-                displayMessage(`Error en ${sideName}`, 'error');
+                displayMessage(`Error in ${sideName} engine`, 'error');
                 updateControlsState(currentBotState); 
             } finally {
                 newBtn.disabled = false;
@@ -122,17 +123,17 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones de las Tabs y del Dashboard
+    // Inicializar botones (Espejos entre Dashboard y Tabs)
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
-    setupSideBtn('austartai-btn', 'ai'); // Dashboard
-    setupSideBtn('btn-start-ai', 'ai');    // Pestaña IA
+    setupSideBtn('austartai-btn', 'ai'); 
+    setupSideBtn('btn-start-ai', 'ai');
 
-    // Sincronización de UI inicial
+    // Sincronización visual inmediata
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico de TradingView
+    // Inicializar Gráfico con delay para asegurar renderizado del DOM
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -141,22 +142,23 @@ export async function initializeAutobotView() {
             }
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
-    }, 500);
+    }, 300);
 
-    // Lógica de Tabs para historial de órdenes
+    // Iniciar pestañas de órdenes
     setupOrderTabs(auOrderList);
 }
 
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
-    if (!orderTabs.length) return;
+    if (!orderTabs.length || !container) return;
 
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
-            btn.classList.add('bg-gray-800/40', 'text-gray-500');
+            btn.classList.remove('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
+            btn.classList.add('text-gray-500');
             if (btn.id === selectedId) {
-                btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
+                btn.classList.remove('text-gray-500');
+                btn.classList.add('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
             }
         });
     };
@@ -170,6 +172,7 @@ function setupOrderTabs(container) {
         };
     });
 
+    // Carga inicial de órdenes (Pestaña por defecto: Opened/All)
     setActiveTabStyle('tab-all');
     fetchOrders('all', container);
 }
