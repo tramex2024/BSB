@@ -1,5 +1,7 @@
 // BSB/server/services/bitmartService.js
 
+// BSB/server/services/bitmartService.js
+
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { initOrderWebSocket } = require('./bitmartWs');
@@ -8,7 +10,7 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 // =========================================================================
-// MOTOR DE FIRMA, CACHÉ Y PETICIONES
+// MOTOR DE FIRMA, CACHÉ Y PETICIONES (Manteniendo tu motor 2026)
 // =========================================================================
 const cache = {
     ticker: { data: null, timestamp: 0, promise: null },
@@ -47,7 +49,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO
+// LÓGICA DE NEGOCIO (Sincronizada con la versión funcional antigua)
 // =========================================================================
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
@@ -115,51 +117,50 @@ const bitmartService = {
 
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
-        const rawOrders = res.data?.data || res.data || [];
-        console.log(`${LOG_PREFIX} [RENDER LOG] Abiertas encontradas: ${Array.isArray(rawOrders) ? rawOrders.length : 0}`);
-        if (Array.isArray(rawOrders) && rawOrders.length > 0) {
-            rawOrders.forEach((o, i) => {
-                console.log(`🔍 [INSPECCIÓN ABIERTA #${i+1}] ID: ${o.orderId || o.order_id} | Side: ${o.side} | Status: ${o.state || o.status}`);
-            });
-        }
-        return { orders: Array.isArray(rawOrders) ? rawOrders : [] };
+        // INYECTADO: Manejo multiespacio de respuesta del código antiguo
+        let orders = [];
+        if (res.data && Array.isArray(res.data.data)) orders = res.data.data;
+        else if (res.data && Array.isArray(res.data)) orders = res.data;
+        else if (res.data?.data?.list) orders = res.data.data.list;
+
+        return { orders: Array.isArray(orders) ? orders : [] };
     },
 
-    // --- HISTORIAL CON LOG DE EMERGENCIA ---
     getHistoryOrders: async (options = {}) => {
         const requestBody = {
             symbol: options.symbol || 'BTC_USDT',
             orderMode: 'spot',
+            startTime: options.startTime,
+            endTime: options.endTime,
             limit: options.limit || 100
         };
         
-        const status = options.order_state || options.status;
-        if (status && status !== 'all') requestBody.status = orderStatusMap[status];
+        const statusStr = options.order_state || options.status;
+        if (statusStr && statusStr !== 'all') {
+            const statusCode = orderStatusMap[statusStr];
+            if (statusCode !== undefined) requestBody.status = statusCode; // BitMart v4 usa códigos numéricos
+        }
 
-        console.log(`${LOG_PREFIX} 📡 Consultando Historial (${status || 'all'})...`);
+        console.log(`${LOG_PREFIX} 📡 Consultando Historial (${statusStr || 'all'})...`);
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         
-        // Extraemos la lista buscando en todas las rutas posibles del JSON de BitMart
-        const rawOrders = res.data?.data?.list || res.data?.list || res.data || [];
-        
-        console.log(`${LOG_PREFIX} [RENDER LOG] Historial Result: ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems.`);
-        
-        // ESTE ES EL LOG QUE BUSCAMOS:
-        if (Array.isArray(rawOrders) && rawOrders.length > 0) {
-            console.log(`🚀 [DETECCION DE ORDENES] Se detectaron ${rawOrders.length} órdenes en el historial.`);
-            rawOrders.forEach((o, i) => {
-                console.log(`📜 [HISTORIAL-DETALLE #${i+1}] ID: ${o.orderId || o.order_id} | Sym: ${o.symbol} | Side: ${o.side} | Status: ${o.status || o.state}`);
-            });
-        } else {
-            console.log(`⚠️ [DETECCION] La API respondió con 0 órdenes para los parámetros enviados.`);
-        }
-        
-        return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
-            ...o,
-            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
-            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
-        }));
+        // INYECTADO: Lógica de extracción de la versión funcional antigua
+        let rawOrders = [];
+        if (res.data && Array.isArray(res.data)) rawOrders = res.data;
+        else if (res.data?.data?.list) rawOrders = res.data.data.list;
+        else if (res.data?.data && Array.isArray(res.data.data)) rawOrders = res.data.data;
+
+        // INYECTADO: Normalización Crítica (Evita precios 0.00 en el frontend)
+        return (Array.isArray(rawOrders) ? rawOrders : []).map(o => {
+            const finalPrice = parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price;
+            const finalSize = parseFloat(o.filledSize) > 0 ? o.filledSize : o.size;
+            return {
+                ...o,
+                price: finalPrice,
+                size: finalSize,
+                orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
+            };
+        });
     },
 
     getOrderDetail: async (symbol, orderId) => {

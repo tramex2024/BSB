@@ -1,6 +1,6 @@
 /**
  * BSB/server/server.js
- * SERVIDOR UNIFICADO (BSB 2026) - Lógica de Órdenes Restaurada (Versión Funcional)
+ * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada con Logs de Depuración
  */
 
 const express = require('express');
@@ -18,7 +18,7 @@ const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 
-// Modelos
+// Modelos Unificados
 const Autobot = require('./models/Autobot');
 const Order = require('./models/Order'); 
 const MarketSignal = require('./models/MarketSignal');
@@ -83,22 +83,7 @@ let isMarketConnected = false;
 let lastExecutionTime = 0;
 const EXECUTION_THROTTLE_MS = 2000; 
 
-// --- 7. LÓGICA DE EMISIÓN DE ESTADO (RECUPERADA DE LA VERSIÓN ANTIGUA) ---
-// Esta función asegura que el frontend reciba todos los datos para evitar ceros
-const emitBotState = (io, state) => {
-    if (!state) return;
-    io.sockets.emit('bot-state-update', {
-        ...state,
-        // Aseguramos campos críticos que el Dashboard espera
-        lstate: state.lstate, sstate: state.sstate,
-        total_profit: state.total_profit,
-        lbalance: state.lbalance, sbalance: state.sbalance,
-        ltprice: state.ltprice, stprice: state.stprice,
-        lcycle: state.lcycle, scycle: state.scycle
-    });
-};
-
-// --- 8. WEBSOCKET BITMART (PÚBLICO - TICKER) ---
+// --- 7. WEBSOCKET BITMART (PÚBLICO - TICKER) ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
@@ -137,10 +122,14 @@ function setupMarketWS(io) {
                 const now = Date.now();
                 if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
                     lastExecutionTime = now;
+
                     if (mongoose.connection.readyState === 1) { 
                         try { 
-                            if (aiEngine.isRunning) await aiEngine.analyze(price, volume); 
+                            if (aiEngine.isRunning) {
+                                await aiEngine.analyze(price, volume); 
+                            }
                         } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                        
                         await autobotLogic.botCycle(price);
                     }
                 }
@@ -155,62 +144,104 @@ function setupMarketWS(io) {
     });
 }
 
-// --- 9. WEBSOCKET ÓRDENES PRIVADAS ---
+// --- 8. WS ÓRDENES PRIVADAS (RASTREO DE ACTIVIDAD) ---
 bitmartService.initOrderWebSocket((ordersData) => {
-    console.log(`[BACKEND-WS] 📥 Evento privado: ${ordersData.length} órdenes.`);
+    // LOG CRÍTICO 1: Ver si llega algo del WebSocket de BitMart
+    console.log(`\n[BACKEND-WS] 📥 EVENTO DE ORDEN PRIVADA RECIBIDO:`);
+    console.log(`Contenido:`, JSON.stringify(ordersData, null, 2));
+
+    // Emitimos al frontend
     io.sockets.emit('open-orders-update', ordersData);
+    console.log(`[BACKEND-WS] 📤 Emitido 'open-orders-update' a los clientes.`);
 });
 
-// --- 10. INTERVALOS DE RESPALDO (RECUPERADOS DE LA VERSIÓN ANTIGUA) ---
-
-// Sincronización de saldos (10s)
+// --- 9. BUCLE SALDOS ---
 setInterval(async () => {
     try {
         if (mongoose.connection.readyState === 1) await autobotLogic.slowBalanceCacheUpdate();
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// Polling de Órdenes (5s) - ESTO ES LO QUE HACÍA QUE LA ANTIGUA FUNCIONARA SÍ O SÍ
-setInterval(async () => {
-    try {
-        const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
-        if (orders) io.sockets.emit('open-orders-update', orders);
-    } catch (e) { console.error("Error Polling Orders:", e.message); }
-}, 5000);
-
 setupMarketWS(io);
 
-// --- 11. EVENTOS SOCKET.IO (CON HIDRATACIÓN MEJORADA) ---
+// --- 10. SOCKET.IO EVENTS ---
 io.on('connection', async (socket) => {
-    console.log(`👤 Usuario Conectado: ${socket.id}`);
+    console.log(`👤 Usuario Conectado al Socket: ${socket.id}`);
 
-    // Emitir estado inicial del bot inmediatamente
-    Autobot.findOne({}).lean().then(state => {
-        if (state) emitBotState(io, state);
-    });
+    const sendAiStatus = async () => {
+        try {
+            let bot = await Autobot.findOne({});
+            if (!bot) {
+                bot = await Autobot.create({
+                    aibalance: 100.00,
+                    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
+                });
+            }
+            
+            const statusData = {
+                isRunning: aiEngine.isRunning,
+                aibalance: bot.aibalance || bot.config?.ai?.amountUsdt || 0,
+                amountUsdt: bot.config?.ai?.amountUsdt || 0,
+                stopAtCycle: bot.config?.ai?.stopAtCycle || false,
+                historyCount: aiEngine.history ? aiEngine.history.length : 0
+            };
+
+            socket.emit('ai-status-update', statusData);
+            socket.emit('ai-status-init', statusData); 
+        } catch (err) { 
+            console.error("❌ Error AI Socket:", err); 
+        }
+    };
 
     const hydrateOrders = async () => {
         try {
-            console.log(`[BACKEND-SYNC] 🔄 Hidratando órdenes para ${socket.id}`);
+            console.log(`\n[BACKEND-SYNC] 🔄 Iniciando hidratación para ${socket.id}`);
+            
+            // 1. Órdenes abiertas vía REST (Respaldo inicial)
             const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
-            socket.emit('open-orders-update', orders || []);
+            
+            // LOG CRÍTICO 2: Ver qué responde BitMart en la carga inicial
+            if (orders && orders.length > 0) {
+                console.log(`[BACKEND-SYNC] ✅ Se encontraron ${orders.length} órdenes abiertas en BitMart.`);
+                socket.emit('open-orders-update', orders);
+            } else {
+                console.log(`[BACKEND-SYNC] ℹ️ No hay órdenes abiertas reportadas por BitMart.`);
+                socket.emit('open-orders-update', []);
+            }
 
-            const history = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(20);
+            // 2. Historial
+            const history = await Order.find({ strategy: 'ai' })
+                .sort({ orderTime: -1 })
+                .limit(20);
+            
             socket.emit('ai-history-update', history);
+            console.log(`[BACKEND-SYNC] ✅ Enviado historial de ${history.length} órdenes.`);
+            
         } catch (err) {
             console.error("❌ Error hidratando órdenes:", err.message);
         }
     };
 
+    await sendAiStatus();
     await hydrateOrders();
+
+    socket.on('get-ai-status', async () => { await sendAiStatus(); });
+
+    socket.on('get-ai-history', async () => {
+        try {
+            const trades = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(20);
+            socket.emit('ai-history-update', trades);
+        } catch (err) { console.error("❌ Error historial IA:", err); }
+    });
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
 });
 
-// --- 12. START ---
+// --- 11. START ---
 server.listen(PORT, async () => {
     try {
         centralAnalyzer.init(io); 
+        console.log("🧠 [CENTRAL-ANALYZER] Iniciado.");
         await aiEngine.init();
         console.log("🧠 [IA-CORE] Motor sincronizado.");
     } catch (e) { console.error("❌ Error inicialización:", e); }

@@ -3,61 +3,74 @@
 const bitmartService = require('../services/bitmartService');
 
 exports.getOrders = async (req, res) => {
+    // OBTENEMOS EL TIPO DE ORDEN DE LOS PARÁMETROS DE RUTA (Lógica funcional antigua)
     const { status } = req.params;
 
-    // Forzamos JSON para evitar que errores del servidor devuelvan HTML (causante del 404/Unexpected Token)
-    res.setHeader('Content-Type', 'application/json');
-
-    console.log(`[Backend]: Solicitando órdenes - Tipo: ${status}`);
+    console.log(`[Backend]: Intentando obtener órdenes de tipo: ${status}`);
 
     if (!status) {
-        return res.status(400).json({ success: false, message: 'Falta el parámetro status.' });
+        return res.status(400).json({ success: false, message: 'Missing "status" path parameter.' });
     }
 
     try {
         let result;
-        const symbol = 'BTC_USDT';
+        const symbol = 'BTC_USDT'; 
 
         switch (status) {
             case 'opened':
-                // Las órdenes abiertas se manejan por WebSocket en el frontend
-                return res.status(200).json([]);
+                // RESTAURADO: Aunque se use WS, mantenemos la lógica de la versión funcional 
+                // para que la API responda si el frontend lo solicita.
+                console.log('[Backend]: Consultando órdenes abiertas...');
+                result = await bitmartService.getOpenOrders(symbol);
+                break;
                 
             case 'filled':
             case 'cancelled':
             case 'all':
+                // LÓGICA ANTIGUA FUNCIONAL: Rango de 90 días y parámetros correctos
+                const endTime = Date.now();
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+                const startTime = ninetyDaysAgo.getTime();
                 
                 const historyParams = {
                     symbol: symbol,
                     orderMode: 'spot',
-                    startTime: ninetyDaysAgo.getTime(),
-                    endTime: Date.now(),
-                    limit: 100,
-                    // Enviamos 'status' para que bitmartService haga el mapeo numérico (1 o 6)
-                    status: status 
+                    startTime: startTime,
+                    endTime: endTime,
+                    limit: 100 
                 };
+                
+                // CORRECCIÓN CRÍTICA RECUPERADA: 
+                // Usamos 'order_state' como hacía la versión funcional
+                if (status !== 'all') {
+                    historyParams.order_state = status; 
+                }
                 
                 result = await bitmartService.getHistoryOrders(historyParams);
                 break;
                 
             default:
-                return res.status(400).json({ success: false, message: 'Estado de orden no válido.' });
+                return res.status(400).json({ success: false, message: 'Invalid order status parameter' });
         }
 
-        // El servicio ya devuelve el array mapeado. Validamos que sea un array.
-        const ordersToReturn = Array.isArray(result) ? result : [];
+        // EXTRACCIÓN DE DATOS (Lógica funcional antigua)
+        // Se asegura de extraer .data si existe, o devolver el result directamente
+        const ordersToReturn = result && result.data ? result.data : result;
 
-        return res.status(200).json(ordersToReturn);
+        console.log(`[Backend]: Retornando ${Array.isArray(ordersToReturn) ? ordersToReturn.length : 0} órdenes.`);
+        res.status(200).json(ordersToReturn);
         
     } catch (error) {
-        console.error('❌ Error en orderController:', error.message);
+        console.error('Error al obtener órdenes. Detalles:', error.response ? error.response.data : error.message);
         
-        let errorMessage = 'Error al obtener datos de BitMart.';
-        if (error.response?.data?.message) errorMessage = error.response.data.message;
+        let errorMessage = 'Error al obtener órdenes. Por favor, revisa tus API Keys.';
+        if (error.response?.data?.message) {
+            errorMessage = error.response.data.message;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
         
-        // Enviamos un array vacío en lugar de un error de objeto para no romper el .map() del frontend
-        return res.status(500).json([]); 
+        res.status(500).json({ success: false, message: errorMessage });
     }
 };
