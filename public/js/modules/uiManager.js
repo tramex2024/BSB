@@ -2,6 +2,7 @@
 
 /**
  * uiManager.js - Orquestador Atómico con Memoria Selectiva
+ * Optimización: Solo actualiza Balance y Profit si los valores cambian realmente.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -24,7 +25,7 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
     
-    // 1. Precio de Mercado (Persistencia constante: NO se monitorea)
+    // 1. Precio de Mercado (Fluidez constante: se renderiza siempre)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
@@ -75,13 +76,12 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
-        // --- LÓGICA DE MONITOREO SELECTIVO ---
-        // Solo aplicamos a Profit y Balance para evitar parpadeo innecesario
+        // --- MONITOR DE CAMBIOS (BALANCE Y PROFIT) ---
         if (id.includes('profit') || id.includes('balance')) {
-            if (lastValues[id] === val) return; // Si el valor no ha cambiado, saltamos el render
-            lastValues[id] = val; // Actualizamos memoria
+            if (lastValues[id] === val) return; 
+            lastValues[id] = val; 
         }
-        // -------------------------------------
+        // ----------------------------------------------
 
         // Render de Estados
         if (id.includes('state') || id.includes('status')) {
@@ -115,15 +115,13 @@ export function updateBotUI(state) {
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    // 4. Sincronización de Inputs (PROTEGIDA durante el guardado)
+    // 4. Sincronización de Inputs (Protegida)
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
 
     updateControlsState(state);
 }
-
-// ... (Resto de funciones: updatePulseBars, updateControlsState y renderAutobotOpenOrders permanecen igual)
 
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');

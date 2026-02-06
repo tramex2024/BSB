@@ -108,7 +108,7 @@ export function initializeFullApp() {
         resetWatchdog();
         if (data?.price) {
             currentBotState.price = parseFloat(data.price);
-            updateBotUI(currentBotState);
+            updateBotUI(currentBotState); // <--- Esto dispara el render de TODO el UI
         }
     });
 
