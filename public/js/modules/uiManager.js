@@ -2,7 +2,7 @@
 
 /**
  * uiManager.js - Orquestador Atómico
- * Ajuste: Protección de escritura y estados en tiempo real.
+ * Ajuste: Dirección a contenedores específicos para evitar parpadeo.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -35,8 +35,6 @@ export function updateBotUI(state) {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
-
-        // LONG
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
         'aulcycle': 'lcycle',         
@@ -45,8 +43,6 @@ export function updateBotUI(state) {
         'aultppc': 'lppc',            
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'lnorder',      
-
-        // SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
         'auscycle': 'scycle',         
@@ -55,14 +51,10 @@ export function updateBotUI(state) {
         'austppc': 'sppc',            
         'auscoverage': 'scoverage',   
         'ausnorder': 'snorder',
-
-        // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
         'ai-adx-val': 'lai',                
         'ai-stoch-val': 'lac',              
         'aubot-aistate': 'aistate', 
-
-        // ESTADOS
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
         'ai-mode-status': 'aistate' 
@@ -74,7 +66,6 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
-        // Render de Estados
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
             el.textContent = currentStatus;
@@ -83,7 +74,6 @@ export function updateBotUI(state) {
             return;
         }
 
-        // Render de Datos Numéricos
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc') || id === 'aubalance-btc') {
@@ -100,13 +90,6 @@ export function updateBotUI(state) {
         }
     });
 
-    // 3. AI Confidence Bar
-    if (state.aiConfidence !== undefined) {
-        const bar = document.getElementById('ai-confidence-fill');
-        if (bar) bar.style.width = `${state.aiConfidence}%`;
-    }
-
-    // 4. Sincronización de Inputs (PROTEGIDA durante el guardado)
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
@@ -137,64 +120,48 @@ export function updateControlsState(state) {
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
     
-    // Espejo del botón AI en el Dashboard
     const aiDashBtn = document.getElementById('austartai-btn');
     if (aiDashBtn) updateButtonState('austartai-btn', aiState, 'AI', aiInputs);
-
-    const engineMsg = document.getElementById('ai-engine-msg');
-    if (engineMsg) {
-        if (aiState === 'RUNNING' || state.config?.ai?.enabled) {
-            engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
-            engineMsg.classList.add('animate-pulse', 'text-blue-400');
-        } else {
-            engineMsg.textContent = "AI CORE IN STANDBY";
-            engineMsg.classList.remove('animate-pulse', 'text-blue-400');
-        }
-    }
 }
 
 /**
- * Renderiza las órdenes ACTIVAS en la pestaña AUTOBOT
- * Nombre unificado con main.js para evitar errores de importación
+ * Renderiza las órdenes ACTIVAS en el contenedor dedicado
+ * Cambio clave: ID au-active-orders-list para evitar sobreescritura
  */
 export function renderAutobotOpenOrders(orders) {
-    const container = document.getElementById('au-order-list');
+    const container = document.getElementById('au-active-orders-list');
     if (!container) return;
 
     const ordersList = Array.isArray(orders) ? orders : [];
 
     if (ordersList.length === 0) {
-        container.innerHTML = `<p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">No hay órdenes activas</p>`;
+        container.innerHTML = `<p class="text-gray-600 text-[9px] italic ml-4 uppercase tracking-tighter">No active orders</p>`;
         return;
     }
 
     container.innerHTML = ordersList.map(order => {
         const side = (order.side || 'BUY').toUpperCase();
         const isBuy = side === 'BUY';
-        
-        // Limpieza de datos numéricos para evitar NaN
         const rawPrice = parseFloat(order.price || 0);
         const rawAmount = parseFloat(order.size || order.amount || 0);
-        const price = rawPrice.toLocaleString();
-        const amount = rawAmount;
         const total = order.notional ? parseFloat(order.notional).toFixed(2) : (rawPrice * rawAmount).toFixed(2);
         
         return `
-            <div class="bg-gray-900/40 border-l-2 ${isBuy ? 'border-emerald-500' : 'border-rose-500'} p-2 rounded-r-lg flex justify-between items-center group hover:bg-gray-700/30 transition-all">
+            <div class="bg-gray-900/60 border-l-2 ${isBuy ? 'border-emerald-500' : 'border-rose-500'} p-2 rounded-r-lg flex justify-between items-center group hover:bg-gray-700/30 transition-all">
                 <div class="flex flex-col">
                     <div class="flex items-center gap-2">
-                        <span class="${isBuy ? 'text-emerald-400' : 'text-rose-400'} font-bold text-[11px]">${side}</span>
-                        <span class="text-white font-mono text-[11px]">$${price}</span>
+                        <span class="${isBuy ? 'text-emerald-400' : 'text-rose-400'} font-bold text-[10px]">${side}</span>
+                        <span class="text-white font-mono text-[10px]">$${rawPrice.toLocaleString()}</span>
                     </div>
-                    <span class="text-[8px] text-gray-500 tracking-tighter">${order.symbol || 'BTC_USDT'} | ID: ${order.orderId?.toString().slice(-6)}</span>
+                    <span class="text-[7px] text-gray-500 uppercase">ID: ${order.orderId?.toString().slice(-6)}</span>
                 </div>
                 <div class="text-right flex items-center gap-3">
-                    <div class="flex flex-col font-mono">
-                        <span class="text-gray-300 text-[10px]">${amount} BTC</span>
-                        <span class="text-[8px] text-gray-500">$${total} USDT</span>
+                    <div class="flex flex-col font-mono leading-tight">
+                        <span class="text-gray-300 text-[9px]">${rawAmount} BTC</span>
+                        <span class="text-[7px] text-gray-500">$${total}</span>
                     </div>
-                    <button onclick="cancelOrder('${order.orderId}')" class="text-gray-600 hover:text-rose-500 transition-colors px-1">
-                        <i class="fas fa-times-circle text-[12px]"></i>
+                    <button onclick="cancelOrder('${order.orderId}')" class="text-gray-600 hover:text-rose-500 transition-colors">
+                        <i class="fas fa-times-circle text-[11px]"></i>
                     </button>
                 </div>
             </div>

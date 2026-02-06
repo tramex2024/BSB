@@ -105,15 +105,70 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[8px] text-emerald-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-L</label>
-                        <input id="auamountl-usdt" type="number" step="1" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-emerald-400 text-[10px] text-center outline-none focus:border-emerald-500 transition-colors"/>
+                        <input id="auamountl-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-emerald-400 text-[10px] text-center outline-none focus:border-emerald-500 transition-colors"/>
                     </div>
                     <div>
                         <label class="block text-[8px] text-rose-600/80 mb-0.5 font-bold uppercase font-mono text-center">Total Budget-S</label>
-                        <input id="auamounts-usdt" type="number" step="1" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-rose-400 text-[10px] text-center outline-none focus:border-rose-500 transition-colors"/>
+                        <input id="auamounts-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-rose-400 text-[10px] text-center outline-none focus:border-rose-500 transition-colors"/>
                     </div>
                 </div>
             </div>
-            </div>          
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-L</label>
+                    <input id="aupurchasel-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">First Buy-S</label>
+                    <input id="aupurchases-usdt" type="number" step="1" value="6.00" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-L %</label>
+                    <input id="auincrementl" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Size Multiplier-S %</label>
+                    <input id="auincrements" type="number" step="1" value="100" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Drop-L %</label>
+                    <input id="audecrementl" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Safety Rise-S %</label>
+                    <input id="audecrements" type="number" step="0.1" value="0.5" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div>            
+
+            <div class="grid grid-cols-2 gap-2"> 
+                <div>
+                    <label class="block text-[8px] text-emerald-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-L %</label>
+                    <input id="autriggerl" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-emerald-900/20 border border-emerald-500/30 text-emerald-400 text-[10px] text-center outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-rose-500/60 mb-0.5 font-bold uppercase font-mono text-center">Take Profit-S %</label>
+                    <input id="autriggers" type="number" step="0.1" value="1.5" class="w-full p-1.5 rounded-lg bg-rose-900/20 border border-rose-500/30 text-rose-400 text-[10px] text-center outline-none"/>
+                </div>
+            </div>
+           
+            <div class="grid grid-cols-2 gap-2"> 
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-L %</label>
+                    <input id="aupricestep-l" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase font-mono text-center">Step Growth-S %</label>
+                    <input id="aupricestep-s" type="number" step="0.1" value="2.0" class="w-full p-1.5 rounded-lg bg-gray-900 border border-gray-700 text-white text-[10px] text-center focus:border-rose-500 outline-none"/>
+                </div>
+            </div> 
+        </div>          
     </div>
     
     <div class="flex-grow flex flex-col gap-2 h-full min-h-0">
@@ -121,8 +176,8 @@
         <div id="au-tvchart" class="bg-gray-800 rounded-xl border border-gray-700 min-h-[550px] lg:flex-grow relative overflow-hidden"></div>
 
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col h-[300px] lg:h-[340px]"> 
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2 border-b border-gray-700 pb-2">
-                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Order Management</h3>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
+                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
                 
                 <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
                     <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
@@ -132,26 +187,8 @@
                 </div>
             </div>
 
-            <div id="au-order-container" class="overflow-y-auto pr-2 flex-grow custom-scrollbar space-y-4">
-                
-                <div id="active-orders-section">
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <h4 class="text-[8px] text-gray-400 uppercase font-black tracking-tighter">Active Orders (Live)</h4>
-                    </div>
-                    <div id="au-active-orders-list" class="space-y-2">
-                        <p class="text-gray-600 text-[9px] italic ml-4">Waiting for market signals...</p>
-                    </div>
-                </div>
-
-                <div class="border-t border-gray-700/50 my-2"></div>
-
-                <div id="history-orders-section">
-                    <h4 class="text-[8px] text-gray-400 uppercase font-black tracking-tighter mb-2">Recent Trade History</h4>
-                    <div id="au-history-list" class="space-y-1 opacity-80">
-                        </div>
-                </div>
-
+            <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
+                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
             </div>
         </div>
     </div>
@@ -164,13 +201,19 @@
                 </div>
                 <h3 class="text-white text-base font-black uppercase tracking-tight mb-1">Confirmar Acción</h3>
                 <p id="modal-message" class="text-gray-400 text-[10px] leading-relaxed mb-6 px-2">
-                    ¿Estás seguro de que deseas detener esta estrategia?
+                    ¿Estás seguro de que deseas detener esta estrategia? Esto podría consolidar pérdidas o dejar órdenes huérfanas en el exchange.
                 </p>
             </div>
+
             <div class="grid grid-cols-2 gap-3">
-                <button id="modal-deny" class="py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold text-[10px] uppercase transition-all border border-gray-700">Deny</button>
-                <button id="modal-accept" class="py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg transition-all">Accept</button>
+                <button id="modal-deny" class="py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold text-[10px] uppercase transition-all active:scale-95 border border-gray-700">
+                    Deny
+                </button>
+                <button id="modal-accept" class="py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-900/40 transition-all active:scale-95">
+                    Accept
+                </button>
             </div>
         </div>
     </div>
+
 </div>
