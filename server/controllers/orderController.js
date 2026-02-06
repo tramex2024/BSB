@@ -7,47 +7,31 @@
 const Order = require('../models/Order');
 
 const orderController = {
-    // Retorna órdenes según su estado
     getOrders: async (req, res) => {
         try {
-            const { type } = req.params; // 'all', 'filled', 'cancelled'
-            console.log(`[ORDERS-API] 🔍 Petición recibida para tipo: ${type}`);
-
+            const { type } = req.params; 
             let query = {};
             
-            // Filtros basados en el estado almacenado en MongoDB
+            // FILTRADO ESTRICTO SEGÚN LA PESTAÑA
             if (type === 'filled') {
                 query = { status: 'filled' };
             } else if (type === 'cancelled') {
+                // Capturamos todas las variantes de cancelación
                 query = { status: { $in: ['canceled', 'cancelled', 'rejected'] } };
+            } else if (type === 'opened') {
+                query = { status: 'new' };
             }
-            // Si es 'all', el query se queda vacío {} para traer todo
+            // Si es 'all', el query se mantiene vacío {} y trae todo el historial
 
-            const orders = await Order.find(query)
-                .sort({ orderTime: -1 }) // Las más recientes primero
-                .limit(50);
+            const orders = await Order.find(query).sort({ orderTime: -1 });
 
-            console.log(`[ORDERS-API] ✅ Enviando ${orders.length} órdenes al frontend.`);
-            
             return res.status(200).json({
                 success: true,
-                count: orders.length,
                 data: orders
             });
         } catch (error) {
-            console.error('❌ Error en getOrders:', error);
-            res.status(500).json({ success: false, message: 'Error interno del servidor' });
-        }
-    },
-
-    // Esta ruta se mantiene por compatibilidad, pero ahora busca en DB
-    getOpenedOrders: async (req, res) => {
-        try {
-            // Intentamos traer lo que la DB cree que está abierto
-            const openOrders = await Order.find({ status: 'new' }).sort({ orderTime: -1 });
-            res.status(200).json(openOrders);
-        } catch (error) {
-            res.status(500).json([]);
+            console.error('❌ Error filtrando órdenes:', error);
+            res.status(500).json({ success: false, data: [] });
         }
     }
 };

@@ -5,16 +5,11 @@ import { BACKEND_URL } from '../main.js';
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
+    const sideTheme = isBuy ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5';
     
-    const sideTheme = isBuy 
-        ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' 
-        : 'text-red-400 border-red-500/20 bg-red-500/5';
-    
-    // Normalización de estados: Soportamos múltiples formatos del exchange y DB
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
     
-    // Usamos orderTime que es el campo unificado
     const timestamp = order.orderTime || order.createTime || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
@@ -22,12 +17,14 @@ function createOrderHtml(order) {
 
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
+    
+    // RESTAURADO: ID completo de la orden
     const fullOrderId = (order.orderId || '').toString();
 
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
-    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'} animate-fadeIn">
+    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
         <div class="flex items-center gap-4 w-1/4">
             <div class="flex flex-col">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Side</span>
@@ -61,42 +58,29 @@ function createOrderHtml(order) {
                         class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
                     Cancel
                 </button>
-            ` : `<p class="text-[8px] text-gray-600 font-mono">ID: ${fullOrderId.slice(-6)}</p>`}
+            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right">ID: ${fullOrderId}</p>`}
         </div>
     </div>`;
 }
 
 export async function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
-
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        console.log(`[FRONTEND] 🚀 Solicitando órdenes tipo: ${status}`);
-        
         const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-
-        if (!response.ok) throw new Error('Error en respuesta del servidor');
-
-        const result = await response.json(); 
-        
-        // EXTRAER ARRAY DE ÓRDENES: 
-        // El controlador envía { data: [] }, pero otros pueden enviar el array directo []
+        const result = await response.json();
         const ordersArray = Array.isArray(result) ? result : (result.data || []);
         
-        console.log(`[FRONTEND] ✅ Órdenes recibidas:`, ordersArray.length);
-        
         if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No orders found</div>`;
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders</div>`;
             return;
         }
 
         orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
-
     } catch (error) {
-        console.error("❌ Fetch error:", error);
-        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING HISTORY</div>`;
+        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
     }
 }
