@@ -1,6 +1,6 @@
 /**
  * File: public/js/modules/aibot.js
- * AI Core Sync & Interface Management
+ * AI Core Sync & Interface Management - Final Sync 2026
  */
 
 import { socket, currentBotState, BACKEND_URL } from '../main.js';
@@ -9,9 +9,11 @@ import aiBotUI from './aiBotUI.js';
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing interface...");
     
+    // Limpieza preventiva de listeners para evitar duplicidad
     if (socket) {
         socket.off('ai-status-update');
         socket.off('ai-history-data');
+        socket.off('open-orders-update'); // Sincronización de órdenes abiertas
         socket.off('ai-order-executed');
         socket.off('ai-decision-update');
         socket.off('market-signal-update');
@@ -20,7 +22,7 @@ export function initializeAibotView() {
     setupAISocketListeners();
     setupAIControls();
     
-    // SYNC FROM GLOBAL STATE
+    // Sincronización inicial desde el estado global
     const isRunning = currentBotState.isRunning;
     const stopAtCycle = currentBotState.stopAtCycle; 
     const amount = currentBotState.amountUsdt;
@@ -28,49 +30,50 @@ export function initializeAibotView() {
     const aiInput = document.getElementById('ai-amount-usdt');
     if (aiInput && amount !== undefined) aiInput.value = amount;
 
-    // Apply visual state (Button & Switch)
+    // Aplicar estado visual inicial
     aiBotUI.setRunningStatus(isRunning, stopAtCycle);
 
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
+        // Pedimos actualización de órdenes abiertas al entrar
+        socket.emit('get-open-orders'); 
     }
 }
 
 function setupAISocketListeners() {
     if (!socket) return;
 
+    // 1. Estado y Balance Virtual
     socket.on('ai-status-update', (data) => {
         currentBotState.virtualBalance = data.virtualBalance;
         currentBotState.isRunning = data.isRunning;
 
-        // 1. Update Balance
         const balEl = document.getElementById('ai-virtual-balance');
         if (balEl && data.virtualBalance !== undefined) {
             balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         }
 
-        // 2. Manage Button State
         const btnAi = document.getElementById('btn-start-ai');
         
-        // If analyzing (warm-up phase)
+        // Lógica de calentamiento (análisis inicial)
         if (data.isRunning && data.historyCount < 50) {
             if (btnAi) {
                 btnAi.textContent = `ANALYZING... (${data.historyCount}/50)`;
                 btnAi.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse";
             }
         } else {
-            // Full Sync (Button + Switch + Input)
-            // Ensure aiBotUI.setRunningStatus uses English labels
             aiBotUI.setRunningStatus(data.isRunning, data.stopAtCycle);
         }
     });
 
+    // 2. Decisiones y Logs de la Neurona
     socket.on('ai-decision-update', (data) => {
         if (aiBotUI.updateConfidence) aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         if (aiBotUI.addLogEntry) aiBotUI.addLogEntry(data.message, data.confidence);
     });
 
+    // 3. Señales de Mercado (ADX / Stoch)
     socket.on('market-signal-update', (data) => {
         const adxEl = document.getElementById('ai-adx-val');
         const stochEl = document.getElementById('ai-stoch-val');
@@ -83,10 +86,18 @@ function setupAISocketListeners() {
         }
     });
 
+    // 4. Órdenes Abiertas (REAL TIME)
+    socket.on('open-orders-update', (orders) => {
+        console.log("📥 [AIBOT] Recibidas órdenes abiertas:", orders);
+        aiBotUI.updateOpenOrdersTable(orders);
+    });
+
+    // 5. Historial de Trades
     socket.on('ai-history-data', (history) => {
         aiBotUI.updateHistoryTable(history);
     });
 
+    // 6. Ejecución de órdenes (Toasts y Sonido)
     socket.on('ai-order-executed', (order) => {
         showAiToast(order);
         playNeuralSound(order.side);
@@ -107,7 +118,7 @@ function setupAIControls() {
 
     const btnStartAi = document.getElementById('btn-start-ai');
 
-    // 1. Amount Inputs Sync
+    // Sincronización de Inputs de Monto
     aiInputs.forEach(input => {
         if (!input) return;
         input.addEventListener('change', async () => {
@@ -118,7 +129,7 @@ function setupAIControls() {
         });
     });
 
-    // 2. Checkboxes Sync
+    // Sincronización de Checkboxes (Stop at Cycle)
     stopCycleChecks.forEach(check => {
         if (!check) return;
         check.addEventListener('change', async () => {
@@ -128,7 +139,7 @@ function setupAIControls() {
         });
     });
 
-    // 3. Start/Stop Toggle (Clone to clean events)
+    // Botón de Toggle Start/Stop
     if (btnStartAi) {
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);

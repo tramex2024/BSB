@@ -133,36 +133,36 @@ const aiBotUI = {
             return;
         }
 
-        tbody.innerHTML = ordersList.map(order => {
-            const isBuy = (order.side || '').toUpperCase() === 'BUY';
-            const id = order.orderId || order.order_id || '';
-            const price = parseFloat(order.price || 0);
-            const amount = parseFloat(order.amount || order.size || 0);
-
-            return `
-                <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
-                    <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
-                        ${id ? id.toString().slice(-6) : '---'}
-                    </td>
-                    <td class="px-6 py-3">
-                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">
-                            ${isBuy ? 'BUY' : 'SELL'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">
-                        $${price.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                    </td>
-                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">
-                        ${amount.toFixed(4)} BTC
-                    </td>
-                    <td class="px-6 py-3 text-right">
-                        <button class="text-red-500/50 hover:text-red-500 transition-colors">
-                            <i class="fas fa-times-circle"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+tbody.innerHTML = ordersList.map(order => {
+    // 🛡️ Normalización agresiva de campos
+    const id = order.orderId || order.order_id || 'N/A';
+    const side = (order.side || 'BUY').toUpperCase();
+    const isBuy = side === 'BUY';
+    
+    // BitMart a veces envía 'notional' como el monto en USDT
+    const price = parseFloat(order.price || order.orderPrice || 0);
+    const amount = parseFloat(order.size || order.amount || order.filledSize || 0);
+    
+    return `
+        <tr class="border-b border-blue-500/5 hover:bg-white/[0.02]">
+            <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
+                ${id.toString().slice(-6)}
+            </td>
+            <td class="px-6 py-3">
+                <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px]">
+                    ${side}
+                </span>
+            </td>
+            <td class="px-6 py-3 text-right text-white font-mono">$${price.toFixed(2)}</td>
+            <td class="px-6 py-3 text-right text-gray-400 font-mono">${amount}</td>
+            <td class="px-6 py-3 text-right">
+                 <button onclick="cancelOrder('${id}')" class="text-red-500 hover:text-red-400">
+                    <i class="fas fa-times-circle"></i>
+                 </button>
+            </td>
+        </tr>
+    `;
+}).join('');
     },
 
     /**

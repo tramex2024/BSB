@@ -119,12 +119,20 @@ export function initializeFullApp() {
     // --- LÓGICA DE ÓRDENES (Sincronización Centralizada) ---
     
     // 1. Órdenes Abiertas (Active/Open)
-    socket.on('open-orders-update', (data) => {
-        console.log("📥 [SOCKET-MAIN] Órdenes abiertas recibidas:", data);
-        const orders = Array.isArray(data) ? data : (data.orders || []);
+    socket.on('open-orders-update', (orders) => {
+        console.log("📥 [SOCKET-MAIN] Órdenes abiertas recibidas:", orders);
+    
+        // 1. Guardar en el estado global
+        currentBotState.openOrders = orders;
+
+        // 2. Pintar en la tabla de la IA (si existe)
         if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
-            aiBotUI.updateOpenOrdersTable(orders);
+        aiBotUI.updateOpenOrdersTable(orders);
         }
+
+        // 3. Pintar en la tabla general de Órdenes (si tienes una sección de 'Open')
+        // Si tu uiManager tiene una función para esto, llámala aquí:
+       // uiManager.renderOpenOrders(orders); 
     });
 
     // 2. Historial General (All, Filled, Canceled) - NUEVO RECEPTOR
