@@ -1,8 +1,3 @@
-/**
- * BSB/server/server.js
- * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada con Logs de Depuración
- */
-
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -15,13 +10,16 @@ const path = require('path');
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
-const centralAnalyzer = require('./services/CentralAnalyzer'); 
+
+// IMPORTACIÓN SEGURA (Case-sensitive para Linux/Render)
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 
-// Modelos Unificados
+// Modelos
 const Autobot = require('./models/Autobot');
-const Order = require('./models/Order'); 
+const Aibot = require('./models/Aibot'); 
 const MarketSignal = require('./models/MarketSignal');
+const AIBotOrder = require('./models/AIBotOrder');
+const analyzer = require('./src/bitmart_indicator_analyzer'); 
 
 dotenv.config();
 const app = express();
@@ -72,18 +70,17 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected (BSB 2026)...'))
+    .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Persistencia Total)...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --- 6. VARIABLES GLOBALES ---
 let lastKnownPrice = 0;
+let lastProcessedMinute = -1;
 let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false; 
-let lastExecutionTime = 0;
-const EXECUTION_THROTTLE_MS = 2000; 
 
-// --- 7. WEBSOCKET BITMART (PÚBLICO - TICKER) ---
+// --- 7. WEBSOCKET BITMART ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
@@ -113,25 +110,43 @@ function setupMarketWS(io) {
                 const volume = parseFloat(ticker.base_volume_24h || 0);
                 const open24h = parseFloat(ticker.open_24h);
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
-   
+
                 lastKnownPrice = price; 
-                centralAnalyzer.updatePrice(price);
+                const currentMinute = new Date().getMinutes();
+
+                if (currentMinute !== lastProcessedMinute) {
+                    lastProcessedMinute = currentMinute;
+                    const analysis = await analyzer.runAnalysis(price);
+                    await MarketSignal.findOneAndUpdate(
+                        { symbol: 'BTC_USDT' },
+                        {
+                            currentRSI: analysis.currentRSI || 0,
+                            signal: analysis.action,
+                            reason: analysis.reason,
+                            lastUpdate: new Date()
+                        },
+                        { upsert: true }
+                    );
+                    io.emit('market-signal-update', analysis);
+                }
 
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
-                const now = Date.now();
-                if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
-                    lastExecutionTime = now;
-
-                    if (mongoose.connection.readyState === 1) { 
-                        try { 
-                            if (aiEngine.isRunning) {
-                                await aiEngine.analyze(price, volume); 
-                            }
-                        } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                // 🚀 GATILLO DE IA Y BOT
+                if (mongoose.connection.readyState === 1) { 
+                    try { 
+                        await aiEngine.analyze(price, volume); 
                         
-                        await autobotLogic.botCycle(price);
-                    }
+                        // Sincronización de progreso (X/30) para el front-end
+                        if (aiEngine.isRunning && aiEngine.history.length <= 30) {
+                            io.emit('ai-status-update', { 
+                                isRunning: true, 
+                                historyCount: aiEngine.history.length,
+                                virtualBalance: aiEngine.virtualBalance
+                            });
+                        }
+                    } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                    await autobotLogic.botCycle(price);
                 }
             }
         } catch (e) { console.error("❌ WS Msg Error:", e.message); }
@@ -139,20 +154,13 @@ function setupMarketWS(io) {
 
     marketWs.on('close', () => {
         isMarketConnected = false; 
-        if (marketHeartbeat) clearInterval(marketHeartbeat);
         setTimeout(() => setupMarketWS(io), 5000);
     });
 }
 
-// --- 8. WS ÓRDENES PRIVADAS (RASTREO DE ACTIVIDAD) ---
+// --- 8. WS ÓRDENES PRIVADAS ---
 bitmartService.initOrderWebSocket((ordersData) => {
-    // LOG CRÍTICO 1: Ver si llega algo del WebSocket de BitMart
-    console.log(`\n[BACKEND-WS] 📥 EVENTO DE ORDEN PRIVADA RECIBIDO:`);
-    console.log(`Contenido:`, JSON.stringify(ordersData, null, 2));
-
-    // Emitimos al frontend
     io.sockets.emit('open-orders-update', ordersData);
-    console.log(`[BACKEND-WS] 📤 Emitido 'open-orders-update' a los clientes.`);
 });
 
 // --- 9. BUCLE SALDOS ---
@@ -165,74 +173,38 @@ setInterval(async () => {
 setupMarketWS(io);
 
 // --- 10. SOCKET.IO EVENTS ---
-io.on('connection', async (socket) => {
-    console.log(`👤 Usuario Conectado al Socket: ${socket.id}`);
+io.on('connection', (socket) => {
+    console.log(`👤 Conectado: ${socket.id}`);
 
     const sendAiStatus = async () => {
         try {
-            let bot = await Autobot.findOne({});
-            if (!bot) {
-                bot = await Autobot.create({
-                    aibalance: 100.00,
-                    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
-                });
-            }
-            
-            const statusData = {
+            let state = await Aibot.findOne({});
+            if (!state) state = await Aibot.create({ isRunning: false, virtualBalance: 100.00 });
+            socket.emit('ai-status-init', {
                 isRunning: aiEngine.isRunning,
-                aibalance: bot.aibalance || bot.config?.ai?.amountUsdt || 0,
-                amountUsdt: bot.config?.ai?.amountUsdt || 0,
-                stopAtCycle: bot.config?.ai?.stopAtCycle || false,
-                historyCount: aiEngine.history ? aiEngine.history.length : 0
-            };
-
-            socket.emit('ai-status-update', statusData);
-            socket.emit('ai-status-init', statusData); 
-        } catch (err) { 
-            console.error("❌ Error AI Socket:", err); 
-        }
+                virtualBalance: aiEngine.virtualBalance || state.virtualBalance,
+                historyCount: aiEngine.history ? aiEngine.history.length : (state.historyPoints?.length || 0)
+            });
+        } catch (err) { console.error("❌ Error AI Socket:", err); }
     };
 
-    const hydrateOrders = async () => {
+    sendAiStatus();
+
+    socket.on('toggle-ai', async (data) => {
         try {
-            console.log(`\n[BACKEND-SYNC] 🔄 Iniciando hidratación para ${socket.id}`);
-            
-            // 1. Órdenes abiertas vía REST (Respaldo inicial)
-            const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
-            
-            // LOG CRÍTICO 2: Ver qué responde BitMart en la carga inicial
-            if (orders && orders.length > 0) {
-                console.log(`[BACKEND-SYNC] ✅ Se encontraron ${orders.length} órdenes abiertas en BitMart.`);
-                socket.emit('open-orders-update', orders);
-            } else {
-                console.log(`[BACKEND-SYNC] ℹ️ No hay órdenes abiertas reportadas por BitMart.`);
-                socket.emit('open-orders-update', []);
-            }
-
-            // 2. Historial
-            const history = await Order.find({ strategy: 'ai' })
-                .sort({ orderTime: -1 })
-                .limit(20);
-            
-            socket.emit('ai-history-update', history);
-            console.log(`[BACKEND-SYNC] ✅ Enviado historial de ${history.length} órdenes.`);
-            
-        } catch (err) {
-            console.error("❌ Error hidratando órdenes:", err.message);
-        }
-    };
-
-    await sendAiStatus();
-    await hydrateOrders();
-
-    socket.on('get-ai-status', async () => { await sendAiStatus(); });
-
-    socket.on('get-ai-history', async () => {
-        try {
-            const trades = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(20);
-            socket.emit('ai-history-update', trades);
-        } catch (err) { console.error("❌ Error historial IA:", err); }
+            const result = await aiEngine.toggle(data.action);
+            if (result.isRunning) await aiEngine.init();
+            io.emit('ai-status-update', { isRunning: result.isRunning, virtualBalance: result.virtualBalance });
+        } catch (err) { console.error("❌ Error toggle:", err); }
     });
+
+    // En tu lógica de Socket en el servidor
+socket.on('get-ai-history', async () => {
+    const trades = await AIBotOrder.find({ isVirtual: true })
+        .sort({ timestamp: -1 }) // Los más recientes primero
+        .limit(5);
+    socket.emit('ai-history-data', trades);
+});
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
 });
@@ -240,10 +212,8 @@ io.on('connection', async (socket) => {
 // --- 11. START ---
 server.listen(PORT, async () => {
     try {
-        centralAnalyzer.init(io); 
-        console.log("🧠 [CENTRAL-ANALYZER] Iniciado.");
         await aiEngine.init();
-        console.log("🧠 [IA-CORE] Motor sincronizado.");
+        console.log("🧠 [IA-CORE] Memoria recuperada satisfactoriamente.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
-    console.log(`🚀 SERVIDOR BSB ACTIVO EN PUERTO: ${PORT}`);
+    console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });

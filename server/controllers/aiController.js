@@ -1,30 +1,35 @@
 /**
- * Archivo: server/controllers/aiController.js
- * Controlador maestro para la gestión de la IA y Órdenes Integradas
+ * Archivo: BSB/server/controllers/aiController.js
+ * Controlador unificado - Confianza en la instancia del Engine
  */
 
-const aiEngine = require('../src/ai/AIEngine'); 
-const Order = require('../models/Order');      // 👈 Cambiado
-const Autobot = require('../models/Autobot');  // 👈 Cambiado
+const path = require('path');
+const aiEngine = require(path.join(__dirname, '..', 'src', 'ai', 'AIEngine'));
+const AIBotOrder = require('../models/AIBotOrder');
+const Aibot = require('../models/Aibot'); 
 
 /**
- * Obtiene el estado actual de la IA desde el modelo unificado
+ * Obtiene el estado actual de la IA (Desde el Engine y DB)
  */
 const getAIStatus = async (req, res) => {
     try {
-        const bot = await Autobot.findOne({}).lean();
-        const recentTrades = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(10);
+        // 1. Buscamos el estado y los últimos 5 trades en paralelo
+        const [state, recentTrades] = await Promise.all([
+            Aibot.findOne({}),
+            AIBotOrder.find({ isVirtual: true }).sort({ timestamp: -1 }).limit(5)
+        ]);
 
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
-            // CAMBIO AQUÍ: Usar aibalance para que coincida con el modelo
-            virtualBalance: aiEngine.virtualBalance || (bot ? bot.aibalance : 0),
-            historyCount: aiEngine.history ? aiEngine.history.length : 0,
+            isVirtual: aiEngine.IS_VIRTUAL_MODE,
+            virtualBalance: aiEngine.virtualBalance,
+            historyCount: aiEngine.history.length,
+            // 🟢 AQUÍ ENVIAMOS LOS 5 TRADES
             recentHistory: recentTrades, 
             config: {
-                amountUsdt: bot?.config?.ai?.amountUsdt || 0,
-                stopAtCycle: aiEngine.stopAtCycle 
+                risk: aiEngine.RISK_PER_TRADE,
+                threshold: 0.7 
             }
         });
     } catch (error) {
@@ -33,98 +38,50 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA (vía AIEngine)
+ * Activa o desactiva el motor de IA
  */
 const toggleAI = async (req, res) => {
     try {
         const { action } = req.body; 
-        if (!action) return res.status(400).json({ success: false, message: "Acción no proporcionada" });
+        
+        if (!action) {
+            return res.status(400).json({ success: false, message: "Acción no proporcionada" });
+        }
 
+        // Delegamos TODA la responsabilidad al Engine.
+        // Él ya sabe cómo actualizar la DB, emitir sockets y limpiar su historial.
         const result = await aiEngine.toggle(action);
-
+        
         res.json({ 
             success: true, 
             isRunning: result.isRunning,
             virtualBalance: result.virtualBalance,
-            message: result.isRunning ? "IA Activada" : "IA Detenida" 
+            message: result.isRunning ? "IA Activada - Analizando mercado" : "IA Detenida" 
         });
     } catch (error) {
+        console.error("Error en toggleAI:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
 /**
- * Cierre de Emergencia
- */
-const panicSell = async (req, res) => {
-    try {
-        const result = await aiEngine.panicSell();
-        res.json({
-            success: true,
-            message: result.message,
-            isRunning: aiEngine.isRunning
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-/**
- * Historial completo filtrado por estrategia AI
+ * Obtiene el historial de órdenes
  */
 const getVirtualHistory = async (req, res) => {
     try {
-        const history = await Order.find({ strategy: 'ai' })
-            .sort({ orderTime: -1 })
-            .limit(50); 
+        const history = await AIBotOrder.find({ isVirtual: true })
+            .sort({ timestamp: -1 })
+            .limit(30); 
             
         res.json({ success: true, data: history });
     } catch (error) {
+        console.error("Error en getVirtualHistory:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Actualiza la configuración en la rama AI del Autobot
- */
-const updateAIConfig = async (req, res) => {
-    try {
-        const { amountUsdt, stopAtCycle } = req.body;
-        const updateFields = {};
-
-        if (amountUsdt !== undefined) {
-            const parsedAmount = parseFloat(amountUsdt);
-            updateFields['config.ai.amountUsdt'] = parsedAmount;
-            
-            if (!aiEngine.isRunning) {
-                updateFields.aibalance = parsedAmount;
-                aiEngine.virtualBalance = parsedAmount;
-            }
-        }
-
-        if (stopAtCycle !== undefined) {
-            updateFields['config.ai.stopAtCycle'] = !!stopAtCycle;
-            aiEngine.stopAtCycle = !!stopAtCycle;
-        }
-
-        const updatedBot = await Autobot.findOneAndUpdate(
-            {}, 
-            { $set: updateFields }, 
-            { new: true }
-        );
-
-        if (aiEngine._broadcastStatus) aiEngine._broadcastStatus();
-
-        res.json({
-            success: true,
-            isRunning: aiEngine.isRunning,
-            virtualBalance: aiEngine.virtualBalance,
-            stopAtCycle: updatedBot.config.ai.stopAtCycle,
-            message: "Configuración Neural Sincronizada"
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+module.exports = {
+    getAIStatus,
+    toggleAI,
+    getVirtualHistory
 };
-
-module.exports = { getAIStatus, toggleAI, panicSell, getVirtualHistory, updateAIConfig };

@@ -2,83 +2,100 @@
 
 const express = require('express');
 const router = express.Router();
+const Autobot = require('../models/Autobot');
 const authMiddleware = require('../middleware/authMiddleware');
 const autobotLogic = require('../autobotLogic');
-const configController = require('../controllers/configController');
+const bitmartService = require('../services/bitmartService');
 
 router.use(authMiddleware);
 
 /**
- * Utilidad para emitir el estado actualizado a través de WebSockets
+ * Emite el estado COMPLETO del bot por Sockets
  */
 const emitBotState = (autobot, req) => {
     try {
         const io = req.app.get('io');
-        if (!io || !autobot) return;
+        if (!io) return;
         const payload = autobot.toObject ? autobot.toObject() : autobot;
         io.emit('bot-state-update', payload);
     } catch (err) {
-        console.error("❌ Error en emitBotState (Routes):", err.message);
+        console.error("❌ Error en emitBotState:", err.message);
     }
 };
 
 // --- CONFIGURACIÓN ---
 
-// Esta ruta usa el controlador blindado para guardar cambios sin perder datos
-router.post('/update-config', configController.updateBotConfig);
+router.post('/update-config', async (req, res) => {
+    try {
+        const { config } = req.body;
+        if (!config) return res.status(400).json({ success: false, message: "No config provided" });
 
-/**
- * Obtiene configuración y estado actual (Sincronizado para evitar errores de carga)
- */
-router.get('/config-and-state', configController.getBotConfig);
+        // 1. Notificar a la lógica del bot para recalcular Targets (ltprice/stprice)
+        // Esta es la función clave que creamos en autobotLogic
+        const updatedBot = await autobotLogic.updateConfig(config);
 
+        // 2. Notificar al Frontend vía Socket
+        emitBotState(updatedBot, req);
 
-// --- RUTAS DE EJECUCIÓN (START / STOP) ---
+        res.json({ success: true, data: updatedBot });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// --- RUTAS DE INICIO (START) ---
 
 router.post('/start/:side', async (req, res) => {
     const { side } = req.params;
     try {
         const { config } = req.body;
         
-        // El motor startSide ya maneja la persistencia y validación internamente
+        // Usamos la lógica centralizada para iniciar
+        // Esto asegura que se verifiquen balances y se pongan las órdenes iniciales si es necesario
         const updatedBot = await autobotLogic.startSide(side, config);
+
         emitBotState(updatedBot, req);
 
         return res.json({ 
             success: true, 
-            message: `Estrategia ${side.toUpperCase()} iniciada correctamente.`, 
+            message: `Estrategia ${side} iniciada.`, 
             price: autobotLogic.getLastPrice() 
         });
         
     } catch (error) {
-        console.error(`❌ Error Start ${side}:`, error.message);
+        console.error(`Error Crítico Start ${side}:`, error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
+
+// --- RUTAS DE PARADA (STOP) ---
 
 router.post('/stop/:side', async (req, res) => {
     const { side } = req.params;
     try {
+        // Usamos la lógica centralizada para detener
         const updatedBot = await autobotLogic.stopSide(side);
+
         emitBotState(updatedBot, req);
-        return res.json({ success: true, message: `${side.toUpperCase()} detenido correctamente.` });
+
+        return res.json({ success: true, message: `${side} detenido correctamente.` });
     } catch (error) {
-        console.error(`❌ Error Stop ${side}:`, error.message);
+        console.error(`Error Stop ${side}:`, error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// --- OPERACIONES GLOBALES ---
+// --- RUTAS GLOBALES (START/STOP ALL) ---
 
 router.post('/start', async (req, res) => {
     try {
         const { config } = req.body;
-        // Inicia ambas ramas secuencialmente
+        // Iniciamos ambos lados
         await autobotLogic.startSide('long', config);
         const updatedBot = await autobotLogic.startSide('short', config);
-        
+
         emitBotState(updatedBot, req);
-        return res.json({ success: true, message: 'Sistema Global activado (LONG & SHORT).' });
+        return res.json({ success: true, message: 'Bot global iniciado.' });
     } catch (error) {
         return res.status(500).json({ success: false, message: error.message });
     }
@@ -88,11 +105,26 @@ router.post('/stop', async (req, res) => {
     try {
         await autobotLogic.stopSide('long');
         const updatedBot = await autobotLogic.stopSide('short');
-        
+
         emitBotState(updatedBot, req);
-        return res.json({ success: true, message: 'Sistema Global detenido.' });
+        return res.json({ success: true, message: 'Bot global detenido.' });
     } catch (error) {
         return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.get('/config-and-state', async (req, res) => {
+    try {
+        const autobot = await Autobot.findOne({});
+        res.json({ 
+            success: !!autobot, 
+            config: autobot?.config, 
+            lstate: autobot?.lstate, 
+            sstate: autobot?.sstate,
+            lastAvailableUSDT: autobot?.lastAvailableUSDT 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false });
     }
 });
 

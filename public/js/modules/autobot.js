@@ -1,25 +1,16 @@
 // public/js/modules/autobot.js
 
-/**
- * autobot.js - Core Logic for Trading Tabs
- * Integration: WebSocket Sync & Dual-Button Control 2026
- */
-
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
 import { askConfirmation } from './confirmModal.js';
-import { activeEdits } from './ui/controls.js';
 
 const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'all';
 let configDebounceTimeout = null;
 
-/**
- * Valida que los montos cumplan con el mínimo del exchange
- */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
     const fields = [`auamount${suffix}-usdt`, `aupurchase${suffix}-usdt`];
@@ -30,25 +21,20 @@ function validateSideInputs(side) {
         if (!input) return;
         const val = parseFloat(input.value);
         if (isNaN(val) || val < MIN_USDT_AMOUNT) {
-            input.classList.add('border-red-500', 'animate-shake');
+            input.classList.add('border-red-500');
             isValid = false;
         } else {
-            input.classList.remove('border-red-500', 'animate-shake');
+            input.classList.remove('border-red-500');
         }
     });
     return isValid;
 }
 
-/**
- * Escucha cambios en todos los inputs de configuración (Dashboard + Tabs)
- */
 function setupConfigListeners() {
     const configIds = [
         'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
         'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
-        'auamountai-usdt', 'ai-amount-usdt', 
-        'au-stop-long-at-cycle', 'au-stop-short-at-cycle', 
-        'au-stop-ai-at-cycle', 'ai-stop-at-cycle'
+        'auamountai-usdt', 'au-stop-long-at-cycle', 'au-stop-short-at-cycle', 'au-stop-ai-at-cycle'
     ];
     
     configIds.forEach(id => {
@@ -57,65 +43,61 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
-            activeEdits[id] = Date.now();
-
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             configDebounceTimeout = setTimeout(async () => {
-                if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
-
                 try {
                     await sendConfigToBackend();
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
                 }
-            }, 800); 
+            }, 500);
         });
     });
 }
 
-/**
- * Inicializa la vista y sincroniza los botones espejo
- */
+// Cambiamos la lógica interna para asegurar que encuentre los elementos recién inyectados
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
 
     setupConfigListeners();
 
-    /**
-     * Configura el evento de Start/Stop para un botón y su lógica asociada
-     */
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
-        if (!btn) return;
+        if (!btn) {
+            console.warn(`⚠️ Botón ${id} no encontrado en el DOM.`);
+            return;
+        }
 
+        // Limpiamos listeners previos clonando
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            // Verificación de estado unificada
-            const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
-                             sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
-                             currentBotState.config.ai.enabled);
+            // Detectar estado por color o texto (clase de uiManager)
+            const isRunning = newBtn.classList.contains('bg-red-600') || 
+                            newBtn.textContent.includes('STOP') ||
+                            (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : currentBotState.sstate !== 'STOPPED');
             
+            // LOGICA DEL MODAL
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
                 if (!confirmed) return;
-            } else {
-                if (sideName !== 'ai' && !validateSideInputs(sideName)) {
-                    displayMessage(`Min $${MIN_USDT_AMOUNT} USDT required for ${sideName.toUpperCase()}`, 'error');
-                    return;
-                }
+            }
+
+            if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
+                displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
+                return;
             }
 
             try {
                 newBtn.disabled = true;
-                newBtn.textContent = isRunning ? "STOPPING..." : "STARTING...";
+                newBtn.textContent = isRunning ? "Stopping..." : "Starting...";
                 await toggleBotSideState(isRunning, sideName);
             } catch (err) {
-                displayMessage(`Error in ${sideName} engine`, 'error');
+                displayMessage(`Error en ${sideName}`, 'error');
                 updateControlsState(currentBotState); 
             } finally {
                 newBtn.disabled = false;
@@ -123,17 +105,16 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones (Espejos entre Dashboard y Tabs)
+    // Inicializar botones
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
-    setupSideBtn('austartai-btn', 'ai'); 
-    setupSideBtn('btn-start-ai', 'ai');
+    setupSideBtn('austartai-btn', 'ai');
 
-    // Sincronización visual inmediata
+    // Sincronizar UI
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico con delay para asegurar renderizado del DOM
+    // Gráfico con delay para asegurar contenedor
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -142,23 +123,17 @@ export async function initializeAutobotView() {
             }
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
-    }, 300);
+    }, 500);
 
-    // Iniciar pestañas de órdenes
-    setupOrderTabs(auOrderList);
-}
-
-function setupOrderTabs(container) {
+    // Gestión de pestañas de órdenes
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
-    if (!orderTabs.length || !container) return;
-
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            btn.classList.remove('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
-            btn.classList.add('text-gray-500');
+            btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
+            btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50', 'text-gray-500');
             if (btn.id === selectedId) {
+                btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
                 btn.classList.remove('text-gray-500');
-                btn.classList.add('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
             }
         });
     };
@@ -168,11 +143,10 @@ function setupOrderTabs(container) {
             const selectedId = e.currentTarget.id;
             setActiveTabStyle(selectedId);
             currentTab = selectedId.replace('tab-', '');
-            fetchOrders(currentTab, container);
+            fetchOrders(currentTab, auOrderList);
         };
     });
 
-    // Carga inicial de órdenes (Pestaña por defecto: Opened/All)
     setActiveTabStyle('tab-all');
-    fetchOrders('all', container);
+    fetchOrders('all', auOrderList);
 }

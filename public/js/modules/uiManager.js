@@ -1,125 +1,101 @@
 /**
- * uiManager.js - Orquestador Atómico (Sincronizado con BD JSON 2026)
- * Ajuste: Sincronización final de estados AI y normalización de renders.
+ * uiManager.js - Orquestador Atómico de Interfaz (Actualizado 2026)
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
-import { isSavingConfig } from './apiService.js';
-
-export { displayMessage } from './ui/notifications.js';
+import { displayMessage } from './ui/notifications.js';
 
 let lastPrice = 0;
 
-const STATUS_COLORS = {
-    'RUNNING': '#10b981',      
-    'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',        
-    'SELLING': '#fbbf24',      
-    'PAUSED': '#fb923c',    
-};
-
 export function updateBotUI(state) {
-    if (!state || isSavingConfig) return;
-    
-    // 1. Precio de Mercado
+    if (!state) return;
+
+    // 1. Precio con detección de tendencia (BTC actual)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
+    
     if (priceEl && currentMarketPrice) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // MAPEO MAESTRO (Sincronizado con los nombres de tu base de datos)
+    // 2. Mapping de valores numéricos (OPTIMIZADO: lpc y spc)
     const elements = {
-        'auprofit': 'total_profit', 
+        auprofit: 'total_profit', 
+        aulbalance: 'lbalance', 
+        ausbalance: 'sbalance',
+        
+        // 🎯 TARGETS: Precios objetivo de venta/compra
+        aultprice: 'ltprice',  
+        austprice: 'stprice',  
+        
+        // 📈 PROMEDIOS Y TRAILING:
+        aultppc: 'lppc',       
+        austppc: 'sppc',       
+        aulsprice: 'lpc',  // ✅ Actualizado a variable real
+        ausbprice: 'spc',  // ✅ Actualizado a variable real
+        
+        // 🔄 CICLOS Y COBERTURAS:
+        aulcycle: 'lcycle', 
+        auscycle: 'scycle',
+        aulcoverage: 'lcoverage', 
+        auscoverage: 'scoverage',
+        
+        // 💰 PROFITS INDIVIDUALES:
+        'aulprofit-val': 'lprofit', 
+        'ausprofit-val': 'sprofit',
+        
+        // 📊 ÓRDENES Y BALANCES REALES:
+        aulnorder: 'lnorder', 
+        ausnorder: 'snorder',
         'aubalance-usdt': 'lastAvailableUSDT', 
-        'aubalance-btc': 'lastAvailableBTC',
-
-        // AUTOBOT: LONG
-        'aulprofit-val': 'lprofit',   
-        'aulbalance': 'lbalance',     
-        'aulcycle': 'lcycle',         
-        'aulsprice': 'lpc',            
-        'aultprice': 'ltprice',       
-        'aultppc': 'lppc',            
-        'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder',      
-
-        // AUTOBOT: SHORT
-        'ausprofit-val': 'sprofit',   
-        'ausbalance': 'sbalance',     
-        'auscycle': 'scycle',         
-        'ausbprice': 'spc',            
-        'austprice': 'stprice',       
-        'austppc': 'sppc',            
-        'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder',
-
-        // AI ENGINE (Sincronizado con los campos específicos de tu JSON)
-        'ai-virtual-balance': 'aibalance', 
-        'ai-adx-val': 'lai',                
-        'ai-stoch-val': 'lac',              
-        'aubot-aistate': 'aistate', 
-
-        // ESTADOS DE INTERFAZ
-        'aubot-lstate': 'lstate',
-        'aubot-sstate': 'sstate',
-        'ai-mode-status': 'aistate' 
+        'aubalance-btc': 'lastAvailableBTC'
     };
 
     Object.entries(elements).forEach(([id, key]) => {
         const el = document.getElementById(id);
         if (!el) return;
         
-        let val = state[key] ?? state.stats?.[key] ?? 0;
-
-        // --- Lógica de Renderizado de Estados y Colores ---
-        if (id.includes('state') || id.includes('status')) {
-            const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
-            el.textContent = currentStatus;
-            el.style.color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
-            el.className = "font-bold font-mono uppercase";
-            return;
+        let val = state[key];
+        
+        // Búsqueda de seguridad si el valor viene en un objeto anidado
+        if (val === undefined || val === null) {
+            val = state.stats?.[key] || 0;
         }
 
-        // --- Lógica de Renderizado de Datos ---
+        // ✨ NUEVO: Lógica de Pulso Visual para el Trailing Stop
+        // Si el precio de corte cambia, el elemento destella en color esmeralda
+        if (id === 'aulsprice' || id === 'ausbprice') {
+            const oldVal = parseFloat(el.textContent.replace(/[^0-9.-]+/g,"")) || 0;
+            const newVal = parseFloat(val);
+            if (oldVal !== 0 && newVal !== oldVal) {
+                el.classList.add('pulse-update');
+                setTimeout(() => el.classList.remove('pulse-update'), 1000);
+            }
+        }
+
+        // --- Lógica de Formateo Inteligente ---
         if (id.includes('profit')) {
             formatProfit(el, val);
-        } else if (id.includes('btc') || id === 'aubalance-btc') {
-            el.textContent = parseFloat(val).toFixed(6);
-        } else if (id.includes('cycle') || id.includes('norder')) {
-            el.textContent = Math.floor(val); 
-        } else if (id.includes('adx') || id.includes('stoch')) {
-            el.textContent = val < 1 ? parseFloat(val).toFixed(4) : parseFloat(val).toFixed(1);
-            updatePulseBars(id, val); 
-        } else if (id.includes('coverage')) {
-            el.textContent = parseFloat(val).toLocaleString(); 
+        } else if (id.includes('btc') || id.includes('sac') || id.includes('lac')) {
+            // ₿ Cantidad de monedas (BTC) lleva 8 decimales
+            formatValue(el, val, true, false);
+        } else if (id.match(/norder|cycle/)) {
+            // # Números enteros (Ciclos, Órdenes)
+            formatValue(el, val, false, true);
         } else {
+            // 💵 Precios y Balances USDT a 2 decimales
             formatValue(el, val, false, false);
         }
     });
 
-    // 3. Sincronización de Barras de Confianza (AI)
-    if (state.aiConfidence !== undefined) {
-        const bar = document.getElementById('ai-confidence-fill');
-        if (bar) bar.style.width = `${state.aiConfidence}%`;
-    }
-
-    // 4. Sincronización de Inputs
-    if (state.config) { 
-        syncInputsFromConfig(state.config); 
-    }
-
+    // 3. Sincronización de Controles y Configuración
+    if (state.config) syncInputsFromConfig(state.config);
     updateControlsState(state);
 }
 
-function updatePulseBars(id, value) {
-    const barId = id.replace('-val', '-bar');
-    const bar = document.getElementById(barId);
-    if (!bar) return;
-    let percent = id.includes('adx') ? (value / 50) * 100 : (value * 100); 
-    bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
-}
-
+/**
+ * Sincroniza estados de ejecución con la interfaz
+ */
 export function updateControlsState(state) {
     if (!state) return;
     
@@ -127,23 +103,38 @@ export function updateControlsState(state) {
     const sState = state.sstate || 'STOPPED';
     const aiState = state.aistate || 'STOPPED';
 
-    // Selectores actualizados para coincidir con el DOM del dashboard y AI tab
-    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
-    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
+    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'aupricestep-l', 'autriggerl'];
+    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'aupricestep-s', 'autriggers'];
 
+    // 1. Ejecutamos la lógica de controles
     updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
-    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
+    updateButtonState('austartai-btn', aiState, 'AI', ['auamountai-usdt']);
     
-    const engineMsg = document.getElementById('ai-engine-msg');
-    if (engineMsg) {
-        if (state.aistate === 'RUNNING' || state.config?.ai?.enabled) {
-            engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
-            engineMsg.classList.add('animate-pulse', 'text-blue-400');
-        } else {
-            engineMsg.textContent = "AI CORE IN STANDBY";
-            engineMsg.classList.remove('animate-pulse', 'text-blue-400');
-        }
+    // 2. REFUERZO CORREGIDO (Sin colores grises)
+    const btnShort = document.getElementById('austarts-btn');
+    if (btnShort && sState === 'STOPPED') {
+        btnShort.textContent = `START SHORT`;
+        btnShort.classList.remove('bg-red-600', 'bg-slate-600');
+        btnShort.classList.add('bg-emerald-600'); // <--- VERDE
     }
+
+    const btnLong = document.getElementById('austartl-btn');
+    if (btnLong && lState === 'STOPPED') {
+        btnLong.textContent = `START LONG`;
+        btnLong.classList.remove('bg-red-600', 'bg-slate-600');
+        btnLong.classList.add('bg-emerald-600'); // <--- VERDE
+    }
+    
+    updateStatusBadge('lstate-badge', lState);
+    updateStatusBadge('sstate-badge', sState);
 }
+
+function updateStatusBadge(id, status) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = status;
+    el.className = `badge ${status === 'RUNNING' || status === 'BUYING' || status === 'SELLING' ? 'bg-emerald-500' : 'bg-slate-500'}`;
+}
+
+export { displayMessage };

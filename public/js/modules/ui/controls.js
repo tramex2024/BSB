@@ -1,29 +1,20 @@
 // public/js/modules/ui/controls.js
 
+// ✅ QUITAMOS 'STOPPED' DE ESTA LISTA
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
-    'RUNNING': '#10b981',      
-    'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',        
-    'SELLING': '#fbbf24',      
-    'PAUSED': '#fb923c',
- //   'WAITING': '#8b5cf6'      
+    'RUNNING': '#10b981',      // Esmeralda
+    'STOPPED': '#ef4444',      // Rojo
+    'BUYING': '#60a5fa',       // Azul
+    'SELLING': '#fbbf24',      // Amarillo    
+    'PAUSED': '#fb923c'        // 
 };
 
-export const activeEdits = {};
-
-document.addEventListener('input', (e) => {
-    if (e.target.tagName === 'INPUT') {
-        activeEdits[e.target.id] = Date.now();
-    }
-});
-
-/**
- * Bloquea estrictamente TODOS los parámetros si la estrategia no está en STOPPED
- */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
+    
+    // Ahora 'STOPPED' devolverá FALSE aquí
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
@@ -31,30 +22,31 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
+    // 1. ACTUALIZAR ETIQUETA
     if (label) {
         label.textContent = currentStatus;
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
+    // 2. ACTUALIZAR BOTÓN
     if (btn) {
-        // CAMBIO AQUÍ: Si es AI, usamos "AI CORE" para que coincida con el resto de la app
-        const suffix = (type === 'AI') ? 'AI CORE' : type.toUpperCase();
-        btn.textContent = isBusy ? `STOP ${suffix}` : `START ${suffix}`;
+        // Si no está busy (ej: STOPPED), dirá "START"
+        btn.textContent = isBusy ? `STOP ${type.charAt(0).toUpperCase()}` : `START ${type.charAt(0).toUpperCase()}`;
         
         if (isBusy) {
-            btn.classList.remove('bg-emerald-600', 'bg-blue-600');
+            btn.classList.remove('bg-emerald-600');
             btn.classList.add('bg-red-600');
         } else {
+            // Cuando sea STOPPED, entrará aquí y se pondrá verde/esmeralda para invitar a iniciar
             btn.classList.remove('bg-red-600');
-            // Si es AI usamos el azul que tienes en el diseño, si no, esmeralda
-            btn.classList.add(type === 'AI' ? 'bg-blue-600' : 'bg-emerald-600');
+            btn.classList.add('bg-emerald-600');
         }
+        // ✅ EL BOTÓN SIEMPRE QUEDA HABILITADO SEGÚN TU LÓGICA ORIGINAL
         btn.disabled = false;
         btn.style.opacity = "1";
     }
 
-    // 🛡️ BLOQUEO DE SEGURIDAD: 
-    // Si isBusy es true, se deshabilitan todos los IDs proporcionados.
+    // 3. GESTIÓN DE INPUTS (Ahora se desbloquean al estar STOPPED)
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -65,9 +57,39 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     });
 }
 
-export function syncInputsFromConfig(conf) {
-    if (!conf || (!conf.long && !conf.short)) return;
+/**
+ * ✅ NUEVA FUNCIÓN: Recolecta los datos de la web para enviarlos al servidor.
+ * Úsala en main.js antes de hacer el POST a /api/autobot/update-config
+ */
+export function collectConfigFromUI() {
+    return {
+        symbol: "BTC_USDT",
+        long: {
+            amountUsdt: parseFloat(document.getElementById('auamountl-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchasel-usdt')?.value) || 0,
+            size_var: parseFloat(document.getElementById('auincrementl')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrementl')?.value) || 0,
+            price_step_inc: parseFloat(document.getElementById('aupricestep-l')?.value) || 0,
+            profit_percent: parseFloat(document.getElementById('autriggerl')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-long-at-cycle')?.checked || false
+        },
+        short: {
+            amountUsdt: parseFloat(document.getElementById('auamounts-usdt')?.value) || 0,
+            purchaseUsdt: parseFloat(document.getElementById('aupurchases-usdt')?.value) || 0,
+            size_var: parseFloat(document.getElementById('auincrements')?.value) || 0,
+            price_var: parseFloat(document.getElementById('audecrements')?.value) || 0,
+            price_step_inc: parseFloat(document.getElementById('aupricestep-s')?.value) || 0,
+            profit_percent: parseFloat(document.getElementById('autriggers')?.value) || 0,
+            stopAtCycle: document.getElementById('au-stop-short-at-cycle')?.checked || false
+        }
+    };
+}
 
+/**
+ * Sincroniza los valores de los inputs con la configuración de la DB
+ */
+export function syncInputsFromConfig(conf) {
+    if (!conf) return;
     const mapping = {
         'auamountl-usdt': conf.long?.amountUsdt,
         'aupurchasel-usdt': conf.long?.purchaseUsdt,
@@ -80,43 +102,22 @@ export function syncInputsFromConfig(conf) {
         'auincrements': conf.short?.size_var,
         'audecrements': conf.short?.price_var,
         'aupricestep-s': conf.short?.price_step_inc,
-        'autriggers': conf.short?.profit_percent,
-        'auamountai-usdt': conf.ai?.amountUsdt
+        'autriggers': conf.short?.profit_percent
     };
-
-    const now = Date.now();
 
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
-        if (!input || value === undefined || value === null) continue;
-
-        const lastEdit = activeEdits[id] || 0;
-        const isFreshlyEdited = (now - lastEdit < 3000);
-
-        if (document.activeElement === input || isFreshlyEdited) {
-            continue; 
-        }
-
-        if (parseFloat(value) === 0 && parseFloat(input.value) > 0) {
-            continue;
-        }
-
-        const currentVal = parseFloat(input.value) || 0;
-        const newVal = parseFloat(value) || 0;
-
-        if (Math.abs(currentVal - newVal) > 0.000001) {
-            input.value = value;
+        if (input && value !== undefined && document.activeElement !== input) {
+            const newVal = parseFloat(value) || 0;
+            input.value = newVal;
         }
     }
     
-    ['long', 'short', 'ai'].forEach(side => {
-        const id = `au-stop-${side}-at-cycle`;
-        const el = document.getElementById(id);
-        const val = !!conf[side]?.stopAtCycle;
-        const lastEdit = activeEdits[id] || 0;
-
-        if (el && document.activeElement !== el && (now - lastEdit >= 3000)) {
-            if (el.checked !== val) el.checked = val;
+    // Checkboxes
+    ['long', 'short'].forEach(side => {
+        const el = document.getElementById(`au-stop-${side}-at-cycle`);
+        if (el && document.activeElement !== el) {
+            el.checked = !!conf[side]?.stopAtCycle;
         }
     });
 }

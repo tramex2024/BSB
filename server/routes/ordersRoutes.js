@@ -5,10 +5,11 @@ const router = express.Router();
 const orderController = require('../controllers/orderController'); // Importa el controlador
 const authMiddleware = require('../middleware/authMiddleware'); // Asegúrate de tener este middleware para proteger la ruta
 
-// La ruta será: GET /api/orders/:status (ej: /api/orders/opened)
+// Esta ruta ahora aceptará cualquier "status" como un parámetro dinámico
+// La ruta completa será: /api/orders/:status
 router.get('/:status', authMiddleware, orderController.getOrders);
 
-module.exports = router;            // server/controllers/orderController.js
+module.exports = router;                                                // server/controllers/orderController.js
 
 const bitmartService = require('../services/bitmartService');
 // Si estás utilizando el modelo 'Order' para guardar el historial, debería ser importado:
