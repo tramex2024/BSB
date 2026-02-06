@@ -10,24 +10,24 @@ function createOrderHtml(order) {
         ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' 
         : 'text-red-400 border-red-500/20 bg-red-500/5';
     
-    // Normalización de estados: El backend ahora envía 'filled', 'cancelled' o 'opened'
+    // Normalización de estados: Soportamos múltiples formatos del exchange y DB
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
     
-    // Usamos orderTime que es el campo unificado que creamos en el Backend
+    // Usamos orderTime que es el campo unificado
     const timestamp = order.orderTime || order.createTime || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
     });
 
     const price = parseFloat(order.price || 0).toFixed(2);
-    const quantity = parseFloat(order.size || 0).toFixed(4);
+    const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
     const fullOrderId = (order.orderId || '').toString();
 
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
-    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
+    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'} animate-fadeIn">
         <div class="flex items-center gap-4 w-1/4">
             <div class="flex flex-col">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Side</span>
@@ -72,21 +72,28 @@ export async function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        // Llamada directa a nuestro controlador unificado
+        console.log(`[FRONTEND] 🚀 Solicitando órdenes tipo: ${status}`);
+        
         const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
         if (!response.ok) throw new Error('Error en respuesta del servidor');
 
-        const orders = await response.json(); // El backend ya envía el array directo o []
+        const result = await response.json(); 
         
-        if (!orders || orders.length === 0) {
+        // EXTRAER ARRAY DE ÓRDENES: 
+        // El controlador envía { data: [] }, pero otros pueden enviar el array directo []
+        const ordersArray = Array.isArray(result) ? result : (result.data || []);
+        
+        console.log(`[FRONTEND] ✅ Órdenes recibidas:`, ordersArray.length);
+        
+        if (ordersArray.length === 0) {
             orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No orders found</div>`;
             return;
         }
 
-        orderListElement.innerHTML = orders.map(order => createOrderHtml(order)).join('');
+        orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
 
     } catch (error) {
         console.error("❌ Fetch error:", error);

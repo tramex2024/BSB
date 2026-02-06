@@ -1,58 +1,55 @@
 // BSB/server/controllers/orderController.js
 
-const bitmartService = require('../services/bitmartService');
+/**
+ * orderController.js - Versión Unificada Corregida
+ * Recupera órdenes reales de MongoDB para las pestañas Filled, Cancelled y All
+ */
+const Order = require('../models/Order');
 
-exports.getOrders = async (req, res) => {
-    const { status } = req.params;
-    const symbol = 'BTC_USDT';
+const orderController = {
+    // Retorna órdenes según su estado
+    getOrders: async (req, res) => {
+        try {
+            const { type } = req.params; // 'all', 'filled', 'cancelled'
+            console.log(`[ORDERS-API] 🔍 Petición recibida para tipo: ${type}`);
 
-    console.log(`[ORDERS] Petición recibida para tipo: ${status}`);
+            let query = {};
+            
+            // Filtros basados en el estado almacenado en MongoDB
+            if (type === 'filled') {
+                query = { status: 'filled' };
+            } else if (type === 'cancelled') {
+                query = { status: { $in: ['canceled', 'cancelled', 'rejected'] } };
+            }
+            // Si es 'all', el query se queda vacío {} para traer todo
 
-    try {
-        let ordersToReturn = [];
+            const orders = await Order.find(query)
+                .sort({ orderTime: -1 }) // Las más recientes primero
+                .limit(50);
 
-        switch (status) {
-            case 'opened':
-                // REST como respaldo: Si el WebSocket aún no ha conectado, 
-                // el frontend pide aquí las órdenes actuales.
-                const openData = await bitmartService.getOpenOrders(symbol);
-                ordersToReturn = openData.orders || []; 
-                break;
-
-            case 'filled':
-            case 'cancelled':
-            case 'all':
-                const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
-                
-                const historyParams = {
-                    symbol: symbol,
-                    startTime: ninetyDaysAgo,
-                    endTime: Date.now(),
-                    limit: 100 
-                };
-                
-                // Mapeamos el status del frontend al formato que espera BitMart
-                if (status !== 'all') {
-                    historyParams.order_state = status; 
-                }
-                
-                const historyData = await bitmartService.getHistoryOrders(historyParams);
-                // getHistoryOrders ya devuelve el array mapeado en nuestro service unificado
-                ordersToReturn = historyData;
-                break;
-                
-            default:
-                return res.status(400).json({ success: false, message: 'Parámetro de estado inválido' });
+            console.log(`[ORDERS-API] ✅ Enviando ${orders.length} órdenes al frontend.`);
+            
+            return res.status(200).json({
+                success: true,
+                count: orders.length,
+                data: orders
+            });
+        } catch (error) {
+            console.error('❌ Error en getOrders:', error);
+            res.status(500).json({ success: false, message: 'Error interno del servidor' });
         }
+    },
 
-        // Enviamos siempre un Array, incluso si está vacío
-        return res.status(200).json(ordersToReturn);
-        
-    } catch (error) {
-        console.error('❌ Error en getOrders:', error.message);
-        return res.status(500).json({ 
-            success: false, 
-            message: error.message || 'Error interno al obtener órdenes' 
-        });
+    // Esta ruta se mantiene por compatibilidad, pero ahora busca en DB
+    getOpenedOrders: async (req, res) => {
+        try {
+            // Intentamos traer lo que la DB cree que está abierto
+            const openOrders = await Order.find({ status: 'new' }).sort({ orderTime: -1 });
+            res.status(200).json(openOrders);
+        } catch (error) {
+            res.status(500).json([]);
+        }
     }
 };
+
+module.exports = orderController;

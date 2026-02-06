@@ -80,7 +80,6 @@ const aiBotUI = {
         const tbody = document.getElementById('ai-history-table-body');
         if (!tbody) return;
 
-        // Aseguramos que trades sea un array
         const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
         
         if (tradesList.length === 0) {
@@ -90,10 +89,8 @@ const aiBotUI = {
 
         tbody.innerHTML = tradesList.map(trade => {
             const isBuy = (trade.side || '').toUpperCase() === 'BUY';
-            // BitMart v4 usa 'confidence' en los canales de estrategia
             const score = trade.confidenceScore || (trade.confidence * 100) || 0;
             
-            // Usamos trade.orderTime que normalizamos en el service
             const time = trade.orderTime 
                 ? new Date(Number(trade.orderTime)).toLocaleTimeString() 
                 : new Date(trade.timestamp).toLocaleTimeString();
@@ -123,6 +120,55 @@ const aiBotUI = {
     },
 
     /**
+     * MÉTODOS PARA ÓRDENES ABIERTAS (Sincronización WebSocket)
+     */
+    updateOpenOrdersTable: function(orders) {
+        const tbody = document.getElementById('ai-open-orders-body'); // Asegúrate de que este ID exista en tu HTML
+        if (!tbody) {
+            console.error("❌ No se encontró el elemento 'ai-open-orders-body' en el DOM.");
+            return;
+        }
+
+        const ordersList = Array.isArray(orders) ? orders : [];
+        console.log(`🖥️ UI: Renderizando ${ordersList.length} órdenes abiertas.`);
+
+        if (ordersList.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 uppercase text-[9px] tracking-widest opacity-50">No Open Positions</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = ordersList.map(order => {
+            const isBuy = (order.side || '').toUpperCase() === 'BUY';
+            const price = parseFloat(order.price || 0);
+            const amount = parseFloat(order.amount || order.size || 0);
+
+            return `
+                <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
+                    <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
+                        ${order.orderId ? order.orderId.slice(-6) : '---'}
+                    </td>
+                    <td class="px-6 py-3">
+                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">
+                            ${isBuy ? 'BUY' : 'SELL'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">
+                        $${price.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                    </td>
+                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">
+                        ${amount.toFixed(4)} BTC
+                    </td>
+                    <td class="px-6 py-3 text-right">
+                        <button class="text-red-500/50 hover:text-red-500 transition-colors">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    /**
      * GLOBAL SYNC: UI state driven by Backend
      */
     setRunningStatus: (isRunning, stopAtCycle = null) => {
@@ -133,7 +179,6 @@ const aiBotUI = {
         const aiInput = document.getElementById('ai-amount-usdt');
         const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-        // 1. Sync Stop At Cycle Switch
         if (stopCycleCheck && stopAtCycle !== null) {
             stopCycleCheck.checked = stopAtCycle;
         }
