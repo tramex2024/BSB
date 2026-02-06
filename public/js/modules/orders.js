@@ -1,6 +1,4 @@
-// public/js/modules/orders.js
-
-// public/js/modules/orders.js
+// BSB/public/js/modules/orders.js
 
 import { BACKEND_URL } from '../main.js';
 
@@ -9,9 +7,27 @@ function createOrderHtml(order) {
     const isBuy = side === 'buy';
     const sideTheme = isBuy ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5';
     
-    const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
-    const isFilled = rawState.includes('FILLED');
+    // --- LÓGICA DE ESTADO MEJORADA PARA FILTRADO VISUAL ---
+    const rawState = String(order.state || order.status || 'UNKNOWN').toUpperCase();
     
+    // BitMart v4 usa: 1=Filled, 2=Canceled (a veces 6), 4=Partially Filled
+    const isFilled = rawState === '1' || rawState.includes('FILLED');
+    const isCancelled = rawState === '6' || rawState === '2' || rawState.includes('CANCELL');
+    
+    let statusLabel = rawState;
+    let statusClass = 'bg-gray-500/20 text-gray-400';
+
+    if (isFilled) {
+        statusLabel = 'FILLED';
+        statusClass = 'bg-emerald-500/20 text-emerald-400';
+    } else if (isCancelled) {
+        statusLabel = 'CANCELLED';
+        statusClass = 'bg-red-500/20 text-red-400';
+    } else if (['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState)) {
+        statusLabel = 'OPEN';
+        statusClass = 'bg-orange-500/20 text-orange-400';
+    }
+
     const timestamp = order.orderTime || order.createTime || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
@@ -19,12 +35,10 @@ function createOrderHtml(order) {
 
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
-    
-    // RESTAURADO: ID completo de la orden
-    const fullOrderId = (order.orderId || '').toString();
+    const fullOrderId = (order.orderId || order.order_id || '').toString();
 
-    // Sincronizado con estados de BitMart v4
-    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
+    // Sincronizado con estados de BitMart v4 para permitir cancelación
+    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(statusLabel);
 
     return `
     <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
@@ -48,8 +62,8 @@ function createOrderHtml(order) {
             </div>
             <div class="flex flex-col items-center">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Status</span>
-                <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
-                    ${rawState}
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold ${statusClass}">
+                    ${statusLabel}
                 </span>
             </div>
         </div>
@@ -61,7 +75,7 @@ function createOrderHtml(order) {
                         class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
                     Cancel
                 </button>
-            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right">ID: ${fullOrderId}</p>`}
+            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right">ID: ${fullOrderId.substring(0,8)}...</p>`}
         </div>
     </div>`;
 }
