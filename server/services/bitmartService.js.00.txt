@@ -143,16 +143,14 @@ const bitmartService = {
 
 getHistoryOrders: async (options = {}) => {
     const now = Date.now();
-    // Calculamos 30 días atrás (30 días * 24h * 60m * 60s * 1000ms)
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
 
     const requestBody = {
-        symbol: options.symbol,
+        symbol: options.symbol || 'BTC_USDT', // Aseguramos un símbolo por defecto si llega undefined
         orderMode: 'spot',
-        limit: options.limit || 100, // Aumentamos el límite por defecto
-        // BitMart v4 usa milisegundos para startTime y endTime
-        startTime: options.startTime || thirtyDaysAgo,
-        endTime: options.endTime || now
+        limit: options.limit || 100,
+        startTime: parseInt(options.startTime || thirtyDaysAgo),
+        endTime: parseInt(options.endTime || now)
     };
 
     const status = options.order_state || options.status;
@@ -160,26 +158,47 @@ getHistoryOrders: async (options = {}) => {
         requestBody.status = orderStatusMap[status];
     }
 
+    // --- LOG 1: ¿Qué estamos pidiendo? ---
+    console.log(`${LOG_PREFIX} 🔍 CONSULTA HISTORIAL:`, {
+        symbol: requestBody.symbol,
+        limit: requestBody.limit,
+        from: new Date(requestBody.startTime).toISOString(),
+        to: new Date(requestBody.endTime).toISOString(),
+        statusRequested: status
+    });
+
     try {
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         
-        // BitMart v4 devuelve la lista en res.data.list o res.data.data.list
+        // --- LOG 2: Respuesta cruda de BitMart ---
+        // Esto nos dirá si el code es 1000 y si 'data' contiene lo que esperamos
+        console.log(`${LOG_PREFIX} 📡 RESPUESTA RAW BITMART (Code):`, res.code);
+
         const rawOrders = res.data?.data?.list || res.data?.list || [];
         
+        // --- LOG 3: Conteo final ---
+        console.log(`${LOG_PREFIX} 📦 ÓRDENES ENCONTRADAS: ${rawOrders.length}`);
+        
+        if (rawOrders.length > 0) {
+            console.log(`${LOG_PREFIX} 💡 EJEMPLO PRIMERA ORDEN:`, {
+                id: rawOrders[0].orderId,
+                side: rawOrders[0].side,
+                state: rawOrders[0].status || rawOrders[0].state
+            });
+        }
+
         return rawOrders.map(o => ({
             ...o,
-            // Normalización de precios y tamaños para la UI
             price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
             size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            // Aseguramos que el timestamp sea accesible para el frontend
             updateTime: o.updateTime || o.createTime
         }));
     } catch (error) {
-        console.error(`${LOG_PREFIX} Error consultando historial:`, error.message);
+        // --- LOG 4: Error detallado ---
+        console.error(`${LOG_PREFIX} ❌ ERROR CRÍTICO EN HISTORIAL:`, error.message);
         return [];
     }
 },
-
     placeOrder: async (symbol, side, type, amount, price) => {
         const sideLower = side.toLowerCase();
         const body = { 
