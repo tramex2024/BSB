@@ -85,41 +85,33 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     const { 
         config, log, updateBotState, updateLStateData, 
-        updateGeneralBotState, logSuccessfulCycle 
+        updateGeneralBotState, logSuccessfulCycle // <--- Recibida de deps
     } = dependencies;
     
     try {
         const currentLData = botStateObj.lStateData;
         
-        // 1. Cálculos de precisión
+        // 1. Cálculos de precisión (8 decimales para BTC)
         const totalBtcToSell = parseFloat(currentLData.ac || 0);
         const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         
+        // Retorno neto tras la comisión de BitMart
         const totalUsdtReceived = (totalBtcToSell * sellPrice) * (1 - SELL_FEE_PERCENT);
         const totalInvestment = parseFloat(currentLData.ai || 0);
         const profitNeto = totalUsdtReceived - totalInvestment;
 
-        // 2. Registro corregido (Ahora con todos los campos requeridos)
+        // 2. Registro obligatorio en historial
         if (logSuccessfulCycle && currentLData.cycleStartTime) {
             try {
                 await logSuccessfulCycle({
-                    autobotId: botStateObj._id, // REQUERIDO
-                    symbol: botStateObj.config.symbol || 'BTC_USDT', // REQUERIDO
                     strategy: 'Long',
                     cycleIndex: (botStateObj.lcycle || 0) + 1,
-                    startTime: currentLData.cycleStartTime, // REQUERIDO
-                    endTime: new Date(), // REQUERIDO
-                    averagePPC: parseFloat(currentLData.ppc || 0), // REQUERIDO
-                    finalSellPrice: sellPrice, // REQUERIDO
-                    orderCount: parseInt(currentLData.orderCountInCycle || 0), // REQUERIDO
-                    initialInvestment: totalInvestment,
-                    finalRecovery: totalUsdtReceived,
                     netProfit: profitNeto,
-                    profitPercentage: (profitNeto / totalInvestment) * 100 // REQUERIDO
+                    initialInvestment: totalInvestment,
+                    finalRecovery: totalUsdtReceived
                 });
                 log(`✅ Ciclo #${(botStateObj.lcycle || 0) + 1} guardado en base de datos.`, 'success');
             } catch (dbError) {
-                // Aquí es donde caía el ciclo 10 por falta de campos
                 log(`⚠️ Error al escribir en tradecycles: ${dbError.message}`, 'error');
             }
         }

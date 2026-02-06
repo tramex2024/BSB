@@ -1,17 +1,17 @@
+// public/js/modules/autobot.js
+
 import { initializeChart } from './chart.js';
-import { fetchOrders } from './orders.js';
+import { fetchOrders, updateOpenOrdersTable } from './orders.js';
 import { updateBotUI, displayMessage } from './uiManager.js';
-import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; // Importamos la nueva función por lado
-import { TRADE_SYMBOL_TV, socket } from '../main.js';
+import { sendConfigToBackend, toggleBotState } from './apiService.js';
+import { TRADE_SYMBOL_TV, BACKEND_URL, socket } from '../main.js';
 
 const MIN_USDT_AMOUNT = 5.00;
 let currentTab = 'opened';
 
-function validateSideInputs(side) {
-    const suffix = side === 'long' ? 'l' : 's';
-    const fields = [`auamount${suffix}-usdt`, `aupurchase${suffix}-usdt`];
+function validateStrategyInputs() {
+    const fields = ['auamountl-usdt', 'auamounts-usdt', 'aupurchasel-usdt', 'aupurchases-usdt'];
     let isValid = true;
-    
     fields.forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
@@ -27,13 +27,12 @@ function validateSideInputs(side) {
 }
 
 function setupConfigListeners() {
-    // IDs actualizados para el Motor Exponencial
     const configIds = [
-        'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
-        'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
-        'auamountai-usdt', 'au-stop-long-at-cycle', 'au-stop-short-at-cycle', 'au-stop-ai-at-cycle'
+        'auamountl-usdt', 'auamounts-usdt', 
+        'aupurchasel-usdt', 'aupurchases-usdt', 
+        'auincrement', 'audecrement', 'autrigger', 
+        'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
     ];
-    
     configIds.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -42,7 +41,7 @@ function setupConfigListeners() {
                 const val = parseFloat(el.value);
                 el.classList.toggle('border-red-500', isNaN(val) || val < 0);
             }
-            sendConfigToBackend(); // Guarda cambios en tiempo real
+            sendConfigToBackend();
         });
     });
 }
@@ -51,57 +50,54 @@ export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     setupConfigListeners();
 
-    // Inicializar Gráfico
     setTimeout(() => {
         if (document.getElementById('au-tvchart')) {
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
     }, 400);
 
-    // --- LÓGICA DE 3 BOTONES INDEPENDIENTES ---
-    const setupSideBtn = (id, sideName) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-
-        // Clonamos para limpiar listeners previos
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-
-        newBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const isRunning = newBtn.textContent.includes('STOP');
-            
-            // Validar solo si vamos a encender
-            if (!isRunning && sideName !== 'ai' && !validateSideInputs(sideName)) {
-                displayMessage(`Mínimo $${MIN_USDT_AMOUNT} USDT para ${sideName.toUpperCase()}`, 'error');
-                return;
-            }
-
-            try {
-                // Llamamos a la API específicamente para este lado
-                await toggleBotSideState(isRunning, sideName);
-            } catch (err) {
-                console.error(`❌ Error en ${sideName}:`, err);
-            }
-        });
+    const activateStartBtn = () => {
+        const startBtn = document.getElementById('austart-btn');
+        if (startBtn) {
+            const newBtn = startBtn.cloneNode(true);
+            startBtn.parentNode.replaceChild(newBtn, startBtn);
+            newBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const isRunning = newBtn.textContent.includes('STOP');
+                if (!isRunning && !validateStrategyInputs()) {
+                    displayMessage(`Min amount is $${MIN_USDT_AMOUNT} USDT`, 'error');
+                    return;
+                }
+                try {
+                    await toggleBotState(isRunning);
+                } catch (err) {
+                    console.error("❌ Error:", err);
+                }
+            });
+            return true;
+        }
+        return false;
     };
 
-    // Inicializamos los 3 botones
-    setupSideBtn('austartl-btn', 'long');
-    setupSideBtn('austarts-btn', 'short');
-    setupSideBtn('austartai-btn', 'ai');
+    if (!activateStartBtn()) {
+        const retry = setInterval(() => {
+            if (activateStartBtn()) clearInterval(retry);
+        }, 200);
+        setTimeout(() => clearInterval(retry), 3000);
+    }
 
     // --- GESTIÓN DE PESTAÑAS ---
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
+    
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50');
+            btn.classList.add('bg-gray-800/40', 'border', 'border-gray-700/50', 'transition-all');
             if (btn.id === selectedId) {
                 btn.classList.add('text-emerald-400', 'font-bold', 'border-emerald-500/30');
-                btn.classList.remove('text-gray-500');
+                btn.classList.remove('text-gray-500', 'font-normal');
             } else {
                 btn.classList.remove('text-emerald-400', 'font-bold', 'border-emerald-500/30');
-                btn.classList.add('text-gray-500');
+                btn.classList.add('text-gray-500', 'font-normal');
             }
         });
     };
@@ -115,15 +111,22 @@ export async function initializeAutobotView() {
         });
     });
 
-    // Carga inicial de órdenes
+    // Carga inicial
     setActiveTabStyle('tab-opened');
     fetchOrders('opened', auOrderList);
 
-    // Socket: Escuchar actualizaciones de estado
+    // --- SOCKETS: ACTUALIZACIÓN EN TIEMPO REAL ---
     if (socket) {
+        // Limpiar listeners previos para evitar duplicados al cambiar de pestaña
         socket.off('bot-state-update');
-        socket.on('bot-state-update', (state) => {
-            updateBotUI(state);
+        socket.off('orders-update'); 
+
+        // Actualiza botones y estado general
+        socket.on('bot-state-update', (state) => updateBotUI(state));
+
+        // Actualiza la lista de órdenes si estamos en la pestaña "opened"
+        socket.on('orders-update', (data) => {
+            updateOpenOrdersTable(data, 'au-order-list', currentTab);
         });
     }
 }
