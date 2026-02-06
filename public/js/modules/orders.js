@@ -1,5 +1,8 @@
 // public/js/modules/orders.js
 
+/**
+ * orders.js - Gestión y Visualización de Órdenes (Historial de 30 días)
+ */
 import { BACKEND_URL } from '../main.js';
 
 /**
@@ -16,9 +19,22 @@ function createOrderHtml(order) {
     
     const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
     
-    const state = (order.state || order.status || 'UNKNOWN').toUpperCase();
-    const isFilled = state.includes('FILLED');
-    const timestamp = order.createTime || order.create_time || Date.now();
+    // Mapeo de estados BitMart (Texto o Numérico)
+    const rawState = (order.state || order.status || 'UNKNOWN').toString().toUpperCase();
+    let stateDisplay = rawState;
+    let isFilled = false;
+
+    if (rawState === '1' || rawState.includes('FILLED')) {
+        stateDisplay = 'FILLED';
+        isFilled = true;
+    } else if (rawState === '6' || rawState.includes('CANCELL')) {
+        stateDisplay = 'CANCELLED';
+    } else if (rawState === '0' || ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState)) {
+        stateDisplay = 'OPEN';
+    }
+    
+    // Priorizamos updateTime para el historial
+    const timestamp = order.updateTime || order.createTime || order.create_time || Date.now();
     
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' 
@@ -27,12 +43,10 @@ function createOrderHtml(order) {
     const priceFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const qtyFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
 
-    const price = priceFormatter.format(parseFloat(order.price || order.filled_price || 0));
+    const price = priceFormatter.format(parseFloat(order.price || order.filled_price || order.priceAvg || 0));
     const quantity = qtyFormatter.format(parseFloat(order.filled_size || order.size || 0));
 
-    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(state);
-
-    // Ajuste aquí: Se eliminó el .slice(-6) para mostrar el ID completo
+    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING', '0'].includes(rawState);
     const fullOrderId = (order.orderId || order.order_id || '').toString();
 
     return `
@@ -59,7 +73,7 @@ function createOrderHtml(order) {
             <div class="flex flex-col items-center">
                 <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Status</span>
                 <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
-                    ${state}
+                    ${stateDisplay}
                 </span>
             </div>
         </div>
@@ -84,14 +98,20 @@ export function displayOrders(orders, orderListElement, filterType) {
 
     let filteredOrders = orders;
 
+    // Lógica de filtrado cliente
     if (filterType === 'filled') {
-        filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('filled'));
+        filteredOrders = orders.filter(o => {
+            const s = (o.state || o.status || '').toString().toLowerCase();
+            return s.includes('filled') || s === '1';
+        });
     } else if (filterType === 'cancelled') {
-        filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
+        filteredOrders = orders.filter(o => {
+            const s = (o.state || o.status || '').toString().toLowerCase();
+            return s.includes('cancel') || s === '6';
+        });
     } else if (filterType === 'opened') {
-        // Incluimos 'new' para que detecte las órdenes abiertas según el test de BitMart
-        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
-        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
+        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending', '0'];
+        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toString().toLowerCase()));
     }
 
     if (filteredOrders.length === 0) {
@@ -103,6 +123,13 @@ export function displayOrders(orders, orderListElement, filterType) {
         return;
     }
 
+    // Ordenar por tiempo descendente (más recientes primero)
+    filteredOrders.sort((a, b) => {
+        const timeA = a.updateTime || a.createTime || 0;
+        const timeB = b.updateTime || b.createTime || 0;
+        return timeB - timeA;
+    });
+
     orderListElement.innerHTML = filteredOrders.map(order => createOrderHtml(order)).join('');
 }
 
@@ -112,30 +139,26 @@ export async function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-20 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
 
     try {
-        // ✅ Ajustamos el endpoint: 
-        // Si el backend no tiene /history, usamos 'all' o 'filled' según tu API real.
-        // Basado en errores previos, intentemos con 'all' que es el estándar de tu lógica.
         const endpoint = (status === 'all') ? 'all' : status; 
         
-        const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
+        // CORRECCIÓN: Solicitamos 30 días exactos al servidor
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
         
-        // Construimos la URL
         const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
-        url.searchParams.append('startTime', fifteenDaysAgo); 
+        url.searchParams.append('startTime', thirtyDaysAgo); 
 
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
-        // Si 'all' da error 400, el backend probablemente solo conoce 'filled' y 'opened'.
-        // En ese caso, para "All" pediremos 'filled' pero lo mostraremos en la pestaña All.
         if (!response.ok) {
-            console.warn(`⚠️ Endpoint ${endpoint} no hallado, reintentando con 'filled' para pestaña All`);
+            console.warn(`⚠️ Error en endpoint ${endpoint}, intentando fallback...`);
             return fetchOrdersFallback('filled', orderListElement, status);
         }
 
         const data = await response.json();
-        const orders = Array.isArray(data) ? data : (data.orders || []);
+        // Normalización de estructura de datos (v4 devuelve list)
+        const orders = Array.isArray(data) ? data : (data.orders || data.list || data.data?.list || []);
         displayOrders(orders, orderListElement, status);
 
     } catch (error) {
@@ -144,15 +167,18 @@ export async function fetchOrders(status, orderListElement) {
     }
 }
 
-// Función de respaldo para evitar el error 400 si el endpoint 'all' no existe en el server
 async function fetchOrdersFallback(fallbackEndpoint, orderListElement, originalStatus) {
-    const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
-    const url = `${BACKEND_URL}/api/orders/${fallbackEndpoint}?startTime=${fifteenDaysAgo}`;
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const url = `${BACKEND_URL}/api/orders/${fallbackEndpoint}?startTime=${thirtyDaysAgo}`;
     
-    const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    });
-    const data = await response.json();
-    const orders = Array.isArray(data) ? data : (data.orders || []);
-    displayOrders(orders, orderListElement, originalStatus);
+    try {
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await response.json();
+        const orders = Array.isArray(data) ? data : (data.orders || data.list || []);
+        displayOrders(orders, orderListElement, originalStatus);
+    } catch (e) {
+        orderListElement.innerHTML = `<div class="text-center py-10 text-gray-500 text-xs font-bold uppercase">No se pudo recuperar historial</div>`;
+    }
 }
