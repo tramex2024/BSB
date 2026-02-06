@@ -1,7 +1,5 @@
 // BSB/server/services/bitmartService.js
 
-// BSB/server/services/bitmartService.js
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { initOrderWebSocket } = require('./bitmartWs');
@@ -10,7 +8,7 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 // =========================================================================
-// MOTOR DE FIRMA, CACHÉ Y PETICIONES (Optimizado para Render/429)
+// MOTOR DE FIRMA, CACHÉ Y PETICIONES
 // =========================================================================
 const cache = {
     ticker: { data: null, timestamp: 0, promise: null },
@@ -49,7 +47,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO Y MÉTODOS DE SERVICIO
+// LÓGICA DE NEGOCIO
 // =========================================================================
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
@@ -57,7 +55,6 @@ const bitmartService = {
     validateApiKeys: async () => {
         try {
             await bitmartService.getBalance();
-            console.log(`${LOG_PREFIX} ✅ Credenciales validadas.`);
             return true;
         } catch (e) { return false; }
     },
@@ -122,23 +119,26 @@ const bitmartService = {
         return cache.klines.promise;
     },
 
-    // --- GESTIÓN DE ÓRDENES CON LOGS DE RENDERIZADO (Restaurado v4) ---
+    // --- CORRECCIÓN CRÍTICA EN GESTIÓN DE ÓRDENES ---
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
-        const rawOrders = res.data?.data || [];
         
-        // LOG DE RENDER (Para ver por qué BitMart dice que hay 0)
-        console.log(`[RENDER LOG] Respuesta Bruta OpenOrders:`, JSON.stringify(res.data).slice(0, 300));
+        // CORRECCIÓN: BitMart v4 devuelve las órdenes directamente en res.data o res.data.data
+        // Según tu log, vienen en un array directo dentro de 'data'
+        const rawOrders = res.data?.data || res.data || [];
+        
+        console.log(`${LOG_PREFIX} [RENDER LOG] Procesando ${Array.isArray(rawOrders) ? rawOrders.length : 0} órdenes abiertas.`);
 
-        const formattedOrders = rawOrders.map(o => ({
+        const formattedOrders = (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
             orderId: o.orderId || o.order_id,
             symbol: o.symbol,
             side: o.side,
             type: o.type,
+            status: o.state || o.status || 'NEW', // Usamos 'state' que es lo que vimos en el log
             price: parseFloat(o.price || 0),
             size: parseFloat(o.size || 0),
             filledSize: parseFloat(o.filledSize || o.filled_size || 0),
-            orderTime: o.orderTime || o.createTime || Date.now()
+            orderTime: o.createTime || o.orderTime || Date.now()
         }));
         
         return { orders: formattedOrders };
@@ -157,13 +157,14 @@ const bitmartService = {
         }
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
-        const rawOrders = res.data?.data?.list || [];
+        const rawOrders = res.data?.data?.list || res.data || [];
         
-        // LOG DE RENDER (Para ver la lista real del historial)
-        console.log(`[RENDER LOG] Historial recuperado: ${rawOrders.length} órdenes.`);
-
-        return rawOrders.map(o => ({
-            ...o,
+        return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
+            orderId: o.orderId || o.order_id,
+            symbol: o.symbol,
+            side: o.side,
+            type: o.type,
+            status: o.status || o.state,
             price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
             size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
             orderTime: o.orderTime || o.updateTime || Date.now()
@@ -196,7 +197,6 @@ const bitmartService = {
         return res.data;
     },
 
-    // --- Helpers y Websocket ---
     initOrderWebSocket,
     getRecentOrders: async (symbol) => bitmartService.getHistoryOrders({ symbol, limit: 50 }),
     placeMarketOrder: async ({ symbol, side, notional }) => 
