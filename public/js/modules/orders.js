@@ -140,29 +140,42 @@ export async function fetchOrders(status, orderListElement) {
 
     try {
         const endpoint = (status === 'all') ? 'all' : status; 
-        
-        // CORRECCIÓN: Solicitamos 30 días exactos al servidor
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
         
         const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
         url.searchParams.append('startTime', thirtyDaysAgo); 
+
+        // --- LOG 1: Petición enviada ---
+        console.log(`%c 🛰️ FETCH ORDERS: Solicitando [${status}] a ${url.href}`, 'color: #3b82f6; font-weight: bold;');
 
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
         if (!response.ok) {
-            console.warn(`⚠️ Error en endpoint ${endpoint}, intentando fallback...`);
+            console.warn(`%c ⚠️ Error ${response.status} en endpoint ${endpoint}, intentando fallback...`, 'color: #fbbf24;');
             return fetchOrdersFallback('filled', orderListElement, status);
         }
 
         const data = await response.json();
-        // Normalización de estructura de datos (v4 devuelve list)
+        
+        // --- LOG 2: Respuesta cruda del servidor ---
+        console.log(`%c 📥 DATA RECIBIDA (RAW):`, 'color: #10b981; font-weight: bold;', data);
+
+        // Normalización de estructura de datos
         const orders = Array.isArray(data) ? data : (data.orders || data.list || data.data?.list || []);
+        
+        // --- LOG 3: Órdenes tras normalización ---
+        console.log(`%c 📊 ÓRDENES PROCESADAS: ${orders.length}`, 'color: #8b5cf6; font-weight: bold;', orders);
+
+        if (orders.length > 0) {
+            console.log(`%c 🔍 MUESTRA DE ORDEN 0:`, 'color: #64748b;', orders[0]);
+        }
+
         displayOrders(orders, orderListElement, status);
 
     } catch (error) {
-        console.error("Fetch error:", error);
+        console.error("%c ❌ FETCH ERROR:", 'color: #ef4444; font-weight: bold;', error);
         orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-xs font-bold uppercase">Error al cargar historial</div>`;
     }
 }
