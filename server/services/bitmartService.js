@@ -12,8 +12,8 @@ const cache = {
     ticker: { data: null, timestamp: 0, promise: null },
     klines: { data: null, timestamp: 0, promise: null }
 };
-const CACHE_TTL = 2000; // 2 segundos para precio
-const KLINES_TTL = 15000; // 15 segundos para velas
+const CACHE_TTL = 2000; 
+const KLINES_TTL = 15000; 
 
 async function makeRequest(method, path, params = {}, body = {}) {
     const { BITMART_API_KEY, BITMART_SECRET_KEY, BITMART_API_MEMO } = process.env;
@@ -39,7 +39,6 @@ async function makeRequest(method, path, params = {}, body = {}) {
         if (response.data.code === 1000) return response.data;
         throw new Error(`API Error: ${response.data.message} (${response.data.code})`);
     } catch (error) {
-        // Si detectamos 429, lanzamos un error específico para que el llamador sepa esperar
         if (error.response?.status === 429) {
             throw new Error("RATE_LIMIT_EXCEEDED");
         }
@@ -47,10 +46,10 @@ async function makeRequest(method, path, params = {}, body = {}) {
     }
 }
 
-const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
+// CORRECCIÓN: BitMart v4 prefiere strings para el campo orderState
+const orderStatusMap = { 'filled': '1', 'cancelled': '6', 'all': '0' };
 
 const bitmartService = {
-    // --- Autenticación y Balances ---
     validateApiKeys: async () => {
         try {
             await bitmartService.getBalance();
@@ -76,17 +75,13 @@ const bitmartService = {
         } catch (e) { return { availableUSDT: 0, availableBTC: 0 }; }
     },
 
-    // --- Mercado con Caché Inteligente ---
     getTicker: async (symbol) => {
         const now = Date.now();
-        // 1. Si hay una petición igual volando, esperamos a esa
         if (cache.ticker.promise) return cache.ticker.promise;
-        // 2. Si el dato es fresco, lo devolvemos
         if (cache.ticker.data && (now - cache.ticker.timestamp < CACHE_TTL)) {
             return cache.ticker.data;
         }
 
-        // 3. Si no, disparamos la petición y la guardamos en el canal de promesas
         cache.ticker.promise = (async () => {
             try {
                 const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
@@ -95,7 +90,7 @@ const bitmartService = {
                 cache.ticker.timestamp = Date.now();
                 return data;
             } finally {
-                cache.ticker.promise = null; // Limpiamos la promesa al terminar
+                cache.ticker.promise = null;
             }
         })();
 
@@ -133,43 +128,40 @@ const bitmartService = {
         return cache.klines.promise;
     },
 
-    // --- Órdenes ---
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
         return { orders: res.data.data || res.data || [] };
     },
 
     getHistoryOrders: async (options = {}) => {
-        // Definimos el rango de tiempo (priorizando lo que viene del controlador)
         const now = Date.now();
-        const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+        const ninetyDaysAgo = now - (90 * 24 * 60 * 60 * 1000); // Rango de 90 días por defecto
 
         const requestBody = {
             symbol: options.symbol || 'BTC_USDT',
             orderMode: 'spot',
-            limit: options.limit || 100, // Aumentamos el límite para dar margen al filtrado
-            // Sincronizamos los parámetros de tiempo que antes se ignoraban
-            startTime: options.startTime || thirtyDaysAgo,
+            limit: options.limit || 100,
+            startTime: options.startTime || ninetyDaysAgo,
             endTime: options.endTime || now
         };
 
-        const status = options.order_state || options.status;
-        if (status && status !== 'all') {
-            requestBody.status = orderStatusMap[status];
+        const statusKey = options.order_state || options.status;
+        
+        // CORRECCIÓN CRÍTICA: BitMart v4 usa 'orderState', no 'status'
+        if (statusKey && statusKey !== 'all') {
+            requestBody.orderState = orderStatusMap[statusKey];
         }
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         
-        // En BitMart v4, la lista suele venir en res.data.list
-        const rawOrders = res.data?.list || res.data?.data?.list || [];
+        // CORRECCIÓN: Manejo flexible de la respuesta (res.data puede ser el array directo)
+        const rawOrders = res.data?.list || (Array.isArray(res.data) ? res.data : []);
         
         return rawOrders.map(o => ({
             ...o,
-            // Normalización de campos para que el frontend no reciba undefined
-            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
-            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            // Aseguramos que el timestamp sea consistente para el ordenamiento en UI
-            updateTime: o.updateTime || o.createTime
+            price: (o.priceAvg && parseFloat(o.priceAvg) > 0) ? o.priceAvg : o.price,
+            size: (o.filledSize && parseFloat(o.filledSize) > 0) ? o.filledSize : o.size,
+            updateTime: parseInt(o.updateTime || o.createTime || Date.now())
         }));
     },
 
