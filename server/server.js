@@ -161,45 +161,71 @@ setupMarketWS(io);
 io.on('connection', async (socket) => {
     console.log(`👤 Conectado: ${socket.id}`);
 
+    // 1. Función para enviar el estado de la IA y del Bot
     const sendAiStatus = async () => {
         try {
-            // Buscamos el documento único de Autobot
             let bot = await Autobot.findOne({});
             if (!bot) {
-                // Si no existe, lo creamos con la estructura unificada
                 bot = await Autobot.create({
-    aibalance: 100.00, // No virtualBalance
-    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
-});
+                    aibalance: 100.00,
+                    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
+                });
             }
             
             const statusData = {
                 isRunning: aiEngine.isRunning,
-                aibalance: bot.aibalance || bot.config.ai.amountUsdt,
-                amountUsdt: bot.config.ai.amountUsdt,
-                stopAtCycle: bot.config.ai.stopAtCycle,
+                aibalance: bot.aibalance || bot.config?.ai?.amountUsdt || 0,
+                amountUsdt: bot.config?.ai?.amountUsdt || 0,
+                stopAtCycle: bot.config?.ai?.stopAtCycle || false,
                 historyCount: aiEngine.history ? aiEngine.history.length : 0
             };
 
             socket.emit('ai-status-update', statusData);
             socket.emit('ai-status-init', statusData); 
-        } catch (err) { console.error("❌ Error AI Socket:", err); }
-    };    
+        } catch (err) { 
+            console.error("❌ Error AI Socket:", err); 
+        }
+    };
 
+    // 2. NUEVA FUNCIÓN: Hidratación inicial de órdenes (La pieza perdida)
+    const hydrateOrders = async () => {
+        try {
+            // Obtenemos órdenes abiertas directamente de BitMart para el frontend
+            const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
+            if (orders) {
+                socket.emit('open-orders-update', orders);
+                console.log(`📦 [SYNC] ${orders.length} órdenes abiertas enviadas a ${socket.id}`);
+            }
+
+            // Enviamos el historial reciente desde la base de datos
+            const history = await Order.find({})
+                .sort({ orderTime: -1 })
+                .limit(20);
+            socket.emit('ai-history-data', history);
+            
+        } catch (err) {
+            console.error("❌ Error hidratando órdenes:", err.message);
+        }
+    };
+
+    // Ejecución inmediata al conectar
     await sendAiStatus();
+    await hydrateOrders();
 
+    // Listeners de eventos
     socket.on('get-ai-status', async () => {
         await sendAiStatus();
     });
 
     socket.on('get-ai-history', async () => {
         try {
-            // Filtramos las órdenes por la estrategia 'ai'
             const trades = await Order.find({ strategy: 'ai' })
                 .sort({ orderTime: -1 })
                 .limit(10);
             socket.emit('ai-history-data', trades);
-        } catch (err) { console.error("❌ Error historial:", err); }
+        } catch (err) { 
+            console.error("❌ Error historial IA:", err); 
+        }
     });
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
