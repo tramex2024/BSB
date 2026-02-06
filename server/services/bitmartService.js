@@ -8,7 +8,7 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 // =========================================================================
-// MOTOR DE FIRMA, CACHÉ Y PETICIONES (Optimizado para Render/429)
+// MOTOR DE FIRMA, CACHÉ Y PETICIONES
 // =========================================================================
 const cache = {
     ticker: { data: null, timestamp: 0, promise: null },
@@ -47,7 +47,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO (RESTAURADA SEGÚN VERSIÓN EXITOSA)
+// LÓGICA DE NEGOCIO
 // =========================================================================
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
@@ -77,7 +77,6 @@ const bitmartService = {
         } catch (e) { return { availableUSDT: 0, availableBTC: 0 }; }
     },
 
-    // --- Mercado con Caché ---
     getTicker: async (symbol) => {
         const now = Date.now();
         if (cache.ticker.promise) return cache.ticker.promise;
@@ -102,16 +101,9 @@ const bitmartService = {
 
         cache.klines.promise = (async () => {
             try {
-                const res = await makeRequest('GET', '/spot/quotation/v3/klines', { 
-                    symbol, step: interval, size: limit 
-                });
+                const res = await makeRequest('GET', '/spot/quotation/v3/klines', { symbol, step: interval, size: limit });
                 const data = res.data.map(c => ({
-                    timestamp: parseInt(c[0]),
-                    open: parseFloat(c[1]),
-                    high: parseFloat(c[2]),
-                    low: parseFloat(c[3]),
-                    close: parseFloat(c[4]),
-                    volume: parseFloat(c[5])
+                    timestamp: parseInt(c[0]), open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5])
                 }));
                 cache.klines.data = data;
                 cache.klines.timestamp = Date.now();
@@ -121,27 +113,22 @@ const bitmartService = {
         return cache.klines.promise;
     },
 
-    // --- Órdenes (Abiertas) ---
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
         const rawOrders = res.data?.data || res.data || [];
-        
         console.log(`${LOG_PREFIX} [RENDER LOG] Abiertas encontradas: ${Array.isArray(rawOrders) ? rawOrders.length : 0}`);
-        
-        // --- LOG DE INSPECCIÓN DE ABIERTAS ---
         if (Array.isArray(rawOrders) && rawOrders.length > 0) {
             rawOrders.forEach((o, i) => {
                 console.log(`🔍 [INSPECCIÓN ABIERTA #${i+1}] ID: ${o.orderId || o.order_id} | Side: ${o.side} | Status: ${o.state || o.status}`);
             });
         }
-        
         return { orders: Array.isArray(rawOrders) ? rawOrders : [] };
     },
 
-    // --- Historial (LOG de Inspección Detallado) ---
+    // --- HISTORIAL CON LOG DE EMERGENCIA ---
     getHistoryOrders: async (options = {}) => {
         const requestBody = {
-            symbol: options.symbol,
+            symbol: options.symbol || 'BTC_USDT',
             orderMode: 'spot',
             limit: options.limit || 100
         };
@@ -149,26 +136,22 @@ const bitmartService = {
         const status = options.order_state || options.status;
         if (status && status !== 'all') requestBody.status = orderStatusMap[status];
 
+        console.log(`${LOG_PREFIX} 📡 Consultando Historial (${status || 'all'})...`);
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         
-        // Extraemos la lista según la estructura de BitMart
+        // Extraemos la lista buscando en todas las rutas posibles del JSON de BitMart
         const rawOrders = res.data?.data?.list || res.data?.list || res.data || [];
         
-        // --- LOG DE INSPECCIÓN DEL HISTORIAL (Aquí verás las órdenes en tu terminal) ---
-        console.log(`${LOG_PREFIX} [RENDER LOG] Historial (${status || 'all'}): ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems encontrados.`);
+        console.log(`${LOG_PREFIX} [RENDER LOG] Historial Result: ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems.`);
         
+        // ESTE ES EL LOG QUE BUSCAMOS:
         if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+            console.log(`🚀 [DETECCION DE ORDENES] Se detectaron ${rawOrders.length} órdenes en el historial.`);
             rawOrders.forEach((o, i) => {
-                // Imprimimos el detalle completo de cada orden que viene de la API
-                console.log(`📜 [HISTORIAL-DETALLE #${i+1}] 
-                    ID: ${o.orderId || o.order_id} 
-                    Sym: ${o.symbol} 
-                    Side: ${o.side} 
-                    PriceAvg: ${o.priceAvg || o.price} 
-                    Size: ${o.filledSize || o.size} 
-                    Status: ${o.status || o.state}
-                -----------------------------------`);
+                console.log(`📜 [HISTORIAL-DETALLE #${i+1}] ID: ${o.orderId || o.order_id} | Sym: ${o.symbol} | Side: ${o.side} | Status: ${o.status || o.state}`);
             });
+        } else {
+            console.log(`⚠️ [DETECCION] La API respondió con 0 órdenes para los parámetros enviados.`);
         }
         
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
@@ -181,9 +164,7 @@ const bitmartService = {
 
     getOrderDetail: async (symbol, orderId) => {
         try {
-            const res = await makeRequest('POST', '/spot/v4/query/order', {}, { 
-                symbol, orderId: String(orderId), orderMode: 'spot' 
-            });
+            const res = await makeRequest('POST', '/spot/v4/query/order', {}, { symbol, orderId: String(orderId), orderMode: 'spot' });
             return res.data?.data || null;
         } catch (e) { return null; }
     },
@@ -191,22 +172,17 @@ const bitmartService = {
     placeOrder: async (symbol, side, type, amount, price) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
-
         if (type.toLowerCase() === 'limit') {
             body.size = amount.toString();
             body.price = price.toString();
         } else {
             if (sideLower === 'buy') body.notional = amount.toString();
-            else if (sideLower === 'sell') body.size = amount.toString();
-            else throw new Error(`Lado de orden no soportado: ${sideLower}`);
+            else body.size = amount.toString();
         }
-
-        console.log(`${LOG_PREFIX} 📡 Enviando a BitMart:`, body);
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body);
         return res.data;
     },
 
-    // --- Helpers y Websocket ---
     initOrderWebSocket,
     getRecentOrders: async (symbol) => bitmartService.getHistoryOrders({ symbol, limit: 100 }),
     placeMarketOrder: async ({ symbol, side, notional }) => 
