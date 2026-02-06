@@ -3,7 +3,7 @@
 import { BACKEND_URL, currentBotState } from '../main.js';
 import { renderAutobotOpenOrders } from './uiManager.js';
 
-// Monitor de estado para evitar re-renders innecesarios
+// Memoria de firmas para evitar re-renders innecesarios
 const lastSnapshots = {
     all: "",
     filled: "",
@@ -12,34 +12,25 @@ const lastSnapshots = {
 };
 
 /**
- * Genera una huella digital (String) de una lista de órdenes.
- * Si el ID o el Estado de alguna orden cambia, la huella será distinta.
+ * Crea una firma de texto única basada en IDs y Estados
  */
 function generateSnapshot(orders) {
     if (!orders || orders.length === 0) return "empty";
-    // Solo tomamos ID y Estado, que es lo que realmente importa para el refresh
     return orders.map(o => `${o.orderId}-${o.state || o.status}`).join('|');
 }
 
-/**
- * Renderiza el HTML de una orden individual preservando IDs completos
- */
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
     const sideTheme = isBuy ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5';
-    
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
-    
     const timestamp = order.orderTime || order.createTime || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
     });
-
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
-    
     const fullOrderId = (order.orderId || '').toString();
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
@@ -53,13 +44,12 @@ function createOrderHtml(order) {
                 </div>
             </div>
         </div>
-
         <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
-            <div class="flex flex-col">
+            <div class="flex flex-col text-left">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Price</span>
                 <span class="text-gray-100 font-mono text-sm">$${price}</span>
             </div>
-            <div class="flex flex-col">
+            <div class="flex flex-col text-left">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Amount</span>
                 <span class="text-gray-300 font-mono text-sm">${quantity}</span>
             </div>
@@ -70,7 +60,6 @@ function createOrderHtml(order) {
                 </span>
             </div>
         </div>
-
         <div class="w-1/4 flex flex-col items-end gap-1">
             <p class="text-[10px] text-gray-400">${date}</p>
             ${isCancellable ? `
@@ -83,15 +72,10 @@ function createOrderHtml(order) {
     </div>`;
 }
 
-/**
- * Filtra y muestra las órdenes - Solo si hay cambios reales
- */
 export function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
-
     orderListElement.dataset.currentStatus = status;
 
-    // 1. Obtener la lista según la pestaña
     let ordersToProcess = [];
     if (status === 'opened') {
         ordersToProcess = currentBotState.openOrders || [];
@@ -102,14 +86,10 @@ export function fetchOrders(status, orderListElement) {
         else if (status === 'cancelled') ordersToProcess = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('CANCELED'));
     }
 
-    // 2. MONITOR DE CAMBIOS: Generar huella y comparar
+    // MONITOR DE CAMBIOS
     const newSnapshot = generateSnapshot(ordersToProcess);
-    if (newSnapshot === lastSnapshots[status]) {
-        // console.log(`[Monitor] Sin cambios en ${status}, abortando render.`);
-        return; 
-    }
-
-    // 3. Guardar nueva huella y Proceder al renderizado
+    if (newSnapshot === lastSnapshots[status]) return; 
+    
     lastSnapshots[status] = newSnapshot;
 
     if (status === 'opened') {
@@ -125,9 +105,6 @@ export function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = ordersToProcess.map(order => createOrderHtml(order)).join('');
 }
 
-/**
- * PUENTE DE ACTUALIZACIÓN: Invocado desde main.js
- */
 window.refreshOrdersUI = () => {
     const container = document.getElementById('au-order-list');
     if (container && container.dataset.currentStatus) {
@@ -135,12 +112,8 @@ window.refreshOrdersUI = () => {
     }
 };
 
-/**
- * BRIDGE GLOBAL: Expone la función de cancelación
- */
 window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
-
     try {
         const response = await fetch(`${BACKEND_URL}/api/orders/cancel`, {
             method: 'POST',
@@ -150,11 +123,8 @@ window.cancelOrder = async (orderId) => {
             },
             body: JSON.stringify({ orderId })
         });
-        
         const data = await response.json();
-        if (!data.success) {
-            alert(`Error: ${data.message || 'Could not cancel'}`);
-        }
+        if (!data.success) alert(`Error: ${data.message || 'Could not cancel'}`);
     } catch (error) {
         console.error("Cancel Error:", error);
     }
