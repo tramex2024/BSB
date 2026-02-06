@@ -138,7 +138,7 @@ const bitmartService = {
         return { orders: Array.isArray(rawOrders) ? rawOrders : [] };
     },
 
-    // --- Historial (Con LOG de Inspección Profunda) ---
+    // --- Historial (LOG de Inspección Detallado) ---
     getHistoryOrders: async (options = {}) => {
         const requestBody = {
             symbol: options.symbol,
@@ -150,14 +150,24 @@ const bitmartService = {
         if (status && status !== 'all') requestBody.status = orderStatusMap[status];
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
-        const rawOrders = res.data?.data?.list || res.data || [];
         
-        // --- LOG DE INSPECCIÓN DEL HISTORIAL ---
-        console.log(`${LOG_PREFIX} [RENDER LOG] Historial (${status || 'all'}): ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems.`);
+        // Extraemos la lista según la estructura de BitMart
+        const rawOrders = res.data?.data?.list || res.data?.list || res.data || [];
+        
+        // --- LOG DE INSPECCIÓN DEL HISTORIAL (Aquí verás las órdenes en tu terminal) ---
+        console.log(`${LOG_PREFIX} [RENDER LOG] Historial (${status || 'all'}): ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems encontrados.`);
         
         if (Array.isArray(rawOrders) && rawOrders.length > 0) {
             rawOrders.forEach((o, i) => {
-                console.log(`🔍 [INSPECCIÓN HISTORIAL #${i+1}] ID: ${o.orderId || o.order_id} | Side: ${o.side} | PriceAvg: ${o.priceAvg} | Status: ${o.status || o.state}`);
+                // Imprimimos el detalle completo de cada orden que viene de la API
+                console.log(`📜 [HISTORIAL-DETALLE #${i+1}] 
+                    ID: ${o.orderId || o.order_id} 
+                    Sym: ${o.symbol} 
+                    Side: ${o.side} 
+                    PriceAvg: ${o.priceAvg || o.price} 
+                    Size: ${o.filledSize || o.size} 
+                    Status: ${o.status || o.state}
+                -----------------------------------`);
             });
         }
         
