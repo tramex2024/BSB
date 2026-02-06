@@ -1,6 +1,6 @@
 /**
  * BSB/server/server.js
- * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada Corregida
+ * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada
  */
 
 const express = require('express');
@@ -20,7 +20,7 @@ const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine'));
 
 // Modelos Unificados
 const Autobot = require('./models/Autobot');
-const Order = require('./models/Order');
+const Order = require('./models/Order'); // Ahora maneja TODAS las órdenes
 const MarketSignal = require('./models/MarketSignal');
 
 dotenv.config();
@@ -72,7 +72,7 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 
 // --- 5. CONEXIÓN BASE DE DATOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected...'))
+    .then(() => console.log('✅ MongoDB Connected (BSB 2026 - Persistencia Total)...'))
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --- 6. VARIABLES GLOBALES ---
@@ -83,7 +83,7 @@ let isMarketConnected = false;
 let lastExecutionTime = 0;
 const EXECUTION_THROTTLE_MS = 2000; 
 
-// --- 7. WEBSOCKET MERCADO (PÚBLICO) ---
+// --- 7. WEBSOCKET BITMART ---
 const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
 
 function setupMarketWS(io) {
@@ -92,7 +92,7 @@ function setupMarketWS(io) {
     
     marketWs.on('open', () => {
         isMarketConnected = true; 
-        console.log("📡 [MARKET_WS] Conectado.");
+        console.log("📡 [MARKET_WS] Conectado. Suscribiendo BTC_USDT...");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
         if (marketHeartbeat) clearInterval(marketHeartbeat);
@@ -116,18 +116,25 @@ function setupMarketWS(io) {
    
                 lastKnownPrice = price; 
                 centralAnalyzer.updatePrice(price);
+
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
                 const now = Date.now();
                 if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
                     lastExecutionTime = now;
+
                     if (mongoose.connection.readyState === 1) { 
-                        if (aiEngine.isRunning) await aiEngine.analyze(price, volume).catch(() => {});
+                        try { 
+                            if (aiEngine.isRunning) {
+                                await aiEngine.analyze(price, volume); 
+                            }
+                        } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                        
                         await autobotLogic.botCycle(price);
                     }
                 }
             }
-        } catch (e) {}
+        } catch (e) { console.error("❌ WS Msg Error:", e.message); }
     });
 
     marketWs.on('close', () => {
@@ -136,17 +143,9 @@ function setupMarketWS(io) {
     });
 }
 
-// --- 8. WS ÓRDENES PRIVADAS (CORREGIDO) ---
-bitmartService.initOrderWebSocket(async (ordersData) => {
-    // Emitir a la consola del frontend para depuración real
-    io.emit('bot-log', { message: `🔔 Cambio en órdenes detectado en BitMart`, type: 'info' });
-    
-    // Notificar actualización de órdenes
-    io.emit('open-orders-update', ordersData);
-
-    // Forzar al bot a refrescar su estado interno y enviarlo al frontend
-    const fullState = await autobotLogic.getAsyncFullState();
-    io.emit('bot-state-update', fullState);
+// --- 8. WS ÓRDENES PRIVADAS ---
+bitmartService.initOrderWebSocket((ordersData) => {
+    io.sockets.emit('open-orders-update', ordersData);
 });
 
 // --- 9. BUCLE SALDOS ---
@@ -158,25 +157,22 @@ setInterval(async () => {
 
 setupMarketWS(io);
 
-// --- 10. SOCKET.IO EVENTS (CORREGIDO) ---
+// --- 10. SOCKET.IO EVENTS ---
 io.on('connection', async (socket) => {
     console.log(`👤 Conectado: ${socket.id}`);
 
-    // NUEVO: Responder a la petición de estado inicial del frontend
-    socket.on('get-bot-state', async () => {
-        const state = await autobotLogic.getAsyncFullState();
-        socket.emit('bot-state-update', state);
-    });
-
     const sendAiStatus = async () => {
         try {
+            // Buscamos el documento único de Autobot
             let bot = await Autobot.findOne({});
             if (!bot) {
+                // Si no existe, lo creamos con la estructura unificada
                 bot = await Autobot.create({
-                    aibalance: 100.00,
-                    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
-                });
+    aibalance: 100.00, // No virtualBalance
+    'config.ai': { enabled: false, amountUsdt: 100.00, stopAtCycle: false }
+});
             }
+            
             const statusData = {
                 isRunning: aiEngine.isRunning,
                 aibalance: bot.aibalance || bot.config.ai.amountUsdt,
@@ -184,19 +180,26 @@ io.on('connection', async (socket) => {
                 stopAtCycle: bot.config.ai.stopAtCycle,
                 historyCount: aiEngine.history ? aiEngine.history.length : 0
             };
+
             socket.emit('ai-status-update', statusData);
             socket.emit('ai-status-init', statusData); 
-        } catch (err) {}
+        } catch (err) { console.error("❌ Error AI Socket:", err); }
     };    
 
     await sendAiStatus();
 
-    socket.on('get-ai-status', async () => await sendAiStatus());
+    socket.on('get-ai-status', async () => {
+        await sendAiStatus();
+    });
+
     socket.on('get-ai-history', async () => {
         try {
-            const trades = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(10);
+            // Filtramos las órdenes por la estrategia 'ai'
+            const trades = await Order.find({ strategy: 'ai' })
+                .sort({ orderTime: -1 })
+                .limit(10);
             socket.emit('ai-history-data', trades);
-        } catch (err) {}
+        } catch (err) { console.error("❌ Error historial:", err); }
     });
 
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
@@ -206,7 +209,11 @@ io.on('connection', async (socket) => {
 server.listen(PORT, async () => {
     try {
         centralAnalyzer.init(io); 
+        console.log("🧠 [CENTRAL-ANALYZER] Iniciado.");
+
+        // El aiEngine ahora debe inicializarse usando el modelo Autobot
         await aiEngine.init();
-    } catch (e) {}
+        console.log("🧠 [IA-CORE] Motor sincronizado con Autobot Model.");
+    } catch (e) { console.error("❌ Error inicialización:", e); }
     console.log(`🚀 SERVIDOR BSB ACTIVO: PUERTO ${PORT}`);
 });

@@ -8,43 +8,49 @@ exports.getOrders = async (req, res) => {
     }
 
     try {
-        let ordersToReturn = [];
+        let result;
         const symbol = 'BTC_USDT';
 
         switch (status) {
             case 'opened':
-                // Para órdenes abiertas seguimos esperando la estructura de objeto del servicio
-                const openRes = await bitmartService.getOpenOrders(symbol);
-                ordersToReturn = openRes.orders || openRes.data || (Array.isArray(openRes) ? openRes : []);
-                break;
+                result = await bitmartService.getOpenOrders(symbol);
+                // BitMart suele devolver { orders: [...] }, nos aseguramos de enviar solo el array
+                return res.status(200).json(result.orders || result.data || result || []);
 
             case 'filled':
             case 'cancelled':
             case 'all':
                 const endTime = Date.now();
-                const ninetyDaysAgo = endTime - (90 * 24 * 60 * 60 * 1000);
+                // 🎯 Ajuste: Aunque pedimos 90 días para cubrir el máximo, 
+                // el "limit" es el que realmente corta la visibilidad.
+                const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
                 
                 const historyParams = {
                     symbol: symbol,
                     orderMode: 'spot',
                     startTime: ninetyDaysAgo,
                     endTime: endTime,
-                    limit: 200 // Mantenemos el límite alto para capturar más días
+                    // 🚀 SUBIMOS EL LÍMITE: BitMart permite hasta 200 en historial
+                    // Si el bot hace 13 órdenes diarias, 200 órdenes = 15 días.
+                    limit: 200 
                 };
                 
                 if (status !== 'all') {
                     historyParams.order_state = status;
                 }
                 
-                // IMPORTANTE: El servicio ya devuelve un Array mapeado.
-                ordersToReturn = await bitmartService.getHistoryOrders(historyParams);
+                result = await bitmartService.getHistoryOrders(historyParams);
                 break;
                 
             default:
                 return res.status(400).json({ success: false, message: 'Invalid order status' });
         }
 
-        // Enviamos el array directamente. El frontend ahora recibirá [ {...}, {...} ]
+        // BitMart v2/v3 suele envolver los resultados en 'data' o 'orders'
+        const ordersToReturn = result.data || result.orders || result;
+        
+        // Si después de aumentar el límite a 200 sigues viendo pocos días,
+        // significa que el bot es extremadamente activo (>13 órdenes/día).
         res.status(200).json(ordersToReturn);
         
     } catch (error) {

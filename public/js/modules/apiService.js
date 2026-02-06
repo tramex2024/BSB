@@ -1,7 +1,5 @@
 // public/js/modules/apiService.js
 
-// public/js/modules/apiService.js
-
 /**
  * apiService.js - Comunicaciones REST
  * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
@@ -70,7 +68,7 @@ export async function fetchEquityCurveData(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
 }
 
-// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT (ESTRUCTURA ORIGINAL RESTAURADA) ---
+// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT (ESTRUCTURA ORIGINAL) ---
 
 /**
  * Recolecta la configuración de la UI asegurando que las llaves
@@ -108,8 +106,7 @@ export function getBotConfiguration() {
             profit_percent: getNum('autriggerl', 'long.profit_percent'),   
             price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
-            // CORRECCIÓN ACORDADA: Usar el estado real
-            enabled: currentBotState.lstate !== 'STOPPED' 
+            enabled: true
         },
         short: {
             amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
@@ -119,14 +116,12 @@ export function getBotConfiguration() {
             profit_percent: getNum('autriggers', 'short.profit_percent'),   
             price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
-            // CORRECCIÓN ACORDADA: Usar el estado real
-            enabled: currentBotState.sstate !== 'STOPPED'
+            enabled: true
         },
         ai: {
             amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
             stopAtCycle: getCheck('ai-stop-at-cycle'),
-            // CORRECCIÓN ACORDADA: Usar el estado real
-            enabled: currentBotState.isRunning || false
+            enabled: true
         }
     };
 }
