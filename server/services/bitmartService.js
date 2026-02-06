@@ -1,5 +1,7 @@
 // BSB/server/services/bitmartService.js
 
+// BSB/server/services/bitmartService.js
+
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { initOrderWebSocket } = require('./bitmartWs');
@@ -132,12 +134,16 @@ const bitmartService = {
         return cache.klines.promise;
     },
 
-    // --- Gestión de Órdenes (Mapeo Mejorado) ---
+    // --- Gestión de Órdenes (Mapeo Mejorado para Visibilidad) ---
     getOpenOrders: async (symbol) => {
+        // Usamos la v4 como en tu código original
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
-        const rawOrders = res.data?.data || res.data || [];
         
-        // Normalizamos los campos para asegurar que el frontend los lea siempre igual
+        // Accedemos correctamente a la estructura de BitMart v4: res.data.data
+        const rawOrders = res.data?.data || [];
+        
+        console.log(`${LOG_PREFIX} [DEBUG] Órdenes abiertas detectadas:`, rawOrders.length);
+
         const formattedOrders = rawOrders.map(o => ({
             orderId: o.orderId || o.order_id,
             symbol: o.symbol,
@@ -146,6 +152,7 @@ const bitmartService = {
             price: parseFloat(o.price || 0),
             size: parseFloat(o.size || 0),
             filledSize: parseFloat(o.filledSize || o.filled_size || 0),
+            status: o.status || 'OPEN',
             orderTime: o.orderTime || o.createTime || o.create_time || Date.now()
         }));
         
@@ -159,7 +166,6 @@ const bitmartService = {
             limit: options.limit || 50
         };
 
-        // CORRECCIÓN FILTRADO: BitMart v4 requiere el ID numérico definido en orderStatusMap
         const statusStr = options.order_state || options.status;
         if (statusStr && statusStr !== 'all') {
             requestBody.status = orderStatusMap[statusStr];
@@ -167,14 +173,19 @@ const bitmartService = {
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         
-        // Aseguramos que extraemos la lista correcta de la respuesta v4
-        const rawOrders = res.data?.data?.list || res.data || [];
+        // En v4 la lista viene en res.data.data.list
+        const rawOrders = res.data?.data?.list || [];
+        
+        console.log(`${LOG_PREFIX} [DEBUG] Órdenes históricas (${statusStr}):`, rawOrders.length);
         
         return rawOrders.map(o => ({
-            ...o,
-            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
-            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            // CORRECCIÓN FECHA: BitMart v4 usa updateTime con CamelCase
+            orderId: o.orderId || o.order_id,
+            symbol: o.symbol,
+            side: o.side,
+            type: o.type,
+            status: o.status,
+            price: parseFloat(o.priceAvg) > 0 ? parseFloat(o.priceAvg) : parseFloat(o.price || 0),
+            size: parseFloat(o.filledSize) > 0 ? parseFloat(o.filledSize) : parseFloat(o.size || 0),
             orderTime: o.orderTime || o.updateTime || o.update_time || Date.now()
         }));
     },
