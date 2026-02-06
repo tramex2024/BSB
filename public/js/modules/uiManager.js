@@ -1,6 +1,8 @@
+// public/js/modules/uiManager.js
+
 /**
- * uiManager.js - Orquestador Atómico (Sincronizado con BD JSON 2026)
- * Ajuste: Sincronización final de estados AI y normalización de renders.
+ * uiManager.js - Orquestador Atómico
+ * Ajuste: Protección de escritura y estados en tiempo real.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -15,26 +17,26 @@ const STATUS_COLORS = {
     'STOPPED': '#ef4444',      
     'BUYING': '#60a5fa',        
     'SELLING': '#fbbf24',      
-    'PAUSED': '#fb923c',    
+    'PAUSED': '#fb923c',      
 };
 
 export function updateBotUI(state) {
-    if (!state || isSavingConfig) return;
+    if (!state) return;
     
-    // 1. Precio de Mercado
+    // 1. Precio de Mercado (Siempre se actualiza, no depende de isSavingConfig)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // MAPEO MAESTRO (Sincronizado con los nombres de tu base de datos)
+    // MAPEO MAESTRO
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
 
-        // AUTOBOT: LONG
+        // LONG
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
         'aulcycle': 'lcycle',         
@@ -44,7 +46,7 @@ export function updateBotUI(state) {
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'lnorder',      
 
-        // AUTOBOT: SHORT
+        // SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
         'auscycle': 'scycle',         
@@ -54,13 +56,13 @@ export function updateBotUI(state) {
         'auscoverage': 'scoverage',   
         'ausnorder': 'snorder',
 
-        // AI ENGINE (Sincronizado con los campos específicos de tu JSON)
+        // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
         'ai-adx-val': 'lai',                
         'ai-stoch-val': 'lac',              
         'aubot-aistate': 'aistate', 
 
-        // ESTADOS DE INTERFAZ
+        // ESTADOS
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
         'ai-mode-status': 'aistate' 
@@ -72,7 +74,7 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
-        // --- Lógica de Renderizado de Estados y Colores ---
+        // Render de Estados
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
             el.textContent = currentStatus;
@@ -81,7 +83,7 @@ export function updateBotUI(state) {
             return;
         }
 
-        // --- Lógica de Renderizado de Datos ---
+        // Render de Datos Numéricos
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc') || id === 'aubalance-btc') {
@@ -98,14 +100,14 @@ export function updateBotUI(state) {
         }
     });
 
-    // 3. Sincronización de Barras de Confianza (AI)
+    // 3. AI Confidence Bar
     if (state.aiConfidence !== undefined) {
         const bar = document.getElementById('ai-confidence-fill');
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    // 4. Sincronización de Inputs
-    if (state.config) { 
+    // 4. Sincronización de Inputs (PROTEGIDA)
+    if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
 
@@ -127,7 +129,6 @@ export function updateControlsState(state) {
     const sState = state.sstate || 'STOPPED';
     const aiState = state.aistate || 'STOPPED';
 
-    // Selectores actualizados para coincidir con el DOM del dashboard y AI tab
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
@@ -136,9 +137,13 @@ export function updateControlsState(state) {
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
     
+    // Espejo del botón AI en el Dashboard
+    const aiDashBtn = document.getElementById('austartai-btn');
+    if (aiDashBtn) updateButtonState('austartai-btn', aiState, 'AI', aiInputs);
+
     const engineMsg = document.getElementById('ai-engine-msg');
     if (engineMsg) {
-        if (state.aistate === 'RUNNING' || state.config?.ai?.enabled) {
+        if (aiState === 'RUNNING' || state.config?.ai?.enabled) {
             engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
             engineMsg.classList.add('animate-pulse', 'text-blue-400');
         } else {

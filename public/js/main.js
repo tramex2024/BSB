@@ -3,7 +3,7 @@
 /**
  * main.js - Central Hub
  * AI Core English Version 2026
- * Estructura original preservada con integración de Dashboard y Panic
+ * Estructura original preservada con integración de Datos Centralizados por Socket
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -21,6 +21,7 @@ export const currentBotState = {
     sstate: 'STOPPED',
     aibalance: 0,
     lastAvailableUSDT: 0,
+    ordersHistory: [], // NUEVO: Almacén central de historial (All, Filled, Canceled)
     config: {
         symbol: 'BTCUSDT',
         long: { amountUsdt: 0, enabled: false },
@@ -115,33 +116,33 @@ export function initializeFullApp() {
         if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
     
-    // --- LÓGICA DE ÓRDENES (Sincronización Reforzada) ---
-socket.on('open-orders-update', (data) => {
-    console.log("📥 [SOCKET-MAIN] Órdenes recibidas:", data);
+    // --- LÓGICA DE ÓRDENES (Sincronización Centralizada) ---
     
-    // Si la data viene normalizada del servidor como array
-    const orders = Array.isArray(data) ? data : (data.orders || []);
+    // 1. Órdenes Abiertas (Active/Open)
+    socket.on('open-orders-update', (data) => {
+        console.log("📥 [SOCKET-MAIN] Órdenes abiertas recibidas:", data);
+        const orders = Array.isArray(data) ? data : (data.orders || []);
+        if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
+            aiBotUI.updateOpenOrdersTable(orders);
+        }
+    });
 
-    if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
-        aiBotUI.updateOpenOrdersTable(orders);
-    } 
-
-    // Opcional: Si tienes una tabla de órdenes en el Dashboard general
-    const generalOrderTable = document.getElementById('general-orders-body');
-    if (generalOrderTable) {
-        // Lógica para pintar órdenes en dashboard si fuera necesario
-    }
-});
+    // 2. Historial General (All, Filled, Canceled) - NUEVO RECEPTOR
+    socket.on('history-orders-all', (data) => {
+        console.log("📥 [SOCKET-MAIN] Historial general actualizado:", data.length, "órdenes");
+        currentBotState.ordersHistory = Array.isArray(data) ? data : [];
+        
+        // Notificar a autobot.js si la vista está activa para que se refresque sola
+        const auOrderList = document.getElementById('au-order-list');
+        if (auOrderList && typeof window.refreshOrdersUI === 'function') {
+            window.refreshOrdersUI();
+        }
+    });
 
     socket.on('order-update', (data) => {
         console.log("📥 [SOCKET-MAIN] 'order-update' recibido (genérico)");
         logStatus("Order Update Received", "success");
-    
-        const auOrderList = document.getElementById('au-order-list');
-        if (auOrderList) {
-           // Si fetchOrders existe en el scope global o módulos cargados
-           if (typeof fetchOrders === 'function') fetchOrders('all', auOrderList); 
-        }
+        // No llamamos a fetchOrders, esperamos a que history-orders-all llegue en el siguiente pulso
     });
 
     // RECEPTOR DE PÁNICO (Sincronización Global)
@@ -184,7 +185,6 @@ socket.on('open-orders-update', (data) => {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         
-        // Signal updates para el Widget del Dashboard y AI Tab
         const adxEl = document.getElementById('ai-adx-val');
         const stochEl = document.getElementById('ai-stoch-val');
         if (adxEl && data.indicators) adxEl.innerText = (data.indicators.adx || 0).toFixed(1);

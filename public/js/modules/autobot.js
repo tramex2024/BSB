@@ -1,8 +1,10 @@
 // public/js/modules/autobot.js
 
+// public/js/modules/autobot.js
+
 /**
  * autobot.js - Core Logic for Trading Tabs
- * Integration: WebSocket Sync & Dual-Button Control 2026
+ * Integration: WebSocket Sync & Client-Side Filtering 2026
  */
 
 import { initializeChart } from './chart.js';
@@ -40,7 +42,7 @@ function validateSideInputs(side) {
 }
 
 /**
- * Escucha cambios en todos los inputs de configuración (Dashboard + Tabs)
+ * Escucha cambios en todos los inputs de configuración
  */
 function setupConfigListeners() {
     const configIds = [
@@ -83,7 +85,7 @@ export async function initializeAutobotView() {
     setupConfigListeners();
 
     /**
-     * Configura el evento de Start/Stop para un botón y su lógica asociada
+     * Configura el evento de Start/Stop para un botón
      */
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
@@ -95,7 +97,6 @@ export async function initializeAutobotView() {
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            // Verificación de estado unificada
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
                              currentBotState.config.ai.enabled);
@@ -123,17 +124,14 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones (Espejos entre Dashboard y Tabs)
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
     setupSideBtn('btn-start-ai', 'ai');
 
-    // Sincronización visual inmediata
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico con delay para asegurar renderizado del DOM
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -144,10 +142,12 @@ export async function initializeAutobotView() {
         }
     }, 300);
 
-    // Iniciar pestañas de órdenes
     setupOrderTabs(auOrderList);
 }
 
+/**
+ * Configura la navegación de pestañas con filtrado local (vía Sockets)
+ */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     if (!orderTabs.length || !container) return;
@@ -167,12 +167,16 @@ function setupOrderTabs(container) {
         tab.onclick = (e) => {
             const selectedId = e.currentTarget.id;
             setActiveTabStyle(selectedId);
+            
+            // Extraer el nombre de la pestaña (all, filled, cancelled, opened)
             currentTab = selectedId.replace('tab-', '');
+            
+            // Llamada a la nueva lógica de filtrado local en orders.js
             fetchOrders(currentTab, container);
         };
     });
 
-    // Carga inicial de órdenes (Pestaña por defecto: Opened/All)
+    // Carga inicial: No hace fetch, simplemente renderiza lo que ya hay en currentBotState.ordersHistory
     setActiveTabStyle('tab-all');
     fetchOrders('all', container);
 }

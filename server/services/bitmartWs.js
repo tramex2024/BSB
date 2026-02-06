@@ -9,6 +9,19 @@ const LOG_PREFIX = '[BITMART_WS]';
 let wsClient = null;
 let heartbeatInterval = null;
 
+/**
+ * Mapa de estados numéricos de BitMart a Strings legibles para tu Frontend
+ */
+const statusMap = {
+    "1": "NEW",
+    "2": "NEW",
+    "3": "PENDING",           // <--- Agregado: Orden en proceso de entrada
+    "4": "FILLED",
+    "5": "PARTIALLY_FILLED",
+    "6": "CANCELED",
+    "8": "PARTIALLY_CANCELED"
+};
+
 function initOrderWebSocket(updateCallback) {
     if (wsClient) {
         if (wsClient.readyState !== WebSocket.OPEN) {
@@ -64,23 +77,27 @@ function initOrderWebSocket(updateCallback) {
             }
 
             // --- 2. ACTUALIZACIÓN DE ORDEN (NORMALIZACIÓN) ---
-            // BitMart v4 envía los datos en message.data que es un ARRAY
             if (message.table === 'spot/user/order' && message.data) {
-                console.log(`${LOG_PREFIX} 📦 Actualización recibida (${message.data.length} items)`);
+                console.log(`${LOG_PREFIX} 📦 Actualización en tiempo real (${message.data.length} items)`);
                 
-                // Normalizamos los datos antes de enviarlos al callback (socket.io)
-                // Esto asegura que el frontend reciba campos consistentes (orderId, price, size)
-                const normalizedOrders = message.data.map(o => ({
-                    orderId: o.order_id || o.orderId,
-                    symbol: o.symbol,
-                    side: o.side,
-                    type: o.type,
-                    price: o.price || o.price_avg,
-                    size: o.size,
-                    filledSize: o.filled_size || o.filledSize || "0",
-                    status: o.status, // Aquí viene el estado: "1", "4", "6", etc.
-                    orderTime: o.update_time || o.create_time || Date.now()
-                }));
+                const normalizedOrders = message.data.map(o => {
+                    // Traducimos el estado numérico a String si existe en el mapa
+                    const rawStatus = (o.status || "").toString();
+                    const finalStatus = statusMap[rawStatus] || rawStatus;
+
+                    return {
+                        orderId: o.order_id || o.orderId,
+                        symbol: o.symbol,
+                        side: o.side,
+                        type: o.type,
+                        price: o.price || o.price_avg,
+                        size: o.size,
+                        filledSize: o.filled_size || o.filledSize || "0",
+                        status: finalStatus, // <--- Ahora envía "FILLED" en lugar de "4"
+                        state: finalStatus,  // Duplicamos como 'state' por compatibilidad
+                        orderTime: o.update_time || o.create_time || Date.now()
+                    };
+                });
 
                 updateCallback(normalizedOrders);
             }

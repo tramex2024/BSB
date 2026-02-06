@@ -1,6 +1,6 @@
 /**
  * BSB/server/server.js
- * SERVIDOR UNIFICADO (BSB 2026) - Lógica de Órdenes Restaurada (Versión Funcional)
+ * SERVIDOR UNIFICADO (BSB 2026) - Lógica de Órdenes y Sockets Centralizada
  */
 
 const express = require('express');
@@ -83,13 +83,11 @@ let isMarketConnected = false;
 let lastExecutionTime = 0;
 const EXECUTION_THROTTLE_MS = 2000; 
 
-// --- 7. LÓGICA DE EMISIÓN DE ESTADO (RECUPERADA DE LA VERSIÓN ANTIGUA) ---
-// Esta función asegura que el frontend reciba todos los datos para evitar ceros
+// --- 7. LÓGICA DE EMISIÓN DE ESTADO ---
 const emitBotState = (io, state) => {
     if (!state) return;
     io.sockets.emit('bot-state-update', {
         ...state,
-        // Aseguramos campos críticos que el Dashboard espera
         lstate: state.lstate, sstate: state.sstate,
         total_profit: state.total_profit,
         lbalance: state.lbalance, sbalance: state.sbalance,
@@ -161,7 +159,7 @@ bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 10. INTERVALOS DE RESPALDO (RECUPERADOS DE LA VERSIÓN ANTIGUA) ---
+// --- 10. INTERVALOS DE RESPALDO Y SINCRONIZACIÓN CENTRALIZADA ---
 
 // Sincronización de saldos (10s)
 setInterval(async () => {
@@ -170,13 +168,27 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// Polling de Órdenes (5s) - ESTO ES LO QUE HACÍA QUE LA ANTIGUA FUNCIONARA SÍ O SÍ
+// Polling Centralizado de Órdenes Abiertas e Historial (6s)
+// Este bloque centraliza lo que el exchange envía para que el frontend no haga fetch
 setInterval(async () => {
     try {
+        // 1. Obtener órdenes abiertas
         const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
         if (orders) io.sockets.emit('open-orders-update', orders);
-    } catch (e) { console.error("Error Polling Orders:", e.message); }
-}, 5000);
+
+        // 2. Obtener Historial General (últimas 100) para el filtrado en Frontend
+        const historyParams = {
+            symbol: 'BTC_USDT',
+            orderMode: 'spot',
+            startTime: Date.now() - (90 * 24 * 60 * 60 * 1000), // 90 días
+            endTime: Date.now(),
+            limit: 100 
+        };
+        const historyOrders = await bitmartService.getHistoryOrders(historyParams);
+        if (historyOrders) io.sockets.emit('history-orders-all', historyOrders);
+
+    } catch (e) { console.error("❌ Error en Polling Centralizado:", e.message); }
+}, 6000);
 
 setupMarketWS(io);
 
@@ -192,11 +204,25 @@ io.on('connection', async (socket) => {
     const hydrateOrders = async () => {
         try {
             console.log(`[BACKEND-SYNC] 🔄 Hidratando órdenes para ${socket.id}`);
+            
+            // Hidratación de Abiertas
             const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
             socket.emit('open-orders-update', orders || []);
 
-            const history = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(20);
-            socket.emit('ai-history-update', history);
+            // Hidratación de Historial General (All)
+            const historyParams = {
+                symbol: 'BTC_USDT',
+                orderMode: 'spot',
+                startTime: Date.now() - (90 * 24 * 60 * 60 * 1000),
+                endTime: Date.now(),
+                limit: 100 
+            };
+            const historyOrders = await bitmartService.getHistoryOrders(historyParams);
+            socket.emit('history-orders-all', historyOrders || []);
+
+            // Hidratación de Historial de IA (DB local)
+            const historyAI = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(20);
+            socket.emit('ai-history-update', historyAI);
         } catch (err) {
             console.error("❌ Error hidratando órdenes:", err.message);
         }

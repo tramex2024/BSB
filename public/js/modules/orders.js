@@ -1,7 +1,10 @@
 // public/js/modules/orders.js
 
-import { BACKEND_URL } from '../main.js';
+import { BACKEND_URL, currentBotState } from '../main.js';
 
+/**
+ * Renderiza el HTML de una orden individual preservando IDs completos
+ */
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
@@ -18,7 +21,7 @@ function createOrderHtml(order) {
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
     
-    // RESTAURADO: ID completo de la orden
+    // ID completo preservado
     const fullOrderId = (order.orderId || '').toString();
 
     // Sincronizado con estados de BitMart v4
@@ -64,30 +67,51 @@ function createOrderHtml(order) {
     </div>`;
 }
 
-export async function fetchOrders(status, orderListElement) {
+/**
+ * Filtra y muestra las órdenes basándose en el estado local (Socket data)
+ * Ya no realiza peticiones fetch al servidor.
+ */
+export function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
-    orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const result = await response.json();
-        const ordersArray = Array.isArray(result) ? result : (result.data || []);
-        
-        if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders</div>`;
-            return;
-        }
+    // Guardamos el estado actual para que refreshOrdersUI sepa qué filtrar
+    orderListElement.dataset.currentStatus = status;
 
-        orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
-    } catch (error) {
-        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
+    const allOrders = currentBotState.ordersHistory || [];
+    let filteredOrders = [];
+
+    // Lógica de filtrado local
+    if (status === 'all') {
+        filteredOrders = allOrders;
+    } else if (status === 'filled') {
+        filteredOrders = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('FILLED'));
+    } else if (status === 'cancelled') {
+        filteredOrders = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('CANCELED'));
+    } else if (status === 'opened') {
+        const cancellableStates = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'];
+        filteredOrders = allOrders.filter(o => cancellableStates.includes((o.state || o.status || '').toUpperCase()));
     }
+
+    if (filteredOrders.length === 0) {
+        orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders available</div>`;
+        return;
+    }
+
+    orderListElement.innerHTML = filteredOrders.map(order => createOrderHtml(order)).join('');
 }
 
 /**
- * BRIDGE GLOBAL: Expone la función de cancelación para los atributos 'onclick'
+ * PUENTE DE ACTUALIZACIÓN: Invocado desde main.js cuando llega el socket 'history-orders-all'
+ */
+window.refreshOrdersUI = () => {
+    const container = document.getElementById('au-order-list');
+    if (container && container.dataset.currentStatus) {
+        fetchOrders(container.dataset.currentStatus, container);
+    }
+};
+
+/**
+ * BRIDGE GLOBAL: Expone la función de cancelación
  */
 window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
@@ -103,13 +127,10 @@ window.cancelOrder = async (orderId) => {
         });
         
         const data = await response.json();
-        if (data.success) {
-            // Refrescar automáticamente la vista actual (generalmente 'all' o 'opened')
-            const activeContainer = document.getElementById('au-order-list');
-            if (activeContainer) fetchOrders('all', activeContainer);
-        } else {
+        if (!data.success) {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }
+        // No refrescamos manualmente aquí, el socket lo hará solo en el siguiente pulso
     } catch (error) {
         console.error("Cancel Error:", error);
     }
