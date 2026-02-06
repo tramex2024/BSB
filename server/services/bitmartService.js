@@ -1,7 +1,5 @@
 // BSB/server/services/bitmartService.js
 
-// BSB/server/services/bitmartService.js
-
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { initOrderWebSocket } = require('./bitmartWs');
@@ -49,7 +47,7 @@ async function makeRequest(method, path, params = {}, body = {}) {
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO Y MÉTODOS DE SERVICIO
+// LÓGICA DE NEGOCIO (RESTAURADA SEGÚN VERSIÓN EXITOSA)
 // =========================================================================
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
@@ -57,6 +55,7 @@ const bitmartService = {
     validateApiKeys: async () => {
         try {
             await bitmartService.getBalance();
+            console.log(`${LOG_PREFIX} ✅ Credenciales validadas.`);
             return true;
         } catch (e) { return false; }
     },
@@ -78,6 +77,7 @@ const bitmartService = {
         } catch (e) { return { availableUSDT: 0, availableBTC: 0 }; }
     },
 
+    // --- Mercado con Caché ---
     getTicker: async (symbol) => {
         const now = Date.now();
         if (cache.ticker.promise) return cache.ticker.promise;
@@ -121,55 +121,37 @@ const bitmartService = {
         return cache.klines.promise;
     },
 
-    // --- Gestión de Órdenes (Abiertas) ---
+    // --- Órdenes (Abiertas) ---
     getOpenOrders: async (symbol) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
         const rawOrders = res.data?.data || res.data || [];
         
-        const formattedOrders = (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
-            orderId: o.orderId || o.order_id,
-            symbol: o.symbol,
-            side: o.side,
-            type: o.type,
-            status: o.state || o.status || 'NEW',
-            price: parseFloat(o.price || 0),
-            size: parseFloat(o.size || 0),
-            filledSize: parseFloat(o.filledSize || o.filled_size || 0),
-            orderTime: o.createTime || o.orderTime || Date.now()
-        }));
+        console.log(`${LOG_PREFIX} [RENDER LOG] Abiertas encontradas: ${Array.isArray(rawOrders) ? rawOrders.length : 0}`);
         
-        console.log(`${LOG_PREFIX} [RENDER LOG] Procesando ${formattedOrders.length} órdenes abiertas.`);
-        return { orders: formattedOrders };
+        return { orders: Array.isArray(rawOrders) ? rawOrders : [] };
     },
 
-    // --- Gestión de Órdenes (Historial - REFORZADO) ---
+    // --- Historial (Lógica Restaurada del archivo antiguo) ---
     getHistoryOrders: async (options = {}) => {
         const requestBody = {
             symbol: options.symbol,
             orderMode: 'spot',
-            limit: options.limit || 100 // Aumentamos a 100 para ver más historial
+            limit: options.limit || 100
         };
-
-        const statusStr = options.order_state || options.status;
-        if (statusStr && statusStr !== 'all') {
-            requestBody.status = orderStatusMap[statusStr];
-        }
+        
+        const status = options.order_state || options.status;
+        if (status && status !== 'all') requestBody.status = orderStatusMap[status];
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
+        const rawOrders = res.data?.data?.list || res.data || [];
         
-        // CORRECCIÓN DE ESTRUCTURA V4: La lista está en res.data.data.list o res.data.list
-        const rawOrders = res.data?.data?.list || res.data?.list || res.data || [];
+        // LOG DE RENDER PARA EL HISTORIAL
+        console.log(`${LOG_PREFIX} [RENDER LOG] Historial (${status || 'all'}): ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems.`);
         
-        console.log(`${LOG_PREFIX} [RENDER LOG] Historial Crudo encontrado: ${Array.isArray(rawOrders) ? rawOrders.length : 0} ítems.`);
-
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
-            orderId: o.orderId || o.order_id,
-            symbol: o.symbol,
-            side: o.side,
-            type: o.type,
-            status: o.status || o.state || 'FINISHED',
-            price: parseFloat(o.priceAvg) > 0 ? parseFloat(o.priceAvg) : parseFloat(o.price || 0),
-            size: parseFloat(o.filledSize) > 0 ? parseFloat(o.filledSize) : parseFloat(o.size || 0),
+            ...o,
+            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
+            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
             orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
         }));
     },
@@ -193,6 +175,7 @@ const bitmartService = {
         } else {
             if (sideLower === 'buy') body.notional = amount.toString();
             else if (sideLower === 'sell') body.size = amount.toString();
+            else throw new Error(`Lado de orden no soportado: ${sideLower}`);
         }
 
         console.log(`${LOG_PREFIX} 📡 Enviando a BitMart:`, body);
@@ -200,6 +183,7 @@ const bitmartService = {
         return res.data;
     },
 
+    // --- Helpers y Websocket ---
     initOrderWebSocket,
     getRecentOrders: async (symbol) => bitmartService.getHistoryOrders({ symbol, limit: 100 }),
     placeMarketOrder: async ({ symbol, side, notional }) => 
