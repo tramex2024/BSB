@@ -1,8 +1,7 @@
 // public/js/modules/uiManager.js
 
 /**
- * uiManager.js - Orquestador Atómico
- * Ajuste: Protección de escritura y estados en tiempo real.
+ * uiManager.js - Orquestador Atómico con Memoria Selectiva
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -11,6 +10,8 @@ import { isSavingConfig } from './apiService.js';
 export { displayMessage } from './ui/notifications.js';
 
 let lastPrice = 0;
+// Memoria para evitar parpadeo en valores financieros estables
+const lastValues = {};
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
@@ -23,7 +24,7 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
     
-    // 1. Precio de Mercado
+    // 1. Precio de Mercado (Persistencia constante: NO se monitorea)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
@@ -74,6 +75,14 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
+        // --- LÓGICA DE MONITOREO SELECTIVO ---
+        // Solo aplicamos a Profit y Balance para evitar parpadeo innecesario
+        if (id.includes('profit') || id.includes('balance')) {
+            if (lastValues[id] === val) return; // Si el valor no ha cambiado, saltamos el render
+            lastValues[id] = val; // Actualizamos memoria
+        }
+        // -------------------------------------
+
         // Render de Estados
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
@@ -114,6 +123,8 @@ export function updateBotUI(state) {
     updateControlsState(state);
 }
 
+// ... (Resto de funciones: updatePulseBars, updateControlsState y renderAutobotOpenOrders permanecen igual)
+
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');
     const bar = document.getElementById(barId);
@@ -137,7 +148,6 @@ export function updateControlsState(state) {
     updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
     
-    // Espejo del botón AI en el Dashboard
     const aiDashBtn = document.getElementById('austartai-btn');
     if (aiDashBtn) updateButtonState('austartai-btn', aiState, 'AI', aiInputs);
 
@@ -153,9 +163,6 @@ export function updateControlsState(state) {
     }
 }
 
-/**
- * Renderiza las órdenes ACTIVAS en la pestaña AUTOBOT
- */
 export function renderAutobotOpenOrders(orders) {
     const container = document.getElementById('au-order-list');
     if (!container) return;

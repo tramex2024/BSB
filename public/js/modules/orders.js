@@ -1,7 +1,25 @@
 // public/js/modules/orders.js
 
 import { BACKEND_URL, currentBotState } from '../main.js';
-import { renderAutobotOpenOrders } from './uiManager.js'; // Importación necesaria para consistencia
+import { renderAutobotOpenOrders } from './uiManager.js';
+
+// Monitor de estado para evitar re-renders innecesarios
+const lastSnapshots = {
+    all: "",
+    filled: "",
+    cancelled: "",
+    opened: ""
+};
+
+/**
+ * Genera una huella digital (String) de una lista de órdenes.
+ * Si el ID o el Estado de alguna orden cambia, la huella será distinta.
+ */
+function generateSnapshot(orders) {
+    if (!orders || orders.length === 0) return "empty";
+    // Solo tomamos ID y Estado, que es lo que realmente importa para el refresh
+    return orders.map(o => `${o.orderId}-${o.state || o.status}`).join('|');
+}
 
 /**
  * Renderiza el HTML de una orden individual preservando IDs completos
@@ -22,10 +40,7 @@ function createOrderHtml(order) {
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
     
-    // ID completo preservado
     const fullOrderId = (order.orderId || '').toString();
-
-    // Sincronizado con estados de BitMart v4
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
@@ -69,38 +84,45 @@ function createOrderHtml(order) {
 }
 
 /**
- * Filtra y muestra las órdenes basándose en el estado local (Socket data)
+ * Filtra y muestra las órdenes - Solo si hay cambios reales
  */
 export function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
 
-    // Guardamos el estado actual para que refreshOrdersUI sepa qué filtrar
     orderListElement.dataset.currentStatus = status;
 
-    // CASO ESPECIAL: Si la pestaña es 'opened', delegamos al renderizador atómico de UI Manager
+    // 1. Obtener la lista según la pestaña
+    let ordersToProcess = [];
     if (status === 'opened') {
-        renderAutobotOpenOrders(currentBotState.openOrders || []);
+        ordersToProcess = currentBotState.openOrders || [];
+    } else {
+        const allOrders = currentBotState.ordersHistory || [];
+        if (status === 'all') ordersToProcess = allOrders;
+        else if (status === 'filled') ordersToProcess = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('FILLED'));
+        else if (status === 'cancelled') ordersToProcess = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('CANCELED'));
+    }
+
+    // 2. MONITOR DE CAMBIOS: Generar huella y comparar
+    const newSnapshot = generateSnapshot(ordersToProcess);
+    if (newSnapshot === lastSnapshots[status]) {
+        // console.log(`[Monitor] Sin cambios en ${status}, abortando render.`);
+        return; 
+    }
+
+    // 3. Guardar nueva huella y Proceder al renderizado
+    lastSnapshots[status] = newSnapshot;
+
+    if (status === 'opened') {
+        renderAutobotOpenOrders(ordersToProcess);
         return;
     }
 
-    const allOrders = currentBotState.ordersHistory || [];
-    let filteredOrders = [];
-
-    // Lógica de filtrado local para Historial
-    if (status === 'all') {
-        filteredOrders = allOrders;
-    } else if (status === 'filled') {
-        filteredOrders = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('FILLED'));
-    } else if (status === 'cancelled') {
-        filteredOrders = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('CANCELED'));
-    }
-
-    if (filteredOrders.length === 0) {
+    if (ordersToProcess.length === 0) {
         orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders available</div>`;
         return;
     }
 
-    orderListElement.innerHTML = filteredOrders.map(order => createOrderHtml(order)).join('');
+    orderListElement.innerHTML = ordersToProcess.map(order => createOrderHtml(order)).join('');
 }
 
 /**
