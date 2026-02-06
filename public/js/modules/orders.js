@@ -20,6 +20,7 @@ function createOrderHtml(order) {
     const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
     
     // Mapeo de estados BitMart (Texto o Numérico)
+    // CORRECCIÓN: Aseguramos que '1' sea FILLED y '6' CANCELLED para BitMart v4
     const rawState = (order.state || order.status || 'UNKNOWN').toString().toUpperCase();
     let stateDisplay = rawState;
     let isFilled = false;

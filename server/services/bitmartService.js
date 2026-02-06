@@ -140,21 +140,36 @@ const bitmartService = {
     },
 
     getHistoryOrders: async (options = {}) => {
+        // Definimos el rango de tiempo (priorizando lo que viene del controlador)
+        const now = Date.now();
+        const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+
         const requestBody = {
-            symbol: options.symbol,
+            symbol: options.symbol || 'BTC_USDT',
             orderMode: 'spot',
-            limit: options.limit || 50
+            limit: options.limit || 100, // Aumentamos el límite para dar margen al filtrado
+            // Sincronizamos los parámetros de tiempo que antes se ignoraban
+            startTime: options.startTime || thirtyDaysAgo,
+            endTime: options.endTime || now
         };
+
         const status = options.order_state || options.status;
-        if (status && status !== 'all') requestBody.status = orderStatusMap[status];
+        if (status && status !== 'all') {
+            requestBody.status = orderStatusMap[status];
+        }
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
-        const rawOrders = res.data?.data?.list || res.data || [];
+        
+        // En BitMart v4, la lista suele venir en res.data.list
+        const rawOrders = res.data?.list || res.data?.data?.list || [];
         
         return rawOrders.map(o => ({
             ...o,
+            // Normalización de campos para que el frontend no reciba undefined
             price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
-            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size
+            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
+            // Aseguramos que el timestamp sea consistente para el ordenamiento en UI
+            updateTime: o.updateTime || o.createTime
         }));
     },
 
