@@ -146,7 +146,7 @@ const bitmartService = {
             price: parseFloat(o.price || 0),
             size: parseFloat(o.size || 0),
             filledSize: parseFloat(o.filledSize || o.filled_size || 0),
-            orderTime: o.orderTime || o.create_time || Date.now()
+            orderTime: o.orderTime || o.createTime || o.create_time || Date.now()
         }));
         
         return { orders: formattedOrders };
@@ -158,17 +158,24 @@ const bitmartService = {
             orderMode: 'spot',
             limit: options.limit || 50
         };
-        const status = options.order_state || options.status;
-        if (status && status !== 'all') requestBody.status = orderStatusMap[status];
+
+        // CORRECCIÓN FILTRADO: BitMart v4 requiere el ID numérico definido en orderStatusMap
+        const statusStr = options.order_state || options.status;
+        if (statusStr && statusStr !== 'all') {
+            requestBody.status = orderStatusMap[statusStr];
+        }
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
+        
+        // Aseguramos que extraemos la lista correcta de la respuesta v4
         const rawOrders = res.data?.data?.list || res.data || [];
         
         return rawOrders.map(o => ({
             ...o,
             price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
             size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            orderTime: o.orderTime || o.update_time
+            // CORRECCIÓN FECHA: BitMart v4 usa updateTime con CamelCase
+            orderTime: o.orderTime || o.updateTime || o.update_time || Date.now()
         }));
     },
 
