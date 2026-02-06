@@ -17,7 +17,7 @@ const lastValues = {};
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
     'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',        
+    'BUYING': '#60a5fa',         
     'SELLING': '#fbbf24',      
     'PAUSED': '#fb923c',      
 };
@@ -41,7 +41,7 @@ export function updateBotUI(state) {
         // LONG
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
-        'aulcycle': 'lcycle',         
+        'aulcycle': 'lcycle',          
         'aulsprice': 'lpc',            
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',            
@@ -51,7 +51,7 @@ export function updateBotUI(state) {
         // SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
-        'auscycle': 'scycle',         
+        'auscycle': 'scycle',          
         'ausbprice': 'spc',            
         'austprice': 'stprice',       
         'austppc': 'sppc',            
@@ -161,14 +161,26 @@ export function updateControlsState(state) {
     }
 }
 
-export function renderAutobotOpenOrders(orders) {
-    const container = document.getElementById('au-order-list');
+/**
+ * Renderizador de Órdenes Independiente
+ * @param {Array} orders - Lista de órdenes
+ * @param {String} type - Tipo de contenedor ('opened', 'filled', 'cancelled', 'all')
+ */
+export function renderAutobotOrders(orders, type = 'opened') {
+    const containerId = `au-order-list-${type}`;
+    const container = document.getElementById(containerId);
     if (!container) return;
 
     const ordersList = Array.isArray(orders) ? orders : [];
 
     if (ordersList.length === 0) {
-        container.innerHTML = `<p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">No hay órdenes activas</p>`;
+        const messages = {
+            opened: 'No hay órdenes activas',
+            filled: 'Historial de compras vacío',
+            cancelled: 'No hay órdenes canceladas',
+            all: 'Sin actividad reciente'
+        };
+        container.innerHTML = `<p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">${messages[type] || 'Sin datos'}</p>`;
         return;
     }
 
@@ -196,11 +208,17 @@ export function renderAutobotOpenOrders(orders) {
                         <span class="text-gray-300 text-[10px]">${amount} BTC</span>
                         <span class="text-[8px] text-gray-500">$${total} USDT</span>
                     </div>
+                    ${type === 'opened' ? `
                     <button onclick="cancelOrder('${order.orderId}')" class="text-gray-600 hover:text-rose-500 transition-colors px-1">
                         <i class="fas fa-times-circle text-[12px]"></i>
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
         `;
     }).join('');
+}
+
+// Mantenemos esta por compatibilidad, pero redirige a la nueva
+export function renderAutobotOpenOrders(orders) {
+    renderAutobotOrders(orders, 'opened');
 }

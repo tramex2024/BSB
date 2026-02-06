@@ -7,7 +7,7 @@
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { updateBotUI, updateControlsState, renderAutobotOpenOrders } from './modules/uiManager.js'; 
+import { updateBotUI, updateControlsState, renderAutobotOpenOrders, renderAutobotOrders } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
 import './modules/orderActions.js';
 
@@ -108,7 +108,7 @@ export function initializeFullApp() {
         resetWatchdog();
         if (data?.price) {
             currentBotState.price = parseFloat(data.price);
-            updateBotUI(currentBotState); // <--- Esto dispara el render de TODO el UI
+            updateBotUI(currentBotState);
         }
     });
 
@@ -120,26 +120,35 @@ export function initializeFullApp() {
     
     // --- LÓGICA DE ÓRDENES (Sincronización Centralizada) ---
     
-    // 1. Órdenes Abiertas (Active/Open)
+    // 1. Órdenes Abiertas (Contenedor: OPENED)
     socket.on('open-orders-update', (orders) => {
-        console.log("📥 [SOCKET-MAIN] Órdenes abiertas recibidas:", orders);
+        console.log("📥 [SOCKET-MAIN] Órdenes abiertas:", orders);
         currentBotState.openOrders = orders;
 
-        // Pintar en la tabla de la IA
         if (aiBotUI && typeof aiBotUI.updateOpenOrdersTable === 'function') {
             aiBotUI.updateOpenOrdersTable(orders);
         }
 
-        // Pintar en la lista del Autobot (UI Manager)
-        renderAutobotOpenOrders(orders); 
+        // Renderiza específicamente en el nuevo contenedor 'opened'
+        renderAutobotOrders(orders, 'opened'); 
     });
 
-    // 2. Historial General (All, Filled, Canceled)
+    // 2. Historial General (Distribución a: ALL, FILLED, CANCELLED)
     socket.on('history-orders-all', (data) => {
-        console.log("📥 [SOCKET-MAIN] Historial general actualizado:", data.length, "órdenes");
-        currentBotState.ordersHistory = Array.isArray(data) ? data : [];
+        const history = Array.isArray(data) ? data : [];
+        console.log("📥 [SOCKET-MAIN] Distribuyendo historial:", history.length, "órdenes");
         
-        // Notificar al Autobot si existe la función de refresco de historial
+        currentBotState.ordersHistory = history;
+
+        // Clasificación por estado para los contenedores independientes
+        const filledOrders = history.filter(o => o.status === 'FILLED');
+        const cancelledOrders = history.filter(o => o.status === 'CANCELED' || o.status === 'CANCELLED');
+
+        // Renderizado masivo a los contenedores específicos
+        renderAutobotOrders(history, 'all');
+        renderAutobotOrders(filledOrders, 'filled');
+        renderAutobotOrders(cancelledOrders, 'cancelled');
+        
         if (typeof window.refreshOrdersUI === 'function') {
             window.refreshOrdersUI();
         }
@@ -176,7 +185,6 @@ export function initializeFullApp() {
         updateBotUI(currentBotState);
         updateControlsState(currentBotState); 
 
-        // Actualización de balances AI
         const balances = document.querySelectorAll('.ai-balance-val');
         const formattedBal = `$${(currentBotState.aibalance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         balances.forEach(el => el.innerText = formattedBal);
@@ -224,8 +232,20 @@ export async function initializeTab(tabName) {
                 await initFn(currentBotState);
             }
         }
+        
+        // Inicialización de lógica interna del Autobot
+        if (tabName === 'autobot') {
+            const { setupOrderTabs } = await import('./modules/appEvents.js');
+            setupOrderTabs();
+            
+            // Forzar renderizado inicial de órdenes al cargar la pestaña
+            renderAutobotOrders(currentBotState.openOrders, 'opened');
+            const history = currentBotState.ordersHistory || [];
+            renderAutobotOrders(history, 'all');
+            renderAutobotOrders(history.filter(o => o.status === 'FILLED'), 'filled');
+            renderAutobotOrders(history.filter(o => o.status === 'CANCELED' || o.status === 'CANCELLED'), 'cancelled');
+        } 
 
-        // Lógica específica si entramos a AIBOT
         if (tabName === 'aibot') {
             const btnAi = document.getElementById('btn-start-ai');
             const aiInput = document.getElementById('ai-amount-usdt');
