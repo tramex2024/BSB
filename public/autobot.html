@@ -55,7 +55,7 @@
 
             <div class="flex gap-2 pt-1">
                 <button id="austartl-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start L</button>     
-                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start S</button>                                                 
+                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start S</button>                                                                                 
             </div>
         </div>
 
@@ -187,8 +187,22 @@
                 </div>
             </div>
 
-            <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
-                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
+            <div class="flex-grow overflow-hidden relative">
+                <div id="au-order-list-opened" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px]">
+                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando abiertas...</p>
+                </div>
+
+                <div id="au-order-list-filled" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px] hidden">
+                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Cargando completadas...</p>
+                </div>
+
+                <div id="au-order-list-cancelled" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px] hidden">
+                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Cargando canceladas...</p>
+                </div>
+
+                <div id="au-order-list-all" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px] hidden">
+                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Cargando historial...</p>
+                </div>
             </div>
         </div>
     </div>
