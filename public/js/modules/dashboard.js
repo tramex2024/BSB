@@ -1,219 +1,301 @@
-// BSB/public/js/modules/dashboard.js (FINAL)
+/**
+ * dashboard.js - Controlador de Interfaz y Eventos (Versión Full Integrada 2026)
+ * Sincronización de balances reales y estados del bot.
+ */
+import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
+import { socket, currentBotState } from '../main.js'; 
+import { updateBotUI } from './uiManager.js';
+import * as Metrics from './metricsManager.js';
 
-// 🛑 ELIMINADA LA IMPORTACIÓN DE checkBitMartConnectionAndData
-import { fetchEquityCurveData, fetchCycleKpis } from './apiService.js'; 
-import { renderEquityCurve } from './chart.js';
-// Usamos el socket principal y otras variables de main.js
-import { intervals, SOCKET_SERVER_URL, socket } from '../main.js'; 
+// Instancias globales de gráficos
+let balanceChart = null; 
+let equityChart = null;
 
-// 🛑 NUEVA VARIABLE GLOBAL para almacenar los datos brutos de la curva
-let cycleHistoryData = []; 
-let currentChartParameter = 'accumulatedProfit'; // Parámetro inicial por defecto
+const sounds = {
+    buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
+    sell: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'),
+};
+Object.values(sounds).forEach(s => s.volume = 0.4);
 
 /**
- * Mapea los colores para el estado del bot.
- * @param {string} state - El estado recibido (e.g., 'RUNNING', 'STOPPED').
- * @returns {string} - Clase CSS de color.
+ * Inicializa la vista del Dashboard
  */
-function getStateColorClass(state) {
-    const s = state.toUpperCase();
-    if (s.includes('RUNNING') || s.includes('ACTIVE')) return 'text-green-400';
-    if (s.includes('PAUSED') || s.includes('WAITING')) return 'text-yellow-400';
-    return 'text-red-400';
+export function initializeDashboardView(initialState) {
+    console.log("📊 Dashboard: Sincronizando sistema...");
+
+    const stateToUse = initialState || currentBotState;
+
+    // 1. Inicializar Gráficos
+    initBalanceChart(stateToUse);
+    initEquityChart();
+
+    // 2. Sincronización inmediata con el estado global
+    if (stateToUse) {
+        updateBotUI(stateToUse);
+        // Pequeño delay para asegurar que el canvas esté listo en el DOM
+        setTimeout(() => {
+            updateDistributionWidget(stateToUse);
+        }, 100);
+    }
+
+    // 3. Configurar Eventos y Botones
+    setupSocketListeners();
+    setupActionButtons();
+    setupAnalyticsFilters();
+    
+    // 4. Carga de analítica
+    refreshAnalytics();
+
+    // 5. Estado de conexión inicial
+    updateHealthStatus('health-market-ws-text', socket?.connected);
+    updateHealthStatus('health-user-ws-text', socket?.connected);
 }
 
-// =========================================================================
-// 🛑 FUNCIÓN: Manejo del Selector de Parámetros de la Gráfica
-// =========================================================================
-
 /**
- * Configura el listener para el selector de parámetros de la Curva de Crecimiento.
+ * CONFIGURACIÓN DE BOTONES
  */
-function setupChartSelectorListener() {
-    const selector = document.getElementById('chart-param-selector');
-    if (selector) {
-        selector.addEventListener('change', (event) => {
-            currentChartParameter = event.target.value;
-            if (cycleHistoryData.length > 0) {
-                // Llama a la función de renderizado con el parámetro seleccionado
-                renderEquityCurve(cycleHistoryData, currentChartParameter); 
-            } else {
-                console.warn("Datos de historial de ciclos aún no disponibles para renderizar el gráfico.");
+function setupActionButtons() {
+    const panicBtn = document.getElementById('panic-btn');
+    if (panicBtn) {
+        panicBtn.onclick = async () => {
+            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
+            if (confirmPanic) {
+                await triggerPanicStop();
             }
-        });
-    }
-}
-
-
-// =========================================================================
-// 🚀 FUNCIÓN: LISTENERS DE SOCKET.IO
-// =========================================================================
-
-/**
- * Inicializa los listeners de Socket.IO para el Dashboard y actualiza las métricas.
- */
-function setupSocketListeners() {
-    if (!socket) {
-        console.error("El socket principal no está disponible en dashboard.js.");
-        return;
+        };
     }
 
-    socket.on('connect', () => {
-        console.log("Conectado al Socket.IO para actualizaciones del Dashboard.");
-    });
-    
-    // 1. Maneja la actualización de las MÉTRICAS CLAVE del AUTOBOT
-    socket.on('autobot-metrics-update', (metrics) => {
-        console.log("Métricas del Autobot recibidas:", metrics);
-        
-        // Actualización de Profit y Precio
-        const profitEl = document.getElementById('auprofit');
-        if (profitEl && metrics.unrealizedProfit !== undefined) {
-             const profitValue = parseFloat(metrics.unrealizedProfit).toFixed(2);
-             profitEl.textContent = profitValue;
-             profitEl.className = `${profitValue >= 0 ? 'text-green-400' : 'text-red-400'}`;
+    const btnConfigs = [
+        { id: 'austartl-btn', side: 'long' },
+        { id: 'austarts-btn', side: 'short' },
+        { id: 'btn-start-ai', side: 'ai' }
+    ];
+
+    btnConfigs.forEach(btn => {
+        const el = document.getElementById(btn.id);
+        if (el) {
+            el.onclick = async () => {
+                const isRunning = el.textContent.includes("STOP");
+                await toggleBotSideState(isRunning, btn.side);
+            };
         }
-        document.getElementById('auprice').textContent = parseFloat(metrics.currentPrice || 0).toFixed(2);
-        
-        // Actualización de Balances Lógico/Asignado (El balance principal 'aubalance' necesita más contexto)
-        // Usamos totalAssignedBalance si existe, sino mantenemos lo que el balance-update envió
-        const totalBalanceEl = document.getElementById('aubalance');
-        if (totalBalanceEl && metrics.totalAssignedBalance !== undefined) {
-             totalBalanceEl.textContent = parseFloat(metrics.totalAssignedBalance).toFixed(2);
-        }
-
-        document.getElementById('aulbalance').textContent = parseFloat(metrics.longBalance || 0).toFixed(2);
-        document.getElementById('ausbalance').textContent = parseFloat(metrics.shortBalance || 0).toFixed(2);
-        
-        // Actualización de Ciclos (asumiendo LCycle y SCycle vienen en el payload)
-        document.getElementById('aulcycle').textContent = metrics.LCycle || 0;
-        document.getElementById('auscycle').textContent = metrics.SCycle || 0;
-
-        // Actualización de estados del Bot
-        const lstateEl = document.getElementById('aubot-lstate');
-        const sstateEl = document.getElementById('aubot-sstate');
-        
-        if (lstateEl) {
-            lstateEl.textContent = (metrics.longState || 'STOPPED').toUpperCase();
-            lstateEl.className = getStateColorClass(metrics.longState || 'STOPPED');
-        }
-        if (sstateEl) {
-            sstateEl.textContent = (metrics.shortState || 'STOPPED').toUpperCase();
-            sstateEl.className = getStateColorClass(metrics.shortState || 'STOPPED');
-        }
-
-        // Actualización del punto de conexión (asumiendo 'isRunning' es el estado general del bot)
-        const statusDot = document.getElementById('status-dot');
-        if (statusDot) {
-            statusDot.classList.remove('bg-red-500', 'bg-green-500');
-            statusDot.classList.add(metrics.isRunning ? 'bg-green-500' : 'bg-red-500');
-        }
-    });
-
-    // Listener para Balances Generales (si es necesario actualizar aubalance con más detalle)
-    socket.on('balance-update', (balances) => {
-        const totalBalanceEl = document.getElementById('aubalance');
-        if (totalBalanceEl) {
-            // Esto actualiza el balance general del exchange
-            const usdtValue = parseFloat(balances.lastAvailableUSDT || 0).toFixed(2);
-            const btcValue = parseFloat(balances.lastAvailableBTC || 0).toFixed(5);
-            totalBalanceEl.textContent = `USDT: ${usdtValue} | BTC: ${btcValue}`;
-        }
-    });
-
-
-    // 2. Maneja la actualización de las MÉTRICAS CLAVE del AIBot (Deshabilitado, pero con estructura)
-    socket.on('aibot-metrics-update', (metrics) => {
-        // console.log("Métricas del AIBot recibidas:", metrics);
-        // Implementación pendiente para AIBot (usando aiprofit, ailbalance, aibot-lstate, etc.)
-    });
-
-    // 3. Actualización de Curva (Si se cierra un ciclo)
-    socket.on('cycle-closed', () => {
-        // Cuando un ciclo se cierra, recargamos la curva y los KPIs
-        loadAndRenderEquityCurve();
-        loadAndDisplayKpis();
-    });
-}
-
-// =========================================================================
-// 🚀 FUNCIÓN: INICIALIZACIÓN DE VISTA Y CARGA DE DATOS
-// =========================================================================
-
-export function initializeDashboardView() {
-    console.log("Inicializando vista del Dashboard...");
-    
-    // 1. Establecer los listeners de Socket.IO para las actualizaciones en tiempo real
-    setupSocketListeners(); 
-    
-    // 2. Ejecuta la carga de datos pesados en PARALELO para ahorrar tiempo
-    Promise.all([
-        loadAndRenderEquityCurve(),
-        loadAndDisplayKpis() 
-    ]).then(() => {
-        console.log('Dashboard: Curva y KPIs cargados en paralelo.');
-        // 🛑 Importante: Configurar el listener del selector una vez que los datos iniciales se hayan intentado cargar
-        setupChartSelectorListener(); 
-    }).catch(error => {
-        console.error('Error al cargar datos del Dashboard:', error);
     });
 }
 
 /**
- * Carga y muestra los KPIs del ciclo en las tarjetas del dashboard.
+ * Refresca analítica
  */
-async function loadAndDisplayKpis() {
-    try {
-        const kpis = await fetchCycleKpis();
-        
-        console.log("Datos KPI recibidos:", kpis); 
-
-        const profitPercentageElement = document.getElementById('cycle-avg-profit'); 
-        const totalCyclesElement = document.getElementById('total-cycles-closed'); 
-
-        // Asumimos que kpis es un objeto { averageProfitPercentage, totalCycles }
-        const totalCycles = kpis.totalCycles || 0;
-        const avgProfit = kpis.averageProfitPercentage || 0;
-
-        if (profitPercentageElement) {
-            // Muestra el rendimiento promedio redondeado con el símbolo %
-            profitPercentageElement.textContent = `${avgProfit.toFixed(2)} %`;
-        }
-        
-        if (totalCyclesElement) {
-            // Muestra el número total de ciclos
-            totalCyclesElement.textContent = totalCycles;
-        }
-
-        console.log(`KPIs de ciclos cargados. Rendimiento promedio: ${avgProfit}%.`);
-    } catch (error) {
-        console.error("Error en la carga y renderizado de KPIs:", error);
-    }
-}
-
-/**
- * Orquesta la obtención y el renderizado de la Curva de Crecimiento.
- * MODIFICADO: Almacena los datos y usa el parámetro de la gráfica actual.
- */
-async function loadAndRenderEquityCurve() {
+async function refreshAnalytics() {
     try {
         const curveData = await fetchEquityCurveData();
-        
-        if (curveData && curveData.length > 0) {
-            // 🛑 1. ALMACENAR DATOS GLOBALES
-            cycleHistoryData = curveData; 
+        if (curveData) {
+            Metrics.setAnalyticsData(curveData);
+            
+            const bSel = document.getElementById('chart-bot-selector');
+            const pSel = document.getElementById('chart-param-selector');
 
-            // 🛑 2. USAR EL PARÁMETRO ACTUAL
-            if (typeof renderEquityCurve === 'function') {
-                renderEquityCurve(cycleHistoryData, currentChartParameter); 
-                console.log('Curva de Crecimiento renderizada.');
-            } else {
-                console.error("La función renderEquityCurve no está definida en chart.js o no fue importada correctamente.");
-            }
-        } else {
-            console.warn('No hay datos suficientes de ciclos cerrados para renderizar la Curva de Crecimiento.');
+            const currentFilter = {
+                bot: bSel?.value || 'all',
+                param: pSel?.value || 'accumulatedProfit'
+            };
+            const filteredData = Metrics.getFilteredData(currentFilter);
+            
+            if (!equityChart) initEquityChart();
+            updateEquityChart(filteredData);
         }
-    } catch (error) {
-        console.error("Error en la carga y renderizado de la curva:", error);
+    } catch (e) { 
+        console.error("❌ Error en Dashboard Metrics:", e.message); 
+    }
+}
+
+/**
+ * Listeners en tiempo real
+ */
+function setupSocketListeners() {
+    if (!socket) return;
+
+    const events = ['market-signal-update', 'order-executed', 'cycle-closed', 'ai-decision-update', 'ai-status-update'];
+    events.forEach(ev => socket.off(ev));
+
+    // Actualización de precio y tendencia
+    socket.on('market-signal-update', (analysis) => {
+        if (analysis.price) {
+            currentBotState.price = analysis.price;
+            // Actualizamos el widget para que el gráfico de dona reaccione al precio real
+            updateDistributionWidget(currentBotState);
+        }
+
+        const signalEl = document.getElementById('ai-trend-label');
+        if (signalEl) {
+            signalEl.textContent = analysis.trend || 'NEUTRAL';
+            signalEl.className = `text-[8px] font-bold px-1.5 py-0.5 rounded bg-gray-900 ${
+                analysis.trend === 'BULLISH' ? 'text-emerald-400' : analysis.trend === 'BEARISH' ? 'text-red-400' : 'text-gray-400'
+            }`;
+        }
+    });
+
+    socket.on('order-executed', (order) => {
+        try {
+            order.side.toLowerCase() === 'buy' ? sounds.buy.play() : sounds.sell.play();
+            flashElement('auprice', order.side.toLowerCase() === 'buy' ? 'bg-emerald-500/20' : 'bg-orange-500/20');
+        } catch (e) {}
+    });
+
+    socket.on('cycle-closed', () => {
+        if(sounds.sell) sounds.sell.play();
+        flashElement('auprofit', 'bg-yellow-500/30');
+        refreshAnalytics(); 
+    });
+
+    socket.on('ai-decision-update', (data) => {
+        const msgEl = document.getElementById('ai-engine-msg');
+        if (msgEl) msgEl.textContent = data.message || "NEURAL CORE ANALYZING...";
+        
+        const confBar = document.getElementById('ai-confidence-fill');
+        if (confBar) confBar.style.width = `${Math.round(data.confidence * 100)}%`;
+    });
+
+    socket.on('ai-status-update', (data) => {
+        if (data.virtualBalance !== undefined) {
+            currentBotState.aibalance = data.virtualBalance;
+            updateDistributionWidget(currentBotState);
+        }
+    });
+}
+
+// --- GESTIÓN DE GRÁFICOS ---
+
+function initBalanceChart(state) {
+    const canvas = document.getElementById('balanceDonutChart');
+    if (!canvas) return;
+    if (balanceChart) balanceChart.destroy();
+
+    balanceChart = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: ['USDT', 'BTC'],
+            datasets: [{ 
+                data: [1, 0], // Placeholder neutro
+                backgroundColor: ['#10b981', '#fb923c'], 
+                borderWidth: 0, 
+                cutout: '75%'
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { display: false } },
+            animation: { duration: 800 }
+        }
+    });
+}
+
+function initEquityChart() {
+    const canvas = document.getElementById('equityCurveChart');
+    if (!canvas) return;
+    if (equityChart) equityChart.destroy();
+
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+
+    equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                borderColor: '#10b981',
+                borderWidth: 2,
+                fill: true,
+                backgroundColor: gradient,
+                tension: 0.4,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', font: { size: 9 } }
+                }
+            }
+        }
+    });
+}
+
+export function updateDistributionWidget(state) {
+    if (!balanceChart || !state) return;
+    
+    const usdt = parseFloat(state.lastAvailableUSDT || 0);
+    const btcAmount = parseFloat(state.lastAvailableBTC || 0);
+    const price = parseFloat(state.price || state.marketPrice || 0);
+    
+    // Solo calculamos proporciones si tenemos precio de mercado real
+    if (price > 0) {
+        const btcInUsdt = btcAmount * price;
+        const total = usdt + btcInUsdt;
+
+        if (total > 0) {
+            balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
+            balanceChart.update('none'); // Update sin animaciones bruscas para el precio
+
+            // Actualizar barras de progreso visuales
+            const displayUsdtPercent = (usdt / total) * 100;
+            const displayBtcPercent = (btcInUsdt / total) * 100;
+
+            const usdtBar = document.getElementById('usdt-bar');
+            const btcBar = document.getElementById('btc-bar');
+            if (usdtBar) usdtBar.style.width = `${displayUsdtPercent}%`;
+            if (btcBar) btcBar.style.width = `${displayBtcPercent}%`;
+        }
+    }
+    
+    // Los textos de balance se actualizan siempre con los valores crudos de la BD
+    const uText = document.getElementById('aubalance-usdt');
+    const bText = document.getElementById('aubalance-btc');
+    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if(bText) bText.innerText = btcAmount.toFixed(6);
+}
+
+export function updateEquityChart(data) {
+    if (!equityChart || !data || !data.points) return;
+    equityChart.data.labels = data.points.map(p => p.time);
+    equityChart.data.datasets[0].data = data.points.map(p => p.value);
+    equityChart.update('none');
+}
+
+function setupAnalyticsFilters() {
+    const bSel = document.getElementById('chart-bot-selector');
+    const pSel = document.getElementById('chart-param-selector');
+
+    const update = () => {
+        const filtered = Metrics.getFilteredData({ bot: bSel.value, param: pSel.value });
+        updateEquityChart(filtered);
+    };
+
+    if (bSel) bSel.onchange = update;
+    if (pSel) pSel.onchange = update;
+}
+
+function updateHealthStatus(textId, isOnline) {
+    const txt = document.getElementById(textId);
+    if (txt) {
+        txt.textContent = isOnline ? 'CONNECTED' : 'OFFLINE';
+        txt.className = `font-mono font-bold ${isOnline ? 'text-emerald-500' : 'text-red-400'}`;
+    }
+}
+
+function flashElement(id, colorClass) {
+    const el = document.getElementById(id);
+    const container = el ? el.closest('.bg-gray-700, .bg-gray-800') : null;
+    if (container) {
+        container.classList.add(colorClass);
+        setTimeout(() => container.classList.remove(colorClass), 800);
     }
 }

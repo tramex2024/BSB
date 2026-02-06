@@ -1,126 +1,178 @@
 // public/js/modules/autobot.js
+
+/**
+ * autobot.js - Core Logic for Trading Tabs
+ * Integration: WebSocket Sync & Dual-Button Control 2026
+ */
+
 import { initializeChart } from './chart.js';
-import { fetchOrders, setActiveTab as setOrdersActiveTab, updateOpenOrdersTable } from './orders.js';
-import { updateBotUI, displayMessage } from './uiManager.js';
-import { getBotConfiguration, sendConfigToBackend, toggleBotState } from './apiService.js';
-import { TRADE_SYMBOL_TV, TRADE_SYMBOL_BITMART, BACKEND_URL, socket } from '../main.js';
+import { fetchOrders } from './orders.js';
+import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
+import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
+import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
+import { askConfirmation } from './confirmModal.js';
+import { activeEdits } from './ui/controls.js';
 
-const MIN_USDT_AMOUNT = 5.00;
-const MIN_BTC_AMOUNT = 0.00005;
-let maxUsdtBalance = 0;
-let maxBtcBalance = 0;
+const MIN_USDT_AMOUNT = 6.00;
+let currentTab = 'all';
+let configDebounceTimeout = null;
 
-function updateMainBalanceDisplay(usdt, btc) {
-    const totalBalanceEl = document.getElementById('aubalance');
-    if (totalBalanceEl) {
-        totalBalanceEl.textContent = `USDT: ${parseFloat(usdt || 0).toFixed(2)} | BTC: ${parseFloat(btc || 0).toFixed(5)}`;
-    }
-}
-
-function updateMaxBalanceDisplay(currency, balance) {
-    const displayElement = document.getElementById(`au-max-${currency.toLowerCase()}`); 
-    if (displayElement) displayElement.textContent = `(Max: ${balance.toFixed(currency === 'USDT' ? 2 : 5)} ${currency})`;
-}
-
-function validateAmountInput(inputId, maxLimit, currency) {
-    const input = document.getElementById(inputId);
-    const errorElement = document.getElementById(`au-error-${currency.toLowerCase()}`); 
-    if (!input) return true;
-
-    const value = parseFloat(input.value);
-    const minBitmart = currency === 'USDT' ? MIN_USDT_AMOUNT : MIN_BTC_AMOUNT;
+/**
+ * Valida que los montos cumplan con el mínimo del exchange
+ */
+function validateSideInputs(side) {
+    const suffix = side === 'long' ? 'l' : 's';
+    const fields = [`auamount${suffix}-usdt`, `aupurchase${suffix}-usdt`];
+    let isValid = true;
     
-    let errorMsg = '';
-    if (isNaN(value) || value <= 0) errorMsg = `Monto de ${currency} inválido.`;
-    else if (value < minBitmart) errorMsg = `Mínimo BitMart: ${minBitmart} ${currency}.`;
-    else if (value > maxLimit) errorMsg = `Excede saldo disponible.`;
-
-    if (errorElement) {
-        errorElement.textContent = errorMsg;
-        errorElement.style.display = errorMsg ? 'block' : 'none';
-    }
-    return !errorMsg;
-}
-
-function setupConfigListeners() {
-    ['auamount-usdt', 'auamount-btc'].forEach(id => {
+    fields.forEach(id => {
         const input = document.getElementById(id);
-        const curr = id.includes('usdt') ? 'USDT' : 'BTC';
-        input?.addEventListener('input', () => {
-            if (validateAmountInput(id, curr === 'USDT' ? maxUsdtBalance : maxBtcBalance, curr)) sendConfigToBackend();
-        });
-    });
-    
-    ['aupurchase-usdt', 'aupurchase-btc', 'auincrement', 'audecrement', 'autrigger', 'au-stop-at-cycle-end'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', sendConfigToBackend);
-    });
-}
-
-async function loadBalancesAndLimits() {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/bot-state/balances`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const data = await response.json();
-        if (data.success && data.data) {
-            maxUsdtBalance = parseFloat(data.data.lastAvailableUSDT) || 0;
-            maxBtcBalance = parseFloat(data.data.lastAvailableBTC) || 0;
-            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-            updateMaxBalanceDisplay('BTC', maxBtcBalance);
-            updateMainBalanceDisplay(maxUsdtBalance, maxBtcBalance);
+        if (!input) return;
+        const val = parseFloat(input.value);
+        if (isNaN(val) || val < MIN_USDT_AMOUNT) {
+            input.classList.add('border-red-500', 'animate-shake');
+            isValid = false;
+        } else {
+            input.classList.remove('border-red-500', 'animate-shake');
         }
-    } catch (error) {
-        console.error("Error cargando límites:", error);
-    }
+    });
+    return isValid;
 }
 
-export async function initializeAutobotView() {
-    let currentTab = 'opened';
-    const auOrderList = document.getElementById('au-order-list');
+/**
+ * Escucha cambios en todos los inputs de configuración (Dashboard + Tabs)
+ */
+function setupConfigListeners() {
+    const configIds = [
+        'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
+        'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
+        'auamountai-usdt', 'ai-amount-usdt', 
+        'au-stop-long-at-cycle', 'au-stop-short-at-cycle', 
+        'au-stop-ai-at-cycle', 'ai-stop-at-cycle'
+    ];
+    
+    configIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const eventType = el.type === 'checkbox' ? 'change' : 'input';
+        
+        el.addEventListener(eventType, () => {
+            activeEdits[id] = Date.now();
 
-    await loadBalancesAndLimits();
+            if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
+            configDebounceTimeout = setTimeout(async () => {
+                if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
+
+                try {
+                    await sendConfigToBackend();
+                } catch (err) {
+                    console.error("❌ Error guardando config:", err);
+                }
+            }, 800); 
+        });
+    });
+}
+
+/**
+ * Inicializa la vista y sincroniza los botones espejo
+ */
+export async function initializeAutobotView() {
+    const auOrderList = document.getElementById('au-order-list');
+    if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
+
     setupConfigListeners();
 
-    // --- INICIALIZACIÓN DEL GRÁFICO ---
-    try {
-        // Importante: No reasignar currentChart localmente, usar la del main si es necesario o manejarla aquí
-        window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-    } catch (e) { console.error("Error en gráfico:", e); }
+    /**
+     * Configura el evento de Start/Stop para un botón y su lógica asociada
+     */
+    const setupSideBtn = (id, sideName) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
 
-    // Botón START/STOP
-    document.getElementById('austart-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('austart-btn');
-        const isRunning = btn.textContent === 'STOP';
-        if (!isRunning && (!validateAmountInput('auamount-usdt', maxUsdtBalance, 'USDT') || !validateAmountInput('auamount-btc', maxBtcBalance, 'BTC'))) {
-            return displayMessage('Fondos insuficientes', 'error');
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+
+        newBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            
+            // Verificación de estado unificada
+            const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
+                             sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
+                             currentBotState.config.ai.enabled);
+            
+            if (isRunning) {
+                const confirmed = await askConfirmation(sideName);
+                if (!confirmed) return;
+            } else {
+                if (sideName !== 'ai' && !validateSideInputs(sideName)) {
+                    displayMessage(`Min $${MIN_USDT_AMOUNT} USDT required for ${sideName.toUpperCase()}`, 'error');
+                    return;
+                }
+            }
+
+            try {
+                newBtn.disabled = true;
+                newBtn.textContent = isRunning ? "STOPPING..." : "STARTING...";
+                await toggleBotSideState(isRunning, sideName);
+            } catch (err) {
+                displayMessage(`Error in ${sideName} engine`, 'error');
+                updateControlsState(currentBotState); 
+            } finally {
+                newBtn.disabled = false;
+            }
+        });
+    };
+
+    // Inicializar botones (Espejos entre Dashboard y Tabs)
+    setupSideBtn('austartl-btn', 'long');
+    setupSideBtn('austarts-btn', 'short');
+    setupSideBtn('austartai-btn', 'ai'); 
+    setupSideBtn('btn-start-ai', 'ai');
+
+    // Sincronización visual inmediata
+    updateBotUI(currentBotState);
+    updateControlsState(currentBotState);
+
+    // Inicializar Gráfico con delay para asegurar renderizado del DOM
+    setTimeout(() => {
+        const chartContainer = document.getElementById('au-tvchart');
+        if (chartContainer) {
+            if (window.currentChart) {
+                try { window.currentChart.remove(); } catch(e) {}
+            }
+            window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }
-        await toggleBotState(isRunning, getBotConfiguration());
+    }, 300);
+
+    // Iniciar pestañas de órdenes
+    setupOrderTabs(auOrderList);
+}
+
+function setupOrderTabs(container) {
+    const orderTabs = document.querySelectorAll('.autobot-tabs button');
+    if (!orderTabs.length || !container) return;
+
+    const setActiveTabStyle = (selectedId) => {
+        orderTabs.forEach(btn => {
+            btn.classList.remove('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
+            btn.classList.add('text-gray-500');
+            if (btn.id === selectedId) {
+                btn.classList.remove('text-gray-500');
+                btn.classList.add('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
+            }
+        });
+    };
+
+    orderTabs.forEach(tab => {
+        tab.onclick = (e) => {
+            const selectedId = e.currentTarget.id;
+            setActiveTabStyle(selectedId);
+            currentTab = selectedId.replace('tab-', '');
+            fetchOrders(currentTab, container);
+        };
     });
 
-    // Pestañas de Órdenes
-    document.querySelectorAll('#autobot-section [id^="tab-"]').forEach(tab => {
-        tab.addEventListener('click', () => {
-            currentTab = tab.id.replace('tab-', '');
-            setOrdersActiveTab(tab.id);
-            fetchOrders(currentTab, auOrderList);
-        });
-    });
-
-    // Carga inicial de órdenes
-    setOrdersActiveTab('tab-opened');
-    fetchOrders('opened', auOrderList);
-
-    if (socket) {
-        socket.on('bot-state-update', (state) => updateBotUI(state));
-        socket.on('balance-update', (balances) => {
-            maxUsdtBalance = balances.lastAvailableUSDT;
-            maxBtcBalance = balances.lastAvailableBTC;
-            updateMaxBalanceDisplay('USDT', maxUsdtBalance);
-            updateMaxBalanceDisplay('BTC', maxBtcBalance);
-            updateMainBalanceDisplay(maxUsdtBalance, maxBtcBalance);
-        });
-        socket.on('open-orders-update', (ordersData) => {
-            updateOpenOrdersTable(ordersData, 'au-order-list', currentTab);
-        });
-    }
+    // Carga inicial de órdenes (Pestaña por defecto: Opened/All)
+    setActiveTabStyle('tab-all');
+    fetchOrders('all', container);
 }

@@ -1,77 +1,75 @@
 // public/js/modules/navigation.js
 
-import { displayLogMessage } from './auth.js';
-
-// Importamos la función para mostrar el modal de autenticación.
 import { toggleAuthModal } from './login.js';
 
+/**
+ * Gestiona el cambio de pestañas y protege las rutas privadas.
+ * @param {Function} callback - Función initializeTab que viene de main.js
+ */
 export function setupNavTabs(callback) {
     const navTabs = document.querySelectorAll('.nav-tab');
-    const mainContent = document.getElementById('main-content');
+    const logMessageEl = document.getElementById('log-message');
     
+    /**
+     * Función interna para manejar el flujo de cambio de vista
+     */
     async function loadContent(tabName) {
-        // --- LÓGICA DE CONTROL DE ACCESO ---
         const token = localStorage.getItem('token');
+        
+        // --- 1. CONTROL DE SEGURIDAD ---
+        // Si el usuario intenta entrar a secciones privadas (autobot/aibot) sin estar logueado
         if (tabName !== 'dashboard' && !token) {
-            console.warn('Acceso denegado. El usuario no está autenticado.');
+            // Revertimos el estilo visual a la pestaña dashboard
+            navTabs.forEach(t => t.classList.remove('active'));
+            const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
+            if (dashTab) dashTab.classList.add('active');
             
-            // Muestra el modal de autenticación
+            // Abrimos el modal de login automáticamente
             toggleAuthModal(true);
             
-            // Muestra un mensaje al usuario en la barra de logs
-            displayLogMessage('Acceso denegado. Por favor, inicia sesión.', 'error', document.getElementById('log-message'));
-            
-            return; // Detiene la ejecución para no cargar la pestaña
+            if (logMessageEl) {
+                logMessageEl.textContent = 'Acceso restringido: Inicia sesión para usar los Bots.';
+                logMessageEl.className = 'text-red-400';
+            }
+            return; 
         }
 
-        try {
-            // Limpiar el contenido actual antes de cargar el nuevo para evitar conflictos
-            mainContent.innerHTML = '';
-            
-            const response = await fetch(`/${tabName}.html`);
-            if (!response.ok) {
-                throw new Error(`Failed to load ${tabName}.html`);
-            }
-            const htmlContent = await response.text();
-            mainContent.innerHTML = htmlContent;
-            displayLogMessage(`Switched to ${tabName} tab.`, 'info');
-
-            const newUrl = window.location.origin + window.location.pathname + `?#${tabName}`;
-            window.history.pushState({ path: newUrl }, '', newUrl);
-
-            // Se ejecuta un callback después de cargar el contenido
-            if (callback) {
-                callback(tabName);
-            }
-        } catch (error) {
-            console.error('Error loading content:', error);
-            mainContent.innerHTML = `<p class="text-red-500">Error loading page content. Please try again.</p>`;
-            displayLogMessage(`Error loading content for ${tabName}.`, 'error', document.getElementById('log-message'));
+        // --- 2. NOTIFICAR AL MOTOR PRINCIPAL (main.js) ---
+        // Delegamos la carga del HTML y el JS al callback para evitar doble carga
+        if (callback) {
+            await callback(tabName);
         }
+
+        // --- 3. ACTUALIZAR URL ---
+        // Esto permite que si refrescas la página, se quede en la misma pestaña
+        window.location.hash = tabName;
     }
 
+    // Configurar el evento click para cada pestaña del menú
     navTabs.forEach(tab => {
-        tab.addEventListener('click', function(event) {
-            event.preventDefault();
-            const tabName = this.dataset.tab;
-
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            const tabName = tab.dataset.tab;
+            
+            // Cambiar visualmente la pestaña activa en el menú
             navTabs.forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
+            tab.classList.add('active');
             
             loadContent(tabName);
         });
     });
 
-    // Cargar la pestaña inicial
-    const initialActiveTab = document.querySelector('.nav-tab.active');
-    if (initialActiveTab) {
-        loadContent(initialActiveTab.dataset.tab);
-    } else {
-        const defaultTab = 'dashboard'; 
-        const defaultTabElement = document.querySelector(`.nav-tab[data-tab="${defaultTab}"]`);
-        if (defaultTabElement) {
-            defaultTabElement.classList.add('active');
-            loadContent(defaultTab);
-        }
-    }
+    // --- MANEJO DE CARGA INICIAL (Refresh) ---
+    // Detectar si venimos de un #hash específico (ej: #autobot)
+    const currentHash = window.location.hash.replace('#', '');
+    const initialTab = currentHash || 'dashboard';
+    
+    // Sincronizar estilos del menú al arrancar
+    navTabs.forEach(t => {
+        if (t.dataset.tab === initialTab) t.classList.add('active');
+        else t.classList.remove('active');
+    });
+
+    // Cargar la pestaña correspondiente al iniciar
+    loadContent(initialTab);
 }

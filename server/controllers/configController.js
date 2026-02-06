@@ -1,152 +1,115 @@
-// BSB/server/controllers/configController.js (NUEVO ARCHIVO CREADO)
+// server/controllers/configController.js
 
 const Autobot = require('../models/Autobot'); 
 const bitmartService = require('../services/bitmartService'); 
-const { log, getBotState } = require('../autobotLogic'); // Importamos solo lo necesario del Logic
-const { updateGeneralBotState } = require('../autobotLogic'); 
-const { calculateLongCoverage, parseNumber } = require('../autobotCalculations'); 
+const autobotLogic = require('../autobotLogic'); 
 
 /**
- * Función que maneja la actualización de la configuración del bot, la validación
- * de balances y el recálculo dinámico de lcoverage/lnorder.
+ * Obtiene la configuración actual para el frontend
+ */
+async function getBotConfig(req, res) {
+    try {
+        const botState = await Autobot.findOne({}).lean();
+        if (!botState) {
+            return res.status(404).json({ success: false, message: "No se encontró la configuración del bot." });
+        }
+        return res.json({ success: true, config: botState.config });
+    } catch (error) {
+        console.error("❌ Error en getBotConfig:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+}
+
+/**
+ * Actualiza la configuración y sincroniza con el motor
  */
 async function updateBotConfig(req, res) {
     try {
-        const newConfig = req.body; 
-        
-        // --- 1. IDENTIFICAR LOS CAMPOS DE CAPITAL ASIGNADO Y OBTENER ESTADO ---
-        const assignedUSDT = parseFloat(newConfig.long?.amountUsdt || 0); 
-        const assignedBTC = parseFloat(newConfig.short?.amountBtc || 0); 
-
-        let botState = await getBotState();
-        const isNewBot = !botState;
-
-        // --- 2. OBTENER SALDOS REALES DE BITMART (Necesario para la validación) ---
-        const { availableUSDT, availableBTC } = await bitmartService.getAvailableTradingBalances();
-
-        // --- 3. VALIDACIÓN CRÍTICA DE FONDOS ---
-        if (assignedUSDT > availableUSDT) {
-            const msg = `Error: Asignación de USDT (${assignedUSDT.toFixed(2)}) excede el saldo real disponible (${availableUSDT.toFixed(2)}).`;
-            log(msg, 'error');
-            return res.status(400).json({ success: false, message: msg });
+        const { config: newConfig } = req.body; 
+        if (!newConfig) {
+            return res.status(400).json({ success: false, message: "No configuration data provided." });
         }
-        if (assignedBTC > availableBTC) {
-            const msg = `Error: Asignación de BTC (${assignedBTC.toFixed(8)}) excede el saldo real disponible (${availableBTC.toFixed(8)}).`;
-            log(msg, 'error');
-            return res.status(400).json({ success: false, message: msg });
+
+        // Recuperamos el estado actual (importante para el Merge)
+        let botState = await Autobot.findOne({});
+        if (!botState) return res.status(404).json({ success: false, message: "Bot no encontrado." });
+
+        // 1. VALIDACIÓN DE FONDOS
+        const { availableUSDT } = await bitmartService.getAvailableTradingBalances();
+        
+        const assignedUSDT_Long = newConfig.long?.amountUsdt !== undefined ? parseFloat(newConfig.long.amountUsdt) : botState.config.long.amountUsdt;
+        const assignedUSDT_Short = newConfig.short?.amountUsdt !== undefined ? parseFloat(newConfig.short.amountUsdt) : botState.config.short.amountUsdt;
+        const assignedUSDT_AI = newConfig.ai?.amountUsdt !== undefined ? parseFloat(newConfig.ai.amountUsdt) : (botState.config.ai?.amountUsdt || 0);
+
+        if ((assignedUSDT_Long + assignedUSDT_Short + assignedUSDT_AI) > (availableUSDT + 5)) {
+             return res.status(400).json({ success: false, message: `Fondos insuficientes: ${availableUSDT.toFixed(2)} USDT disponibles.` });
         }
-        
-        // ---------------------------------------------------------------------------------
-        // 💡 LÓGICA DE RECALCULO DE LCOVERAGE Y LNORDER (Trigger)
-        // ---------------------------------------------------------------------------------
-        let recalculateCoverage = false;
 
-        if (!isNewBot) {
-            const oldPurchaseUsdt = parseFloat(botState.config.long.purchaseUsdt);
-            const newPurchaseUsdt = parseFloat(newConfig.long.purchaseUsdt);
-            
-            if (oldPurchaseUsdt !== newPurchaseUsdt) {
-                const isBotStopped = botState.lstate === 'STOPPED';
-                const isPositionEmpty = (botState.lStateData.ppc || 0) === 0;
+        // 2. FUNCIÓN DE AYUDA PARA FUSIÓN
+        const mergeValue = (newValue, oldValue, fallback = 0) => {
+            if (newValue === undefined || newValue === null || newValue === "") return oldValue;
+            const parsed = parseFloat(newValue);
+            return isNaN(parsed) ? oldValue : parsed;
+        };
 
-                if (isBotStopped || isPositionEmpty) {
-                    recalculateCoverage = true;
-                }
-            }
-        } else {
-            // Si es un bot nuevo, siempre recalculamos la cobertura inicial
-            recalculateCoverage = true; 
+        // 3. PREPARACIÓN DE LA ACTUALIZACIÓN
+        const update = {
+            // LONG
+            'config.long.amountUsdt': assignedUSDT_Long,
+            'config.long.purchaseUsdt': mergeValue(newConfig.long?.purchaseUsdt, botState.config.long.purchaseUsdt),
+            'config.long.price_var': mergeValue(newConfig.long?.price_var, botState.config.long.price_var),
+            'config.long.size_var': mergeValue(newConfig.long?.size_var, botState.config.long.size_var),
+            'config.long.profit_percent': mergeValue(newConfig.long?.profit_percent, botState.config.long.profit_percent, 1.5),
+            'config.long.price_step_inc': mergeValue(newConfig.long?.price_step_inc, botState.config.long.price_step_inc),
+            'config.long.stopAtCycle': newConfig.long?.stopAtCycle !== undefined ? !!newConfig.long.stopAtCycle : botState.config.long.stopAtCycle,
+
+            // SHORT
+            'config.short.amountUsdt': assignedUSDT_Short,
+            'config.short.purchaseUsdt': mergeValue(newConfig.short?.purchaseUsdt, botState.config.short.purchaseUsdt),
+            'config.short.price_var': mergeValue(newConfig.short?.price_var, botState.config.short.price_var),
+            'config.short.size_var': mergeValue(newConfig.short?.size_var, botState.config.short.size_var),
+            'config.short.profit_percent': mergeValue(newConfig.short?.profit_percent, botState.config.short.profit_percent, 1.5),
+            'config.short.price_step_inc': mergeValue(newConfig.short?.price_step_inc, botState.config.short.price_step_inc),
+            'config.short.stopAtCycle': newConfig.short?.stopAtCycle !== undefined ? !!newConfig.short.stopAtCycle : botState.config.short.stopAtCycle,
+
+            // AI
+            'config.ai.amountUsdt': assignedUSDT_AI,
+            'config.ai.stopAtCycle': newConfig.ai?.stopAtCycle !== undefined ? !!newConfig.ai.stopAtCycle : (botState.config.ai?.stopAtCycle || false),
+            'config.ai.enabled': newConfig.ai?.enabled !== undefined ? !!newConfig.ai.enabled : (botState.config.ai?.enabled || false)
+        };
+
+        // Lógica Extra: Si la IA NO tiene una posición abierta (ailastEntryPrice === 0), 
+        // actualizamos su balance operativo al nuevo monto asignado.
+        if (botState.ailastEntryPrice === 0) {
+            update.aibalance = assignedUSDT_AI;
         }
-        // ---------------------------------------------------------------------------------
 
+        // 4. PERSISTENCIA ATÓMICA
+        const updatedBot = await Autobot.findOneAndUpdate(
+            {}, 
+            { $set: update }, 
+            { new: true, runValidators: true }
+        ).lean();
 
-        // --- 4. CARGAR ESTADO Y APLICAR LÓGICA DE ASIGNACIÓN DE BALANCE/CONFIGURACIÓN ---
-        
-        if (isNewBot) {
-            // Inicializar un nuevo bot
-            botState = new Autobot({ 
-                config: newConfig,
-                lbalance: assignedUSDT, 
-                sbalance: assignedBTC, 
-            });
-            log('Primer estado del bot inicializado.', 'success');
-
-        } else {
-            
-            // Asignación de Balance solo si está STOPPED
-            if (botState.lstate === 'STOPPED') {
-                 botState.lbalance = assignedUSDT; 
-                 log(`LBalance reinicializado a ${assignedUSDT.toFixed(2)} USDT.`, 'info');
-            }
-            if (botState.sstate === 'STOPPED') {
-                 botState.sbalance = assignedBTC;
-                 log(`SBalance reinicializado a ${assignedBTC.toFixed(8)} BTC.`, 'info');
-            }
-
-            // Fusión de la Configuración
-            botState.config.long = { ...(botState.config.long?.toObject() || {}), ...newConfig.long };
-            botState.config.short = { ...(botState.config.short?.toObject() || {}), ...newConfig.short };
-            Object.assign(botState.config, newConfig);
-            botState.markModified('config'); 
+        // 5. SINCRONIZACIÓN DE MOTORES
+        if (updatedBot) {
+            const lastPrice = autobotLogic.getLastPrice();
+            await autobotLogic.syncFrontendState(lastPrice, updatedBot);
         }
-        
-        // --- 5. RECALCULO Y PERSISTENCIA DE COBERTURA (lcoverage/lnorder) ---
 
-        if (recalculateCoverage) {
-            const balanceForCalc = isNewBot ? assignedUSDT : botState.lbalance;
-            const purchaseUsdtForCalc = parseFloat(newConfig.long.purchaseUsdt);
-            
-            // Usar el PPC si existe, si no, 1 como referencia segura.
-            const referencePrice = (botState.lStateData?.ppc || 0) > 0 ? botState.lStateData.ppc : 1; 
-            
-            const priceVarDecimal = parseNumber(newConfig.long.price_var) / 100;
-            const sizeVarDecimal = parseNumber(newConfig.long.size_var) / 100;
-            
-            const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-                balanceForCalc,      
-                referencePrice,       
-                purchaseUsdtForCalc, 
-                priceVarDecimal,
-                sizeVarDecimal
-            );
-
-            // Asignar los nuevos valores antes de guardar
-            botState.lcoverage = newLCoverage;
-            botState.lnorder = newLNOrder;
-            
-            log(`Nuevos targets de cobertura base: ${newLNOrder} órdenes hasta ${newLCoverage.toFixed(2)} USD.`, 'success');
-        }
-        
-        // 6. Guardar todos los cambios (Config, lbalance/sbalance, lcoverage, lnorder)
-        await botState.save();
-
-        log('Configuración guardada y balances de estrategia actualizados.', 'success');
-        
-        // 7. Devolver el estado actual
-        const updatedBotState = await getBotState();
-        return res.json({ success: true, message: 'Configuración y balances de estrategia actualizados.', botState: updatedBotState });
+        return res.json({ 
+            success: true, 
+            message: "Configuración sincronizada correctamente.", 
+            data: updatedBot.config 
+        });
 
     } catch (error) {
-        log(`Error al actualizar la configuración: ${error.message}`, 'error');
-        return res.status(500).json({ success: false, message: 'Error interno del servidor al actualizar la configuración.' });
+        console.error("❌ Error en updateBotConfig:", error);
+        return res.status(500).json({ success: false, message: error.message });
     }
 }
-
-async function getBotConfig(req, res) {
-    try {
-        const botState = await Autobot.findOne({});
-        if (!botState) {
-            return res.status(404).json({ success: false, message: 'No se encontró el estado inicial del bot.' });
-        }
-        res.json({ success: true, config: botState.config });
-    } catch (error) {
-        log(`Error al obtener la configuración: ${error.message}`, 'error');
-        res.status(500).json({ success: false, message: 'Error interno del servidor.' });
-    }
-}
-
 
 module.exports = { 
-    updateBotConfig,
+    updateBotConfig, 
     getBotConfig 
 };

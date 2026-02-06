@@ -1,121 +1,101 @@
 // public/js/modules/appEvents.js (CORREGIDO)
 
-import { toggleAuthModal, setupAuthListeners } from './login.js';
+import { toggleAuthModal, handleAuthSubmit } from './login.js';
 import { handleLogout } from './logout.js';
-import { toggleApiModal } from './login.js';
 import { handleApiFormSubmit } from './api.js';
 
-// 🛑 ELIMINADAS: Variables globales de DOM.
-// Ahora se declaran dentro de initializeAppEvents para garantizar que el DOM esté cargado.
-
-
-/**
- * Muestra u oculta el modal de logout.
- * @param {boolean} show - `true` para mostrar el modal, `false` para ocultarlo.
- */
-function toggleLogoutModal(show) {
-    // 💡 NOTA: logoutModal debe ser recuperado del DOM dentro de initializeAppEvents
-    const logoutModal = document.getElementById('logout-modal');
-    if (logoutModal) {
-        logoutModal.style.display = show ? 'flex' : 'none';
-    }
-}
-
-/**
- * Actualiza el icono de login/logout basado en si hay un token de autenticación.
- */
 export function updateLoginIcon() {
-    // 💡 NOTA: loginLogoutIcon debe ser recuperado del DOM dentro de initializeAppEvents
-    const loginLogoutIcon = document.getElementById('login-logout-icon');
+    const icon = document.getElementById('login-logout-icon');
+    if (!icon) return;
     
-    // CORRECCIÓN CLAVE: Usamos 'token'
-    const isLoggedIn = localStorage.getItem('token');
-    
-    if (loginLogoutIcon) {
-        if (isLoggedIn) {
-            loginLogoutIcon.classList.remove('fa-sign-in-alt');
-            loginLogoutIcon.classList.add('fa-sign-out-alt');
-            loginLogoutIcon.title = 'Logout';
-        } else {
-            loginLogoutIcon.classList.remove('fa-sign-out-alt');
-            loginLogoutIcon.classList.add('fa-sign-in-alt');
-            loginLogoutIcon.title = 'Login';
-        }
+    const token = localStorage.getItem('token');
+    if (token) {
+        icon.className = 'fas fa-sign-out-alt cursor-pointer text-emerald-500 hover:text-red-400 transition';
+        icon.title = 'Sign Out'; // Texto en inglés
+    } else {
+        icon.className = 'fas fa-sign-in-alt cursor-pointer hover:text-white transition';
+        icon.title = 'Sign In'; // Texto en inglés
     }
 }
 
-/**
- * Configura los event listeners principales de la aplicación.
- * 🛑 CRÍTICO: Las referencias al DOM se obtienen AHORA.
- * @param {Function} onLoginSuccessCallback - Callback a ejecutar después de un login exitoso.
- */
-export function initializeAppEvents(onLoginSuccessCallback) {
+export function initializeAppEvents(onLoginSuccess) {
+    const loginIcon = document.getElementById('login-logout-icon');
+    const authForm = document.getElementById('auth-form');
+    const closeAuthBtn = document.getElementById('close-auth-modal');
     
-    // 1. OBTENCIÓN DE REFERENCIAS AL DOM (GARANTIZADO QUE EXISTEN AQUÍ)
-    const loginLogoutIcon = document.getElementById('login-logout-icon');
     const apiKeyIcon = document.getElementById('api-key-icon');
+    const apiModal = document.getElementById('api-modal');
+    const closeApiBtn = document.getElementById('close-api-modal');
     const apiForm = document.getElementById('api-form');
-    // const logoutModal = document.getElementById('logout-modal'); // Lo dejamos en la función toggleLogoutModal
-    const confirmLogoutBtn = document.getElementById('confirm-logout-btn');
-    const cancelLogoutBtn = document.getElementById('cancel-logout-btn');
-    const loginCtaBtn = document.getElementById('login-cta-btn'); // 👈 ESTE ES EL BOTÓN "Log in Now"
-    
-    updateLoginIcon(); // Llama a la versión mejorada
 
-    // Ahora pasamos el callback de éxito al listener de autenticación
-    setupAuthListeners(onLoginSuccessCallback);
+    // Elementos del Modal de Logout
+    const logoutModal = document.getElementById('logout-modal');
+    const confirmLogoutBtn = document.getElementById('confirm-logout');
+    const cancelLogoutBtn = document.getElementById('cancel-logout');
 
-    // --- Listeners Principales ---
-    
-    if (loginLogoutIcon) {
-        loginLogoutIcon.addEventListener('click', () => {
+    // --- EVENTOS DE LOGIN / LOGOUT ---
+    if (loginIcon) {
+        loginIcon.addEventListener('click', () => {
             if (localStorage.getItem('token')) {
-                // Si hay token: Muestra modal de Logout
-                toggleLogoutModal(true);
+                // En lugar de confirm(), mostramos el modal moderno
+                if (logoutModal) logoutModal.style.display = 'flex';
             } else {
-                // Si no hay token: Muestra modal de Login
-                toggleAuthModal(true); 
+                toggleAuthModal(true);
             }
         });
     }
 
-    // El botón de Login/CTA en el Splash Screen (El que no funcionaba)
-    if (loginCtaBtn) {
-        loginCtaBtn.addEventListener('click', () => {
-            // El CTA siempre debe mostrar el modal de Login/Auth
-            toggleAuthModal(true);
-        });
-    }
-
-    // --- Listeners de Modal de Logout ---
-
+    // Confirmar cierre de sesión
     if (confirmLogoutBtn) {
         confirmLogoutBtn.addEventListener('click', () => {
+            if (logoutModal) logoutModal.style.display = 'none';
             handleLogout();
-            // Ya que handleLogout elimina el token, el icono se actualizará correctamente
-            updateLoginIcon(); 
-            toggleLogoutModal(false);
-            window.location.reload();
         });
     }
 
+    // Cancelar cierre de sesión
     if (cancelLogoutBtn) {
         cancelLogoutBtn.addEventListener('click', () => {
-            toggleLogoutModal(false);
+            if (logoutModal) logoutModal.style.display = 'none';
         });
     }
 
-    // --- Listener de API Key ---
+    if (authForm) {
+        authForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleAuthSubmit(onLoginSuccess);
+        });
+    }
 
+    if (closeAuthBtn) {
+        closeAuthBtn.addEventListener('click', () => toggleAuthModal(false));
+    }
+
+    // --- EVENTOS DE API ---
     if (apiKeyIcon) {
         apiKeyIcon.addEventListener('click', () => {
             if (!localStorage.getItem('token')) {
-                alert("Please login first to configure API keys.");
+                alert("Por favor, inicia sesión primero.");
                 return;
             }
-            toggleApiModal(true);
+            if (apiModal) apiModal.style.display = 'flex';
         });
     }
-    
-    if (apiForm) apiForm.addEventListener('submit', handleApiFormSubmit);
+
+    if (closeApiBtn) {
+        closeApiBtn.addEventListener('click', () => {
+            if (apiModal) apiModal.style.display = 'none';
+        });
+    }
+
+    if (apiForm) {
+        apiForm.addEventListener('submit', handleApiFormSubmit);
+    }
+
+    // Cerrar modales al hacer clic fuera del contenido
+    window.addEventListener('click', (e) => {
+        if (e.target === apiModal) apiModal.style.display = 'none';
+        if (e.target === logoutModal) logoutModal.style.display = 'none';
+        // El de auth suele manejarse por su propia función toggle
+    });
 }

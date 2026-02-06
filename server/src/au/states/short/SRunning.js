@@ -1,32 +1,51 @@
-// BSB/server/src/au/states/short/SRunning.js (Espejo de LRunning.js)
-
-const analyzer = require('../../../bitmart_indicator_analyzer');
+const MarketSignal = require('../../../../models/MarketSignal');
 
 async function run(dependencies) {
-    const { botState, currentPrice, config, log, updateBotState } = dependencies;
+    const { botState, log, updateBotState, currentPrice } = dependencies;
     
-    // 💡 1. VERIFICACIÓN DE POSICIÓN (Candado de Entrada Short)
-    if (botState.sStateData.orderCountInCycle > 0) {
-        log("Posición Short detectada (orderCountInCycle > 0). Transicionando a SELLING.", 'info');
-        // Transición directa a SELLING para que maneje la posición existente.
-        await updateBotState('SELLING', 'short'); 
-        return; // Detener la ejecución de RUNNING
+    // 0. PREVENTIVE BLOCK: Security against price 0
+    if (!currentPrice || currentPrice <= 0) {
+        return; 
     }
 
-    log("Estado Short: RUNNING. Esperando señal de entrada de VENTA (Short).", 'info');
-
-    // Si no hay posición, procedemos con el análisis.
-    const analysisResult = await analyzer.runAnalysis(currentPrice);
-
-    if (analysisResult.action === 'SELL') { 
-        log(`¡Señal de VENTA detectada! Razón: ${analysisResult.reason}`, 'success');
-        
-        // Simplemente transicionamos a SELLING para que este estado inicie el proceso de venta.
-        log('Señal de VENTA recibida. Transicionando a SELLING para iniciar la orden Short.', 'info');
+    // 1. SECURITY CHECK (Orphan Position)
+    // ✅ MIGRATED: Directly reading 'sac' from root
+    const currentAC = parseFloat(botState.sac || 0); 
+    
+    if (currentAC > 0) {
+        log("[S-RUNNING] 🛡️ Active Short position detected (sac > 0). Correcting state to SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
-        
-        // CRÍTICO: Detener este ciclo para que el bot pase a SELLING en la siguiente iteración.
         return; 
+    }
+
+    try {
+        // Access symbol from config structure
+        const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+        const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
+
+        if (!globalSignal) return;
+
+        // 2. MONITORING LOG (Heartbeat) - Unified Format
+        log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
+
+        // 3. REAL-TIME VALIDATION
+        const signalAgeMinutes = (Date.now() - new Date(globalSignal.lastUpdate || globalSignal.updatedAt).getTime()) / 60000;
+        if (signalAgeMinutes > 5) {
+            log(`[S-RUNNING] ⚠️ Obsolete Short signal (${signalAgeMinutes.toFixed(1)} min). Ignoring.`, 'warning');
+            return;
+        }
+
+        // 4. ACTIVATION LOGIC
+        // If RSI indicates overbought or SELL signal, we enter Short
+        if (globalSignal.signal === 'SELL') { 
+            log(`🚀 [S-SIGNAL] SHORT OPPORTUNITY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
+            // Transition to SELLING so SSelling.js takes control and executes the first order
+            await updateBotState('SELLING', 'short'); 
+            return; 
+        }
+
+    } catch (error) {
+        log(`[S-RUNNING] ❌ Signals Error: ${error.message}`, 'error');
     }
 }
 

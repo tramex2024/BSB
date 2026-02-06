@@ -18,31 +18,34 @@ BSB/			    # Bitmart Spot Bots
 │   │   └── bsb-logo.png
 │   ├── js/
 │        ├── main.js
-│        ├── modules/
-│       	  └── login.js
-│        	  └── logout.js
-│       	  └── auth.js
-│        	  └── orders.js
-│       	  └── aicalculations.js
-│       	  └── navigation.js
-│       	  └── bot.js
-│       	  └── autobot.js
-│       	  └── aibot.js
-│       	  └── dashboard.js
-│       	  └── network.js
-│       	  └── balance.js
-│       	  └── api.js
-│       	  └── apiService.js
-│       	  └── uiManager.js
-│       	  └── chart.js
-│       	  └── appEvents.js
+│        └── modules/
+│       	   ├── ui/
+│       	   │   └── controls.js
+│       	   │   └── formatters.js
+│       	   │   └── notifications.js
+│       	   ├── login.js
+│        	   ├── logout.js
+│       	   ├── auth.js
+│        	   ├── orders.js
+│       	   ├── navigation.js
+│       	   ├── autobot.js
+│       	   ├── aibot.js
+│       	   ├── aiBotUI.js
+│       	   ├── dashboard.js
+│       	   ├── network.js
+│       	   ├── balance.js
+│       	   ├── api.js
+│       	   ├── apiService.js
+│       	   ├── uiManager.js
+│       	   ├── chart.js
+│       	   ├── appEvents.js
+│       	   ├── confirmModal.js
+│       	   └── metricsManager.js 
 │
 ├── server/                # Backend files - Deployed on Render
      ├── server.js
      ├── autobotLogic.js
-     ├── autobotCalculations.js
-     ├── calculateShortTargets.js 
-     ├── autobotShortCalculations.js     
+     ├── autobotCalculations.js        
      ├── models/
      │   └── Order.js
      │   └── Autobot.js
@@ -50,18 +53,19 @@ BSB/			    # Bitmart Spot Bots
      │   └── User.js
      │   └── BotState.js
      │   └── TradeCycle.js
+     │   └── MarketSignal.js
+     │   └── AIBotOrder.js
+     │   └── Aibot.js
      ├── middleware/
      │   └── bitmartAuthMiddleware.js
      │   └── authMiddleware.js
      ├── services/
      │   └── orderPersistenceService.js
      │   └── cycleLogService.js
+     │   └── CentralAnalyzer.js
      │   └── bitmartService.js
-     │   └── bitmartClient.js
-     │   └── bitmartSpot.js
      │   └── bitmartWs.js
-     │   └── check_time.js
-     │   └── test_sign.js
+     │   └── botStats.js          
      ├── routes/
      │   └── authRoutes.js
      │   └── userRoutes.js 
@@ -70,6 +74,7 @@ BSB/			    # Bitmart Spot Bots
      │   └── configRoutes.js
      │   └── balanceRoutes.js
      │   └── analyticsRoutes.js
+     │   └── aiRoutes.js
      ├── controllers/
      │   └── authController.js
      │   └── userController.js
@@ -78,28 +83,30 @@ BSB/			    # Bitmart Spot Bots
      │   └── bitmartController.js
      │   └── analyticsController.js
      │   └── configController.js
+     │   └── aiController.js
      ├── utils/
      │   └── encryption.js
      │   └── cryptoUtils.js
      │   └── helpers.js
+     │   └── email.js
      ├── seeders/
      │   └── seed.js
      ├── src/
-          ├── bitmart_indicator_analyzer.js
-          ├── bitmart_entry_point.json  
+          ├── aiStrategy.js
           ├── longStrategy.js
           ├── shortStrategy.js
           ├── logger.js
                ├── ai/
+ 	       │    └── AIEngine.js
+ 	       │    └── CandleBuilder.js          
+	       │    └── StrategyManager.js
                ├── au/
  	            ├── managers/
  	            │    └── longDataManager.js
  	            │    └── longOrderManager.js          
 	       	    │    └── shortDataManager.js
 	            │    └── shortOrderManager.js
-	            ├── utils/
-	            │    └── coverageLogic.js
- 	            │    └── coverageLogicShort.js
+	            ├── utils/	            
 	            │    └── tradeConstants.js
 	            │    └── cleanState.js
 	            │    └── botUtilities.js

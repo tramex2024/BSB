@@ -1,433 +1,321 @@
-// BSB/server/autobotLogic.js (Integración LongSellConsolidator y Recálculo Dinámico)
+/**
+ * Archivo: BSB/server/autobotLogic.js
+ * Versión: BSB 2026 - Motor de Ciclos Unificado
+ * Descripción: Controla la lógica de ejecución, sincronización con BitMart y persistencia en Base de Datos.
+ */
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
+const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
+const { runAIStrategy, setDependencies: setAIDeps } = require('./src/aiStrategy'); 
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
 
-// 🛑 NUEVAS IMPORTACIONES: Cálculo de Cobertura
-const { calculateLongCoverage, parseNumber } = require('./autobotCalculations'); // Asumiendo que está un nivel arriba
+const { 
+    calculateLongCoverage, 
+    calculateShortCoverage, 
+    parseNumber, 
+    calculatePotentialProfit 
+} = require('./autobotCalculations');
 
-// 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
+// Monitores de órdenes (Revisan si se completaron las compras/ventas en el exchange)
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
-const { monitorAndConsolidateSell } = require('./src/au/states/long/LongSellConsolidator'); 
+const { monitorAndConsolidateSell: monitorLongSell } = require('./src/au/states/long/LongSellConsolidator'); 
 const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
+const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/states/short/ShortBuyConsolidator');
 
 let io;
+let isProcessing = false; 
+let lastCyclePrice = 0; 
 
-function setIo(socketIo) {
-    io = socketIo;
+/**
+ * Conecta el bot con el sistema de mensajería en tiempo real (Socket.io)
+ */
+function setIo(socketIo) { 
+    io = socketIo; 
 }
 
-// 🛑 Mantén la función log aquí, es la forma correcta si está en el mismo archivo.
+/**
+ * Obtiene el último precio registrado por el bot
+ */
+function getLastPrice() { 
+    return lastCyclePrice; 
+}
+
+/**
+ * Envía mensajes de registro (logs) tanto a la consola como a la pantalla del usuario
+ */
 function log(message, type = 'info') {
-    if (io) {
-        io.emit('bot-log', { message, type, timestamp: new Date().toISOString() });
-    }
-    console.log(`[BOT LOG]: ${message}`);
-}
-
-/**
- * Función genérica para emitir el estado actual del bot, incluyendo el precio
- * actual del WebSocket, para sincronizar la interfaz de usuario.
- */
-async function syncFrontendState(currentPrice, botState) {
-    if (io && botState) {
-        // Obtenemos el estado más fresco de la DB si botState es null/viejo
-        const stateToEmit = botState || await getBotState();
-        
-        // Emitimos el objeto completo, incluyendo el precio actual
-        io.emit('full-state-sync', {
-            botState: stateToEmit,
-            currentPrice: currentPrice,
-            timestamp: new Date().toISOString()
-        });
-    }
-}
-
-/**
- * Función para obtener el estado actual del bot directamente de la base de datos.
- */
-async function getBotState() {
-    return Autobot.findOne({});
-}
-
-/**
- * Función que actualiza únicamente el estado principal del bot (lstate/sstate) y EMITE AL FRONTEND.
- */
-async function updateBotState(newState, strategy) {
-    try {
-        const updateField = strategy === 'long' ? 'lstate' : 'sstate';
-        
-        // Usamos $set para actualizar solo el campo de estado
-        await Autobot.findOneAndUpdate({}, { $set: { [updateField]: newState } });
-        
-        // La emisión se maneja ahora principalmente a través de syncFrontendState en botCycle
-        const updatedBotState = await Autobot.findOne({});
-        if (io) {
-             io.emit('bot-state-update', updatedBotState); // Se mantiene esta emisión para eventos específicos de cambio de estado
-        }
-        
-        log(`Estado de la estrategia ${strategy} actualizado a: ${newState}`, 'info');
-    } catch (error) {
-        // 🛑 CORRECCIÓN DE BLINDAJE: Usar console.error
-        console.error(`[DB ERROR] Fallo al actualizar el estado: ${error.message}`);
-    }
-}
-
-/**
- * Función que actualiza PARCIALMENTE los datos del ciclo Long (lStateData) en la base de datos.
- */
-async function updateLStateData(fieldsToUpdate) {
-    try {
-        // Mapeamos los campos para usar notación de punto 'lStateData.campo'
-        const dotNotationUpdate = Object.keys(fieldsToUpdate).reduce((acc, key) => {
-            acc[`lStateData.${key}`] = fieldsToUpdate[key];
-            return acc;
-        }, {});
-
-        // Usamos $set para solo modificar los campos pasados dentro del subdocumento.
-        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
-    } catch (error) {
-        // 🛑 CORRECCIÓN DE BLINDAJE: Usar console.error
-        console.error(`[DB ERROR] Fallo al guardar lStateData: ${error.message}`);
-    }
-}
-
-/**
- * Función que actualiza PARCIALMENTE los datos del ciclo Short (sStateData) en la base de datos.
- */
-async function updateSStateData(fieldsToUpdate) {
-    try {
-        // Mapeamos los campos para usar notación de punto 'sStateData.campo'
-        const dotNotationUpdate = Object.keys(fieldsToUpdate).reduce((acc, key) => {
-            acc[`sStateData.${key}`] = fieldsToUpdate[key];
-            return acc;
-        }, {});
-
-        // Usamos $set para solo modificar los campos pasados dentro del subdocumento.
-        await Autobot.findOneAndUpdate({}, { $set: dotNotationUpdate }); 
-    } catch (error) {
-        // 🛑 CORRECCIÓN DE BLINDAJE: Usar console.error
-        console.error(`[DB ERROR] Fallo al guardar sStateData: ${error.message}`);
-    }
-}
-
-/**
- * Función genérica para actualizar campos top-level y subdocumentos en el modelo Autobot.
- */
-async function updateGeneralBotState(fieldsToUpdate) {
-    try {
-        // Usamos $set, podemos pasar campos de primer nivel Y campos con notación de punto
-        // 1. Aplicar la actualización en la DB
-        const updatedBot = await Autobot.findOneAndUpdate(
-            {}, 
-            { $set: fieldsToUpdate },
-            { new: true } // 💡 CRÍTICO: Usar {new: true} para obtener el documento actualizado
-        );
-        
-        // 🛑 Eliminamos la emisión 'bot-state-update' de aquí. La sincronización completa 
-        // se hará al final del botCycle mediante syncFrontendState.
-        return updatedBot;
-    } catch (error) {
-        // 🛑 CORRECCIÓN DE BLINDAJE: Usar console.error
-        console.error(`[DB ERROR] Fallo al actualizar campos generales del estado del bot: ${error.message}`);
-    }
-}
-
-/**
- * [CICLO LENTO - API] Llama a la API de BitMart (una vez cada 30-60s) 
- * y actualiza los balances reales de USDT y BTC en la base de datos (cache).
- */
-async function slowBalanceCacheUpdate() {
-    let availableUSDT = 0;
-    let availableBTC = 0;
-    let apiSuccess = false;
-
-    try {
-        // La única llamada a la API de BitMart
-        const balancesArray = await bitmartService.getBalance();
-        
-        // 1. Extraer balances asumiendo que devuelve un ARRAY de objetos
-        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-
-        availableUSDT = parseFloat(usdtBalance?.available || 0);
-        availableBTC = parseFloat(btcBalance?.available || 0);
-
-        apiSuccess = true; // La API respondió con éxito
-        
-    } catch (error) {
-        // Si hay un error, usamos la caché anterior.
-        console.error("[SLOW BALANCE CACHE] Error al obtener balances de BitMart (Usando caché anterior/default):", error.message);
-        
-        // Si falla, leemos los valores anteriores de la DB para la emisión RÁPIDA (si existen)
-        const currentBotState = await Autobot.findOne({});
-        if (currentBotState) {
-            availableUSDT = currentBotState.lastAvailableUSDT || 0;
-            availableBTC = currentBotState.lastAvailableBTC || 0;
-        }
-    }
-
-    try {
-        // 2. Guardar el valor en los campos de caché de la base de datos
-        const updatedBotState = await Autobot.findOneAndUpdate(
-            {}, 
-            {
-                $set: { 
-                    lastAvailableUSDT: availableUSDT, 
-                    lastAvailableBTC: availableBTC,
-                    lastBalanceCheck: new Date() 
-                }
-            },
-            { new: true, upsert: true } 
-        );
-
-        // 3. Emitir los balances a la UI a través de Socket.IO
-        if (updatedBotState && io) {
-             io.sockets.emit('balance-real-update', { 
-                lastAvailableUSDT: updatedBotState.lastAvailableUSDT,
-                lastAvailableBTC: updatedBotState.lastAvailableBTC,
-                lastBalanceCheck: updatedBotState.lastBalanceCheck,
-                // Indicamos si la actualización fue de la API o de la caché (fallida)
-                source: apiSuccess ? 'API_SUCCESS' : 'CACHE_FALLBACK' 
-            });
-        }
-        
-    } catch (dbError) {
-        console.error("[SLOW BALANCE CACHE] Error crítico al guardar en la DB:", dbError.message);
-    }
-}
-
-// ====================================================================
-// FUNCIÓN DE RECALCULO DINÁMICO
-// ====================================================================
-
-async function recalculateDynamicCoverageLong(currentPrice, botState) {
-    try {
-        const { lbalance, config, lStateData, lcoverage, lnorder } = botState;
-        const purchaseUsdt = parseFloat(config.long.purchaseUsdt);
-        const priceVarDecimal = parseNumber(config.long.price_var) / 100;
-        const sizeVarDecimal = parseNumber(config.long.size_var) / 100;
-        const currentOrderCount = lStateData.orderCountInCycle || 0;
-
-        // Solo proceder si la estrategia Long está activa
-        if (botState.lstate === 'STOPPED') return;
-
-        // 1. Verificación de seguridad
-        if (parseFloat(lbalance) <= 0.01 || purchaseUsdt <= 0) {
-            if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 });
-            }
-            return;
-        }
-
-        // 2. Cálculo del monto de la SIGUIENTE orden real
-        // Si hay 3 órdenes, la siguiente es la 4ta (potencia 3)
-        const nextOrderAmount = purchaseUsdt * Math.pow((1 + sizeVarDecimal), currentOrderCount);
-
-        // 3. Verificación de saldo para la SIGUIENTE orden
-        if (parseFloat(lbalance) < nextOrderAmount) {
-            if (lnorder !== 0 || lcoverage !== 0) {
-                await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
-                log(`[LONG] Saldo insuficiente (${lbalance.toFixed(2)} USDT) para la orden #${currentOrderCount + 1} (${nextOrderAmount.toFixed(2)} USDT). LNorder: 0`, 'warning');
-            }
-            return;
-        }
-
-        // 4. Preparación de precio de referencia
-        const referencePrice = (lStateData.ppc || 0) > 0 ? lStateData.ppc : currentPrice;
-
-        // 5. Ejecución del cálculo de cobertura PASANDO EL CICLO ACTUAL
-        const { coveragePrice: newLCoverage, numberOfOrders: newLNOrder } = calculateLongCoverage(
-            lbalance,      
-            referencePrice, 
-            purchaseUsdt,  
-            priceVarDecimal,
-            sizeVarDecimal,
-            currentOrderCount // 🎯 CRÍTICO: Ahora sí pasamos la profundidad del ciclo
-        );
-        
-        // 6. Persistencia si hay cambios
-        if (newLNOrder !== lnorder || Math.abs(newLCoverage - lcoverage) > 0.01) {
-            await updateGeneralBotState({
-                lcoverage: newLCoverage,
-                lnorder: newLNOrder,
-            });
-            log(`[LONG] Cobertura recalculada. Disponibles: ${newLNOrder} órdenes más.`, 'debug');
-        }
-    } catch (error) {
-        console.error(`[CALCULO ERROR] Error en recalculateDynamicCoverageLong: ${error.message}`);
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`[${timestamp}] [${type.toUpperCase()}] ${message}`);
+    if (io) {
+        io.emit('bot-log', { message, type });
     }
 }
 
-async function botCycle(priceFromWebSocket, externalDependencies = {}) {
-    try {
-        // CRÍTICO: Recargar el botState ANTES de cada ciclo.
-        let botState = await Autobot.findOne({});
-        const currentPrice = parseFloat(priceFromWebSocket); 
-        let needsStateRefresh = false; // 💡 Nueva bandera de optimización
-
-        // 🛑 BLOQUE CORREGIDO: Verificación inicial y salida (CRÍTICO)
-        if (!botState || isNaN(currentPrice) || currentPrice <= 0) {
-            if (priceFromWebSocket !== 'N/A') { 
-                // Usamos console.log como alternativa si log es el problema inicial.
-                if (typeof log === 'function') {
-                    log(`Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`, 'warning');
-                } else {
-                    console.log(`[BOT LOG (WARNING)]: Precio recibido no válido o botState no encontrado. Precio: ${priceFromWebSocket}`);
-                }
-            }
-            // 🛑 Sincronización final y SALIDA del ciclo.
-            await syncFrontendState(currentPrice, botState);
-            return; 
-        } // 🛑 LLAVE DE CIERRE FALTANTE
-
-        // -------------------------------------------------------------
-        // LECTURA DE LA CACHÉ Y DEFINICIÓN DE DEPENDENCIAS
-        // -------------------------------------------------------------
-        const availableUSDT = parseFloat(botState.lastAvailableUSDT || 0);
-        const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
-        
-        const dependencies = {
-            log, io, bitmartService, Autobot, currentPrice, 
-            availableUSDT, availableBTC, botState,
-            config: botState.config,
-            creds: {
-                apiKey: process.env.BITMART_API_KEY, secretKey: process.env.BITMART_SECRET_KEY, memo: process.env.BITMART_API_MEMO
-            },
-            updateBotState, updateLStateData, updateSStateData, updateGeneralBotState, getBotState,
-            // 🛑 Añadimos la nueva función de sincronización a las dependencias
-            syncFrontendState,
-            ...externalDependencies 
-        };
-
-        setLongDeps(dependencies);
-        setShortDeps(dependencies); 
-
-        // ==========================================================
-        // 🛑 0. FASE DE RECALCULO DINÁMICO (NUEVO BLOQUE)
-        // ==========================================================
-        if (botState.config.long.enabled) {
-            await recalculateDynamicCoverageLong(currentPrice, botState);
-            
-            // CRÍTICO: Recargamos el estado para obtener los nuevos lcoverage/lnorder
-            // antes de la consolidación y la ejecución, si es que cambiaron.
-            botState = await Autobot.findOne({});
-            dependencies.botState = botState;
-        }
-
-
-        // ==========================================================
-        // 1. FASE DE CONSOLIDACIÓN (CHECK DE ÓRDENES PENDIENTES)
-        // ==========================================================
-        
-        // Ejecutar Consolidación Long (Monitorea órdenes BUY)
-        if (botState.lStateData.lastOrder?.side === 'buy') {
-            const orderProcessed = await monitorLongBuy(
-                dependencies.botState, 
-                dependencies.config.symbol, 
-                dependencies.log, 
-                dependencies.updateLStateData, 
-                dependencies.updateBotState, 
-                dependencies.updateGeneralBotState
-            );
-            if (orderProcessed) {
-                needsStateRefresh = true; 
-            }
-        }
-        
-        // 💡 NUEVO BLOQUE: Ejecutar Consolidación Long (Monitorea órdenes SELL)
-        if (botState.lStateData.lastOrder?.side === 'sell') {
-            const orderProcessed = await monitorAndConsolidateSell( // 🎯 Llamada al nuevo módulo
-                dependencies.botState, 
-                dependencies.config.symbol, 
-                dependencies.log, 
-                dependencies.updateLStateData, 
-                dependencies.updateBotState, 
-                dependencies.updateGeneralBotState
-            );
-            if (orderProcessed) {
-                needsStateRefresh = true; 
-            }
-        }
-        
-        // Ejecutar Consolidación Short (Monitorea órdenes SELL para apertura/cobertura)
-        if (botState.sStateData.lastOrder?.side === 'sell') {
-            const orderProcessed = await monitorShortSell(
-                dependencies.botState, 
-                dependencies.config.symbol, 
-                dependencies.log, 
-                dependencies.updateSStateData, 
-                dependencies.updateBotState, 
-                dependencies.updateGeneralBotState
-            );
-            if (orderProcessed) {
-                needsStateRefresh = true; 
-            }
-        }
-
-        // 💡 OPTIMIZACIÓN CRÍTICA: Recargar UNA SOLA VEZ si alguna consolidación ocurrió.
-        if (needsStateRefresh) {
-            botState = await Autobot.findOne({});
-            dependencies.botState = botState; // Actualizar dependencias con el nuevo estado
-            needsStateRefresh = false; // Reiniciar la bandera
-        }
-
-
-        // ==========================================================
-        // 2. FASE DE EJECUCIÓN DE ESTRATEGIAS
-        // ==========================================================
-
-        let strategyExecuted = false;
-
-        if (botState.lstate !== 'STOPPED') {
-            await runLongStrategy();
-            strategyExecuted = true;
-        }
-        
-        if (botState.sstate !== 'STOPPED') {
-            // await runShortStrategy(); 
-            // strategyExecuted = true;
-        }
-        
-        // Recargar el botState UNA VEZ si se ejecutó CUALQUIER estrategia.
-        if (strategyExecuted) {
-            botState = await Autobot.findOne({});
-            dependencies.botState = botState; // Actualizar la referencia
-        }
-        
-        // ==========================================================
-        // 3. FASE DE SINCRONIZACIÓN FINAL
-        // ==========================================================
-        // 🛑 Emitir el estado FINAL del ciclo, incluyendo el precio, al frontend.
-        await syncFrontendState(currentPrice, botState);
-        
-    } catch (error) {
-        // 🛑 BLINDAJE: Usar console.error directamente
-        console.error(`[ERROR FATAL EN BOTCYCLE] El bot falló: ${error.message}`);
-    }
+/**
+ * Sincroniza el estado actual del bot con la interfaz visual
+ */
+async function syncFrontendState(currentPrice, botState) {
+    if (io && botState) {
+        const priceToEmit = parseFloat(currentPrice || lastCyclePrice || 0);
+        io.emit('bot-state-update', { 
+            ...botState, 
+            price: priceToEmit,
+            serverTime: Date.now() 
+        });
+    }
 }
 
-async function start() {
-    log('El bot se ha iniciado. El ciclo lo controla server.js', 'success');
+/**
+ * Guarda todos los cambios en la base de datos de forma segura (Atómica)
+ */
+async function commitChanges(changeSet, currentPrice) {
+    try {
+        if (Object.keys(changeSet).length === 0) {
+            const current = await Autobot.findOne({}).lean();
+            if (current) await syncFrontendState(currentPrice, current);
+            return null;
+        }
+
+        changeSet.lastUpdate = new Date();
+        
+        const updated = await Autobot.findOneAndUpdate(
+            {}, 
+            { $set: changeSet }, 
+            { new: true, runValidators: true }
+        ).lean();
+
+        if (updated) {
+            await syncFrontendState(currentPrice, updated);
+        }
+        return updated;
+    } catch (error) {
+        console.error(`❌ [ERROR DB]: No se pudieron guardar los cambios: ${error.message}`);
+        return null;
+    }
 }
 
-async function stop() {
-    log('El bot se ha detenido. El ciclo lo controla server.js', 'success');
+/**
+ * Actualiza los saldos (USDT y BTC) consultando a BitMart
+ */
+async function slowBalanceCacheUpdate() {
+    let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
+    try {
+        const balancesArray = await bitmartService.getBalance();
+        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
+        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+        availableUSDT = parseFloat(usdtBalance?.available || 0);
+        availableBTC = parseFloat(btcBalance?.available || 0);
+        apiSuccess = true;
+    } catch (error) {
+        const current = await Autobot.findOne({}).lean();
+        availableUSDT = current?.lastAvailableUSDT || 0;
+        availableBTC = current?.lastAvailableBTC || 0;
+    }
+    
+    const updated = await Autobot.findOneAndUpdate({}, {
+        $set: { lastAvailableUSDT: availableUSDT, lastAvailableBTC: availableBTC, lastBalanceCheck: new Date() }
+    }, { new: true, upsert: true, lean: true });
+
+    if (updated) await syncFrontendState(lastCyclePrice, updated);
+    return apiSuccess;
+}
+
+/**
+ * Procesa actualizaciones de configuración desde la web
+ */
+async function updateConfig(newConfig) {
+    const currentPrice = lastCyclePrice;
+    const currentBot = await Autobot.findOne({}).lean();
+    if (!currentBot) return null;
+
+    const finalConfig = JSON.parse(JSON.stringify(currentBot.config || {}));
+
+    const mergeSide = (side) => {
+        if (newConfig[side]) {
+            for (const key in newConfig[side]) {
+                const val = newConfig[side][key];
+                if (val !== undefined && val !== null && val !== "") {
+                    finalConfig[side][key] = val;
+                }
+            }
+        }
+    };
+
+    mergeSide('long');
+    mergeSide('short');
+    if (newConfig.ai) Object.assign(finalConfig.ai, newConfig.ai);
+    if (newConfig.symbol) finalConfig.symbol = newConfig.symbol;
+
+    const bot = await Autobot.findOneAndUpdate({}, { 
+        $set: { config: finalConfig, lastUpdate: new Date() } 
+    }, { new: true }).lean();
+
+    log('✅ Configuración guardada correctamente.', 'success');
+    if (bot) await syncFrontendState(currentPrice, bot);
+    return bot;
+}
+
+/**
+ * Inicia una estrategia específica (LONG o SHORT)
+ */
+async function startSide(side, config) {
+    const botState = await Autobot.findOne({}).lean();
+    const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
+    
+    const finalConfig = JSON.parse(JSON.stringify(botState.config));
+    if (config && config[side]) {
+        Object.assign(finalConfig[side], config[side]);
+    }
+    
+    if (finalConfig[side]) finalConfig[side].enabled = true;
+
+    const update = {
+        ...cleanData, 
+        [side === 'long' ? 'lstate' : 'sstate']: 'RUNNING',
+        config: finalConfig
+    };
+    
+    const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
+    log(`🚀 Estrategia ${side.toUpperCase()} encendida.`, 'success');
+    await slowBalanceCacheUpdate();
+    return bot;
+}
+
+/**
+ * Detiene una estrategia específica
+ */
+async function stopSide(side) {
+    const botState = await Autobot.findOne({}).lean();
+    if (!botState) throw new Error("Bot no encontrado");
+
+    const stateField = side === 'long' ? 'lstate' : 'sstate'; 
+    const newConfig = JSON.parse(JSON.stringify(botState.config));
+    if (newConfig[side]) newConfig[side].enabled = false;
+
+    const update = {
+        [stateField]: 'STOPPED',
+        config: newConfig,
+        lastUpdate: new Date()
+    };
+    
+    const bot = await Autobot.findOneAndUpdate({}, { $set: update }, { new: true }).lean();
+    if (bot) await syncFrontendState(lastCyclePrice, bot);
+
+    log(`🛑 Estrategia ${side.toUpperCase()} apagada.`, 'warning');
+    return bot;
+}
+
+/**
+ * EL MOTOR PRINCIPAL: Se ejecuta con cada movimiento de precio
+ */
+async function botCycle(priceFromWebSocket) {
+    if (isProcessing) return; // Si el ciclo anterior no ha terminado, espera.
+
+    try {
+        isProcessing = true; 
+        const changeSet = {}; 
+        
+        let botState = await Autobot.findOne({}).lean();
+        const currentPrice = parseFloat(priceFromWebSocket);
+        
+        if (!isNaN(currentPrice) && currentPrice > 0) {
+            lastCyclePrice = currentPrice;
+        }
+        
+        if (!botState || !botState.config || isNaN(currentPrice) || currentPrice <= 0) {
+            if (botState) await syncFrontendState(currentPrice, botState);
+            return;
+        }
+
+        // Preparamos las herramientas para las estrategias
+        const dependencies = {
+            log, io, bitmartService, Autobot, currentPrice,
+            availableUSDT: botState.lastAvailableUSDT, 
+            availableBTC: botState.lastAvailableBTC,
+            botState, config: botState.config,
+            updateBotState: async (val, strat) => { 
+                changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; 
+            },
+            updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
+            updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
+            updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
+            syncFrontendState
+        };
+
+        setLongDeps(dependencies);
+        setShortDeps(dependencies);
+        setAIDeps(dependencies); 
+
+        // 1. REVISIÓN DE ÓRDENES: ¿Se llenó la compra o la venta?
+        if (botState.llastOrder && botState.lstate !== 'STOPPED') {
+            if (botState.llastOrder.side === 'buy') {
+                await monitorLongBuy(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
+            } else {
+                await monitorLongSell(botState, botState.config.symbol, log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
+            }
+        }
+
+        if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+            if (botState.slastOrder.side === 'sell') { 
+                await monitorShortSell(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
+            } else {
+                await monitorShortBuy(botState, botState.config.symbol, log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
+            }
+        }
+
+        // 2. MATEMÁTICAS: Calcular precio de cobertura y ganancias potenciales
+        if (botState.lstate !== 'STOPPED' && botState.config.long) {
+            const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
+            if (activeLPPC > 0) {
+                const { coveragePrice, numberOfOrders } = calculateLongCoverage(
+                    botState.lbalance, currentPrice, botState.config.long.purchaseUsdt,
+                    parseNumber(botState.config.long.price_var) / 100, 
+                    parseNumber(botState.config.long.size_var), 
+                    changeSet.locc || botState.locc || 0,
+                    parseNumber(botState.config.long.price_step_inc)
+                );
+                changeSet.lcoverage = coveragePrice;
+                changeSet.lnorder = numberOfOrders;
+                changeSet.lprofit = calculatePotentialProfit(activeLPPC, (changeSet.lac || botState.lac || 0), currentPrice, 'long');
+            }
+        }
+
+        if (botState.sstate !== 'STOPPED' && botState.config.short) {
+            const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
+            if (activeSPPC > 0) {
+                const { coveragePrice, numberOfOrders } = calculateShortCoverage(
+                    botState.sbalance, currentPrice, botState.config.short.purchaseUsdt, 
+                    parseNumber(botState.config.short.price_var) / 100, 
+                    parseNumber(botState.config.short.size_var), 
+                    changeSet.socc || botState.socc || 0,
+                    parseNumber(botState.config.short.price_step_inc)
+                );
+                changeSet.scoverage = coveragePrice;
+                changeSet.snorder = numberOfOrders;
+                changeSet.sprofit = calculatePotentialProfit(activeSPPC, (changeSet.sac || botState.sac || 0), currentPrice, 'short');
+            }
+        }
+
+        // 3. EJECUCIÓN DE ESTRATEGIAS
+        if (botState.lstate !== 'STOPPED') await runLongStrategy();
+        if (botState.sstate !== 'STOPPED') await runShortStrategy();
+        await runAIStrategy(); 
+
+        // 4. GUARDADO FINAL DE LOS RESULTADOS DEL CICLO
+        await commitChanges(changeSet, currentPrice);
+        
+    } catch (error) {
+        log(`❌ Error crítico en el ciclo: ${error.message}`, 'error');
+    } finally {
+        isProcessing = false; 
+    }
 }
 
 module.exports = {
-    setIo,
-    start,
-    stop,
-    log,
-    botCycle,    
-    updateBotState,
-    updateLStateData,
-    updateSStateData,
-    updateGeneralBotState,
-    slowBalanceCacheUpdate,
-    recalculateDynamicCoverageLong,
-    syncFrontendState
+    setIo, 
+    start: () => log('🚀 Autobot Iniciado', 'success'), 
+    stop: () => log('🛑 Autobot Detenido', 'warning'),
+    log, botCycle, slowBalanceCacheUpdate, syncFrontendState, getLastPrice, updateConfig, startSide, stopSide
 };

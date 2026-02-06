@@ -1,178 +1,105 @@
-// BSB/server/src/states/short/SSelling.js (Espejo de LBuying.js)
-
-const { calculateShortTargets } = require('../../../../autobotCalculations'); // 💡 Se asume una función calculateShortTargets
-// 💡 IMPORTACIONES PARA ORDENES SHORT
-const { placeFirstSellOrder, placeCoverageSellOrder } = require('../../managers/shortOrderManager'); 
-// ✅ Se asume un módulo consolidator Short
-const { monitorAndConsolidateShort } = require('./ShortSellConsolidator'); 
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/tradeConstants');
-
+const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
+const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
 
 async function run(dependencies) {
     const {
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
-        availableBTC // 💡 Se asume un campo disponibleBTC
+        availableUSDT
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
-    const sStateData = botState.sStateData;
-    const S_STATE = 'short';
+    const SSTATE = 'short';
 
-    log("Estado Short: SELLING. Verificando el estado de la última orden de venta o gestionando targets...", 'info');
-
-    // =================================================================
-    // === [ 0. COLOCACIÓN DE PRIMERA ORDEN (Lógica Integrada) ] ==========
-    // =================================================================
-    if (sStateData.ppc === 0 && sStateData.orderCountInCycle === 0 && !sStateData.lastOrder) {
-        log("Estado de posición inicial detectado. Iniciando lógica de primera venta (Short)...", 'warning');
-
-        const firstSellAmountBtc = parseFloat(config.short.purchaseBtc); // Cantidad de BTC a vender en corto
-        const currentSBalance = parseFloat(botState.sbalance || 0); // Capital BTC disponible para el corto
-
-        const isRealBalanceSufficient = availableBTC >= firstSellAmountBtc; // Verificación de fondos reales
-        const isCapitalLimitSufficient = currentSBalance >= firstSellAmountBtc; // Verificación de límite asignado
-
-        if (isRealBalanceSufficient && isCapitalLimitSufficient) {
-            log("Verificaciones de fondos BTC y límite aprobadas. Colocando la primera orden Short...", 'info');
-
-            // 🎯 Coloca la orden, actualiza lastOrder y descuenta sbalance.
-            // NOTA: Se necesita implementar esta función en shortOrderManager.js
-            await placeFirstSellOrder(config, log, updateBotState, updateGeneralBotState); 
-            
-            log("Primera orden Short colocada exitosamente. Esperando al próximo ciclo para monitorear.", 'success');
-
-        } else {
-            let reason = '';
-            if (!isRealBalanceSufficient) {
-                reason = `Fondos REALES BTC (${availableBTC.toFixed(8)} BTC) insuficientes para abrir corto.`;
-            } else if (!isCapitalLimitSufficient) {
-                reason = `LÍMITE DE CAPITAL ASIGNADO BTC (${currentSBalance.toFixed(8)} BTC) insuficiente.`;
-            }
-
-            log(`No se puede iniciar la orden Short. ${reason} Cambiando a NO_COVERAGE.`, 'warning');
-            await updateBotState('NO_COVERAGE', S_STATE); 
-        }
-        
-        return; // Detener el ciclo para esperar la próxima iteración.
-    }
-
-    // =================================================================
-    // === [ 1. MONITOREO Y CONSOLIDACIÓN DE ORDEN PENDIENTE ] =========
-    // =================================================================
-    
-    // 💡 Llama al ShortSellConsolidator (Se asume que existe)
-    const orderIsPendingOrProcessed = await monitorAndConsolidateShort(
-        botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState
-    );
-    
-    if (orderIsPendingOrProcessed) {
-        return; 
-    }
-    
-    // =================================================================
-    // === [ 2. CÁLCULO Y GESTIÓN DE TARGETS ] ===========================
-    // =================================================================
-    if (!sStateData.lastOrder && sStateData.ppc > 0) { 
-        log("Calculando objetivos iniciales (Cierre/Cobertura) y Límite de Cobertura Short...", 'info');
-    
-        const { 
-            targetBuyPrice, // 💡 Nuevo nombre
-            nextCoveragePrice, 
-            requiredCoverageAmountBtc, // 💡 Nuevo campo (en BTC)
-            sCoveragePrice, 
-            sNOrderMax         
-        } = calculateShortTargets(
-            sStateData.ppc, 
-            config.short.profit_percent, 
-            config.short.price_var, 
-            config.short.size_var,
-            config.short.purchaseBtc,
-            sStateData.orderCountInCycle,
-            botState.sbalance 
+    try {
+        // 1. ACTIVE ORDERS MONITORING
+        const orderIsActive = await monitorShortSell(
+            botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState
         );
+        if (orderIsActive) return; 
 
-        // 🎯 ACTUALIZACIÓN ATÓMICA DE TARGETS
-        const targetsUpdate = {
-            stprice: targetBuyPrice, // 💡 Se actualiza stprice (Target de Compra)
-            scoverage: sCoveragePrice, 
-            snorder: sNOrderMax,        
-            // Campos de sStateData
-            'sStateData.requiredCoverageAmount': requiredCoverageAmountBtc, // En BTC
-            'sStateData.nextCoveragePrice': nextCoveragePrice,
-        };
+        // 2. MONITORING LOG (Unified Format)
+        if (botState.sppc > 0) {
+            const nextPrice = botState.sncp || 0; 
+            const targetActivation = botState.stprice || 0; 
+            
+            const distToDCA = nextPrice > 0 ? Math.abs(((nextPrice / currentPrice) - 1) * 100).toFixed(2) : "0.00";
+            const distToTP = targetActivation > 0 ? Math.abs(((currentPrice / targetActivation) - 1) * 100).toFixed(2) : "0.00";
+            const pnlActual = botState.sprofit || 0;
 
-        await updateGeneralBotState(targetsUpdate);
-
-        // 💡 LUEGO DE ACTUALIZAR LA DB, ACTUALIZAMOS LA REFERENCIA LOCAL
-        sStateData.requiredCoverageAmount = requiredCoverageAmountBtc; 
-        sStateData.nextCoveragePrice = nextCoveragePrice;
-
-        // 🟢 LOG RESUMEN DE TARGETS
-        const logSummary = `
-            Estrategia SHORT: Targets y Cobertura actualizados.
-            ------------------------------------------
-            💰 PPC actual: ${sStateData.ppc.toFixed(2)} USD (AC: ${sStateData.ac.toFixed(8)} BTC).
-            🎯 TP Objetivo (Cierre/Compra): ${targetBuyPrice.toFixed(2)} USD.
-            📈 Proxima Cobertura (DCA Venta): ${nextCoveragePrice.toFixed(2)} USD (Monto: ${requiredCoverageAmountBtc.toFixed(8)} BTC).
-            🛡️ Cobertura Máxima (S-Coverage): ${sCoveragePrice.toFixed(2)} USD (Órdenes restantes posibles: ${sNOrderMax}).
-        `.replace(/\s+/g, ' ').trim();
-        log(logSummary, 'warning'); 
-
-    } else if (!sStateData.lastOrder && sStateData.ppc === 0) {
-        log("Posición inicial (AC=0). Targets no calculados. Esperando señal de entrada.", 'info');
-    }
-
-    // =================================================================
-    // === [ 3. EVALUACIÓN DE TRANSICIÓN DE ESTADO/COLOCACIÓN DE ORDEN ] =
-    // =================================================================
-    
-    // 3A. Transición a BUYING por Take Profit (stprice alcanzado, precio CAE)
-    if (botState.stprice > 0 && currentPrice <= botState.stprice) { // 🛑 INVERSIÓN: Precio debe CAER
-        log(`[SHORT] ¡TARGET DE CIERRE (Take Profit) alcanzado! Precio actual: ${currentPrice.toFixed(2)} <= ${botState.stprice.toFixed(2)}. Transicionando a BUYING.`, 'success');
-        
-        await updateBotState('BUYING', S_STATE);
-        return;
-    }
-
-    // 3B. Colocación de ORDEN de COBERTURA (DCA Venta)
-    const requiredAmountBtc = sStateData.requiredCoverageAmount;
-
-    if (!sStateData.lastOrder && sStateData.nextCoveragePrice > 0 && currentPrice >= sStateData.nextCoveragePrice) { // 🛑 INVERSIÓN: Precio debe SUBIR
-        
-        if (requiredAmountBtc <= 0 || requiredAmountBtc < MIN_SELL_AMOUNT_BTC) { // 💡 Se asume MIN_SELL_AMOUNT_BTC en tradeConstants.js
-            log(`Error CRÍTICO: El monto requerido para la cobertura (${requiredAmountBtc.toFixed(8)} BTC) es insuficiente. Transicionando a NO_COVERAGE.`, 'error');
-            await updateBotState('NO_COVERAGE', S_STATE); 
-            return; 
+            // Short Logic: DCA is above (+), TP is below (-)
+            const signDCA = nextPrice > currentPrice ? '+' : '-';
+            const signTP = targetActivation > currentPrice ? '+' : '-';
+            
+            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${signDCA}${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (${signTP}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }
 
-        if (botState.sbalance >= requiredAmountBtc) { // 🛑 Verificar BTC disponible
-            log(`[SHORT] ¡Precio de COBERTURA alcanzado! Precio actual: ${currentPrice.toFixed(2)} >= ${sStateData.nextCoveragePrice.toFixed(2)}. Colocando orden de VENTA (Short).`, 'warning');
-            
-            try {
-                // Llama a la función de cobertura de VENTA (Short)
-                await placeCoverageSellOrder(botState, requiredAmountBtc, sStateData.nextCoveragePrice, log, updateGeneralBotState, updateBotState);
-                
-            } catch (error) {
-                log(`Error CRÍTICO al colocar la orden de COBERTURA Short: ${error.message}.`, 'error');
-            }
-            return; // Esperar el próximo ciclo para monitorear la orden.
+        // 3. OPENING LOGIC
+        const currentPPC = parseFloat(botState.sppc || 0);
+        const pendingOrder = botState.slastOrder; 
 
-        } else {
-            log(`Advertencia: Precio de cobertura alcanzado (${sStateData.nextCoveragePrice.toFixed(2)}), pero no hay suficiente capital BTC disponible (${botState.sbalance.toFixed(8)} BTC). Transicionando a NO_COVERAGE.`, 'error');
-            await updateBotState('NO_COVERAGE', S_STATE);
+        if ((!currentPPC || currentPPC === 0) && !pendingOrder) {
+            const purchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
+            const currentSBalance = parseFloat(botState.sbalance || 0);
+
+            if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
+                log(`🚀 [S-SELL] Starting Short cycle. Placing first order of ${purchaseAmount} USDT.`, 'info');
+                await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice);
+            } else {
+                log(`⚠️ [S-SELL] Insufficient funds to open Short position.`, 'warning');
+                await updateBotState('STOPPED', SSTATE);
+            }
             return;
         }
-    }
-    
-    // 3C. Transición por defecto o Log final (Permanece en SELLING)
-    
-    if (!sStateData.lastOrder && sStateData.ppc > 0) {
-        log(`Monitoreando... Cierre: ${botState.stprice.toFixed(2)}, Cobertura: ${sStateData.nextCoveragePrice.toFixed(2)}. Esperando que el precio suba o caiga.`, 'debug');
-        return; // Permanece en el estado SELLING
-    }
 
-    log(`Monitoreando... Cierre: ${botState.stprice.toFixed(2)}, Cobertura: ${sStateData.nextCoveragePrice.toFixed(2)}.`, 'debug');
+        // 4. ACTIVATION EVALUATION (To S-BUYING for Trailing Stop)
+        const targetActivation = botState.stprice || 0; 
+        if (targetActivation > 0 && currentPrice <= targetActivation) {
+            log(`💰 [S-SELL] Target (${targetActivation.toFixed(2)}) reached. Activating Trailing Stop in BUYING...`, 'success');
+            
+            await updateGeneralBotState({
+                spm: 0, 
+                spc: 0 
+            });
+
+            await updateBotState('BUYING', SSTATE);
+            return;
+        }
+
+        // 5. EXPONENTIAL DCA (Protection against rises with Security Lock)
+        const requiredAmount = parseFloat(botState.srca || 0); 
+        const nextCoveragePrice = parseFloat(botState.sncp || 0); 
+        const lastExecutionPrice = parseFloat(botState.slep || 0);
+
+        const isPriceHighEnough = nextCoveragePrice > 0 && currentPrice >= nextCoveragePrice;
+
+        if (!pendingOrder && isPriceHighEnough) {
+            
+            // 🛡️ SECURITY LOCK: Prevents DCA at the same or lower level
+            if (currentPrice <= lastExecutionPrice) {
+                log(`[S-SELL] 🛑 Security Lock: Current price (${currentPrice.toFixed(2)}) is not higher than last execution (${lastExecutionPrice.toFixed(2)}).`, 'warning');
+                return; 
+            }
+
+            const hasBalance = botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount;
+
+            if (hasBalance && requiredAmount > 0) {
+                log(`📈 [S-SELL] Price above DCA. Increasing coverage...`, 'warning');
+                try {
+                    await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice);
+                } catch (error) {
+                    log(`❌ [S-SELL] Failed to place coverage: ${error.message}`, 'error');
+                }
+            } else {
+                log(`🚫 [S-SELL] DCA failed due to insufficient balance.`, 'error');
+                await updateBotState('PAUSED', SSTATE);
+            }
+            return;
+        }
+
+    } catch (criticalError) {
+        log(`🔥 [CRITICAL] SSelling: ${criticalError.message}`, 'error');
+    }
 }
 
 module.exports = { run };

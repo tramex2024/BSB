@@ -1,56 +1,57 @@
-// BSB/server/src/au/utils/cleanState.js (VERSIÓN FINAL CORREGIDA)
+// BSB/server/src/au/utils/cleanState.js
 
 /**
- * Objeto que representa el estado limpio y inicializado de los datos de la estrategia (Long o Short).
- * Usado después de una venta exitosa o al detener (STOP) la estrategia.
- * NOTA: Corresponde al campo 'lStateData' o 'sStateData'.
+ * MIGRACIÓN 2026 - ARQUITECTURA PLANA
+ * Este archivo define el estado 'CERO' de cada estrategia.
+ * Se debe aplicar al finalizar un ciclo exitoso (Take Profit) 
+ * o al reiniciar el bot manualmente.
  */
-const CLEAN_STRATEGY_DATA = {
-    ppc: 0, // Precio Promedio (Compra o Short)
-    ac: 0,  // Cantidad Acumulada
-    ai: 0,  // ✅ CRÍTICO: Inversión Acumulada (Debe ser cero al inicio)
-    orderCountInCycle: 0, // Contador de órdenes en el ciclo
-    lastOrder: null, // Información de la última orden (limpiar)
-    pm: 0,  // Long/Short: Precio Máximo/Mínimo (Para Trailing Stop)
-    pc: 0,  // Precio de Corte (Trailing Stop/Protección)
-    
-    // ✅ FALTANTES CRÍTICOS: Se usaban para la lógica de cobertura/siguiente paso
-    lastExecutionPrice: 0, // Precio de la ultima ejecución (Debe ser 0)
-    requiredCoverageAmount: 0, // Monto de la próxima orden de cobertura (Debe ser 0, se recalcula)
-    nextCoveragePrice: 0, // Precio de la próxima orden de cobertura (Debe ser 0, se recalcula)
-    
-    cycleStartTime: null // LIMPIAR EL START TIME
+
+/**
+ * Valores de reseteo para la estrategia LONG (Siglas l...)
+ */
+const CLEAN_LONG_ROOT = {
+    lppc: 0,          // Long Price Per Coin (Precio promedio compra)
+    lac: 0,           // Long Accumulated Coins (BTC acumulado)
+    lai: 0,           // Long Accumulated Investment (USDT invertido)
+    locc: 0,          // Long Order Cycle Count (Contador para lógica exponencial)
+    llastOrder: null, // Limpieza de rastro de órdenes en Bitmart
+    lpm: 0,           // Long Price Max (Reset para nuevo Trailing)
+    lpc: 0,           // Long Price Cut (Reset para nuevo Trailing)
+    lstartTime: null, // Reset de marca de tiempo de inicio
+    lrca: 0,          // Long Required Coverage Amount (Próxima compra USDT)
+    lncp: 0,          // Long Next Coverage Price (Próximo gatillo DCA)
+    ltprice: 0,       // Target Price visual
+    lsprice: 0,       // Stop Price visual
+    lprofit: 0,       // Profit acumulado en el ciclo actual
+    lnorder: 0,       // Contador visual de órdenes
+    lcoverage: 0,     // Precio de resistencia/cobertura visual
+    llep: 0           //✅ AGREGAR: Reset del Last Execution Price (Long)
 };
 
 /**
- * Objeto que contiene todos los campos de nivel raíz que deben reiniciarse
- * al comienzo de un nuevo ciclo o al detener la estrategia.
- * NOTA: Corresponden a los campos del objeto principal (root level).
+ * Valores de reseteo para la estrategia SHORT (Siglas s...)
  */
-const CLEAN_ROOT_FIELDS = {
-    // Targets de Venta/Compra
-    ltprice: 0,       // Target de Venta Long
-    stprice: 0,       // Target de Compra Short
-    
-    // Trailing Stop Prices
-    lsprice: 0,       // Precio de Venta Long (Trailing Stop)
-    sbprice: 0,       // Precio de Compra Short (Trailing Stop)
-    
-    // Ganancias del ciclo (Debe ser 0 al inicio del nuevo ciclo)
-    lprofit: 0,       
-    sprofit: 0,
-    
-    // ✅ FALTANTES CRÍTICOS: Se usan para la gestión de órdenes en algunos sistemas
-    // Estos campos representan la orden base / orden activa de la capa raíz.
-    lnorder: 0,       // Limpiar el contador de la orden actual de compra (Long)
-    snorder: 0,       // Limpiar el contador de la orden actual de compra (Short)
-    
-    // ✅ FALTANTES CRÍTICOS: Se usaban para la gestión de cobertura
-    lcoverage: 0,     // Limpiar el monto de cobertura pendiente Long
-    scoverage: 0,     // Limpiar el monto de cobertura pendiente Short
+const CLEAN_SHORT_ROOT = {
+    sppc: 0,          // Short Price Per Coin (Precio promedio venta)
+    sac: 0,           // Short Accumulated Coins (Deuda/Contrato)
+    sai: 0,           // Short Accumulated Investment (USDT colateral)
+    socc: 0,          // Short Order Cycle Count (Contador para lógica exponencial)
+    slastOrder: null, // Limpieza de rastro de órdenes en Bitmart
+    spm: 0,           // Short Price Min (Reset para Trailing Short)
+    spc: 0,           // Short Price Cut (Reset para Trailing Short)
+    sstartTime: null, // Reset de marca de tiempo
+    srca: 0,          // Short Required Coverage Amount
+    sncp: 0,          // Short Next Coverage Price (Gatillo DCA si el precio sube)
+    stprice: 0,       // Target Price visual
+    sbprice: 0,       // Stop/Buy Price visual (Dashboard)
+    sprofit: 0,       // Profit acumulado en el ciclo actual
+    snorder: 0,       // Contador visual de órdenes
+    scoverage: 0,     // Precio de resistencia/cobertura visual
+    slep: 0           // ✅ AGREGAR: Reset del Last Execution Price (Short)
 };
 
 module.exports = {
-    CLEAN_STRATEGY_DATA,
-    CLEAN_ROOT_FIELDS
+    CLEAN_LONG_ROOT,
+    CLEAN_SHORT_ROOT
 };

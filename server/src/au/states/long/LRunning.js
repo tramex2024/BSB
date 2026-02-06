@@ -1,34 +1,55 @@
-// BSB/server/src/au/states/long/LRunning.js (ETAPA 1: Detector de Señal)
-
-const analyzer = require('../../../bitmart_indicator_analyzer');
-// Se elimina la dependencia de placeFirstBuyOrder
+const MarketSignal = require('../../../../models/MarketSignal');
 
 async function run(dependencies) {
-    const { botState, currentPrice, config, log, updateBotState } = dependencies;
+    const { botState, log, updateBotState } = dependencies;
     
-    // 💡 1. VERIFICACIÓN DE POSICIÓN (Candado de Entrada)
-    if (botState.lStateData.orderCountInCycle > 0) {
-        log("Posición detectada (orderCountInCycle > 0). Transicionando a BUYING.", 'info');
-        // Transición directa a BUYING para que maneje la posición existente.
+    // 1. SECURITY CHECK (Flat Architecture)
+    // If lac > 0, the bot already has coins and must be in BUYING or SELLING.
+    if (parseFloat(botState.lac || 0) > 0) {
+        log("[L-RUNNING] 🛡️ Open position detected (lac > 0). Correcting state to BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
-        return; // Detener la ejecución de RUNNING
+        return; 
     }
 
-    log("[L]: RUNNING. Esperando señal de compra.", 'info');
+    // 2. GLOBAL SIGNAL QUERY
+    try {
+        const currentSymbol = botState.config?.symbol || 'BTC_USDT';
+        const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
 
-    // Si no hay posición, procedemos con el análisis.
-    const analysisResult = await analyzer.runAnalysis(currentPrice);
+        if (!globalSignal) {
+            log("[L-RUNNING] ⏳ Waiting for market signals initialization...", 'debug');
+            return;
+        }
 
-    if (analysisResult.action === 'BUY') { 
-        log(`¡Señal de COMPRA detectada! Razón: ${analysisResult.reason}`, 'success');
+        // 3. FRESHNESS VALIDATION
+        const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
+
+        // Unified log format with emojis and bars
+        log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
+
+        if (!signalTime) {
+            log("[L-RUNNING] ⚠️ Signal without timestamp. Waiting for update...", 'warning');
+            return;
+        }
+
+        const signalAgeMinutes = (Date.now() - new Date(signalTime).getTime()) / 60000;
         
-        // 🛑 CAMBIO CRÍTICO: Eliminamos toda la lógica de validación de fondos y colocación de orden.
-        // Simplemente transicionamos a BUYING para que este estado inicie el proceso de compra.
-        log('Señal de COMPRA recibida. Transicionando a BUYING para iniciar la orden.', 'info');
-        await updateBotState('BUYING', 'long'); 
-        
-        // CRÍTICO: Detener este ciclo para que el bot pase a BUYING en la siguiente iteración.
-        return; 
+        if (signalAgeMinutes > 5) {
+            log(`[L-RUNNING] ⚠️ Obsolete signal (${signalAgeMinutes.toFixed(1)} min). Waiting for update...`, 'warning');
+            return;
+        }
+
+        // 4. ACTIVATION LOGIC (Market Entry)
+        if (globalSignal.signal === 'BUY') { 
+            log(`🚀 [L-SIGNAL] BUY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)} | Entering Market...`, 'success');
+            
+            // Transition to BUYING so LBuying.js executes the first exponential order.
+            await updateBotState('BUYING', 'long'); 
+            return; 
+        }
+
+    } catch (error) {
+        log(`[L-RUNNING] ❌ Error reading signals: ${error.message}`, 'error');
     }
 }
 

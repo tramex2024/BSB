@@ -2,151 +2,94 @@
 
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const Autobot = require('../models/Autobot'); // Ya lo tenías, ¡Excelente!
+const Autobot = require('../models/Autobot');
+const { sendTokenEmail } = require('../utils/email'); // Importamos la utilidad simplificada
 
-//LOG TEMPORAL
-
-//console.log(`[EMAIL DEBUG] USER: ${process.env.EMAIL_USER}`);
-//console.log(`[EMAIL DEBUG] PASS LOADED (First 4 chars): ${process.env.EMAIL_PASS ? process.env.EMAIL_PASS.substring(0, 4) : 'NONE'}`);
-
-// Nodemailer transporter setup (replace with your email service details)
-const transporter = nodemailer.createTransport({    
-    host: 'smtp.gmail.com', 
-    port: 465, 
-    secure: true, 
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
-    }
-});
-
+/**
+ * Solicita un token de acceso y lo envía por correo
+ */
 exports.requestToken = async (req, res) => {
     const { email } = req.body;
-
     try {
-        let user = await User.findOne({ email });
-        // Generar un token de 6 dígitos numérico
-        const token = Math.floor(100000 + Math.random() * 900000).toString(); // Genera un número de 6 dígitos como string
-        const tokenExpires = Date.now() + 10 * 60 * 1000; // Token válido por 10 minutos
+        // 1. Generar token de 6 dígitos y expiración (10 min)
+        const token = Math.floor(100000 + Math.random() * 900000).toString();
+        const tokenExpires = Date.now() + 10 * 60 * 1000;
 
-        if (!user) {
-            // Nuevo usuario, crea una entrada
-            user = new User({ email, token, tokenExpires });
-            await user.save();
-        } else {
-            // Usuario existente, actualiza el token
-            user.token = token;
-            user.tokenExpires = tokenExpires;
-            await user.save();
-        }
+        // 2. Guardar o actualizar el usuario en MongoDB
+        await User.findOneAndUpdate(
+            { email },
+            { token, tokenExpires },
+            { upsert: true, new: true }
+        );
 
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'BSB - Your Login Token',
-            html: `<p>Your login token for BSB is: <strong>${token}</strong>. It is valid for 10 minutes.</p>`
-        };
+        console.log(`--- 🏁 Iniciando flujo para: ${email} ---`);
+        console.log("1. Token guardado en DB.");
 
-        // Usa un callback para detectar errores de envío del correo.
-        await transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.error('Error al enviar el correo:', error);
-                // Si hay un error aquí, la respuesta al usuario aún será 200 para no dar pistas a un atacante,
-                // pero tú verás el error en el log del servidor.
-            } else {
-                console.log('Correo enviado:', info.response);
-            }
+        // 3. EJECUCIÓN DE LA PRUEBA (Paso 2 de tu plan)
+        // El await hace que el frontend se quede en "Processing" hasta que esto termine
+        console.log("2. Llamando a utils/email.js (Configuración directa)...");
+        await sendTokenEmail(email, token);
+        
+        console.log("3. ✅ Envío exitoso. Notificando al frontend.");
+
+        // 4. Si llegamos aquí, todo salió bien
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Token sent!' 
         });
 
-        res.status(200).json({ message: 'A token has been sent to your email.' });
-
     } catch (error) {
-        console.error('Error general en requestToken:', error);
-        res.status(500).json({ message: 'Server error. Please try again later.' });
+        // Si el envío falla, el error se captura aquí
+        console.error('❌ Error en el flujo de solicitud:', error.message);
+        
+        return res.status(500).json({ 
+            error: 'Error de envío detectado',
+            details: error.message 
+        });
     }
 };
 
+/**
+ * Verifica el token y genera la sesión (JWT)
+ */
 exports.verifyToken = async (req, res) => {
     const { email, token } = req.body;
-
-    console.log('--- DEBUG: Verify Token Request ---');
-    console.log('Token recibido del frontend:', token);
-    console.log('Email recibido del frontend:', email);
-
     try {
         const user = await User.findOne({ email });
 
-        console.log('Usuario encontrado en la base de datos:', user);
-        if (user) {
-            console.log('Token guardado en la DB:', user.token);
-            console.log('Expiración del token en la DB:', user.tokenExpires);
-        }
-        console.log('--- FIN DE DEBUG ---');
-
-        if (!user) {
-            console.error(`[VERIFY TOKEN] User not found for email: ${email}`);
-            return res.status(404).json({ message: 'User not found.' });
-        }
-
-        if (!user.token || user.token !== token || user.tokenExpires < Date.now()) {
-            let reason = '';
-            if (!user.token) {
-                reason = 'No token stored for user.';
-            } else if (user.token !== token) {
-                reason = `Token mismatch. Provided: ${token}, Stored: ${user.token}`;
-            } else if (user.tokenExpires < Date.now()) {
-                reason = `Token expired. Expires: ${new Date(user.tokenExpires).toLocaleString()}, Current: ${new Date().toLocaleString()}`;
-            }
-            console.error(`[VERIFY TOKEN ERROR] Invalid or expired token for email: ${email}. Reason: ${reason}`);
-
+        // Validaciones de seguridad
+        if (!user || !user.token || user.token !== token || user.tokenExpires < Date.now()) {
             return res.status(400).json({ message: 'Invalid or expired token.' });
         }
 
-        // 🛑 INICIO DE LA CORRECCIÓN CLAVE: Asignar un Autobot si no tiene uno
+        // Si el usuario no tiene un bot asignado, se le crea uno
         if (!user.autobotId) {
-            console.log(`[VERIFY TOKEN] Usuario ${user.email} no tiene autobotId. Creando uno por defecto.`);
-            
-            // 1. Crear un nuevo Autobot. Usamos la ID del usuario como referencia.
-            const newBot = new Autobot({ 
-                userId: user._id, 
-                // Asegúrate de incluir cualquier campo 'required' que tenga tu modelo Autobot.
-                // Por ejemplo, si tiene un campo 'name', pon: name: 'Bot Principal' 
-            });
+            const newBot = new Autobot({ userId: user._id });
             await newBot.save();
-            
-            // 2. Asignar la referencia del nuevo bot al documento del usuario
-            user.autobotId = newBot._id; 
-            // NOTA: await user.save() se hará al final de la función.
+            user.autobotId = newBot._id;
         }
-        // 🛑 FIN DE LA CORRECCIÓN CLAVE
 
-        // Generar JWT para la sesión persistente
+        // Generar JWT para la sesión
         const jwtToken = jwt.sign(
-            { id: user._id, email: user.email, autobotId: user.autobotId }, // ¡Ahora tiene valor garantizado!
+            { id: user._id, email: user.email, autobotId: user.autobotId },
             process.env.JWT_SECRET,
-            { expiresIn: '365d' } // Token válido por 365 días
+            { expiresIn: '365d' }
         );
 
-        // **CORRECCIÓN:** Guardar el token de sesión JWT en la base de datos
-        // He añadido un nuevo campo 'jwtToken' para guardar el token de sesión
+        // Guardar token de sesión y limpiar el token de un solo uso
         user.jwtToken = jwtToken;
-
-        // Opcionalmente, puedes no borrar el token numérico, como solicitaste
-        // user.token = null;
-        // user.tokenExpires = null;
-        
-        // Guardar el documento actualizado en la base de datos (guarda el jwtToken y el autobotId)
+        user.token = null;
+        user.tokenExpires = null;
         await user.save();
 
-        res.status(200).json({ 
-            message: 'Login successful!', 
-            token: jwtToken, // Esto envía el token al frontend para que lo guarde
-            user: { id: user._id, email: user.email, autobotId: user.autobotId } // Opcional: enviar el ID del bot al frontend
+        return res.status(200).json({ 
+            message: 'Login successful!',
+            token: jwtToken,
+            user: { id: user._id, email: user.email, autobotId: user.autobotId }
         });
 
     } catch (error) {
-        console.error('Error verifying token (catch block):', error);
-        res.status(500).json({ message: 'Server error. Please try again later.' });
+        console.error('❌ Error en verifyToken:', error);
+        res.status(500).json({ message: 'Server error during verification.' });
     }
 };

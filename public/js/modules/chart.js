@@ -1,141 +1,163 @@
 // public/js/modules/chart.js
 
+let equityChartInstance = null;
+
+/**
+ * Gráfico de TradingView (Precios en vivo) con Indicadores Persistentes
+ */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
-    if (!container) {
-        console.error(`Contenedor del gráfico con ID "${containerId}" no encontrado.`);
-        return;
-    }
+    if (!container) return;
 
-    // Limpia el contenedor antes de añadir un nuevo gráfico
     container.innerHTML = '';
+    container.style.height = "500px"; 
+    container.style.width = "100%";
 
-    // Crea el nuevo widget de TradingView con la propiedad 'autosize'
+    const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
+
     new TradingView.widget({
-        "container_id": containerId,
-        "autosize": true, // <-- ¡Esta es la clave para el redimensionamiento!
-        "symbol": `BITMART:${symbol}`, // Ajustado para ser coherente con BitMart
-        "interval": "60",
+        "autosize": true,
+        "symbol": `BITMART:${symbol}`,
+        "interval": savedInterval,
         "timezone": "Etc/UTC",
         "theme": "dark",
         "style": "1",
         "locale": "es",
-        "toolbar_bg": "#1f2937", // Color del fondo de la toolbar, para que coincida con tu diseño
+        "toolbar_bg": "#111827",
         "enable_publishing": false,
         "withdateranges": true,
         "hide_side_toolbar": false,
         "allow_symbol_change": true,
-        "hotlist": false,
-        "calendar": false,
+        "container_id": containerId,
         "support_host": "https://www.tradingview.com",
+        "studies": [
+            "RSI@tv-basicstudies",      
+            "BB@tv-basicstudies",       
+            "MACD@tv-basicstudies"      
+        ],
+        "overrides": {
+            "mainSeriesProperties.style": 1,
+            "paneProperties.background": "#111827",
+            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.05)",
+            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)",
+            "paneProperties.legendProperties.showStudyArguments": true,
+            "paneProperties.legendProperties.showStudyTitles": true,
+            "paneProperties.legendProperties.showStudyValues": true,
+        }
     });
-
-    console.log("Gráfico de TradingView inicializado para el símbolo:", symbol);
 }
 
-let equityChartInstance = null; // Variable para mantener la instancia del gráfico
-
 /**
- * Renderiza la curva de crecimiento de capital usando Chart.js.
- * @param {Array<object>} data - Los datos de los ciclos cerrados.
- * @param {string} parameter - El parámetro a mostrar ('accumulatedProfit', 'durationHours', etc.).
+ * Gráfico de Curva de Capital (Chart.js)
+ * Optimizada para recibir puntos de tiempo formateados
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
-    const ctx = document.getElementById('equityCurveChart');
-    if (!ctx) {
-        console.error("Contenedor del gráfico 'equityCurveChart' no encontrado.");
-        return;
-    }
+    const canvas = document.getElementById('equityCurveChart');
+    if (!canvas) return;
 
-    // Si ya existe una instancia, destrúyela antes de crear una nueva.
+    const ctx = canvas.getContext('2d');
+
+    // Destrucción limpia de la instancia previa para evitar el error "Canvas in use"
     if (equityChartInstance) {
         equityChartInstance.destroy();
+        equityChartInstance = null;
     }
 
-    // 🛑 1. PREPARACIÓN DE DATOS DINÁMICA
-    const labels = data.map((cycle, index) => `Cycle ${index + 1}`); // Etiqueta: Ciclo 1, Ciclo 2, etc.
+    if (!data || data.length === 0) return;
 
-    let datasetLabel = '';
+    // --- MEJORA: Lógica de Etiquetas Inteligentes ---
+    // Si la data viene procesada por getFilteredData de metricsManager, tendrá .time
+    // Si no, usamos el índice del ciclo como respaldo.
+    const labels = data.map((d, i) => d.time || `Ciclo ${i + 1}`);
+    
     let dataPoints = [];
-    let yAxisTitle = '';
+    let labelText = '';
+    let color = '#10b981'; 
 
     switch (parameter) {
         case 'durationHours':
-            dataPoints = data.map(cycle => (cycle.durationHours || 0).toFixed(2));
-            datasetLabel = 'Duración de Ciclo (Horas)';
-            yAxisTitle = 'Duración (h)';
+            dataPoints = data.map(c => parseFloat(c.durationHours || 0));
+            labelText = 'Duración (Horas)';
+            color = '#f59e0b';
             break;
         case 'initialInvestment':
-            // Asumo que tienes una propiedad 'initialInvestment' en tus datos
-            dataPoints = data.map(cycle => (cycle.initialInvestment || 0).toFixed(2));
-            datasetLabel = 'Inversión Inicial';
-            yAxisTitle = 'USDT';
+            dataPoints = data.map(c => parseFloat(c.initialInvestment || 0));
+            labelText = 'Inversión Inicial (USDT)';
+            color = '#3b82f6';
             break;
-        case 'accumulatedProfit':
         default:
-            // 🛑 Lógica para el rendimiento acumulado (la curva original)
-            dataPoints = data.map(cycle => (cycle.accumulatedProfit || 0).toFixed(2));
-            datasetLabel = 'Rendimiento Neto Acumulado';
-            yAxisTitle = 'USDT';
-            break;
+            // Soportamos tanto el objeto procesado {value} como el crudo {netProfit}
+            dataPoints = data.map(c => {
+                if (c.value !== undefined) return c.value;
+                return parseFloat(c.accumulatedProfit || c.netProfit || 0);
+            });
+            labelText = 'Capital Acumulado (USDT)';
+            color = '#10b981';
     }
 
-    // 🛑 2. CREACIÓN/ACTUALIZACIÓN DEL GRÁFICO
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, `${color}66`); // Color con opacidad 40%
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
     equityChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: datasetLabel,
+                label: labelText,
                 data: dataPoints,
-                borderColor: parameter === 'accumulatedProfit' ? 'rgb(75, 192, 192)' : 'rgb(255, 159, 64)', // Cambia el color para diferenciar
-                backgroundColor: parameter === 'accumulatedProfit' ? 'rgba(75, 192, 192, 0.2)' : 'rgba(255, 159, 64, 0.2)',
+                borderColor: color,
+                backgroundColor: gradient,
                 borderWidth: 2,
-                tension: 0.3,
-                fill: parameter === 'accumulatedProfit' ? 'start' : false
+                pointBackgroundColor: color,
+                pointBorderColor: '#111827',
+                pointBorderWidth: 1,
+                pointHoverRadius: 6,
+                tension: 0.4, 
+                fill: true,
+                pointRadius: labels.length > 50 ? 0 : 3 // Ocultar puntos si hay demasiada data
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: yAxisTitle,
-                        color: '#9ca3af' // gray-400
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#9ca3af'
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Ciclos Cerrados',
-                        color: '#9ca3af'
-                    },
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#9ca3af'
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1f2937',
+                    titleColor: '#9ca3af',
+                    bodyColor: '#fff',
+                    borderColor: color,
+                    borderWidth: 1,
+                    displayColors: false,
+                    padding: 10,
+                    callbacks: {
+                        label: (context) => ` ${context.parsed.y.toFixed(2)} USDT`
                     }
                 }
             },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#f3f4f6' // gray-100
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { 
+                        color: '#9ca3af', 
+                        font: { size: 10 },
+                        callback: (value) => `$${value}` 
                     }
                 },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
+                x: {
+                    grid: { display: false },
+                    ticks: { 
+                        color: '#9ca3af', 
+                        font: { size: 9 },
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 10 // No saturar el eje X
+                    }
                 }
             }
         }

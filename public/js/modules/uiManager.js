@@ -1,104 +1,149 @@
-// public/js/modules/uiManager.js
+/**
+ * uiManager.js - Orquestador Atómico (Sincronizado con BD JSON 2026)
+ * Ajuste: Sincronización final de estados AI y normalización de renders.
+ */
+import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
+import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
+import { isSavingConfig } from './apiService.js';
+
+export { displayMessage } from './ui/notifications.js';
+
+let lastPrice = 0;
+
+const STATUS_COLORS = {
+    'RUNNING': '#10b981',      
+    'STOPPED': '#ef4444',      
+    'BUYING': '#60a5fa',        
+    'SELLING': '#fbbf24',      
+    'PAUSED': '#fb923c',    
+};
 
 export function updateBotUI(state) {
-    const statusColors = {
-        RUNNING: 'text-green-400',
-        STOPPED: 'text-red-400',
-        BUYING: 'text-blue-400',
-        SELLING: 'text-yellow-400',
-        NO_COVERAGE: 'text-purple-400'
-    };
-
-    const lstateElement = document.getElementById('aubot-lstate');
-    const sstateElement = document.getElementById('aubot-sstate');
-    const startStopButton = document.getElementById('austart-btn');
-    const autobotSettings = document.getElementById('autobot-settings');
+    if (!state || isSavingConfig) return;
     
-    const elementsToUpdate = {
-        auprofit: 'total_profit', 
-        aulbalance: 'lbalance',
-        ausbalance: 'sbalance',
-        aultprice: 'ltprice',
-        austprice: 'stprice',
-        aulcycle: 'lcycle',
-        auscycle: 'scycle',
-        aulcoverage: 'lcoverage',
-        auscoverage: 'scoverage',
-        aulnorder: 'lnorder',
-        ausnorder: 'snorder',
-        aulsprice: 'lsprice', 
-        ausbprice: 'sbprice',  
-        aulprofit: 'lprofit',
-        ausprofit: 'sprofit'
+    // 1. Precio de Mercado
+    const priceEl = document.getElementById('auprice');
+    const currentMarketPrice = state.price || state.marketPrice || lastPrice;
+    if (priceEl && currentMarketPrice) {
+        lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
+    }
+
+    // MAPEO MAESTRO (Sincronizado con los nombres de tu base de datos)
+    const elements = {
+        'auprofit': 'total_profit', 
+        'aubalance-usdt': 'lastAvailableUSDT', 
+        'aubalance-btc': 'lastAvailableBTC',
+
+        // AUTOBOT: LONG
+        'aulprofit-val': 'lprofit',   
+        'aulbalance': 'lbalance',     
+        'aulcycle': 'lcycle',         
+        'aulsprice': 'lpc',            
+        'aultprice': 'ltprice',       
+        'aultppc': 'lppc',            
+        'aulcoverage': 'lcoverage',   
+        'aulnorder': 'lnorder',      
+
+        // AUTOBOT: SHORT
+        'ausprofit-val': 'sprofit',   
+        'ausbalance': 'sbalance',     
+        'auscycle': 'scycle',         
+        'ausbprice': 'spc',            
+        'austprice': 'stprice',       
+        'austppc': 'sppc',            
+        'auscoverage': 'scoverage',   
+        'ausnorder': 'snorder',
+
+        // AI ENGINE (Sincronizado con los campos específicos de tu JSON)
+        'ai-virtual-balance': 'aibalance', 
+        'ai-adx-val': 'lai',                
+        'ai-stoch-val': 'lac',              
+        'aubot-aistate': 'aistate', 
+
+        // ESTADOS DE INTERFAZ
+        'aubot-lstate': 'lstate',
+        'aubot-sstate': 'sstate',
+        'ai-mode-status': 'aistate' 
     };
 
-    if (lstateElement) {
-        lstateElement.textContent = state.lstate;
-        lstateElement.className = '';
-        lstateElement.classList.add(statusColors[state.lstate] || 'text-red-400');
-    }
+    Object.entries(elements).forEach(([id, key]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        
+        let val = state[key] ?? state.stats?.[key] ?? 0;
 
-    if (sstateElement) {
-        sstateElement.textContent = state.sstate;
-        sstateElement.className = '';
-        sstateElement.classList.add(statusColors[state.sstate] || 'text-red-400');
-    }
-
-    for (const [elementId, dataKey] of Object.entries(elementsToUpdate)) {
-        const element = document.getElementById(elementId);
-        if (element) {
-            let value;
-            if (state[dataKey] !== undefined && state[dataKey] !== null) {
-                value = Number(state[dataKey]); 
-            } else {
-                value = NaN;
-            }
-            
-            element.classList.remove('text-green-500', 'text-red-500', 'text-gray-400');
-
-            if (dataKey === 'total_profit' || dataKey === 'lprofit' || dataKey === 'sprofit') {
-                if (isNaN(value)) {
-                    element.textContent = 'N/A';
-                } else {
-                    if (value > 0) element.classList.add('text-green-500');
-                    else if (value < 0) element.classList.add('text-red-500');
-                    else element.classList.add('text-gray-400');
-                    element.textContent = `$${value.toFixed(2)}`;
-                }
-            } else if (['lcoverage', 'scoverage', 'lbalance', 'sbalance', 'ltprice', 'stprice', 'lsprice', 'sbprice'].includes(dataKey)) {
-                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(2);
-            } else if (dataKey === 'lnorder' || dataKey === 'snorder' || dataKey === 'lcycle' || dataKey === 'scycle') {
-                element.textContent = isNaN(value) ? 'N/A' : value.toFixed(0);
-            } else {
-                element.textContent = state[dataKey] !== undefined && state[dataKey] !== null ? String(state[dataKey]) : 'N/A';
-            }
+        // --- Lógica de Renderizado de Estados y Colores ---
+        if (id.includes('state') || id.includes('status')) {
+            const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
+            el.textContent = currentStatus;
+            el.style.color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
+            el.className = "font-bold font-mono uppercase";
+            return;
         }
-    }
-    
-    const isStopped = state.lstate === 'STOPPED' && state.sstate === 'STOPPED';
-    
-    if (autobotSettings) {
-        const inputs = autobotSettings.querySelectorAll('input, select');
-        inputs.forEach(input => {
-            input.disabled = !isStopped;
-        });
+
+        // --- Lógica de Renderizado de Datos ---
+        if (id.includes('profit')) {
+            formatProfit(el, val);
+        } else if (id.includes('btc') || id === 'aubalance-btc') {
+            el.textContent = parseFloat(val).toFixed(6);
+        } else if (id.includes('cycle') || id.includes('norder')) {
+            el.textContent = Math.floor(val); 
+        } else if (id.includes('adx') || id.includes('stoch')) {
+            el.textContent = val < 1 ? parseFloat(val).toFixed(4) : parseFloat(val).toFixed(1);
+            updatePulseBars(id, val); 
+        } else if (id.includes('coverage')) {
+            el.textContent = parseFloat(val).toLocaleString(); 
+        } else {
+            formatValue(el, val, false, false);
+        }
+    });
+
+    // 3. Sincronización de Barras de Confianza (AI)
+    if (state.aiConfidence !== undefined) {
+        const bar = document.getElementById('ai-confidence-fill');
+        if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    if (startStopButton) {
-        startStopButton.textContent = isStopped ? 'START' : 'STOP';
-        startStopButton.classList.remove('start-btn', 'stop-btn');
-        startStopButton.classList.add(isStopped ? 'start-btn' : 'stop-btn');
+    // 4. Sincronización de Inputs
+    if (state.config) { 
+        syncInputsFromConfig(state.config); 
     }
+
+    updateControlsState(state);
 }
 
-export function displayMessage(message, type) {
-    const messageContainer = document.getElementById('message-container');
-    if (messageContainer) {
-        messageContainer.textContent = message;
-        messageContainer.className = `message ${type}`;
-        setTimeout(() => {
-            messageContainer.textContent = '';
-            messageContainer.className = 'message';
-        }, 5000);
+function updatePulseBars(id, value) {
+    const barId = id.replace('-val', '-bar');
+    const bar = document.getElementById(barId);
+    if (!bar) return;
+    let percent = id.includes('adx') ? (value / 50) * 100 : (value * 100); 
+    bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
+}
+
+export function updateControlsState(state) {
+    if (!state) return;
+    
+    const lState = state.lstate || 'STOPPED';
+    const sState = state.sstate || 'STOPPED';
+    const aiState = state.aistate || 'STOPPED';
+
+    // Selectores actualizados para coincidir con el DOM del dashboard y AI tab
+    const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
+    const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
+    const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
+
+    updateButtonState('austartl-btn', lState, 'LONG', longInputs);
+    updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
+    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
+    
+    const engineMsg = document.getElementById('ai-engine-msg');
+    if (engineMsg) {
+        if (state.aistate === 'RUNNING' || state.config?.ai?.enabled) {
+            engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
+            engineMsg.classList.add('animate-pulse', 'text-blue-400');
+        } else {
+            engineMsg.textContent = "AI CORE IN STANDBY";
+            engineMsg.classList.remove('animate-pulse', 'text-blue-400');
+        }
     }
 }

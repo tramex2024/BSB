@@ -1,197 +1,219 @@
 // public/js/modules/apiService.js
 
+/**
+ * apiService.js - Comunicaciones REST
+ * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
+ */
 import { displayMessage } from './uiManager.js';
-import { TRADE_SYMBOL_BITMART } from '../main.js';
+import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
-const BACKEND_URL = 'https://bsb-ppex.onrender.com';
-
-/**
- * Recopila todos los datos de los campos de configuración.
- * @returns {object} Un objeto con la configuración del bot.
- */
-export function getBotConfiguration() {
-    const config = {
-        symbol: TRADE_SYMBOL_BITMART,
-        long: {
-            amountUsdt: parseFloat(document.getElementById('auamount-usdt').value),
-            purchaseUsdt: parseFloat(document.getElementById('aupurchase-usdt').value),
-            price_var: parseFloat(document.getElementById('audecrement').value),
-            size_var: parseFloat(document.getElementById('auincrement').value),
-            trigger: parseFloat(document.getElementById('autrigger').value),
-        },
-        short: {
-            amountBtc: parseFloat(document.getElementById('auamount-btc').value),
-            sellBtc: parseFloat(document.getElementById('aupurchase-btc').value),
-            price_var: parseFloat(document.getElementById('audecrement').value),
-            size_var: parseFloat(document.getElementById('auincrement').value),
-            trigger: parseFloat(document.getElementById('autrigger').value),
-        },
-        options: {
-            stopAtCycleEnd: document.getElementById('au-stop-at-cycle-end').checked,
-        },
-    };
-    return config;
-}
+// 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI con datos viejos mientras guardamos
+export let isSavingConfig = false;
 
 /**
- * Envía la configuración del bot al backend en tiempo real.
+ * Función base para peticiones privadas con Timeout y AbortController
  */
-export async function sendConfigToBackend() {
-    try {
-        const config = getBotConfiguration();
-        console.log('Enviando configuración al backend:', config);
-
-        const token = localStorage.getItem('token');
-        if (!token) {
-            console.error('No se encontró el token de autenticación.');
-            displayMessage('Authentication token not found. Please log in again.', 'error');
-            return;
-        }
-        
-        const response = await fetch(`${BACKEND_URL}/api/autobot/update-config`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ config }),
-        });
-
-        const result = await response.json();
-        
-        if (response.ok) {
-            console.log('Configuración enviada con éxito. Respuesta del servidor:', result);
-            displayMessage('Configuración y estado inicial actualizados con éxito.', 'success');
-        } else {
-            console.error('Error al actualizar la configuración en el backend:', result.message);
-            displayMessage(`Failed to update config on backend: ${result.message}`, 'error');
-        }
-    } catch (error) {
-        console.error('Failed to send config:', error);
-        displayMessage('Failed to connect to backend.', 'error');
-    }
-}
-
-/**
- * Envía una solicitud para iniciar o detener el bot.
- * @param {boolean} isRunning - Indica si el bot está corriendo.
- * @param {object} config - La configuración del bot para enviar al iniciar.
- * @returns {Promise<void>}
- */
-export async function toggleBotState(isRunning, config) {
-    const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
-    let body = {};
-
-    if (!isRunning) {
-        body = { config };
-    }
-
-    try {
-        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify(body)
-        });
-        const data = await response.json();
-        if (!data.success) {
-            console.error(`Error al ${isRunning ? 'detener' : 'iniciar'} el bot:`, data.message);
-            displayMessage(`Error: ${data.message}`, 'error');
-        } else {
-            displayMessage(`Bot ${isRunning ? 'stopped' : 'started'} successfully.`, 'success');
-        }
-    } catch (error) {
-        console.error(`Error de red al ${isRunning ? 'detener' : 'iniciar'} el bot:`, error);
-        displayMessage('Failed to connect to backend.', 'error');
-    }
-}
-
-// =================================================================
-// 💡 NUEVAS FUNCIONES PARA ANALÍTICAS DEL DASHBOARD
-// =================================================================
-
-/**
- * Obtiene la serie de datos para la Curva de Crecimiento de Capital (Equity Curve)
- * del backend. Esto incluye la ganancia neta acumulada por ciclo.
- * @returns {Promise<Array>} Un array de objetos con { endTime, netProfit, cumulativeProfit }
- */
-export async function fetchEquityCurveData() {
-    console.log('Solicitando datos de la Curva de Crecimiento...');
-    
+async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) {
-        console.error('No se encontró el token de autenticación para analíticas.');
-        return [];
+        logStatus("⚠️ Sesión no encontrada. Por favor inicie sesión.", "error");
+        return { success: false, message: "Sesión no encontrada." };
     }
 
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/equity-curve`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); 
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error al obtener la Curva de Crecimiento:', errorData.message);
-            displayMessage(`Error al cargar la curva: ${errorData.message}`, 'error');
-            return [];
+    const defaultOptions = {
+        signal: controller.signal,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        }
+    };
+
+    try {
+        const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
+        clearTimeout(timeoutId);
+        
+        if (response.status === 401) {
+            logStatus("⚠️ Sesión expirada.", "error");
+            localStorage.removeItem('token');
+            return { success: false, message: "Unauthorized" };
         }
 
-        const data = await response.json();
-        console.log('Datos de Curva de Crecimiento recibidos con éxito.');
-        return data; // Debería ser un array de ciclos ordenados
+        const result = await response.json().catch(() => ({ 
+            success: response.ok, 
+            message: response.statusText 
+        }));
+
+        return result; 
+
     } catch (error) {
-        console.error('Error de red al obtener la Curva de Crecimiento:', error);
-        displayMessage('Fallo la conexión con el backend para analíticas.', 'error');
-        return [];
+        if (error.name === 'AbortError') {
+            logStatus("❌ Tiempo de espera agotado", "error");
+        } else {
+            logStatus("❌ Error de red o conexión", "error");
+        }
+        return { success: false, message: error.message };
+    }
+}
+
+// --- SECCIÓN: ANALYTICS (CORREGIDA PARA SOPORTAR 'ALL' Y 'AI') ---
+
+export async function fetchCycleKpis(strategy = 'all') {
+    return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
+}
+
+export async function fetchEquityCurveData(strategy = 'all') {
+    return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
+}
+
+// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT (ESTRUCTURA ORIGINAL) ---
+
+/**
+ * Recolecta la configuración de la UI asegurando que las llaves
+ * coincidan exactamente con el Schema de Mongoose.
+ */
+export function getBotConfiguration() {
+    const getNum = (id, path) => {
+        const el = document.getElementById(id);
+        if (!el) return 0;
+        
+        const rawValue = el.value.trim();
+        if (rawValue === "") {
+            const parts = path.split('.');
+            // Intento de recuperación del estado actual si el campo está vacío
+            if (parts.length === 2) {
+                return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
+            }
+            return 0;
+        }
+
+        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
+        return isNaN(val) ? 0 : val;
+    };
+
+    const getCheck = (id) => document.getElementById(id)?.checked || false;
+
+    // Esta es la estructura masiva que mantiene la integridad de tu base de datos
+    return {
+        symbol: "BTC_USDT", 
+        long: {
+            amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt'),
+            purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt'),
+            price_var: getNum('audecrementl', 'long.price_var'),
+            size_var: getNum('auincrementl', 'long.size_var'),
+            profit_percent: getNum('autriggerl', 'long.profit_percent'),   
+            price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
+            stopAtCycle: getCheck('au-stop-long-at-cycle'),
+            enabled: true
+        },
+        short: {
+            amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
+            purchaseUsdt: getNum('aupurchases-usdt', 'short.purchaseUsdt'),
+            price_var: getNum('audecrements', 'short.price_var'),
+            size_var: getNum('auincrements', 'short.size_var'),
+            profit_percent: getNum('autriggers', 'short.profit_percent'),   
+            price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
+            stopAtCycle: getCheck('au-stop-short-at-cycle'),
+            enabled: true
+        },
+        ai: {
+            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
+            stopAtCycle: getCheck('ai-stop-at-cycle'),
+            enabled: true
+        }
+    };
+}
+
+/**
+ * Envía la configuración al Backend bloqueando actualizaciones de socket
+ */
+export async function sendConfigToBackend() {
+    const config = getBotConfiguration();
+    
+    // Validación básica de seguridad
+    if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
+        displayMessage("⚠️ El monto mínimo es $5", 'error');
+        return { success: false };
+    }
+
+    isSavingConfig = true; 
+    
+    try {
+        const data = await privateFetch('/api/autobot/update-config', {
+            method: 'POST',
+            body: JSON.stringify({ config })
+        });
+
+        if (data && data.success) {
+            displayMessage("✅ Configuración sincronizada", 'success');
+        } else {
+            displayMessage(data?.message || "Error al guardar", 'error');
+        }
+        return data;
+    } catch (err) {
+        displayMessage("Error crítico de conexión", 'error');
+        return { success: false };
+    } finally {
+        setTimeout(() => { isSavingConfig = false; }, 400);
     }
 }
 
 /**
- * Obtiene los Key Performance Indicators (KPIs) de los ciclos cerrados,
- * como el rendimiento promedio por ciclo.
- * @returns {Promise<object>} Un objeto con averageProfitPercentage y totalCycles.
- */
-export async function fetchCycleKpis() {
-    console.log('Solicitando KPIs de ciclos cerrados...');
-    
-    const token = localStorage.getItem('token');
-    if (!token) {
-        console.error('No se encontró el token de autenticación para KPIs.');
-        return { averageProfitPercentage: 0, totalCycles: 0 };
-    }
+ * Activa o desactiva una estrategia (Long, Short o AI)
+ */
+export async function toggleBotSideState(isRunning, side, providedConfig = null) {
+    const sideKey = side.toLowerCase(); 
+    const action = isRunning ? 'stop' : 'start';
+    
+    let btnId;
+    if (sideKey === 'long') btnId = 'austartl-btn';
+    else if (sideKey === 'short') btnId = 'austarts-btn';
+    else if (sideKey === 'ai') btnId = 'btn-start-ai'; 
 
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
+    const btn = document.getElementById(btnId);
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error al obtener los KPIs del ciclo:', errorData.message);
-            return { averageProfitPercentage: 0, totalCycles: 0 };
-        }
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
+    }
 
-        const data = await response.json();
-        
-        // 🎯 CORRECCIÓN: Normalizamos la respuesta para devolver el objeto KPI directamente.
-        // Si el backend devuelve un array [kpiObject], lo desempacamos.
-        // Si devuelve kpiObject directamente, lo usamos.
-        const kpiObject = Array.isArray(data) ? data[0] : data;
-        
-        return kpiObject || { averageProfitPercentage: 0, totalCycles: 0 }; 
-        
-    } catch (error) {
-        console.error('Error de red al obtener KPIs del ciclo:', error);
-        return { averageProfitPercentage: 0, totalCycles: 0 };
-    }
+    try {
+        const config = providedConfig || getBotConfiguration();
+        const data = await privateFetch(`/api/autobot/${action}/${sideKey}`, {
+            method: 'POST',
+            body: JSON.stringify({ config }) 
+        });
+
+        if (data && data.success) {
+            displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
+            return data;
+        } else {
+            throw new Error(data?.message || 'Error en el motor');
+        }
+    } catch (err) {
+        displayMessage(err.message, 'error');
+        return { success: false };
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        }
+    }
+}
+
+/**
+ * BOTÓN DE PÁNICO: Detiene todo inmediatamente
+ */
+export async function triggerPanicStop() {
+    try {
+        const data = await privateFetch('/api/autobot/panic-stop', { method: 'POST' });
+        if (data.success) displayMessage("🚨 PÁNICO ACTIVADO: Todo detenido", 'success');
+        return data;
+    } catch (err) {
+        displayMessage("Error al ejecutar pánico", 'error');
+        return { success: false };
+    }
 }

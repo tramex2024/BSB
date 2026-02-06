@@ -1,113 +1,139 @@
-<div class="flex flex-col md:flex-row h-full md:h-screen">
-    <div class="w-full md:w-[30%] bg-gray-800 p-6 space-y-4 overflow-y-auto">
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-            <div class="flex justify-between text-sm">
-                <div id="connection-status" class="flex items-center space-x-2">
-                    <span id="status-dot" class="h-3 w-3 rounded-full bg-red-500"></span>
-                    <h2 class="text-lg font-bold">AIBOT</h2>
-                </div>
-                <div class="flex justify-between items-center">
-                    <div><strong>Profit:</strong> <span id="aiprofit" class="text-green-400">0.00</span></div>
-                </div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LState:</strong> <span id="aibot-lstate" class="text-yellow-400">STOPPED</span></div>
-                <div><strong>SState:</strong> <span id="aibot-sstate" class="text-yellow-400">STOPPED</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LBalance:</strong> <span id="ailbalance">0.00</span></div>
-                <div><strong>SBalance:</strong> <span id="aisbalance">0.00</span></div>
+<div class="p-6 space-y-6 bg-gray-900 animate-fadeIn h-full overflow-y-auto custom-scrollbar">
+    
+    <div class="flex justify-between items-center bg-gray-800 p-5 rounded-2xl border-2 border-blue-500/30 shadow-lg shadow-blue-500/5">
+        <div>
+            <h2 class="text-2xl font-black text-blue-400 tracking-tighter uppercase">AI Autonomous Engine</h2>
+            <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                Modo: <span id="ai-mode-status" class="text-yellow-500 font-mono">Simulación Virtual</span>
+            </p>
+        </div>
+        <div class="text-right">
+            <div class="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-xl border border-blue-500/20">
+                <div id="ai-status-dot" class="w-2.5 h-2.5 bg-gray-500 rounded-full shadow-[0_0_8px_rgba(107,114,128,0.5)] transition-all duration-500"></div>
+                <span class="text-[10px] font-black text-gray-300 tracking-widest">MODELO: NEURAL-V2.6</span>
             </div>
         </div>
-
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-            <div class="flex justify-between text-sm">
-		<div><strong>Price:</strong> <span id="auprice" class="price-display">0.00</span></div>
-                <div><strong>Price:</strong> <span id="aiprice">0.00</span></div>
-                <div><strong>Balance:</strong> <span id="aibalance">0.00</span></div>
-            </div>
-        </div>
-
-        <div class="bg-gray-700 p-4 rounded-lg space-y-2">
-            <div class="flex justify-between text-sm">
-                <div><strong>LTPrice:</strong> <span id="ailtprice">0.00</span></div>
-                <div><strong>STPrice:</strong> <span id="aistprice">0.00</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LCycle:</strong> <span id="ailcycle">0</span></div>
-                <div><strong>SCycle:</strong> <span id="aiscycle">0</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LCoverage:</strong> <span id="ailcoverage">0.00</span></div>
-                <div><strong>SCoverage:</strong> <span id="aiscoverage">0.00</span></div>
-            </div>
-            <div class="flex justify-between text-sm">
-                <div><strong>LNorder:</strong> <span id="ailnorder">0</span></div>
-                <div><strong>SNorder:</strong> <span id="aisnorder">0</span></div>
-            </div>
-        </div>
-
-        <div class="space-y-4 text-sm">
-            <hr class="border-gray-600"/>
-            <div class="flex space-x-4">
-                <div class="flex-1">
-                    <label class="block">Amount (USDT)</label>
-                    <input id="aiamount-usdt" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-                <div class="flex-1">
-                    <label class="block">Amount (BTC)</label>
-                    <input id="aiamount-btc" type="number" step="0.000010" value="0.000000" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-            </div>
-            <div class="flex space-x-4">
-                <div class="flex-1">
-                    <label class="block">Purchase (USDT)</label>
-                    <input id="aipurchase-usdt" type="number" step="1" value="5.00" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-                <div class="flex-1">
-                    <label class="block">Purchase (BTC)</label>
-                    <input id="aipurchase-btc" type="number" step="0.000010" value="0.000000" class="w-full p-2 rounded bg-gray-700 text-white"/>
-                </div>
-            </div>
-            <label class="block">Increment (%)</label>
-            <input id="aiincrement" type="number" step="10" value="100" class="w-full p-2 rounded bg-gray-700 text-white"/>
-            <div>
-                <label class="block">Decrement (%)</label>
-                <input id="aidecrement" type="number" step="0.1" value="1.0" class="w-full p-2 rounded bg-gray-700 text-white"/>
-            </div>
-            <div>
-                <label class="block">Trigger (%)</label>
-                <input id="aitrigger" type="number" step="0.1" value="1.5" class="w-full p-2 rounded bg-gray-700 text-white"/>
-            </div>
-
-            <div class="flex flex-col space-y-2">
-                <div class="flex items-center">
-                    <input type="checkbox" id="aistop-at-cycle-end" class="form-checkbox h-4 w-4 text-green-600 transition duration-150 ease-in-out bg-gray-700 border-gray-600 rounded">
-                    <label for="stop-at-cycle-end" class="ml-2 block text-sm text-gray-200">Stop at cycle end</label>
-                </div>
-                <div class="flex space-x-2">
-                    <button id="aistart-btn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded w-1/2">START</button>
-                    <button id="aireset-btn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded w-1/2" disabled>RESET</button>
-                </div>
-            </div>
-        </div>
-
     </div>
-    <div class="w-full md:w-[70%] flex flex-col bg-gray-900 p-6 space-y-4">
 
-        <div id="ai-tvchart" class="bg-gray-800 rounded p-2 h-[500px] flex-grow"></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div class="bg-gray-800 p-6 rounded-3xl border-2 border-blue-500/20 flex flex-col items-center justify-center relative overflow-hidden group">
+            <div class="absolute inset-0 bg-blue-500/5 radial-gradient opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <h3 class="text-blue-500/60 text-[10px] font-black mb-4 tracking-widest uppercase">Nivel de Confianza</h3>
+            
+            <div class="relative w-32 h-32 flex items-center justify-center">
+                <svg class="absolute w-full h-full -rotate-90" viewBox="0 0 128 128">
+                    <circle cx="64" cy="64" r="58" stroke="#111827" stroke-width="8" fill="transparent" />
+                    <circle id="ai-confidence-circle" cx="64" cy="64" r="58" 
+                        stroke="#3b82f6" stroke-width="8" fill="transparent" 
+                        class="transition-all duration-1000 ease-out" 
+                        stroke-dasharray="364.4" stroke-dashoffset="364.4" 
+                        stroke-linecap="round" />
+                </svg>
+                <div id="ai-confidence-value" class="text-3xl font-mono font-black text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
+                    0%
+                </div>
+            </div>
+            
+            <p id="ai-prediction-text" class="mt-4 text-[9px] font-mono text-center text-blue-300 italic uppercase tracking-tighter">
+                >> Calibrando Redes Neuronales...
+            </p>
+        </div>
 
-        <div class="bg-gray-800 rounded p-4 flex-grow flex flex-col">
-            <h3 class="text-lg font-semibold mb-2">Order History</h3>
-            <div class="flex border-b border-gray-600 mb-4 autobot-tabs">
-                <button id="aitab-opened" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Opened</button>
-                <button id="aitab-filled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Filled</button>
-                <button id="aitab-cancelled" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">Cancelled</button>
-                <button id="aitab-all" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-gray-400 focus:outline-none">All</button>
+        <div class="bg-gray-800 p-6 rounded-3xl border-2 border-blue-500/20 space-y-4 flex flex-col justify-center">
+            <h3 class="text-gray-400 text-[10px] font-black text-center uppercase tracking-widest">Training Control</h3>
+            
+            <div class="space-y-1.5">
+                <label class="text-[9px] text-blue-400/60 uppercase font-black ml-1">Monto de Entrenamiento (USDT)</label>
+                <div class="relative group">
+                    <input id="ai-amount-usdt" type="number" step="10" placeholder="100.00"
+                        class="w-full bg-black/60 border border-blue-500/30 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-blue-500 transition-all group-hover:bg-black/80 shadow-inner">
+                    <div class="absolute right-3 top-3.5 text-[9px] text-gray-500 font-bold uppercase pointer-events-none">Config</div>
+                </div>
             </div>
 
-            <div id="ai-order-list" class="overflow-y-auto text-sm space-y-2 flex-grow">
-                <p class="text-gray-400">Loading orders...</p>
+            <button id="btn-start-ai" class="w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-900/40 border border-blue-400/30 uppercase tracking-widest active:scale-95">
+                Activar Núcleo IA
+            </button>
+
+            <button id="btn-panic-ai" class="w-full py-2 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl font-black text-[10px] transition-all border border-red-500/30 uppercase tracking-[0.2em] active:scale-95 group flex items-center justify-center gap-2">
+                <span class="w-2 h-2 bg-red-500 rounded-full animate-ping group-hover:bg-white"></span>
+                Panic Sell & Stop
+            </button>
+
+            <div class="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-blue-500/10">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-blue-400 uppercase font-black">Ciclo Inteligente</span>
+                    <span class="text-[7px] text-gray-500 uppercase tracking-tighter">Detener al finalizar ciclo</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="ai-stop-at-cycle" class="sr-only peer">
+                    <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+                </label>
+            </div>
+
+            <div class="bg-black/40 p-3 rounded-xl border border-blue-500/10">
+                <div class="flex items-center justify-between">
+                    <span class="text-[9px] text-gray-500 uppercase font-black">Saldo Actual</span>
+                    <span id="ai-virtual-balance" class="text-emerald-400 font-mono font-black text-sm">$0.00</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-2">
+                <div class="text-center bg-black/20 p-2 rounded-lg border border-gray-700">
+                    <p class="text-[7px] text-gray-500 uppercase">ADX Trend</p>
+                    <p id="ai-adx-val" class="text-[10px] font-mono text-blue-400">0.0</p>
+                </div>
+                <div class="text-center bg-black/20 p-2 rounded-lg border border-gray-700">
+                    <p class="text-[7px] text-gray-500 uppercase">Stoch RSI</p>
+                    <p id="ai-stoch-val" class="text-[10px] font-mono text-purple-400">0.0</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-black p-4 rounded-3xl border-2 border-blue-500/20 font-mono text-[10px] h-64 md:h-[450px] overflow-hidden flex flex-col shadow-inner">
+            <div class="text-blue-500 border-b border-blue-500/20 pb-1 mb-2 shrink-0 font-bold flex justify-between">
+                <span>[LOG_NEURAL_STREAM]</span>
+                <span class="animate-pulse">_</span>
+            </div>
+            <div id="ai-log-container" class="space-y-1 overflow-y-auto flex-1 text-gray-400 custom-scrollbar pr-1 scroll-smooth">
+                <p class="text-gray-600 italic">>> Estableciendo enlace con el motor de IA...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-8">
+        <div class="flex items-center justify-between mb-4 px-2">
+            <div class="flex items-center gap-2">
+                <div class="w-1.5 h-4 bg-blue-500 rounded-full"></div>
+                <h3 class="text-white text-xs font-black tracking-widest uppercase">Registro de Operaciones Neurales</h3>
+            </div>
+            <div class="flex space-x-2 items-center bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
+                <span id="ai-sync-dot" class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-pulse"></span>
+                <span id="ai-sync-text" class="text-[9px] text-blue-300 font-black uppercase">DISCONNECTED</span>
+            </div>
+        </div>
+        
+        <div class="bg-gray-800/50 rounded-3xl border-2 border-blue-500/10 overflow-hidden backdrop-blur-sm shadow-2xl">
+            <div class="overflow-x-auto">
+                <table class="w-full text-[11px] font-mono text-left">
+                    <thead>
+                        <tr class="text-blue-400/70 border-b border-blue-500/10 bg-blue-500/5 text-[9px]">
+                            <th class="px-6 py-4 font-black uppercase tracking-widest">Timestamp</th>
+                            <th class="px-6 py-4 font-black uppercase tracking-widest">Operación</th>
+                            <th class="px-6 py-4 font-black uppercase tracking-widest text-right">Precio</th>
+                            <th class="px-6 py-4 font-black uppercase tracking-widest text-right">Monto (USDT)</th>
+                            <th class="px-6 py-4 font-black uppercase tracking-widest text-center">IA Conf.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ai-history-table-body" class="divide-y divide-blue-500/5">
+                        <tr class="text-gray-500">
+                            <td colspan="5" class="px-6 py-10 text-center italic tracking-widest uppercase text-[10px]">
+                                Esperando datos del flujo neural...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

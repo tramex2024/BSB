@@ -1,90 +1,120 @@
-// models/Autobot.js (FINALIZADO - Soporte Long y Short Completo)
+/**
+ * BSB/server/models/Autobot.js
+ * Modelo Unificado de Estado y Configuración (Long, Short & AI)
+ */
 
 const mongoose = require('mongoose');
 
-// =========================================================================
-// ESQUEMA DE DATOS DE ESTRATEGIA (ÚNICO para Long y Short)
-// =========================================================================
-const strategyDataSchema = new mongoose.Schema({
-    ppc: { type: Number, default: 0 }, // Long: Precio Promedio de Compra (PPC) | Short: Precio Promedio de Short (PPS)
-    ac: { type: Number, default: 0 }, // Cantidad Acumulada de BTC/Activo    
-    ai: { type: Number, default: 0 }, // Monto de usdt invertido en compras activas para calcular ganancias.
-    orderCountInCycle: { type: Number, default: 0 },
-    lastOrder: { type: Object, default: null },
-    pm: { type: Number, default: 0 }, // Long: Máximo Alcanzado | Short: Mínimo Alcanzado
-    pc: { type: Number, default: 0 }, // Precio de Corte/Cubrimiento (Trailing Stop)    
-    lastExecutionPrice: { type: Number, default: 0 },
-    // 💡 AÑADIDO: Campos de Contingencia para NO_COVERAGE
-    requiredCoverageAmount: { type: Number, default: 0 }, 
-    nextCoveragePrice: { type: Number, default: 0 },
-    // 💡 NUEVO CAMPO: Marca de tiempo de la primera compra
-    cycleStartTime: { type: Date, default: null } 
-});
-
-// =========================================================================
-// ESQUEMA DE CONFIGURACIÓN
-// =========================================================================
-const configSchema = new mongoose.Schema({
-    symbol: { type: String, default: "BTC_USDT" },
-    long: {
-        enabled: { type: Boolean, default: false },
-        amountUsdt: { type: Number, default: 5.00 },
-        purchaseUsdt: { type: Number, default: 6.00 },
-        price_var: { type: Number, default: 0.1 },
-        size_var: { type: Number, default: 5.0 },
-        profit_percent: { type: Number, default: 1.5 } // Renombrado de 'trigger'
-    },
-    short: {
-        enabled: { type: Boolean, default: false },        
-	amountBtc: { type: Number, default: 0.00005 }, // Capital total asignado (BTC)
-        sellBtc: { type: Number, default: 0.00005 }, // Monto de la orden inicial/cobertura (BTC)
-        price_var: { type: Number, default: 0.1 },
-        size_var: { type: Number, default: 5.0 },
-        profit_percent: { type: Number, default: 1.5 } 
-    },
-    stopAtCycle: { type: Boolean, default: false }
-});
-
-// =========================================================================
-// ESQUEMA PRINCIPAL DE AUTOBOT
-// =========================================================================
 const autobotSchema = new mongoose.Schema({
-    
-    total_profit: { type: Number, default: 0.00 },
-    lstate: { type: String, default: 'STOPPED' },
-    sstate: { type: String, default: 'STOPPED' },
-    lbalance: { type: Number, default: 0.00 }, // Balance Asignado (Lógica del Bot)
-    sbalance: { type: Number, default: 0.00 }, // Balance Asignado (Lógica del Bot)
-    
-    // 💡 CAMPOS DE CACHÉ DE BALANCE REAL DE EXCHANGE (PASO 1)
-    lastAvailableUSDT: { type: Number, default: 0.00 },
-    lastAvailableBTC: { type: Number, default: 0.00 },
-    lastBalanceCheck: { type: Date, default: Date.now },
-    // ----------------------------------------------------
-
-    ltprice: { type: Number, default: 0.00 }, 
-    stprice: { type: Number, default: 0.00 }, 
-
-    lsprice: { type: Number, default: 0.00 }, 
-    sbprice: { type: Number, default: 0.00 }, 
+    total_profit: { type: Number, default: 0 },
     
-    lprofit: { type: Number, default: 0.00 }, 
-    sprofit: { type: Number, default: 0.00 },
+    // --- ESTADOS DE OPERACIÓN ---
+    lstate: { type: String, default: 'STOPPED' },
+    sstate: { type: String, default: 'STOPPED' },
+    aistate: { type: String, default: 'STOPPED' }, // Estado motor IA
+    
+    // --- SALDOS OPERATIVOS ---
+    lbalance: { type: Number, default: 0 }, 
+    sbalance: { type: Number, default: 0 },
+    aibalance: { type: Number, default: 0 }, // Saldo asignado a IA
 
-    lcycle: { type: Number, default: 0 },
-    scycle: { type: Number, default: 0 },
-    
-    lcoverage: { type: Number, default: 0.00 }, 
-    scoverage: { type: Number, default: 0.00 },
- 
-    lnorder: { type: Number, default: 0 }, 
-    snorder: { type: Number, default: 0 }, 
-    
-    lStateData: { type: strategyDataSchema, default: {} },
-    sStateData: { type: strategyDataSchema, default: {} },
+    // --- RAÍZ LONG (L...) ---
+    lppc: { type: Number, default: 0 },
+    lac: { type: Number, default: 0 },
+    lai: { type: Number, default: 0 },
+    locc: { type: Number, default: 0 }, 
+    llastOrder: { type: Object, default: null },
+    lpm: { type: Number, default: 0 },
+    lpc: { type: Number, default: 0 },    
+    lrca: { type: Number, default: 0 }, 
+    lncp: { type: Number, default: 0 }, 
+    lcoverage: { type: Number, default: 0 }, 
+    lstartTime: { type: Date, default: null },
+    lnorder: { type: Number, default: 0 },
 
-    config: { type: configSchema, default: {} },
-    lastUpdateTime: { type: Date, default: Date.now }
+    // --- RAÍZ SHORT (S...) ---
+    sppc: { type: Number, default: 0 },
+    sac: { type: Number, default: 0 },
+    sai: { type: Number, default: 0 },
+    socc: { type: Number, default: 0 }, 
+    slastOrder: { type: Object, default: null },
+    spm: { type: Number, default: 0 },
+    spc: { type: Number, default: 0 },    
+    srca: { type: Number, default: 0 }, 
+    sncp: { type: Number, default: 0 }, 
+    scoverage: { type: Number, default: 0 }, 
+    sstartTime: { type: Date, default: null },
+    snorder: { type: Number, default: 0 },
+
+    // --- RAÍZ AI (AI...) ---
+    aippc: { type: Number, default: 0 },        // Precio promedio compra IA
+    aiac: { type: Number, default: 0 },         // Cantidad acumulada IA
+    ailastEntryPrice: { type: Number, default: 0 },
+    aihighestPrice: { type: Number, default: 0 },
+    ailastOrder: { type: Object, default: null },
+    aistartTime: { type: Date, default: null },
+    ainorder: { type: Number, default: 0 },
+
+    // --- CONTROL DE TARGETS Y CICLOS ---
+    ltprice: { type: Number, default: 0 }, 
+    stprice: { type: Number, default: 0 }, 
+    aitprice: { type: Number, default: 0 }, // Target price IA
+    lprofit: { type: Number, default: 0 }, 
+    sprofit: { type: Number, default: 0 },
+    aiprofit: { type: Number, default: 0 }, // Profit acumulado IA
+    lcycle: { type: Number, default: 0 },
+    scycle: { type: Number, default: 0 },
+    aicycle: { type: Number, default: 0 }, // Ciclos completados IA
+    slep: { type: Number, default: 0 }, 
+    llep: { type: Number, default: 0 }, 
+
+    // --- SINCRONIZACIÓN DE EXCHANGE ---
+    lastAvailableUSDT: { type: Number, default: 0 },
+    lastAvailableBTC: { type: Number, default: 0 },
+    lastBalanceCheck: { type: Date, default: Date.now },
+
+    // --- CONFIGURACIÓN (Protegida contra sobreescritura) ---
+    config: {
+        symbol: { type: String, default: "BTC_USDT" },
+        long: {
+            enabled: { type: Boolean, default: false },
+            amountUsdt: { type: Number },
+            purchaseUsdt: { type: Number },
+            price_var: { type: Number },
+            size_var: { type: Number },
+            profit_percent: { type: Number },
+            price_step_inc: { type: Number },
+            stopAtCycle: { type: Boolean, default: false }
+        },
+        short: {
+            enabled: { type: Boolean, default: false },
+            amountUsdt: { type: Number },
+            purchaseUsdt: { type: Number },
+            price_var: { type: Number },
+            size_var: { type: Number },
+            profit_percent: { type: Number },
+            price_step_inc: { type: Number },
+            stopAtCycle: { type: Boolean, default: false }
+        },
+        ai: {
+            enabled: { type: Boolean, default: false },
+            amountUsdt: { type: Number },
+            stopAtCycle: { type: Boolean, default: false }
+            // Se puede extender con parámetros específicos de IA si se desea
+        }
+    },
+
+    lastUpdate: { type: Date, default: Date.now },
+    lastUpdateTime: { type: Date, default: Date.now }
+}, { 
+    minimize: false 
+});
+
+// Middleware de actualización automática de timestamps
+autobotSchema.pre('save', function(next) {
+    this.lastUpdate = new Date();
+    this.lastUpdateTime = new Date();
+    next();
 });
 
 module.exports = mongoose.model('Autobot', autobotSchema);

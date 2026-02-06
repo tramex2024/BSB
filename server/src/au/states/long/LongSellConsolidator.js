@@ -1,93 +1,78 @@
-// BSB/server/src/au/states/long/LongSellConsolidator.js (CORREGIDO)
+// BSB/server/src/au/states/long/LongSellConsolidator.js
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulSell } = require('../../managers/longDataManager');
+// 🟢 CORRECCIÓN: Importación necesaria para que el historial (tradecycles) funcione
+const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
 
 /**
- * Monitorea una orden de VENTA pendiente, consolida la posición si la orden se llena,
- * o limpia el lastOrder si la orden falla.
- */
+ * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.
+ * Delega la lógica de parada o reinicio al LongDataManager.
+ */
 async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
-    const lStateData = botState.lStateData;
-    const lastOrder = lStateData.lastOrder;
-    const LSTATE = 'long';
+    
+    // ✅ CAMBIO: Ahora leemos la orden directamente de la raíz (llastOrder)
+    const lastOrder = botState.llastOrder;
 
-    if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
-        return false; // No hay orden de venta pendiente que monitorear
-    }
+    if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
+        return false; 
+    }
 
-    const orderIdString = String(lastOrder.order_id);
-    log(`[SELL CONSOLIDATOR] Orden de venta pendiente ${orderIdString} detectada. Consultando BitMart...`, 'warning');
+    const orderIdString = String(lastOrder.order_id);
 
-    try {
-        let orderDetails = await getOrderDetail(SYMBOL, orderIdString);
-        let finalDetails = orderDetails;
-        
-        // Consolidar campos de volumen llenado (filledSize/filled_volume/filledVolume)
-        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
+    try {
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
+        let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
 
-        // Definición de ORDEN PROCESADA (Total o Parcial)
-        let isOrderProcessed = (
-            finalDetails?.state === 'filled' ||
-            finalDetails?.state === 'partially_canceled' ||
-            (finalDetails?.state === 'canceled' && filledVolume > 0) ||
-            filledVolume > 0
-        );
+        // Respaldo Atómico: Verificación en historial si falla la consulta directa
+        if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
+            const recentOrders = await getRecentOrders(SYMBOL);
+            finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
+            if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
+        }
 
-        // 2. Lógica de Respaldo (Buscar en Historial si la consulta directa falla)
-        if (!isOrderProcessed && !finalDetails) {
-            log(`[SELL CONSOLIDATOR] Fallo en consulta directa. Buscando orden ${orderIdString} en el historial de BitMart...`, 'info');
-            const recentOrders = await getRecentOrders(SYMBOL);
-            finalDetails = recentOrders.find(order => 
-                String(order.orderId) === orderIdString || String(order.order_id) === orderIdString
-            );
-            
-            if (finalDetails) {
-                // 💡 Consolidar volumen llenado de la respuesta de respaldo
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0); 
-                isOrderProcessed = filledVolume > 0;
-            }
-        }
+        const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
+        const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        if (isOrderProcessed && filledVolume > 0) {
-            // === CASO A: VENTA PROCESADA CON ÉXITO (Cierre de Ciclo) ===
-            log(`[SELL CONSOLIDATOR] Orden ${orderIdString} confirmada. Iniciando consolidación y CIERRE DE CICLO.`, 'success');
-            
-            const handlerDependencies = { 
-                log, updateBotState, updateLStateData, updateGeneralBotState, 
-                config: botState.config 
+        // === CASO A: VENTA CONFIRMADA (Delegación al Manager) ===
+        if (isFilled) {
+            log(`💰 [L-SELL-SUCCESS] Venta confirmada. Procesando cierre de ciclo...`, 'success');
+            
+            const handlerDependencies = { 
+                log, 
+                updateBotState, 
+                updateLStateData, 
+                updateGeneralBotState, 
+                logSuccessfulCycle, // Inyectamos la función para asegurar el registro en tradecycles
+                config: botState.config // Contiene la nueva jerarquía config.long
             };
-            
-            // 🎯 handleSuccessfulSell maneja la lógica de ganancias, reseteo de estado 
-            // y la transición FINAL a BUYING o STOPPED (según stopAtCycle).
-            await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
-            
-            // 🛑 ELIMINADA la línea: await updateBotState('BUYING', LSTATE);
-            log(`[SELL CONSOLIDATOR] Cierre de ciclo Long completo. Transición delegada a LongDataManager.`, 'debug');
+            
+            // ✅ handleSuccessfulSell se encargará de resetear las siglas de raíz (lac, lai, etc.)
+            await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
 
-            return true; // Orden procesada
+            return true;
+        }
 
-        } else if (finalDetails && (finalDetails.state === 'new' || finalDetails.state === 'partially_filled')) {
-            // === CASO B: ORDEN AÚN PENDIENTE ===
-            log(`[SELL CONSOLIDATOR] La orden ${orderIdString} sigue activa (${finalDetails.state}). Esperando ejecución.`, 'info');
-            return true; // Orden pendiente (mantiene el bloqueo)
+        // === CASO B: LA ORDEN SIGUE EN EL LIBRO ===
+        if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
+            return true; 
+        }
 
-        } else {
-            // === CASO C: ORDEN FALLIDA SIN VOLUMEN LLENADO ===
-            log(`[SELL CONSOLIDATOR] La orden ${orderIdString} falló/se canceló sin ejecución. Limpiando lastOrder para reintento.`, 'error');
-            
-            await updateLStateData({ 'lastOrder': null });
-            
-            // Permanecer en SELLING. El próximo ciclo de autobotLogic llamará a LSelling.run, que intentará colocar la orden de nuevo.
-            await updateBotState('SELLING', LSTATE); 
+        // === CASO C: FALLO O CANCELACIÓN SIN EJECUCIÓN ===
+        if (isCanceled && filledVolume === 0) {
+            log(`❌ [L-SELL-FAIL] Venta cancelada sin ejecución. Liberando para reintento...`, 'error');
+            
+            // ✅ CAMBIO: Limpiamos llastOrder en la raíz
+            await updateGeneralBotState({ llastOrder: null });
+            return true;
+        }
 
-            return true; // Orden procesada (fallida)
-        }
+        return true;
 
-    } catch (error) {
-        log(`[SELL CONSOLIDATOR] Error de API/lógica al consultar la orden ${orderIdString}: ${error.message}. Persistiendo el bloqueo.`, 'error');
-        return true; 
-    }
+    } catch (error) {
+        log(`[L-SELL-ERROR] Error crítico: ${error.message}`, 'error');
+        return true; 
+    }
 }
 
 module.exports = { monitorAndConsolidateSell };
