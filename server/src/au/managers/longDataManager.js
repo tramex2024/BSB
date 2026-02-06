@@ -1,156 +1,144 @@
-// BSB/server/src/au/states/long/LongDataManager.js
-
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 const { calculateLongCoverage, parseNumber, getExponentialAmount } = require('../../../autobotCalculations');
-const { CLEAN_LONG_ROOT } = require('../utils/cleanState');
+const { CLEAN_STRATEGY_DATA, CLEAN_LONG_ROOT } = require('../utils/cleanState');
 
 const LSTATE = 'long';
-const SELL_FEE_PERCENT = 0.001; // 0.1% BitMart Fee
+const SELL_FEE_PERCENT = 0.001; 
 
 /**
- * Procesa el éxito de una compra Long (Apertura o DCA).
- * Actualiza promedios y proyecta el siguiente escalón exponencial.
+ * Procesa el éxito de una compra Long, actualizando balances, 
+ * acumulados y proyectando el siguiente nivel exponencial.
  */
 async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {}) {
-    const { updateGeneralBotState } = dependencies;
+    const { updateGeneralBotState, updateLStateData } = dependencies;
     
     const executedQty = parseFloat(orderDetails.filledSize || 0);
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
 
     if (executedQty <= 0 || executedPrice <= 0) {
-        log('[L-DATA] ⚠️ Ejecución inválida capturada por el consolidador.', 'error');
-        await updateGeneralBotState({ llastOrder: null });
+        log('[L-DATA] ⚠️ Ejecución inválida.', 'error');
+        if (updateLStateData) await updateLStateData({ 'lastOrder': null });
         return;
     }
 
-    // --- 1. CÁLCULOS DE ACUMULADOS ---
+    // --- 1. SANEAMIENTO DE BALANCE ---
     const currentBalance = parseFloat(botState.lbalance || 0);
     const finalizedLBalance = parseFloat((currentBalance - baseExecutedValue).toFixed(8));
 
-    const isFirstOrder = (botState.locc || 0) === 0;
+    const currentLData = botState.lStateData || {};
+    const isFirstOrder = (currentLData.orderCountInCycle || 0) === 0;
     
-    const newTotalQty = parseFloat(((botState.lac || 0) + executedQty).toFixed(8)); 
-    const newAI = (botState.lai || 0) + baseExecutedValue;
-    const newPPC = newAI / newTotalQty; 
-    const newOrderCount = (botState.locc || 0) + 1;
+    const currentTotalQty = isFirstOrder ? 0 : parseFloat(currentLData.ac || 0);
+    const currentAI = isFirstOrder ? 0 : parseFloat(currentLData.ai || 0);
+    
+    const newTotalQty = parseFloat((currentTotalQty + executedQty).toFixed(8)); 
+    const newAI = currentAI + baseExecutedValue;
+    const newPPC = newAI / newTotalQty;
+    const newOrderCount = (currentLData.orderCountInCycle || 0) + 1;
 
-    // --- 2. PROYECCIÓN EXPONENCIAL Y TARGETS ---
-    // 🎯 CAMBIO: Usamos profit_percent (1.3%) y guardamos en ltprice
-    const profitPercent = parseNumber(botState.config.long?.profit_percent || botState.config.long?.trigger || 0) / 100;
-    const newLTPrice = newPPC * (1 + profitPercent); 
+    // --- 2. CÁLCULO DE TARGETS (Ajustado a nueva jerarquía) ---
+    // ✅ Cambio: profit_percent ahora es trigger
+    const profitPercent = parseNumber(botState.config.long?.trigger || 0) / 100;
+    const newLTPrice = newPPC * (1 + profitPercent);
 
-    const { price_var, size_var, purchaseUsdt, price_step_inc } = botState.config.long || {};
+    const { price_var, size_var, purchaseUsdt } = botState.config.long || {};
+    const newNextPrice = executedPrice * (1 - (parseNumber(price_var || 0) / 100));
     
-    const priceVarDec = parseNumber(price_var || 0) / 100;
-    const nextStepMult = Math.pow(1 + (parseNumber(price_step_inc || 0) / 100), newOrderCount - 1);
-    const newNextPrice = executedPrice * (1 - (priceVarDec * nextStepMult));
-    
+    // El monto de la siguiente orden se calcula con la lógica exponencial
     const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount, size_var);
     
-    // --- 3. COBERTURA / RESISTENCIA REAL ---
+    // --- 3. COBERTURA REAL ---
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
         finalizedLBalance, 
         executedPrice, 
         purchaseUsdt, 
-        priceVarDec, 
-        parseNumber(size_var || 0),
-        newOrderCount,
-        parseNumber(price_step_inc || 0)
+        parseNumber(price_var || 0) / 100, 
+        parseNumber(size_var || 0), // Lógica exponencial pura
+        newOrderCount
     );
 
-    // Persistencia en DB
     await saveExecutedOrder({ ...orderDetails, side: 'buy' }, LSTATE);
 
-    // ✅ ACTUALIZACIÓN ATÓMICA EN RAÍZ
     await updateGeneralBotState({
+        lcoverage: coveragePrice,
+        lnorder: numberOfOrders,
         lbalance: finalizedLBalance,
-        lac: newTotalQty,        
-        lai: newAI,             
-        lppc: newPPC,           
-        locc: newOrderCount,    
-        ltprice: newLTPrice,    // Objetivo de activación
-        lpc: 0,                 // 🧹 Limpieza de Trailing
-        lpm: 0,                 // 🧹 Limpieza de Trailing
-        lncp: newNextPrice,     
-        lrca: nextRequiredAmount, 
-        lcoverage: coveragePrice, 
-        lnorder: numberOfOrders, 
-        llep: executedPrice,    
-        llastOrder: null,       
-        lstartTime: isFirstOrder ? new Date() : botState.lstartTime
+        ltprice: newLTPrice,
+        lStateData: {
+            ...currentLData,
+            ac: newTotalQty,
+            ai: newAI,
+            ppc: newPPC,
+            lastOrder: null,
+            lastExecutionPrice: executedPrice,
+            requiredCoverageAmount: nextRequiredAmount,
+            nextCoveragePrice: newNextPrice,
+            orderCountInCycle: newOrderCount,
+            cycleStartTime: isFirstOrder ? new Date() : currentLData.cycleStartTime
+        }
     });
 
-    log(`✅ [L-DATA] #${newOrderCount} Long. PPC: ${newPPC.toFixed(2)}. Target: ${newLTPrice.toFixed(2)}. Balance: $${finalizedLBalance.toFixed(2)}`, 'success');
+    log(`✅ [L-DATA] Balance: $${finalizedLBalance.toFixed(2)}. Target TP: ${newLTPrice.toFixed(2)}.`, 'success');
 }
 
-/**
- * Procesa el cierre de ciclo (Take Profit) del Long.
- * Actualizada para persistir la orden de venta en el historial local.
- */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
-    const { config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
+    const { 
+        config, log, updateBotState, updateLStateData, 
+        updateGeneralBotState, logSuccessfulCycle 
+    } = dependencies;
     
     try {
-        const totalBtcToSell = parseFloat(botStateObj.lac || 0);
+        const currentLData = botStateObj.lStateData || {};
+        
+        const totalBtcToSell = parseFloat(currentLData.ac || 0);
         const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         
         const totalUsdtReceived = (totalBtcToSell * sellPrice) * (1 - SELL_FEE_PERCENT);
-        const totalInvestment = parseFloat(botStateObj.lai || 0);
+        const totalInvestment = parseFloat(currentLData.ai || 0);
         const profitNeto = totalUsdtReceived - totalInvestment;
 
-        // 🚀 NUEVO: Guardar la orden de venta en el historial de órdenes (Persistence Service)
-        // Esto garantiza que la venta aparezca en el Dashboard junto con las compras.
-        try {
-            await saveExecutedOrder({ 
-                ...orderDetails, 
-                side: 'sell', 
-                status: 'filled',
-                filledSize: totalBtcToSell,
-                priceAvg: sellPrice,
-                timestamp: Date.now()
-            }, LSTATE);
-        } catch (saveError) {
-            log(`⚠️ Error al persistir orden de venta en BD: ${saveError.message}`, 'error');
-        }
-
-        if (logSuccessfulCycle && botStateObj.lstartTime) {
+        // Registro en historial
+        if (logSuccessfulCycle && currentLData.cycleStartTime) {
             try {
                 await logSuccessfulCycle({
                     autobotId: botStateObj._id,
                     symbol: botStateObj.config.symbol || 'BTC_USDT',
                     strategy: 'Long',
                     cycleIndex: (botStateObj.lcycle || 0) + 1,
-                    startTime: botStateObj.lstartTime,
+                    startTime: currentLData.cycleStartTime,
                     endTime: new Date(),
-                    averagePPC: parseFloat(botStateObj.lppc || 0),
+                    averagePPC: parseFloat(currentLData.ppc || 0),
                     finalSellPrice: sellPrice,
-                    orderCount: parseInt(botStateObj.locc || 0),
+                    orderCount: parseInt(currentLData.orderCountInCycle || 0),
                     initialInvestment: totalInvestment,
                     finalRecovery: totalUsdtReceived,
                     netProfit: profitNeto,
                     profitPercentage: totalInvestment > 0 ? (profitNeto / totalInvestment) * 100 : 0
                 });
             } catch (dbError) {
-                log(`⚠️ Error al guardar historial de Ciclo Long: ${dbError.message}`, 'error');
+                log(`⚠️ Error historial: ${dbError.message}`, 'error');
             }
         }
 
         const newLBalance = parseFloat((botStateObj.lbalance + totalUsdtReceived).toFixed(8));
         const shouldStopLong = config.long?.stopAtCycle === true;
 
-        // ✅ RESET TOTAL A RAÍZ
+        // Limpieza y reseteo para el siguiente ciclo
         await updateGeneralBotState({
-    ...CLEAN_LONG_ROOT, 
-    lbalance: newLBalance, // Este valor es vital mantenerlo
-    total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
-    lcycle: (Number(botStateObj.lcycle || 0) + 1),
-    'config.long.enabled': !shouldStopLong 
-});
+            ...CLEAN_LONG_ROOT,
+            lbalance: newLBalance,
+            total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
+            lcycle: (Number(botStateObj.lcycle || 0) + 1),
+            'config.long.enabled': !shouldStopLong 
+        });
+
+        await updateLStateData(CLEAN_STRATEGY_DATA);
         
-        log(`💰 [L-DATA] Ciclo Long Cerrado: +${profitNeto.toFixed(2)} USDT.`, 'success');
+        log(`💰 [L-DATA] Venta finalizada: +${profitNeto.toFixed(2)} USDT.`, 'success');
         
+        // El bot se mantiene en BUYING de forma autónoma a menos que stopAtCycle sea true
         await updateBotState(shouldStopLong ? 'STOPPED' : 'BUYING', LSTATE);
 
     } catch (error) {

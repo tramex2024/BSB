@@ -1,43 +1,38 @@
+// server/src/ai/CandleBuilder.js
+
 class CandleBuilder {
     constructor() {
         this.currentCandle = null;
     }
 
     /**
-     * Procesa un nuevo precio y opcionalmente el volumen. 
-     * Retorna la vela cerrada si el minuto terminó.
+     * Procesa un nuevo precio. 
+     * Retorna la vela cerrada si el minuto terminó, de lo contrario retorna null.
      */
-    processTick(price, volume = 0) {
-        // Normalizamos al inicio del minuto exacto
-        const now = new Date();
-        const timestamp = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes()).getTime();
-        
+    processTick(price) {
+        const timestamp = new Date().setSeconds(0, 0); // Inicio del minuto actual
         let closedCandle = null;
 
-        // 1. DETECCIÓN DE CIERRE DE VELA
+        // Si cambió el minuto, cerramos la vela anterior
         if (this.currentCandle && this.currentCandle.timestamp !== timestamp) {
-            // La vela del minuto anterior ha terminado
             closedCandle = { ...this.currentCandle };
             this.currentCandle = null;
         }
 
-        // 2. CREACIÓN O ACTUALIZACIÓN
+        // Si no hay vela iniciada para este minuto, la creamos
         if (!this.currentCandle) {
-            // Iniciamos vela de nuevo minuto
             this.currentCandle = {
                 timestamp,
                 open: price,
                 high: price,
                 low: price,
-                close: price,
-                volume: parseFloat(volume) || 0 // Inicializamos volumen
+                close: price
             };
         } else {
-            // Actualizamos vela existente (OHLCV)
+            // Actualizamos la vela en formación
             this.currentCandle.high = Math.max(this.currentCandle.high, price);
             this.currentCandle.low = Math.min(this.currentCandle.low, price);
             this.currentCandle.close = price;
-            this.currentCandle.volume += parseFloat(volume) || 0; // Acumulamos volumen del tick
         }
 
         return closedCandle;

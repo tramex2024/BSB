@@ -7,8 +7,8 @@ const { handleSuccessfulShortSell } = require('../../managers/shortDataManager')
  * Monitorea órdenes de VENTA (apertura o DCA de Short).
  */
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
-    // ✅ CAMBIO DE PARÁMETRO: Referencia a raíz slastOrder
-    const lastOrder = botState.slastOrder;
+    const sStateData = botState.sStateData || {}; // Protección de acceso
+    const lastOrder = sStateData.lastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false;
@@ -40,20 +40,20 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
         // --- CASO 1: VENTA EXITOSA (Apertura o Cobertura) ---
         if (isFilled) {
-    const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
+            const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
 
-    log(`[S-CONSOLIDATOR] ✅ Venta confirmada. Consolidando...`, 'success');
-    
-    // 🔥 PASO CLAVE: Limpiamos slastOrder ANTES para que ninguna otra vuelta del bucle entre aquí.
-    await updateGeneralBotState({ slastOrder: null });
-
-    await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
-        updateGeneralBotState, 
-        updateSStateData 
-    }); 
-    
-    return false; 
-}
+            log(`[S-CONSOLIDATOR] ✅ Venta ${orderIdString} confirmada (${finalExecutedQty} BTC). Actualizando promedios...`, 'success');
+            
+            // Inyectamos el detalle al DataManager
+            // El DataManager usará botState.config.short para recalcular el TP y el DCA Exponencial
+            await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
+                updateGeneralBotState, 
+                updateSStateData 
+            }); 
+            
+            // Retornamos false para que el bucle de SSelling.js sepa que ya no hay orden pendiente
+            return false; 
+        } 
 
         // --- CASO 2: ORDEN ACTIVA (Esperando en el libro) ---
         if (finalDetails && ['new', 'partially_filled', '8'].includes(String(finalDetails.state))) {
@@ -63,8 +63,7 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
         // --- CASO 3: ORDEN CANCELADA ---
         if (isCanceled) {
             log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada sin ejecutarse. Liberando estado.`, 'error');
-            // ✅ CAMBIO DE PARÁMETRO: Limpieza de slastOrder en raíz
-            await updateSStateData({ 'slastOrder': null });
+            await updateSStateData({ 'lastOrder': null });
             return false;
         }
 

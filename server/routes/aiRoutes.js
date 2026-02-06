@@ -1,27 +1,12 @@
-// BSB/server/routes/aiRoutes.js
+// server/routes/aiRoutes.js
 
 const express = require('express');
 const router = express.Router();
 const aiController = require('../controllers/aiController');
-// Si usas autenticación, puedes importar tu middleware aquí
-// const { protect } = require('../middleware/authMiddleware');
+const authMiddleware = require('../middleware/authMiddleware');
 
-/**
- * RUTA: GET /api/ai/status
- * DESCRIPCIÓN: Obtiene balance, estado de ejecución y configuración.
- */
-router.get('/status', aiController.getAIStatus);
-
-/**
- * RUTA: GET /api/ai/history
- * DESCRIPCIÓN: Obtiene los últimos trades virtuales realizados por la IA.
- */
-router.get('/history', aiController.getVirtualHistory);
-
-/**
- * RUTA: POST /api/ai/toggle
- * DESCRIPCIÓN: Enciende o apaga el motor neuronal.
- */
-router.post('/toggle', aiController.toggleAI);
+router.get('/status', authMiddleware, aiController.getAIStatus);
+router.post('/toggle', authMiddleware, aiController.toggleAI);
+router.get('/history', authMiddleware, aiController.getVirtualHistory);
 
 module.exports = router;

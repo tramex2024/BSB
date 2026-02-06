@@ -1,30 +1,25 @@
+// public/js/main.js
+
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
-import aiBotUI from './modules/aiBotUI.js';
 
-// --- CONFIGURACIÓN ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
+export const TRADE_SYMBOL_BITMART = 'BTC_USDT';
+export let socket = null;
 
-export const currentBotState = {
+export let currentBotState = {
     price: 0,
     sstate: 'STOPPED',
     lstate: 'STOPPED',
-    lpc: 0, 
-    spc: 0, 
-    lpm: 0,
-    spm: 0,
-    isRunning: false,
     config: {}
 };
-
-export let socket = null;
-export let intervals = {}; 
 
 let logQueue = [];
 let isProcessingLog = false;
 let connectionWatchdog = null;
+let errorInterval = null;
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -32,223 +27,156 @@ const views = {
     aibot: () => import('./modules/aibot.js')
 };
 
-// --- GESTIÓN DE CONEXIÓN ---
-function updateConnectionStatus(status) {
+function updateConnectionStatus(connected) {
     const statusDot = document.getElementById('status-dot');
     if (!statusDot) return;
-    statusDot.classList.remove('status-red', 'status-green', 'status-purple');
 
-    if (status === 'CONNECTED') {
+    if (connected) {
+        statusDot.classList.remove('status-red');
         statusDot.classList.add('status-green');
+        
+        if (errorInterval) {
+            clearInterval(errorInterval);
+            errorInterval = null;
+            logQueue = []; 
+            logStatus("✅ Conexión restaurada", "success");
+        }
     } else {
+        statusDot.classList.remove('status-green');
         statusDot.classList.add('status-red');
+
+        if (!errorInterval) {
+            logQueue = []; 
+            const warningMsg = "⚠️ ALERTA: Sin recepción de datos";
+            logStatus(warningMsg, "error"); 
+            
+            errorInterval = setInterval(() => {
+                if (logQueue.length < 2) {
+                    logStatus(warningMsg, "error");
+                }
+            }, 2000); 
+        }
     }
 }
 
 function resetWatchdog() {
-    updateConnectionStatus('CONNECTED');
+    updateConnectionStatus(true);
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
     connectionWatchdog = setTimeout(() => {
-        updateConnectionStatus('DISCONNECTED');
-    }, 5000);
+        updateConnectionStatus(false);
+    }, 3000);
 }
 
+// --- GESTIÓN DE LOGS ---
 export function logStatus(message, type = 'info') {
-    if (type === 'error') {
-        logQueue = [{ message, type }]; 
-    } else {
-        if (logQueue.length >= 2) logQueue.shift();
-        logQueue.push({ message, type });
-    }
+    logQueue.push({ message, type });
+    if (logQueue.length > 20) logQueue.shift();
     if (!isProcessingLog) processNextLog();
 }
 
 function processNextLog() {
-    if (logQueue.length === 0) { isProcessingLog = false; return; }
-    const logEl = document.getElementById('log-message');
-    if (!logEl) return;
+    if (logQueue.length === 0) {
+        isProcessingLog = false;
+        return;
+    }
 
     isProcessingLog = true;
     const log = logQueue.shift();
-    logEl.textContent = log.message;
-    
-    const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
-    logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-    
-    setTimeout(() => { processNextLog(); }, 2500);
+    const logEl = document.getElementById('log-message');
+    const logBar = document.getElementById('log-bar');
+
+    if (logEl && logBar) {
+        logEl.textContent = log.message;
+        const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
+        logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
+        
+        logBar.style.backgroundColor = log.type === 'error' ? '#7f1d1d' : '#111827';
+        logEl.style.opacity = '1';
+
+        setTimeout(() => {
+            if (logEl) logEl.style.opacity = '0.5';
+            processNextLog();
+        }, 1500); 
+    } else {
+        isProcessingLog = false;
+    }
 }
 
-// --- INICIALIZACIÓN DE SOCKETS ---
+// --- INICIALIZACIÓN ---
 export function initializeFullApp() {
     if (socket && socket.connected) return;
-    if (typeof io === 'undefined') return;
 
     socket = io(BACKEND_URL, { 
-        transports: ['websocket', 'polling'],
-        reconnection: true 
+        path: '/socket.io', 
+        transports: ['websocket'], 
+        reconnection: true
     });
 
-   socket.on('connect', () => {
-    updateConnectionStatus('CONNECTED');
-    socket.emit('get-bot-state'); // Para el Autobot
-    socket.emit('get-ai-status');  // Para el AI Bot
-});
+    socket.on('connect', () => {
+        updateConnectionStatus(true);
+        socket.emit('get-bot-state');
+    });
+
+    socket.on('disconnect', () => {
+        updateConnectionStatus(false);
+    });
 
     socket.on('marketData', (data) => {
         resetWatchdog();
-        if (data && data.price) {
-            currentBotState.price = parseFloat(data.price);
-            updateBotUI(currentBotState);
-        }
-    });
-
-    socket.on('bot-log', (data) => {
-        if (data && data.message) {
-            logStatus(data.message, data.type || 'info');
-        }
-    });
-
-   socket.on('bot-state-update', (state) => {
-        if (state) {
-            // ✅ Mezcla el estado nuevo con el actual
-            Object.assign(currentBotState, state);
-            
-            // Sincronizar balance de IA... (tu código actual)
-            if(state.virtualAiBalance) {
-                const balEl = document.getElementById('ai-virtual-balance');
-                if(balEl) balEl.innerText = `$${state.virtualAiBalance.toFixed(2)}`;
+        if (data && data.price != null) {
+            if (currentBotState.price !== data.price) {
+                currentBotState.price = data.price;
+                // Sincronización dual: Datos + Controles
+                updateBotUI(currentBotState);
+                updateControlsState(currentBotState); 
             }
         }
-
-        // 🔥 CRÍTICO: Estas dos funciones deben ser capaces de encontrar los botones
-        // aunque se acabe de cambiar de pestaña.
-        updateBotUI(currentBotState);
-        updateControlsState(currentBotState); 
     });
 
-    // 🧠 LISTENERS ESPECÍFICOS DE IA (Dentro de la inicialización)
-    socket.on('ai-decision-update', (data) => {
-        aiBotUI.updateConfidence(data.confidence);
-        aiBotUI.addLog(data.message);
+    socket.on('bot-log', (log) => {
+        logStatus(log.message, log.type);
     });
 
-    socket.on('ai-history-update', (trades) => {
-        aiBotUI.updateHistoryTable(trades);
-    });
-
-   socket.on('ai-status-change', (status) => {
-        // ✅ GUARDA EL ESTADO EN LA MEMORIA GLOBAL
-        currentBotState.isRunning = status.isRunning; 
-        
-        // Actualiza la UI si la pestaña está abierta
-        aiBotUI.setRunningStatus(status.isRunning);
-        
-        const balEl = document.getElementById('ai-virtual-balance');
-        if(status.virtualBalance && balEl) {
-            balEl.innerText = `$${status.virtualBalance.toFixed(2)}`;
+    socket.on('bot-state-update', (state) => {
+        resetWatchdog();
+        if (state) {
+            currentBotState = { ...currentBotState, ...state };
+            
+            // Reparación del flujo de bloqueo
+            updateBotUI(currentBotState); 
+            updateControlsState(currentBotState); 
         }
     });
 
-    socket.on('disconnect', () => updateConnectionStatus('DISCONNECTED'));
+    setupNavTabs(initializeTab);
 }
 
-// --- GESTIÓN DE PESTAÑAS ---
 export async function initializeTab(tabName) {
-    Object.values(intervals).forEach(clearInterval);
-    intervals = {};
-
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
-
     try {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         mainContent.innerHTML = html;
-        
         if (views[tabName]) {
-    const module = await views[tabName]();
-    // Esto buscará initializeAibotView y la ejecutará
-    const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
-    if (typeof module[initFnName] === 'function') {
-        await module[initFnName](currentBotState); 
-    }
-        }
-
-        // 🟢 Lógica especial para el botón de la pestaña AIBOT
-        if (tabName === 'aibot') {
-            const btnAi = document.getElementById('btn-start-ai');
-            if (btnAi) {
-                // 1. FORZAR ESTADO INMEDIATO (Sincronía total)
-                // Usamos el estado guardado en el objeto global
-                aiBotUI.setRunningStatus(currentBotState.isRunning); 
-
-                btnAi.onclick = async () => {
-                    // Evitar múltiples clics cambiando el estado visual antes de la petición
-                    const isRunning = btnAi.innerText.includes("DETENER");
-                    const action = isRunning ? 'stop' : 'start';
-                    
-                    // Feedback visual inmediato (Optimismo)
-                    btnAi.disabled = true;
-                    btnAi.innerText = "PROCESANDO...";
-
-                    try {
-                        const res = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                            method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('token')}`
-                            },
-                            body: JSON.stringify({ action })
-                        });
-                        const data = await res.json();
-                        
-                        // Actualizamos nuestro estado global con la respuesta del servidor
-                        if(data.success) {
-                            currentBotState.isRunning = data.isRunning;
-                            aiBotUI.setRunningStatus(data.isRunning);
-                            aiBotUI.addLog(`Solicitud de ${action} enviada...`);
-                        }
-                    } catch (e) {
-                        aiBotUI.addLog("Error al conectar con el núcleo");
-                    } finally {
-                        btnAi.disabled = false;
-                    }
-                };
+            const module = await views[tabName]();
+            const initFnName = `initialize${tabName.charAt(0).toUpperCase()}${tabName.slice(1)}View`;
+            if (typeof module[initFnName] === 'function') {
+                // Inyectamos el estado actual a la nueva vista
+                await module[initFnName](currentBotState); 
+                updateBotUI(currentBotState);
+                updateControlsState(currentBotState);
             }
         }
-
-    } catch (error) { 
-        console.error("❌ Error cargando vista:", error); 
-    }
+    } catch (error) { console.error("❌ Error cargando vista:", error); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-    
     if (localStorage.getItem('token')) { 
         initializeFullApp(); 
-        initializeTab('autobot'); 
     } else { 
         initializeTab('dashboard'); 
-    }
-});
-
-// Detectar cuando el usuario vuelve a la pestaña
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && socket && socket.connected) {
-        console.log("🔄 Sincronizando estados de bots (Autobot + AI)...");
-        
-        // 1. Pedir estados actualizados al servidor
-        socket.emit('get-bot-state'); // Para el Autobot (Long/Short)
-        socket.emit('get-ai-status');  // Para el AI Bot
-        
-        // 2. Opcional: Refresco visual inmediato con lo que hay en memoria
-        // Esto evita que el usuario vea datos viejos mientras el socket responde
-        updateControlsState(currentBotState);
-        if (typeof aiBotUI !== 'undefined') {
-            aiBotUI.setRunningStatus(currentBotState.isRunning);
-        }
     }
 });

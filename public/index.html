@@ -12,28 +12,27 @@
 <body class="bg-gray-900 text-gray-100 font-sans">
 
     <header class="h-16 flex items-center justify-between px-4 md:px-6 bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
-    <div class="flex items-center space-x-3 shrink-0">
-        <img src="images/bsb-logo.png" alt="Logo" class="w-9 h-9">
-        <span class="hidden sm:block font-bold text-lg md:text-xl tracking-tight">
-            Bitmart <span class="text-emerald-500">Spot Bots</span>
-        </span>
-    </div>
-    
-    <nav id="main-nav" class="flex space-x-1">
-        <a class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
-        <a class="nav-tab" data-tab="autobot">AUTOBOT</a>            
-        <a class="nav-tab" data-tab="aibot">AIBOT</a>
-    </nav>
-    
-    <div class="flex items-center space-x-3 md:space-x-5 text-gray-400">
-        <div class="status-ball-container">
-            <span id="status-dot" class="status-dot-base status-red" title="Estado de Conexión"></span>
+        <div class="flex items-center space-x-3 shrink-0">
+            <img src="images/bsb-logo.png" alt="Logo" class="w-9 h-9">
+            <span class="hidden sm:block font-bold text-lg md:text-xl tracking-tight">
+                Bitmart <span class="text-emerald-500">Spot Bots</span>
+            </span>
+            <div class="status-ball-container ml-1">
+                <span id="status-dot" class="status-dot-base status-red" title="Estado de Conexión"></span>
+            </div>
         </div>
         
-        <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
-        <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
-    </div>
-</header>
+        <nav id="main-nav" class="flex space-x-1">
+            <a class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
+            <a class="nav-tab" data-tab="autobot">AUTOBOT</a>            
+            <a class="nav-tab" data-tab="aibot">AIBOT</a>
+        </nav>
+        
+        <div class="flex items-center space-x-3 md:space-x-5 text-gray-400">
+            <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
+            <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
+        </div>
+    </header>
 
     <div id="log-bar" class="log-bar">
         <p id="log-message">Sincronizando con Bitmart API...</p>

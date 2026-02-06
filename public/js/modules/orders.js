@@ -112,47 +112,29 @@ export async function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-20 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
 
     try {
-        // ✅ Ajustamos el endpoint: 
-        // Si el backend no tiene /history, usamos 'all' o 'filled' según tu API real.
-        // Basado en errores previos, intentemos con 'all' que es el estándar de tu lógica.
-        const endpoint = (status === 'all') ? 'all' : status; 
-        
-        const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
-        
-        // Construimos la URL
-        const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
-        url.searchParams.append('startTime', fifteenDaysAgo); 
-
-        const response = await fetch(url, {
+        const endpoint = status === 'all' ? 'filled' : status; 
+        const response = await fetch(`${BACKEND_URL}/api/orders/${endpoint}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-
-        // Si 'all' da error 400, el backend probablemente solo conoce 'filled' y 'opened'.
-        // En ese caso, para "All" pediremos 'filled' pero lo mostraremos en la pestaña All.
-        if (!response.ok) {
-            console.warn(`⚠️ Endpoint ${endpoint} no hallado, reintentando con 'filled' para pestaña All`);
-            return fetchOrdersFallback('filled', orderListElement, status);
-        }
-
+        if (!response.ok) throw new Error("Error en API de órdenes");
         const data = await response.json();
         const orders = Array.isArray(data) ? data : (data.orders || []);
         displayOrders(orders, orderListElement, status);
-
     } catch (error) {
         console.error("Fetch error:", error);
         orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-xs font-bold uppercase">Error al cargar historial</div>`;
     }
 }
 
-// Función de respaldo para evitar el error 400 si el endpoint 'all' no existe en el server
-async function fetchOrdersFallback(fallbackEndpoint, orderListElement, originalStatus) {
-    const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
-    const url = `${BACKEND_URL}/api/orders/${fallbackEndpoint}?startTime=${fifteenDaysAgo}`;
-    
-    const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    });
-    const data = await response.json();
-    const orders = Array.isArray(data) ? data : (data.orders || []);
-    displayOrders(orders, orderListElement, originalStatus);
+export function updateOpenOrdersTable(ordersData, listElementId, activeOrderTab) {
+    const orderListElement = document.getElementById(listElementId);
+    if (!orderListElement) return;
+    if (activeOrderTab === 'all') return; 
+    if (activeOrderTab !== 'opened') return;
+    const orders = Array.isArray(ordersData) ? ordersData : (ordersData?.orders || []);
+    if (orders.length === 0) {
+        orderListElement.innerHTML = `<div class="py-12 text-center text-gray-600 font-bold uppercase text-[10px]">No hay órdenes abiertas</div>`;
+        return;
+    }
+    orderListElement.innerHTML = orders.map(order => createOrderHtml(order)).join('');
 }

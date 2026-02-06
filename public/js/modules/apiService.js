@@ -1,25 +1,14 @@
 /**
  * apiService.js - Comunicaciones REST
- * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus } from '../main.js';
 
-/**
- * Función base para peticiones privadas con Timeout y AbortController
- */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
-    if (!token) {
-        logStatus("⚠️ Sesión no encontrada. Por favor inicie sesión.", "error");
-        return { success: false, message: "Sesión no encontrada." };
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); 
+    if (!token) return { success: false, message: "Sesión no encontrada." };
 
     const defaultOptions = {
-        signal: controller.signal,
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
@@ -28,43 +17,27 @@ async function privateFetch(endpoint, options = {}) {
 
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
-        clearTimeout(timeoutId);
+        const data = await response.json();
         
+        // Si el token expiró (401), avisamos al usuario
         if (response.status === 401) {
-            logStatus("⚠️ Sesión expirada.", "error");
-            localStorage.removeItem('token');
+            logStatus("⚠️ Sesión expirada. Por favor, relogea.", "error");
             return { success: false, message: "Unauthorized" };
         }
-
-        const result = await response.json().catch(() => ({ 
-            success: response.ok, 
-            message: response.statusText 
-        }));
-
-        return result; 
-
+        
+        return data;
     } catch (error) {
-        if (error.name === 'AbortError') {
-            logStatus("❌ Tiempo de espera agotado", "error");
-        } else {
-            logStatus("❌ Error de red o conexión", "error");
-        }
-        return { success: false, message: error.message };
+        console.error(`Error en ${endpoint}:`, error);
+        logStatus("❌ Error de red: El servidor no responde", "error");
+        return { success: false, message: "Connection error." };
     }
 }
 
-// --- SECCIÓN: ANALYTICS ---
+// ... (fetchCycleKpis y fetchEquityCurveData se mantienen igual)
 
-export async function fetchCycleKpis(strategy = 'Long') {
-    return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
-}
-
-export async function fetchEquityCurveData(strategy = 'Long') {
-    return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
-}
-
-// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
-
+/**
+ * Captura el estado actual de los inputs con los IDs corregidos
+ */
 export function getBotConfiguration() {
     const getNum = (id) => {
         const el = document.getElementById(id);
@@ -73,14 +46,13 @@ export function getBotConfiguration() {
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
-        symbol: "BTC_USDT", 
+        symbol: "BTC_USDT",
         long: {
             amountUsdt: getNum('auamountl-usdt'),
             purchaseUsdt: getNum('aupurchasel-usdt'),
             price_var: getNum('audecrementl'),
             size_var: getNum('auincrementl'),
-            profit_percent: getNum('autriggerl'),   
-            price_step_inc: getNum('aupricestep-l'),
+            trigger: getNum('autriggerl'),
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
@@ -89,81 +61,55 @@ export function getBotConfiguration() {
             purchaseUsdt: getNum('aupurchases-usdt'),
             price_var: getNum('audecrements'),
             size_var: getNum('auincrements'),
-            profit_percent: getNum('autriggers'),   
-            price_step_inc: getNum('aupricestep-s'),
+            trigger: getNum('autriggers'),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
-            enabled: true
-        },
-        ai: {
-            amountUsdt: getNum('auamountai-usdt'),
-            stopAtCycle: getCheck('au-stop-ai-at-cycle'),
             enabled: true
         }
     };
 }
 
-export async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    return await privateFetch('/api/autobot/update-config', {
-        method: 'POST',
-        body: JSON.stringify({ config })
-    });
-}
-
 /**
- * Activa o desactiva una estrategia (Long, Short o AI)
- * Ajustado para feedback visual inmediato y sincronización de DB
+ * Enciende/apaga el bot y bloquea el botón para evitar "Double-Click"
  */
-export async function toggleBotSideState(isRunning, side, providedConfig = null) {
-    const sideKey = side.toLowerCase(); 
+export async function toggleBotSideState(isRunning, side) {
     const action = isRunning ? 'stop' : 'start';
-    const btnId = sideKey === 'long' ? 'austartl-btn' : (sideKey === 'short' ? 'austarts-btn' : 'austartai-btn');
-    const btn = document.getElementById(btnId);
+    const endpoint = `/api/autobot/${action}/${side}`;
+    
+    // Capturamos config actual para asegurar que el START lleve los últimos valores
+    const config = getBotConfiguration();
 
-    // 1. ESTADO TRANSITORIO (Gris con "Starting..." o "Stopping...")
+    const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
+    const btn = document.getElementById(btnId);
+    
     if (btn) {
         btn.disabled = true;
-        // Quitamos los colores de éxito/error para poner el gris de espera
-        btn.classList.remove('bg-emerald-600', 'bg-red-600');
-        btn.classList.add('bg-slate-600'); 
-        btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
     }
 
-    try {
-        const config = providedConfig || getBotConfiguration();
-        const endpoint = `/api/autobot/${action}/${sideKey}`; 
-        
-        console.log(`📡 Enviando petición a: ${endpoint}`);
+    logStatus(`⏳ Solicitando ${action.toUpperCase()} para ${side.toUpperCase()}...`, "info");
 
+    try {
         const data = await privateFetch(endpoint, {
             method: 'POST',
-            body: JSON.stringify({ config }) 
+            body: JSON.stringify({ config }) // Enviamos siempre la config para sincronizar
         });
 
-        if (data && data.success) {
-            displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
-            // Nota: No quitamos el color gris aquí porque el Socket llegará en milisegundos 
-            // y ejecutará updateButtonState() poniendo el color final (Verde o Rojo).
-            return data;
+        if (data.success) {
+            const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
+            displayMessage(msg, 'success');
+            logStatus(`✅ ${msg}`, "success");
         } else {
-            throw new Error(data?.message || 'Error en servidor');
+            displayMessage(`Error: ${data.message}`, 'error');
+            logStatus(`❌ Falló ${action}: ${data.message}`, "error");
         }
-    } catch (err) {
-        displayMessage(err.message, 'error');
         
-        // REVERSIÓN EN CASO DE ERROR
+        return data;
+    } catch (err) {
+        logStatus(`❌ Error crítico en ${action}`, "error");
+    } finally {
         if (btn) {
             btn.disabled = false;
-            btn.classList.remove('bg-slate-600');
-            // Si falla, vuelve a su color lógico
-            if (isRunning) {
-                btn.classList.add('bg-red-600');
-                btn.textContent = `STOP ${sideKey.toUpperCase()}`;
-            } else {
-                btn.classList.add('bg-emerald-600');
-                btn.textContent = `START ${sideKey.toUpperCase()}`;
-            }
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
         }
-        return { success: false };
     }
 }

@@ -1,31 +1,29 @@
 // public/js/modules/aibot.js
 
-import { socket, currentBotState } from '../main.js';
-import aiBotUI from './aiBotUI.js';
+import { socket } from '../main.js';
 
 /**
- * Inicializa la vista de la IA cada vez que el usuario entra en la pestaña.
+ * Inicialización principal de la vista del Bot de IA
  */
 export function initializeAibotView() {
-    console.log("🚀 Sistema IA: Sincronizando interfaz...");
+    console.log("🚀 Sistema IA: Inicializando interfaz vía WebSockets...");
     
-    // 1. Limpiamos listeners previos para evitar ejecuciones duplicadas
+    // 1. LIMPIEZA CRÍTICA DE SOCKETS
+    // Evitamos que los mensajes de la IA y las operaciones virtuales se dupliquen en el log
     if (socket) {
+        socket.off('ai-status-init');
         socket.off('ai-status-update');
         socket.off('ai-history-data');
+        socket.off('ai-decision-update');
         socket.off('ai-order-executed');
     }
 
-    // 2. Configuramos los escuchadores activos
+    // 2. ACTIVAR ESCUCHADORES Y CONTROLES
     setupAISocketListeners();
-    
-    // 3. Configuramos el botón de control Start/Stop
     setupAIControls();
     
-    // 4. Sincronización inmediata con el estado global (Evita el lag visual)
-    aiBotUI.setRunningStatus(currentBotState.isRunning);
-
-    // 5. Solicitamos datos frescos al servidor para llenar la tabla y el balance
+    // 3. CARGA PROACTIVA
+    // Solicitamos al servidor los datos nada más entrar a la pestaña
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
@@ -33,120 +31,178 @@ export function initializeAibotView() {
 }
 
 /**
- * Escucha los eventos del socket específicos para la vista de IA
+ * 1. ESCUCHADORES DE EVENTOS (Recibir datos del servidor)
  */
 function setupAISocketListeners() {
     if (!socket) return;
 
-    // Monitor de estado: Progreso (1/30), Balance y Running
+    // Respuesta inicial de estado (Saldo virtual y si está corriendo)
+    socket.on('ai-status-init', (state) => {
+        console.log("📊 Estado IA recibido:", state);
+        const btn = document.getElementById('btn-start-ai');
+        const balanceEl = document.getElementById('ai-virtual-balance');
+        
+        if (btn) setBtnUI(btn, state.isRunning);
+        if (balanceEl && state.virtualBalance !== undefined) {
+            balanceEl.textContent = `$${state.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} USDT`;
+        }
+    });
+
+    // Actualización de estado tras pulsar el botón
     socket.on('ai-status-update', (data) => {
-        // Actualizamos el balance en la UI
-        const balEl = document.getElementById('ai-virtual-balance');
-        if (balEl && data.virtualBalance !== undefined) {
-            balEl.innerText = `$${data.virtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        const btn = document.getElementById('btn-start-ai');
+        if (btn) {
+            setBtnUI(btn, data.isRunning);
+            btn.disabled = false; // Reactivamos el botón tras recibir respuesta
         }
-
-        // Lógica del botón: Si está en fase de análisis (30 velas), mostramos progreso
-        const btnAi = document.getElementById('btn-start-ai');
-        if (btnAi) {
-            if (data.isRunning && data.historyCount < 30) {
-                btnAi.textContent = `ANALIZANDO... (${data.historyCount}/30)`;
-                btnAi.className = "w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs animate-pulse";
-                btnAi.disabled = false;
-            } else {
-                // Si ya pasó el análisis o está apagado, delegamos al módulo UI principal
-                aiBotUI.setRunningStatus(data.isRunning);
-            }
+        if (data.virtualBalance !== undefined) {
+            updateAIBalance({ currentVirtualBalance: data.virtualBalance });
         }
     });
 
-    // Historial completo (usualmente al cargar la pestaña)
+    // Carga masiva del historial (Limpia la tabla primero)
     socket.on('ai-history-data', (history) => {
-        aiBotUI.updateHistoryTable(history);
+        const tableBody = document.getElementById('ai-history-table-body');
+        if (tableBody && Array.isArray(history)) {
+            tableBody.innerHTML = ''; // Limpieza para evitar duplicados
+            // Invertimos para que los más nuevos aparezcan arriba
+            history.forEach(order => appendOrderToTable(order));
+        }
     });
 
-    // Ejecución en tiempo real: Cuando la IA hace un trade mientras miras la pantalla
-    socket.on('ai-order-executed', (order) => {
-        showAiToast(order);
-        playNeuralSound(order.side);
-        // Pedimos historial actualizado para que la tabla crezca
-        socket.emit('get-ai-history'); 
+    // Decisiones en tiempo real del motor neuronal
+    socket.on('ai-decision-update', (data) => {
+        updateAIUI(data);
+    });
+
+    // Cuando se ejecuta una orden virtual (Trading simulado)
+    socket.on('ai-order-executed', (data) => {
+        updateAIBalance(data);
+        addTradeToLog(data);
+        appendOrderToTable(data);
+        playNeuralSound(data.side);
     });
 }
 
 /**
- * Configura el botón de encendido/apagado con limpieza de eventos
+ * 2. CONTROLES DE INTERFAZ (Enviar datos al servidor)
  */
 function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
-    // Clonamos el botón para eliminar cualquier eventListener previo (evita clics fantasma)
+    // Clonar para limpiar cualquier evento previo pegado al botón
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
     newBtn.addEventListener('click', () => {
-        // Determinamos acción basándonos en la memoria global
-        const action = currentBotState.isRunning ? 'stop' : 'start';
+        const isCurrentlyRunning = newBtn.textContent.includes("DETENER");
+        const action = isCurrentlyRunning ? 'stop' : 'start';
 
-        // Feedback visual inmediato (Optimismo)
         newBtn.disabled = true;
         newBtn.textContent = "PROCESANDO...";
-        newBtn.className = "w-full py-4 bg-gray-600 text-white rounded-2xl font-black text-xs animate-pulse cursor-wait";
 
-        // Emitimos la orden al backend
         socket.emit('toggle-ai', { action: action });
     });
 }
 
 /**
- * Notificación visual tipo Toast cuando ocurre un trade
+ * 3. FUNCIONES DE ACTUALIZACIÓN VISUAL (DOM)
  */
-function showAiToast(order) {
-    const toast = document.createElement('div');
-    const isBuy = order.side.toUpperCase() === 'BUY';
+function updateAIUI(data) {
+    const confidenceEl = document.getElementById('ai-confidence-value');
+    const predictionText = document.getElementById('ai-prediction-text');
+    const logContainer = document.getElementById('ai-log-container');
+
+    if (confidenceEl) {
+        const value = (data.confidence * 100).toFixed(1);
+        confidenceEl.textContent = `${value}%`;
+        // Colores según confianza
+        confidenceEl.className = `text-3xl font-bold font-mono ${
+            value > 80 ? 'text-emerald-500' : value < 40 ? 'text-red-500' : 'text-blue-500'
+        }`;
+    }
+
+    if (predictionText) predictionText.textContent = data.message || "Analizando mercado...";
+
+    if (logContainer && data.message) {
+        const log = document.createElement('div');
+        log.className = 'text-gray-400 border-l border-blue-900 pl-2 mb-1 text-[10px] animate-in fade-in duration-500';
+        log.innerHTML = `<span class="text-blue-700">[${new Date().toLocaleTimeString()}]</span> ${data.message}`;
+        logContainer.prepend(log);
+        if (logContainer.childNodes.length > 50) logContainer.lastChild.remove();
+    }
+}
+
+function updateAIBalance(data) {
+    const balanceEl = document.getElementById('ai-virtual-balance');
+    if (balanceEl && data.currentVirtualBalance !== undefined) {
+        balanceEl.textContent = `$${data.currentVirtualBalance.toLocaleString('en-US', {minimumFractionDigits: 2})} USDT`;
+    }
+}
+
+function addTradeToLog(data) {
+    const logContainer = document.getElementById('ai-log-container');
+    if (logContainer) {
+        const tradeLog = document.createElement('div');
+        const color = data.side === 'BUY' ? 'text-emerald-400' : 'text-orange-400';
+        tradeLog.className = `${color} font-bold border-l-2 border-white pl-2 my-1 animate-pulse`;
+        tradeLog.innerHTML = `[SISTEMA] OPERACIÓN ${data.side} @ ${data.price} | PNL: ${data.pnlLastTrade || 0}`;
+        logContainer.prepend(tradeLog);
+    }
+}
+
+function setBtnUI(btn, isRunning) {
+    if (isRunning) {
+        btn.textContent = "DETENER NÚCLEO IA";
+        btn.className = "w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold shadow-lg shadow-red-900/40 transition-all cursor-pointer";
+    } else {
+        btn.textContent = "ACTIVAR NÚCLEO IA";
+        btn.className = "w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg shadow-blue-900/40 transition-all cursor-pointer";
+    }
+}
+
+function appendOrderToTable(order) {
+    const tableBody = document.getElementById('ai-history-table-body');
+    if (!tableBody) return;
     
-    toast.className = `fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border ${
-        isBuy ? 'bg-emerald-900/90 border-emerald-400' : 'bg-red-900/90 border-red-400'
-    } text-white animate-bounceIn`;
+    // Si la tabla tiene el texto de "Esperando...", lo limpiamos
+    if (tableBody.innerText.includes("Esperando")) tableBody.innerHTML = '';
+
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-blue-500/5 transition-colors border-b border-gray-800/30';
     
-    toast.innerHTML = `
-        <div class="flex items-center gap-3">
-            <div class="p-2 bg-white/10 rounded-full">🤖</div>
-            <div>
-                <p class="text-[10px] font-bold uppercase tracking-tighter">IA Ejecución Virtual</p>
-                <p class="text-xs font-black">${order.side} BTC @ $${parseFloat(order.price).toLocaleString()}</p>
-            </div>
-        </div>
+    const time = new Date(order.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const sideClass = order.side === 'BUY' ? 'text-emerald-400' : 'text-orange-400';
+    
+    row.innerHTML = `
+        <td class="px-4 py-3 text-gray-500">${time}</td>
+        <td class="px-4 py-3 font-bold ${sideClass}">${order.side}</td>
+        <td class="px-4 py-3 text-right text-gray-300">$${parseFloat(order.price).toLocaleString()}</td>
+        <td class="px-4 py-3 text-right text-gray-400">${parseFloat(order.amount).toFixed(2)}</td>
+        <td class="px-4 py-3 text-center">
+            <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20 text-[9px]">
+                ${order.confidenceScore || 0}%
+            </span>
+        </td>
     `;
-    
-    document.body.appendChild(toast);
-    setTimeout(() => {
-        toast.classList.add('animate-fadeOut');
-        setTimeout(() => toast.remove(), 500);
-    }, 4000);
+    tableBody.prepend(row);
 }
 
 /**
- * Sonido sutil para confirmar ejecución de la IA
+ * Sonido sintetizado para operaciones de IA
  */
-function playNeuralSound(side) {
+function playNeuralSound(type) {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
-        
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
-        
-        oscillator.type = 'sine';
-        // Agudo para compra, más grave para venta
-        oscillator.frequency.setValueAtTime(side.toUpperCase() === 'BUY' ? 880 : 440, audioCtx.currentTime);
-        
+        oscillator.type = type === 'BUY' ? 'sine' : 'square';
+        oscillator.frequency.setValueAtTime(type === 'BUY' ? 880 : 440, audioCtx.currentTime);
         gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
         oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.15);
-    } catch (e) {
-        // El navegador bloquea audio sin interacción previa, se ignora silenciosamente
-    }
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    } catch (e) { }
 }
