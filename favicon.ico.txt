@@ -1,0 +1,22 @@
+favicon.ico:1 GET https://bsb-lime.vercel.app/favicon.ico 404 (Not Found)
+Understanding this error:
+
+This is a very common and usually harmless error. It simply means that your web browser is trying to request a favicon.ico file (the small icon that appears in the browser tab next to your website's title) from the root of your Vercel deployment (https://bsb-lime.vercel.app/).
+
+The server (Vercel, in this case) is responding with a 404 Not Found status because it cannot find that file at that specific location.
+
+Why it's usually harmless:
+
+Missing file: You likely haven't placed a favicon.ico file directly in the root directory of your Vercel project, or it's named something else, or it's located in a different sub-directory.
+Browser behavior: Browsers automatically look for this file, and if they don't find it, they just display a default blank icon or the browser's default icon. It doesn't affect your application's functionality.
+How to fix (optional):
+
+Create a favicon.ico: Design a small icon (e.g., 16x16, 32x32 pixels) and save it as favicon.ico.
+Place it in your frontend's public or root directory: For a Vercel project, this would typically be in the public folder or the root of your frontend project if you're not using a framework like React or Vue that has a specific public folder.
+Reference it in your index.html: Add a line like this within your <head> section:
+HTML
+
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+If you place it in a subfolder (e.g., /assets/icons/favicon.ico), adjust the href accordingly.
+Conclusion: This error is not related to your bot's functionality or your backend. You can ignore it for now if you wish, or implement a favicon if you want a more polished look for your website.
+

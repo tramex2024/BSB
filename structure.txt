@@ -1,119 +1,34 @@
-BSB/			    # Bitmart Spot Bots
-├── README.md
-├── package.json
-├── package-lock.json
-├── tailwind.config.js
-├── postcss.config.js
-├── .git/					# Git directory files
+BSB/
 ├── public/                # Frontend files (index.html, CSS, JS, images) - Deployed on Vercel
 │   ├── index.html
-│   ├── autobot.html
-│   ├── aibot.html
-│   ├── dashboard.html
 │   ├── css/
 │   │   └── style.css
-│   ├── src/
-│   │   └── input.css
-│   ├── images/
-│   │   └── bsb-logo.png
 │   ├── js/
-│        ├── main.js
-│        ├── modules/
-│       	  └── login.js
-│        	  └── logout.js
-│       	  └── auth.js
-│        	  └── orders.js
-│       	  └── navigation.js
-│       	  └── autobot.js
-│       	  └── aibot.js
-│       	  └── dashboard.js
-│       	  └── network.js
-│       	  └── balance.js
-│       	  └── api.js
-│       	  └── apiService.js
-│       	  └── uiManager.js
-│       	  └── chart.js
-│       	  └── appEvents.js
-│
+│   │   └── main.js
+│   └── images/
+│       └── bsb-logo.png
 ├── server/                # Backend files - Deployed on Render
-     ├── server.js
-     ├── autobotLogic.js
-     ├── autobotCalculations.js
-     ├── calculateShortTargets.js 
-     ├── autobotShortCalculations.js     
-     ├── models/
-     │   └── Order.js
-     │   └── Autobot.js
-     │   └── AutobotMock.js
-     │   └── User.js
-     │   └── BotState.js
-     │   └── TradeCycle.js
-     │   └── MarketSignal.js
-     ├── middleware/
-     │   └── bitmartAuthMiddleware.js
-     │   └── authMiddleware.js
-     ├── services/
-     │   └── orderPersistenceService.js
-     │   └── cycleLogService.js
-     │   └── bitmartService.js
-     │   └── bitmartWs.js
-     │   └── botStats.js          
-     ├── routes/
-     │   └── authRoutes.js
-     │   └── userRoutes.js 
-     │   └── ordersRoutes.js
-     │   └── autobotRoutes.js
-     │   └── configRoutes.js
-     │   └── balanceRoutes.js
-     │   └── analyticsRoutes.js
-     ├── controllers/
-     │   └── authController.js
-     │   └── userController.js
-     │   └── orderController.js
-     │   └── balanceController.js
-     │   └── bitmartController.js
-     │   └── analyticsController.js
-     │   └── configController.js
-     ├── utils/
-     │   └── encryption.js
-     │   └── cryptoUtils.js
-     │   └── helpers.js
-     │   └── email.js
-     ├── seeders/
-     │   └── seed.js
-     ├── src/
-          ├── bitmart_indicator_analyzer.js
-          ├── bitmart_entry_point.json          
-          ├── logger.js
-               ├── ai/
-               ├── au/
-                    ├── longStrategy.js
-                    ├── shortStrategy.js
- 	            ├── managers/
- 	            │    └── longDataManager.js
- 	            │    └── longOrderManager.js          
-	       	    │    └── shortDataManager.js
-	            │    └── shortOrderManager.js
-	            ├── utils/
-	            │    └── coverageLogic.js
- 	            │    └── coverageLogicShort.js
-	            │    └── tradeConstants.js
-	            │    └── cleanState.js
-	            │    └── botUtilities.js
-	            ├── states/
-		         ├── long/
-		         │   └── LStopped.js
-		         │   └── LSelling.js
-		         │   └── LRunning.js
-		         │   └── LNoCoverage.js
-		         │   └── LBuying.js
-        	         │   └── LongBuyConsolidator.js
-     	                 │   └── LongSellConsolidator.js
-		         ├── short/	
-	               	    └── SStopped.js
-			    └── SSelling.js
-			    └── SRunning.js
-			    └── SNoCoverage.js
-			    └── SBuying.js
-		            └── ShortBuyConsolidator.js
- 	      	            └── ShortSellConsolidator.js
+│   ├── server.js
+│   ├── autobotLogic.js
+│   ├── bitmart_indicator_analyzer.js
+│   ├── models/
+│   │   └── User.js
+│   │   └── BotState.js
+│   ├── middleware/
+│   │   └── bitmartAuthMiddleware.js
+│   │   └── authMiddleware.js
+│   ├── services/
+│   │   └── bitmartService.js
+│   ├── routes/
+│   │   └── authRoutes.js
+│   │   └── userRoutes.js 
+│   ├── controllers/
+│   │   └── authController.js
+│   │   └── userController.js
+│   ├── utils/
+│   │   └── encryption.js
+│   ├── seeders/
+│   │   └── seed.js
+│   ├── .env                   # Environment variables (MongoDB URI, etc.)
+│   ├── package.json
+│   └── README.md

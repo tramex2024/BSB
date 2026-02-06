@@ -1,97 +1,103 @@
-// src/server/controllers/authController.js
-
-// src/server/controllers/authController.js
+// src/server/controllers/authController.js (o la ruta donde lo tengas)
 
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const Autobot = require('../models/Autobot');
-const { sendTokenEmail } = require('../utils/email'); // Importamos la utilidad simplificada
+const nodemailer = require('nodemailer');
+const randToken = require('rand-token'); // Considera usar 'crypto' para mayor seguridad en el token
 
-/**
- * Solicita un token de acceso y lo envía por correo
- */
+// Nodemailer transporter setup (replace with your email service details)
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // e.g., 'gmail', 'SendGrid'
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS // ¡Asegúrate de que esta sea la contraseña de aplicación de Google!
+    }
+});
+
 exports.requestToken = async (req, res) => {
     const { email } = req.body;
+
     try {
-        // 1. Generar token de 6 dígitos y expiración (10 min)
-        const token = Math.floor(100000 + Math.random() * 900000).toString();
-        const tokenExpires = Date.now() + 10 * 60 * 1000;
+        let user = await User.findOne({ email });
+        // Generar un token de 6 dígitos numérico
+        // const token = randToken.generate(6, '0123456789'); // This generates random numbers
+        // Para asegurar que sea un string de 6 dígitos numéricos:
+        const token = Math.floor(100000 + Math.random() * 900000).toString(); // Genera un número de 6 dígitos como string
+        const tokenExpires = Date.now() + 10 * 60 * 1000; // Token valid for 10 minutes
 
-        // 2. Guardar o actualizar el usuario en MongoDB
-        await User.findOneAndUpdate(
-            { email },
-            { token, tokenExpires },
-            { upsert: true, new: true }
-        );
+        if (!user) {
+            // New user, create an entry
+            user = new User({ email, token, tokenExpires });
+            await user.save();
+        } else {
+            // Existing user, update token
+            user.token = token;
+            user.tokenExpires = tokenExpires;
+            await user.save();
+        }
 
-        console.log(`--- 🏁 Iniciando flujo para: ${email} ---`);
-        console.log("1. Token guardado en DB.");
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'BSB - Your Login Token',
+            html: `<p>Your login token for BSB is: <strong>${token}</strong>. It is valid for 10 minutes.</p>`
+        };
 
-        // 3. EJECUCIÓN DE LA PRUEBA (Paso 2 de tu plan)
-        // El await hace que el frontend se quede en "Processing" hasta que esto termine
-        console.log("2. Llamando a utils/email.js (Configuración directa)...");
-        await sendTokenEmail(email, token);
-        
-        console.log("3. ✅ Envío exitoso. Notificando al frontend.");
+        await transporter.sendMail(mailOptions);
 
-        // 4. Si llegamos aquí, todo salió bien
-        return res.status(200).json({ 
-            success: true, 
-            message: 'Token sent!' 
-        });
+        res.status(200).json({ message: 'A token has been sent to your email.' });
 
     } catch (error) {
-        // Si el envío falla, el error se captura aquí
-        console.error('❌ Error en el flujo de solicitud:', error.message);
-        
-        return res.status(500).json({ 
-            error: 'Error de envío detectado',
-            details: error.message 
-        });
+        console.error('Error requesting token:', error);
+        res.status(500).json({ message: 'Server error. Please try again later.' });
     }
 };
 
-/**
- * Verifica el token y genera la sesión (JWT)
- */
 exports.verifyToken = async (req, res) => {
     const { email, token } = req.body;
+
     try {
         const user = await User.findOne({ email });
 
-        // Validaciones de seguridad
-        if (!user || !user.token || user.token !== token || user.tokenExpires < Date.now()) {
+        if (!user) {
+            console.error(`[VERIFY TOKEN] User not found for email: ${email}`); // Añadir log
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        // --- AÑADIR CONSOLE.ERROR AQUÍ PARA DEPURAR EL 400 ---
+        if (!user.token || user.token !== token || user.tokenExpires < Date.now()) {
+            let reason = '';
+            if (!user.token) {
+                reason = 'No token stored for user.';
+            } else if (user.token !== token) {
+                reason = `Token mismatch. Provided: ${token}, Stored: ${user.token}`;
+            } else if (user.tokenExpires < Date.now()) {
+                reason = `Token expired. Expires: ${new Date(user.tokenExpires).toLocaleString()}, Current: ${new Date().toLocaleString()}`;
+            }
+            console.error(`[VERIFY TOKEN ERROR] Invalid or expired token for email: ${email}. Reason: ${reason}`);
+            // console.error(`[DEBUG] Stored Token: ${user.token}, Provided Token: ${token}, Stored Expires: ${new Date(user.tokenExpires).toISOString()}, Current Time: ${new Date().toISOString()}`);
+
             return res.status(400).json({ message: 'Invalid or expired token.' });
         }
 
-        // Si el usuario no tiene un bot asignado, se le crea uno
-        if (!user.autobotId) {
-            const newBot = new Autobot({ userId: user._id });
-            await newBot.save();
-            user.autobotId = newBot._id;
-        }
-
-        // Generar JWT para la sesión
-        const jwtToken = jwt.sign(
-            { id: user._id, email: user.email, autobotId: user.autobotId },
-            process.env.JWT_SECRET,
-            { expiresIn: '365d' }
-        );
-
-        // Guardar token de sesión y limpiar el token de un solo uso
-        user.jwtToken = jwtToken;
-        user.token = null;
-        user.tokenExpires = null;
+        // Token is valid, clear it for security
+        user.token = null; // Establecer a null es correcto si el campo no es `required: true`
+        user.tokenExpires = null; // Establecer a null es correcto
         await user.save();
 
-        return res.status(200).json({ 
-            message: 'Login successful!',
-            token: jwtToken,
-            user: { id: user._id, email: user.email, autobotId: user.autobotId }
-        });
+        // Generate JWT for persistent login
+        const jwtToken = jwt.sign(
+            { id: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' } // Token valid for 7 days
+        );
+
+        res.status(200).json({ message: 'Login successful!', token: jwtToken, user: { id: user._id, email: user.email } });
 
     } catch (error) {
-        console.error('❌ Error en verifyToken:', error);
-        res.status(500).json({ message: 'Server error during verification.' });
+        console.error('Error verifying token (catch block):', error); // Mensaje más específico
+        res.status(500).json({ message: 'Server error. Please try again later.' });
     }
 };
+
+// ... Si tienes otras funciones de BitMart API Keys en este archivo, déjalas ...

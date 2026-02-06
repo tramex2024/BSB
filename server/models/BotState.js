@@ -13,7 +13,7 @@ const BotStateSchema = new mongoose.Schema({
         type: Boolean,
         default: false // Indica si el bot está actualmente en ejecución
     },
-    state: { // Puede ser 'RUNNING', 'STOPPED', 'SELLING', etc.
+    state: { // Puede ser 'RUNNING', 'STOPPED', 'PAUSED', etc.
         type: String,
         default: 'STOPPED'
     },

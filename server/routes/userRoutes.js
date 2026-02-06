@@ -1,4 +1,4 @@
-// server/routes/userRoutes.js
+// backend/routes/userRoutes.js
 
 const express = require('express');
 const router = express.Router();
@@ -40,23 +40,16 @@ router.post('/bitmart/place-order', bitmartAuthMiddleware, async (req, res) => {
     }
 });
 
-// --- RUTA CLAVE CORREGIDA: Historial de Órdenes (para Opened, Filled, Cancelled, All en el frontend) ---
-// Ahora coincide con la ruta que el frontend está solicitando: /api/user/bitmart/history-orders
-router.get('/bitmart/history-orders', bitmartAuthMiddleware, userController.getHistoryOrders); // ✨ THIS IS THE KEY CHANGE ✨
+// --- RUTA CLAVE: Historial de Órdenes (para Opened, Filled, Cancelled, All en el frontend) ---
+// La ruta del frontend es '/api/user/history-orders', así que aquí solo necesitamos '/history-orders'
+// Esta ruta ahora usa 'userController.getHistoryOrders' que renombramos en el userController.
+router.get('/history-orders', bitmartAuthMiddleware, userController.getHistoryOrders);
 
 // Ruta para obtener la configuración y el estado del bot
 router.get('/bot-config-and-state', userController.getBotConfigAndState);
 
 // Ruta para alternar el estado del bot (start/stop)
-// Esta ruta también necesita el middleware de autenticación de BitMart para acceder a las credenciales
-// del usuario y pasárselas a autobotLogic.toggleBotState.
-router.post('/toggle-bot', bitmartAuthMiddleware, userController.toggleBotState);
+router.post('/toggle-bot', userController.toggleBotState);
 
-// --- NUEVA RUTA para obtener el precio de un ticker ---
-// Esta ruta no necesita 'bitmartAuthMiddleware' porque es una API pública.
-router.get('/bitmart/ticker', userController.getTickerPrice);
-
-// --- NUEVA RUTA para actualizar la configuración del Autobot ---
-router.post('/autobot/update-config', userController.updateBotConfig);
 
 module.exports = router;
