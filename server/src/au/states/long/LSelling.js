@@ -13,10 +13,8 @@ async function run(dependencies) {
         updateLStateData, updateBotState, updateGeneralBotState 
     } = dependencies;
     
-    // Acceso seguro a lStateData
-    const lStateData = botState.lStateData || {};
-    const lastOrder = lStateData.lastOrder; 
-    const { ac: acSelling, pm, pc } = lStateData;
+    const lastOrder = botState.lStateData.lastOrder; 
+    const { ac: acSelling, pm, pc } = botState.lStateData;
 
     // 1. BLOQUEO DE SEGURIDAD
     if (lastOrder) {
@@ -27,30 +25,24 @@ async function run(dependencies) {
     // 2. LÓGICA DE TRAILING STOP
     const trailingStopPercent = TRAILING_STOP_PERCENTAGE / 100;
 
-    // Aseguramos que pm (Precio Máximo) tenga un valor inicial válido
     const newPm = Math.max(pm || 0, currentPrice);
     const newPc = newPm * (1 - trailingStopPercent);
 
     if (newPm > (pm || 0)) {
         log(`📈 [L-TRAILING] Nuevo máximo: ${newPm.toFixed(2)}. Stop sube a: ${newPc.toFixed(2)}`, 'info');
 
-        // Actualizamos datos locales del estado Long
         await updateLStateData({ pm: newPm, pc: newPc });
-        // Actualizamos el precio de stop visual en el dashboard general (lsprice)
         await updateGeneralBotState({ lsprice: newPc });
     }
 
     // 3. CONDICIÓN DE DISPARO
-    // Verificamos que tengamos BTC acumulado (AC) suficiente
     if (acSelling >= MIN_SELL_AMOUNT_BTC) {
         
-        // El disparo ocurre si el precio cae por debajo del Stop (pc)
         if (currentPrice <= (pc || newPc)) {
-            log(`💰 [L-SELL] ¡Trailing Stop activado! Precio ${currentPrice.toFixed(2)} <= Stop ${(pc || newPc).toFixed(2)}. Liquidando ${acSelling.toFixed(8)} BTC.`, 'success');
+            log(`💰 [L-SELL] ¡Trailing Stop activado! Precio ${currentPrice.toFixed(2)} <= Stop ${pc?.toFixed(2)}. Liquidando ${acSelling.toFixed(8)} BTC.`, 'success');
             
             try {
-                // Pasamos 'config' (que ya tiene la nueva estructura config.long.trigger, etc.)
-                // aunque placeLongSellOrder use principalmente el símbolo y credenciales.
+                // 🟢 CORRECCIÓN: Llamada a la función correcta
                 await placeLongSellOrder(config, botState, acSelling, log, updateLStateData); 
             } catch (error) {
                 log(`❌ Error crítico al intentar vender: ${error.message}`, 'error');
@@ -61,13 +53,11 @@ async function run(dependencies) {
                 }
             }
         } else {
-            // Log de seguimiento mientras el precio sube o se mantiene
-            const currentStop = pc || newPc;
-            const distToStop = (((currentPrice / currentStop) - 1) * 100).toFixed(2);
-            log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Máximo: ${newPm.toFixed(2)} | Stop Venta: ${currentStop.toFixed(2)} (-${distToStop}%) | AC: ${acSelling.toFixed(8)}`, 'info');
+            const distToStop = (((currentPrice / (pc || newPc)) - 1) * 100).toFixed(2);
+            log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Máximo: ${newPm.toFixed(2)} | Stop Venta: ${(pc || newPc).toFixed(2)} (-${distToStop}%) | AC: ${acSelling.toFixed(8)}`, 'info');
         }
     } else {
-        log(`[L-SELLING] ⚠️ AC insuficiente para vender (${acSelling ? acSelling.toFixed(8) : 0} BTC).`, 'warning');
+        log(`[L-SELLING] ⚠️ AC insuficiente para vender (${acSelling.toFixed(8)} BTC).`, 'warning');
     }
 }
 

@@ -11,23 +11,20 @@ async function run(dependencies) {
     }
 
     // 1. VERIFICACIÓN DE SEGURIDAD (Posición huérfana)
-    // Acceso seguro a sStateData
-    const sStateData = botState.sStateData || {};
-    if (sStateData.ac > 0) {
+    if (botState.sStateData && botState.sStateData.ac > 0) {
         log("[S-RUNNING] 🛡️ Posición Short activa detectada. Corrigiendo estado...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
 
     try {
-        // Acceso seguro al símbolo desde la nueva estructura config
-        const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+        const SYMBOL = botState.config.symbol || 'BTC_USDT';
         const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
 
         if (!globalSignal) return;
 
-        // 2. LOG DE MONITOREO (Heartbeat)
-        // Se mantiene el log de debug para ver el RSI en tiempo real
+        // 🟢 EL LOG DEL OJITO (REINSTAURADO):
+        // Ahora es seguro porque ya validamos que hay currentPrice arriba.
         log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Tendencia: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
 
         // 3. VALIDACIÓN DE TIEMPO REAL
@@ -38,10 +35,8 @@ async function run(dependencies) {
         }
 
         // 4. LÓGICA DE ACTIVACIÓN
-        // Si el RSI indica sobrecompra o señal de venta (SELL), entramos en Short
         if (globalSignal.signal === 'SELL') { 
             log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
-            // En Short, el estado de operación activa suele ser SELLING
             await updateBotState('SELLING', 'short'); 
             return; 
         }

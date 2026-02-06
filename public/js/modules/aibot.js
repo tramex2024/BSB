@@ -1,42 +1,19 @@
-// public/js/modules/aibot.js
+// Archivo: public/js/modules/aibot.js
 
 import { socket } from '../main.js';
 
-/**
- * Inicialización principal de la vista del Bot de IA
- */
 export function initializeAibotView() {
     console.log("🚀 Sistema IA: Inicializando interfaz vía WebSockets...");
-    
-    // 1. LIMPIEZA CRÍTICA DE SOCKETS
-    // Evitamos que los mensajes de la IA y las operaciones virtuales se dupliquen en el log
-    if (socket) {
-        socket.off('ai-status-init');
-        socket.off('ai-status-update');
-        socket.off('ai-history-data');
-        socket.off('ai-decision-update');
-        socket.off('ai-order-executed');
-    }
-
-    // 2. ACTIVAR ESCUCHADORES Y CONTROLES
     setupAISocketListeners();
     setupAIControls();
-    
-    // 3. CARGA PROACTIVA
-    // Solicitamos al servidor los datos nada más entrar a la pestaña
-    if (socket && socket.connected) {
-        socket.emit('get-ai-status');
-        socket.emit('get-ai-history');
-    }
+    loadInitialAIHistory();
 }
 
 /**
  * 1. ESCUCHADORES DE EVENTOS (Recibir datos del servidor)
  */
 function setupAISocketListeners() {
-    if (!socket) return;
-
-    // Respuesta inicial de estado (Saldo virtual y si está corriendo)
+    // Respuesta inicial de estado (Saldo y si está corriendo)
     socket.on('ai-status-init', (state) => {
         console.log("📊 Estado IA recibido:", state);
         const btn = document.getElementById('btn-start-ai');
@@ -48,34 +25,33 @@ function setupAISocketListeners() {
         }
     });
 
-    // Actualización de estado tras pulsar el botón
+    // Actualización de estado (Cuando alguien pulsa el botón)
     socket.on('ai-status-update', (data) => {
         const btn = document.getElementById('btn-start-ai');
         if (btn) {
             setBtnUI(btn, data.isRunning);
-            btn.disabled = false; // Reactivamos el botón tras recibir respuesta
+            btn.disabled = false; // Reactivar tras el procesamiento
         }
         if (data.virtualBalance !== undefined) {
             updateAIBalance({ currentVirtualBalance: data.virtualBalance });
         }
     });
 
-    // Carga masiva del historial (Limpia la tabla primero)
+    // Datos del historial
     socket.on('ai-history-data', (history) => {
         const tableBody = document.getElementById('ai-history-table-body');
         if (tableBody && Array.isArray(history)) {
-            tableBody.innerHTML = ''; // Limpieza para evitar duplicados
-            // Invertimos para que los más nuevos aparezcan arriba
+            tableBody.innerHTML = '';
             history.forEach(order => appendOrderToTable(order));
         }
     });
 
-    // Decisiones en tiempo real del motor neuronal
+    // Decisiones en tiempo real del motor
     socket.on('ai-decision-update', (data) => {
         updateAIUI(data);
     });
 
-    // Cuando se ejecuta una orden virtual (Trading simulado)
+    // Cuando se ejecuta una orden virtual
     socket.on('ai-order-executed', (data) => {
         updateAIBalance(data);
         addTradeToLog(data);
@@ -91,19 +67,24 @@ function setupAIControls() {
     const btn = document.getElementById('btn-start-ai');
     if (!btn) return;
 
-    // Clonar para limpiar cualquier evento previo pegado al botón
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
+    // Pedir estado inicial al conectar
+    socket.emit('get-ai-status');
 
-    newBtn.addEventListener('click', () => {
-        const isCurrentlyRunning = newBtn.textContent.includes("DETENER");
+    btn.addEventListener('click', () => {
+        const isCurrentlyRunning = btn.textContent.includes("DETENER");
         const action = isCurrentlyRunning ? 'stop' : 'start';
 
-        newBtn.disabled = true;
-        newBtn.textContent = "PROCESANDO...";
+        btn.disabled = true;
+        btn.textContent = "PROCESANDO...";
 
+        // Enviar orden de encendido/apagado vía Socket
         socket.emit('toggle-ai', { action: action });
     });
+}
+
+function loadInitialAIHistory() {
+    // Pedir historial vía Socket
+    socket.emit('get-ai-history');
 }
 
 /**
@@ -117,17 +98,16 @@ function updateAIUI(data) {
     if (confidenceEl) {
         const value = (data.confidence * 100).toFixed(1);
         confidenceEl.textContent = `${value}%`;
-        // Colores según confianza
-        confidenceEl.className = `text-3xl font-bold font-mono ${
-            value > 80 ? 'text-emerald-500' : value < 40 ? 'text-red-500' : 'text-blue-500'
-        }`;
+        if (value > 80) confidenceEl.className = 'text-3xl font-bold text-emerald-500 font-mono';
+        else if (value < 40) confidenceEl.className = 'text-3xl font-bold text-red-500 font-mono';
+        else confidenceEl.className = 'text-3xl font-bold text-blue-500 font-mono';
     }
 
     if (predictionText) predictionText.textContent = data.message || "Analizando mercado...";
 
     if (logContainer && data.message) {
         const log = document.createElement('div');
-        log.className = 'text-gray-400 border-l border-blue-900 pl-2 mb-1 text-[10px] animate-in fade-in duration-500';
+        log.className = 'text-gray-400 border-l border-blue-900 pl-2 mb-1 text-[10px]';
         log.innerHTML = `<span class="text-blue-700">[${new Date().toLocaleTimeString()}]</span> ${data.message}`;
         logContainer.prepend(log);
         if (logContainer.childNodes.length > 50) logContainer.lastChild.remove();
@@ -165,13 +145,10 @@ function setBtnUI(btn, isRunning) {
 function appendOrderToTable(order) {
     const tableBody = document.getElementById('ai-history-table-body');
     if (!tableBody) return;
-    
-    // Si la tabla tiene el texto de "Esperando...", lo limpiamos
     if (tableBody.innerText.includes("Esperando")) tableBody.innerHTML = '';
 
     const row = document.createElement('tr');
     row.className = 'hover:bg-blue-500/5 transition-colors border-b border-gray-800/30';
-    
     const time = new Date(order.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const sideClass = order.side === 'BUY' ? 'text-emerald-400' : 'text-orange-400';
     
@@ -189,9 +166,6 @@ function appendOrderToTable(order) {
     tableBody.prepend(row);
 }
 
-/**
- * Sonido sintetizado para operaciones de IA
- */
 function playNeuralSound(type) {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -201,7 +175,7 @@ function playNeuralSound(type) {
         gainNode.connect(audioCtx.destination);
         oscillator.type = type === 'BUY' ? 'sine' : 'square';
         oscillator.frequency.setValueAtTime(type === 'BUY' ? 880 : 440, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.01, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.02, audioCtx.currentTime);
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.1);
     } catch (e) { }

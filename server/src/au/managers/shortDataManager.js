@@ -10,7 +10,6 @@ const BUY_FEE_PERCENT = 0.001;
 
 /**
  * Maneja el éxito de una VENTA (Apertura o DCA).
- * Actualizada con lógica exponencial dinámica y nueva estructura de DB.
  */
 async function handleSuccessfulShortSell(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState, updateSStateData } = dependencies;
@@ -20,16 +19,16 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const baseExecutedValue = executedQty * executedPrice;
 
     if (executedQty <= 0 || executedPrice <= 0) {
-        log('[S-DATA] ⚠️ Ejecución Short inválida.', 'error');
+        log('[S-DATA] ⚠️ Ejecución inválida.', 'error');
         if (updateSStateData) await updateSStateData({ 'lastOrder': null });
         return;
     }
 
-    // --- 1. SANEAMIENTO DE BALANCE ---
+    // --- SANEAMIENTO DE BALANCE ---
     const currentSBalance = parseFloat(botState.sbalance || 0);
     const finalizedSBalance = parseFloat((currentSBalance - baseExecutedValue).toFixed(8));
 
-    const currentSData = botState.sStateData || {};
+    const currentSData = botState.sStateData;
     const isFirstOrder = (currentSData.orderCountInCycle || 0) === 0;
     
     const currentTotalQty = isFirstOrder ? 0 : parseFloat(currentSData.ac || 0);
@@ -40,30 +39,22 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const newPPC = newAI / newTotalQty;
     const newOrderCount = (currentSData.orderCountInCycle || 0) + 1;
 
-    // --- 2. CÁLCULO DE TARGETS (Ajustado a config.short) ---
-    // ✅ CORRECCIÓN: Usamos 'trigger' de la nueva DB
-    const profitTrigger = parseNumber(botState.config.short?.trigger || 0) / 100;
-    const newSTPrice = newPPC * (1 - profitTrigger);
+    // Target de recompra (precio menor al promedio de venta)
+    const profitPercent = parseNumber(botState.config.short.profit_percent) / 100;
+    const newSTPrice = newPPC * (1 - profitPercent);
 
-    const { price_var, size_var, purchaseUsdt } = botState.config.short || {};
-    
-    // El precio de la próxima cobertura (DCA)
+    const { price_var, size_var, purchaseUsdt } = botState.config.short;
     const newNextPrice = executedPrice * (1 + (parseNumber(price_var) / 100));
-
-    // LÓGICA EXPONENCIAL: Calcula el monto de la siguiente orden
-    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount, size_var);
+    const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount);
     
-    // --- 3. CÁLCULO DE COBERTURA RESTANTE (Resistencia de la billetera) ---
     const { coveragePrice, numberOfOrders } = calculateShortCoverage(
         finalizedSBalance, 
-        executedPrice, 
+        newPPC, 
         purchaseUsdt, 
-        parseNumber(price_var) / 100, 
-        parseNumber(size_var),
-        newOrderCount
+        parseNumber(price_var)/100, 
+        parseNumber(size_var)/100
     );
 
-    // --- 4. PERSISTENCIA Y ACTUALIZACIÓN ---
     await saveExecutedOrder({ ...orderDetails, side: 'sell' }, SSTATE);
 
     await updateGeneralBotState({
@@ -85,58 +76,46 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         }
     });
     
-    log(`✅ [S-DATA] #${newOrderCount} Short. Nuevo Bal: ${finalizedSBalance.toFixed(2)}. TP: ${newSTPrice.toFixed(2)}`, 'success');
+    log(`✅ [S-DATA] Orden #${newOrderCount} (Venta). Nuevo Bal: ${finalizedSBalance.toFixed(2)}. Target TP: ${newSTPrice.toFixed(2)}`, 'success');
 }
 
 /**
  * Maneja el éxito de una COMPRA (Take Profit).
  */
 async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies) {
-    const { 
-        config, log, updateBotState, updateSStateData, 
-        updateGeneralBotState, logSuccessfulCycle 
-    } = dependencies;
+    const { config, log, updateBotState, updateSStateData, updateGeneralBotState } = dependencies;
     
     try {
-        const currentSData = botStateObj.sStateData || {};
+        const currentSData = botStateObj.sStateData;
         const buyPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         const filledSize = parseFloat(orderDetails.filledSize || 0); 
         
+        // AI es el capital que entró por las ventas previas
         const totalUsdtReceivedFromSales = parseFloat(currentSData.ai || 0); 
+
+        // Costo real de cerrar la deuda en BitMart
         const totalSpentToCover = (filledSize * buyPrice) * (1 + BUY_FEE_PERCENT);
         const profitNeto = totalUsdtReceivedFromSales - totalSpentToCover;
 
-        // Recuperamos el balance + el profit generado
+        // RECUPERACIÓN DE BALANCE:
+        // El sbalance ya fue restado en cada venta. Al cerrar, devolvemos el capital 
+        // inicial más el profit generado.
         const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
 
         await saveExecutedOrder({ ...orderDetails, side: 'buy' }, SSTATE);
 
-        // --- REGISTRO DE CICLO ---
-        if (logSuccessfulCycle && currentSData.cycleStartTime) {
-            try {
-                await logSuccessfulCycle({
-                    autobotId: botStateObj._id,
-                    symbol: botStateObj.config?.symbol || 'BTC_USDT',
-                    strategy: 'Short',
-                    cycleIndex: (botStateObj.scycle || 0) + 1,
-                    startTime: currentSData.cycleStartTime,
-                    endTime: new Date(),
-                    averagePPC: parseFloat(currentSData.ppc || 0),
-                    finalSellPrice: buyPrice,
-                    orderCount: parseInt(currentSData.orderCountInCycle || 0),
-                    initialInvestment: totalUsdtReceivedFromSales,
-                    finalRecovery: totalSpentToCover,
-                    netProfit: profitNeto,
-                    profitPercentage: (profitNeto / totalUsdtReceivedFromSales) * 100
-                });
-            } catch (dbError) {
-                log(`⚠️ Error al guardar historial Short: ${dbError.message}`, 'error');
-            }
+        if (currentSData.cycleStartTime) {
+            await logSuccessfulCycle({
+                strategy: 'Short',
+                cycleIndex: (botStateObj.scycle || 0) + 1,
+                netProfit: profitNeto,
+                initialInvestment: totalUsdtReceivedFromSales,
+                finalRecovery: totalSpentToCover
+            });
         }
 
-        const shouldStopShort = config.short?.stopAtCycle === true;
+        const shouldStopShort = config.short.stopAtCycle === true;
 
-        // Limpiamos datos del ciclo y actualizamos totales
         await updateGeneralBotState({
             ...CLEAN_SHORT_ROOT,
             sbalance: finalizedSBalance,
@@ -147,9 +126,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
 
         await updateSStateData(CLEAN_STRATEGY_DATA);
 
-        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT.`, 'success');
-        
-        // Si stopAtCycle es true, el bot pasa a STOPPED, si no, vuelve a RUNNING para buscar otra señal
+        log(`💰 [S-DATA] Ciclo Short Cerrado. Profit: +${profitNeto.toFixed(2)} USDT. Nuevo Bal: ${finalizedSBalance.toFixed(2)}`, 'success');
         await updateBotState(shouldStopShort ? 'STOPPED' : 'RUNNING', SSTATE);
 
     } catch (error) {

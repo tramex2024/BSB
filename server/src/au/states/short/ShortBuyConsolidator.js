@@ -2,15 +2,16 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulShortBuy } = require('../../managers/shortDataManager');
-// 🟢 CORRECCIÓN: Importación esencial para que el historial de ciclos (tradecycles) funcione
+// 🟢 CORRECCIÓN: Importación esencial para que el historial de ciclos (tradecycles) no quede vacío
 const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
 
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
  * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy).
+ * Delega la lógica de reinicio exponencial o parada al ShortDataManager.
  */
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
-    const sStateData = botState.sStateData || {}; // Protección de acceso
+    const sStateData = botState.sStateData;
     const lastOrder = sStateData.lastOrder;
 
     // En Short, el ciclo se cierra con una compra (buy) para cubrir la venta previa
@@ -43,13 +44,12 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
                 updateBotState, 
                 updateSStateData, 
                 updateGeneralBotState, 
-                logSuccessfulCycle, 
-                // Pasamos el config con la nueva estructura config.short
+                logSuccessfulCycle, // 🟢 CORRECCIÓN: Inyectamos el servicio para guardar el profit en la DB
                 config: botState.config 
             };
             
             // Centralizamos la decisión: ¿Ir a SELLING (Exponencial) o a STOPPED?
-            // El Manager leerá config.short.stopAtCycle
+            // Esta lógica ya está blindada dentro del ShortDataManager que corregimos.
             await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
 
             return true;
@@ -62,8 +62,9 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
 
         // === CASO C: ORDEN FALLIDA O CANCELADA ===
         if (isCanceled && filledVolume === 0) {
-            log(`❌ [S-BUY-FAIL] Recompra cancelada sin ejecución. Liberando para reintento...`, 'error');
+            log(`❌ [S-BUY-FAIL] Recompra cancelada sin ejecución. Reintentando...`, 'error');
             await updateSStateData({ 'lastOrder': null });
+            // El bot volverá a intentar poner la compra de cierre en el próximo ciclo
             return true;
         }
 

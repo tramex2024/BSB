@@ -10,7 +10,7 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
  * Delega la lógica de parada o reinicio al LongDataManager.
  */
 async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
-    const lStateData = botState.lStateData || {}; // Protección de acceso
+    const lStateData = botState.lStateData;
     const lastOrder = lStateData.lastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
@@ -42,8 +42,8 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
                 updateBotState, 
                 updateLStateData, 
                 updateGeneralBotState, 
-                logSuccessfulCycle, // Inyectamos la función para asegurar el registro en tradecycles
-                config: botState.config // Contiene la nueva jerarquía config.long
+                logSuccessfulCycle, // 🟢 CORRECCIÓN: Inyectamos la función para asegurar el registro en tradecycles
+                config: botState.config 
             };
             
             // Centralizamos aquí la lógica de STOPPED o reinicio a BUYING.

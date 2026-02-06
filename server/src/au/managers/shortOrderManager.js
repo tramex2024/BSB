@@ -10,31 +10,27 @@ function convertUsdtToBtc(usdtAmount, currentPrice) {
     return Math.floor(btcAmount * 1000000) / 1000000;
 }
 
-/**
- * APERTURA DE SHORT: Vende BTC para abrir posición.
- */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, injectedPrice = 0) {
-    // ✅ CORRECCIÓN: Referencia a la nueva jerarquía config.short
-    const { purchaseUsdt } = config.short || {};
-    const SYMBOL = config.symbol || 'BTC_USDT';
-    const amountNominal = parseFloat(purchaseUsdt || 0);
+    const { purchaseUsdt } = config.short;
+    const SYMBOL = config.symbol;
+    const amountNominal = parseFloat(purchaseUsdt);
     
-    // Prioridad: Precio inyectado (WebSocket) > Precio DB
+    // Prioridad: Precio inyectado (WebSocket) > Precio DB > 0
     const currentPrice = injectedPrice || botState.price || 0; 
 
     if (currentPrice <= 0) {
-        log(`[S-FIRST] ⏳ Abortando: Precio de mercado no disponible.`, 'warning');
+        log(`[S-FIRST] ⏳ Abortando: Precio de mercado no disponible para cálculo.`, 'warning');
         return;
     }
 
     const btcSize = convertUsdtToBtc(amountNominal, currentPrice);
 
     if (btcSize <= 0) {
-        log(`[S-FIRST] ❌ Error: Tamaño BTC inválido (${btcSize}).`, 'error');
+        log(`[S-FIRST] ❌ Error: Tamaño BTC inválido (Calculado: ${btcSize} @ ${currentPrice}).`, 'error');
         return;
     }
 
-    log(`🚀 [S-FIRST] Abriendo Short: Vendiendo ${btcSize} BTC @ ${currentPrice}...`, 'info'); 
+    log(`🚀 [S-FIRST] Abriendo Short: Enviando venta de ${btcSize} BTC @ ${currentPrice}...`, 'info'); 
 
     try {
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcSize); 
@@ -42,7 +38,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
         if (orderResult && orderResult.order_id) {
             await updateGeneralBotState({
                 sStateData: {
-                    ...(botState.sStateData || {}),
+                    ...botState.sStateData,
                     lastOrder: {
                         order_id: orderResult.order_id,
                         side: 'sell',
@@ -59,20 +55,17 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     }
 }
 
-/**
- * DCA SHORT: Vende más BTC para promediar a la baja (subir el PPC).
- */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState, injectedPrice = 0) { 
-    const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+    const SYMBOL = botState.config.symbol;
     const currentPrice = injectedPrice || botState.price || 0;
     const btcSize = convertUsdtToBtc(usdtAmount, currentPrice);
 
     if (currentPrice <= 0 || btcSize <= 0) {
-        log(`[S-DCA] ❌ Error: Sin precio válido para promediar.`, 'error');
+        log(`[S-DCA] ❌ Error: No se puede promediar sin precio válido.`, 'error');
         return;
     }
 
-    log(`📈 [S-DCA] Cobertura Short: ${btcSize} BTC (~${usdtAmount.toFixed(2)} USDT)...`, 'warning');
+    log(`📈 [S-DCA] Enviando cobertura Short: ${btcSize} BTC (~${usdtAmount.toFixed(2)} USDT)...`, 'warning');
     
     try {
         const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcSize); 
@@ -80,7 +73,7 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
         if (order && order.order_id) {
             await updateGeneralBotState({
                 sStateData: {
-                    ...(botState.sStateData || {}),
+                    ...botState.sStateData,
                     lastOrder: {
                         order_id: order.order_id,
                         side: 'sell',
@@ -97,18 +90,15 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
     }
 }
 
-/**
- * RECOMPRA DE CIERRE (Take Profit): Compra BTC para saldar la deuda.
- */
-async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData, injectedPrice = 0, dependencies = {}) { 
-    const SYMBOL = config.symbol || 'BTC_USDT';
+// Las funciones placeShortBuyOrder y cancelActiveShortOrder se mantienen igual pero asegurando el uso de currentPrice
+async function placeShortBuyOrder(config, botState, btcAmount, log, updateSStateData, injectedPrice = 0) { 
+    const SYMBOL = config.symbol;
     const currentPrice = injectedPrice || botState.price || 0;
-    // En BitMart, para recomprar ('buy') una cantidad de BTC en market, a veces se usa el total en USDT
     const usdtNeeded = btcAmount * currentPrice;
     
     if (usdtNeeded <= 0) return;
 
-    log(`💰 [S-PROFIT] Recomprando ${btcAmount.toFixed(8)} BTC para cerrar ciclo...`, 'info');
+    log(`💰 [S-PROFIT] Recomprando deuda de ${btcAmount.toFixed(8)} BTC para cerrar...`, 'info');
 
     try {
         const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtNeeded); 
@@ -119,13 +109,7 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateSState
                     order_id: order.order_id,
                     size: btcAmount, 
                     side: 'buy',
-                    timestamp: new Date(),
-                    // Guardamos las dependencias para que el Consolidator cierre el ciclo
-                    dependencies: {
-                        logSuccessfulCycle: dependencies.logSuccessfulCycle,
-                        updateBotState: dependencies.updateBotState,
-                        updateGeneralBotState: dependencies.updateGeneralBotState
-                    }
+                    timestamp: new Date()
                 }
             });
             log(`✅ [S-PROFIT] Cierre enviado ID: ${order.order_id}.`, 'success');
@@ -136,10 +120,9 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateSState
 }
 
 async function cancelActiveShortOrder(botState, log, updateSStateData) {
-    const sStateData = botState.sStateData || {};
-    const lastOrder = sStateData.lastOrder;
+    const lastOrder = botState.sStateData.lastOrder;
     if (!lastOrder?.order_id) return;
-    const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+    const SYMBOL = botState.config.symbol;
     
     try {
         log(`🛑 [S-CANCEL] Cancelando orden ${lastOrder.order_id}...`, 'warning');

@@ -1,12 +1,10 @@
-/**
- * apiService.js - Comunicaciones REST
- */
+// public/js/modules/apiService.js
 import { displayMessage } from './uiManager.js';
-import { BACKEND_URL, logStatus } from '../main.js';
+import { BACKEND_URL } from '../main.js';
 
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
-    if (!token) return { success: false, message: "Sesión no encontrada." };
+    if (!token) return { success: false, message: "Session not found." };
 
     const defaultOptions = {
         headers: {
@@ -17,32 +15,36 @@ async function privateFetch(endpoint, options = {}) {
 
     try {
         const response = await fetch(`${BACKEND_URL}${endpoint}`, { ...defaultOptions, ...options });
-        const data = await response.json();
-        
-        // Si el token expiró (401), avisamos al usuario
-        if (response.status === 401) {
-            logStatus("⚠️ Sesión expirada. Por favor, relogea.", "error");
-            return { success: false, message: "Unauthorized" };
-        }
-        
-        return data;
+        return await response.json();
     } catch (error) {
-        console.error(`Error en ${endpoint}:`, error);
-        logStatus("❌ Error de red: El servidor no responde", "error");
+        console.error(`Error at ${endpoint}:`, error);
         return { success: false, message: "Connection error." };
     }
 }
 
-// ... (fetchCycleKpis y fetchEquityCurveData se mantienen igual)
+// --- NUEVAS FUNCIONES PARA DASHBOARD (Analíticas) ---
 
 /**
- * Captura el estado actual de los inputs con los IDs corregidos
+ * Obtiene los KPIs de los ciclos (Promedio de profit, ciclos totales, etc.)
  */
+export async function fetchCycleKpis() {
+    // Apunta a la ruta de analytics definida en tu server.js
+    const data = await privateFetch('/api/v1/analytics/stats'); 
+    return data.success ? data.data : null;
+}
+
+/**
+ * Obtiene los datos para el gráfico de la curva de capital
+ */
+export async function fetchEquityCurveData() {
+    const data = await privateFetch('/api/v1/analytics/equity-curve');
+    return data.success ? data.data : [];
+}
+
+// --- LÓGICA DE CONFIGURACIÓN ---
+
 export function getBotConfiguration() {
-    const getNum = (id) => {
-        const el = document.getElementById(id);
-        return el ? parseFloat(el.value) || 0 : 0;
-    };
+    const getNum = (id) => parseFloat(document.getElementById(id)?.value) || 0;
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
@@ -50,66 +52,50 @@ export function getBotConfiguration() {
         long: {
             amountUsdt: getNum('auamountl-usdt'),
             purchaseUsdt: getNum('aupurchasel-usdt'),
-            price_var: getNum('audecrementl'),
-            size_var: getNum('auincrementl'),
-            trigger: getNum('autriggerl'),
+            price_var: getNum('audecrement'),
+            size_var: getNum('auincrement'),
+            trigger: getNum('autrigger'),
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: true
         },
         short: {
-            amountUsdt: getNum('auamounts-usdt'),
-            purchaseUsdt: getNum('aupurchases-usdt'),
-            price_var: getNum('audecrements'),
-            size_var: getNum('auincrements'),
-            trigger: getNum('autriggers'),
+            amountUsdt: getNum('auamounts-usdt'), 
+            purchaseUsdt: getNum('aupurchases-usdt'), 
+            price_var: getNum('audecrement'),
+            size_var: getNum('auincrement'),
+            trigger: getNum('autrigger'),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: true
         }
     };
 }
 
-/**
- * Enciende/apaga el bot y bloquea el botón para evitar "Double-Click"
- */
-export async function toggleBotSideState(isRunning, side) {
-    const action = isRunning ? 'stop' : 'start';
-    const endpoint = `/api/autobot/${action}/${side}`;
-    
-    // Capturamos config actual para asegurar que el START lleve los últimos valores
+export async function sendConfigToBackend() {
     const config = getBotConfiguration();
+    await privateFetch('/api/autobot/update-config', {
+        method: 'POST',
+        body: JSON.stringify({ config })
+    });
+}
 
-    const btnId = side === 'long' ? 'austartl-btn' : 'austarts-btn';
-    const btn = document.getElementById(btnId);
-    
-    if (btn) {
-        btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed');
+export async function toggleBotState(isRunning) {
+    const endpoint = isRunning ? '/api/autobot/stop' : '/api/autobot/start';
+    const config = isRunning ? {} : getBotConfiguration();
+
+    const btn = document.getElementById('austart-btn');
+    if (btn) btn.disabled = true;
+
+    const data = await privateFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ config })
+    });
+
+    if (data.success) {
+        displayMessage(`Bot ${isRunning ? 'stopped' : 'started'} successfully`, 'success');
+    } else {
+        displayMessage(`Error: ${data.message}`, 'error');
     }
 
-    logStatus(`⏳ Solicitando ${action.toUpperCase()} para ${side.toUpperCase()}...`, "info");
-
-    try {
-        const data = await privateFetch(endpoint, {
-            method: 'POST',
-            body: JSON.stringify({ config }) // Enviamos siempre la config para sincronizar
-        });
-
-        if (data.success) {
-            const msg = `${side.toUpperCase()} ${isRunning ? 'detenido' : 'iniciado'}`;
-            displayMessage(msg, 'success');
-            logStatus(`✅ ${msg}`, "success");
-        } else {
-            displayMessage(`Error: ${data.message}`, 'error');
-            logStatus(`❌ Falló ${action}: ${data.message}`, "error");
-        }
-        
-        return data;
-    } catch (err) {
-        logStatus(`❌ Error crítico en ${action}`, "error");
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-    }
+    if (btn) btn.disabled = false;
+    return data;
 }

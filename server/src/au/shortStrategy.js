@@ -16,21 +16,26 @@ function setDependencies(deps) {
 async function runShortStrategy() {
     const { botState } = dependencies;
 
+    // Selecciona la función a ejecutar basándose en el estado sstate (Short State)
     switch (botState.sstate) {
         case 'RUNNING':
             await SRunning.run(dependencies);
             break;
         case 'SELLING': 
+            // 💡 En Short, SELLING es el equivalente a BUYING en Long: 
+            // Es donde abrimos la posición y hacemos DCA (Vender más caro).
             await SSelling.run(dependencies);
             break;
         case 'BUYING':
+            // 💡 En Short, BUYING es el equivalente a SELLING en Long:
+            // Es donde recompramos barato para cerrar el ciclo y tomar ganancias.
             await SBuying.run(dependencies);
             break;
         case 'NO_COVERAGE':
             await SNoCoverage.run(dependencies);
             break;
         case 'STOPPED':
-            await SStopped.run(dependencies); // RE-ACTIVADO
+            await SStopped.run(dependencies);
             break;
         default:
             console.error(`Estado Short desconocido: ${botState.sstate}`);
