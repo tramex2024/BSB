@@ -129,40 +129,11 @@ function calculateInitialState(config, currentPrice) {
     };
 }
 
-/**
- * Simulación de resistencia para SHORT (Hasta dónde aguanta el balance si el precio sube)
- * Basado en Lógica Exponencial 2^n
- */
-function calculateShortCoverage(balance, lastPrice, baseAmount, priceVarDec, currentOrderCount) {
-    let remainingBalance = parseNumber(balance);
-    let currentPriceLevel = parseNumber(lastPrice);
-    let orderCount = parseNumber(currentOrderCount);
-    let numberOfExtraOrders = 0;
-
-    while (true) {
-        // Usamos la misma lógica exponencial que el Long
-        let nextAmount = getExponentialAmount(baseAmount, orderCount);
-        if (remainingBalance < nextAmount || numberOfExtraOrders > 20) break;
-
-        remainingBalance -= nextAmount;
-        // En Short, el riesgo es que el precio SUBE
-        currentPriceLevel = currentPriceLevel * (1 + parseNumber(priceVarDec));
-        orderCount++;
-        numberOfExtraOrders++;
-    }
-
-    return { 
-        coveragePrice: currentPriceLevel, 
-        numberOfOrders: numberOfExtraOrders 
-    };
-}
-
 module.exports = {
     parseNumber,
     calculateLongTargets,
     calculateLongCoverage,
-    calculateShortTargets, // Asegúrate de que esta use getExponentialAmount
-    calculateShortCoverage, // <--- ESTA ES LA QUE FALTABA
+    calculateShortTargets,
     calculatePotentialProfit,
     calculateInitialState,
     getExponentialAmount
