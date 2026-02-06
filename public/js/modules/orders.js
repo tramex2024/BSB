@@ -2,10 +2,6 @@
 
 import { BACKEND_URL } from '../main.js';
 
-/**
- * Crea el HTML de una orden (Card)
- * Optimizada para legibilidad rápida y jerarquía de datos
- */
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
@@ -14,34 +10,28 @@ function createOrderHtml(order) {
         ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' 
         : 'text-red-400 border-red-500/20 bg-red-500/5';
     
-    const icon = isBuy ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
+    // Normalización de estados: El backend ahora envía 'filled', 'cancelled' o 'opened'
+    const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
+    const isFilled = rawState.includes('FILLED');
     
-    const state = (order.state || order.status || 'UNKNOWN').toUpperCase();
-    const isFilled = state.includes('FILLED');
-    const timestamp = order.createTime || order.create_time || Date.now();
-    
+    // Usamos orderTime que es el campo unificado que creamos en el Backend
+    const timestamp = order.orderTime || order.createTime || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
-        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' 
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
     });
 
-    const priceFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const qtyFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+    const price = parseFloat(order.price || 0).toFixed(2);
+    const quantity = parseFloat(order.size || 0).toFixed(4);
+    const fullOrderId = (order.orderId || '').toString();
 
-    const price = priceFormatter.format(parseFloat(order.price || order.filled_price || 0));
-    const quantity = qtyFormatter.format(parseFloat(order.filled_size || order.size || 0));
-
-    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(state);
-
-    // Ajuste aquí: Se eliminó el .slice(-6) para mostrar el ID completo
-    const fullOrderId = (order.orderId || order.order_id || '').toString();
+    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
-    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between hover:bg-gray-800/60 transition-all border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
+    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
         <div class="flex items-center gap-4 w-1/4">
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Side</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase">Side</span>
                 <div class="${sideTheme} py-0.5 px-2 rounded-md w-fit flex items-center gap-1">
-                    <i class="fas ${icon} text-[10px]"></i>
                     <span class="font-black text-xs uppercase">${side}</span>
                 </div>
             </div>
@@ -49,110 +39,57 @@ function createOrderHtml(order) {
 
         <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider text-center md:text-left">Price</span>
-                <span class="text-gray-100 font-mono font-semibold text-sm text-center md:text-left">$${price}</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase">Price</span>
+                <span class="text-gray-100 font-mono text-sm">$${price}</span>
             </div>
-            <div class="flex flex-col border-x border-gray-700/10 px-2">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider text-center">Amount</span>
-                <span class="text-gray-300 font-mono text-sm text-center">${quantity}</span>
+            <div class="flex flex-col">
+                <span class="text-[9px] text-gray-500 font-bold uppercase">Amount</span>
+                <span class="text-gray-300 font-mono text-sm">${quantity}</span>
             </div>
             <div class="flex flex-col items-center">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Status</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase">Status</span>
                 <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
-                    ${state}
+                    ${rawState}
                 </span>
             </div>
         </div>
 
         <div class="w-1/4 flex flex-col items-end gap-1">
-            <p class="text-[10px] text-gray-400 font-medium">${date}</p>
+            <p class="text-[10px] text-gray-400">${date}</p>
             ${isCancellable ? `
-                <button onclick="cancelOrder('${fullOrderId}')" 
-                        class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all border border-red-500/20">
+                <button onclick="window.cancelOrder('${fullOrderId}')" 
+                        class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
                     Cancel
                 </button>
-            ` : `
-                <p class="text-[9px] text-gray-600 font-mono">ID: ${fullOrderId}</p>
-            `}
+            ` : `<p class="text-[8px] text-gray-600 font-mono">ID: ${fullOrderId.slice(-6)}</p>`}
         </div>
-    </div>
-    `;
-}
-
-export function displayOrders(orders, orderListElement, filterType) {
-    if (!orderListElement) return;
-
-    let filteredOrders = orders;
-
-    if (filterType === 'filled') {
-        filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('filled'));
-    } else if (filterType === 'cancelled') {
-        filteredOrders = orders.filter(o => (o.state || o.status || '').toLowerCase().includes('cancel'));
-    } else if (filterType === 'opened') {
-        // Incluimos 'new' para que detecte las órdenes abiertas según el test de BitMart
-        const openStatuses = ['new', 'partially_filled', 'open', 'active', 'pending'];
-        filteredOrders = orders.filter(o => openStatuses.includes((o.state || o.status || '').toLowerCase()));
-    }
-
-    if (filteredOrders.length === 0) {
-        orderListElement.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-12 text-gray-600">
-                <i class="fas fa-folder-open text-2xl mb-2 opacity-20"></i>
-                <p class="text-[10px] uppercase tracking-widest font-bold">No orders found in ${filterType}</p>
-            </div>`;
-        return;
-    }
-
-    orderListElement.innerHTML = filteredOrders.map(order => createOrderHtml(order)).join('');
+    </div>`;
 }
 
 export async function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
 
-    orderListElement.innerHTML = `<div class="py-20 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
+    orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        // ✅ Ajustamos el endpoint: 
-        // Si el backend no tiene /history, usamos 'all' o 'filled' según tu API real.
-        // Basado en errores previos, intentemos con 'all' que es el estándar de tu lógica.
-        const endpoint = (status === 'all') ? 'all' : status; 
-        
-        const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
-        
-        // Construimos la URL
-        const url = new URL(`${BACKEND_URL}/api/orders/${endpoint}`);
-        url.searchParams.append('startTime', fifteenDaysAgo); 
-
-        const response = await fetch(url, {
+        // Llamada directa a nuestro controlador unificado
+        const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
 
-        // Si 'all' da error 400, el backend probablemente solo conoce 'filled' y 'opened'.
-        // En ese caso, para "All" pediremos 'filled' pero lo mostraremos en la pestaña All.
-        if (!response.ok) {
-            console.warn(`⚠️ Endpoint ${endpoint} no hallado, reintentando con 'filled' para pestaña All`);
-            return fetchOrdersFallback('filled', orderListElement, status);
+        if (!response.ok) throw new Error('Error en respuesta del servidor');
+
+        const orders = await response.json(); // El backend ya envía el array directo o []
+        
+        if (!orders || orders.length === 0) {
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No orders found</div>`;
+            return;
         }
 
-        const data = await response.json();
-        const orders = Array.isArray(data) ? data : (data.orders || []);
-        displayOrders(orders, orderListElement, status);
+        orderListElement.innerHTML = orders.map(order => createOrderHtml(order)).join('');
 
     } catch (error) {
-        console.error("Fetch error:", error);
-        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-xs font-bold uppercase">Error al cargar historial</div>`;
+        console.error("❌ Fetch error:", error);
+        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING HISTORY</div>`;
     }
-}
-
-// Función de respaldo para evitar el error 400 si el endpoint 'all' no existe en el server
-async function fetchOrdersFallback(fallbackEndpoint, orderListElement, originalStatus) {
-    const fifteenDaysAgo = Date.now() - (15 * 24 * 60 * 60 * 1000);
-    const url = `${BACKEND_URL}/api/orders/${fallbackEndpoint}?startTime=${fifteenDaysAgo}`;
-    
-    const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    });
-    const data = await response.json();
-    const orders = Array.isArray(data) ? data : (data.orders || []);
-    displayOrders(orders, orderListElement, originalStatus);
 }

@@ -1,6 +1,6 @@
 /**
  * BSB/server/server.js
- * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada
+ * SERVIDOR CENTRALIZADO (BSB 2026) - Versión Unificada Corregida
  */
 
 const express = require('express');
@@ -139,6 +139,7 @@ function setupMarketWS(io) {
 
     marketWs.on('close', () => {
         isMarketConnected = false; 
+        if (marketHeartbeat) clearInterval(marketHeartbeat); // Limpieza de heartbeat al cerrar
         setTimeout(() => setupMarketWS(io), 5000);
     });
 }
@@ -187,21 +188,23 @@ io.on('connection', async (socket) => {
         }
     };
 
-    // 2. NUEVA FUNCIÓN: Hidratación inicial de órdenes (La pieza perdida)
+    // 2. Hidratación inicial de órdenes unificada con el Frontend
     const hydrateOrders = async () => {
         try {
-            // Obtenemos órdenes abiertas directamente de BitMart para el frontend
+            // Órdenes abiertas actuales (Directo de BitMart)
             const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
             if (orders) {
                 socket.emit('open-orders-update', orders);
                 console.log(`📦 [SYNC] ${orders.length} órdenes abiertas enviadas a ${socket.id}`);
             }
 
-            // Enviamos el historial reciente desde la base de datos
-            const history = await Order.find({})
+            // Historial desde Base de Datos (Sincronizado con aiBotUI.js)
+            const history = await Order.find({ strategy: 'ai' })
                 .sort({ orderTime: -1 })
                 .limit(20);
-            socket.emit('ai-history-data', history);
+            
+            // Usamos 'ai-history-update' para que el frontend lo procese automáticamente
+            socket.emit('ai-history-update', history);
             
         } catch (err) {
             console.error("❌ Error hidratando órdenes:", err.message);
@@ -221,8 +224,9 @@ io.on('connection', async (socket) => {
         try {
             const trades = await Order.find({ strategy: 'ai' })
                 .sort({ orderTime: -1 })
-                .limit(10);
-            socket.emit('ai-history-data', trades);
+                .limit(20);
+            // Sincronizado con el nombre de evento que espera el Frontend
+            socket.emit('ai-history-update', trades);
         } catch (err) { 
             console.error("❌ Error historial IA:", err); 
         }

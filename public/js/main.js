@@ -114,6 +114,18 @@ export function initializeFullApp() {
         logStatus(data.message, data.type || 'info');
         if (aiBotUI?.addLog) aiBotUI.addLog(data.message, data.type);
     });
+    
+    socket.on('order-update', (data) => {
+        logStatus("Order Update Received", "success");
+    
+        // Si el usuario está en la pestaña de Autobot, refrescamos la lista automáticamente
+        const auOrderList = document.getElementById('au-order-list');
+        if (auOrderList) {
+           // 'currentTab' es la variable que exportas/manejas en autobot.js
+           // Podrías necesitar importarla o manejarla globalmente
+           fetchOrders('all', auOrderList); 
+        }
+    });
 
     // RECEPTOR DE PÁNICO (Sincronización Global)
     socket.on('panic-executed', (data) => {

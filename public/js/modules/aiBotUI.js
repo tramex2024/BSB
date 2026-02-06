@@ -75,11 +75,12 @@ const aiBotUI = {
             container.removeChild(container.lastChild);
         }
     },
-
+   
     updateHistoryTable: (trades) => {
         const tbody = document.getElementById('ai-history-table-body');
         if (!tbody) return;
 
+        // Aseguramos que trades sea un array
         const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
         
         if (tradesList.length === 0) {
@@ -88,21 +89,31 @@ const aiBotUI = {
         }
 
         tbody.innerHTML = tradesList.map(trade => {
-            const isBuy = trade.side.toUpperCase() === 'BUY';
+            const isBuy = (trade.side || '').toUpperCase() === 'BUY';
+            // BitMart v4 usa 'confidence' en los canales de estrategia
             const score = trade.confidenceScore || (trade.confidence * 100) || 0;
+            
+            // Usamos trade.orderTime que normalizamos en el service
+            const time = trade.orderTime 
+                ? new Date(Number(trade.orderTime)).toLocaleTimeString() 
+                : new Date(trade.timestamp).toLocaleTimeString();
 
             return `
                 <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group">
                     <td class="px-6 py-3 text-gray-500 text-[9px] group-hover:text-gray-300">
-                        ${new Date(trade.timestamp).toLocaleTimeString()}
+                        ${time}
                     </td>
                     <td class="px-6 py-3">
                         <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} font-black text-[8px] border ${isBuy ? 'border-emerald-500/20' : 'border-red-500/20'}">
-                            ${trade.side}
+                            ${trade.side ? trade.side.toUpperCase() : 'N/A'}
                         </span>
                     </td>
-                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">$${parseFloat(trade.price).toLocaleString()}</td>
-                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">$${parseFloat(trade.amount).toFixed(2)}</td>
+                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">
+                        $${parseFloat(trade.price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                    </td>
+                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">
+                        $${parseFloat(trade.amount || trade.size || 0).toFixed(2)}
+                    </td>
                     <td class="px-6 py-3 text-center">
                         <span class="${score >= 85 ? 'text-emerald-400' : 'text-blue-400'} font-bold">${Math.round(score)}%</span>
                     </td>
