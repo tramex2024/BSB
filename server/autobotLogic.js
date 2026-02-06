@@ -2,16 +2,16 @@
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
+const { runLongStrategy, setDependencies: setLongDeps } = require('./src/au/longStrategy');
+const { runShortStrategy, setDependencies: setShortDeps } = require('./src/au/shortStrategy');
 
 // 🛑 NUEVAS IMPORTACIONES: Cálculo de Cobertura
 const { calculateLongCoverage, parseNumber } = require('./autobotCalculations'); // Asumiendo que está un nivel arriba
 
 // 🛑 AÑADIDO: Consolidadores para órdenes que bloquean el ciclo
-const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
-const { monitorAndConsolidateSell } = require('./src/states/long/LongSellConsolidator'); 
-const { monitorAndConsolidateShort: monitorShortSell } = require('./src/states/short/ShortSellConsolidator');
+const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
+const { monitorAndConsolidateSell } = require('./src/au/states/long/LongSellConsolidator'); 
+const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
 
 let io;
 

@@ -90,31 +90,33 @@ BSB/			    # Bitmart Spot Bots
           ├── longStrategy.js
           ├── shortStrategy.js
           ├── logger.js
-          ├── managers/
-          │    └── longDataManager.js
-          │    └── longOrderManager.js          
-	  │    └── shortDataManager.js
-          │    └── shortOrderManager.js
-          ├── utils/
-          │    └── coverageLogic.js
-          │    └── coverageLogicShort.js
-          │    └── tradeConstants.js
-          │    └── cleanState.js
-          │    └── botUtilities.js
-          ├── states/
-	       ├── long/
-	       │   └── LStopped.js
-	       │   └── LSelling.js
-	       │   └── LRunning.js
-	       │   └── LNoCoverage.js
-	       │   └── LBuying.js
-               │   └── LongBuyConsolidator.js
-               │   └── LongSellConsolidator.js
-	       ├── short/	
-               	    └── SStopped.js
-		    └── SSelling.js
-		    └── SRunning.js
-		    └── SNoCoverage.js
-		    └── SBuying.js
-	            └── ShortBuyConsolidator.js
-                    └── ShortSellConsolidator.js
+               ├── ai/
+               ├── au/
+ 	            ├── managers/
+ 	            │    └── longDataManager.js
+ 	            │    └── longOrderManager.js          
+	       	    │    └── shortDataManager.js
+	            │    └── shortOrderManager.js
+	            ├── utils/
+	            │    └── coverageLogic.js
+ 	            │    └── coverageLogicShort.js
+	            │    └── tradeConstants.js
+	            │    └── cleanState.js
+	            │    └── botUtilities.js
+	            ├── states/
+		         ├── long/
+		         │   └── LStopped.js
+		         │   └── LSelling.js
+		         │   └── LRunning.js
+		         │   └── LNoCoverage.js
+		         │   └── LBuying.js
+        	         │   └── LongBuyConsolidator.js
+     	                 │   └── LongSellConsolidator.js
+		         ├── short/	
+	               	    └── SStopped.js
+			    └── SSelling.js
+			    └── SRunning.js
+			    └── SNoCoverage.js
+			    └── SBuying.js
+		            └── ShortBuyConsolidator.js
+ 	      	            └── ShortSellConsolidator.js

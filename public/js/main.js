@@ -24,16 +24,19 @@ function updateConnectionStatusBall(source) {
     const statusDot = document.getElementById('status-dot'); 
     if (!statusDot) return;
     
-    statusDot.classList.remove('bg-red-500', 'bg-yellow-500', 'bg-green-500');
+    // 1. Limpiamos todas las clases posibles (Tailwind y personalizadas)
+    statusDot.className = 'h-full w-full rounded-full block'; 
 
+    // 2. Aplicamos la lógica de estados
     if (source === 'API_SUCCESS') {
-        statusDot.classList.add('bg-green-500');
+        statusDot.classList.add('status-green'); // Pulso verde
         statusDot.title = 'Conectado a BitMart';
     } else if (source === 'CACHE_FALLBACK') {
-        statusDot.classList.add('bg-yellow-500');
+        statusDot.classList.add('bg-yellow-500'); // Amarillo estático (o puedes crear status-yellow)
         statusDot.title = 'Usando datos en caché';
     } else {
-        statusDot.classList.add('bg-red-500');
+        // source === 'DISCONNECTED' o error
+        statusDot.classList.add('status-red'); // Parpadeo rojo
         statusDot.title = 'Desconectado';
     }
 }
