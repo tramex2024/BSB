@@ -1,4 +1,4 @@
-// server/controllers/userController.js
+// BSB/server/controllers/userController.js
 
 const User = require('../models/User');
 const Autobot = require('../models/Autobot');
@@ -33,37 +33,33 @@ exports.saveBitmartApiKeys = async (req, res) => {
 
     try {
         if (!apiKey || !secretKey) {
-            return res.status(400).json({ message: 'API Key and Secret Key are required.' });
+            return res.status(400).json({ message: 'Se requiere API Key y Secret Key.' });
         }
 
         const user = await User.findById(req.user.id);
         if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
         }
 
-        // 1. Guardamos API Key plana (fácil de identificar)
-        user.bitmartApiKey = apiKey;
-        
-        // 2. Encriptamos SOLO el secreto (máxima seguridad)
+        // --- CORRECCIÓN DE SEGURIDAD: Encriptamos TODO ---
+        user.bitmartApiKey = encrypt(apiKey); 
         user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-        
-        // 3. Memo plano
-        user.bitmartApiMemo = apiMemo || '';
+        user.bitmartApiMemo = encrypt(apiMemo || '');
 
         user.bitmartApiValidated = false;
         await user.save();
 
-        console.log(`[USER-CONTROLLER] 🔑 Keys guardadas para el usuario: ${user.email}`);
+        console.log(`[USER-CONTROLLER] 🛡️ Todas las llaves encriptadas y guardadas para: ${user.email}`);
 
         res.status(200).json({ 
             success: true,
-            message: 'BitMart API keys saved successfully. Please validate them to start.', 
+            message: 'Llaves BitMart guardadas con éxito (Cifrado total).', 
             connected: true 
         });
 
     } catch (error) {
-        console.error('Error saving BitMart API keys:', error);
-        res.status(500).json({ message: error.message || 'Error saving keys.' });
+        console.error('Error al guardar llaves:', error);
+        res.status(500).json({ message: 'Error interno al cifrar llaves.' });
     }
 };
 
