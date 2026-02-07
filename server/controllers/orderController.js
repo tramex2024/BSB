@@ -1,75 +1,81 @@
 // BSB/server/controllers/orderController.js
 
-const bitmartService = require('../services/bitmartService');
+const Order = require('../models/Order'); // Asegúrate de que la ruta al modelo sea correcta
 
-exports.getOrders = async (req, res) => {
+/**
+ * CONTROLADOR DE ÓRDENES (Historial Local)
+ * Este controlador ya no consulta a BitMart. Usa MongoDB como fuente de verdad.
+ */
+const getOrders = async (req, res) => {
+    // 1. Obtenemos el tipo de orden de los parámetros de ruta (ej: /api/orders/filled)
     const { status } = req.params;
 
-    console.log(`[Backend]: Intentando obtener órdenes de tipo: ${status}`);
+    console.log(`[ORDER-CONTROLLER] 📊 Petición de historial: ${status}`);
 
     if (!status) {
-        return res.status(400).json({ success: false, message: 'Missing "status" path parameter.' });
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Falta el parámetro de estado (status) en la URL.' 
+        });
     }
 
     try {
-        let result;
-        const symbol = 'BTC_USDT'; 
+        let filter = {};
 
+        // --- 2. LÓGICA DE FILTRADO PARA MONGODB ---
         switch (status) {
             case 'opened':
-                console.log('[Backend]: Consultando órdenes abiertas...');
-                const openRes = await bitmartService.getOpenOrders(symbol);
-                // CRÍTICO: El frontend espera un ARRAY directo. 
-                // bitmartService.getOpenOrders devuelve { orders: [] }, extraemos el array:
-                result = openRes.orders || [];
-                break;
+                /**
+                 * IMPORTANTE: Las órdenes abiertas ahora se manejan por WebSockets
+                 * para evitar el polling constante al servidor. Devolvemos un array 
+                 * vacío para que el dashboard no de error al cargar la pestaña.
+                 */
+                return res.status(200).json([]);
                 
             case 'filled':
+                // Filtramos por órdenes ejecutadas (Take Profit, DCA, Apertura)
+                filter.status = 'Filled';
+                break;
+                
             case 'cancelled':
+                // Filtramos por órdenes canceladas o fallidas
+                filter.status = 'Canceled';
+                break;
+                
             case 'all':
-                const endTime = Date.now();
-                const ninetyDaysAgo = new Date();
-                ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                const startTime = ninetyDaysAgo.getTime();
-                
-                const historyParams = {
-                    symbol: symbol,
-                    orderMode: 'spot',
-                    startTime: startTime,
-                    endTime: endTime,
-                    limit: 100 
-                };
-                
-                if (status !== 'all') {
-                    historyParams.order_state = status; 
-                }
-                
-                // bitmartService.getHistoryOrders ya devuelve un array normalizado [...]
-                result = await bitmartService.getHistoryOrders(historyParams);
+                // Sin filtro, trae todo el historial guardado por el bot
                 break;
                 
             default:
-                return res.status(400).json({ success: false, message: 'Invalid order status parameter' });
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Estado de orden no válido. Use: opened, filled, cancelled o all.' 
+                });
         }
 
-        // LÓGICA DE RETORNO REFORZADA
-        // 1. Aseguramos que 'ordersToReturn' sea siempre un Array.
-        let ordersToReturn = [];
-        if (Array.isArray(result)) {
-            ordersToReturn = result;
-        } else if (result && result.data && Array.isArray(result.data)) {
-            ordersToReturn = result.data;
-        } else if (result && result.orders && Array.isArray(result.orders)) {
-            ordersToReturn = result.orders;
-        }
+        // --- 3. CONSULTA A LA BASE DE DATOS ---
+        // Buscamos las órdenes que el orderPersistenceService ha guardado
+        const ordersToReturn = await Order.find(filter)
+            .sort({ orderTime: -1 }) // Mostrar las más recientes primero
+            .limit(100)              // Límite de seguridad para el frontend
+            .lean();
 
-        console.log(`[Backend]: Retornando ${ordersToReturn.length} órdenes para la pestaña ${status}.`);
+        console.log(`[ORDER-CONTROLLER] ✅ Enviando ${ordersToReturn.length} órdenes desde la DB.`);
         
-        // 2. Enviamos el array directamente (como lo espera tu Dashboard antiguo)
-        res.status(200).json(ordersToReturn);
+        // --- 4. RESPUESTA AL FRONTEND ---
+        // Enviamos el array directamente para que el Dashboard lo mapee sin cambios
+        return res.status(200).json(ordersToReturn);
         
     } catch (error) {
-        console.error('Error al obtener órdenes:', error.message);
-        res.status(500).json({ success: false, message: error.message });
+        console.error('❌ Error crítico en orderController:', error.message);
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Error interno al consultar la base de datos local.' 
+        });
     }
+};
+
+// Exportamos como un objeto para que el Router lo desestructure correctamente
+module.exports = {
+    getOrders
 };
