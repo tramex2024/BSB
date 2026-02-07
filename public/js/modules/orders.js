@@ -1,6 +1,6 @@
 // public/js/modules/orders.js
 
-import { BACKEND_URL } from '../main.js';
+import { fetchFromBackend } from './api.js'; // Importamos tu función genérica
 
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
@@ -17,11 +17,8 @@ function createOrderHtml(order) {
 
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
-    
-    // RESTAURADO: ID completo de la orden
     const fullOrderId = (order.orderId || '').toString();
 
-    // Sincronizado con estados de BitMart v4
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
@@ -69,11 +66,13 @@ export async function fetchOrders(status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const result = await response.json();
-        const ordersArray = Array.isArray(result) ? result : (result.data || []);
+        // CAMBIAMOS EL ENDPOINT:
+        // De: /api/orders/${status}
+        // A: /api/users/bitmart/history-orders
+        const data = await fetchFromBackend(`/api/users/bitmart/history-orders?status=${status}&symbol=BTC_USDT`);
+        
+        // El controlador 'getHistoryOrders' devuelve el array directamente
+        const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
             orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders</div>`;
@@ -82,29 +81,26 @@ export async function fetchOrders(status, orderListElement) {
 
         orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
     } catch (error) {
+        console.error("Fetch Orders Error:", error);
         orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
     }
 }
 
 /**
- * BRIDGE GLOBAL: Expone la función de cancelación para los atributos 'onclick'
+ * BRIDGE GLOBAL
  */
 window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
 
     try {
-        const response = await fetch(`${BACKEND_URL}/api/orders/cancel`, {
+        // CORRECCIÓN RUTA: Necesitaremos crear esta ruta en userController 
+        // o apuntar a una válida. Por ahora la ajustamos al nuevo estándar:
+        const data = await fetchFromBackend(`/api/users/bitmart/cancel-order`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ orderId })
+            body: JSON.stringify({ orderId, symbol: 'BTC_USDT' })
         });
         
-        const data = await response.json();
         if (data.success) {
-            // Refrescar automáticamente la vista actual (generalmente 'all' o 'opened')
             const activeContainer = document.getElementById('au-order-list');
             if (activeContainer) fetchOrders('all', activeContainer);
         } else {
