@@ -1,7 +1,7 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
- * Versión: Unificada (Usa Autobot Model y Order Model)
- * Ajustes: Sincronización de nombres para evitar parpadeo en UI.
+ * Versión: Unificada y Sincronizada 2026
+ * Ajuste: Inclusión de 'aistate' en el broadcast para eliminar parpadeo.
  */
 
 const Autobot = require('../../models/Autobot');
@@ -57,12 +57,13 @@ class AIEngine {
 
     async toggle(action) {
         const isStarting = (action === 'start');
+        const newState = isStarting ? 'RUNNING' : 'STOPPED';
         
         const updatedBot = await Autobot.findOneAndUpdate(
             {},
             { 
                 $set: { 
-                    aistate: isStarting ? 'RUNNING' : 'STOPPED',
+                    aistate: newState,
                     'config.ai.enabled': isStarting
                 } 
             },
@@ -84,6 +85,7 @@ class AIEngine {
         
         return { 
             isRunning: this.isRunning, 
+            aistate: newState, // <--- Agregado para consistencia
             virtualBalance: this.virtualBalance,
             stopAtCycle: this.stopAtCycle 
         };
@@ -112,7 +114,6 @@ class AIEngine {
     }
 
     async _executeStrategy(price) {
-        // Marcamos isAnalyzing: true si no hay suficiente historial
         if (this.history.length < 50) {
             this._log(`CALIBRANDO SENSORES... (${this.history.length}/50)`, 0.1, true);
             return;
@@ -127,7 +128,6 @@ class AIEngine {
             if (confidence >= 0.85) {
                 await this._trade('BUY', price, confidence);
             } else {
-                // Log aleatorio para feedback visual
                 if (Math.random() > 0.98) this._log(message, confidence);
             }
         }
@@ -160,12 +160,14 @@ class AIEngine {
                 }
             }
 
+            const newState = this.isRunning ? 'RUNNING' : 'STOPPED';
+
             await Autobot.updateOne({}, { 
                 $set: {
                     aibalance: this.virtualBalance,
                     ailastEntryPrice: this.lastEntryPrice,
                     aihighestPrice: this.highestPrice,
-                    aistate: this.isRunning ? 'RUNNING' : 'STOPPED',
+                    aistate: newState,
                     'config.ai.stopAtCycle': this.stopAtCycle
                 },
                 $inc: { total_profit: side === 'SELL' ? (tradeAmountUSDT * ((price - this.lastEntryPrice)/this.lastEntryPrice)) : 0 }
@@ -191,10 +193,11 @@ class AIEngine {
 
     _broadcastStatus() {
         if (this.io) {
-            // NORMALIZACIÓN: Emitimos propiedades que el frontend espera
+            // NORMALIZACIÓN ABSOLUTA: Enviamos lo que el uiManager necesita
             this.io.emit('ai-status-update', {
                 isRunning: this.isRunning,
-                virtualBalance: parseFloat(this.virtualBalance || 0), // Cambiado a virtualBalance
+                aistate: this.isRunning ? 'RUNNING' : 'STOPPED', // <--- FUNDAMENTAL
+                virtualBalance: parseFloat(this.virtualBalance || 0),
                 amountUsdt: this.amountUsdt,
                 historyCount: this.history.length,
                 lastEntryPrice: this.lastEntryPrice,

@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Orquestador Atómico (Sincronizado 2026)
- * Ajuste: Renderizado centralizado y protección de inputs activos.
+ * Ajuste: Protección contra parpadeo por mensajes incompletos.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -24,7 +24,7 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
     
-    // 1. Actualización de Precio (Sin pisar si el usuario está viendo el cambio)
+    // 1. Actualización de Precio
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
@@ -41,9 +41,9 @@ export function updateBotUI(state) {
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
         'aulcycle': 'lcycle',         
-        'aulsprice': 'lpc',            
+        'aulsprice': 'lpc',           
         'aultprice': 'ltprice',       
-        'aultppc': 'lppc',            
+        'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
         'lnorder-val': 'lnorder',     
 
@@ -51,9 +51,9 @@ export function updateBotUI(state) {
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
         'auscycle': 'scycle',         
-        'ausbprice': 'spc',            
+        'ausbprice': 'spc',           
         'austprice': 'stprice',       
-        'austppc': 'sppc',            
+        'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
         'snorder-val': 'snorder',
 
@@ -73,8 +73,11 @@ export function updateBotUI(state) {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // Buscamos el valor en el estado o en el sub-objeto stats si existe
-        let val = state[key] ?? state.stats?.[key] ?? 0;
+        // Buscamos el valor en el estado o en el sub-objeto stats
+        let val = state[key] ?? state.stats?.[key];
+
+        // IMPORTANTE: Si el valor es undefined, no hacemos nada (evita parpadeo)
+        if (val === undefined) return;
 
         // --- Renderizado de Estados (Colores y Texto) ---
         if (id.includes('state') || id.includes('status')) {
@@ -97,7 +100,6 @@ export function updateBotUI(state) {
         } else if (id.includes('coverage')) {
             el.textContent = parseFloat(val).toLocaleString(); 
         } else {
-            // Formateo estándar para montos USDT
             formatValue(el, val, false, false);
         }
     });
@@ -108,12 +110,15 @@ export function updateBotUI(state) {
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    // 4. Sincronización de Inputs (Solo si NO se está guardando activamente)
+    // 4. Sincronización de Inputs (Solo si hay una configuración válida en el mensaje)
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
 
-    updateControlsState(state);
+    // 5. Solo actualizamos controles si el mensaje contiene información de estados
+    if (state.lstate || state.sstate || state.aistate || state.isRunning !== undefined) {
+        updateControlsState(state);
+    }
 }
 
 /**
@@ -123,35 +128,39 @@ function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');
     const bar = document.getElementById(barId);
     if (!bar) return;
-    // Normalización: ADX suele ir de 0-50+, Stoch de 0-100
     let percent = id.includes('adx') ? (value / 50) * 100 : value; 
     bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
 }
 
 /**
- * Gestiona el estado de los botones (Enabled/Disabled) y mensajes de la AI
+ * Gestiona el estado de los botones
  */
 export function updateControlsState(state) {
     if (!state) return;
     
-    const lState = state.lstate || 'STOPPED';
-    const sState = state.sstate || 'STOPPED';
-    const aiState = state.aistate || 'STOPPED';
+    // Solo actuamos si el estado específico viene en el objeto, de lo contrario mantenemos el actual
+    const lState = state.lstate;
+    const sState = state.sstate;
+    const aiState = state.aistate;
 
-    // Listado de inputs que deben bloquearse cuando el bot corre
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
 
-    // Actualiza botones de Long, Short y los dos de AI (Dashboard y Tab)
-    updateButtonState('austartl-btn', lState, 'LONG', longInputs);
-    updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
-    updateButtonState('btn-start-ai', aiState, 'AI', aiInputs); 
-    updateButtonState('austartai-btn', aiState, 'AI', aiInputs); 
+    // Si el estado viene en el mensaje, actualizamos el botón correspondiente
+    if (lState) updateButtonState('austartl-btn', lState, 'LONG', longInputs);
+    if (sState) updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
+    
+    // Para AI, verificamos tanto aistate como la bandera isRunning
+    if (aiState || state.isRunning !== undefined) {
+        const actualAiStatus = aiState || (state.isRunning ? 'RUNNING' : 'STOPPED');
+        updateButtonState('btn-start-ai', actualAiStatus, 'AI', aiInputs); 
+        updateButtonState('austartai-btn', actualAiStatus, 'AI', aiInputs); 
+    }
     
     // Mensajería del motor AI
     const engineMsg = document.getElementById('ai-engine-msg');
-    if (engineMsg) {
+    if (engineMsg && (aiState || state.isRunning !== undefined)) {
         if (aiState === 'RUNNING' || state.isRunning) {
             engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
             engineMsg.classList.add('animate-pulse', 'text-blue-400');

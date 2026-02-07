@@ -18,6 +18,9 @@ const getAIStatus = async (req, res) => {
         res.json({
             success: true,
             isRunning: aiEngine.isRunning,
+            // AGREGAMOS ESTO PARA EL FRONTEND:
+            aistate: aiEngine.isRunning ? 'RUNNING' : 'STOPPED', 
+            virtualBalance: aiEngine.virtualBalance || (bot ? bot.aibalance : 0),
             // CAMBIO AQUÍ: Usar aibalance para que coincida con el modelo
             virtualBalance: aiEngine.virtualBalance || (bot ? bot.aibalance : 0),
             historyCount: aiEngine.history ? aiEngine.history.length : 0,
@@ -45,6 +48,7 @@ const toggleAI = async (req, res) => {
         res.json({ 
             success: true, 
             isRunning: result.isRunning,
+            aistate: result.isRunning ? 'RUNNING' : 'STOPPED',
             virtualBalance: result.virtualBalance,
             message: result.isRunning ? "IA Activada" : "IA Detenida" 
         });
