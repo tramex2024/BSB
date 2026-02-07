@@ -1,10 +1,15 @@
-// public/js/modules/autobot.js
+//public/js/modules/autobot.js
+
+/**
+ * Autobot.js - Logic for Automated Engines (Long/Short/AI)
+ * Synchronized with Core System 2026
+ */
 
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
-import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
+import { TRADE_SYMBOL_TV, currentBotState } from '../main.js'; 
 import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
@@ -12,6 +17,9 @@ const MIN_USDT_AMOUNT = 6.00;
 let currentTab = 'all';
 let configDebounceTimeout = null;
 
+/**
+ * Validates inputs for a specific side before starting
+ */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
     const fields = [`auamount${suffix}-usdt`, `aupurchase${suffix}-usdt`];
@@ -31,6 +39,9 @@ function validateSideInputs(side) {
     return isValid;
 }
 
+/**
+ * Sets up listeners for all configuration inputs with debouncing
+ */
 function setupConfigListeners() {
     const configIds = [
         'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
@@ -47,21 +58,22 @@ function setupConfigListeners() {
         
         el.addEventListener(eventType, () => {
             activeEdits[id] = Date.now();
-
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             configDebounceTimeout = setTimeout(async () => {
                 if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
-
                 try {
                     await sendConfigToBackend();
                 } catch (err) {
-                    console.error("❌ Error guardando config:", err);
+                    console.error("❌ Error saving config:", err);
                 }
             }, 800); 
         });
     });
 }
 
+/**
+ * Main initializer for the Autobot view
+ */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
@@ -72,15 +84,17 @@ export async function initializeAutobotView() {
         const btn = document.getElementById(id);
         if (!btn) return;
 
+        // Clone to clean previous listeners
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
+            // Check current state from Global State
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
-                             currentBotState.config.ai.enabled);
+                             currentBotState.config?.ai?.enabled);
             
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
@@ -105,14 +119,17 @@ export async function initializeAutobotView() {
         });
     };
 
+    // Binding buttons for all engines
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
     setupSideBtn('btn-start-ai', 'ai');
 
+    // Initial UI update
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
+    // Dynamic Chart Loading
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -126,6 +143,9 @@ export async function initializeAutobotView() {
     setupOrderTabs(auOrderList);
 }
 
+/**
+ * Configures the order list filtering tabs
+ */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     if (!orderTabs.length || !container) return;
@@ -150,6 +170,7 @@ function setupOrderTabs(container) {
         };
     });
 
+    // Default tab
     setActiveTabStyle('tab-all');
     fetchOrders('all', container);
 }

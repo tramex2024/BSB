@@ -1,13 +1,13 @@
 /**
- * dashboard.js - Controlador de Interfaz y Eventos (Versión Full Integrada 2026)
- * Sincronización de balances reales y estados del bot.
+ * dashboard.js - Interface & Event Controller (Integrated Full Version 2026)
+ * Real-time balance synchronization and bot status management.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { socket, currentBotState } from '../main.js'; 
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 
-// Instancias globales de gráficos
+// Global Chart Instances
 let balanceChart = null; 
 let equityChart = null;
 
@@ -18,47 +18,47 @@ const sounds = {
 Object.values(sounds).forEach(s => s.volume = 0.4);
 
 /**
- * Inicializa la vista del Dashboard
+ * Initializes the Dashboard View
  */
 export function initializeDashboardView(initialState) {
-    console.log("📊 Dashboard: Sincronizando sistema...");
+    console.log("📊 Dashboard: Syncing system...");
 
     const stateToUse = initialState || currentBotState;
 
-    // 1. Inicializar Gráficos
+    // 1. Initialize Charts
     initBalanceChart(stateToUse);
     initEquityChart();
 
-    // 2. Sincronización inmediata con el estado global
+    // 2. Immediate synchronization with global state
     if (stateToUse) {
         updateBotUI(stateToUse);
-        // Pequeño delay para asegurar que el canvas esté listo en el DOM
+        // Small delay to ensure canvas is ready in the DOM
         setTimeout(() => {
             updateDistributionWidget(stateToUse);
         }, 100);
     }
 
-    // 3. Configurar Eventos y Botones
+    // 3. Configure Events and Buttons
     setupSocketListeners();
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // 4. Carga de analítica
+    // 4. Load Analytics
     refreshAnalytics();
 
-    // 5. Estado de conexión inicial
+    // 5. Initial connection status
     updateHealthStatus('health-market-ws-text', socket?.connected);
     updateHealthStatus('health-user-ws-text', socket?.connected);
 }
 
 /**
- * CONFIGURACIÓN DE BOTONES
+ * BUTTON CONFIGURATION
  */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.onclick = async () => {
-            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
+            const confirmPanic = confirm("🚨 ARE YOU SURE? All bots will stop and orders will be cancelled.");
             if (confirmPanic) {
                 await triggerPanicStop();
             }
@@ -83,7 +83,7 @@ function setupActionButtons() {
 }
 
 /**
- * Refresca analítica
+ * Refresh Analytics Data
  */
 async function refreshAnalytics() {
     try {
@@ -104,24 +104,24 @@ async function refreshAnalytics() {
             updateEquityChart(filteredData);
         }
     } catch (e) { 
-        console.error("❌ Error en Dashboard Metrics:", e.message); 
+        console.error("❌ Dashboard Metrics Error:", e.message); 
     }
 }
 
 /**
- * Listeners en tiempo real
+ * Real-time Socket Listeners
  */
 function setupSocketListeners() {
     if (!socket) return;
 
+    // Preventive cleanup to avoid duplicate sounds/actions
     const events = ['market-signal-update', 'order-executed', 'cycle-closed', 'ai-decision-update', 'ai-status-update'];
     events.forEach(ev => socket.off(ev));
 
-    // Actualización de precio y tendencia
+    // Price and Trend update
     socket.on('market-signal-update', (analysis) => {
         if (analysis.price) {
             currentBotState.price = analysis.price;
-            // Actualizamos el widget para que el gráfico de dona reaccione al precio real
             updateDistributionWidget(currentBotState);
         }
 
@@ -163,7 +163,7 @@ function setupSocketListeners() {
     });
 }
 
-// --- GESTIÓN DE GRÁFICOS ---
+// --- CHART MANAGEMENT ---
 
 function initBalanceChart(state) {
     const canvas = document.getElementById('balanceDonutChart');
@@ -175,7 +175,7 @@ function initBalanceChart(state) {
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: [1, 0], // Placeholder neutro
+                data: [1, 0], 
                 backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
@@ -236,16 +236,14 @@ export function updateDistributionWidget(state) {
     const btcAmount = parseFloat(state.lastAvailableBTC || 0);
     const price = parseFloat(state.price || state.marketPrice || 0);
     
-    // Solo calculamos proporciones si tenemos precio de mercado real
     if (price > 0) {
         const btcInUsdt = btcAmount * price;
         const total = usdt + btcInUsdt;
 
         if (total > 0) {
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-            balanceChart.update('none'); // Update sin animaciones bruscas para el precio
+            balanceChart.update('none'); 
 
-            // Actualizar barras de progreso visuales
             const displayUsdtPercent = (usdt / total) * 100;
             const displayBtcPercent = (btcInUsdt / total) * 100;
 
@@ -256,7 +254,6 @@ export function updateDistributionWidget(state) {
         }
     }
     
-    // Los textos de balance se actualizan siempre con los valores crudos de la BD
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
     if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

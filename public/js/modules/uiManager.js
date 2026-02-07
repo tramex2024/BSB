@@ -1,8 +1,8 @@
-// public/js/modules/uiManager.js
+//public/js/modules/uiManager.js
 
 /**
- * uiManager.js - Orquestador Atómico con Memoria Selectiva
- * Optimización: Solo actualiza Balance y Profit si los valores cambian realmente.
+ * uiManager.js - Atomic Orchestrator with Selective Memory
+ * Optimization: Updates Balance and Profit only if values actually change.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -11,7 +11,7 @@ import { isSavingConfig } from './apiService.js';
 export { displayMessage } from './ui/notifications.js';
 
 let lastPrice = 0;
-// Memoria para evitar parpadeo en valores financieros estables
+// Memory to prevent flicker on stable financial values
 const lastValues = {};
 
 const STATUS_COLORS = {
@@ -25,14 +25,14 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
     
-    // 1. Precio de Mercado (Fluidez constante: se renderiza siempre)
+    // 1. Market Price (rendered always for fluidity)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // MAPEO MAESTRO
+    // MASTER MAPPING
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -41,20 +41,20 @@ export function updateBotUI(state) {
         // LONG
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
-        'aulcycle': 'lcycle',          
-        'aulsprice': 'lpc',            
+        'aulcycle': 'lcycle',           
+        'aulsprice': 'lpc',             
         'aultprice': 'ltprice',       
-        'aultppc': 'lppc',            
+        'aultppc': 'lppc',             
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'lnorder',      
 
         // SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
-        'auscycle': 'scycle',          
-        'ausbprice': 'spc',            
+        'auscycle': 'scycle',           
+        'ausbprice': 'spc',             
         'austprice': 'stprice',       
-        'austppc': 'sppc',            
+        'austppc': 'sppc',             
         'auscoverage': 'scoverage',   
         'ausnorder': 'snorder',
 
@@ -64,7 +64,7 @@ export function updateBotUI(state) {
         'ai-stoch-val': 'lac',              
         'aubot-aistate': 'aistate', 
 
-        // ESTADOS
+        // STATUSES
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
         'ai-mode-status': 'aistate' 
@@ -76,14 +76,14 @@ export function updateBotUI(state) {
         
         let val = state[key] ?? state.stats?.[key] ?? 0;
 
-        // --- MONITOR DE CAMBIOS (BALANCE Y PROFIT) ---
+        // --- CHANGE MONITOR (BALANCE & PROFIT) ---
         if (id.includes('profit') || id.includes('balance')) {
             if (lastValues[id] === val) return; 
             lastValues[id] = val; 
         }
-        // ----------------------------------------------
+        // ------------------------------------------
 
-        // Render de Estados
+        // Render Statuses
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
             el.textContent = currentStatus;
@@ -92,7 +92,7 @@ export function updateBotUI(state) {
             return;
         }
 
-        // Render de Datos Numéricos
+        // Render Numeric Data
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc') || id === 'aubalance-btc') {
@@ -115,7 +115,7 @@ export function updateBotUI(state) {
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    // 4. Sincronización de Inputs (Protegida)
+    // 4. Input Sync (Protected while typing)
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
@@ -162,9 +162,7 @@ export function updateControlsState(state) {
 }
 
 /**
- * Renderizador de Órdenes Independiente
- * @param {Array} orders - Lista de órdenes
- * @param {String} type - Tipo de contenedor ('opened', 'filled', 'cancelled', 'all')
+ * Independent Order Renderer
  */
 export function renderAutobotOrders(orders, type = 'opened') {
     const containerId = `au-order-list-${type}`;
@@ -175,12 +173,12 @@ export function renderAutobotOrders(orders, type = 'opened') {
 
     if (ordersList.length === 0) {
         const messages = {
-            opened: 'No hay órdenes activas',
-            filled: 'Historial de compras vacío',
-            cancelled: 'No hay órdenes canceladas',
-            all: 'Sin actividad reciente'
+            opened: 'No active orders',
+            filled: 'Trade history empty',
+            cancelled: 'No cancelled orders',
+            all: 'No recent activity'
         };
-        container.innerHTML = `<p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">${messages[type] || 'Sin datos'}</p>`;
+        container.innerHTML = `<p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">${messages[type] || 'No data'}</p>`;
         return;
     }
 
@@ -218,7 +216,6 @@ export function renderAutobotOrders(orders, type = 'opened') {
     }).join('');
 }
 
-// Mantenemos esta por compatibilidad, pero redirige a la nueva
 export function renderAutobotOpenOrders(orders) {
     renderAutobotOrders(orders, 'opened');
 }
