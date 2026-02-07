@@ -2,8 +2,8 @@
  * socket.js - Communication Layer
  * Centraliza toda la conexión con el backend para que sea persistente.
  */
-import { BACKEND_URL, currentBotState, logStatus } from './main.js';
-import aiBotUI from './modules/aiBotUI.js';
+import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
+import aiBotUI from './aiBotUI.js';
 
 export let socket = null;
 let connectionWatchdog = null;
