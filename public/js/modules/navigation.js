@@ -1,75 +1,88 @@
-// public/js/modules/navigation.js
-
+/**
+ * navigation.js - SPA Router & Route Guard
+ */
 import { toggleAuthModal } from './login.js';
 
+// Mapa de URLs de los fragmentos HTML
+const TAB_SOURCES = {
+    'dashboard': '/views/dashboard.html',
+    'autobot': '/views/autobot.html',
+    'aibot': '/views/aibot.html'
+};
+
 /**
- * Gestiona el cambio de pestañas y protege las rutas privadas.
- * @param {Function} callback - Función initializeTab que viene de main.js
+ * Carga el contenido de una pestaña y protege rutas privadas
  */
-export function setupNavTabs(callback) {
+export async function loadContent(tabName) {
+    const mainContent = document.getElementById('main-content');
     const navTabs = document.querySelectorAll('.nav-tab');
     const logMessageEl = document.getElementById('log-message');
-    
-    /**
-     * Función interna para manejar el flujo de cambio de vista
-     */
-    async function loadContent(tabName) {
-        const token = localStorage.getItem('token');
-        
-        // --- 1. CONTROL DE SEGURIDAD ---
-        // Si el usuario intenta entrar a secciones privadas (autobot/aibot) sin estar logueado
-        if (tabName !== 'dashboard' && !token) {
-            // Revertimos el estilo visual a la pestaña dashboard
-            navTabs.forEach(t => t.classList.remove('active'));
-            const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
-            if (dashTab) dashTab.classList.add('active');
-            
-            // Abrimos el modal de login automáticamente
-            toggleAuthModal(true);
-            
-            if (logMessageEl) {
-                logMessageEl.textContent = 'Acceso restringido: Inicia sesión para usar los Bots.';
-                logMessageEl.className = 'text-red-400';
-            }
-            return; 
-        }
+    const token = localStorage.getItem('token');
 
-        // --- 2. NOTIFICAR AL MOTOR PRINCIPAL (main.js) ---
-        // Delegamos la carga del HTML y el JS al callback para evitar doble carga
-        if (callback) {
-            await callback(tabName);
-        }
+    if (!mainContent) return;
 
-        // --- 3. ACTUALIZAR URL ---
-        // Esto permite que si refrescas la página, se quede en la misma pestaña
-        window.location.hash = tabName;
+    // --- 1. ROUTE GUARD (Seguridad) ---
+    if (tabName !== 'dashboard' && !token) {
+        updateActiveTab('dashboard');
+        toggleAuthModal(true);
+        if (logMessageEl) {
+            logMessageEl.textContent = '🔒 Acceso restringido: Inicia sesión para operar.';
+            logMessageEl.className = 'text-amber-400 font-bold';
+        }
+        return;
     }
 
-    // Configurar el evento click para cada pestaña del menú
-    navTabs.forEach(tab => {
+    // --- 2. CARGA DE CONTENIDO (Fetch HTML) ---
+    try {
+        // Mostrar mini-loader interno si se desea
+        mainContent.innerHTML = `<div class="flex items-center justify-center h-64"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div></div>`;
+
+        const response = await fetch(TAB_SOURCES[tabName] || TAB_SOURCES['dashboard']);
+        if (!response.ok) throw new Error('Error al cargar la vista');
+        
+        const html = await response.text();
+        mainContent.innerHTML = html;
+
+        // --- 3. INICIALIZACIÓN DINÁMICA ---
+        // Aquí podrías disparar eventos específicos por pestaña si fuera necesario
+        window.location.hash = tabName;
+        localStorage.setItem('last_page', tabName);
+        updateActiveTab(tabName);
+
+    } catch (error) {
+        console.error("Navigation Error:", error);
+        mainContent.innerHTML = `<div class="p-10 text-center text-rose-500">Error cargando componente: ${tabName}</div>`;
+    }
+}
+
+/**
+ * Actualiza visualmente los botones de la barra de navegación
+ */
+function updateActiveTab(tabName) {
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        if (tab.dataset.tab === tabName) {
+            tab.classList.add('active', 'border-b-2', 'border-emerald-500', 'text-emerald-400');
+        } else {
+            tab.classList.remove('active', 'border-b-2', 'border-emerald-500', 'text-emerald-400');
+        }
+    });
+}
+
+/**
+ * Configura los eventos iniciales
+ */
+export function initNavigation() {
+    // Detectar clicks en el nav
+    document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
-            e.preventDefault();
-            const tabName = tab.dataset.tab;
-            
-            // Cambiar visualmente la pestaña activa en el menú
-            navTabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            
-            loadContent(tabName);
+            const target = e.currentTarget.dataset.tab;
+            loadContent(target);
         });
     });
 
-    // --- MANEJO DE CARGA INICIAL (Refresh) ---
-    // Detectar si venimos de un #hash específico (ej: #autobot)
-    const currentHash = window.location.hash.replace('#', '');
-    const initialTab = currentHash || 'dashboard';
-    
-    // Sincronizar estilos del menú al arrancar
-    navTabs.forEach(t => {
-        if (t.dataset.tab === initialTab) t.classList.add('active');
-        else t.classList.remove('active');
+    // Manejar el botón de atrás/adelante del navegador
+    window.addEventListener('popstate', () => {
+        const hash = window.location.hash.replace('#', '') || 'dashboard';
+        loadContent(hash);
     });
-
-    // Cargar la pestaña correspondiente al iniciar
-    loadContent(initialTab);
 }

@@ -75,7 +75,7 @@ function setupActionButtons() {
         const el = document.getElementById(btn.id);
         if (el) {
             el.onclick = async () => {
-                const isRunning = el.textContent.includes("STOP");
+                const isRunning = el && el.textContent ? el.textContent.includes("STOP") : false;
                 await toggleBotSideState(isRunning, btn.side);
             };
         }
