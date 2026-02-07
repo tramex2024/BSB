@@ -8,7 +8,7 @@ const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 // =========================================================================
-// MOTOR DE FIRMA, CACHÉ Y PETICIONES (Optimizado para Multiusuario)
+// MOTOR DE FIRMA, CACHÉ Y PETICIONES (Manteniendo tu motor 2026)
 // =========================================================================
 const cache = {
     ticker: { data: null, timestamp: 0, promise: null },
@@ -17,24 +17,17 @@ const cache = {
 const CACHE_TTL = 2000; 
 const KLINES_TTL = 15000;
 
-// MODIFICACIÓN CRÍTICA: Ahora acepta un 5to parámetro 'userCreds'
-async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    
-    // Si vienen credenciales del usuario (DB), las usamos. Si no, usamos las del .env (Bot actual).
-    const apiKey = userCreds?.apiKey || process.env.BITMART_API_KEY;
-    const secretKey = userCreds?.secretKey || process.env.BITMART_SECRET_KEY;
-    const apiMemo = userCreds?.apiMemo || process.env.BITMART_API_MEMO;
-
+async function makeRequest(method, path, params = {}, body = {}) {
+    const { BITMART_API_KEY, BITMART_SECRET_KEY, BITMART_API_MEMO } = process.env;
     const timestamp = Date.now().toString();
+
     let bodyForSign = method === 'POST' ? JSON.stringify(body) : '';
-    
-    // Firma usando las llaves seleccionadas
-    const message = `${timestamp}#${apiMemo}#${bodyForSign}`;
-    const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
+    const message = `${timestamp}#${BITMART_API_MEMO}#${bodyForSign}`;
+    const sign = CryptoJS.HmacSHA256(message, BITMART_SECRET_KEY).toString(CryptoJS.enc.Hex);
 
     const headers = {
         'Content-Type': 'application/json',
-        'X-BM-KEY': apiKey,
+        'X-BM-KEY': BITMART_API_KEY,
         'X-BM-TIMESTAMP': timestamp,
         'X-BM-SIGN': sign,
     };
@@ -54,28 +47,27 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO (Adaptada para recibir credenciales opcionales)
+// LÓGICA DE NEGOCIO (Sincronizada con la versión funcional antigua)
 // =========================================================================
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
 const bitmartService = {
-    // Agregamos 'creds' como parámetro a todas las funciones
-    validateApiKeys: async (creds) => {
+    validateApiKeys: async () => {
         try {
-            await bitmartService.getBalance(creds);
-            console.log(`${LOG_PREFIX} ✅ Credentials validated successfully.`);
+            await bitmartService.getBalance();
+            console.log(`${LOG_PREFIX} ✅ Credenciales validadas.`);
             return true;
         } catch (e) { return false; }
     },
 
-    getBalance: async (creds) => {
-        const res = await makeRequest('GET', '/account/v1/wallet', {}, {}, creds);
+    getBalance: async () => {
+        const res = await makeRequest('GET', '/account/v1/wallet');
         return res.data.wallet;
     },
 
-    getAvailableTradingBalances: async (creds) => {
+    getAvailableTradingBalances: async () => {
         try {
-            const wallet = await bitmartService.getBalance(creds);
+            const wallet = await bitmartService.getBalance();
             const usdt = wallet.find(b => b.currency === 'USDT');
             const btc = wallet.find(b => b.currency === 'BTC');
             return { 
@@ -92,7 +84,6 @@ const bitmartService = {
 
         cache.ticker.promise = (async () => {
             try {
-                // Ticker es público, no necesita credenciales
                 const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
                 const data = res.data.tickers.find(t => t.symbol === symbol);
                 cache.ticker.data = data;
@@ -110,7 +101,6 @@ const bitmartService = {
 
         cache.klines.promise = (async () => {
             try {
-                // Klines es público
                 const res = await makeRequest('GET', '/spot/quotation/v3/klines', { symbol, step: interval, size: limit });
                 const data = res.data.map(c => ({
                     timestamp: parseInt(c[0]), open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5])
@@ -123,8 +113,9 @@ const bitmartService = {
         return cache.klines.promise;
     },
 
-    getOpenOrders: async (symbol, creds) => {
-        const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 }, creds);
+    getOpenOrders: async (symbol) => {
+        const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 });
+        // INYECTADO: Manejo multiespacio de respuesta del código antiguo
         let orders = [];
         if (res.data && Array.isArray(res.data.data)) orders = res.data.data;
         else if (res.data && Array.isArray(res.data)) orders = res.data;
@@ -133,7 +124,7 @@ const bitmartService = {
         return { orders: Array.isArray(orders) ? orders : [] };
     },
 
-    getHistoryOrders: async (options = {}, creds) => {
+    getHistoryOrders: async (options = {}) => {
         const requestBody = {
             symbol: options.symbol || 'BTC_USDT',
             orderMode: 'spot',
@@ -145,16 +136,19 @@ const bitmartService = {
         const statusStr = options.order_state || options.status;
         if (statusStr && statusStr !== 'all') {
             const statusCode = orderStatusMap[statusStr];
-            if (statusCode !== undefined) requestBody.status = statusCode;
+            if (statusCode !== undefined) requestBody.status = statusCode; // BitMart v4 usa códigos numéricos
         }
 
-        const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody, creds);
+        console.log(`${LOG_PREFIX} 📡 Consultando Historial (${statusStr || 'all'})...`);
+        const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody);
         
+        // INYECTADO: Lógica de extracción de la versión funcional antigua
         let rawOrders = [];
         if (res.data && Array.isArray(res.data)) rawOrders = res.data;
         else if (res.data?.data?.list) rawOrders = res.data.data.list;
         else if (res.data?.data && Array.isArray(res.data.data)) rawOrders = res.data.data;
 
+        // INYECTADO: Normalización Crítica (Evita precios 0.00 en el frontend)
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => {
             const finalPrice = parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price;
             const finalSize = parseFloat(o.filledSize) > 0 ? o.filledSize : o.size;
@@ -167,7 +161,14 @@ const bitmartService = {
         });
     },
 
-    placeOrder: async (symbol, side, type, amount, price, creds) => {
+    getOrderDetail: async (symbol, orderId) => {
+        try {
+            const res = await makeRequest('POST', '/spot/v4/query/order', {}, { symbol, orderId: String(orderId), orderMode: 'spot' });
+            return res.data?.data || null;
+        } catch (e) { return null; }
+    },
+
+    placeOrder: async (symbol, side, type, amount, price) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
         if (type.toLowerCase() === 'limit') {
@@ -177,14 +178,14 @@ const bitmartService = {
             if (sideLower === 'buy') body.notional = amount.toString();
             else body.size = amount.toString();
         }
-        const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
+        const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body);
         return res.data;
     },
 
     initOrderWebSocket,
-    getRecentOrders: async (symbol, creds) => bitmartService.getHistoryOrders({ symbol, limit: 100 }, creds),
-    placeMarketOrder: async ({ symbol, side, notional }, creds) => 
-        bitmartService.placeOrder(symbol, side, 'market', notional, null, creds)
+    getRecentOrders: async (symbol) => bitmartService.getHistoryOrders({ symbol, limit: 100 }),
+    placeMarketOrder: async ({ symbol, side, notional }) => 
+        bitmartService.placeOrder(symbol, side, 'market', notional, null)
 };
 
 module.exports = bitmartService;
