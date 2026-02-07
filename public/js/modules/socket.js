@@ -1,19 +1,15 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
- * Centraliza toda la conexión con el backend y dispara las actualizaciones de UI.
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { updateBotUI } from './uiManager.js'; 
+import { formatCurrency } from './ui/formatters.js'; // Importamos el formateador
 
 export let socket = null;
 let connectionWatchdog = null;
 
-/**
- * Inicializa la conexión Socket.io
- */
 export function initSocket() {
-    // Evitar duplicados y verificar que io esté cargado
     if (socket?.connected || typeof io === 'undefined') return;
 
     socket = io(BACKEND_URL, { 
@@ -23,85 +19,72 @@ export function initSocket() {
         reconnectionDelay: 1000
     });
 
-    // --- MANEJO DE CONEXIÓN ---
     socket.on('connect', () => {
         resetWatchdog();
-        // Pedimos el estado inicial nada más conectar
         socket.emit('get-bot-state'); 
         console.log("✅ Socket: Connected to Backend");
     });
 
     socket.on('disconnect', () => {
         updateConnectionStatus('DISCONNECTED');
-        console.warn("❌ Socket: Disconnected");
     });
 
-    // --- RECEPCIÓN DE PRECIO EN TIEMPO REAL ---
+    // --- RECEPCIÓN DE PRECIO (CORREGIDO) ---
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data?.price) {
-            // Actualizamos el estado global
-            currentBotState.price = parseFloat(data.price);
+            const newPrice = parseFloat(data.price);
+            currentBotState.price = newPrice;
             
-            // DISPARADOR: Actualiza el precio y elementos dependientes en la UI
-            updateBotUI(currentBotState); 
+            // OPTIMIZACIÓN: Solo actualizamos el elemento del precio en el DOM
+            // No llamamos a updateBotUI para no re-renderizar botones y causar parpadeo
+            const priceEl = document.getElementById('auprice');
+            if (priceEl) {
+                formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
+                currentBotState.lastPrice = newPrice;
+            }
         }
     });
 
-    // --- ESTADO GLOBAL DEL BOT (Balances, Ciclos, Estados) ---
+    // --- ESTADO GLOBAL DEL BOT ---
     socket.on('bot-state-update', (state) => {
         if (!state) return;
 
-        // Mezclamos la configuración nueva con la existente
         if (state.config) {
             currentBotState.config = { ...currentBotState.config, ...state.config };
         }
         
-        // Sincronizamos el resto de propiedades al estado global
         Object.assign(currentBotState, state);
 
-        // Mapeo de banderas de ejecución para compatibilidad
-        currentBotState.isRunning = (state.aistate === 'RUNNING' || currentBotState.config.ai?.enabled);
-        currentBotState.stopAtCycle = currentBotState.config.ai?.stopAtCycle || false;
+        // Aseguramos que el estado de IA se derive correctamente
+        const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
+        currentBotState.isRunning = aiIsActive;
 
-        // DISPARADOR: Refresca Dashboard y Controles de todas las pestañas
+        // Aquí SÍ actualizamos la UI completa porque es un cambio de estado real
         updateBotUI(currentBotState);
 
-        // Actualización específica de la pestaña AI
         if (aiBotUI) {
             aiBotUI.setRunningStatus(
-                currentBotState.isRunning, 
-                currentBotState.stopAtCycle, 
-                state.historyCount
+                aiIsActive, 
+                currentBotState.config.ai?.stopAtCycle, 
+                state.historyCount || 0
             );
         }
     });
 
-    // --- SISTEMA DE LOGS ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
-        
-        // Log en la marquesina superior
         logStatus(data.message, data.type || 'info');
-        
-        // Log en la consola de la pestaña AI
         if (aiBotUI?.addLogEntry) {
             aiBotUI.addLogEntry(data.message, (data.type === 'success' ? 0.9 : 0.5));
         }
     });
 
-    // --- ACTUALIZACIÓN DE DECISIONES NEURALES ---
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
-        
-        // Actualiza el círculo de confianza y el texto predictivo
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
-        
-        // Si la decisión implica un cambio de estado, refrescamos UI general
-        updateBotUI(currentBotState);
     });
 
-    // --- TABLAS DE ÓRDENES Y TRADES ---
     socket.on('open-orders-update', (data) => {
         const orders = Array.isArray(data) ? data : (data.orders || []);
         if (aiBotUI?.updateOpenOrdersTable) {
@@ -118,13 +101,9 @@ export function initSocket() {
     return socket;
 }
 
-// --- UTILIDADES DE CONEXIÓN (Watchdog) ---
-
 function resetWatchdog() {
     updateConnectionStatus('CONNECTED');
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
-    
-    // Si no recibimos nada en 15 segundos, marcamos como desconectado
     connectionWatchdog = setTimeout(() => {
         updateConnectionStatus('DISCONNECTED');
     }, 15000);
@@ -132,13 +111,10 @@ function resetWatchdog() {
 
 function updateConnectionStatus(status) {
     const statusDot = document.getElementById('status-dot');
-    const isConnected = status === 'CONNECTED';
-    
     if (statusDot) {
+        const isConnected = status === 'CONNECTED';
         statusDot.className = `w-3 h-3 rounded-full transition-all duration-500 ${
-            isConnected 
-            ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]' 
-            : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]'
+            isConnected ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]'
         }`;
     }
 }
