@@ -41,6 +41,7 @@ BSB/			    # Bitmart Spot Bots
 │       	   ├── appEvents.js
 │       	   ├── confirmModal.js
 │       	   └── metricsManager.js 
+│       	   └── socket.js 
 │
 ├── server/                # Backend files - Deployed on Render
      ├── server.js
@@ -51,11 +52,8 @@ BSB/			    # Bitmart Spot Bots
      │   └── Autobot.js
      │   └── AutobotMock.js
      │   └── User.js
-     │   └── BotState.js
      │   └── TradeCycle.js
      │   └── MarketSignal.js
-     │   └── AIBotOrder.js
-     │   └── Aibot.js
      ├── middleware/
      │   └── bitmartAuthMiddleware.js
      │   └── authMiddleware.js

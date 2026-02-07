@@ -2,47 +2,32 @@
 
 const User = require('../models/User');
 const Autobot = require('../models/Autobot');
-//const BotState = require('../models/BotState');
 const jwt = require('jsonwebtoken');
-
-const { encrypt, decrypt } = require('../utils/encryption');
+const { encrypt } = require('../utils/encryption');
 const bitmartService = require('../services/bitmartService');
-
-// IMPORTAR EL AUTOBOT LOGIC
 const autobotLogic = require('../autobotLogic');
 
-
-// --- MUY TEMPRANO: Logs de Depuración de Variables de Entorno (raw) ---
-console.log(`[VERY EARLY DEBUG] ENCRYPTION_KEY_ENV (raw from process.env): '${process.env.ENCRYPTION_KEY ? process.env.ENCRYPTION_KEY.substring(0, 5) + '...' : 'UNDEFINED'}'`);
-console.log(`[VERY EARLY DEBUG] JWT_SECRET_ENV (raw from process.env): '${process.env.JWT_SECRET ? process.env.JWT_SECRET.substring(0, 5) + '...' : 'UNDEFINED'}'`);
-
-
-// --- Middleware de Autenticación (para asegurar que el usuario esté logueado) ---
+// --- Middleware de Autenticación Corregido ---
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    if (token == null) {
-        console.warn("[AUTH MIDDLEWARE] No token provided.");
+    if (!token) {
         return res.status(401).json({ message: 'Authentication token required.' });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
         if (err) {
-            console.error("[AUTH MIDDLEWARE] JWT Verification Error:", err.message);
-            return res.status(403).json({ message: 'Invalid or expired authentication token.' });
+            console.error("[AUTH MIDDLEWARE] JWT Error:", err.message);
+            return res.status(403).json({ message: 'Invalid or expired token.' });
         }
-        req.user = {
-            id: decodedUser.id,
-            email: decodedUser.email,
-            autobotId: decodedUser.autobotId // ¡Ahora está disponible!
-        };
+        // Asignamos el decoded (que contiene id, email, etc) al req.user
+        req.user = decoded; 
         next();
     });
 };
 
-
-// --- Controlador para guardar las API Keys de BitMart ---
+// --- Guardar API Keys (Estructura definitiva para Multi-tenant) ---
 exports.saveBitmartApiKeys = async (req, res) => {
     const { apiKey, secretKey, apiMemo } = req.body;
 
@@ -56,21 +41,29 @@ exports.saveBitmartApiKeys = async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        user.bitmartApiKey = encrypt(apiKey);
+        // 1. Guardamos API Key plana (fácil de identificar)
+        user.bitmartApiKey = apiKey;
+        
+        // 2. Encriptamos SOLO el secreto (máxima seguridad)
         user.bitmartSecretKeyEncrypted = encrypt(secretKey);
-        user.bitmartApiMemo = encrypt(apiMemo || '');
+        
+        // 3. Memo plano
+        user.bitmartApiMemo = apiMemo || '';
 
         user.bitmartApiValidated = false;
         await user.save();
 
-        res.status(200).json({ message: 'BitMart API keys saved successfully. Please try to connect to validate them.', connected: true });
+        console.log(`[USER-CONTROLLER] 🔑 Keys guardadas para el usuario: ${user.email}`);
+
+        res.status(200).json({ 
+            success: true,
+            message: 'BitMart API keys saved successfully. Please validate them to start.', 
+            connected: true 
+        });
 
     } catch (error) {
         console.error('Error saving BitMart API keys:', error);
-        if (error.message.includes("ENCRYPTION_KEY no está definida")) {
-            return res.status(500).json({ message: "Error interno del servidor al encriptar las claves. Asegúrate de que ENCRYPTION_KEY esté correctamente definida en tus variables de entorno." });
-        }
-        res.status(500).json({ message: error.message || 'Error saving BitMart API keys. Please check server logs.' });
+        res.status(500).json({ message: error.message || 'Error saving keys.' });
     }
 };
 
