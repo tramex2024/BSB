@@ -1,5 +1,3 @@
-//public/js/modules/aiBotUI.js
-
 /**
  * AI Bot Interface Module - Optimized 2026
  * Integration: Centralized Button State & Neural Sync
@@ -172,19 +170,27 @@ const aiBotUI = {
         const aiInput = document.getElementById('ai-amount-usdt');
         const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
 
+        // Sincronizar Checkbox si viene el dato
         if (stopCycleCheck && stopAtCycle !== null) {
-            stopCycleCheck.checked = stopAtCycle;
+            if (stopCycleCheck.checked !== !!stopAtCycle) {
+                stopCycleCheck.checked = !!stopAtCycle;
+            }
         }
 
         if (isRunning) {
-            // Lógica unificada para el botón
             if (btn) {
-                if (historyCount < 50) {
-                    btn.innerText = `ANALYZING... (${historyCount}/50)`;
-                    btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse transition-all";
-                } else {
-                    btn.innerText = "STOP AI CORE";
-                    btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
+                // Solo actualizamos si el texto ha cambiado para evitar el parpadeo
+                const isAnalyzing = (historyCount < 50);
+                const targetText = isAnalyzing ? `ANALYZING... (${historyCount}/50)` : "STOP AI CORE";
+                
+                if (btn.innerText !== targetText) {
+                    btn.innerText = targetText;
+                    // Aplicamos los estilos solo si cambian
+                    if (isAnalyzing) {
+                        btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse transition-all";
+                    } else {
+                        btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
+                    }
                 }
             }
 
@@ -192,12 +198,12 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
             
-            if (aiInput) {
+            if (aiInput && !aiInput.disabled) {
                 aiInput.disabled = true;
                 aiInput.classList.add('opacity-40', 'cursor-not-allowed');
             }
         } else {
-            if (btn) {
+            if (btn && btn.innerText !== "START AI CORE") {
                 btn.innerText = "START AI CORE";
                 btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
             }
@@ -205,7 +211,7 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
             
-            if (aiInput) {
+            if (aiInput && aiInput.disabled) {
                 aiInput.disabled = false;
                 aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
             }
