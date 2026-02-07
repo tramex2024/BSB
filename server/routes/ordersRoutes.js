@@ -2,14 +2,9 @@
 
 const express = require('express');
 const router = express.Router();
-const orderController = require('../controllers/orderController');
-const authMiddleware = require('../middleware/authMiddleware');
+const userController = require('../controllers/userController');
 
-// Verifica que orderController.getOrders sea una función antes de pasarla
-if (typeof orderController.getOrders !== 'function') {
-    console.error('❌ ERROR: orderController.getOrders no es una función. Revisa el archivo del controlador.');
-}
-
-router.get('/:status', authMiddleware, orderController.getOrders);
+// Asegúrate de que el nombre de la ruta sea 'api-keys'
+router.post('/api-keys', userController.authenticateToken, userController.saveBitmartApiKeys);
 
 module.exports = router;

@@ -46,20 +46,21 @@ export async function handleApiFormSubmit(event) {
 
     if (!apiStatusMessage) return;
 
-    apiStatusMessage.textContent = 'Validando llaves...';
+    apiStatusMessage.textContent = 'Guardando llaves...';
     apiStatusMessage.className = 'text-xs text-center text-yellow-500';
 
     try {
-        const data = await fetchFromBackend('/api/auth/api-keys', { // Ajusta el endpoint según tu backend
+        // CAMBIO AQUÍ: Cambiamos /api/auth por /api/users
+        const data = await fetchFromBackend('/api/users/api-keys', { 
             method: 'POST',
             body: JSON.stringify({ apiKey, secretKey }),
         });
 
-        if (data.success) {
-            apiStatusMessage.textContent = '¡Conexión exitosa y guardada!';
+        // Verificamos data.success o data.connected según lo que devuelve tu controlador
+        if (data.success || data.connected) {
+            apiStatusMessage.textContent = '¡Llaves guardadas correctamente!';
             apiStatusMessage.className = 'text-xs text-center text-emerald-500';
             
-            // Opcional: Cerrar el modal después de 2 segundos
             setTimeout(() => {
                 const apiModal = document.getElementById('api-modal');
                 if (apiModal) apiModal.style.display = 'none';
