@@ -46,19 +46,28 @@
     </main>
 
     <div id="api-modal" class="modal">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold">BitMart API</h2>
-                <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-api-modal"></i>
-            </div>
-            <form id="api-form" class="space-y-4">
-                <input type="text" id="api-key" placeholder="API Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                <input type="password" id="secret-key" placeholder="Secret Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">VALIDAR CONEXIÓN</button>
-                <p id="api-status-message" class="text-xs text-center text-gray-500"></p>
-            </form>
+    <div class="modal-content">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">BitMart API</h2>
+            <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-api-modal"></i>
         </div>
+        <form id="api-form" class="space-y-4">
+            <input type="text" id="api-key" placeholder="API Key" 
+                class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+            
+            <input type="password" id="secret-key" placeholder="Secret Key" 
+                class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+            
+            <input type="password" id="api-memo" placeholder="API Memo (Passphrase)" 
+                class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+
+            <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">
+                SAVE & VALIDATE
+            </button>
+            <p id="api-status-message" class="text-xs text-center text-gray-500"></p>
+        </form>
     </div>
+</div>
 
     <div id="auth-modal" class="modal">
         <div class="modal-content">
