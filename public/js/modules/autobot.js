@@ -8,7 +8,7 @@ import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
-import { socket } from '../socket.js'; // Importamos el socket central
+import { socket } from './socket.js'; // Importamos el socket central
 import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 

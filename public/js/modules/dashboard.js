@@ -3,7 +3,8 @@
  * Estado: Limpieza de listeners de Socket (Movidos a socket.js)
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
-import { socket, currentBotState } from '../main.js'; 
+import { currentBotState } from '../main.js'; 
+import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 

@@ -6,7 +6,7 @@
 
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
-import { socket } from '../socket.js'; // Importamos el socket centralizado
+import { socket } from './socket.js'; // Importamos el socket centralizado
 
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing interface...");
