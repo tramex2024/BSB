@@ -7,7 +7,7 @@ import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
-import { initSocket } from './socket.js'; // Importamos el nuevo motor de sockets
+import { initSocket } from './modules/socket.js'; // Importamos el nuevo motor de sockets
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
