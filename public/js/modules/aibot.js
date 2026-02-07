@@ -1,6 +1,6 @@
 /**
  * File: public/js/modules/aibot.js
- * AI Core Sync & Interface Management - Final Sync 2026
+ * AI Core Sync & Interface Management
  */
 
 import { socket, currentBotState, BACKEND_URL } from '../main.js';
@@ -9,11 +9,9 @@ import aiBotUI from './aiBotUI.js';
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing interface...");
     
-    // 1. Clean up existing listeners to prevent duplicates
     if (socket) {
         socket.off('ai-status-update');
         socket.off('ai-history-data');
-        socket.off('open-orders-update');
         socket.off('ai-order-executed');
         socket.off('ai-decision-update');
         socket.off('market-signal-update');
@@ -22,56 +20,57 @@ export function initializeAibotView() {
     setupAISocketListeners();
     setupAIControls();
     
-    // 2. Initial sync from Global State
-    const { isRunning, stopAtCycle, amountUsdt } = currentBotState.config?.ai || {};
+    // SYNC FROM GLOBAL STATE
+    const isRunning = currentBotState.isRunning;
+    const stopAtCycle = currentBotState.stopAtCycle; 
+    const amount = currentBotState.amountUsdt;
 
     const aiInput = document.getElementById('ai-amount-usdt');
-    if (aiInput && amountUsdt !== undefined) aiInput.value = amountUsdt;
+    if (aiInput && amount !== undefined) aiInput.value = amount;
 
-    // Apply visual status
+    // Apply visual state (Button & Switch)
     aiBotUI.setRunningStatus(isRunning, stopAtCycle);
 
-    // 3. Request fresh data if connected
     if (socket && socket.connected) {
         socket.emit('get-ai-status');
         socket.emit('get-ai-history');
-        socket.emit('get-open-orders'); 
     }
 }
 
 function setupAISocketListeners() {
     if (!socket) return;
 
-    // Status and Virtual Balance
     socket.on('ai-status-update', (data) => {
-        currentBotState.aibalance = data.virtualBalance;
-        currentBotState.config.ai.enabled = data.isRunning;
+        currentBotState.virtualBalance = data.virtualBalance;
+        currentBotState.isRunning = data.isRunning;
 
+        // 1. Update Balance
         const balEl = document.getElementById('ai-virtual-balance');
         if (balEl && data.virtualBalance !== undefined) {
             balEl.innerText = `$${parseFloat(data.virtualBalance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         }
 
+        // 2. Manage Button State
         const btnAi = document.getElementById('btn-start-ai');
         
-        // Warming up logic (Initial analysis phase)
+        // If analyzing (warm-up phase)
         if (data.isRunning && data.historyCount < 50) {
             if (btnAi) {
                 btnAi.textContent = `ANALYZING... (${data.historyCount}/50)`;
                 btnAi.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse";
             }
         } else {
+            // Full Sync (Button + Switch + Input)
+            // Ensure aiBotUI.setRunningStatus uses English labels
             aiBotUI.setRunningStatus(data.isRunning, data.stopAtCycle);
         }
     });
 
-    // Neural Decisions & Logs
     socket.on('ai-decision-update', (data) => {
         if (aiBotUI.updateConfidence) aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         if (aiBotUI.addLogEntry) aiBotUI.addLogEntry(data.message, data.confidence);
     });
 
-    // Market Signals (ADX / Stoch)
     socket.on('market-signal-update', (data) => {
         const adxEl = document.getElementById('ai-adx-val');
         const stochEl = document.getElementById('ai-stoch-val');
@@ -84,18 +83,10 @@ function setupAISocketListeners() {
         }
     });
 
-    // Real-time Open Orders
-    socket.on('open-orders-update', (orders) => {
-        console.log("📥 [AIBOT] Open orders received:", orders);
-        if (aiBotUI.updateOpenOrdersTable) aiBotUI.updateOpenOrdersTable(orders);
-    });
-
-    // Trade History
     socket.on('ai-history-data', (history) => {
-        if (aiBotUI.updateHistoryTable) aiBotUI.updateHistoryTable(history);
+        aiBotUI.updateHistoryTable(history);
     });
 
-    // Execution feedback
     socket.on('ai-order-executed', (order) => {
         showAiToast(order);
         playNeuralSound(order.side);
@@ -107,17 +98,18 @@ function setupAIControls() {
     const aiInputs = [
         document.getElementById('ai-amount-usdt'),
         document.getElementById('auamountai-usdt')
-    ].filter(Boolean);
+    ];
     
     const stopCycleChecks = [
         document.getElementById('au-stop-ai-at-cycle'),
         document.getElementById('ai-stop-at-cycle')
-    ].filter(Boolean);
+    ];
 
     const btnStartAi = document.getElementById('btn-start-ai');
 
-    // Sync Amount Inputs
+    // 1. Amount Inputs Sync
     aiInputs.forEach(input => {
+        if (!input) return;
         input.addEventListener('change', async () => {
             const val = parseFloat(input.value);
             if (isNaN(val) || val <= 0) return;
@@ -126,8 +118,9 @@ function setupAIControls() {
         });
     });
 
-    // Sync Checkboxes
+    // 2. Checkboxes Sync
     stopCycleChecks.forEach(check => {
+        if (!check) return;
         check.addEventListener('change', async () => {
             const state = check.checked;
             stopCycleChecks.forEach(c => { if(c !== check) c.checked = state; });
@@ -135,15 +128,13 @@ function setupAIControls() {
         });
     });
 
-    // Start/Stop Toggle
+    // 3. Start/Stop Toggle (Clone to clean events)
     if (btnStartAi) {
-        // Remove old listeners by cloning
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
         newBtn.addEventListener('click', async () => {
-            const isRunning = currentBotState.config.ai.enabled;
-            const action = isRunning ? 'stop' : 'start';
+            const action = currentBotState.isRunning ? 'stop' : 'start';
             newBtn.disabled = true;
             newBtn.textContent = "PROCESSING...";
 
@@ -159,7 +150,7 @@ function setupAIControls() {
 
                 const result = await response.json();
                 if (result.success) {
-                    currentBotState.config.ai.enabled = result.isRunning;
+                    currentBotState.isRunning = result.isRunning;
                     aiBotUI.setRunningStatus(result.isRunning, stopCycleChecks[0]?.checked);
                 }
             } catch (error) {
@@ -199,7 +190,7 @@ function showAiToast(order) {
     const toast = document.createElement('div');
     const isBuy = order.side.toUpperCase() === 'BUY';
     
-    toast.className = `fixed bottom-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-500 transform translate-y-0 ${
+    toast.className = `fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-500 transform translate-y-0 ${
         isBuy ? 'bg-emerald-900/90 border-emerald-400' : 'bg-red-900/90 border-red-400'
     } text-white animate-bounceIn`;
 

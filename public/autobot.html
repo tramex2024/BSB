@@ -55,7 +55,7 @@
 
             <div class="flex gap-2 pt-1">
                 <button id="austartl-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start L</button>     
-                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start S</button>                                                                                 
+                <button id="austarts-btn" class="flex-1 bg-emerald-600 py-2 rounded-lg font-bold text-[10px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-colors">Start S</button>                                                 
             </div>
         </div>
 
@@ -177,7 +177,7 @@
 
         <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col h-[300px] lg:h-[340px]"> 
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
-                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order Management</h3>
+                <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
                 
                 <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
                     <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
@@ -187,22 +187,8 @@
                 </div>
             </div>
 
-            <div class="flex-grow overflow-hidden relative">
-                <div id="au-order-list-opened" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px]">
-                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando abiertas...</p>
-                </div>
-
-                <div id="au-order-list-filled" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px] hidden">
-                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Cargando completadas...</p>
-                </div>
-
-                <div id="au-order-list-cancelled" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px] hidden">
-                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Cargando canceladas...</p>
-                </div>
-
-                <div id="au-order-list-all" class="absolute inset-0 overflow-y-auto pr-2 space-y-2 custom-scrollbar font-mono text-[9px] hidden">
-                    <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Cargando historial...</p>
-                </div>
+            <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
+                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
             </div>
         </div>
     </div>

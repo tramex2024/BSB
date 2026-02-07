@@ -1,15 +1,15 @@
-//public/js/modules/autobot.js
+// public/js/modules/autobot.js
 
 /**
- * Autobot.js - Logic for Automated Engines (Long/Short/AI)
- * Synchronized with Core System 2026
+ * autobot.js - Core Logic for Trading Tabs
+ * Integration: WebSocket Sync & Dual-Button Control 2026
  */
 
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
-import { TRADE_SYMBOL_TV, currentBotState } from '../main.js'; 
+import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
 import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
@@ -18,7 +18,7 @@ let currentTab = 'all';
 let configDebounceTimeout = null;
 
 /**
- * Validates inputs for a specific side before starting
+ * Valida que los montos cumplan con el mínimo del exchange
  */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
@@ -40,7 +40,7 @@ function validateSideInputs(side) {
 }
 
 /**
- * Sets up listeners for all configuration inputs with debouncing
+ * Escucha cambios en todos los inputs de configuración (Dashboard + Tabs)
  */
 function setupConfigListeners() {
     const configIds = [
@@ -58,13 +58,15 @@ function setupConfigListeners() {
         
         el.addEventListener(eventType, () => {
             activeEdits[id] = Date.now();
+
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             configDebounceTimeout = setTimeout(async () => {
                 if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
+
                 try {
                     await sendConfigToBackend();
                 } catch (err) {
-                    console.error("❌ Error saving config:", err);
+                    console.error("❌ Error guardando config:", err);
                 }
             }, 800); 
         });
@@ -72,7 +74,7 @@ function setupConfigListeners() {
 }
 
 /**
- * Main initializer for the Autobot view
+ * Inicializa la vista y sincroniza los botones espejo
  */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
@@ -80,21 +82,23 @@ export async function initializeAutobotView() {
 
     setupConfigListeners();
 
+    /**
+     * Configura el evento de Start/Stop para un botón y su lógica asociada
+     */
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
         if (!btn) return;
 
-        // Clone to clean previous listeners
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            // Check current state from Global State
+            // Verificación de estado unificada
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
-                             currentBotState.config?.ai?.enabled);
+                             currentBotState.config.ai.enabled);
             
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
@@ -119,17 +123,17 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Binding buttons for all engines
+    // Inicializar botones (Espejos entre Dashboard y Tabs)
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
     setupSideBtn('btn-start-ai', 'ai');
 
-    // Initial UI update
+    // Sincronización visual inmediata
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Dynamic Chart Loading
+    // Inicializar Gráfico con delay para asegurar renderizado del DOM
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -140,12 +144,10 @@ export async function initializeAutobotView() {
         }
     }, 300);
 
+    // Iniciar pestañas de órdenes
     setupOrderTabs(auOrderList);
 }
 
-/**
- * Configures the order list filtering tabs
- */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     if (!orderTabs.length || !container) return;
@@ -170,7 +172,7 @@ function setupOrderTabs(container) {
         };
     });
 
-    // Default tab
+    // Carga inicial de órdenes (Pestaña por defecto: Opened/All)
     setActiveTabStyle('tab-all');
     fetchOrders('all', container);
 }

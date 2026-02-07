@@ -7,7 +7,8 @@ const STATUS_COLORS = {
     'STOPPED': '#ef4444',      
     'BUYING': '#60a5fa',        
     'SELLING': '#fbbf24',      
-    'PAUSED': '#fb923c',        
+    'PAUSED': '#fb923c',
+ //   'WAITING': '#8b5cf6'      
 };
 
 export const activeEdits = {};
@@ -26,8 +27,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const isBusy = BUSY_STATES.includes(currentStatus);
 
     const btn = document.getElementById(btnId);
-    
-    // Sincronizar el label de estado (ej: aubot-lstate)
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
@@ -38,16 +37,16 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     }
 
     if (btn) {
-        // Texto del botón
-        btn.textContent = isBusy ? `STOP ${type.toUpperCase()}` : `START ${type.toUpperCase()}`;
+        // CAMBIO AQUÍ: Si es AI, usamos "AI CORE" para que coincida con el resto de la app
+        const suffix = (type === 'AI') ? 'AI CORE' : type.toUpperCase();
+        btn.textContent = isBusy ? `STOP ${suffix}` : `START ${suffix}`;
         
-        // Colores de fondo según estado
         if (isBusy) {
             btn.classList.remove('bg-emerald-600', 'bg-blue-600');
             btn.classList.add('bg-red-600');
         } else {
             btn.classList.remove('bg-red-600');
-            // AI usa azul, Long/Short usan esmeralda según tu diseño
+            // Si es AI usamos el azul que tienes en el diseño, si no, esmeralda
             btn.classList.add(type === 'AI' ? 'bg-blue-600' : 'bg-emerald-600');
         }
         btn.disabled = false;
@@ -55,6 +54,7 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     }
 
     // 🛡️ BLOQUEO DE SEGURIDAD: 
+    // Si isBusy es true, se deshabilitan todos los IDs proporcionados.
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -65,12 +65,8 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     });
 }
 
-/**
- * Sincroniza los valores de los inputs con la config del servidor
- * Evita sobrescribir si el usuario está editando (3s de gracia)
- */
 export function syncInputsFromConfig(conf) {
-    if (!conf) return;
+    if (!conf || (!conf.long && !conf.short)) return;
 
     const mapping = {
         'auamountl-usdt': conf.long?.amountUsdt,
@@ -85,8 +81,7 @@ export function syncInputsFromConfig(conf) {
         'audecrements': conf.short?.price_var,
         'aupricestep-s': conf.short?.price_step_inc,
         'autriggers': conf.short?.profit_percent,
-        'auamountai-usdt': conf.ai?.amountUsdt,
-        'ai-amount-usdt': conf.ai?.amountUsdt
+        'auamountai-usdt': conf.ai?.amountUsdt
     };
 
     const now = Date.now();
@@ -98,7 +93,13 @@ export function syncInputsFromConfig(conf) {
         const lastEdit = activeEdits[id] || 0;
         const isFreshlyEdited = (now - lastEdit < 3000);
 
-        if (document.activeElement === input || isFreshlyEdited) continue; 
+        if (document.activeElement === input || isFreshlyEdited) {
+            continue; 
+        }
+
+        if (parseFloat(value) === 0 && parseFloat(input.value) > 0) {
+            continue;
+        }
 
         const currentVal = parseFloat(input.value) || 0;
         const newVal = parseFloat(value) || 0;
@@ -108,22 +109,14 @@ export function syncInputsFromConfig(conf) {
         }
     }
     
-    // Sincronización de Checkboxes (Stop at Cycle)
     ['long', 'short', 'ai'].forEach(side => {
-        // IDs posibles para los checkboxes
-        const ids = [`au-stop-${side}-at-cycle`];
-        if (side === 'ai') ids.push('ai-stop-at-cycle');
+        const id = `au-stop-${side}-at-cycle`;
+        const el = document.getElementById(id);
+        const val = !!conf[side]?.stopAtCycle;
+        const lastEdit = activeEdits[id] || 0;
 
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-
-            const val = !!conf[side]?.stopAtCycle;
-            const lastEdit = activeEdits[id] || 0;
-
-            if (document.activeElement !== el && (now - lastEdit >= 3000)) {
-                if (el.checked !== val) el.checked = val;
-            }
-        });
+        if (el && document.activeElement !== el && (now - lastEdit >= 3000)) {
+            if (el.checked !== val) el.checked = val;
+        }
     });
 }

@@ -1,37 +1,27 @@
 // public/js/modules/orders.js
 
-import { BACKEND_URL, currentBotState } from '../main.js';
-import { renderAutobotOpenOrders } from './uiManager.js';
-
-// Memoria de firmas para evitar re-renders innecesarios
-const lastSnapshots = {
-    all: "",
-    filled: "",
-    cancelled: "",
-    opened: ""
-};
-
-/**
- * Crea una firma de texto única basada en IDs y Estados
- */
-function generateSnapshot(orders) {
-    if (!orders || orders.length === 0) return "empty";
-    return orders.map(o => `${o.orderId}-${o.state || o.status}`).join('|');
-}
+import { BACKEND_URL } from '../main.js';
 
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
     const sideTheme = isBuy ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5';
+    
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
+    
     const timestamp = order.orderTime || order.createTime || Date.now();
     const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
     });
+
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
+    
+    // RESTAURADO: ID completo de la orden
     const fullOrderId = (order.orderId || '').toString();
+
+    // Sincronizado con estados de BitMart v4
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
 
     return `
@@ -44,12 +34,13 @@ function createOrderHtml(order) {
                 </div>
             </div>
         </div>
+
         <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
-            <div class="flex flex-col text-left">
+            <div class="flex flex-col">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Price</span>
                 <span class="text-gray-100 font-mono text-sm">$${price}</span>
             </div>
-            <div class="flex flex-col text-left">
+            <div class="flex flex-col">
                 <span class="text-[9px] text-gray-500 font-bold uppercase">Amount</span>
                 <span class="text-gray-300 font-mono text-sm">${quantity}</span>
             </div>
@@ -60,6 +51,7 @@ function createOrderHtml(order) {
                 </span>
             </div>
         </div>
+
         <div class="w-1/4 flex flex-col items-end gap-1">
             <p class="text-[10px] text-gray-400">${date}</p>
             ${isCancellable ? `
@@ -72,48 +64,34 @@ function createOrderHtml(order) {
     </div>`;
 }
 
-export function fetchOrders(status, orderListElement) {
+export async function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
-    orderListElement.dataset.currentStatus = status;
+    orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
-    let ordersToProcess = [];
-    if (status === 'opened') {
-        ordersToProcess = currentBotState.openOrders || [];
-    } else {
-        const allOrders = currentBotState.ordersHistory || [];
-        if (status === 'all') ordersToProcess = allOrders;
-        else if (status === 'filled') ordersToProcess = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('FILLED'));
-        else if (status === 'cancelled') ordersToProcess = allOrders.filter(o => (o.state || o.status || '').toUpperCase().includes('CANCELED'));
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/orders/${status}`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const result = await response.json();
+        const ordersArray = Array.isArray(result) ? result : (result.data || []);
+        
+        if (ordersArray.length === 0) {
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders</div>`;
+            return;
+        }
+
+        orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
+    } catch (error) {
+        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
     }
-
-    // MONITOR DE CAMBIOS
-    const newSnapshot = generateSnapshot(ordersToProcess);
-    if (newSnapshot === lastSnapshots[status]) return; 
-    
-    lastSnapshots[status] = newSnapshot;
-
-    if (status === 'opened') {
-        renderAutobotOpenOrders(ordersToProcess);
-        return;
-    }
-
-    if (ordersToProcess.length === 0) {
-        orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders available</div>`;
-        return;
-    }
-
-    orderListElement.innerHTML = ordersToProcess.map(order => createOrderHtml(order)).join('');
 }
 
-window.refreshOrdersUI = () => {
-    const container = document.getElementById('au-order-list');
-    if (container && container.dataset.currentStatus) {
-        fetchOrders(container.dataset.currentStatus, container);
-    }
-};
-
+/**
+ * BRIDGE GLOBAL: Expone la función de cancelación para los atributos 'onclick'
+ */
 window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
+
     try {
         const response = await fetch(`${BACKEND_URL}/api/orders/cancel`, {
             method: 'POST',
@@ -123,8 +101,15 @@ window.cancelOrder = async (orderId) => {
             },
             body: JSON.stringify({ orderId })
         });
+        
         const data = await response.json();
-        if (!data.success) alert(`Error: ${data.message || 'Could not cancel'}`);
+        if (data.success) {
+            // Refrescar automáticamente la vista actual (generalmente 'all' o 'opened')
+            const activeContainer = document.getElementById('au-order-list');
+            if (activeContainer) fetchOrders('all', activeContainer);
+        } else {
+            alert(`Error: ${data.message || 'Could not cancel'}`);
+        }
     } catch (error) {
         console.error("Cancel Error:", error);
     }

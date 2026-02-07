@@ -1,25 +1,27 @@
+// public/js/modules/apiService.js
+
 /**
- * apiService.js - REST Communications
- * Optimized to coexist with Sockets 2026
+ * apiService.js - Comunicaciones REST
+ * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
-// 🛡️ SHIELD: Prevents Socket from overwriting UI while user is editing
+// 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI con datos viejos mientras guardamos
 export let isSavingConfig = false;
-let savingTimeout = null;
 
 /**
- * Base function for private fetch requests
+ * Función base para peticiones privadas con Timeout y AbortController
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) {
-        return { success: false, message: "Session not found." };
+        logStatus("⚠️ Sesión no encontrada. Por favor inicie sesión.", "error");
+        return { success: false, message: "Sesión no encontrada." };
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000); 
+    const timeoutId = setTimeout(() => controller.abort(), 15000); 
 
     const defaultOptions = {
         signal: controller.signal,
@@ -34,20 +36,29 @@ async function privateFetch(endpoint, options = {}) {
         clearTimeout(timeoutId);
         
         if (response.status === 401) {
+            logStatus("⚠️ Sesión expirada.", "error");
             localStorage.removeItem('token');
-            window.location.reload(); // Force re-login if token expires
             return { success: false, message: "Unauthorized" };
         }
 
-        return await response.json(); 
+        const result = await response.json().catch(() => ({ 
+            success: response.ok, 
+            message: response.statusText 
+        }));
+
+        return result; 
 
     } catch (error) {
-        if (error.name === 'AbortError') logStatus("❌ API Timeout", "error");
+        if (error.name === 'AbortError') {
+            logStatus("❌ Tiempo de espera agotado", "error");
+        } else {
+            logStatus("❌ Error de red o conexión", "error");
+        }
         return { success: false, message: error.message };
     }
 }
 
-// --- SECTION: ANALYTICS ---
+// --- SECCIÓN: ANALYTICS (CORREGIDA PARA SOPORTAR 'ALL' Y 'AI') ---
 
 export async function fetchCycleKpis(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
@@ -57,10 +68,11 @@ export async function fetchEquityCurveData(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
 }
 
-// --- SECTION: CONFIGURATION & CONTROL ---
+// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT (ESTRUCTURA ORIGINAL) ---
 
 /**
- * Collects configuration from UI inputs
+ * Recolecta la configuración de la UI asegurando que las llaves
+ * coincidan exactamente con el Schema de Mongoose.
  */
 export function getBotConfiguration() {
     const getNum = (id, path) => {
@@ -68,9 +80,9 @@ export function getBotConfiguration() {
         if (!el) return 0;
         
         const rawValue = el.value.trim();
-        // If empty, fallback to current global state to avoid zeroing out config
         if (rawValue === "") {
             const parts = path.split('.');
+            // Intento de recuperación del estado actual si el campo está vacío
             if (parts.length === 2) {
                 return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
             }
@@ -83,6 +95,7 @@ export function getBotConfiguration() {
 
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
+    // Esta es la estructura masiva que mantiene la integridad de tu base de datos
     return {
         symbol: "BTC_USDT", 
         long: {
@@ -93,7 +106,7 @@ export function getBotConfiguration() {
             profit_percent: getNum('autriggerl', 'long.profit_percent'),   
             price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
-            enabled: currentBotState.config?.long?.enabled || false
+            enabled: true
         },
         short: {
             amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
@@ -103,32 +116,29 @@ export function getBotConfiguration() {
             profit_percent: getNum('autriggers', 'short.profit_percent'),   
             price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
-            enabled: currentBotState.config?.short?.enabled || false
+            enabled: true
         },
         ai: {
             amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
-            stopAtCycle: getCheck('ai-stop-at-cycle') || getCheck('au-stop-ai-at-cycle'),
-            enabled: currentBotState.config?.ai?.enabled || false
+            stopAtCycle: getCheck('ai-stop-at-cycle'),
+            enabled: true
         }
     };
 }
 
 /**
- * Sends configuration to Backend with temporary Socket shield
+ * Envía la configuración al Backend bloqueando actualizaciones de socket
  */
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
     
-    // Safety check for minimum exchange requirements
-    if ((config.long.amountUsdt > 0 && config.long.amountUsdt < 5) || 
-        (config.short.amountUsdt > 0 && config.short.amountUsdt < 5)) {
-        displayMessage("⚠️ Minimum amount is $5 USDT", 'warning');
+    // Validación básica de seguridad
+    if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
+        displayMessage("⚠️ El monto mínimo es $5", 'error');
         return { success: false };
     }
 
-    // Activate shield
-    isSavingConfig = true;
-    if (savingTimeout) clearTimeout(savingTimeout);
+    isSavingConfig = true; 
     
     try {
         const data = await privateFetch('/api/autobot/update-config', {
@@ -137,36 +147,38 @@ export async function sendConfigToBackend() {
         });
 
         if (data && data.success) {
-            logStatus("✅ Configuration saved", "success");
+            displayMessage("✅ Configuración sincronizada", 'success');
+        } else {
+            displayMessage(data?.message || "Error al guardar", 'error');
         }
         return data;
     } catch (err) {
+        displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        // Hold the shield for 1s to allow socket state to stabilize
-        savingTimeout = setTimeout(() => { isSavingConfig = false; }, 1000);
+        setTimeout(() => { isSavingConfig = false; }, 400);
     }
 }
 
 /**
- * Engine Control (Long, Short or AI)
+ * Activa o desactiva una estrategia (Long, Short o AI)
  */
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
     const sideKey = side.toLowerCase(); 
     const action = isRunning ? 'stop' : 'start';
     
-    // Visual feedback for all related buttons
-    const btnIds = {
-        long: ['austartl-btn'],
-        short: ['austarts-btn'],
-        ai: ['btn-start-ai', 'austartai-btn']
-    };
+    let btnId;
+    if (sideKey === 'long') btnId = 'austartl-btn';
+    else if (sideKey === 'short') btnId = 'austarts-btn';
+    else if (sideKey === 'ai') btnId = 'btn-start-ai'; 
 
-    const targets = btnIds[sideKey] || [];
-    targets.forEach(id => {
-        const b = document.getElementById(id);
-        if (b) { b.disabled = true; b.textContent = "..."; }
-    });
+    const btn = document.getElementById(btnId);
+
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
+    }
 
     try {
         const config = providedConfig || getBotConfiguration();
@@ -176,27 +188,32 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         });
 
         if (data && data.success) {
-            displayMessage(`${sideKey.toUpperCase()} ${action === 'start' ? 'STARTED' : 'STOPPED'}`, 'success');
+            displayMessage(`${sideKey.toUpperCase()}: ${data.message}`, 'success');
             return data;
         } else {
-            throw new Error(data?.message || 'Server error');
+            throw new Error(data?.message || 'Error en el motor');
         }
     } catch (err) {
         displayMessage(err.message, 'error');
         return { success: false };
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        }
     }
 }
 
 /**
- * PANIC BUTTON
+ * BOTÓN DE PÁNICO: Detiene todo inmediatamente
  */
 export async function triggerPanicStop() {
     try {
         const data = await privateFetch('/api/autobot/panic-stop', { method: 'POST' });
-        if (data.success) displayMessage("🚨 PANIC: Stopping all engines", 'error');
+        if (data.success) displayMessage("🚨 PÁNICO ACTIVADO: Todo detenido", 'success');
         return data;
     } catch (err) {
-        displayMessage("Panic stop failed", 'error');
+        displayMessage("Error al ejecutar pánico", 'error');
         return { success: false };
     }
 }

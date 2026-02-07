@@ -1,4 +1,4 @@
-// public/js/modules/aiBotUI.js
+//public/js/modules/aiBotUI.js
 
 /**
  * AI Bot Interface Module - Optimized 2026
@@ -78,7 +78,7 @@ const aiBotUI = {
    
     updateHistoryTable: (trades) => {
         const tbody = document.getElementById('ai-history-table-body');
-        if (!tbody) return; // Guardia silenciosa
+        if (!tbody) return;
 
         const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
         
@@ -90,6 +90,8 @@ const aiBotUI = {
         tbody.innerHTML = tradesList.map(trade => {
             const isBuy = (trade.side || '').toUpperCase() === 'BUY';
             const score = trade.confidenceScore || (trade.confidence * 100) || 0;
+            
+            // Normalización de tiempo para evitar Invalid Date
             const rawTime = trade.orderTime || trade.updateTime || trade.timestamp;
             const time = rawTime ? new Date(Number(rawTime)).toLocaleTimeString() : '---';
 
@@ -122,92 +124,91 @@ const aiBotUI = {
      */
     updateOpenOrdersTable: function(orders) {
         const tbody = document.getElementById('ai-open-orders-body'); 
-        
-        // 🛡️ GUARDIA SILENCIOSA: No lanzamos error si no está en el DOM actual
-        if (!tbody) return;
+        if (!tbody) {
+            console.error("❌ No se encontró el elemento 'ai-open-orders-body' en el DOM.");
+            return;
+        }
 
         const ordersList = Array.isArray(orders) ? orders : (orders.orders || []);
+        console.log(`🖥️ UI: Renderizando ${ordersList.length} órdenes abiertas.`);
 
         if (ordersList.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 uppercase text-[9px] tracking-widest opacity-50">No Open Positions</td></tr>`;
             return;
         }
 
-tbody.innerHTML = ordersList.map(order => {
-    // 🛡️ Normalización agresiva de campos
-    const id = order.orderId || order.order_id || 'N/A';
-    const side = (order.side || 'BUY').toUpperCase();
-    const isBuy = side === 'BUY';
-    
-    // BitMart a veces envía 'notional' como el monto en USDT
-    const price = parseFloat(order.price || order.orderPrice || 0);
-    const amount = parseFloat(order.size || order.amount || order.filledSize || 0);
-    
-    return `
-        <tr class="border-b border-blue-500/5 hover:bg-white/[0.02]">
-            <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
-                ${id.toString().slice(-6)}
-            </td>
-            <td class="px-6 py-3">
-                <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px]">
-                    ${side}
-                </span>
-            </td>
-            <td class="px-6 py-3 text-right text-white font-mono">$${price.toFixed(2)}</td>
-            <td class="px-6 py-3 text-right text-gray-400 font-mono">${amount}</td>
-            <td class="px-6 py-3 text-right">
-                 <button onclick="cancelOrder('${id}')" class="text-red-500 hover:text-red-400">
-                    <i class="fas fa-times-circle"></i>
-                 </button>
-            </td>
-        </tr>
-    `;
-}).join('');
+        tbody.innerHTML = ordersList.map(order => {
+            const isBuy = (order.side || '').toUpperCase() === 'BUY';
+            const id = order.orderId || order.order_id || '';
+            const price = parseFloat(order.price || 0);
+            const amount = parseFloat(order.amount || order.size || 0);
+
+            return `
+                <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
+                    <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
+                        ${id ? id.toString().slice(-6) : '---'}
+                    </td>
+                    <td class="px-6 py-3">
+                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">
+                            ${isBuy ? 'BUY' : 'SELL'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">
+                        $${price.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                    </td>
+                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">
+                        ${amount.toFixed(4)} BTC
+                    </td>
+                    <td class="px-6 py-3 text-right">
+                        <button class="text-red-500/50 hover:text-red-500 transition-colors">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
     },
 
     /**
      * GLOBAL SYNC: UI state driven by Backend
      */
     setRunningStatus: (isRunning, stopAtCycle = null) => {
-        // IDs que manejamos
-        const elements = {
-            btn: document.getElementById('btn-start-ai'),
-            dot: document.getElementById('ai-status-dot'),
-            syncDot: document.getElementById('ai-sync-dot'),
-            syncText: document.getElementById('ai-sync-text'),
-            aiInput: document.getElementById('ai-amount-usdt'),
-            stopCycleCheck: document.getElementById('ai-stop-at-cycle')
-        };
+        const btn = document.getElementById('btn-start-ai');
+        const dot = document.getElementById('ai-status-dot');
+        const syncDot = document.getElementById('ai-sync-dot');
+        const syncText = document.getElementById('ai-sync-text');
+        const aiInput = document.getElementById('ai-amount-usdt');
+        const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-        if (elements.stopCycleCheck && stopAtCycle !== null) {
-            elements.stopCycleCheck.checked = stopAtCycle;
+        if (stopCycleCheck && stopAtCycle !== null) {
+            stopCycleCheck.checked = stopAtCycle;
         }
 
         if (isRunning) {
-            if (elements.btn) {
-                elements.btn.innerText = "STOP AI CORE";
-                elements.btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
+            if (btn) {
+                btn.innerText = "STOP AI CORE";
+                btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
             }
-            if (elements.dot) elements.dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
-            if (elements.syncDot) elements.syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
-            if (elements.syncText) elements.syncText.innerText = "AI CORE ACTIVE";
+            if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
+            if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
+            if (syncText) syncText.innerText = "AI CORE ACTIVE";
             
-            if (elements.aiInput) {
-                elements.aiInput.disabled = true;
-                elements.aiInput.classList.add('opacity-40', 'cursor-not-allowed');
+            if (aiInput) {
+                aiInput.disabled = true;
+                aiInput.classList.add('opacity-40', 'cursor-not-allowed');
             }
         } else {
-            if (elements.btn) {
-                elements.btn.innerText = "START AI CORE";
-                elements.btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
+            if (btn) {
+                btn.innerText = "START AI CORE";
+                btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
             }
-            if (elements.dot) elements.dot.className = "w-2.5 h-2.5 bg-gray-500 rounded-full shadow-none";
-            if (elements.syncDot) elements.syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
-            if (elements.syncText) elements.syncText.innerText = "STANDBY";
+            if (dot) dot.className = "w-2.5 h-2.5 bg-gray-500 rounded-full shadow-none";
+            if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
+            if (syncText) syncText.innerText = "STANDBY";
             
-            if (elements.aiInput) {
-                elements.aiInput.disabled = false;
-                elements.aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
+            if (aiInput) {
+                aiInput.disabled = false;
+                aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
             }
 
             const circle = document.getElementById('ai-confidence-circle');
