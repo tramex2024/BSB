@@ -1,6 +1,6 @@
 /**
  * BSB/server/server.js
- * SERVIDOR UNIFICADO (BSB 2026) - Lógica de Órdenes Restaurada (Versión Funcional)
+ * SERVIDOR UNIFICADO (BSB 2026) - Optimización Multiusuario y Estabilidad de Órdenes
  */
 
 const express = require('express');
@@ -17,6 +17,7 @@ const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
+const orderPersistenceService = require('./services/orderPersistenceService'); // <--- AÑADIDO
 
 // Modelos
 const Autobot = require('./models/Autobot');
@@ -59,6 +60,7 @@ const io = new Server(server, {
 
 autobotLogic.setIo(io);
 aiEngine.setIo(io); 
+orderPersistenceService.setIo(io); // <--- CONEXIÓN DEL CABLE DE NOTIFICACIONES
 
 // --- 4. RUTAS API ---
 app.use('/api/auth', require('./routes/authRoutes'));
@@ -83,13 +85,11 @@ let isMarketConnected = false;
 let lastExecutionTime = 0;
 const EXECUTION_THROTTLE_MS = 2000; 
 
-// --- 7. LÓGICA DE EMISIÓN DE ESTADO (RECUPERADA DE LA VERSIÓN ANTIGUA) ---
-// Esta función asegura que el frontend reciba todos los datos para evitar ceros
+// --- 7. LÓGICA DE EMISIÓN DE ESTADO ---
 const emitBotState = (io, state) => {
     if (!state) return;
     io.sockets.emit('bot-state-update', {
         ...state,
-        // Aseguramos campos críticos que el Dashboard espera
         lstate: state.lstate, sstate: state.sstate,
         total_profit: state.total_profit,
         lbalance: state.lbalance, sbalance: state.sbalance,
@@ -157,11 +157,11 @@ function setupMarketWS(io) {
 
 // --- 9. WEBSOCKET ÓRDENES PRIVADAS ---
 bitmartService.initOrderWebSocket((ordersData) => {
-    console.log(`[BACKEND-WS] 📥 Evento privado: ${ordersData.length} órdenes.`);
+    console.log(`[BACKEND-WS] 📥 Evento privado detectado.`);
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 10. INTERVALOS DE RESPALDO (RECUPERADOS DE LA VERSIÓN ANTIGUA) ---
+// --- 10. INTERVALOS DE RESPALDO OPTIMIZADOS ---
 
 // Sincronización de saldos (10s)
 setInterval(async () => {
@@ -170,40 +170,30 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// Polling de Órdenes (5s) - ESTO ES LO QUE HACÍA QUE LA ANTIGUA FUNCIONARA SÍ O SÍ
-setInterval(async () => {
-    try {
-        const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
-        if (orders) io.sockets.emit('open-orders-update', orders);
-    } catch (e) { console.error("Error Polling Orders:", e.message); }
-}, 5000);
-
 setupMarketWS(io);
 
-// --- 11. EVENTOS SOCKET.IO (CON HIDRATACIÓN MEJORADA) ---
+// --- 11. EVENTOS SOCKET.IO (HIDRATACIÓN DESDE DB) ---
 io.on('connection', async (socket) => {
     console.log(`👤 Usuario Conectado: ${socket.id}`);
 
-    // Emitir estado inicial del bot inmediatamente
     Autobot.findOne({}).lean().then(state => {
         if (state) emitBotState(io, state);
     });
 
-    const hydrateOrders = async () => {
+    const hydrateFromDB = async () => {
         try {
-            console.log(`[BACKEND-SYNC] 🔄 Hidratando órdenes para ${socket.id}`);
-            const { orders } = await bitmartService.getOpenOrders('BTC_USDT');
-            socket.emit('open-orders-update', orders || []);
-
-            const history = await Order.find({ strategy: 'ai' }).sort({ orderTime: -1 }).limit(20);
+            console.log(`[BACKEND-SYNC] 🔄 Hidratando desde DB para ${socket.id}`);
+            const history = await Order.find({})
+                .sort({ orderTime: -1 })
+                .limit(20);
+            
             socket.emit('ai-history-update', history);
         } catch (err) {
-            console.error("❌ Error hidratando órdenes:", err.message);
+            console.error("❌ Error hidratando desde DB:", err.message);
         }
     };
 
-    await hydrateOrders();
-
+    await hydrateFromDB();
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
 });
 

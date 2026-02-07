@@ -69,9 +69,11 @@ async function syncFrontendState(currentPrice, botState) {
 
 /**
  * Guarda todos los cambios en la base de datos de forma segura (Atómica)
+ * OPTIMIZADO: Ahora garantiza que el cambio de estado se emita inmediatamente.
  */
 async function commitChanges(changeSet, currentPrice) {
     try {
+        // Si no hay cambios, solo refrescamos el precio y estado actual en el frontend
         if (Object.keys(changeSet).length === 0) {
             const current = await Autobot.findOne({}).lean();
             if (current) await syncFrontendState(currentPrice, current);
@@ -87,7 +89,16 @@ async function commitChanges(changeSet, currentPrice) {
         ).lean();
 
         if (updated) {
+            // ✅ Sincronización inmediata: Emitimos el nuevo estado del bot (incluyendo llastOrder)
             await syncFrontendState(currentPrice, updated);
+            
+            // Si el cambio incluyó una nueva orden pendiente, avisamos específicamente
+            if (changeSet.llastOrder || changeSet.slastOrder) {
+                io.emit('order-pending-verification', { 
+                    symbol: updated.config.symbol,
+                    hasPending: true 
+                });
+            }
         }
         return updated;
     } catch (error) {
