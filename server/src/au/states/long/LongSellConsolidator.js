@@ -2,16 +2,14 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
 const { handleSuccessfulSell } = require('../../managers/longDataManager');
-// 🟢 CORRECCIÓN: Importación necesaria para que el historial (tradecycles) funcione
 const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
 
 /**
  * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.
- * Delega la lógica de parada o reinicio al LongDataManager.
+ * Optimizada para no dejar rastro de órdenes antiguas y notificar al frontend.
  */
 async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState) {
     
-    // ✅ CAMBIO: Ahora leemos la orden directamente de la raíz (llastOrder)
     const lastOrder = botState.llastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
@@ -34,35 +32,36 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: VENTA CONFIRMADA (Delegación al Manager) ===
+        // === CASO A: VENTA CONFIRMADA ===
         if (isFilled) {
-            log(`💰 [L-SELL-SUCCESS] Venta confirmada. Procesando cierre de ciclo...`, 'success');
+            log(`💰 [L-SELL-SUCCESS] Venta confirmada @ ${finalDetails.priceAvg || 'Market'}. Cerrando ciclo...`, 'success');
             
             const handlerDependencies = { 
                 log, 
                 updateBotState, 
                 updateLStateData, 
                 updateGeneralBotState, 
-                logSuccessfulCycle, // Inyectamos la función para asegurar el registro en tradecycles
-                config: botState.config // Contiene la nueva jerarquía config.long
+                logSuccessfulCycle,
+                config: botState.config
             };
             
-            // ✅ handleSuccessfulSell se encargará de resetear las siglas de raíz (lac, lai, etc.)
+            // Este manager ahora disparará saveExecutedOrder, el cual notificará al socket.
             await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
 
             return true;
         }
 
         // === CASO B: LA ORDEN SIGUE EN EL LIBRO ===
+        // No hacemos nada, dejamos que el bot espere en el siguiente tic.
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
             return true; 
         }
 
-        // === CASO C: FALLO O CANCELACIÓN SIN EJECUCIÓN ===
-        if (isCanceled && filledVolume === 0) {
-            log(`❌ [L-SELL-FAIL] Venta cancelada sin ejecución. Liberando para reintento...`, 'error');
+        // === CASO C: FALLO O CANCELACIÓN ===
+        if (isCanceled) {
+            log(`⚠️ [L-SELL-CANCEL] La orden de venta fue cancelada en el exchange.`, 'warning');
             
-            // ✅ CAMBIO: Limpiamos llastOrder en la raíz
+            // Limpiamos la orden de la raíz para permitir que el bot decida si re-vende o espera.
             await updateGeneralBotState({ llastOrder: null });
             return true;
         }
@@ -71,6 +70,7 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
 
     } catch (error) {
         log(`[L-SELL-ERROR] Error crítico: ${error.message}`, 'error');
+        // Importante: No limpiamos llastOrder aquí para reintentar en el siguiente ciclo.
         return true; 
     }
 }
