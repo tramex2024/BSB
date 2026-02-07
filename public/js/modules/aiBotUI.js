@@ -2,7 +2,7 @@
 
 /**
  * AI Bot Interface Module - Optimized 2026
- * Integration: Balance Input Control & Neural Sync
+ * Integration: Centralized Button State & Neural Sync
  */
 
 const aiBotUI = {
@@ -91,7 +91,6 @@ const aiBotUI = {
             const isBuy = (trade.side || '').toUpperCase() === 'BUY';
             const score = trade.confidenceScore || (trade.confidence * 100) || 0;
             
-            // Normalización de tiempo para evitar Invalid Date
             const rawTime = trade.orderTime || trade.updateTime || trade.timestamp;
             const time = rawTime ? new Date(Number(rawTime)).toLocaleTimeString() : '---';
 
@@ -119,18 +118,11 @@ const aiBotUI = {
         }).join('');
     },
 
-    /**
-     * MÉTODOS PARA ÓRDENES ABIERTAS (Sincronización WebSocket)
-     */
     updateOpenOrdersTable: function(orders) {
         const tbody = document.getElementById('ai-open-orders-body'); 
-        if (!tbody) {
-            console.error("❌ No se encontró el elemento 'ai-open-orders-body' en el DOM.");
-            return;
-        }
+        if (!tbody) return;
 
         const ordersList = Array.isArray(orders) ? orders : (orders.orders || []);
-        console.log(`🖥️ UI: Renderizando ${ordersList.length} órdenes abiertas.`);
 
         if (ordersList.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 uppercase text-[9px] tracking-widest opacity-50">No Open Positions</td></tr>`;
@@ -170,9 +162,9 @@ const aiBotUI = {
     },
 
     /**
-     * GLOBAL SYNC: UI state driven by Backend
+     * GLOBAL SYNC: UI state driven by Backend + historyCount logic
      */
-    setRunningStatus: (isRunning, stopAtCycle = null) => {
+    setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 50) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');
         const syncDot = document.getElementById('ai-sync-dot');
@@ -185,10 +177,17 @@ const aiBotUI = {
         }
 
         if (isRunning) {
+            // Lógica unificada para el botón
             if (btn) {
-                btn.innerText = "STOP AI CORE";
-                btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
+                if (historyCount < 50) {
+                    btn.innerText = `ANALYZING... (${historyCount}/50)`;
+                    btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse transition-all";
+                } else {
+                    btn.innerText = "STOP AI CORE";
+                    btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
+                }
             }
+
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";

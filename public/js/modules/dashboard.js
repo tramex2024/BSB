@@ -1,6 +1,6 @@
 /**
- * dashboard.js - Controlador de Interfaz y Eventos (Versión Full Integrada 2026)
- * Sincronización de balances reales y estados del bot.
+ * dashboard.js - Controlador de Interfaz (Versión Sincronizada 2026)
+ * Estado: Limpieza de listeners de Socket (Movidos a socket.js)
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { socket, currentBotState } from '../main.js'; 
@@ -32,14 +32,13 @@ export function initializeDashboardView(initialState) {
     // 2. Sincronización inmediata con el estado global
     if (stateToUse) {
         updateBotUI(stateToUse);
-        // Pequeño delay para asegurar que el canvas esté listo en el DOM
         setTimeout(() => {
             updateDistributionWidget(stateToUse);
         }, 100);
     }
 
-    // 3. Configurar Eventos y Botones
-    setupSocketListeners();
+    // 3. Configurar Eventos y Botones Locales
+    // NOTA: setupSocketListeners ha sido eliminado porque socket.js centraliza todo.
     setupActionButtons();
     setupAnalyticsFilters();
     
@@ -77,13 +76,14 @@ function setupActionButtons() {
             el.onclick = async () => {
                 const isRunning = el.textContent.includes("STOP");
                 await toggleBotSideState(isRunning, btn.side);
+                // La actualización visual vendrá vía Socket -> socket.js -> uiManager
             };
         }
     });
 }
 
 /**
- * Refresca analítica
+ * Refresca analítica (Gráfico de Equity)
  */
 async function refreshAnalytics() {
     try {
@@ -108,61 +108,6 @@ async function refreshAnalytics() {
     }
 }
 
-/**
- * Listeners en tiempo real
- */
-function setupSocketListeners() {
-    if (!socket) return;
-
-    const events = ['market-signal-update', 'order-executed', 'cycle-closed', 'ai-decision-update', 'ai-status-update'];
-    events.forEach(ev => socket.off(ev));
-
-    // Actualización de precio y tendencia
-    socket.on('market-signal-update', (analysis) => {
-        if (analysis.price) {
-            currentBotState.price = analysis.price;
-            // Actualizamos el widget para que el gráfico de dona reaccione al precio real
-            updateDistributionWidget(currentBotState);
-        }
-
-        const signalEl = document.getElementById('ai-trend-label');
-        if (signalEl) {
-            signalEl.textContent = analysis.trend || 'NEUTRAL';
-            signalEl.className = `text-[8px] font-bold px-1.5 py-0.5 rounded bg-gray-900 ${
-                analysis.trend === 'BULLISH' ? 'text-emerald-400' : analysis.trend === 'BEARISH' ? 'text-red-400' : 'text-gray-400'
-            }`;
-        }
-    });
-
-    socket.on('order-executed', (order) => {
-        try {
-            order.side.toLowerCase() === 'buy' ? sounds.buy.play() : sounds.sell.play();
-            flashElement('auprice', order.side.toLowerCase() === 'buy' ? 'bg-emerald-500/20' : 'bg-orange-500/20');
-        } catch (e) {}
-    });
-
-    socket.on('cycle-closed', () => {
-        if(sounds.sell) sounds.sell.play();
-        flashElement('auprofit', 'bg-yellow-500/30');
-        refreshAnalytics(); 
-    });
-
-    socket.on('ai-decision-update', (data) => {
-        const msgEl = document.getElementById('ai-engine-msg');
-        if (msgEl) msgEl.textContent = data.message || "NEURAL CORE ANALYZING...";
-        
-        const confBar = document.getElementById('ai-confidence-fill');
-        if (confBar) confBar.style.width = `${Math.round(data.confidence * 100)}%`;
-    });
-
-    socket.on('ai-status-update', (data) => {
-        if (data.virtualBalance !== undefined) {
-            currentBotState.aibalance = data.virtualBalance;
-            updateDistributionWidget(currentBotState);
-        }
-    });
-}
-
 // --- GESTIÓN DE GRÁFICOS ---
 
 function initBalanceChart(state) {
@@ -175,7 +120,7 @@ function initBalanceChart(state) {
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: [1, 0], // Placeholder neutro
+                data: [1, 0], 
                 backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
@@ -234,32 +179,26 @@ export function updateDistributionWidget(state) {
     
     const usdt = parseFloat(state.lastAvailableUSDT || 0);
     const btcAmount = parseFloat(state.lastAvailableBTC || 0);
-    const price = parseFloat(state.price || state.marketPrice || 0);
+    const price = parseFloat(state.price || 0);
     
-    // Solo calculamos proporciones si tenemos precio de mercado real
     if (price > 0) {
         const btcInUsdt = btcAmount * price;
         const total = usdt + btcInUsdt;
 
         if (total > 0) {
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-            balanceChart.update('none'); // Update sin animaciones bruscas para el precio
-
-            // Actualizar barras de progreso visuales
-            const displayUsdtPercent = (usdt / total) * 100;
-            const displayBtcPercent = (btcInUsdt / total) * 100;
+            balanceChart.update('none');
 
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');
-            if (usdtBar) usdtBar.style.width = `${displayUsdtPercent}%`;
-            if (btcBar) btcBar.style.width = `${displayBtcPercent}%`;
+            if (usdtBar) usdtBar.style.width = `${(usdt / total) * 100}%`;
+            if (btcBar) btcBar.style.width = `${(btcInUsdt / total) * 100}%`;
         }
     }
     
-    // Los textos de balance se actualizan siempre con los valores crudos de la BD
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
-    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
     if(bText) bText.innerText = btcAmount.toFixed(6);
 }
 
@@ -288,14 +227,5 @@ function updateHealthStatus(textId, isOnline) {
     if (txt) {
         txt.textContent = isOnline ? 'CONNECTED' : 'OFFLINE';
         txt.className = `font-mono font-bold ${isOnline ? 'text-emerald-500' : 'text-red-400'}`;
-    }
-}
-
-function flashElement(id, colorClass) {
-    const el = document.getElementById(id);
-    const container = el ? el.closest('.bg-gray-700, .bg-gray-800') : null;
-    if (container) {
-        container.classList.add(colorClass);
-        setTimeout(() => container.classList.remove(colorClass), 800);
     }
 }

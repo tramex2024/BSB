@@ -1,10 +1,11 @@
 /**
  * Archivo: server/src/ai/AIEngine.js
  * Versión: Unificada (Usa Autobot Model y Order Model)
+ * Ajustes: Sincronización de nombres para evitar parpadeo en UI.
  */
 
 const Autobot = require('../../models/Autobot');
-const Order = require('../../models/Order'); // 👈 Unificado
+const Order = require('../../models/Order'); 
 const MarketSignal = require('../../models/MarketSignal'); 
 const StrategyManager = require('./StrategyManager');
 
@@ -30,18 +31,17 @@ class AIEngine {
 
     async init() {
         try {
-            // Buscamos el estado en el documento unificado de Autobot
             let bot = await Autobot.findOne({});
             if (!bot) {
                 console.warn("⚠️ Autobot no inicializado. Esperando creación...");
                 return;
             }
 
-            // Sincronizamos memoria con la DB (Rama AI)
+            // Sincronización con DB
             this.isRunning = (bot.aistate === 'RUNNING');
             this.amountUsdt = bot.config.ai?.amountUsdt || 100.00;
             
-            // Usamos aibalance o el capital inicial si está en 0
+            // Prioridad al balance guardado en DB
             this.virtualBalance = (bot.aibalance > 0) ? bot.aibalance : this.amountUsdt;
             
             this.lastEntryPrice = bot.ailastEntryPrice || 0;
@@ -58,7 +58,6 @@ class AIEngine {
     async toggle(action) {
         const isStarting = (action === 'start');
         
-        // Actualizamos en DB usando el esquema unificado
         const updatedBot = await Autobot.findOneAndUpdate(
             {},
             { 
@@ -93,7 +92,6 @@ class AIEngine {
     async analyze(price) {
         if (!this.isRunning) return;
 
-        // Lógica de Trailing Stop (Usando memoria sincronizada)
         if (this.lastEntryPrice > 0) {
             if (price > this.highestPrice) {
                 this.highestPrice = price;
@@ -114,7 +112,11 @@ class AIEngine {
     }
 
     async _executeStrategy(price) {
-        if (this.history.length < 50) return;
+        // Marcamos isAnalyzing: true si no hay suficiente historial
+        if (this.history.length < 50) {
+            this._log(`CALIBRANDO SENSORES... (${this.history.length}/50)`, 0.1, true);
+            return;
+        }
 
         const analysis = StrategyManager.calculate(this.history);
         if (!analysis) return;
@@ -125,6 +127,7 @@ class AIEngine {
             if (confidence >= 0.85) {
                 await this._trade('BUY', price, confidence);
             } else {
+                // Log aleatorio para feedback visual
                 if (Math.random() > 0.98) this._log(message, confidence);
             }
         }
@@ -157,7 +160,6 @@ class AIEngine {
                 }
             }
 
-            // --- PERSISTENCIA EN DOCUMENTO ÚNICO ---
             await Autobot.updateOne({}, { 
                 $set: {
                     aibalance: this.virtualBalance,
@@ -169,10 +171,9 @@ class AIEngine {
                 $inc: { total_profit: side === 'SELL' ? (tradeAmountUSDT * ((price - this.lastEntryPrice)/this.lastEntryPrice)) : 0 }
             });
 
-            // --- REGISTRO EN HISTORIAL UNIFICADO ---
             await Order.create({
                 strategy: 'ai',
-                executionMode: 'SIMULATED', // Tal como pediste
+                executionMode: 'SIMULATED',
                 orderId: `ai_order_${Date.now()}`,
                 side: side,
                 price: price,
@@ -190,9 +191,10 @@ class AIEngine {
 
     _broadcastStatus() {
         if (this.io) {
+            // NORMALIZACIÓN: Emitimos propiedades que el frontend espera
             this.io.emit('ai-status-update', {
                 isRunning: this.isRunning,
-                aibalance: parseFloat(this.virtualBalance || 0),
+                virtualBalance: parseFloat(this.virtualBalance || 0), // Cambiado a virtualBalance
                 amountUsdt: this.amountUsdt,
                 historyCount: this.history.length,
                 lastEntryPrice: this.lastEntryPrice,
@@ -203,7 +205,11 @@ class AIEngine {
 
     _log(msg, conf, isAnalyzing = false) {
         if (this.io) {
-            this.io.emit('ai-decision-update', { confidence: conf, message: msg, isAnalyzing });
+            this.io.emit('ai-decision-update', { 
+                confidence: conf, 
+                message: msg, 
+                isAnalyzing 
+            });
         }
     }
 }

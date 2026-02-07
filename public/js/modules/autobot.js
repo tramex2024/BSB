@@ -1,8 +1,6 @@
-// public/js/modules/autobot.js
-
 /**
  * autobot.js - Core Logic for Trading Tabs
- * Integration: WebSocket Sync & Dual-Button Control 2026
+ * Integration: WebSocket Sync & Centralized State 2026
  */
 
 import { initializeChart } from './chart.js';
@@ -10,6 +8,7 @@ import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
+import { socket } from '../socket.js'; // Importamos el socket central
 import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
@@ -40,7 +39,7 @@ function validateSideInputs(side) {
 }
 
 /**
- * Escucha cambios en todos los inputs de configuración (Dashboard + Tabs)
+ * Escucha cambios en los inputs (Dashboard + Tabs)
  */
 function setupConfigListeners() {
     const configIds = [
@@ -83,19 +82,20 @@ export async function initializeAutobotView() {
     setupConfigListeners();
 
     /**
-     * Configura el evento de Start/Stop para un botón y su lógica asociada
+     * Lógica de botones Start/Stop
      */
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
         if (!btn) return;
 
+        // Limpieza de eventos anteriores
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            // Verificación de estado unificada
+            // Verificación basada en el estado central
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
                              currentBotState.config.ai.enabled);
@@ -114,6 +114,7 @@ export async function initializeAutobotView() {
                 newBtn.disabled = true;
                 newBtn.textContent = isRunning ? "STOPPING..." : "STARTING...";
                 await toggleBotSideState(isRunning, sideName);
+                // El cambio visual final vendrá por el socket a través de socket.js -> uiManager
             } catch (err) {
                 displayMessage(`Error in ${sideName} engine`, 'error');
                 updateControlsState(currentBotState); 
@@ -123,17 +124,17 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones (Espejos entre Dashboard y Tabs)
+    // Inicializar botones (Dashboard y Tab)
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
     setupSideBtn('btn-start-ai', 'ai');
 
-    // Sincronización visual inmediata
+    // Sincronización visual inmediata al cargar la pestaña
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico con delay para asegurar renderizado del DOM
+    // Inicializar Gráfico
     setTimeout(() => {
         const chartContainer = document.getElementById('au-tvchart');
         if (chartContainer) {
@@ -172,7 +173,7 @@ function setupOrderTabs(container) {
         };
     });
 
-    // Carga inicial de órdenes (Pestaña por defecto: Opened/All)
+    // Carga inicial
     setActiveTabStyle('tab-all');
     fetchOrders('all', container);
 }
