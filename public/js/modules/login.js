@@ -1,10 +1,11 @@
 /**
  * public/js/modules/login.js
- * Versión: BSB 2026 - Gestión de acceso multiusuario
+ * Version: BSB AI Core 2026 - Multi-user access & UI Auto-clean
  */
 
 import { requestToken, verifyToken } from './auth.js';
 import { updateLoginIcon } from './appEvents.js';
+import { logStatus } from '../main.js'; // To overwrite the "Session not found" message
 
 const authModal = document.getElementById('auth-modal');
 const authForm = document.getElementById('auth-form');
@@ -37,7 +38,7 @@ export async function handleAuthSubmit(onSuccess) {
     authMessage.className = 'text-yellow-500 text-xs mt-2';
 
     try {
-        // --- PASO 1: Solicitar Token (OTP) ---
+        // --- STEP 1: Request OTP Token ---
         if (tokenSection.style.display === 'none') {
             const data = await requestToken(email);
             
@@ -51,32 +52,34 @@ export async function handleAuthSubmit(onSuccess) {
                 throw new Error(data.error || 'Failed to send token');
             }
         }
-        // --- PASO 2: Verificar Token y Guardar Sesión ---
+        // --- STEP 2: Verify Token & Store Session ---
         else {
             const data = await verifyToken(email, token);
             
             if (data && data.token) {
-                // GUARDAR DATOS EN LOCALSTORAGE
+                // 1. SAVE CREDENTIALS
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userEmail', email);
                 
-                // CRÍTICO: Guardamos el ID de usuario para que el Socket sepa a qué sala entrar
-                // Intentamos leerlo desde data.userId o data.user.id según lo envíe tu backend
                 const uid = data.userId || (data.user && data.user.id);
                 if (uid) {
                     localStorage.setItem('userId', uid);
                 }
                 
-                // ACTUALIZAR INTERFAZ
+                // 2. IMMEDIATE UI CLEANUP
+                // This overwrites the "⚠️ Session not found" warning in the log bar
+                logStatus("Session established. Connecting to bot...", "success");
+
+                // 3. UPDATE UI COMPONENTS
                 authMessage.textContent = 'Login Successful!';
                 authMessage.className = 'text-emerald-400 text-xs mt-2';
                 
-                updateLoginIcon(); // Cambia el icono de Sign In a Sign Out
+                updateLoginIcon(); // Changes the icon from Sign-in to Sign-out
                 
-                // Si hay una función de éxito (como inicializar sockets), la ejecutamos
+                // 4. TRIGGER AUTHENTICATED FLOW (Sockets, Data Sync)
                 if (onSuccess) onSuccess();
                 
-                // Cerramos el modal tras un breve retraso para que el usuario vea el éxito
+                // Close modal after a brief delay
                 setTimeout(() => toggleAuthModal(false), 1500);
                 
             } else {
@@ -88,6 +91,6 @@ export async function handleAuthSubmit(onSuccess) {
         console.error('Login Error:', error);
         authMessage.textContent = 'Error: ' + (error.message || 'Connection failed');
         authMessage.className = 'text-red-400 text-xs mt-2';
-        authButton.textContent = 'Continue'; // Reset texto para permitir reintento
+        authButton.textContent = 'Continue';
     }
 }

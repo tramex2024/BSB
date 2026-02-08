@@ -161,21 +161,28 @@ document.addEventListener('click', async (e) => {
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
-    setupNavTabs(initializeTab); 
-    
-    // Al registrar eventos de login, pasamos la función que arranca la app completa
-    initializeAppEvents(initializeFullApp);
-    
-    updateLoginIcon();
-    
-    // Auto-login si ya existe sesión completa en el navegador
+    // 1. Initial State Check (Prioritize Session)
     const hasToken = localStorage.getItem('token');
     const hasUserId = localStorage.getItem('userId');
 
     if (hasToken && hasUserId) { 
+        // If session exists, boot up the socket and clean up logs immediately
         initializeFullApp(); 
+    } else {
+        // If no session, show a clean prompt in English
+        logStatus("Please sign in to access bot controls.", "warning");
     }
+
+    // 2. Setup Navigation & Core UI Events
+    setupNavTabs(initializeTab); 
     
-    // Siempre cargamos el dashboard al inicio
+    // When login is successful, this callback will trigger initializeFullApp
+    initializeAppEvents(initializeFullApp);
+    
+    // 3. Update Visual Elements
+    updateLoginIcon();
+    
+    // 4. Load initial view (Dashboard)
+    // The currentBotState will now sync correctly once the socket connects
     initializeTab('dashboard'); 
 });
