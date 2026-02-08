@@ -1,6 +1,7 @@
 /**
  * BSB/server/services/bitmartWs.js
  * GESTOR DE WEBSOCKETS PRIVADOS (Multi-usuario)
+ * Versión 2026 - Protegida contra fallos de inicialización
  */
 
 const WebSocket = require('ws');
@@ -17,9 +18,15 @@ const userConnections = {};
  * Inicia un WebSocket privado para un usuario específico.
  */
 function initOrderWebSocket(userId, credentials, updateCallback) {
+    // 🛡️ VALIDACIÓN DE SEGURIDAD (Evita el crash en el despliegue)
+    if (!credentials || !credentials.apiKey || !credentials.secretKey) {
+        console.error(`${LOG_PREFIX} ❌ Error: No se puede iniciar WS para el usuario ${userId}. Credenciales indefinidas o incompletas.`);
+        return;
+    }
+
     const { apiKey, secretKey, memo } = credentials;
 
-    // Si ya existe una conexión activa para este usuario, la cerramos para evitar duplicados
+    // Si ya existe una conexión activa para este usuario, la cerramos para evitar fugas de memoria
     if (userConnections[userId]) {
         console.log(`${LOG_PREFIX} Reestableciendo conexión para usuario: ${userId}`);
         stopOrderWebSocket(userId);
@@ -41,6 +48,7 @@ function initOrderWebSocket(userId, credentials, updateCallback) {
         startHeartbeat();
 
         const timestamp = Date.now().toString();
+        // Mensaje de firma según documentación BitMart 2026
         const message = `${timestamp}#${memo}#bitmart.WebSocket`;
         const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
@@ -59,30 +67,32 @@ function initOrderWebSocket(userId, credentials, updateCallback) {
         try {
             const message = JSON.parse(rawData);
 
-            // 1. LOGIN EXITOSO
+            // 1. CONFIRMACIÓN DE LOGIN
             if (message.event === 'login' && message.code === 0) {
-                console.log(`${LOG_PREFIX} 🔑 [User: ${userId}] Auth Exitosa.`);
+                console.log(`${LOG_PREFIX} 🔑 [User: ${userId}] Autenticación Exitosa.`);
+                // Suscripción al canal de órdenes spot
                 wsClient.send(JSON.stringify({
                     op: "subscribe",
                     args: ["spot/user/order:BTC_USDT"] 
                 }));
             }
 
-            // 2. ACTUALIZACIÓN DE ORDEN
+            // 2. RECEPCIÓN DE ACTUALIZACIONES DE ÓRDENES
             if (message.table === 'spot/user/order' && message.data) {
                 const normalizedOrders = message.data.map(o => ({
-                    userId: userId, // <--- Importante: marcamos a quién pertenece la orden
+                    userId: userId, 
                     orderId: o.order_id || o.orderId,
                     symbol: o.symbol,
-                    side: o.side,
-                    type: o.type,
+                    side: o.side, // BUY / SELL
+                    type: o.type, // MARKET / LIMIT
                     price: o.price || o.price_avg,
                     size: o.size,
                     filledSize: o.filled_size || o.filledSize || "0",
-                    status: o.status,
+                    status: o.status, // FILLED, PARTIALLY_FILLED, CANCELED
                     orderTime: o.update_time || o.create_time || Date.now()
                 }));
 
+                // Enviamos los datos al callback (usualmente procesado en autobotLogic)
                 updateCallback(normalizedOrders);
             }
 
@@ -94,13 +104,16 @@ function initOrderWebSocket(userId, credentials, updateCallback) {
     });
 
     wsClient.on('close', (code) => {
-        console.log(`${LOG_PREFIX} ⚠️ [User: ${userId}] Conexión cerrada (${code}).`);
+        console.log(`${LOG_PREFIX} ⚠️ [User: ${userId}] Conexión cerrada (Código: ${code}).`);
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         delete userConnections[userId];
         
-        // Reconexión automática solo si el código no es un cierre voluntario
+        // Reconexión automática (Backoff de 5s)
         if (code !== 1000) {
-            setTimeout(() => initOrderWebSocket(userId, credentials, updateCallback), 5000);
+            setTimeout(() => {
+                // Volvemos a intentar la conexión si el usuario sigue existiendo
+                initOrderWebSocket(userId, credentials, updateCallback);
+            }, 5000);
         }
     });
 
@@ -108,20 +121,22 @@ function initOrderWebSocket(userId, credentials, updateCallback) {
         console.error(`${LOG_PREFIX} ❌ Error en WS [User: ${userId}]:`, err.message);
     });
 
-    // Guardamos la referencia para control posterior
+    // Guardamos la referencia activa
     userConnections[userId] = { ws: wsClient, heartbeat: heartbeatInterval };
 }
 
 /**
- * Cierra la conexión de un usuario (ej: cuando apaga el bot)
+ * Cierra la conexión de un usuario (ej: cuando apaga el bot o se desconecta)
  */
 function stopOrderWebSocket(userId) {
     if (userConnections[userId]) {
         const { ws, heartbeat } = userConnections[userId];
         if (heartbeat) clearInterval(heartbeat);
-        ws.terminate();
+        
+        // Cerramos con código 1000 para evitar la reconexión automática
+        ws.close(1000); 
         delete userConnections[userId];
-        console.log(`${LOG_PREFIX} 🛑 Conexión eliminada para usuario: ${userId}`);
+        console.log(`${LOG_PREFIX} 🛑 Conexión cerrada voluntariamente: ${userId}`);
     }
 }
 

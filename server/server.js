@@ -14,6 +14,7 @@ const path = require('path');
 
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
+const bitmartWs = require('./services/bitmartWs'); // Importado para manejo de WS privados
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
@@ -73,9 +74,17 @@ app.use('/api/v1/balance', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
 
-// --- 5. CONEXIÓN BASE DE DATOS ---
+// --- 5. CONEXIÓN BASE DE DATOS Y ARRANQUE DE SERVICIOS ---
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log('✅ MongoDB Connected (BSB 2026)...'))
+    .then(async () => {
+        console.log('✅ MongoDB Connected (BSB 2026)...');
+        
+        // Inicializamos los sockets privados después de conectar a la DB
+        await initializePrivateWebSockets();
+        
+        // Iniciamos el WS del mercado
+        setupMarketWS(io);
+    })
     .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --- 6. VARIABLES GLOBALES ---
@@ -153,7 +162,6 @@ function setupMarketWS(io) {
                 if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
                     lastExecutionTime = now;
                     if (mongoose.connection.readyState === 1) { 
-                        // El análisis de IA ahora es parte del ciclo interno de autobotLogic para evitar desincronización
                         await autobotLogic.botCycle(price);
                     }
                 }
@@ -168,17 +176,36 @@ function setupMarketWS(io) {
     });
 }
 
-// --- 9. WEBSOCKET ÓRDENES PRIVADAS ---
-bitmartService.initOrderWebSocket((ordersData) => {
-    console.log(`[BACKEND-WS] 📥 Evento privado detectado.`);
-    io.sockets.emit('open-orders-update', ordersData);
-});
+// --- 9. FUNCIÓN PARA WEBSOCKETS PRIVADOS (REPARADA) ---
+const initializePrivateWebSockets = async () => {
+    try {
+        const botsWithKeys = await Autobot.find({ 
+            "apiKeys.apiKey": { $exists: true, $ne: "" } 
+        });
+
+        console.log(`[AUTH] 🔑 Inicializando ${botsWithKeys.length} conexiones privadas.`);
+
+        for (const bot of botsWithKeys) {
+            const credentials = {
+                apiKey: bot.apiKeys.apiKey,
+                secretKey: bot.apiKeys.secretKey,
+                memo: bot.apiKeys.memo
+            };
+
+            bitmartWs.initOrderWebSocket(bot.userId, credentials, (ordersData) => {
+                console.log(`[BACKEND-WS] 📥 Evento privado detectado para ${bot.userId}`);
+                io.emit('open-orders-update', ordersData);
+            });
+        }
+    } catch (error) {
+        console.error("❌ Error en inicialización privada:", error.message);
+    }
+};
 
 // --- 10. INTERVALOS DE RESPALDO ---
 setInterval(async () => {
     try {
         if (mongoose.connection.readyState === 1) {
-            // Buscamos todos los usuarios activos para actualizar sus balances
             const activeBots = await Autobot.find({ 
                 $or: [{ lstate: 'RUNNING' }, { sstate: 'RUNNING' }] 
             }).select('userId');
@@ -190,13 +217,11 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-setupMarketWS(io);
 
 // --- 11. EVENTOS SOCKET.IO (HIDRATACIÓN DESDE DB) ---
 io.on('connection', async (socket) => {
     console.log(`👤 Usuario Conectado: ${socket.id}`);
 
-    // Nota: En multiusuario, esto debería filtrar por el userId del socket/auth
     Autobot.findOne({}).lean().then(state => {
         if (state) emitBotState(io, state);
     });
@@ -222,7 +247,7 @@ io.on('connection', async (socket) => {
 server.listen(PORT, async () => {
     try {
         centralAnalyzer.init(io); 
-        await aiEngine.init();
+        // Eliminado aiEngine.init() para favorecer la nueva arquitectura limpia
         console.log("🧠 [IA-CORE] Motor sincronizado.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
     console.log(`🚀 SERVIDOR BSB ACTIVO EN PUERTO: ${PORT}`);
