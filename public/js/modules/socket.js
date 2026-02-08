@@ -1,43 +1,62 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
+ * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { updateBotUI } from './uiManager.js'; 
-import { formatCurrency } from './ui/formatters.js'; // Importamos el formateador
+import { formatCurrency } from './ui/formatters.js';
 
 export let socket = null;
 let connectionWatchdog = null;
 
 export function initSocket() {
-    if (socket?.connected || typeof io === 'undefined') return;
+    // 1. Recuperamos credenciales del localStorage
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('userId');
 
+    // Evitamos duplicar conexiones o conectar sin sesión
+    if (socket?.connected || !token || !userId) {
+        if (!token || !userId) console.warn("⚠️ Socket: No hay sesión activa para conectar.");
+        return;
+    }
+
+    // 2. CONEXIÓN AUTENTICADA: Enviamos token y userId en el handshake
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 5,
-        reconnectionDelay: 1000
+        reconnectionDelay: 1000,
+        auth: { token },      // El middleware del backend validará este token
+        query: { userId }     // El backend usará esto para unirnos a la sala user_userId
     });
 
     socket.on('connect', () => {
         resetWatchdog();
+        // Pedimos el estado inicial específico de nuestro bot al conectar
         socket.emit('get-bot-state'); 
-        console.log("✅ Socket: Connected to Backend");
+        console.log(`✅ Socket: Connected as User ${userId}`);
     });
 
     socket.on('disconnect', () => {
+        console.warn("❌ Socket: Disconnected from Backend");
         updateConnectionStatus('DISCONNECTED');
     });
 
-    // --- RECEPCIÓN DE PRECIO (CORREGIDO) ---
+    socket.on('connect_error', (err) => {
+        console.error("❌ Socket Connection Error:", err.message);
+        if (err.message === "Authentication error") {
+            logStatus("Sesión expirada o inválida", "error");
+        }
+    });
+
+    // --- RECEPCIÓN DE PRECIO (Público) ---
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data?.price) {
             const newPrice = parseFloat(data.price);
             currentBotState.price = newPrice;
             
-            // OPTIMIZACIÓN: Solo actualizamos el elemento del precio en el DOM
-            // No llamamos a updateBotUI para no re-renderizar botones y causar parpadeo
             const priceEl = document.getElementById('auprice');
             if (priceEl) {
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
@@ -46,21 +65,22 @@ export function initSocket() {
         }
     });
 
-    // --- ESTADO GLOBAL DEL BOT ---
+    // --- ESTADO GLOBAL DEL BOT (Privado - Solo para este usuario) ---
     socket.on('bot-state-update', (state) => {
         if (!state) return;
 
+        // Mezclamos la configuración recibida con la local
         if (state.config) {
             currentBotState.config = { ...currentBotState.config, ...state.config };
         }
         
         Object.assign(currentBotState, state);
 
-        // Aseguramos que el estado de IA se derive correctamente
+        // Derivamos el estado de ejecución de la IA
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
 
-        // Aquí SÍ actualizamos la UI completa porque es un cambio de estado real
+        // Actualización integral de la UI
         updateBotUI(currentBotState);
 
         if (aiBotUI) {
@@ -72,6 +92,7 @@ export function initSocket() {
         }
     });
 
+    // --- LOGS PRIVADOS ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
         logStatus(data.message, data.type || 'info');
@@ -80,6 +101,7 @@ export function initSocket() {
         }
     });
 
+    // --- ACTUALIZACIONES DE IA Y ÓRDENES ---
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);

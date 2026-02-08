@@ -1,13 +1,13 @@
 /**
  * main.js - Central Hub
  * AI Core English Version 2026
- * Refactorización: Estado Global y Delegación de Eventos
+ * Refactorización: Estado Global Multiusuario y Sincronización
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
-import { initSocket } from './modules/socket.js'; // Importamos el nuevo motor de sockets
+import { initSocket } from './modules/socket.js'; 
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -67,8 +67,16 @@ function processNextLog() {
 
 // --- APP INITIALIZATION ---
 export function initializeFullApp() {
-    // Iniciamos la comunicación persistente
-    initSocket();
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('userId');
+
+    // Solo iniciamos comunicación si tenemos la sesión completa
+    if (token && userId) {
+        console.log("🚀 Initializing Authenticated App Flow...");
+        initSocket();
+    } else {
+        console.warn("⚠️ Partial session detected. Waiting for full login.");
+    }
 }
 
 // --- TAB MANAGEMENT ---
@@ -100,7 +108,7 @@ export async function initializeTab(tabName) {
             }
         }
 
-        // Sincronización estética de elementos de IA si existen en la pestaña cargada
+        // Sincronización estética de elementos de IA
         syncAIElementsInDOM();
 
     } catch (error) { 
@@ -108,10 +116,6 @@ export async function initializeTab(tabName) {
     }
 }
 
-/**
- * Asegura que los elementos de IA (inputs, botones) 
- * reflejen el estado global sin importar la pestaña cargada.
- */
 function syncAIElementsInDOM() {
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
@@ -119,14 +123,11 @@ function syncAIElementsInDOM() {
     if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
     if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
     
-    // Actualizamos el botón usando el módulo UI central
     aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle);
 }
 
 // --- GLOBAL EVENT DELEGATION ---
-// Escuchamos clics en todo el documento para que los botones funcionen siempre
 document.addEventListener('click', async (e) => {
-    // Lógica del Botón START/STOP AI
     if (e.target && e.target.id === 'btn-start-ai') {
         const btnAi = e.target;
         const isCurrentlyEnabled = currentBotState.isRunning;
@@ -146,12 +147,12 @@ document.addEventListener('click', async (e) => {
             });
             const data = await res.json();
             if (data.success) {
-                // Actualizamos estado local, el socket hará el resto para la UI
                 currentBotState.isRunning = data.isRunning;
                 aiBotUI.setRunningStatus(data.isRunning, currentBotState.stopAtCycle);
             }
         } catch (err) {
             console.error("Error toggling AI:", err);
+            logStatus("Error al cambiar estado de IA", "error");
         } finally {
             btnAi.disabled = false;
         }
@@ -161,12 +162,20 @@ document.addEventListener('click', async (e) => {
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
+    
+    // Al registrar eventos de login, pasamos la función que arranca la app completa
     initializeAppEvents(initializeFullApp);
+    
     updateLoginIcon();
     
-    if (localStorage.getItem('token')) { 
+    // Auto-login si ya existe sesión completa en el navegador
+    const hasToken = localStorage.getItem('token');
+    const hasUserId = localStorage.getItem('userId');
+
+    if (hasToken && hasUserId) { 
         initializeFullApp(); 
     }
+    
     // Siempre cargamos el dashboard al inicio
     initializeTab('dashboard'); 
 });
