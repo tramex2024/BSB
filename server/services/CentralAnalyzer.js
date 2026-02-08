@@ -1,13 +1,13 @@
 // server/src/services/CentralAnalyzer.js
 
 /**
- * BSB/server/src/services/CentralAnalyzer.js
+ * BSB/server/services/CentralAnalyzer.js
  * Motor de Indicadores Técnicos Globales (Optimizado para BSB 2026)
  */
 
 const { RSI, ADX, Stochastic } = require('technicalindicators');
-const bitmartService = require('../../services/bitmartService'); 
-const MarketSignal = require('../../models/MarketSignal');
+const bitmartService = require('./bitmartService'); 
+const MarketSignal = require('../models/MarketSignal');
 
 class CentralAnalyzer {
     constructor() {
