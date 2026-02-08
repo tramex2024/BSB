@@ -1,7 +1,6 @@
 /**
- * Archivo: server/src/ai/AIEngine.js
- * Versión: Unificada y Sincronizada 2026
- * Ajuste: Inclusión de 'aistate' en el broadcast para eliminar parpadeo.
+ * AIEngine.js - Motor de Ejecución Predictiva
+ * Gestión de Trailing Stop y Ejecución de Señales por Usuario.
  */
 
 const Autobot = require('../../models/Autobot');
@@ -11,204 +10,139 @@ const StrategyManager = require('./StrategyManager');
 
 class AIEngine {
     constructor() {
-        this.isRunning = false;
         this.io = null;
-        this.history = [];
-        this.virtualBalance = 0; 
-        this.amountUsdt = 0;      
-        this.lastEntryPrice = 0;
-        this.highestPrice = 0;
-        this.stopAtCycle = false;
-
-        this.TRAILING_PERCENT = 0.005; // 0.5%
-        this.EXCHANGE_FEE = 0.001;     // 0.1%
+        this.TRAILING_PERCENT = 0.005; // 0.5% de retroceso permitido
+        this.EXCHANGE_FEE = 0.001;     // 0.1% de comisión estimada
     }
 
-    setIo(io) { 
-        this.io = io; 
-        this.init(); 
-    }
+    setIo(io) { this.io = io; }
 
-    async init() {
+    async analyze(price, userId) {
+        if (!userId) return;
+
         try {
-            let bot = await Autobot.findOne({});
-            if (!bot) {
-                console.warn("⚠️ Autobot no inicializado. Esperando creación...");
-                return;
+            const bot = await Autobot.findOne({ userId }).lean();
+            if (!bot || bot.aistate !== 'RUNNING') return;
+
+            const lastEntryPrice = bot.ailastEntryPrice || 0;
+            let highestPrice = bot.aihighestPrice || 0;
+
+            // 1. GESTIÓN DE OPERACIÓN ABIERTA (Trailing Stop)
+            if (lastEntryPrice > 0) {
+                // Actualizar el pico más alto si el precio sube
+                if (price > highestPrice) {
+                    highestPrice = price;
+                    await Autobot.updateOne({ userId }, { $set: { aihighestPrice: highestPrice } });
+                }
+
+                // Cálculo del Stop Dinámico
+                const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
+                
+                if (price <= stopPrice) {
+                    this._log(userId, `🎯 Trailing Stop activado: Exit @ $${price}`, 0.95);
+                    await this._trade(userId, 'SELL', price, 1.0, bot);
+                    return; 
+                }
             }
 
-            // Sincronización con DB
-            this.isRunning = (bot.aistate === 'RUNNING');
-            this.amountUsdt = bot.config.ai?.amountUsdt || 100.00;
-            
-            // Prioridad al balance guardado en DB
-            this.virtualBalance = (bot.aibalance > 0) ? bot.aibalance : this.amountUsdt;
-            
-            this.lastEntryPrice = bot.ailastEntryPrice || 0;
-            this.highestPrice = bot.aihighestPrice || 0;
-            this.stopAtCycle = bot.config.ai?.stopAtCycle || false;
-
-            this._broadcastStatus();
-            this._log(this.isRunning ? "🚀 IA Unificada Online" : "💤 IA en Standby", 0.5);
-        } catch (e) {
-            console.error("❌ Error en init de AIEngine:", e);
+            // 2. BUSCAR NUEVAS ENTRADAS (Si no hay posición abierta)
+            if (lastEntryPrice === 0) {
+                const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
+                if (marketData && marketData.history && marketData.history.length >= 50) {
+                    await this._executeStrategy(userId, price, marketData.history, bot);
+                } else if (Math.random() > 0.98) {
+                    this._log(userId, "Calibrando sensores de IA...", 0.1, true);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ AI Analyze Error (User: ${userId}):`, error);
         }
     }
 
-    async toggle(action) {
-        const isStarting = (action === 'start');
-        const newState = isStarting ? 'RUNNING' : 'STOPPED';
-        
-        const updatedBot = await Autobot.findOneAndUpdate(
-            {},
-            { 
-                $set: { 
-                    aistate: newState,
-                    'config.ai.enabled': isStarting
-                } 
-            },
-            { new: true }
-        );
-
-        if (updatedBot) {
-            this.isRunning = isStarting;
-            this.amountUsdt = updatedBot.config.ai.amountUsdt;
-            this.stopAtCycle = updatedBot.config.ai.stopAtCycle;
-            
-            if (isStarting) {
-                this.virtualBalance = updatedBot.aibalance || updatedBot.config.ai.amountUsdt;
-            }
-        }
-
-        this._broadcastStatus();
-        this._log(this.isRunning ? "🚀 NÚCLEO IA: ACTIVADO" : "🛑 NÚCLEO IA: DETENIDO", isStarting ? 0.9 : 0);
-        
-        return { 
-            isRunning: this.isRunning, 
-            aistate: newState, // <--- Agregado para consistencia
-            virtualBalance: this.virtualBalance,
-            stopAtCycle: this.stopAtCycle 
-        };
-    }
-
-    async analyze(price) {
-        if (!this.isRunning) return;
-
-        if (this.lastEntryPrice > 0) {
-            if (price > this.highestPrice) {
-                this.highestPrice = price;
-            }
-            const stopPrice = this.highestPrice * (1 - this.TRAILING_PERCENT);
-            if (price <= stopPrice) {
-                this._log(`🎯 Trailing Stop activado en $${price}`, 0.95);
-                await this._trade('SELL', price, 1.0);
-                return; 
-            }
-        }
-
-        const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
-        if (marketData && marketData.history) {
-            this.history = marketData.history;
-            await this._executeStrategy(price);
-        }
-    }
-
-    async _executeStrategy(price) {
-        if (this.history.length < 50) {
-            this._log(`CALIBRANDO SENSORES... (${this.history.length}/50)`, 0.1, true);
-            return;
-        }
-
-        const analysis = StrategyManager.calculate(this.history);
+    async _executeStrategy(userId, price, history, bot) {
+        const analysis = StrategyManager.calculate(history);
         if (!analysis) return;
 
         const { confidence, message } = analysis;
         
-        if (this.lastEntryPrice === 0) {
-            if (confidence >= 0.85) {
-                await this._trade('BUY', price, confidence);
-            } else {
-                if (Math.random() > 0.98) this._log(message, confidence);
-            }
+        // Umbral de confianza del 85% para entrar
+        if (confidence >= 0.85) {
+            await this._trade(userId, 'BUY', price, confidence, bot);
+        } else if (Math.random() > 0.95) {
+            // Feedback visual para el usuario en el Dashboard
+            this._log(userId, message, confidence);
         }
     }
 
-    async _trade(side, price, confidence) {
+    async _trade(userId, side, price, confidence, bot) {
         try {
-            const tradeAmountUSDT = this.virtualBalance;
-            const fee = tradeAmountUSDT * this.EXCHANGE_FEE;
+            const currentBalance = parseFloat(bot.aibalance || bot.config.ai?.amountUsdt || 100);
+            const fee = currentBalance * this.EXCHANGE_FEE;
             
-            if (side === 'BUY') {
-                this.lastEntryPrice = price;
-                this.highestPrice = price;
-                this.virtualBalance -= fee;
-                this._log(`🔥 COMPRA IA: BTC @ $${price}`, 1);
-            } else {
-                const profitPct = (price - this.lastEntryPrice) / this.lastEntryPrice;
-                const netProfit = (tradeAmountUSDT * profitPct) - (fee); 
-                
-                this.virtualBalance += netProfit;
-                this._log(`💰 VENTA IA: BTC @ $${price} | PNL: $${netProfit.toFixed(2)} USDT`, 1);
-                
-                this.lastEntryPrice = 0;
-                this.highestPrice = 0;
+            let newBalance = currentBalance;
+            let nextEntryPrice = 0;
+            let nextHighestPrice = 0;
+            let netProfit = 0;
 
-                if (this.stopAtCycle) {
-                    this.isRunning = false;
-                    this.stopAtCycle = false;
-                    this._log("🛑 CICLO COMPLETADO: Auto-apagado.", 0.5);
-                }
+            if (side === 'BUY') {
+                nextEntryPrice = price;
+                nextHighestPrice = price;
+                newBalance -= fee; // Descontamos comisión en la entrada
+            } else {
+                // PNL = ((Precio Venta / Precio Compra) - 1) * Capital - Fee
+                const profitFactor = (price / bot.ailastEntryPrice);
+                netProfit = (currentBalance * (profitFactor - 1)) - fee;
+                newBalance += netProfit;
             }
 
-            const newState = this.isRunning ? 'RUNNING' : 'STOPPED';
+            const stopAtCycle = bot.config?.ai?.stopAtCycle || false;
+            const shouldStop = side === 'SELL' && stopAtCycle;
+            const newState = shouldStop ? 'STOPPED' : 'RUNNING';
 
-            await Autobot.updateOne({}, { 
+            // Actualización atómica de la base de datos
+            await Autobot.updateOne({ userId }, { 
                 $set: {
-                    aibalance: this.virtualBalance,
-                    ailastEntryPrice: this.lastEntryPrice,
-                    aihighestPrice: this.highestPrice,
+                    aibalance: newBalance,
+                    ailastEntryPrice: nextEntryPrice,
+                    aihighestPrice: nextHighestPrice,
                     aistate: newState,
-                    'config.ai.stopAtCycle': this.stopAtCycle
+                    'config.ai.enabled': !shouldStop
                 },
-                $inc: { total_profit: side === 'SELL' ? (tradeAmountUSDT * ((price - this.lastEntryPrice)/this.lastEntryPrice)) : 0 }
+                $inc: { total_profit: side === 'SELL' ? netProfit : 0 }
             });
 
+            // Registro de orden para analíticas (BSB/server/models/Order.js)
             await Order.create({
+                userId,
                 strategy: 'ai',
+                cycleIndex: bot.aicycle || 0, // Vinculamos con el ciclo actual
                 executionMode: 'SIMULATED',
-                orderId: `ai_order_${Date.now()}`,
-                side: side,
-                price: price,
-                size: tradeAmountUSDT / price,
-                notional: tradeAmountUSDT,
-                confidenceScore: Math.round(confidence * 100),
+                orderId: `ai_${userId.toString().slice(-4)}_${Date.now()}`,
+                side,
+                price,
+                size: currentBalance / price,
+                notional: currentBalance,
                 status: 'FILLED'
             });
 
-            this._broadcastStatus();
-        } catch (error) {
-            console.error("❌ Error en trade IA:", error);
-        }
-    }
-
-    _broadcastStatus() {
-        if (this.io) {
-            // NORMALIZACIÓN ABSOLUTA: Enviamos lo que el uiManager necesita
-            this.io.emit('ai-status-update', {
-                isRunning: this.isRunning,
-                aistate: this.isRunning ? 'RUNNING' : 'STOPPED', // <--- FUNDAMENTAL
-                virtualBalance: parseFloat(this.virtualBalance || 0),
-                amountUsdt: this.amountUsdt,
-                historyCount: this.history.length,
-                lastEntryPrice: this.lastEntryPrice,
-                stopAtCycle: this.stopAtCycle
+            this._broadcastStatus(userId, {
+                aistate: newState,
+                virtualBalance: newBalance.toFixed(2),
+                lastEntryPrice: nextEntryPrice
             });
+
+        } catch (error) {
+            console.error(`❌ AI Trade Error (User: ${userId}):`, error);
         }
     }
 
-    _log(msg, conf, isAnalyzing = false) {
+    _broadcastStatus(userId, data) {
+        if (this.io) this.io.to(`user_${userId}`).emit('ai-status-update', data);
+    }
+
+    _log(userId, msg, conf, isAnalyzing = false) {
         if (this.io) {
-            this.io.emit('ai-decision-update', { 
+            this.io.to(`user_${userId}`).emit('ai-decision-update', { 
                 confidence: conf, 
                 message: msg, 
                 isAnalyzing 
@@ -217,5 +151,4 @@ class AIEngine {
     }
 }
 
-const engine = new AIEngine();
-module.exports = engine;
+module.exports = new AIEngine();

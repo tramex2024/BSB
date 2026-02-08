@@ -1,17 +1,22 @@
 const MarketSignal = require('../../../../models/MarketSignal');
 
+/**
+ * RUNNING STATE (LONG):
+ * Estado de espera activa. Busca señales de compra para iniciar el ciclo.
+ */
 async function run(dependencies) {
-    const { botState, log, updateBotState } = dependencies;
+    // 1. Extraemos userId de las dependencias inyectadas por autobotLogic
+    const { userId, botState, log, updateBotState } = dependencies;
     
-    // 1. SECURITY CHECK (Flat Architecture)
-    // If lac > 0, the bot already has coins and must be in BUYING or SELLING.
+    // 2. SECURITY CHECK (Flat Architecture)
+    // Si ya hay balance (lac > 0), el bot debe estar gestionando la posición.
     if (parseFloat(botState.lac || 0) > 0) {
         log("[L-RUNNING] 🛡️ Open position detected (lac > 0). Correcting state to BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
         return; 
     }
 
-    // 2. GLOBAL SIGNAL QUERY
+    // 3. GLOBAL SIGNAL QUERY
     try {
         const currentSymbol = botState.config?.symbol || 'BTC_USDT';
         const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
@@ -21,10 +26,10 @@ async function run(dependencies) {
             return;
         }
 
-        // 3. FRESHNESS VALIDATION
+        // 4. FRESHNESS VALIDATION
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
 
-        // Unified log format with emojis and bars
+        // El log inyectado ya sabe que debe enviar esto a la "room" del userId
         log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
 
         if (!signalTime) {
@@ -39,7 +44,8 @@ async function run(dependencies) {
             return;
         }
 
-        // 4. ACTIVATION LOGIC (Market Entry)
+        // 5. ACTIVATION LOGIC (Market Entry)
+        // Solo si la señal es BUY, cambiamos el estado para que LBuying tome el control.
         if (globalSignal.signal === 'BUY') { 
             log(`🚀 [L-SIGNAL] BUY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)} | Entering Market...`, 'success');
             

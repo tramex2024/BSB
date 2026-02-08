@@ -1,6 +1,9 @@
-// server/models/User.js
+/**
+ * BSB/server/models/User.js
+ * MODELO DE USUARIO - Gestión de Sesiones y Credenciales Cifradas
+ */
+
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs'); // Asumo que usas bcrypt para encriptar contraseñas si las manejas
 
 const userSchema = new mongoose.Schema({
     email: {
@@ -9,13 +12,14 @@ const userSchema = new mongoose.Schema({
         unique: true,
         lowercase: true,
         trim: true,
-        match: [/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/, 'Please fill a valid email address']
+        match: [/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/, 'Please fill a valid email address'],
+        index: true // Optimiza la búsqueda durante el login
     },
     
     autobotId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Autobot', // Asegúrate de que 'Autobot' sea el nombre correcto de tu modelo de bot
-        default: null // Puede ser null inicialmente si se asigna después del registro
+        ref: 'Autobot',
+        default: null 
     },
 
     jwtToken: {
@@ -23,34 +27,45 @@ const userSchema = new mongoose.Schema({
         default: null,
     },
     
-    // Campos para el token de autenticación de un solo uso (para login sin contraseña)
-    // Estos campos NO deben ser required: true, ya que se anulan después de la verificación.
+    // AUTH OTP: No son requeridos para permitir limpieza tras validación
     token: { 
-        type: String        
+        type: String,
+        default: null
     },
-    tokenExpires: { // Este es el campo que causaba el error 'tokenExpires: Path `tokenExpires` is required.'
-        type: Date        
+    tokenExpires: { 
+        type: Date,
+        default: null
     },
 
-    // Campos para las API Keys de BitMart
+    // CREDENCIALES BITMART (Cifradas con AES-256 via encryption.js)
     bitmartApiKey: {
-        type: String,
-        // No es required para que un usuario pueda existir sin API keys configuradas
+        type: String, // Guardaremos el valor cifrado aquí
+        default: null
     },
-    // ¡CORRECCIÓN CRÍTICA AQUÍ! El nombre del campo debe coincidir con 'bitmartSecretKeyEncrypted'
     bitmartSecretKeyEncrypted: { 
-        type: String,        
+        type: String,
+        default: null
     },
     bitmartApiMemo: {
-        type: String,        
+        type: String, // El memo también se recomienda cifrarlo
+        default: null
     },
-    // Puedes añadir un campo para saber si las claves de BitMart están validadas
+    
     bitmartApiValidated: {
         type: Boolean,
         default: false
     }
 
-}, { timestamps: true }); // 'timestamps: true' añade createdAt y updatedAt automáticamente
+}, { 
+    timestamps: true // Gestiona automáticamente createdAt y updatedAt
+});
 
+// Middleware opcional para debug (puedes borrarlo después)
+userSchema.pre('save', function(next) {
+    if (this.isModified('bitmartSecretKeyEncrypted')) {
+        console.log(`[USER-MODEL] Credentials updated for: ${this.email}`);
+    }
+    next();
+});
 
 module.exports = mongoose.model('User', userSchema);

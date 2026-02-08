@@ -1,22 +1,31 @@
 /**
  * BSB/server/models/Autobot.js
- * Modelo Unificado de Estado y Configuración (Long, Short & AI)
+ * Modelo Unificado - Versión preservando estados originales
  */
 
 const mongoose = require('mongoose');
 
 const autobotSchema = new mongoose.Schema({
+    // VÍNCULO CON EL USUARIO (Único cambio estructural necesario)
+    userId: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'User', 
+        required: true, 
+        unique: true, 
+        index: true 
+    },
+
     total_profit: { type: Number, default: 0 },
     
-    // --- ESTADOS DE OPERACIÓN ---
+    // --- ESTADOS DE OPERACIÓN (Sin restricciones de enum) ---
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
-    aistate: { type: String, default: 'STOPPED' }, // Estado motor IA
+    aistate: { type: String, default: 'STOPPED' }, 
     
     // --- SALDOS OPERATIVOS ---
     lbalance: { type: Number, default: 0 }, 
     sbalance: { type: Number, default: 0 },
-    aibalance: { type: Number, default: 0 }, // Saldo asignado a IA
+    aibalance: { type: Number, default: 0 }, 
 
     // --- RAÍZ LONG (L...) ---
     lppc: { type: Number, default: 0 },
@@ -47,8 +56,8 @@ const autobotSchema = new mongoose.Schema({
     snorder: { type: Number, default: 0 },
 
     // --- RAÍZ AI (AI...) ---
-    aippc: { type: Number, default: 0 },        // Precio promedio compra IA
-    aiac: { type: Number, default: 0 },         // Cantidad acumulada IA
+    aippc: { type: Number, default: 0 }, 
+    aiac: { type: Number, default: 0 }, 
     ailastEntryPrice: { type: Number, default: 0 },
     aihighestPrice: { type: Number, default: 0 },
     ailastOrder: { type: Object, default: null },
@@ -58,13 +67,13 @@ const autobotSchema = new mongoose.Schema({
     // --- CONTROL DE TARGETS Y CICLOS ---
     ltprice: { type: Number, default: 0 }, 
     stprice: { type: Number, default: 0 }, 
-    aitprice: { type: Number, default: 0 }, // Target price IA
+    aitprice: { type: Number, default: 0 }, 
     lprofit: { type: Number, default: 0 }, 
     sprofit: { type: Number, default: 0 },
-    aiprofit: { type: Number, default: 0 }, // Profit acumulado IA
+    aiprofit: { type: Number, default: 0 }, 
     lcycle: { type: Number, default: 0 },
     scycle: { type: Number, default: 0 },
-    aicycle: { type: Number, default: 0 }, // Ciclos completados IA
+    aicycle: { type: Number, default: 0 }, 
     slep: { type: Number, default: 0 }, 
     llep: { type: Number, default: 0 }, 
 
@@ -73,7 +82,7 @@ const autobotSchema = new mongoose.Schema({
     lastAvailableBTC: { type: Number, default: 0 },
     lastBalanceCheck: { type: Date, default: Date.now },
 
-    // --- CONFIGURACIÓN (Protegida contra sobreescritura) ---
+    // --- CONFIGURACIÓN ---
     config: {
         symbol: { type: String, default: "BTC_USDT" },
         long: {
@@ -100,7 +109,6 @@ const autobotSchema = new mongoose.Schema({
             enabled: { type: Boolean, default: false },
             amountUsdt: { type: Number },
             stopAtCycle: { type: Boolean, default: false }
-            // Se puede extender con parámetros específicos de IA si se desea
         }
     },
 
@@ -110,7 +118,7 @@ const autobotSchema = new mongoose.Schema({
     minimize: false 
 });
 
-// Middleware de actualización automática de timestamps
+// Mantengo tus middlewares de tiempo tal cual
 autobotSchema.pre('save', function(next) {
     this.lastUpdate = new Date();
     this.lastUpdateTime = new Date();

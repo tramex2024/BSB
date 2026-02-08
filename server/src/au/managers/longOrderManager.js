@@ -1,13 +1,17 @@
 // BSB/server/src/au/managers/longOrderManager.js
 
+/**
+ * LONG ORDER MANAGER:
+ * Responsable de disparar las ejecuciones hacia BitMart y registrar la orden pendiente.
+ */
+
 const bitmartService = require('../../../services/bitmartService');
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../utils/tradeConstants');
 
 /**
- * APERTURA DE LONG: Solo coloca la orden en BitMart.
- * Utiliza el monto base definido en la configuración.
+ * APERTURA DE LONG: Compra inicial.
  */
-async function placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState) {
+async function placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, userId) {
     const { purchaseUsdt } = config.long || {}; 
     const SYMBOL = config.symbol || 'BTC_USDT';
     const amountNominal = parseFloat(purchaseUsdt || 0);
@@ -21,10 +25,10 @@ async function placeFirstLongOrder(config, botState, log, updateBotState, update
     log(`🚀 [L-FIRST] Enviando compra inicial de ${amountNominal} USDT...`, 'info');
 
     try {
-        const orderResult = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', amountNominal);
+        // ✅ CONTEXTO MULTIUSUARIO: Se pasa userId para firmar con sus API Keys
+        const orderResult = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', amountNominal, userId);
 
         if (orderResult && orderResult.order_id) {
-            // ✅ PERSISTENCIA ATÓMICA: Guardamos en llastOrder (raíz)
             await updateGeneralBotState({
                 llastOrder: {
                     order_id: orderResult.order_id,
@@ -43,16 +47,16 @@ async function placeFirstLongOrder(config, botState, log, updateBotState, update
 /**
  * COBERTURA LONG (DCA): usdtAmount ya viene calculado por el motor exponencial.
  */
-async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState) {
+async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState, userId) {
     const SYMBOL = botState.config?.symbol || 'BTC_USDT';
 
     log(`📉 [L-DCA] Ejecutando cobertura: ${usdtAmount.toFixed(2)} USDT...`, 'warning');
 
     try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtAmount);
+        // ✅ CONTEXTO MULTIUSUARIO
+        const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtAmount, userId);
 
         if (order && order.order_id) {
-            // ✅ MIGRADO: Sobrescribimos llastOrder para que el consolidador lo trackee
             await updateGeneralBotState({
                 llastOrder: {
                     order_id: order.order_id,
@@ -71,10 +75,9 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
 /**
  * VENTA DE CIERRE (Take Profit).
  */
-async function placeLongSellOrder(config, botState, btcAmount, log, updateGeneralBotState) {
+async function placeLongSellOrder(config, botState, btcAmount, log, updateGeneralBotState, userId) {
     const SYMBOL = config.symbol || 'BTC_USDT';
     
-    // Evitamos enviar órdenes de tamaño cero o negativo
     if (btcAmount <= 0) {
         log(`[L-PROFIT] ❌ Error: Cantidad de BTC inválida (${btcAmount})`, 'error');
         return;
@@ -83,10 +86,10 @@ async function placeLongSellOrder(config, botState, btcAmount, log, updateGenera
     log(`💰 [L-PROFIT] Enviando venta de cierre: ${btcAmount.toFixed(8)} BTC...`, 'info');
 
     try {
-        const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcAmount);
+        // ✅ CONTEXTO MULTIUSUARIO
+        const order = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcAmount, userId);
 
         if (order && order.order_id) {
-            // ✅ MIGRADO: Guardamos la orden de venta en llastOrder para consolidar el ciclo
             await updateGeneralBotState({
                 llastOrder: {
                     order_id: order.order_id,
@@ -103,9 +106,9 @@ async function placeLongSellOrder(config, botState, btcAmount, log, updateGenera
 }
 
 /**
- * CANCELACIÓN: Limpia el rastro de la orden en la raíz y libera el bot.
+ * CANCELACIÓN: Limpia la orden en el exchange y libera el bot.
  */
-async function cancelActiveLongOrder(botState, log, updateGeneralBotState) {
+async function cancelActiveLongOrder(botState, log, updateGeneralBotState, userId) {
     const lastOrder = botState.llastOrder; 
     if (!lastOrder?.order_id) return;
     
@@ -113,15 +116,14 @@ async function cancelActiveLongOrder(botState, log, updateGeneralBotState) {
 
     try {
         log(`🛑 [L-CANCEL] Cancelando orden pendiente ${lastOrder.order_id}...`, 'warning');
-        const result = await bitmartService.cancelOrder(SYMBOL, lastOrder.order_id);
+        // ✅ CONTEXTO MULTIUSUARIO
+        const result = await bitmartService.cancelOrder(SYMBOL, lastOrder.order_id, userId);
         
-        // El código 1000 indica éxito o que la orden ya no existe (llenada/cancelada previamente)
         if (result?.code === 1000 || result?.message?.includes('already filled')) {
             await updateGeneralBotState({ llastOrder: null });
             log(`✅ [L-CANCEL] Orden removida. Sistema desbloqueado.`, 'success');
         }
     } catch (error) {
-        // Si el error es que no se encontró la orden, limpiamos de todos modos para no quedar bloqueados
         if (error.message.includes('not found') || error.message.includes('400')) {
             await updateGeneralBotState({ llastOrder: null });
             log(`⚠️ [L-CANCEL] Orden no encontrada en exchange. Limpiando estado local.`, 'warning');

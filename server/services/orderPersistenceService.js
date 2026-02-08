@@ -1,22 +1,35 @@
-// services/orderPersistenceService.js
+/**
+ * BSB/server/services/orderPersistenceService.js
+ * PERSISTENCIA Y NOTIFICACIÓN DE ÓRDENES (Multi-usuario)
+ */
 
 const Order = require('../models/Order');
 
-// Variable para guardar la instancia de Socket.io (se inyectará desde el server o logic)
+// Variable para guardar la instancia de Socket.io
 let ioInstance = null;
 
 function setIo(io) {
     ioInstance = io;
 }
 
-async function saveExecutedOrder(orderDetails, strategy) {
+/**
+ * Guarda la orden vinculándola a un usuario y notifica en tiempo real.
+ */
+async function saveExecutedOrder(orderDetails, strategy, userId) {
     try {
+        if (!userId) {
+            console.error(`[PERSISTENCE ERROR] Intento de guardar orden sin userId.`);
+            return null;
+        }
+
         const rawTime = orderDetails.orderTime || orderDetails.create_time || orderDetails.update_time || Date.now();
         const validOrderDate = new Date(Number(rawTime));
 
+        // 1. CREACIÓN EN BASE DE DATOS
         const newOrder = await Order.create({
+            userId: userId, 
             orderId: orderDetails.orderId || orderDetails.order_id, 
-            symbol: orderDetails.symbol,
+            symbol: orderDetails.symbol || 'BTC_USDT',
             side: orderDetails.side,
             type: orderDetails.type || 'market',
             size: parseFloat(orderDetails.size || 0),
@@ -28,35 +41,42 @@ async function saveExecutedOrder(orderDetails, strategy) {
             strategy: strategy 
         });
 
-        // ✅ CIRUGÍA EXITOSA: Si la orden se guardó y tenemos Socket.io, avisamos al Frontend
+        // 2. NOTIFICACIÓN PRIVADA VÍA SOCKET.IO
         if (newOrder && ioInstance) {
-            console.log(`[PERSISTENCE] 📢 Notificando nueva orden (${strategy}) al frontend.`);
+            // Importante: Usar el prefijo 'user_' para coincidir con autobotLogic y server.js
+            const userRoom = `user_${userId}`;
             
-            // Emitimos a todos los clientes que deben actualizar su historial
-            ioInstance.emit('new-order-executed', {
+            console.log(`[PERSISTENCE] 📢 Notificando orden ${newOrder.orderId} (${strategy}) al canal ${userRoom}.`);
+            
+            // Emitimos el evento de ejecución individual
+            ioInstance.to(userRoom).emit('new-order-executed', {
                 strategy: strategy,
                 order: newOrder
             });
 
-            // También podemos enviar el historial actualizado de los últimos 20
-            const updatedHistory = await Order.find({})
+            // Enviamos el historial actualizado de los últimos 20 movimientos de ESTE usuario
+            const updatedHistory = await Order.find({ userId: userId })
                 .sort({ orderTime: -1 })
-                .limit(20);
-            ioInstance.emit('ai-history-update', updatedHistory);
+                .limit(20)
+                .lean(); // .lean() para que la respuesta sea un objeto JS plano más rápido
+            
+            ioInstance.to(userRoom).emit('ai-history-update', updatedHistory);
         }
 
         return newOrder;
+
     } catch (error) {
+        // Manejo de duplicados (BitMart a veces envía el mismo evento 2 veces)
         if (error.code === 11000) {
-            console.warn(`[PERSISTENCE] La orden ${orderDetails.orderId} ya existe en la DB. Saltando.`);
+            console.warn(`[PERSISTENCE] Orden duplicada ${orderDetails.orderId}. No se requiere acción.`);
             return null;
         }
-        console.error(`[PERSISTENCE ERROR] Error al guardar la orden ejecutada: ${error.message}`);
+        console.error(`[PERSISTENCE ERROR] Error crítico al guardar: ${error.message}`);
         return null;
     }
 }
 
 module.exports = { 
     saveExecutedOrder,
-    setIo // Exportamos el inyector
+    setIo 
 };

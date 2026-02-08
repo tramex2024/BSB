@@ -3,8 +3,7 @@
 /**
  * MIGRACIÓN 2026 - ARQUITECTURA PLANA
  * Este archivo define el estado 'CERO' de cada estrategia.
- * Se debe aplicar al finalizar un ciclo exitoso (Take Profit) 
- * o al reiniciar el bot manualmente.
+ * Se aplica al finalizar un ciclo (Take Profit) o al reiniciar el bot.
  */
 
 /**
@@ -26,7 +25,7 @@ const CLEAN_LONG_ROOT = {
     lprofit: 0,       // Profit acumulado en el ciclo actual
     lnorder: 0,       // Contador visual de órdenes
     lcoverage: 0,     // Precio de resistencia/cobertura visual
-    llep: 0           //✅ AGREGAR: Reset del Last Execution Price (Long)
+    llep: 0           // Last Execution Price (Evita loops de órdenes duplicadas)
 };
 
 /**
@@ -48,7 +47,7 @@ const CLEAN_SHORT_ROOT = {
     sprofit: 0,       // Profit acumulado en el ciclo actual
     snorder: 0,       // Contador visual de órdenes
     scoverage: 0,     // Precio de resistencia/cobertura visual
-    slep: 0           // ✅ AGREGAR: Reset del Last Execution Price (Short)
+    slep: 0           // Last Execution Price (Evita loops de órdenes duplicadas)
 };
 
 module.exports = {

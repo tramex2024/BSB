@@ -1,3 +1,5 @@
+//BSB/server/src/au/states/short/SBuying.js
+
 const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
@@ -6,6 +8,7 @@ const TRAILING_STOP_PERCENTAGE = 0.3; // Default 0.3% bounce
 
 async function run(dependencies) {
     const { 
+        userId, // <--- IDENTIDAD INYECTADA
         botState, currentPrice, config, log, 
         updateSStateData, updateBotState, updateGeneralBotState,
         logSuccessfulCycle 
@@ -15,8 +18,8 @@ async function run(dependencies) {
 
     const slastOrder = botState.slastOrder;  
     const acBuying = parseFloat(botState.sac || 0); // Short Accumulated Coins
-    const pm = parseFloat(botState.spm || 0);       // Floor (min price reached)
-    const pc = parseFloat(botState.spc || 0);       // Buyback Stop (Cut price)
+    const pm = parseFloat(botState.spm || 0);       // Floor (mínimo alcanzado)
+    const pc = parseFloat(botState.spc || 0);       // Buyback Stop (Precio de corte)
 
     // 1. SECURITY LOCK
     if (slastOrder) {
@@ -28,16 +31,16 @@ async function run(dependencies) {
     const configPercent = config.short?.trailing_percent || TRAILING_STOP_PERCENTAGE;
     const trailingStopPercent = configPercent / 100;
 
-    // Floor initialization (pm)
+    // Inicialización del suelo (pm)
     let currentMin = (pm > 0) ? pm : currentPrice;
     
-    // If current price is the new minimum, we capture it
+    // Si el precio actual es el nuevo mínimo, lo capturamos
     const newPm = Math.min(currentMin, currentPrice);
     
-    // The Buyback price is the floor + bounce margin
+    // El precio de recompra es el suelo + el margen de rebote
     const newPc = newPm * (1 + trailingStopPercent);
 
-    // If we find a new floor, or it's the first time (pm === 0)
+    // Si encontramos un nuevo suelo, o es la primera vez
     if (newPm < pm || pm === 0) {
         log(`📉 [S-TRAILING] New Floor: ${newPm.toFixed(2)} | Buyback Stop (PC) set at: ${newPc.toFixed(2)} (+${configPercent}%)`, 'info');
 
@@ -52,15 +55,17 @@ async function run(dependencies) {
         
         const triggerPrice = pc > 0 ? pc : newPc;
 
-        // TRIGGER: If price rises and hits the Buyback Stop
+        // TRIGGER: Si el precio sube y toca el Stop de recompra
         if (currentPrice >= triggerPrice) {
             log(`💰 [S-CLOSE] Bounce confirmed: ${currentPrice.toFixed(2)} >= ${triggerPrice.toFixed(2)}. Closing Short...`, 'success');
             
             try {
+                // PASAMOS EL userId PARA QUE EL MANAGER PERSISTA CORRECTAMENTE
                 await placeShortBuyOrder(config, botState, acBuying, log, updateSStateData, currentPrice, {
                     logSuccessfulCycle,
                     updateBotState,
-                    updateGeneralBotState
+                    updateGeneralBotState,
+                    userId // <--- IMPORTANTE: Inyectamos el dueño de la orden
                 }); 
             } catch (error) {
                 log(`❌ Critical error in Short buyback: ${error.message}`, 'error');
@@ -71,10 +76,8 @@ async function run(dependencies) {
                 }
             }
         } else {
-            // Heartbeat monitoring (Unified Format)
+            // Heartbeat monitoring (Solo visible para el usuario dueño)
             const distToClose = Math.abs(((triggerPrice / currentPrice) - 1) * 100).toFixed(2);
-            
-            // In Short Trailing, the Stop is above, hence '+'
             const signStop = triggerPrice > currentPrice ? '+' : '-';
 
             log(`[S-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | Floor: ${newPm.toFixed(2)} | Stop: ${triggerPrice.toFixed(2)} (${signStop}${distToClose}%)`, 'info');

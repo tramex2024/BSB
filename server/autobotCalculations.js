@@ -1,7 +1,10 @@
+//BSB/server/autobotCalculations.js
+
 /**
  * BSB/server/autobotCalculations.js
  * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
  * BASADO EN LÓGICA EXPONENCIAL DINÁMICA 2026.
+ * * ATENCIÓN: No modificar operadores matemáticos.
  */
 
 const parseNumber = (val) => {
@@ -49,7 +52,7 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
 }
 
 // ==========================================
-//            LÓGICA PARA LONG
+//             LÓGICA PARA LONG
 // ==========================================
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
@@ -94,10 +97,9 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
 }
 
 // ==========================================
-//            LÓGICA PARA SHORT
+//             LÓGICA PARA SHORT
 // ==========================================
 
-// Dentro de autobotCalculations.js
 function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
     const conf = config || {}; // Protección si config llega null
@@ -139,7 +141,7 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
 }
 
 // ==========================================
-//            PNL Y UTILIDADES
+//             PNL Y UTILIDADES
 // ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {

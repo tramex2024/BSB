@@ -1,6 +1,6 @@
 /**
  * BSB/server/server.js
- * SERVIDOR UNIFICADO (BSB 2026) - Optimización Multiusuario y Estabilidad de Órdenes
+ * SERVIDOR UNIFICADO (BSB 2026) - Versión Integra con CandleBuilder e IA
  */
 
 const express = require('express');
@@ -17,7 +17,8 @@ const bitmartService = require('./services/bitmartService');
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
-const orderPersistenceService = require('./services/orderPersistenceService'); // <--- AÑADIDO
+const candleBuilder = require('./src/ai/CandleBuilder'); // <--- AÑADIDO
+const orderPersistenceService = require('./services/orderPersistenceService');
 
 // Modelos
 const Autobot = require('./models/Autobot');
@@ -60,7 +61,7 @@ const io = new Server(server, {
 
 autobotLogic.setIo(io);
 aiEngine.setIo(io); 
-orderPersistenceService.setIo(io); // <--- CONEXIÓN DEL CABLE DE NOTIFICACIONES
+orderPersistenceService.setIo(io); 
 
 // --- 4. RUTAS API ---
 app.use('/api/auth', require('./routes/authRoutes'));
@@ -132,15 +133,27 @@ function setupMarketWS(io) {
                 lastKnownPrice = price; 
                 centralAnalyzer.updatePrice(price);
 
+                // --- INTEGRACIÓN CANDLEBUILDER ---
+                const closedCandle = candleBuilder.processTick(price, volume);
+                if (closedCandle) {
+                    await MarketSignal.updateOne(
+                        { symbol: 'BTC_USDT' },
+                        { 
+                            $push: { history: { $each: [closedCandle], $slice: -100 } },
+                            $set: { lastUpdate: new Date() }
+                        },
+                        { upsert: true }
+                    );
+                }
+                // ---------------------------------
+
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
                 const now = Date.now();
                 if (now - lastExecutionTime > EXECUTION_THROTTLE_MS) {
                     lastExecutionTime = now;
                     if (mongoose.connection.readyState === 1) { 
-                        try { 
-                            if (aiEngine.isRunning) await aiEngine.analyze(price, volume); 
-                        } catch (aiErr) { console.error("⚠️ AI Error:", aiErr.message); }
+                        // El análisis de IA ahora es parte del ciclo interno de autobotLogic para evitar desincronización
                         await autobotLogic.botCycle(price);
                     }
                 }
@@ -161,12 +174,19 @@ bitmartService.initOrderWebSocket((ordersData) => {
     io.sockets.emit('open-orders-update', ordersData);
 });
 
-// --- 10. INTERVALOS DE RESPALDO OPTIMIZADOS ---
-
-// Sincronización de saldos (10s)
+// --- 10. INTERVALOS DE RESPALDO ---
 setInterval(async () => {
     try {
-        if (mongoose.connection.readyState === 1) await autobotLogic.slowBalanceCacheUpdate();
+        if (mongoose.connection.readyState === 1) {
+            // Buscamos todos los usuarios activos para actualizar sus balances
+            const activeBots = await Autobot.find({ 
+                $or: [{ lstate: 'RUNNING' }, { sstate: 'RUNNING' }] 
+            }).select('userId');
+            
+            for(const bot of activeBots) {
+                await autobotLogic.slowBalanceCacheUpdate(bot.userId);
+            }
+        }
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
@@ -176,6 +196,7 @@ setupMarketWS(io);
 io.on('connection', async (socket) => {
     console.log(`👤 Usuario Conectado: ${socket.id}`);
 
+    // Nota: En multiusuario, esto debería filtrar por el userId del socket/auth
     Autobot.findOne({}).lean().then(state => {
         if (state) emitBotState(io, state);
     });

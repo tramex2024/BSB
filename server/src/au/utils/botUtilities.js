@@ -1,85 +1,77 @@
 // BSB/server/src/utils/botUtilities.js
 
+/**
+ * MIGRACIÓN 2026 - UTILIDADES DE SISTEMA
+ * Este archivo gestiona el mantenimiento y Hard Reset de los bots.
+ * A diferencia de los DataManagers, este reseteo se usa para emergencias 
+ * o limpiezas manuales solicitadas por el usuario.
+ */
+
 const Autobot = require('../../../models/Autobot'); 
 const { log } = require('../../../services/loggerService'); 
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../au/utils/cleanState');
 
 /**
- * Función de reseteo total del bot.
- * Preserva configuración, profit y el conteo de ciclos ejecutados.
- * Ahora inicializa todas las siglas raíz para la arquitectura 2026.
+ * Función de reseteo total del bot para un usuario específico.
+ * Preserva configuración, profit acumulado y el histórico de ciclos.
+ * * @param {string} userId - El ID único del usuario propietario del bot.
  */
-async function resetAndInitializeBot() {
-    try {
-        const currentBot = await Autobot.findOne({});
-        
-        // --- 1. PRESERVACIÓN DE DATOS HISTÓRICOS ---
-        const config = currentBot ? currentBot.config : {}; 
-        const totalProfit = currentBot ? (parseFloat(currentBot.total_profit) || 0) : 0; 
-        
-        // Mantenemos el conteo de ciclos globales de cada estrategia
-        const lcycle = currentBot ? (parseInt(currentBot.lcycle) || 0) : 0;
-        const scycle = currentBot ? (parseInt(currentBot.scycle) || 0) : 0;
+async function resetAndInitializeBot(userId) {
+    if (!userId) {
+        console.error("❌ [SYSTEM] Error: Se requiere userId para ejecutar el reset.");
+        return;
+    }
 
-        // Balances iniciales desde config (Acceso seguro a la jerarquía)
+    try {
+        // 1. Buscamos el bot actual del usuario
+        const currentBot = await Autobot.findOne({ userId });
+        
+        if (!currentBot) {
+            console.log(`⚠️ [SYSTEM] No existe bot para el usuario: ${userId}.`);
+            return;
+        }
+
+        // 2. Extraemos datos que NO queremos perder (Configuración y Éxitos)
+        const config = currentBot.config || {}; 
+        const totalProfit = parseFloat(currentBot.total_profit) || 0; 
+        const lcycle = parseInt(currentBot.lcycle) || 0;
+        const scycle = parseInt(currentBot.scycle) || 0;
+
+        // 3. Restauramos los balances iniciales desde la configuración
+        // Si el usuario cambió su capital en el config, el reset aplicará ese nuevo monto.
         const initialLBalance = config.long?.amountUsdt || 0; 
         const initialSBalance = config.short?.amountUsdt || 0; 
 
-        // --- 2. RE-INICIALIZACIÓN ---
-        // Borramos el documento previo para evitar conflictos de esquemas antiguos
-        await Autobot.deleteMany({});
-        
-        const newBotData = {
+        // 4. Construcción del objeto de reseteo (Siglas Raíz 2026)
+        const resetData = {
+            // Estado operativo
             "lstate": "STOPPED",
             "sstate": "STOPPED",
-            "config": config,
             "total_profit": totalProfit,
             "lcycle": lcycle,
             "scycle": scycle,
-            
             "lbalance": initialLBalance, 
             "sbalance": initialSBalance, 
 
-            // --- SIGLAS RAÍZ LONG (Arquitectura Plana) ---
-            "lppc": 0,          // Long Price Per Coin (Promedio)
-            "lac": 0,           // Long Accumulated Coins (BTC)
-            "lai": 0,           // Long Accumulated Investment (USDT)
-            "locc": 0,          // Long Order Cycle Count (Para exponencial)
-            "llastOrder": null, // Rastro de la orden activa
-            "lpm": 0,           // Long Price Max (Para Trailing)
-            "lpc": 0,           // Long Price Cut (Stop Loss del Trailing)
-            "lrca": 0,          // Long Required Coverage Amount
-            "lncp": 0,          // Long Next Coverage Price
-            "lstartTime": null, 
-            "lnorder": 0,       // Número de orden visual
-            "ltprice": 0,       // Long Target Price (Take Profit)
-            "lsprice": 0,       // Long Stop Price (Visual)
+            // Aplicamos limpieza profunda de promedios, órdenes y trailings
+            ...CLEAN_LONG_ROOT,
+            ...CLEAN_SHORT_ROOT,
 
-            // --- SIGLAS RAÍZ SHORT (Arquitectura Plana) ---
-            "sppc": 0,          // Short Price Per Coin
-            "sac": 0,           // Short Accumulated Coins
-            "sai": 0,           // Short Accumulated Investment
-            "socc": 0,          // Short Order Cycle Count
-            "slastOrder": null, 
-            "spm": 0,           // Short Price Min (Para Trailing Short)
-            "spc": 0,           // Short Price Cut (Stop de compra)
-            "srca": 0,          // Short Required Coverage Amount
-            "sncp": 0,          // Short Next Coverage Price
-            "sstartTime": null,
-            "snorder": 0,
-            "stprice": 0,       // Short Target Price
-            "sbprice": 0,       // Short Buy Price (Visual)
-            
             "updatedAt": new Date()
         };
+
+        // 5. Actualización atómica en base de datos
+        // Usamos updateOne con userId para garantizar que NO tocamos a otros usuarios.
+        await Autobot.updateOne(
+            { userId: userId }, 
+            { $set: resetData }
+        );
         
-        const newAutobot = new Autobot(newBotData);
-        await newAutobot.save();
-        
-        console.log(`✅ [SYSTEM] Reset completo.`);
-        console.log(`📊 Historial Preservado -> Profit: $${totalProfit} | Ciclos L: ${lcycle} | Ciclos S: ${scycle}`);
+        console.log(`✅ [SYSTEM] Hard Reset exitoso para el usuario: ${userId}`);
+        console.log(`📊 Datos preservados -> Profit: $${totalProfit} | Ciclos: L(${lcycle}) S(${scycle})`);
         
     } catch (error) {
-        console.error(`❌ Error en resetAndInitializeBot: ${error.message}`);
+        console.error(`❌ [SYSTEM] Error crítico en resetAndInitializeBot: ${error.message}`);
     }
 }
 

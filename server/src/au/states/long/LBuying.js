@@ -7,6 +7,7 @@ const { monitorAndConsolidate } = require('./LongBuyConsolidator');
  */
 async function run(dependencies) {
     const {
+        userId, // <--- RECIBIMOS EL ID INYECTADO
         botState, currentPrice, config, log,
         updateBotState, updateLStateData, updateGeneralBotState,
         availableUSDT 
@@ -17,13 +18,14 @@ async function run(dependencies) {
 
     try {
         // 1. PENDING ORDER MONITORING
+        // El monitor también debe recibir el userId para saber a quién verificar
         const orderIsActive = await monitorAndConsolidate(
-            botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState
+            botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId
         );
         
         if (orderIsActive) return; 
         
-        // 2. MONITORING LOG
+        // 2. MONITORING LOG (Se mantiene igual, el log ya sabe usar el userId internamente)
         if (parseFloat(botState.lppc || 0) > 0) {
             const nextPrice = parseFloat(botState.lncp || 0);
             const targetTP = parseFloat(botState.ltprice || 0);
@@ -44,7 +46,8 @@ async function run(dependencies) {
             
             if (availableUSDT >= purchaseAmount && botState.lbalance >= purchaseAmount) {
                 log("🚀 [L-BUY] Starting Long cycle. Placing first exponential buy...", 'info');
-                await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState); 
+                // PASAMOS EL userId AL MANAGER
+                await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, userId); 
             } else {
                 log(`⚠️ [L-BUY] Insufficient funds for opening.`, 'warning');
                 await updateBotState('PAUSED', LSTATE); 
@@ -52,15 +55,11 @@ async function run(dependencies) {
             return; 
         }
 
-        // 4. EXIT TO SELLING EVALUATION (With Trailing Cleanup)
+        // 4. EXIT TO SELLING EVALUATION (Se mantiene igual)
         if (botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-            log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) reached. Activating Trailing Stop in SELLING...`, 'success');
+            log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) reached. Activating Trailing Stop...`, 'success');
             
-            await updateGeneralBotState({
-                lpm: 0,
-                lpc: 0
-            });
-
+            await updateGeneralBotState({ lpm: 0, lpc: 0 });
             await updateBotState('SELLING', LSTATE);
             return;
         }
@@ -74,7 +73,7 @@ async function run(dependencies) {
 
         if (!botState.llastOrder && isPriceLowEnough) {
             if (lastExecutionPrice > 0 && currentPrice >= lastExecutionPrice) {
-                log(`[L-BUY] 🛑 Security Lock: Current price (${currentPrice.toFixed(2)}) is not lower than last purchase (${lastExecutionPrice.toFixed(2)}).`, 'warning');
+                log(`[L-BUY] 🛑 Security Lock: Price not lower than last purchase.`, 'warning');
                 return; 
             }
 
@@ -83,7 +82,8 @@ async function run(dependencies) {
             if (hasFunds && requiredAmount > 0) {
                 log(`📉 [L-BUY] Triggering Exponential DCA: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
                 try {
-                    await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState);
+                    // PASAMOS EL userId AL MANAGER
+                    await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, userId);
                 } catch (error) {
                     log(`❌ [L-BUY] DCA Execution Error: ${error.message}`, 'error');
                 }

@@ -1,8 +1,16 @@
+//BSB/server/src/au/states/long/LPaused.js
+
+/**
+ * L-PAUSED STATE:
+ * Gestiona la espera por fondos insuficientes y la recuperación del ciclo.
+ */
+
 const { calculateLongTargets } = require('../../../../autobotCalculations');
 const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 
 async function run(dependencies) {
     const { 
+        userId, // <--- IDENTIDAD INYECTADA
         botState, currentPrice, config, 
         updateBotState, updateLStateData,
         updateGeneralBotState, 
@@ -17,6 +25,8 @@ async function run(dependencies) {
     const orderCountInCycle = parseInt(botState.locc || 0);
 
     // --- 1. RECOVERY LOGIC (EXIT TO SELLING) ---
+    // Si el precio sube mientras estamos pausados por falta de dinero, 
+    // permitimos que el bot intente vender lo que ya tiene.
     if (ac > 0 && botState.ltprice > 0 && currentPrice >= botState.ltprice) {
         log(`🚀 [L-RECOVERY] Target reached (${botState.ltprice.toFixed(2)})! Switching to SELLING.`, 'success');
         await updateBotState('SELLING', 'long'); 
@@ -24,14 +34,16 @@ async function run(dependencies) {
     }
 
     // --- 2. CALCULATE REQUIREMENTS ---
-   const recalculation = calculateLongTargets(
-    ppc, 
-    config.long, 
-    orderCountInCycle
-);
+    // Recalculamos basándonos en la configuración específica de este usuario
+    const recalculation = calculateLongTargets(
+        ppc, 
+        config.long, 
+        orderCountInCycle
+    );
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
+    // Actualizamos solo el documento del usuario actual
     await updateGeneralBotState({ 
         lrca: requiredAmount, 
         lncp: recalculation.nextCoveragePrice 
@@ -53,8 +65,8 @@ async function run(dependencies) {
         log(`✅ [L-FUNDS] Capital recovered (${availableUSDT.toFixed(2)} USDT). Resuming BUYING...`, 'success');
         await updateBotState('BUYING', 'long');
     } else {
-        // Uniform format with emojis and bars
-        log(`[L-PAUSED] ⏸️ Waiting for Funds | Balance: ${currentLBalance.toFixed(2)} | Required: ${requiredAmount.toFixed(2)} | Next: #${orderCountInCycle + 1}`, 'debug');
+        // Log individualizado que aparecerá solo en el Dashboard del usuario afectado
+        log(`[L-PAUSED] ⏸️ Waiting for Funds | Balance: ${currentLBalance.toFixed(2)} | Required: ${requiredAmount.toFixed(2)} | Next Order: #${orderCountInCycle + 1}`, 'debug');
     }
 } 
 

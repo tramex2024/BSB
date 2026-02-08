@@ -1,48 +1,56 @@
 /**
- * Archivo: server/src/aiStrategy.js
+ * BSB/server/src/aiStrategy.js
  * Wrapper para integrar el AIEngine en el ciclo secuencial del Autobot.
  */
 
 const aiEngine = require('./ai/AIEngine');
 
-let deps = {};
-
 /**
- * Inyecta las dependencias globales del bot
+ * Ejecuta un ciclo de análisis de la IA.
+ * @param {Object} dependencies - Datos inyectados desde el motor central (botCycle).
  */
-function setDependencies(dependencies) {
-    deps = dependencies;
-}
+async function runAIStrategy(dependencies) {
+    // 1. Verificación de integridad (Fail-fast)
+    if (!dependencies || !dependencies.botState || !dependencies.currentPrice) {
+        return;
+    }
 
-/**
- * Ejecuta un ciclo de análisis de la IA
- */
-async function runAIStrategy() {
+    const { currentPrice, botState, userId, io, log } = dependencies;
+
     try {
-        const { currentPrice, botState } = deps;
-
-        // Si el motor de IA está apagado en su propio estado, no hacemos nada
-        if (!aiEngine.isRunning) return;
-
-        // Sincronizamos el IO si no estaba seteado
-        if (!aiEngine.io && deps.io) {
-            aiEngine.setIo(deps.io);
+        // 2. Control de Estado: Verificamos si la IA está habilitada para ESTE usuario
+        // Usamos la ruta de config que definimos en el modelo Autobot.js
+        if (!botState.config?.ai?.enabled) {
+            return;
         }
 
-        // Ejecutamos el análisis con el precio actual del ciclo
-        // Esto garantiza que la IA vea el mismo precio que el Long y el Short
-        await aiEngine.analyze(currentPrice);
+        // 3. Sincronización dinámica de Sockets
+        // Aseguramos que el motor de IA pueda hablar con el canal privado del usuario
+        if (!aiEngine.io && io) {
+            aiEngine.setIo(io);
+        }
+
+        /**
+         * 4. Ejecución del Análisis Predictivo
+         * El motor de IA recibe el contexto y decide si hay una oportunidad.
+         * Internamente, AIEngine consultará MarketSignal y el historial.
+         */
+        
+        // Opcional: Log de debug para saber que la IA está escaneando
+        // log(`🧠 AI Engine scanning market for ${botState.config.symbol}...`, 'info');
+
+        await aiEngine.analyze(currentPrice, userId);
 
     } catch (error) {
-        if (deps.log) {
-            deps.log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
-        } else {
-            console.error("Error en AI Strategy:", error);
+        // Error aislado: El fallo de la IA de un usuario no detiene el bot de los demás
+        if (log) {
+            log(`❌ [AI-STRATEGY-ERROR] (User: ${userId}): ${error.message}`, 'error');
         }
+        console.error(`[CRITICAL-AI][User: ${userId}]:`, error);
     }
 }
 
+// Exportación limpia sin variables globales de estado
 module.exports = {
-    runAIStrategy,
-    setDependencies
+    runAIStrategy
 };

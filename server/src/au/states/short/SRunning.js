@@ -1,31 +1,40 @@
+//BSB/server/src/au/states/short/SRunning.js
+
+/**
+ * S-RUNNING STATE (SHORT):
+ * Monitorea señales de mercado para abrir una posición en corto.
+ */
+
 const MarketSignal = require('../../../../models/MarketSignal');
 
 async function run(dependencies) {
-    const { botState, log, updateBotState, currentPrice } = dependencies;
+    // 1. Extraemos userId y herramientas de las dependencias
+    const { userId, botState, log, updateBotState, currentPrice } = dependencies;
     
-    // 0. PREVENTIVE BLOCK: Security against price 0
+    // 0. PREVENTIVE BLOCK: Seguridad contra precio 0
     if (!currentPrice || currentPrice <= 0) {
         return; 
     }
 
     // 1. SECURITY CHECK (Orphan Position)
-    // ✅ MIGRATED: Directly reading 'sac' from root
+    // ✅ MIGRATED: Lectura directa de 'sac' (Short Accumulated Coins) desde el root
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
         log("[S-RUNNING] 🛡️ Active Short position detected (sac > 0). Correcting state to SELLING...", 'warning');
+        // El updateBotState ya tiene el userId vinculado internamente
         await updateBotState('SELLING', 'short'); 
         return; 
     }
 
     try {
-        // Access symbol from config structure
+        // Obtenemos el símbolo de la configuración de este usuario
         const SYMBOL = botState.config?.symbol || 'BTC_USDT';
         const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
 
         if (!globalSignal) return;
 
-        // 2. MONITORING LOG (Heartbeat) - Unified Format
+        // 2. MONITORING LOG (Heartbeat) - El log es privado para el userId
         log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
 
         // 3. REAL-TIME VALIDATION
@@ -36,10 +45,11 @@ async function run(dependencies) {
         }
 
         // 4. ACTIVATION LOGIC
-        // If RSI indicates overbought or SELL signal, we enter Short
+        // Si la señal global es SELL, este bot entra en ciclo de Short
         if (globalSignal.signal === 'SELL') { 
             log(`🚀 [S-SIGNAL] SHORT OPPORTUNITY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
-            // Transition to SELLING so SSelling.js takes control and executes the first order
+            
+            // Transición a SELLING para que SSelling.js ejecute la primera orden
             await updateBotState('SELLING', 'short'); 
             return; 
         }

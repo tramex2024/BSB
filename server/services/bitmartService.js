@@ -1,26 +1,28 @@
 // BSB/server/services/bitmartService.js
 
+/**
+ * BSB/server/services/bitmartService.js
+ * SERVICIO REST BITMART - Optimizado para Multi-usuario y Caché por Símbolo
+ */
+
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
-const { initOrderWebSocket } = require('./bitmartWs');
+const { initOrderWebSocket, stopOrderWebSocket } = require('./bitmartWs');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
 // =========================================================================
-// MOTOR DE FIRMA, CACHÉ Y PETICIONES (Optimizado para Multiusuario)
+// MOTOR DE FIRMA Y CACHÉ DINÁMICO
 // =========================================================================
-const cache = {
-    ticker: { data: null, timestamp: 0, promise: null },
-    klines: { data: null, timestamp: 0, promise: null }
-};
-const CACHE_TTL = 2000; 
+const tickerCache = new Map(); // Mapa para: symbol -> {data, timestamp, promise}
+const klinesCache = new Map(); // Mapa para: symbol_interval -> {data, timestamp, promise}
+
+const CACHE_TTL = 2000;  
 const KLINES_TTL = 15000;
 
-// MODIFICACIÓN CRÍTICA: Ahora acepta un 5to parámetro 'userCreds'
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    
-    // Si vienen credenciales del usuario (DB), las usamos. Si no, usamos las del .env (Bot actual).
+    // Si no hay credenciales de usuario, cae en las del .env por seguridad
     const apiKey = userCreds?.apiKey || process.env.BITMART_API_KEY;
     const secretKey = userCreds?.secretKey || process.env.BITMART_SECRET_KEY;
     const apiMemo = userCreds?.apiMemo || process.env.BITMART_API_MEMO;
@@ -28,7 +30,6 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
     const timestamp = Date.now().toString();
     let bodyForSign = method === 'POST' ? JSON.stringify(body) : '';
     
-    // Firma usando las llaves seleccionadas
     const message = `${timestamp}#${apiMemo}#${bodyForSign}`;
     const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
@@ -54,17 +55,15 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO (Adaptada para recibir credenciales opcionales)
+// LÓGICA DE NEGOCIO
 // =========================================================================
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
 const bitmartService = {
-    // Agregamos 'creds' como parámetro a todas las funciones
     validateApiKeys: async (creds) => {
         try {
-            await bitmartService.getBalance(creds);
-            console.log(`${LOG_PREFIX} ✅ Credentials validated successfully.`);
-            return true;
+            const wallet = await bitmartService.getBalance(creds);
+            return !!wallet;
         } catch (e) { return false; }
     },
 
@@ -87,49 +86,56 @@ const bitmartService = {
 
     getTicker: async (symbol) => {
         const now = Date.now();
-        if (cache.ticker.promise) return cache.ticker.promise;
-        if (cache.ticker.data && (now - cache.ticker.timestamp < CACHE_TTL)) return cache.ticker.data;
+        const cached = tickerCache.get(symbol);
 
-        cache.ticker.promise = (async () => {
+        if (cached?.promise) return cached.promise;
+        if (cached?.data && (now - cached.timestamp < CACHE_TTL)) return cached.data;
+
+        const promise = (async () => {
             try {
-                // Ticker es público, no necesita credenciales
                 const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
                 const data = res.data.tickers.find(t => t.symbol === symbol);
-                cache.ticker.data = data;
-                cache.ticker.timestamp = Date.now();
+                tickerCache.set(symbol, { data, timestamp: Date.now(), promise: null });
                 return data;
-            } finally { cache.ticker.promise = null; }
+            } catch (err) {
+                tickerCache.delete(symbol);
+                throw err;
+            }
         })();
-        return cache.ticker.promise;
+
+        tickerCache.set(symbol, { ...cached, promise });
+        return promise;
     },
 
     getKlines: async (symbol, interval, limit = 200) => {
         const now = Date.now();
-        if (cache.klines.promise) return cache.klines.promise;
-        if (cache.klines.data && (now - cache.klines.timestamp < KLINES_TTL)) return cache.klines.data;
+        const cacheKey = `${symbol}_${interval}`;
+        const cached = klinesCache.get(cacheKey);
 
-        cache.klines.promise = (async () => {
+        if (cached?.promise) return cached.promise;
+        if (cached?.data && (now - cached.timestamp < KLINES_TTL)) return cached.data;
+
+        const promise = (async () => {
             try {
-                // Klines es público
                 const res = await makeRequest('GET', '/spot/quotation/v3/klines', { symbol, step: interval, size: limit });
                 const data = res.data.map(c => ({
                     timestamp: parseInt(c[0]), open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5])
                 }));
-                cache.klines.data = data;
-                cache.klines.timestamp = Date.now();
+                klinesCache.set(cacheKey, { data, timestamp: Date.now(), promise: null });
                 return data;
-            } finally { cache.klines.promise = null; }
+            } catch (err) {
+                klinesCache.delete(cacheKey);
+                throw err;
+            }
         })();
-        return cache.klines.promise;
+
+        klinesCache.set(cacheKey, { ...cached, promise });
+        return promise;
     },
 
     getOpenOrders: async (symbol, creds) => {
         const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 }, creds);
-        let orders = [];
-        if (res.data && Array.isArray(res.data.data)) orders = res.data.data;
-        else if (res.data && Array.isArray(res.data)) orders = res.data;
-        else if (res.data?.data?.list) orders = res.data.data.list;
-
+        let orders = res.data?.data?.list || res.data?.data || res.data || [];
         return { orders: Array.isArray(orders) ? orders : [] };
     },
 
@@ -150,18 +156,13 @@ const bitmartService = {
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody, creds);
         
-        let rawOrders = [];
-        if (res.data && Array.isArray(res.data)) rawOrders = res.data;
-        else if (res.data?.data?.list) rawOrders = res.data.data.list;
-        else if (res.data?.data && Array.isArray(res.data.data)) rawOrders = res.data.data;
+        let rawOrders = res.data?.data?.list || res.data?.data || res.data || [];
 
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => {
-            const finalPrice = parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price;
-            const finalSize = parseFloat(o.filledSize) > 0 ? o.filledSize : o.size;
             return {
                 ...o,
-                price: finalPrice,
-                size: finalSize,
+                price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
+                size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
                 orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
             };
         });
@@ -181,7 +182,10 @@ const bitmartService = {
         return res.data;
     },
 
+    // Gestión de WebSockets por usuario
     initOrderWebSocket,
+    stopOrderWebSocket, 
+
     getRecentOrders: async (symbol, creds) => bitmartService.getHistoryOrders({ symbol, limit: 100 }, creds),
     placeMarketOrder: async ({ symbol, side, notional }, creds) => 
         bitmartService.placeOrder(symbol, side, 'market', notional, null, creds)

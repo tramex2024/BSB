@@ -5,9 +5,9 @@ const { handleSuccessfulShortSell } = require('../../managers/shortDataManager')
 
 /**
  * Monitorea órdenes de VENTA (apertura o DCA de Short).
- * Optimizada para la Estructura Plana y notificaciones instantáneas.
+ * @param {string} userId - Identificador del usuario para contexto de API y DB.
  */
-async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState) {
+async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId) {
     // Leemos directamente de la raíz slastOrder
     const lastOrder = botState.slastOrder;
 
@@ -18,7 +18,8 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
     const orderIdString = String(lastOrder.order_id);
 
     try {
-        let finalDetails = await getOrderDetail(SYMBOL, orderIdString);
+        // Consultamos BitMart usando el contexto del usuario específico (API Keys)
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, userId);
         
         // Aseguramos capturar el tamaño ejecutado (BTC vendidos)
         let filledSize = parseFloat(
@@ -29,7 +30,7 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
         // 1. Verificación de respaldo (Back-up) si la API falla
         if (!finalDetails || (isNaN(filledSize) && finalDetails.state !== 'new')) {
-            const recentOrders = await getRecentOrders(SYMBOL);
+            const recentOrders = await getRecentOrders(SYMBOL, userId);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
                 filledSize = parseFloat(finalDetails.filledSize || finalDetails.size || 0);
@@ -43,15 +44,16 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
         if (isFilled) {
             const finalExecutedQty = filledSize > 0 ? filledSize : (lastOrder.btc_size || 0);
 
-            log(`[S-CONSOLIDATOR] ✅ Venta confirmada (#${botState.socc + 1}). Consolidando en DB...`, 'success');
+            log(`[S-CONSOLIDATOR] ✅ Venta confirmada (#${(botState.socc || 0) + 1}). Consolidando en DB...`, 'success');
             
-            // 🔥 PASO CLAVE: Limpiamos slastOrder inmediatamente
+            // 🔥 PASO CLAVE: Limpiamos slastOrder inmediatamente en el documento del usuario
             await updateGeneralBotState({ slastOrder: null });
 
-            // El manager se encargará de saveExecutedOrder y emitir el Socket
+            // El manager se encargará de saveExecutedOrder(..., userId)
             await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: finalExecutedQty }, log, { 
                 updateGeneralBotState, 
-                updateSStateData 
+                updateSStateData,
+                userId // <--- INYECTAMOS LA IDENTIDAD
             }); 
             
             return false; 
@@ -59,7 +61,7 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
         // --- CASO 2: ORDEN ACTIVA (Esperando en el libro) ---
         if (finalDetails && ['new', 'partially_filled', '8'].includes(String(finalDetails.state))) {
-            return true; // Mantiene el bloqueo del estado
+            return true; // Mantiene el bloqueo del estado para evitar duplicidad
         } 
 
         // --- CASO 3: ORDEN CANCELADA ---

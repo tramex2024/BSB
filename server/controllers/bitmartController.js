@@ -1,12 +1,48 @@
-// server/controllers/bitmartController.js
+/**
+ * BSB/server/controllers/bitmartController.js
+ * CONTROLADOR DE ESTADO DE CONEXIÓN Y MERCADO
+ */
 
-// Ejemplo de un controlador simple
+const bitmartService = require('../services/bitmartService');
+
+/**
+ * Verifica el estado de la conexión con BitMart.
+ * Si se invoca con credenciales (vía middleware), valida las llaves.
+ * Si no, valida solo el estado del servidor de BitMart (Público).
+ */
 exports.getBitMartStatus = async (req, res) => {
     try {
-        // Lógica para obtener el precio actual o el estado de conexión
-        // const price = await bitmartService.getMarketPrice('BTC_USDT'); 
-        res.status(200).json({ success: true, message: "BitMart connection OK", data: {} });
+        // 1. Verificamos el precio de BTC (Público) para confirmar que la API responde
+        const ticker = await bitmartService.getTicker('BTC_USDT');
+        
+        if (!ticker || !ticker.last_price) {
+            throw new Error("Could not fetch market data from BitMart");
+        }
+
+        let authStatus = "Public connection active";
+
+        // 2. Si el middleware inyectó credenciales, intentamos una validación privada ligera
+        if (req.bitmartCreds) {
+            const isValid = await bitmartService.validateApiKeys(req.bitmartCreds);
+            authStatus = isValid ? "Authenticated (Keys OK)" : "Invalid Credentials";
+        }
+
+        res.status(200).json({ 
+            success: true, 
+            message: "BitMart connection operational", 
+            authStatus,
+            data: {
+                serverTime: Date.now(),
+                marketPrice: parseFloat(ticker.last_price)
+            } 
+        });
+
     } catch (error) {
-        res.status(500).json({ success: false, message: "BitMart connection failed" });
+        console.error(`[BITMART-CONTROLLER] Error: ${error.message}`);
+        res.status(503).json({ 
+            success: false, 
+            message: "BitMart service temporarily unavailable",
+            error: error.message 
+        });
     }
 };
