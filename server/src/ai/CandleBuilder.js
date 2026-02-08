@@ -1,4 +1,4 @@
-BSB/server/src/ai/CandleBuilder.js
+//BSB/server/src/ai/CandleBuilder.js
 
 /**
  * CANDLE BUILDER - GENERADOR DE VELAS OHLCV
