@@ -2,14 +2,15 @@
 
 /**
  * Archivo: BSB/server/autobotLogic.js
- * Versión: BSB 2026 - Motor de Ciclos Unificado (Multi-usuario) - COMPLETO
+ * Versión: BSB 2026 - Motor de Ciclos Unificado (Multi-usuario) - REPARADO
  */
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-const { runLongStrategy, setDependencies: setLongDeps } = require('./src/longStrategy');
-const { runShortStrategy, setDependencies: setShortDeps } = require('./src/shortStrategy');
-const { runAIStrategy, setDependencies: setAIDeps } = require('./src/aiStrategy'); 
+// Eliminamos las importaciones de setDependencies que causaban el error
+const { runLongStrategy } = require('./src/longStrategy');
+const { runShortStrategy } = require('./src/shortStrategy');
+const { runAIStrategy } = require('./src/aiStrategy'); 
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
 
 const { 
@@ -71,13 +72,11 @@ async function syncFrontendState(currentPrice, botState, userId) {
 
 /**
  * PERSISTENCIA DE CAMBIOS (COMMIT)
- * Mejorado: Solo actualiza si hay cambios reales y maneja errores por usuario.
  */
 async function commitChanges(userId, changeSet, currentPrice) {
     if (!userId || Object.keys(changeSet).length === 0) return null;
 
     try {
-        // Aseguramos que el precio de mercado siempre se guarde como referencia
         changeSet.lastUpdate = new Date();
         
         const updated = await Autobot.findOneAndUpdate(
@@ -87,12 +86,10 @@ async function commitChanges(userId, changeSet, currentPrice) {
         );
 
         if (updated) {
-            // Sincronización específica a la "sala" del usuario en Socket.io
             await syncFrontendState(currentPrice, updated, userId);
             return updated;
         }
     } catch (error) {
-        // Error aislado: No detiene el bucle for del botCycle
         console.error(`[DB-ERROR] User ${userId}: ${error.message}`);
     }
     return null;
@@ -254,10 +251,6 @@ async function botCycle(priceFromWebSocket) {
                 syncFrontendState: (price, state) => syncFrontendState(price, state, userId)
             };
 
-            setLongDeps(dependencies);
-            setShortDeps(dependencies);
-            setAIDeps(dependencies); 
-
             // MONITOR DE ÓRDENES
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
                 if (botState.llastOrder.side === 'buy') {
@@ -297,10 +290,10 @@ async function botCycle(priceFromWebSocket) {
                 }
             }
 
-            // EJECUCIÓN
-            if (botState.lstate !== 'STOPPED') await runLongStrategy();
-            if (botState.sstate !== 'STOPPED') await runShortStrategy();
-            await runAIStrategy(); 
+            // EJECUCIÓN (Ahora pasamos las dependencias directamente)
+            if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
+            if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
+            await runAIStrategy(dependencies); 
 
             // GUARDADO POR USUARIO
             await commitChanges(userId, changeSet, currentPrice);
