@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 const { encrypt, decrypt } = require('../utils/encryption');
 const bitmartService = require('../services/bitmartService');
 const autobotLogic = require('../autobotLogic');
+const Order = require('../models/Order');
 
 // ==========================================
 //          MIDDLEWARES DE SEGURIDAD
