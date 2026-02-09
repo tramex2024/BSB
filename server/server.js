@@ -14,17 +14,21 @@ const path = require('path');
 
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const bitmartService = require('./services/bitmartService');
-const bitmartWs = require('./services/bitmartWs'); // Importado para manejo de WS privados
+const bitmartWs = require('./services/bitmartWs'); 
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
-const candleBuilder = require('./src/ai/CandleBuilder'); // <--- AÑADIDO
+const candleBuilder = require('./src/ai/CandleBuilder'); 
 const orderPersistenceService = require('./services/orderPersistenceService');
 
 // Modelos
+const User = require('./models/User'); // <--- AÑADIDO PARA INICIALIZACIÓN
 const Autobot = require('./models/Autobot');
 const Order = require('./models/Order'); 
 const MarketSignal = require('./models/MarketSignal');
+
+// Utilidades
+const { decrypt } = require('./utils/encryption'); // <--- PARA DESENCRIPTAR LLAVES AL INICIO
 
 dotenv.config();
 const app = express();
@@ -96,23 +100,12 @@ let lastExecutionTime = 0;
 const EXECUTION_THROTTLE_MS = 2000; 
 
 // --- 7. LÓGICA DE EMISIÓN DE ESTADO (REFACTORIZADA PARA MULTIUSUARIO) ---
-/**
- * Emite el estado del bot únicamente a la sala privada del usuario dueño.
- * @param {Object} io - Instancia de Socket.io
- * @param {Object} state - Documento del bot desde MongoDB (debe incluir userId)
- */
 const emitBotState = (io, state) => {
-    // Validamos que exista el estado y que tenga un dueño asignado
-    if (!state || !state.userId) {
-        // console.warn("⚠️ Intento de emisión de estado sin userId válido.");
-        return;
-    }
+    if (!state || !state.userId) return;
 
     const userIdStr = state.userId.toString();
 
-    // Enviamos los datos ÚNICAMENTE a la sala (room) del usuario
     io.to(userIdStr).emit('bot-state-update', {
-        // Mantenemos la estructura de datos que espera tu frontend
         ...state,
         lstate: state.lstate, 
         sstate: state.sstate,
@@ -123,11 +116,8 @@ const emitBotState = (io, state) => {
         stprice: state.stprice,
         lcycle: state.lcycle, 
         scycle: state.scycle,
-        // Añadimos explícitamente el userId para validación del lado del cliente
         userId: userIdStr 
     });
-
-    // console.log(`[SOCKET] 📤 Estado enviado a sala privada: ${userIdStr}`);
 };
 
 // --- 8. WEBSOCKET BITMART (PÚBLICO - TICKER) ---
@@ -164,7 +154,6 @@ function setupMarketWS(io) {
                 lastKnownPrice = price; 
                 centralAnalyzer.updatePrice(price);
 
-                // --- INTEGRACIÓN CANDLEBUILDER ---
                 const closedCandle = candleBuilder.processTick(price, volume);
                 if (closedCandle) {
                     await MarketSignal.updateOne(
@@ -176,7 +165,6 @@ function setupMarketWS(io) {
                         { upsert: true }
                     );
                 }
-                // ---------------------------------
 
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
                 
@@ -198,25 +186,36 @@ function setupMarketWS(io) {
     });
 }
 
-// --- 9. FUNCIÓN PARA WEBSOCKETS PRIVADOS (REPARADA) ---
+// --- 9. FUNCIÓN PARA WEBSOCKETS PRIVADOS (REPARADA PARA USAR MODELO USER) ---
 const initializePrivateWebSockets = async () => {
     try {
-        const botsWithKeys = await Autobot.find({ 
-            "apiKeys.apiKey": { $exists: true, $ne: "" } 
+        // Buscamos usuarios que tengan llaves configuradas en el modelo User
+        const usersWithKeys = await User.find({ 
+            bitmartApiKey: { $exists: true, $ne: "" } 
         });
 
-        for (const bot of botsWithKeys) {
-            const credentials = {
-                apiKey: bot.apiKeys.apiKey,
-                secretKey: bot.apiKeys.secretKey,
-                memo: bot.apiKeys.memo
-            };
+        console.log(`🔑 [INIT] Iniciando WebSockets privados para ${usersWithKeys.length} usuarios.`);
 
-            bitmartWs.initOrderWebSocket(bot.userId, credentials, (ordersData) => {
-    console.log(`[BACKEND-WS] 📥 Enviando órdenes abiertas a sala: ${bot.userId}`);
-    // USAR .to() NO .emit()
-    io.to(bot.userId.toString()).emit('open-orders-update', ordersData);
-});
+        for (const user of usersWithKeys) {
+            try {
+                // Desencriptamos para conectar al WebSocket de Bitmart
+                const credentials = {
+                    apiKey: decrypt(user.bitmartApiKey),
+                    secretKey: decrypt(user.bitmartSecretKeyEncrypted),
+                    memo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ""
+                };
+
+                const userIdStr = user._id.toString();
+
+                bitmartWs.initOrderWebSocket(userIdStr, credentials, (ordersData) => {
+                    console.log(`[BACKEND-WS] 📥 Actualización de órdenes para usuario: ${userIdStr}`);
+                    // Emitimos tanto al historial como a las órdenes abiertas para asegurar que el Front las vea
+                    io.to(userIdStr).emit('open-orders-update', ordersData);
+                    io.to(userIdStr).emit('ai-history-update', ordersData);
+                });
+            } catch (err) {
+                console.error(`❌ Error al descifrar llaves para user ${user.email}:`, err.message);
+            }
         }
     } catch (error) {
         console.error("❌ Error en inicialización privada:", error.message);
@@ -238,35 +237,36 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// --- 11. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO) ---
+// --- 11. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO Y SALAS) ---
 io.on('connection', async (socket) => {
-    // El cliente debe enviar su userId al conectar (ej: socket.io?userId=123)
-    const userId = socket.handshake.query.userId;
+    // El cliente envía su userId al conectar
+    let userId = socket.handshake.query.userId;
     
-    if (!userId) {
-        console.log(`⚠️ Conexión rechazada: No se proporcionó userId`);
+    if (!userId || userId === 'undefined' || userId === 'null') {
+        console.warn(`⚠️ Conexión rechazada: Socket ${socket.id} no proporcionó userId válido.`);
         return socket.disconnect();
     }
 
-    console.log(`👤 Usuario Conectado: ${socket.id} (Sala: ${userId})`);
-    socket.join(userId); // <--- CREAMOS LA SALA PRIVADA
+    const userIdStr = userId.toString();
+    console.log(`👤 Usuario Conectado: ${socket.id} unido a sala: ${userIdStr}`);
+    
+    socket.join(userIdStr); // <--- UNIÓN EXPLÍCITA A LA SALA
 
-    // 1. Enviar estado inicial solo de SU bot
+    // 1. Enviar estado inicial del Autobot
     try {
-        const state = await Autobot.findOne({ userId }).lean();
+        const state = await Autobot.findOne({ userId: userIdStr }).lean();
         if (state) {
-            // Enviamos solo a este socket específico
             socket.emit('bot-state-update', state);
         }
     } catch (err) {
         console.error("Error fetching initial state:", err);
     }
 
-    // 2. Hidratar historial solo de SU bot
+    // 2. Hidratar historial de órdenes
     const hydrateFromDB = async () => {
         try {
-            console.log(`[BACKEND-SYNC] 🔄 Hidratando órdenes privadas para ${userId}`);
-            const history = await Order.find({ userId }) // <--- FILTRO POR USERID
+            console.log(`[BACKEND-SYNC] 🔄 Enviando historial a ${userIdStr}`);
+            const history = await Order.find({ userId: userIdStr })
                 .sort({ orderTime: -1 })
                 .limit(20);
             
@@ -277,14 +277,13 @@ io.on('connection', async (socket) => {
     };
 
     await hydrateFromDB();
-    socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id}`));
+    socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id} de sala: ${userIdStr}`));
 });
 
 // --- 12. START ---
 server.listen(PORT, async () => {
     try {
         centralAnalyzer.init(io); 
-        // Eliminado aiEngine.init() para favorecer la nueva arquitectura limpia
         console.log("🧠 [IA-CORE] Motor sincronizado.");
     } catch (e) { console.error("❌ Error inicialización:", e); }
     console.log(`🚀 SERVIDOR BSB ACTIVO EN PUERTO: ${PORT}`);

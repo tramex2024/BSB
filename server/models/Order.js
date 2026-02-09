@@ -14,6 +14,7 @@ const orderSchema = new mongoose.Schema({
     },
     strategy: { 
         type: String,
+        lowercase: true,
         enum: ['long', 'short', 'ai'], // 👈 Minúsculas para coincidir con tu lógica
         required: true,
         index: true
