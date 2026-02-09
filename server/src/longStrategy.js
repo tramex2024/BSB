@@ -9,8 +9,6 @@ const LSelling = require('./au/states/long/LSelling');
 const LPaused  = require('./au/states/long/LPaused');
 const LStopped = require('./au/states/long/LStopped');
 
-// Eliminamos la variable global 'let dependencies' para evitar fugas de memoria entre usuarios
-
 /**
  * Ejecuta el paso correspondiente del State Machine del Long.
  * @param {Object} dependencies - Recibe las dependencias directamente del autobotLogic.
@@ -28,6 +26,8 @@ async function runLongStrategy(dependencies) {
         /**
          * PATRÓN STATE MACHINE
          * Delegamos la lógica pesada a submódulos especializados.
+         * El objeto 'log' ya viene configurado desde autobotLogic para emitir
+         * a la sala privada (userId) sin prefijos incorrectos.
          */
         switch (currentState) {
             case 'RUNNING':
@@ -56,7 +56,8 @@ async function runLongStrategy(dependencies) {
                 break;
                 
             default:
-                log(`⚠️ Unknown Long state for user ${userId}: ${currentState}`, 'error');
+                // Log estanco por usuario
+                log(`⚠️ Unknown Long state: ${currentState}`, 'error');
                 break;
         }
     } catch (error) {
@@ -66,7 +67,6 @@ async function runLongStrategy(dependencies) {
     }
 }
 
-// Exportamos solo la ejecución; las dependencias se pasan por argumento ahora
 module.exports = {
     runLongStrategy
 };

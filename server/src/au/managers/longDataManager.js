@@ -1,7 +1,6 @@
 //BSB/server/src/au/managers/long/LongDataManager.js
 
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
-const { logSuccessfulCycle } = require('../../../services/cycleLogService');
 const { calculateLongCoverage, parseNumber, getExponentialAmount } = require('../../../autobotCalculations');
 const { CLEAN_LONG_ROOT } = require('../utils/cleanState');
 
@@ -12,9 +11,9 @@ const SELL_FEE_PERCENT = 0.001; // 0.1% BitMart Fee
  * Procesa el éxito de una compra Long (Apertura o DCA).
  */
 async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {}) {
-    const { updateGeneralBotState, userId } = dependencies; // <--- IDENTIDAD RECUPERADA
+    const { updateGeneralBotState, userId } = dependencies; 
     
-    const executedQty = parseFloat(orderDetails.filledSize || 0);
+    const executedQty = parseFloat(orderDetails.filledSize || orderDetails.filled_volume || 0);
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
 
@@ -58,10 +57,16 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         parseNumber(price_step_inc || 0)
     );
 
-    // PERSISTENCIA: Ahora guardamos la COMPRA vinculada al userId
-    await saveExecutedOrder({ ...orderDetails, side: 'buy' }, LSTATE, userId);
+    // PERSISTENCIA REPARADA: Incluimos el lcycle para que el historial lo agrupe bien
+    const currentCycleIndex = Number(botState.lcycle || 0);
+    await saveExecutedOrder(
+        { ...orderDetails, side: 'buy' }, 
+        LSTATE, 
+        userId, 
+        currentCycleIndex
+    );
 
-    // ACTUALIZACIÓN ATÓMICA EN EL DOCUMENTO DEL USUARIO
+    // ACTUALIZACIÓN EN DB
     await updateGeneralBotState({
         lbalance: finalizedLBalance,
         lac: newTotalQty,        
@@ -96,8 +101,9 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const totalUsdtReceived = (totalBtcToSell * sellPrice) * (1 - SELL_FEE_PERCENT);
         const totalInvestment = parseFloat(botStateObj.lai || 0);
         const profitNeto = totalUsdtReceived - totalInvestment;
+        const currentCycleIndex = Number(botStateObj.lcycle || 0);
 
-        // GUARDAR VENTA: Persistencia vinculada al userId
+        // GUARDAR VENTA: Incluimos cycleIndex para el cierre
         try {
             await saveExecutedOrder({ 
                 ...orderDetails, 
@@ -106,20 +112,20 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
                 filledSize: totalBtcToSell,
                 priceAvg: sellPrice,
                 timestamp: Date.now()
-            }, LSTATE, userId);
+            }, LSTATE, userId, currentCycleIndex);
         } catch (saveError) {
-            log(`⚠️ Error al persistir orden de venta en BD: ${saveError.message}`, 'error');
+            log(`⚠️ Error al persistir venta: ${saveError.message}`, 'error');
         }
 
-        // REGISTRO DE CICLO: El profit va a la cuenta del userId
+        // REGISTRO DE CICLO: El resumen final del profit
         if (logSuccessfulCycle && botStateObj.lstartTime) {
             try {
                 await logSuccessfulCycle({
-                    userId, // <--- DUEÑO DEL BENEFICIO
+                    userId,
                     autobotId: botStateObj._id,
                     symbol: botStateObj.config.symbol || 'BTC_USDT',
                     strategy: 'Long',
-                    cycleIndex: (botStateObj.lcycle || 0) + 1,
+                    cycleIndex: currentCycleIndex + 1,
                     startTime: botStateObj.lstartTime,
                     endTime: new Date(),
                     averagePPC: parseFloat(botStateObj.lppc || 0),
@@ -138,12 +144,12 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const newLBalance = parseFloat((botStateObj.lbalance + totalUsdtReceived).toFixed(8));
         const shouldStopLong = config.long?.stopAtCycle === true;
 
-        // RESET TOTAL: Limpia el estado Long pero mantiene el balance actualizado
+        // RESET Y INCREMENTO DE CICLO
         await updateGeneralBotState({
             ...CLEAN_LONG_ROOT, 
             lbalance: newLBalance,
             total_profit: (parseFloat(botStateObj.total_profit) || 0) + profitNeto,
-            lcycle: (Number(botStateObj.lcycle || 0) + 1),
+            lcycle: currentCycleIndex + 1,
             'config.long.enabled': !shouldStopLong 
         });
         
@@ -152,7 +158,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         await updateBotState(shouldStopLong ? 'STOPPED' : 'BUYING', LSTATE);
 
     } catch (error) {
-        log(`🔥 [CRITICAL] Fallo en cierre de ciclo Long: ${error.message}`, 'error');
+        log(`🔥 [CRITICAL] Fallo en cierre Long: ${error.message}`, 'error');
         throw error;
     }
 }

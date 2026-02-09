@@ -23,7 +23,9 @@ async function runShortStrategy(dependencies) {
     try {
         /**
          * MÁQUINA DE ESTADOS SHORT
-         * Nota: En Short, 'SELLING' es el proceso de acumulación y 'BUYING' es el cierre.
+         * Delegamos la ejecución a submódulos. 
+         * El objeto 'log' inyectado emitirá a la sala privada (userId) 
+         * permitiendo el aislamiento total entre usuarios.
          */
         switch (currentState) {
             case 'RUNNING':
@@ -52,16 +54,17 @@ async function runShortStrategy(dependencies) {
                 break;
 
             default:
-                log(`⚠️ Unknown Short state for user ${userId}: ${currentState}`, 'error');
+                // Log estanco usando el canal corregido
+                log(`⚠️ Unknown Short state: ${currentState}`, 'error');
                 break;
         }
     } catch (error) {
+        // Aislamiento de errores para no afectar a otros usuarios en el loop
         log(`🔥 ShortStrategy Error [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-SHORT][User: ${userId}]:`, error);
     }
 }
 
-// Exportación simplificada para el motor central
 module.exports = {
     runShortStrategy
 };

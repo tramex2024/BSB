@@ -9,7 +9,7 @@ const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellCon
  */
 async function run(dependencies) {
     const {
-        userId, // <--- IDENTIDAD INYECTADA
+        userId, 
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
         availableUSDT
@@ -19,29 +19,27 @@ async function run(dependencies) {
     const SSTATE = 'short';
 
     try {
-        // 1. ACTIVE ORDERS MONITORING
-        // Pasamos el userId para que el monitor sepa qué órdenes de qué usuario validar
+        // 1. MONITOR DE ÓRDENES ACTIVAS
+        // Verificamos si hay una venta pendiente de confirmar en BitMart para este usuario
         const orderIsActive = await monitorShortSell(
             botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId
         );
         if (orderIsActive) return; 
 
-        // 2. MONITORING LOG (Sincronizado al Dashboard del usuario)
+        // 2. MONITORING LOG (Dashboard del usuario)
         if (botState.sppc > 0) {
             const nextPrice = botState.sncp || 0; 
             const targetActivation = botState.stprice || 0; 
             
-            const distToDCA = nextPrice > 0 ? Math.abs(((nextPrice / currentPrice) - 1) * 100).toFixed(2) : "0.00";
-            const distToTP = targetActivation > 0 ? Math.abs(((currentPrice / targetActivation) - 1) * 100).toFixed(2) : "0.00";
+            // En Short, DCA está arriba (+) y TP está abajo (-)
+            const distToDCA = nextPrice > 0 ? ((nextPrice / currentPrice - 1) * 100).toFixed(2) : "0.00";
+            const distToTP = targetActivation > 0 ? ((1 - currentPrice / targetActivation) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.sprofit || 0;
-
-            const signDCA = nextPrice > currentPrice ? '+' : '-';
-            const signTP = targetActivation > currentPrice ? '+' : '-';
             
-            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA: ${nextPrice.toFixed(2)} (${signDCA}${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (${signTP}${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA en: ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }
 
-        // 3. OPENING LOGIC
+        // 3. LÓGICA DE APERTURA (Primera orden del ciclo)
         const currentPPC = parseFloat(botState.sppc || 0);
         const pendingOrder = botState.slastOrder; 
 
@@ -49,22 +47,23 @@ async function run(dependencies) {
             const purchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
             const currentSBalance = parseFloat(botState.sbalance || 0);
 
+            // Verificamos fondos tanto en el balance interno del bot como en el real del Exchange
             if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
-                log(`🚀 [S-SELL] Starting Short cycle. Placing first order of ${purchaseAmount} USDT.`, 'info');
-                // PASAMOS userId AL MANAGER PARA LA PERSISTENCIA
+                log(`🚀 [S-SELL] Iniciando ciclo Short. Vendiendo ${purchaseAmount} USDT...`, 'info');
                 await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, userId);
             } else {
-                log(`⚠️ [S-SELL] Insufficient funds to open Short position.`, 'warning');
+                log(`⚠️ [S-SELL] Fondos insuficientes para abrir posición Short.`, 'warning');
                 await updateBotState('STOPPED', SSTATE);
             }
             return;
         }
 
-        // 4. ACTIVATION EVALUATION (Hacia S-BUYING para el Trailing Stop)
+        // 4. EVALUACIÓN DE TAKE PROFIT (Hacia S-BUYING para el Trailing Stop)
         const targetActivation = botState.stprice || 0; 
         if (targetActivation > 0 && currentPrice <= targetActivation) {
-            log(`💰 [S-SELL] Target (${targetActivation.toFixed(2)}) reached. Activating Trailing Stop in BUYING...`, 'success');
+            log(`💰 [S-SELL] Target alcanzado (${targetActivation.toFixed(2)}). Activando Trailing Stop en BUYING...`, 'success');
             
+            // Reset de trailing para este usuario específico
             await updateGeneralBotState({
                 spm: 0, 
                 spc: 0 
@@ -74,40 +73,39 @@ async function run(dependencies) {
             return;
         }
 
-        // 5. EXPONENTIAL DCA (Protección contra subidas)
+        // 5. DCA EXPONENCIAL (Protección si el precio sube)
         const requiredAmount = parseFloat(botState.srca || 0); 
         const nextCoveragePrice = parseFloat(botState.sncp || 0); 
         const lastExecutionPrice = parseFloat(botState.slep || 0);
 
+        // En Short, el DCA se dispara si el precio es mayor o igual al objetivo
         const isPriceHighEnough = nextCoveragePrice > 0 && currentPrice >= nextCoveragePrice;
 
         if (!pendingOrder && isPriceHighEnough) {
             
-            // 🛡️ SECURITY LOCK: Evita DCA en el mismo nivel o inferior
+            // 🛡️ SECURITY LOCK: No permitir DCA si el precio bajó del último punto de ejecución
             if (currentPrice <= lastExecutionPrice) {
-                log(`[S-SELL] 🛑 Security Lock: Price (${currentPrice.toFixed(2)}) is not higher than last execution (${lastExecutionPrice.toFixed(2)}).`, 'warning');
                 return; 
             }
 
             const hasBalance = botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount;
 
             if (hasBalance && requiredAmount > 0) {
-                log(`📈 [S-SELL] Price above DCA. Increasing coverage...`, 'warning');
+                log(`📈 [S-SELL] Precio por encima de DCA. Incrementando cobertura...`, 'warning');
                 try {
-                    // PASAMOS userId AL MANAGER
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice, userId);
                 } catch (error) {
-                    log(`❌ [S-SELL] Failed to place coverage: ${error.message}`, 'error');
+                    log(`❌ [S-SELL] Error al colocar cobertura: ${error.message}`, 'error');
                 }
             } else {
-                log(`🚫 [S-SELL] DCA failed due to insufficient balance.`, 'error');
+                log(`🚫 [S-SELL] DCA fallido por falta de saldo. Pausando bot.`, 'error');
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
         }
 
     } catch (criticalError) {
-        log(`🔥 [CRITICAL] SSelling: ${criticalError.message}`, 'error');
+        log(`🔥 [CRITICAL] Error en SSelling: ${criticalError.message}`, 'error');
     }
 }
 

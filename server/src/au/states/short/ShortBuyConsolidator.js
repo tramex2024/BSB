@@ -12,7 +12,7 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId) {
     const lastOrder = botState.slastOrder;
 
-    // Un ciclo Short termina con una orden 'buy' (recompra para cerrar la deuda)
+    // En Short, el ciclo se cierra con una compra ('buy') para devolver los activos "prestados"
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false; 
     }
@@ -20,7 +20,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
     const orderIdString = String(lastOrder.order_id);
 
     try {
-        // Consultamos BitMart usando las credenciales/contexto del usuario
+        // Consultamos BitMart usando el contexto del usuario para acceder a sus API Keys
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, userId);
         
         let filledVolume = parseFloat(
@@ -29,7 +29,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
             finalDetails?.filledVolume || 0
         );
 
-        // Fallback: Si no hay detalles, buscamos en historial reciente del usuario
+        // Fallback: Verificación en historial si la consulta directa no devuelve datos claros
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL, userId);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
@@ -41,12 +41,12 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: RECOMPRA EXITOSA (CIERRE DE CICLO) ===
+        // === CASO A: RECOMPRA EXITOSA (CIERRE DE POSICIÓN) ===
         if (isFilled) {
-            log(`💰 [S-BUY-SUCCESS] Short cerrado con éxito. Procesando profit...`, 'success');
+            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. Liquidando ciclo y calculando profit...`, 'success');
             
             const handlerDependencies = { 
-                userId, // <--- PASAMOS EL ADN DEL USUARIO
+                userId, // Identidad inyectada para el historial de ciclos y balance
                 log, 
                 updateBotState, 
                 updateSStateData, 
@@ -55,20 +55,21 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
                 config: botState.config 
             };
             
-            // El manager invocará saveExecutedOrder(..., userId), notificando al Dashboard correcto
+            // El manager se encarga de saveExecutedOrder y resetear el CLEAN_SHORT_ROOT
             await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
             return true;
         }
 
-        // === CASO B: ORDEN PENDIENTE ===
+        // === CASO B: ORDEN AÚN EN EL LIBRO (Lógica de espera) ===
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
             return true; 
         }
 
-        // === CASO C: ORDEN CANCELADA O FALLIDA ===
+        // === CASO C: CANCELACIÓN O FALLO DE EJECUCIÓN ===
         if (isCanceled) {
-            log(`⚠️ [S-BUY-CANCEL] Recompra cancelada en exchange. Liberando estado para reintento.`, 'warning');
-            // Limpiamos slastOrder para que el bot pueda volver a intentar cerrar
+            log(`⚠️ [S-BUY-CANCEL] Orden de recompra cancelada. Liberando slot para reintento inmediato.`, 'warning');
+            
+            // Limpiamos la orden pendiente para que SBuying.js pueda re-intentar la compra
             await updateGeneralBotState({ 'slastOrder': null });
             return true;
         }
@@ -76,7 +77,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
         return true;
 
     } catch (error) {
-        log(`[S-BUY-ERROR] Error crítico en consolidación Short Buy: ${error.message}`, 'error');
+        log(`[S-BUY-ERROR] Error en monitoreo (User: ${userId}): ${error.message}`, 'error');
         return true; 
     }
 }

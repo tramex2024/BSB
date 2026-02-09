@@ -49,7 +49,8 @@ function log(message, type = 'info', userId = null) {
     console.log(`[${timestamp}] [${type.toUpperCase()}] ${userId ? `[User: ${userId}] ` : ''}${message}`);
     if (io) {
         if (userId) {
-            io.to(`user_${userId}`).emit('bot-log', { message, type });
+            // REPARADO: Se eliminó el prefijo 'user_' para coincidir con el join de server.js
+            io.to(userId.toString()).emit('bot-log', { message, type });
         } else {
             io.emit('bot-log', { message, type });
         }
@@ -62,7 +63,8 @@ function log(message, type = 'info', userId = null) {
 async function syncFrontendState(currentPrice, botState, userId) {
     if (io && botState && userId) {
         const priceToEmit = parseFloat(currentPrice || lastCyclePrice || 0);
-        io.to(`user_${userId}`).emit('bot-state-update', { 
+        // REPARADO: Se eliminó el prefijo 'user_' para aislamiento correcto
+        io.to(userId.toString()).emit('bot-state-update', { 
             ...botState, 
             price: priceToEmit,
             serverTime: Date.now() 
@@ -242,6 +244,10 @@ async function botCycle(priceFromWebSocket) {
                 availableUSDT: botState.lastAvailableUSDT, 
                 availableBTC: botState.lastAvailableBTC,
                 botState, config: botState.config,
+                // REPARADO: Se inyectan los ciclos actuales para que saveExecutedOrder sea válido en la DB
+                lcycle: botState.lcycle || 0,
+                scycle: botState.scycle || 0,
+                aicycle: botState.aicycle || 0,
                 updateBotState: async (val, strat) => { 
                     changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; 
                 },

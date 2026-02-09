@@ -21,35 +21,76 @@ const klinesCache = new Map(); // Mapa para: symbol_interval -> {data, timestamp
 const CACHE_TTL = 2000;  
 const KLINES_TTL = 15000;
 
+/**
+ * Realiza peticiones a la API de BitMart.
+ * @param {string} method - 'GET' o 'POST'
+ * @param {string} path - Endpoint de la API
+ * @param {Object} params - Parámetros para GET
+ * @param {Object} body - Payload para POST
+ * @param {Object|null} userCreds - Credenciales {apiKey, secretKey, apiMemo}
+ */
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    // Si no hay credenciales de usuario, cae en las del .env por seguridad
-    const apiKey = userCreds?.apiKey || process.env.BITMART_API_KEY;
-    const secretKey = userCreds?.secretKey || process.env.BITMART_SECRET_KEY;
-    const apiMemo = userCreds?.apiMemo || process.env.BITMART_API_MEMO;
-
     const timestamp = Date.now().toString();
-    let bodyForSign = method === 'POST' ? JSON.stringify(body) : '';
-    
-    const message = `${timestamp}#${apiMemo}#${bodyForSign}`;
-    const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
-
     const headers = {
         'Content-Type': 'application/json',
-        'X-BM-KEY': apiKey,
         'X-BM-TIMESTAMP': timestamp,
-        'X-BM-SIGN': sign,
     };
 
+    // --- BIFURCACIÓN DE SEGURIDAD ---
+    // Si la ruta NO incluye 'quotation', 'ticker' o 'klines' (endpoints públicos), 
+    // requerimos credenciales obligatoriamente.
+    const isPublic = path.includes('/spot/v1/ticker') || 
+                     path.includes('/spot/quotation/v3/klines') ||
+                     path.includes('/spot/v1/symbols/details');
+
+    if (!isPublic) {
+        if (!userCreds || !userCreds.apiKey || !userCreds.secretKey) {
+            throw new Error(`${LOG_PREFIX} Operación rechazada: Este endpoint requiere API Keys vinculadas.`);
+        }
+
+        const { apiKey, secretKey, apiMemo } = userCreds;
+        const bodyForSign = method === 'POST' ? JSON.stringify(body) : '';
+        
+        // El formato de firma de BitMart: timestamp#memo#body
+        const message = `${timestamp}#${apiMemo || ''}#${bodyForSign}`;
+        const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
+
+        headers['X-BM-KEY'] = apiKey;
+        headers['X-BM-SIGN'] = sign;
+    }
+
     try {
-        const config = { method, url: `${BASE_URL}${path}`, headers, timeout: 10000 };
-        if (method === 'GET') config.params = params;
-        else config.data = body;
+        const config = { 
+            method, 
+            url: `${BASE_URL}${path}`, 
+            headers, 
+            timeout: 10000 
+        };
+
+        if (method === 'GET') {
+            config.params = params;
+        } else {
+            config.data = body;
+        }
 
         const response = await axios(config);
-        if (response.data.code === 1000) return response.data;
-        throw new Error(`API Error: ${response.data.message} (${response.data.code})`);
+
+        // BitMart usa el código 1000 para "Success"
+        if (response.data.code === 1000) {
+            return response.data;
+        }
+
+        // Manejo de errores específicos de la API de BitMart
+        throw new Error(`BitMart API Error: ${response.data.message} (Code: ${response.data.code})`);
+
     } catch (error) {
-        if (error.response?.status === 429) throw new Error("RATE_LIMIT_EXCEEDED");
+        // Error de Rate Limit (Demasiadas peticiones)
+        if (error.response?.status === 429) {
+            console.error(`${LOG_PREFIX} 🚨 RATE LIMIT DETECTADO en ${path}`);
+            throw new Error("RATE_LIMIT_EXCEEDED");
+        }
+
+        // Errores de red o de la lógica de arriba
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
 }

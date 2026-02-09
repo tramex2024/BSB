@@ -1,53 +1,60 @@
 const mongoose = require('mongoose');
 
-async function cleanAndSyncDB() {
+async function recoverBotCycle() {
     try {
         const uri = 'mongodb+srv://tramex2024:vIHKxhFCqFOXC4tf@cluster0.y0qkdw4.mongodb.net/bsb?retryWrites=true&w=majority&appName=Cluster0';
         
-        console.log("🔗 Conectando a MongoDB para limpieza y sincronización...");
+        console.log("🔗 Connecting to MongoDB to recover multi-user cycle...");
         await mongoose.connect(uri);
         
         const collection = mongoose.connection.collection('autobots');
-        const filter = { _id: new mongoose.Types.ObjectId("690fd622ced7eb324d1ffa2f") };
+        
+        // IMPORTANTE: Filtramos por el ID del nuevo registro multiusuario
+        const filter = { _id: new mongoose.Types.ObjectId("6988087b259fbd1c99fdf8fd") };
 
         const update = {
             $set: {
-                // --- ESTADO GENERAL ---
-                "total_profit": 12.1223126345,
-                "lastAvailableUSDT": 21.26678733,
+                // --- GLOBAL STATE ---
+                "total_profit": 12.624578,
+                "lastAvailableUSDT": 16.26178733,
                 "lastAvailableBTC": 0.00454,
                 "lastUpdate": new Date(),
 
-                // --- LONG: MANTENER VALORES ACTUALES ---
-                "lstate": "PAUSED",
+                // --- LONG CYCLE RECOVERY (The active operation) ---
+                "lstate": "PAUSED", // Para que no dispare órdenes nuevas de inmediato al arrancar
                 "lcycle": 13,
                 "lbalance": 3.3062621,
                 "ltprice": 85025.88814022901,
-                "lprofit": -14.29365371620002,
+                "lprofit": -38.14497392080001,
                 "lac": 0.00262,
                 "lai": 219.90900980000004,
                 "lppc": 83934.7365648855,
-                "locc": 7,
-                "lncp": 83934.7365648855,
+                "locc": 7, // 7 órdenes abiertas capturadas
+                "lncp": 80505.09988336416,
                 "llep": 82336.38,
+                "lrca": 128.9653786453125,
+                "lstartTime": new Date("2026-01-28T02:35:30.747Z"),
+                "lcoverage": 69529.05,
 
-                // --- SHORT: RESET TOTAL (STOPPED) ---
+                // --- SHORT STATE (Reset/Stopped) ---
                 "sstate": "STOPPED",
                 "scycle": 3,
-                "sbalance": 141, // Valor de tu JSON
+                "sbalance": 141,
                 "stprice": 0,
                 "sprofit": 0,
                 "sac": 0,
                 "sai": 0,
                 "sppc": 0,
                 "socc": 0,
-                "slep": 0,
-                "sncp": 0,
-                "spm": 0,
-                "spc": 0,
-                "sstartTime": null,
+                "snorder": 0,
 
-                // --- CONFIGURACIÓN (Sincronizada con el Dashboard) ---
+                // --- AI STATE (From your working backup) ---
+                "aistate": "RUNNING",
+                "aibalance": 94.72176697655406,
+                "aihighestPrice": 69564.9,
+                "ailastEntryPrice": 69564.9,
+
+                // --- CONFIGURATION SYNC ---
                 "config": {
                     "symbol": "BTC_USDT",
                     "long": {
@@ -61,35 +68,34 @@ async function cleanAndSyncDB() {
                         "enabled": true
                     },
                     "short": {
-                        "amountUsdt": 224,
+                        "amountUsdt": 141,
                         "purchaseUsdt": 6,
                         "price_var": 0.5,
                         "size_var": 55,
                         "profit_percent": 1.3,
                         "price_step_inc": 35,
                         "stopAtCycle": true,
-                        "enabled": true
+                        "enabled": false
                     },
                     "ai": {
-                        "amountUsdt": 0,
-                        "stopAtCycle": false,
-                        "enabled": false
+                        "amountUsdt": 100,
+                        "stopAtCycle": true,
+                        "enabled": true
                     }
-                },
-                "aibalance": 0
+                }
             }
         };
 
-        console.log("🛠️ Aplicando limpieza de Short y actualización de Long...");
+        console.log("🛠️ Injecting cycle data into user 69880862881f8789a039d0a3...");
         const result = await collection.updateOne(filter, update);
 
         if (result.matchedCount > 0) {
-            console.log("✨ BASE DE DATOS ACTUALIZADA ✨");
-            console.log("- Long: Activo/Paused (Ciclo 13)");
-            console.log("- Short: Reseteado a 0 (Stopped)");
-            console.log("- Config: Sincronizada.");
+            console.log("✨ BOT RECOVERED SUCCESSFULLY ✨");
+            console.log("- Long: PAUSED (Cycle 13, 7 Orders)");
+            console.log("- AI: RUNNING");
+            console.log("- UI should now reflect the $219.90 investment in Long.");
         } else {
-            console.log("⚠️ No se encontró el documento.");
+            console.log("⚠️ Document not found. Check the _id of the new bot.");
         }
 
     } catch (err) {
@@ -100,4 +106,4 @@ async function cleanAndSyncDB() {
     }
 }
 
-cleanAndSyncDB();
+recoverBotCycle();

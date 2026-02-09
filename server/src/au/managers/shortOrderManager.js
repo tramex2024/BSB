@@ -13,7 +13,7 @@ function convertUsdtToBtc(usdtAmount, currentPrice) {
 }
 
 /**
- * APERTURA DE SHORT: Vende BTC para abrir posición.
+ * APERTURA DE SHORT: Vende BTC (Market Sell) para abrir posición.
  */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, injectedPrice = 0, userId) {
     const { purchaseUsdt } = config.short || {};
@@ -22,7 +22,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     const currentPrice = injectedPrice || botState.price || 0; 
 
     if (currentPrice <= 0) {
-        log(`[S-FIRST] ⏳ Abortando: Precio de mercado no disponible.`, 'warning');
+        log(`[S-FIRST] ⏳ Abortando: Precio de mercado no disponible para calcular el tamaño.`, 'warning');
         return;
     }
 
@@ -34,14 +34,14 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     }
 
     try {
-        // Enviamos el userId para usar sus credenciales de API
+        // ✅ CONTEXTO MULTIUSUARIO: Se firma con las credenciales del userId
         const orderResult = await bitmartService.placeOrder(SYMBOL, 'sell', 'market', btcSize, userId); 
 
         if (orderResult && orderResult.order_id) {
             await updateGeneralBotState({
                 sstartTime: new Date(),
                 socc: 1, 
-                slastOrder: {                                
+                slastOrder: {                                     
                     order_id: orderResult.order_id,
                     side: 'sell',
                     btc_size: btcSize,
@@ -49,15 +49,15 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-FIRST] Orden Short enviada ID: ${orderResult.order_id}.`, 'success');
+            log(`✅ [S-FIRST] Orden Short enviada ID: ${orderResult.order_id}. BTC: ${btcSize}`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-FIRST] Error de API en apertura: ${error.message}`, 'error');
+        log(`❌ [S-FIRST] Error de API en apertura Short: ${error.message}`, 'error');
     }
 }
 
 /**
- * DCA SHORT: Vende más BTC para promediar hacia arriba.
+ * DCA SHORT: Vende más BTC para promediar el precio hacia arriba.
  */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState, injectedPrice = 0, userId) { 
     const SYMBOL = botState.config?.symbol || 'BTC_USDT';
@@ -65,7 +65,7 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
     const btcSize = convertUsdtToBtc(usdtAmount, currentPrice);
 
     if (currentPrice <= 0 || btcSize <= 0) {
-        log(`[S-DCA] ❌ Error: Sin precio válido para cobertura.`, 'error');
+        log(`[S-DCA] ❌ Error: Sin precio válido para cobertura Short.`, 'error');
         return;
     }
 
@@ -82,7 +82,7 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-DCA] Cobertura Short enviada ID: ${order.order_id}.`, 'success');
+            log(`✅ [S-DCA] Cobertura Short enviada ID: ${order.order_id}. BTC: ${btcSize}`, 'success');
         }
     } catch (error) {
         log(`❌ [S-DCA] Error en DCA Short: ${error.message}`, 'error');
@@ -90,22 +90,22 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
 }
 
 /**
- * RECOMPRA DE CIERRE (Take Profit): Compra BTC para saldar deuda.
+ * RECOMPRA DE CIERRE (Take Profit): Compra BTC (Market Buy) para cerrar el Short.
  */
 async function placeShortBuyOrder(config, botState, btcAmount, log, updateGeneralBotState, injectedPrice = 0, dependencies = {}) { 
     const SYMBOL = config.symbol || 'BTC_USDT';
     const currentPrice = injectedPrice || botState.price || 0;
-    const { userId } = dependencies; // Extraemos el userId de las deps
+    const { userId } = dependencies;
     
-    // Bitmart Market Buy requiere USDT
+    // BitMart Market Buy requiere el monto en la moneda de cotización (USDT)
     const usdtNeeded = btcAmount * currentPrice;
     
     if (usdtNeeded <= 0) {
-        log(`[S-PROFIT] ❌ Error: Monto USDT es cero.`, 'error');
+        log(`[S-PROFIT] ❌ Error: El monto USDT calculado es cero.`, 'error');
         return;
     }
 
-    log(`💰 [S-PROFIT] Recomprando ${btcAmount.toFixed(6)} BTC para cerrar ciclo...`, 'info');
+    log(`💰 [S-PROFIT] Recomprando p/ cerrar: ${btcAmount.toFixed(6)} BTC (~${usdtNeeded.toFixed(2)} USDT)...`, 'info');
 
     try {
         const order = await bitmartService.placeOrder(SYMBOL, 'buy', 'market', usdtNeeded, userId); 
@@ -117,8 +117,9 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateGenera
                     size: btcAmount, 
                     side: 'buy',
                     timestamp: new Date(),
+                    // Pasamos las dependencias para que el consolidador tenga todo el contexto del usuario
                     dependencies: {
-                        userId: userId, // Importante para el consolidador
+                        userId: userId,
                         logSuccessfulCycle: dependencies.logSuccessfulCycle,
                         updateBotState: dependencies.updateBotState,
                         updateGeneralBotState: dependencies.updateGeneralBotState
@@ -128,12 +129,12 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateGenera
             log(`✅ [S-PROFIT] Recompra de cierre enviada ID: ${order.order_id}.`, 'success');
         }
     } catch (error) { 
-        log(`❌ [S-PROFIT] Error en orden de cierre: ${error.message}`, 'error');
+        log(`❌ [S-PROFIT] Error en orden de cierre Short: ${error.message}`, 'error');
     }
 }
 
 /**
- * CANCELACIÓN: Limpia la orden en el exchange usando el userId.
+ * CANCELACIÓN: Limpia la orden en el exchange y el estado local.
  */
 async function cancelActiveShortOrder(botState, log, updateGeneralBotState, userId) {
     const lastOrder = botState.slastOrder;
@@ -141,17 +142,17 @@ async function cancelActiveShortOrder(botState, log, updateGeneralBotState, user
     const SYMBOL = botState.config?.symbol || 'BTC_USDT';
     
     try {
-        log(`🛑 [S-CANCEL] Cancelando orden ${lastOrder.order_id}...`, 'warning');
+        log(`🛑 [S-CANCEL] Cancelando orden Short pendiente ${lastOrder.order_id}...`, 'warning');
         const result = await bitmartService.cancelOrder(SYMBOL, lastOrder.order_id, userId); 
         
         if (result?.code === 1000 || result?.message?.includes('already filled')) {
             await updateGeneralBotState({ slastOrder: null });
-            log(`✅ [S-CANCEL] Orden Short removida.`, 'success');
+            log(`✅ [S-CANCEL] Orden removida. Sistema Short desbloqueado.`, 'success');
         }
     } catch (error) {
         if (error.message.includes('not found') || error.message.includes('400')) {
             await updateGeneralBotState({ slastOrder: null });
-            log(`⚠️ [S-CANCEL] Orden no encontrada. Limpiando estado local.`, 'warning');
+            log(`⚠️ [S-CANCEL] Orden no encontrada en BitMart. Limpiando estado.`, 'warning');
         } else {
             log(`❌ [S-CANCEL] Error al cancelar Short: ${error.message}`, 'error');
         }

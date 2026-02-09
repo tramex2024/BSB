@@ -2,92 +2,90 @@
 
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/authMiddleware');
+const userController = require('../controllers/userController'); // Usamos el auth que ya tenemos
 const autobotLogic = require('../autobotLogic');
 const configController = require('../controllers/configController');
 
-router.use(authMiddleware);
+// Usamos el middleware consistente de los otros archivos
+router.use(userController.authenticateToken);
 
 /**
- * Utilidad para emitir el estado actualizado a través de WebSockets
+ * Utilidad para emitir el estado actualizado a la SALA PRIVADA del usuario
  */
 const emitBotState = (autobot, req) => {
     try {
         const io = req.app.get('io');
-        if (!io || !autobot) return;
+        if (!io || !autobot || !autobot.userId) return;
+        
         const payload = autobot.toObject ? autobot.toObject() : autobot;
-        io.emit('bot-state-update', payload);
+        const userIdStr = autobot.userId.toString();
+
+        // 🎯 IMPORTANTE: Emitimos solo a la sala del usuario (sin guiones)
+        io.to(userIdStr).emit('bot-state-update', payload);
     } catch (err) {
         console.error("❌ Error en emitBotState (Routes):", err.message);
     }
 };
 
 // --- CONFIGURACIÓN ---
-
-// Esta ruta usa el controlador blindado para guardar cambios sin perder datos
 router.post('/update-config', configController.updateBotConfig);
-
-/**
- * Obtiene configuración y estado actual (Sincronizado para evitar errores de carga)
- */
 router.get('/config-and-state', configController.getBotConfig);
 
-
-// --- RUTAS DE EJECUCIÓN (START / STOP) ---
+// --- RUTAS DE EJECUCIÓN (START / STOP POR LADO) ---
 
 router.post('/start/:side', async (req, res) => {
     const { side } = req.params;
+    const userId = req.user.id; // Obtenido del token JWT
     try {
         const { config } = req.body;
         
-        // El motor startSide ya maneja la persistencia y validación internamente
-        const updatedBot = await autobotLogic.startSide(side, config);
+        // Pasamos el userId para que el motor sepa de quién es el bot
+        const updatedBot = await autobotLogic.startSide(userId, side, config);
         emitBotState(updatedBot, req);
 
         return res.json({ 
             success: true, 
-            message: `Estrategia ${side.toUpperCase()} iniciada correctamente.`, 
+            message: `Estrategia ${side.toUpperCase()} iniciada.`, 
             price: autobotLogic.getLastPrice() 
         });
-        
     } catch (error) {
-        console.error(`❌ Error Start ${side}:`, error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.post('/stop/:side', async (req, res) => {
     const { side } = req.params;
+    const userId = req.user.id;
     try {
-        const updatedBot = await autobotLogic.stopSide(side);
+        const updatedBot = await autobotLogic.stopSide(userId, side);
         emitBotState(updatedBot, req);
-        return res.json({ success: true, message: `${side.toUpperCase()} detenido correctamente.` });
+        return res.json({ success: true, message: `${side.toUpperCase()} detenido.` });
     } catch (error) {
-        console.error(`❌ Error Stop ${side}:`, error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// --- OPERACIONES GLOBALES ---
+// --- OPERACIONES GLOBALES (TODO EL BOT) ---
 
 router.post('/start', async (req, res) => {
+    const userId = req.user.id;
     try {
         const { config } = req.body;
-        // Inicia ambas ramas secuencialmente
-        await autobotLogic.startSide('long', config);
-        const updatedBot = await autobotLogic.startSide('short', config);
+        await autobotLogic.startSide(userId, 'long', config);
+        const updatedBot = await autobotLogic.startSide(userId, 'short', config);
         
         emitBotState(updatedBot, req);
-        return res.json({ success: true, message: 'Sistema Global activado (LONG & SHORT).' });
+        return res.json({ success: true, message: 'LONG & SHORT activados.' });
     } catch (error) {
         return res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.post('/stop', async (req, res) => {
+    const userId = req.user.id;
     try {
-        await autobotLogic.stopSide('long');
-        const updatedBot = await autobotLogic.stopSide('short');
+        await autobotLogic.stopSide(userId, 'long');
+        const updatedBot = await autobotLogic.stopSide(userId, 'short');
         
         emitBotState(updatedBot, req);
         return res.json({ success: true, message: 'Sistema Global detenido.' });

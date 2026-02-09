@@ -95,17 +95,39 @@ let isMarketConnected = false;
 let lastExecutionTime = 0;
 const EXECUTION_THROTTLE_MS = 2000; 
 
-// --- 7. LÓGICA DE EMISIÓN DE ESTADO ---
+// --- 7. LÓGICA DE EMISIÓN DE ESTADO (REFACTORIZADA PARA MULTIUSUARIO) ---
+/**
+ * Emite el estado del bot únicamente a la sala privada del usuario dueño.
+ * @param {Object} io - Instancia de Socket.io
+ * @param {Object} state - Documento del bot desde MongoDB (debe incluir userId)
+ */
 const emitBotState = (io, state) => {
-    if (!state) return;
-    io.sockets.emit('bot-state-update', {
+    // Validamos que exista el estado y que tenga un dueño asignado
+    if (!state || !state.userId) {
+        // console.warn("⚠️ Intento de emisión de estado sin userId válido.");
+        return;
+    }
+
+    const userIdStr = state.userId.toString();
+
+    // Enviamos los datos ÚNICAMENTE a la sala (room) del usuario
+    io.to(userIdStr).emit('bot-state-update', {
+        // Mantenemos la estructura de datos que espera tu frontend
         ...state,
-        lstate: state.lstate, sstate: state.sstate,
+        lstate: state.lstate, 
+        sstate: state.sstate,
         total_profit: state.total_profit,
-        lbalance: state.lbalance, sbalance: state.sbalance,
-        ltprice: state.ltprice, stprice: state.stprice,
-        lcycle: state.lcycle, scycle: state.scycle
+        lbalance: state.lbalance, 
+        sbalance: state.sbalance,
+        ltprice: state.ltprice, 
+        stprice: state.stprice,
+        lcycle: state.lcycle, 
+        scycle: state.scycle,
+        // Añadimos explícitamente el userId para validación del lado del cliente
+        userId: userIdStr 
     });
+
+    // console.log(`[SOCKET] 📤 Estado enviado a sala privada: ${userIdStr}`);
 };
 
 // --- 8. WEBSOCKET BITMART (PÚBLICO - TICKER) ---
@@ -183,8 +205,6 @@ const initializePrivateWebSockets = async () => {
             "apiKeys.apiKey": { $exists: true, $ne: "" } 
         });
 
-        console.log(`[AUTH] 🔑 Inicializando ${botsWithKeys.length} conexiones privadas.`);
-
         for (const bot of botsWithKeys) {
             const credentials = {
                 apiKey: bot.apiKeys.apiKey,
@@ -193,9 +213,10 @@ const initializePrivateWebSockets = async () => {
             };
 
             bitmartWs.initOrderWebSocket(bot.userId, credentials, (ordersData) => {
-                console.log(`[BACKEND-WS] 📥 Evento privado detectado para ${bot.userId}`);
-                io.emit('open-orders-update', ordersData);
-            });
+    console.log(`[BACKEND-WS] 📥 Enviando órdenes abiertas a sala: ${bot.userId}`);
+    // USAR .to() NO .emit()
+    io.to(bot.userId.toString()).emit('open-orders-update', ordersData);
+});
         }
     } catch (error) {
         console.error("❌ Error en inicialización privada:", error.message);
@@ -217,19 +238,35 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-
-// --- 11. EVENTOS SOCKET.IO (HIDRATACIÓN DESDE DB) ---
+// --- 11. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO) ---
 io.on('connection', async (socket) => {
-    console.log(`👤 Usuario Conectado: ${socket.id}`);
+    // El cliente debe enviar su userId al conectar (ej: socket.io?userId=123)
+    const userId = socket.handshake.query.userId;
+    
+    if (!userId) {
+        console.log(`⚠️ Conexión rechazada: No se proporcionó userId`);
+        return socket.disconnect();
+    }
 
-    Autobot.findOne({}).lean().then(state => {
-        if (state) emitBotState(io, state);
-    });
+    console.log(`👤 Usuario Conectado: ${socket.id} (Sala: ${userId})`);
+    socket.join(userId); // <--- CREAMOS LA SALA PRIVADA
 
+    // 1. Enviar estado inicial solo de SU bot
+    try {
+        const state = await Autobot.findOne({ userId }).lean();
+        if (state) {
+            // Enviamos solo a este socket específico
+            socket.emit('bot-state-update', state);
+        }
+    } catch (err) {
+        console.error("Error fetching initial state:", err);
+    }
+
+    // 2. Hidratar historial solo de SU bot
     const hydrateFromDB = async () => {
         try {
-            console.log(`[BACKEND-SYNC] 🔄 Hidratando desde DB para ${socket.id}`);
-            const history = await Order.find({})
+            console.log(`[BACKEND-SYNC] 🔄 Hidratando órdenes privadas para ${userId}`);
+            const history = await Order.find({ userId }) // <--- FILTRO POR USERID
                 .sort({ orderTime: -1 })
                 .limit(20);
             

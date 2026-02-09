@@ -1,31 +1,31 @@
 // BSB/server/src/au/utils/tradeConstants.js
 
 /**
- * CONFIGURACIÓN TÉCNICA DE TRADING - BITMART
- * Estas constantes rigen los límites mínimos y cálculos de comisiones.
- * Son universales para todos los usuarios del sistema.
+ * BITMART TECHNICAL TRADING CONFIGURATION
+ * These constants govern minimum limits and fee calculations.
+ * They are universal for all users within the system.
  */
 
 const TRADE_SYMBOL = 'BTC_USDT';
 
 /**
- * BitMart requiere un mínimo de 5.00 USDT para órdenes de mercado.
- * Usamos 6.00 como margen de seguridad para evitar rechazos por fluctuaciones 
- * de milisegundos en el precio o descuentos de micro-comisiones.
+ * BitMart requires a minimum of 5.00 USDT for market orders.
+ * We use 6.00 as a safety margin to avoid rejections caused by 
+ * millisecond price fluctuations or micro-fee deductions.
  */
 const MIN_USDT_VALUE_FOR_BITMART = 6.00;
 
 /**
- * Comisiones estándar de BitMart (0.1%).
- * Se utilizan en los DataManagers para calcular el Profit Neto real.
+ * Standard BitMart Trading Fees (0.1%).
+ * Used across DataManagers to calculate real Net Profit.
  */
 const BUY_FEE_PERCENT = 0.001; 
 const SELL_FEE_PERCENT = 0.001; 
 
 /**
- * Precisiones requeridas por la API de BitMart para el par BTC_USDT.
- * BTC (Qty): 6 decimales (ej. 0.000123)
- * USDT (Price/Amount): 2 decimales (ej. 50000.50)
+ * Precision requirements for BitMart API (BTC_USDT pair).
+ * BTC (Qty): 6 decimals (e.g., 0.000123)
+ * USDT (Price/Amount): 2 decimals (e.g., 50000.50)
  */
 const BTC_PRECISION = 6;
 const USDT_PRECISION = 2;

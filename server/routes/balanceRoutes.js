@@ -2,21 +2,25 @@
 
 const express = require('express');
 const router = express.Router();
-// Reemplazamos la lógica directa por el controlador
 const balanceController = require('../controllers/balanceController');
+const userController = require('../controllers/userController'); // Para el middleware de Auth
 
-// ----------------------------------------------------------------------------------
-// 🛑 RUTA DISCUTIDA: /api/v1/balances/bot-state/balances
-// Dado que 'balances' es la base en server.js, definimos el resto del path aquí.
-// ----------------------------------------------------------------------------------
+/**
+ * RUTAS DE BALANCES Y SALDOS
+ * Estas rutas devuelven tanto el saldo real en BitMart (caché) como el asignado al bot.
+ */
 
-// [OPCIONAL] Ruta anterior que resultaba en /api/v1/balances/available
-// router.get('/available', balanceController.getAccountBalances);
+// 1. Protección Global: Solo usuarios autenticados pueden ver saldos
+router.use(userController.authenticateToken);
 
-// 🎯 NUEVA RUTA: Implementa el path que discutimos
-// Este endpoint DEBERÍA llamar a una función específica que devuelva los saldos
-// del bot (DB y Exchange). Asumiremos que el mismo controller puede manejarlo.
-router.get('/balances', balanceController.getAccountBalances);
+/**
+ * @route   GET /api/v1/balances/
+ * @desc    Obtiene el consolidado de saldos (Exchange + Bot Asignado)
+ * Nota: Si dejas solo '/', la ruta final será la base definida en server.js
+ */
+router.get('/', balanceController.getAccountBalances);
 
+// Mantengo esta por si tu frontend ya está apuntando específicamente a /balances
+router.get('/current', balanceController.getAccountBalances);
 
 module.exports = router;

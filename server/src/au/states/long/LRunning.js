@@ -6,6 +6,7 @@ const MarketSignal = require('../../../../models/MarketSignal');
  */
 async function run(dependencies) {
     // 1. Extraemos userId de las dependencias inyectadas por autobotLogic
+    // IMPORTANTE: userId ya viene como el String/ID puro (ej: 698808...)
     const { userId, botState, log, updateBotState } = dependencies;
     
     // 2. SECURITY CHECK (Flat Architecture)
@@ -29,7 +30,7 @@ async function run(dependencies) {
         // 4. FRESHNESS VALIDATION
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
 
-        // El log inyectado ya sabe que debe enviar esto a la "room" del userId
+        // REPARADO: El log inyectado ya emite a la sala del userId sin prefijos.
         log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
 
         if (!signalTime) {
@@ -49,12 +50,13 @@ async function run(dependencies) {
         if (globalSignal.signal === 'BUY') { 
             log(`🚀 [L-SIGNAL] BUY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)} | Entering Market...`, 'success');
             
-            // Transition to BUYING so LBuying.js executes the first exponential order.
+            // Transición a BUYING: LBuying.js ejecutará la primera orden exponencial.
             await updateBotState('BUYING', 'long'); 
             return; 
         }
 
     } catch (error) {
+        // El aislamiento asegura que este error no tire el bot de otros usuarios
         log(`[L-RUNNING] ❌ Error reading signals: ${error.message}`, 'error');
     }
 }

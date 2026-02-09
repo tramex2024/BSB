@@ -1,6 +1,8 @@
+// BSB/server/src/au/engines/AIEngine.js
+
 /**
- * AIEngine.js - Motor de Ejecución Predictiva
- * Gestión de Trailing Stop y Ejecución de Señales por Usuario.
+ * AIEngine.js - Predictive Execution Engine
+ * Manages Trailing Stops and Signal Execution per User.
  */
 
 const Autobot = require('../../models/Autobot');
@@ -11,8 +13,8 @@ const StrategyManager = require('./StrategyManager');
 class AIEngine {
     constructor() {
         this.io = null;
-        this.TRAILING_PERCENT = 0.005; // 0.5% de retroceso permitido
-        this.EXCHANGE_FEE = 0.001;     // 0.1% de comisión estimada
+        this.TRAILING_PERCENT = 0.005; // 0.5% allowed pullback
+        this.EXCHANGE_FEE = 0.001;     // 0.1% estimated fee
     }
 
     setIo(io) { this.io = io; }
@@ -27,31 +29,31 @@ class AIEngine {
             const lastEntryPrice = bot.ailastEntryPrice || 0;
             let highestPrice = bot.aihighestPrice || 0;
 
-            // 1. GESTIÓN DE OPERACIÓN ABIERTA (Trailing Stop)
+            // 1. OPEN POSITION MANAGEMENT (Trailing Stop)
             if (lastEntryPrice > 0) {
-                // Actualizar el pico más alto si el precio sube
+                // Update peak price if current price is higher
                 if (price > highestPrice) {
                     highestPrice = price;
                     await Autobot.updateOne({ userId }, { $set: { aihighestPrice: highestPrice } });
                 }
 
-                // Cálculo del Stop Dinámico
+                // Dynamic Stop Calculation
                 const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
                 
                 if (price <= stopPrice) {
-                    this._log(userId, `🎯 Trailing Stop activado: Exit @ $${price}`, 0.95);
+                    this._log(userId, `🎯 Trailing Stop triggered: Exit @ $${price}`, 0.95);
                     await this._trade(userId, 'SELL', price, 1.0, bot);
                     return; 
                 }
             }
 
-            // 2. BUSCAR NUEVAS ENTRADAS (Si no hay posición abierta)
+            // 2. SEARCH FOR NEW ENTRIES (If no open position)
             if (lastEntryPrice === 0) {
                 const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
                 if (marketData && marketData.history && marketData.history.length >= 50) {
                     await this._executeStrategy(userId, price, marketData.history, bot);
                 } else if (Math.random() > 0.98) {
-                    this._log(userId, "Calibrando sensores de IA...", 0.1, true);
+                    this._log(userId, "Calibrating AI sensors...", 0.1, true);
                 }
             }
         } catch (error) {
@@ -65,11 +67,11 @@ class AIEngine {
 
         const { confidence, message } = analysis;
         
-        // Umbral de confianza del 85% para entrar
+        // 85% confidence threshold to enter trade
         if (confidence >= 0.85) {
             await this._trade(userId, 'BUY', price, confidence, bot);
         } else if (Math.random() > 0.95) {
-            // Feedback visual para el usuario en el Dashboard
+            // Visual feedback for the user dashboard
             this._log(userId, message, confidence);
         }
     }
@@ -87,9 +89,9 @@ class AIEngine {
             if (side === 'BUY') {
                 nextEntryPrice = price;
                 nextHighestPrice = price;
-                newBalance -= fee; // Descontamos comisión en la entrada
+                newBalance -= fee; // Deduct fee on entry
             } else {
-                // PNL = ((Precio Venta / Precio Compra) - 1) * Capital - Fee
+                // PNL = ((Sell Price / Buy Price) - 1) * Capital - Fee
                 const profitFactor = (price / bot.ailastEntryPrice);
                 netProfit = (currentBalance * (profitFactor - 1)) - fee;
                 newBalance += netProfit;
@@ -99,7 +101,7 @@ class AIEngine {
             const shouldStop = side === 'SELL' && stopAtCycle;
             const newState = shouldStop ? 'STOPPED' : 'RUNNING';
 
-            // Actualización atómica de la base de datos
+            // Atomic update for AI state
             await Autobot.updateOne({ userId }, { 
                 $set: {
                     aibalance: newBalance,
@@ -111,11 +113,11 @@ class AIEngine {
                 $inc: { total_profit: side === 'SELL' ? netProfit : 0 }
             });
 
-            // Registro de orden para analíticas (BSB/server/models/Order.js)
+            // Log order for analytics
             await Order.create({
                 userId,
                 strategy: 'ai',
-                cycleIndex: bot.aicycle || 0, // Vinculamos con el ciclo actual
+                cycleIndex: bot.aicycle || 0,
                 executionMode: 'SIMULATED',
                 orderId: `ai_${userId.toString().slice(-4)}_${Date.now()}`,
                 side,

@@ -1,53 +1,53 @@
 // BSB/server/src/au/utils/cleanState.js
 
 /**
- * MIGRACIÓN 2026 - ARQUITECTURA PLANA
- * Este archivo define el estado 'CERO' de cada estrategia.
- * Se aplica al finalizar un ciclo (Take Profit) o al reiniciar el bot.
+ * 2026 MIGRATION - FLAT ARCHITECTURE
+ * This file defines the 'ZERO' state for each strategy.
+ * Applied when a cycle finishes (Take Profit) or when the bot is reset.
  */
 
 /**
- * Valores de reseteo para la estrategia LONG (Siglas l...)
+ * Reset values for LONG strategy (Acroynms starting with 'l')
  */
 const CLEAN_LONG_ROOT = {
-    lppc: 0,          // Long Price Per Coin (Precio promedio compra)
-    lac: 0,           // Long Accumulated Coins (BTC acumulado)
-    lai: 0,           // Long Accumulated Investment (USDT invertido)
-    locc: 0,          // Long Order Cycle Count (Contador para lógica exponencial)
-    llastOrder: null, // Limpieza de rastro de órdenes en Bitmart
-    lpm: 0,           // Long Price Max (Reset para nuevo Trailing)
-    lpc: 0,           // Long Price Cut (Reset para nuevo Trailing)
-    lstartTime: null, // Reset de marca de tiempo de inicio
-    lrca: 0,          // Long Required Coverage Amount (Próxima compra USDT)
-    lncp: 0,          // Long Next Coverage Price (Próximo gatillo DCA)
-    ltprice: 0,       // Target Price visual
-    lsprice: 0,       // Stop Price visual
-    lprofit: 0,       // Profit acumulado en el ciclo actual
-    lnorder: 0,       // Contador visual de órdenes
-    lcoverage: 0,     // Precio de resistencia/cobertura visual
-    llep: 0           // Last Execution Price (Evita loops de órdenes duplicadas)
+    lppc: 0,          // Long Price Per Coin (Average Buy Price)
+    lac: 0,           // Long Accumulated Coins (BTC accumulated)
+    lai: 0,           // Long Accumulated Investment (USDT spent)
+    locc: 0,          // Long Order Cycle Count (Counter for exponential logic)
+    llastOrder: null, // Clear pending orders from Bitmart
+    lpm: 0,           // Long Price Max (Trailing Peak reset)
+    lpc: 0,           // Long Price Cut (Trailing Stop reset)
+    lstartTime: null, // Initial timestamp reset
+    lrca: 0,          // Long Required Coverage Amount (Next DCA USDT)
+    lncp: 0,          // Long Next Coverage Price (DCA trigger price)
+    ltprice: 0,       // UI Target Price
+    lsprice: 0,       // UI Stop Price
+    lprofit: 0,       // PNL accumulated in current cycle
+    lnorder: 0,       // UI Order counter
+    lcoverage: 0,     // UI Resistance/Coverage price
+    llep: 0           // Last Execution Price (Prevents duplicate order loops)
 };
 
 /**
- * Valores de reseteo para la estrategia SHORT (Siglas s...)
+ * Reset values for SHORT strategy (Acronyms starting with 's')
  */
 const CLEAN_SHORT_ROOT = {
-    sppc: 0,          // Short Price Per Coin (Precio promedio venta)
-    sac: 0,           // Short Accumulated Coins (Deuda/Contrato)
-    sai: 0,           // Short Accumulated Investment (USDT colateral)
-    socc: 0,          // Short Order Cycle Count (Contador para lógica exponencial)
-    slastOrder: null, // Limpieza de rastro de órdenes en Bitmart
-    spm: 0,           // Short Price Min (Reset para Trailing Short)
-    spc: 0,           // Short Price Cut (Reset para Trailing Short)
-    sstartTime: null, // Reset de marca de tiempo
+    sppc: 0,          // Short Price Per Coin (Average Sell Price)
+    sac: 0,           // Short Accumulated Coins (Debt/Contract size)
+    sai: 0,           // Short Accumulated Investment (USDT Collateral)
+    socc: 0,          // Short Order Cycle Count (Counter for exponential logic)
+    slastOrder: null, // Clear pending orders from Bitmart
+    spm: 0,           // Short Price Min (Trailing Floor reset)
+    spc: 0,           // Short Price Cut (Trailing Buyback reset)
+    sstartTime: null, // Initial timestamp reset
     srca: 0,          // Short Required Coverage Amount
-    sncp: 0,          // Short Next Coverage Price (Gatillo DCA si el precio sube)
-    stprice: 0,       // Target Price visual
-    sbprice: 0,       // Stop/Buy Price visual (Dashboard)
-    sprofit: 0,       // Profit acumulado en el ciclo actual
-    snorder: 0,       // Contador visual de órdenes
-    scoverage: 0,     // Precio de resistencia/cobertura visual
-    slep: 0           // Last Execution Price (Evita loops de órdenes duplicadas)
+    sncp: 0,          // Short Next Coverage Price (DCA trigger if price rises)
+    stprice: 0,       // UI Target Price
+    sbprice: 0,       // UI Buyback/Stop Price
+    sprofit: 0,       // PNL accumulated in current cycle
+    snorder: 0,       // UI Order counter
+    scoverage: 0,     // UI Resistance/Coverage price
+    slep: 0           // Last Execution Price (Prevents duplicate order loops)
 };
 
 module.exports = {

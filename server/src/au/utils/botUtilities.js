@@ -1,50 +1,48 @@
 // BSB/server/src/utils/botUtilities.js
 
 /**
- * MIGRACIÓN 2026 - UTILIDADES DE SISTEMA
- * Este archivo gestiona el mantenimiento y Hard Reset de los bots.
- * A diferencia de los DataManagers, este reseteo se usa para emergencias 
- * o limpiezas manuales solicitadas por el usuario.
+ * 2026 SYSTEM UTILITIES
+ * This file handles maintenance and Hard Reset logic for bots.
+ * Unlike DataManagers, this reset is used for emergencies or manual user-requested cleanups.
  */
 
 const Autobot = require('../../../models/Autobot'); 
-const { log } = require('../../../services/loggerService'); 
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../au/utils/cleanState');
 
 /**
- * Función de reseteo total del bot para un usuario específico.
- * Preserva configuración, profit acumulado y el histórico de ciclos.
- * * @param {string} userId - El ID único del usuario propietario del bot.
+ * Performs a total reset of the bot state for a specific user.
+ * Preserves configuration, total accumulated profit, and cycle history.
+ * @param {string} userId - Unique ID of the user who owns the bot.
  */
 async function resetAndInitializeBot(userId) {
     if (!userId) {
-        console.error("❌ [SYSTEM] Error: Se requiere userId para ejecutar el reset.");
+        console.error("❌ [SYSTEM] Error: userId is required to execute a reset.");
         return;
     }
 
     try {
-        // 1. Buscamos el bot actual del usuario
+        // 1. Fetch current bot for the specific user
         const currentBot = await Autobot.findOne({ userId });
         
         if (!currentBot) {
-            console.log(`⚠️ [SYSTEM] No existe bot para el usuario: ${userId}.`);
+            console.log(`⚠️ [SYSTEM] No bot found for user: ${userId}.`);
             return;
         }
 
-        // 2. Extraemos datos que NO queremos perder (Configuración y Éxitos)
+        // 2. Extract data that MUST be preserved (Config and Lifetime Stats)
         const config = currentBot.config || {}; 
         const totalProfit = parseFloat(currentBot.total_profit) || 0; 
         const lcycle = parseInt(currentBot.lcycle) || 0;
         const scycle = parseInt(currentBot.scycle) || 0;
 
-        // 3. Restauramos los balances iniciales desde la configuración
-        // Si el usuario cambió su capital en el config, el reset aplicará ese nuevo monto.
+        // 3. Restore initial balances from user configuration
+        // If the user updated their capital in settings, the reset applies the new amount.
         const initialLBalance = config.long?.amountUsdt || 0; 
         const initialSBalance = config.short?.amountUsdt || 0; 
 
-        // 4. Construcción del objeto de reseteo (Siglas Raíz 2026)
+        // 4. Construct the reset object (2026 Root Acronyms)
         const resetData = {
-            // Estado operativo
+            // Operational state
             "lstate": "STOPPED",
             "sstate": "STOPPED",
             "total_profit": totalProfit,
@@ -53,25 +51,29 @@ async function resetAndInitializeBot(userId) {
             "lbalance": initialLBalance, 
             "sbalance": initialSBalance, 
 
-            // Aplicamos limpieza profunda de promedios, órdenes y trailings
+            // Deep clean of averages, pending orders, and trailings
             ...CLEAN_LONG_ROOT,
             ...CLEAN_SHORT_ROOT,
 
             "updatedAt": new Date()
         };
 
-        // 5. Actualización atómica en base de datos
-        // Usamos updateOne con userId para garantizar que NO tocamos a otros usuarios.
-        await Autobot.updateOne(
+        // 5. Atomic update in Database
+        // We use updateOne with userId to guarantee we DO NOT touch other users' data.
+        const updateResult = await Autobot.updateOne(
             { userId: userId }, 
             { $set: resetData }
         );
         
-        console.log(`✅ [SYSTEM] Hard Reset exitoso para el usuario: ${userId}`);
-        console.log(`📊 Datos preservados -> Profit: $${totalProfit} | Ciclos: L(${lcycle}) S(${scycle})`);
+        if (updateResult.modifiedCount > 0) {
+            console.log(`✅ [SYSTEM] Hard Reset successful for user: ${userId}`);
+            console.log(`📊 Preserved Data -> Profit: $${totalProfit} | Cycles: L(${lcycle}) S(${scycle})`);
+        } else {
+            console.log(`⚠️ [SYSTEM] Reset executed but no changes were applied for user: ${userId}`);
+        }
         
     } catch (error) {
-        console.error(`❌ [SYSTEM] Error crítico en resetAndInitializeBot: ${error.message}`);
+        console.error(`❌ [SYSTEM] Critical error in resetAndInitializeBot: ${error.message}`);
     }
 }
 

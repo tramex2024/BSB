@@ -8,54 +8,51 @@
 const MarketSignal = require('../../../../models/MarketSignal');
 
 async function run(dependencies) {
-    // 1. Extraemos userId y herramientas de las dependencias
+    // 1. Contexto inyectado
     const { userId, botState, log, updateBotState, currentPrice } = dependencies;
     
-    // 0. PREVENTIVE BLOCK: Seguridad contra precio 0
-    if (!currentPrice || currentPrice <= 0) {
-        return; 
-    }
+    // 0. Bloqueo de seguridad: Precio inválido
+    if (!currentPrice || currentPrice <= 0) return; 
 
-    // 1. SECURITY CHECK (Orphan Position)
-    // ✅ MIGRATED: Lectura directa de 'sac' (Short Accumulated Coins) desde el root
+    // 1. VERIFICACIÓN DE POSICIÓN HUÉRFANA
+    // Si ya hay activos en 'sac', debemos estar gestionando la venta, no buscando señal.
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
-        log("[S-RUNNING] 🛡️ Active Short position detected (sac > 0). Correcting state to SELLING...", 'warning');
-        // El updateBotState ya tiene el userId vinculado internamente
+        log("[S-RUNNING] 🛡️ Posición Short activa detectada (sac > 0). Corrigiendo estado a SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
 
     try {
-        // Obtenemos el símbolo de la configuración de este usuario
+        // 2. CONSULTA DE SEÑALES GLOBALES
         const SYMBOL = botState.config?.symbol || 'BTC_USDT';
         const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
 
         if (!globalSignal) return;
 
-        // 2. MONITORING LOG (Heartbeat) - El log es privado para el userId
+        // Log de monitoreo (Heartbeat) filtrado por userId
         log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
 
-        // 3. REAL-TIME VALIDATION
+        // 3. VALIDACIÓN DE OBSOLESCENCIA
         const signalAgeMinutes = (Date.now() - new Date(globalSignal.lastUpdate || globalSignal.updatedAt).getTime()) / 60000;
         if (signalAgeMinutes > 5) {
-            log(`[S-RUNNING] ⚠️ Obsolete Short signal (${signalAgeMinutes.toFixed(1)} min). Ignoring.`, 'warning');
+            log(`[S-RUNNING] ⚠️ Señal Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
             return;
         }
 
-        // 4. ACTIVATION LOGIC
-        // Si la señal global es SELL, este bot entra en ciclo de Short
+        // 4. LÓGICA DE ACTIVACIÓN
+        // En Short, entramos cuando la señal es 'SELL' (el mercado está arriba y esperamos que baje)
         if (globalSignal.signal === 'SELL') { 
-            log(`🚀 [S-SIGNAL] SHORT OPPORTUNITY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
+            log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
             
-            // Transición a SELLING para que SSelling.js ejecute la primera orden
+            // Pasamos a SELLING para ejecutar la primera venta de apertura
             await updateBotState('SELLING', 'short'); 
             return; 
         }
 
     } catch (error) {
-        log(`[S-RUNNING] ❌ Signals Error: ${error.message}`, 'error');
+        log(`[S-RUNNING] ❌ Error en señales: ${error.message}`, 'error');
     }
 }
 

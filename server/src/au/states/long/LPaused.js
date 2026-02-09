@@ -10,11 +10,14 @@ const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 
 async function run(dependencies) {
     const { 
-        userId, // <--- IDENTIDAD INYECTADA
-        botState, currentPrice, config, 
-        updateBotState, updateLStateData,
+        userId, 
+        botState, 
+        currentPrice, 
+        config, 
+        updateBotState, 
         updateGeneralBotState, 
-        log, availableUSDT: realUSDT
+        log, 
+        availableUSDT: realUSDT 
     } = dependencies;
     
     const availableUSDT = parseFloat(realUSDT || 0);
@@ -25,16 +28,15 @@ async function run(dependencies) {
     const orderCountInCycle = parseInt(botState.locc || 0);
 
     // --- 1. RECOVERY LOGIC (EXIT TO SELLING) ---
-    // Si el precio sube mientras estamos pausados por falta de dinero, 
-    // permitimos que el bot intente vender lo que ya tiene.
+    // Si el precio sube mientras estamos pausados, permitimos vender lo acumulado.
     if (ac > 0 && botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-        log(`🚀 [L-RECOVERY] Target reached (${botState.ltprice.toFixed(2)})! Switching to SELLING.`, 'success');
+        log(`🚀 [L-RECOVERY] ¡Precio alcanzado (${botState.ltprice.toFixed(2)})! Saliendo de pausa para VENDER.`, 'success');
         await updateBotState('SELLING', 'long'); 
         return;
     }
 
-    // --- 2. CALCULATE REQUIREMENTS ---
-    // Recalculamos basándonos en la configuración específica de este usuario
+    // --- 2. RECALCULAR REQUERIMIENTOS ---
+    // Recalculamos basándonos en la configuración dinámica del usuario.
     const recalculation = calculateLongTargets(
         ppc, 
         config.long, 
@@ -43,30 +45,31 @@ async function run(dependencies) {
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
-    // Actualizamos solo el documento del usuario actual
+    // Sincronizamos los indicadores de "Siguiente Compra" en el documento del usuario.
     await updateGeneralBotState({ 
         lrca: requiredAmount, 
         lncp: recalculation.nextCoveragePrice 
     });
 
-    // --- 3. INDICATORS RESET ---
+    // --- 3. RESET DE INDICADORES (Si no hay fondos ni posición) ---
     if (ac <= 0 && currentLBalance < requiredAmount && botState.lnorder !== 0) {
-        log(`[L-RESET] Cleaning indicators: LBalance (${currentLBalance.toFixed(2)}) < Required (${requiredAmount.toFixed(2)}).`, 'warning');
+        log(`[L-RESET] Limpiando indicadores: Saldo insuficiente para iniciar nueva orden.`, 'warning');
         await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
         return; 
     }
 
-    // --- 4. RESUME VERIFICATION ---
+    // --- 4. VERIFICACIÓN DE REANUDACIÓN ---
+    // Verificamos tanto el lbalance (interno) como el availableUSDT (real en Exchange).
     const canResume = currentLBalance >= requiredAmount && 
                       availableUSDT >= requiredAmount && 
                       requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
 
     if (canResume) {
-        log(`✅ [L-FUNDS] Capital recovered (${availableUSDT.toFixed(2)} USDT). Resuming BUYING...`, 'success');
+        log(`✅ [L-FUNDS] Capital recuperado (${availableUSDT.toFixed(2)} USDT). Reanudando COMPRAS...`, 'success');
         await updateBotState('BUYING', 'long');
     } else {
-        // Log individualizado que aparecerá solo en el Dashboard del usuario afectado
-        log(`[L-PAUSED] ⏸️ Waiting for Funds | Balance: ${currentLBalance.toFixed(2)} | Required: ${requiredAmount.toFixed(2)} | Next Order: #${orderCountInCycle + 1}`, 'debug');
+        // Log informativo que solo verá este usuario en su consola/celular.
+        log(`[L-PAUSED] ⏸️ Esperando fondos | Disponible: ${currentLBalance.toFixed(2)} | Requerido: ${requiredAmount.toFixed(2)} | Orden: #${orderCountInCycle + 1}`, 'debug');
     }
 } 
 
