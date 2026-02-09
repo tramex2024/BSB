@@ -122,19 +122,19 @@ exports.getBitmartOpenOrders = async (req, res) => {
 };
 
 exports.getHistoryOrders = async (req, res) => {
-    const { symbol, status, startTime, endTime, limit } = req.query;
     try {
-        const historyParams = {
-            symbol: symbol || 'BTC_USDT',
-            status: status || 'all',
-            startTime: startTime ? parseInt(startTime, 10) : undefined,
-            endTime: endTime ? parseInt(endTime, 10) : undefined,
-            limit: limit ? parseInt(limit, 10) : undefined
-        };
-        const historyOrders = await bitmartService.getHistoryOrders(historyParams, req.bitmartCreds);
-        res.status(200).json(historyOrders);
+        const { status } = req.query;
+        const userId = req.user.id;
+
+        let filter = { userId: userId };
+        if (status && status !== 'all') {
+            filter.status = status.toUpperCase(); // FILLED, CANCELED, etc.
+        }
+
+        const orders = await Order.find(filter).sort({ orderTime: -1 }).limit(50);
+        res.status(200).json(orders); // Esto devuelve el ARRAY que el frontend espera
     } catch (error) {
-        res.status(500).json({ message: error.message || 'Error fetching history.' });
+        res.status(500).json({ message: 'Error recuperando órdenes de la DB local.' });
     }
 };
 

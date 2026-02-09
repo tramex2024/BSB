@@ -3,18 +3,12 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
-const userController = require('../controllers/userController'); // Necesario para el middleware de Auth
+const userController = require('../controllers/userController');
 
-/**
- * RUTAS DE HISTORIAL DE ÓRDENES (DB LOCAL)
- * Base path sugerido: /api/v1/orders
- */
-
-// 1. Middleware Global para este router: Todas las consultas de órdenes requieren JWT
+// Protegemos todas las rutas
 router.use(userController.authenticateToken);
 
-// 2. Obtener órdenes filtradas por estado (all, opened, filled, cancelled)
-// Ejemplo: GET /api/v1/orders/filled
+// GET /api/orders/:status (all, opened, filled, cancelled)
 router.get('/:status', orderController.getOrders);
 
 module.exports = router;
