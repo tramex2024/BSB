@@ -187,19 +187,15 @@ function setupMarketWS(io) {
     });
 }
 
-// --- 9. FUNCIÓN PARA WEBSOCKETS PRIVADOS (REPARADA PARA USAR MODELO USER) ---
+// --- 9. FUNCIÓN PARA WEBSOCKETS PRIVADOS (REPARADA PARA PERSISTENCIA) ---
 const initializePrivateWebSockets = async () => {
     try {
-        // Buscamos usuarios que tengan llaves configuradas en el modelo User
         const usersWithKeys = await User.find({ 
             bitmartApiKey: { $exists: true, $ne: "" } 
         });
 
-        console.log(`🔑 [INIT] Iniciando WebSockets privados para ${usersWithKeys.length} usuarios.`);
-
         for (const user of usersWithKeys) {
             try {
-                // Desencriptamos para conectar al WebSocket de Bitmart
                 const credentials = {
                     apiKey: decrypt(user.bitmartApiKey),
                     secretKey: decrypt(user.bitmartSecretKeyEncrypted),
@@ -208,14 +204,21 @@ const initializePrivateWebSockets = async () => {
 
                 const userIdStr = user._id.toString();
 
-                bitmartWs.initOrderWebSocket(userIdStr, credentials, (ordersData) => {
-                    console.log(`[BACKEND-WS] 📥 Actualización de órdenes para usuario: ${userIdStr}`);
-                    // Emitimos tanto al historial como a las órdenes abiertas para asegurar que el Front las vea
-                    io.to(userIdStr).emit('open-orders-update', ordersData);
-                    io.to(userIdStr).emit('ai-history-update', ordersData);
-                });
+                bitmartWs.initOrderWebSocket(userIdStr, credentials, async (ordersData) => {
+    console.log(`[BACKEND-WS] 📥 Orden detectada via WS para: ${userIdStr}`);
+    
+    // CORRECCIÓN: Llamamos a la función con el nombre correcto y detectamos la estrategia
+    // Nota: ordersData suele ser un array o un objeto dependiendo del evento de BitMart
+    const strategy = ordersData.clientOrderId?.startsWith('L_') ? 'long' : 
+                     ordersData.clientOrderId?.startsWith('S_') ? 'short' : 'ai';
+
+    await orderPersistenceService.saveExecutedOrder(ordersData, strategy, userIdStr);
+
+    io.to(userIdStr).emit('open-orders-update', ordersData);
+    io.to(userIdStr).emit('ai-history-update', ordersData);
+});
             } catch (err) {
-                console.error(`❌ Error al descifrar llaves para user ${user.email}:`, err.message);
+                console.error(`❌ Error en WS privado para ${user.email}:`, err.message);
             }
         }
     } catch (error) {

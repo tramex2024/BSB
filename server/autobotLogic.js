@@ -179,22 +179,27 @@ async function botCycle(priceFromWebSocket) {
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-            // MONITOR DE ÓRDENES
-            if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-                if (botState.llastOrder.side === 'buy') {
-                    await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
-                } else {
-                    await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
-                }
-            }
+           // --- MONITOR DE ÓRDENES LONG ---
+if (botState.llastOrder && botState.lstate !== 'STOPPED') {
+    if (botState.llastOrder.side === 'buy') {
+        // Agregamos userId al final
+        await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+    } else {
+        // Agregamos userId al final
+        await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+    }
+}
 
-            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-                if (botState.slastOrder.side === 'sell') { 
-                    await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
-                } else {
-                    await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState);
-                }
-            }
+// --- MONITOR DE ÓRDENES SHORT ---
+if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+    if (botState.slastOrder.side === 'sell') { 
+        // Agregamos userId al final
+        await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+    } else {
+        // Agregamos userId al final
+        await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+    }
+}
 
             // MATEMÁTICAS LONG
             if (botState.lstate !== 'STOPPED' && botState.config.long) {

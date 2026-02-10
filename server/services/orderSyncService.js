@@ -56,9 +56,19 @@ const syncOpenOrders = async (userId, credentials, io) => {
 
         // 5. Emitir al Frontend vía Socket para actualización instantánea
         if (io) {
-            const allOrders = await Order.find({ userId }).sort({ orderTime: -1 }).limit(50);
-            io.to(userId.toString()).emit('ai-history-update', allOrders);
-        }
+    // Buscamos tanto las FILLED (historial) como las NEW (abiertas sincronizadas)
+    const updatedHistory = await Order.find({ userId })
+        .sort({ orderTime: -1 })
+        .limit(50)
+        .lean();
+    
+    // Emitimos a la sala del usuario
+    io.to(userId.toString()).emit('ai-history-update', updatedHistory);
+    
+    // TIP: También podrías emitir un evento específico para órdenes abiertas
+    const openOnly = updatedHistory.filter(o => ['NEW', 'PARTIALLY_FILLED'].includes(o.status));
+    io.to(userId.toString()).emit('open-orders-update', openOnly);
+}
 
         console.log(`Sync [${userId}]: ${ordersToInsert.length} órdenes abiertas sincronizadas (Status: EX para manuales).`);
         
