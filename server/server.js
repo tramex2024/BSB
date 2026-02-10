@@ -20,6 +20,7 @@ const centralAnalyzer = require('./services/CentralAnalyzer');
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 const candleBuilder = require('./src/ai/CandleBuilder'); 
 const orderPersistenceService = require('./services/orderPersistenceService');
+const orderSyncService = require('./services/orderSyncService');
 
 // Modelos
 const User = require('./models/User'); // <--- AÑADIDO PARA INICIALIZACIÓN
@@ -237,7 +238,29 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// --- 11. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO Y SALAS) ---
+// --- 11. Sincronización de Órdenes Abiertas cada 30 segundos
+setInterval(async () => {
+    try {
+        const User = require('./models/User');
+        const { decrypt } = require('./utils/encryption');
+        
+        const users = await User.find({ bitmartApiKey: { $exists: true, $ne: "" } });
+        
+        for (const user of users) {
+            const credentials = {
+                apiKey: decrypt(user.bitmartApiKey),
+                secretKey: decrypt(user.bitmartSecretKeyEncrypted),
+                memo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ""
+            };
+            // Llamamos al sincronizador
+            await orderSyncService.syncOpenOrders(user._id, credentials, io);
+        }
+    } catch (err) {
+        console.error("❌ Error en el loop de sincronización:", err.message);
+    }
+}, 30000); // 30 segundos es un buen equilibrio para no saturar la API
+
+// --- 12. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO Y SALAS) ---
 io.on('connection', async (socket) => {
     // El cliente envía su userId al conectar
     let userId = socket.handshake.query.userId;
@@ -280,7 +303,7 @@ io.on('connection', async (socket) => {
     socket.on('disconnect', () => console.log(`👤 Desconectado: ${socket.id} de sala: ${userIdStr}`));
 });
 
-// --- 12. START ---
+// --- 13. START ---
 server.listen(PORT, async () => {
     try {
         centralAnalyzer.init(io); 

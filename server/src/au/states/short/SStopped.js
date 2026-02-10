@@ -1,35 +1,44 @@
-//BSB/server/src/au/states/short/SStopped.js
+// BSB/server/src/au/states/short/SStopped.js
 
 /**
  * S-STOPPED STATE (SHORT):
- * Monitors if there is pending BTC debt (sac > 0) while the Short strategy is disabled.
- * Implements a per-user logging system to prevent Dashboard saturation.
+ * Monitorea si hay deuda pendiente (sac > 0) mientras la estrategia Short está apagada.
+ * Implementa throttling de logs por usuario para no saturar el Dashboard.
  */
 
-// Use a Map to keep track of log throttling independently per userId
+// Mapa persistente para control de frecuencia de logs por userId
 const userLastLogTimes = new Map();
 
 async function run(dependencies) {
     const { userId, log, botState } = dependencies;
     const now = Date.now();
+    const userKey = userId.toString();
 
-    // Retrieve last log time for this specific user
-    const lastLogTime = userLastLogTimes.get(userId.toString()) || 0;
+    // 1. CONTROL DE SPAM: Recuperamos el tiempo del último log de este usuario
+    const lastLogTime = userLastLogTimes.get(userKey) || 0;
 
-    // Log only once every 10 minutes per user to avoid saturating the User Dashboard
+    // Log cada 10 minutos por usuario
     if (now - lastLogTime < 600000) return;
 
-    // ✅ MIGRATED: Direct access to 'sac' (Short Accumulated Coins) in root
+    // 2. VERIFICACIÓN DE DEUDA (sac = Short Accumulated Coins)
     const ac = parseFloat(botState.sac || 0);
 
-    // In Short strategy, if 'sac' > 0, there is a debt that needs buyback.
     if (ac > 0) {
-        log(`[S-STOPPED] ⚠️ Short strategy stopped with open debt (${ac.toFixed(8)} BTC). Bot is NOT managing Trailing Stop or DCA. High risk if price rises! Manual closure required.`, 'warning');
-        userLastLogTimes.set(userId.toString(), now);
+        // ALERTA DE RIESGO: Hay deuda de BTC pero el bot está apagado.
+        log(`[S-STOPPED] ⚠️ Estrategia Short detenida con deuda activa (${ac.toFixed(8)} BTC). El bot NO está gestionando Recompra ni DCA. ¡Riesgo alto si el precio sube!`, 'warning');
     } else {
-        // Silent server console log to confirm bot instance heartbeat
-        console.log(`[S-STOPPED] [User: ${userId}] Short strategy inactive. No open positions.`);
-        userLastLogTimes.set(userId.toString(), now);
+        // Heartbeat silencioso en consola de servidor
+        console.log(`[SYS-HB] Short Stopped - User: ${userId} - No debt found.`);
+    }
+
+    // 3. ACTUALIZACIÓN DE TIEMPO Y LIMPIEZA
+    userLastLogTimes.set(userKey, now);
+
+    // Mantenimiento preventivo: si el mapa es muy grande, limpiamos registros viejos (> 2h)
+    if (userLastLogTimes.size > 1000) {
+        for (const [key, time] of userLastLogTimes) {
+            if (now - time > 7200000) userLastLogTimes.delete(key);
+        }
     }
 }
 

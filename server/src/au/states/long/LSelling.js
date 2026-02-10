@@ -10,7 +10,6 @@ const LSTATE = 'long';
  * Gestiona el Trailing Stop Loss y ejecuta la venta final del ciclo.
  */
 async function run(dependencies) {
-    // 1. Extraemos el contexto atómico del usuario
     const { 
         userId, 
         botState, 
@@ -18,22 +17,23 @@ async function run(dependencies) {
         config, 
         log, 
         updateBotState, 
-        updateGeneralBotState 
+        updateGeneralBotState,
+        // --- INYECCIÓN DE LA FUNCIÓN FIRMADA ---
+        placeLongOrder 
     } = dependencies;
     
-    // Referencias directas para evitar colisiones entre usuarios
     const lastOrder = botState.llastOrder; 
     const acSelling = parseFloat(botState.lac || 0); 
     const pm = parseFloat(botState.lpm || 0);        
     const pc = parseFloat(botState.lpc || 0);        
 
-    // 2. Bloqueo de seguridad: Evitar duplicidad de órdenes de venta
+    // 1. Bloqueo de seguridad: Evitar duplicidad
     if (lastOrder) {
         log(`[L-SELLING] ⏳ Orden de venta ${lastOrder.order_id} pendiente de confirmación...`, 'debug');
         return;
     }
 
-    // 3. LÓGICA DE TRAILING STOP
+    // 2. LÓGICA DE TRAILING STOP
     const trailingStopPercent = (config.long?.trailing_percent || 0.3) / 100;
 
     let newPm = pm;
@@ -43,7 +43,7 @@ async function run(dependencies) {
     
     const newPc = newPm * (1 - trailingStopPercent);
 
-    // Si el precio sube, subimos el Stop Loss (Aislamiento de logs verificado)
+    // Si el precio sube, actualizamos el Stop Loss en la DB
     if (newPm > pm) {
         log(`📈 [L-TRAILING] Subida detectada: ${newPm.toFixed(2)} | Nuevo Stop: ${newPc.toFixed(2)}`, 'info');
 
@@ -53,18 +53,18 @@ async function run(dependencies) {
         });
     }
 
-    // 4. CONDICIÓN DE DISPARO (Trigger)
+    // 3. CONDICIÓN DE DISPARO (Trigger)
     if (acSelling >= MIN_SELL_AMOUNT_BTC) {
         
         const currentStop = pc > 0 ? pc : newPc;
         
-        // Si el precio baja y toca el Stop Loss, vendemos todo
+        // Si el precio toca el Stop Loss, vendemos todo
         if (currentPrice <= currentStop) {
-            log(`💰 [L-SELL] TRIGGER ACTIVADO | Precio: ${currentPrice.toFixed(2)} <= Stop: ${currentStop.toFixed(2)} | Liquidando posición...`, 'success');
+            log(`💰 [L-SELL] TRIGGER ACTIVADO | Liquidando posición firmada...`, 'success');
             
             try {
-                // Pasamos userId para que el manager use las API keys correctas
-                await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, userId); 
+                // --- CAMBIO: Pasamos placeLongOrder para que la venta lleve el prefijo L_ ---
+                await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, placeLongOrder); 
             } catch (error) {
                 log(`❌ Error crítico en ejecución de venta: ${error.message}`, 'error');
                 
@@ -74,7 +74,7 @@ async function run(dependencies) {
                 }
             }
         } else {
-            // Log de seguimiento en tiempo real para el socket room del usuario
+            // Log de seguimiento (Dashboard)
             const profitActual = botState.lppc > 0 ? (((currentPrice / botState.lppc) - 1) * 100).toFixed(2) : "0.00";
             const distToStop = Math.abs(((currentPrice / currentStop) - 1) * 100).toFixed(2);
             const signStop = currentStop > currentPrice ? '+' : '-';
@@ -82,7 +82,7 @@ async function run(dependencies) {
             log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Profit: +${profitActual}% | Stop: ${currentStop.toFixed(2)} (${signStop}${distToStop}%)`, 'info');
         }
     } else {
-        log(`[L-SELLING] ⚠️ Cantidad insuficiente (lac) para vender. Reajustando...`, 'warning');
+        log(`[L-SELLING] ⚠️ Cantidad insuficiente (lac: ${acSelling}) para vender. Reajustando...`, 'warning');
         if (acSelling <= 0) await updateBotState('BUYING', LSTATE);
     }
 }

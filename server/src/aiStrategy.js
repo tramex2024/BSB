@@ -1,18 +1,16 @@
-// BSB/server/src/aiStrategy.js
-
 /**
  * BSB/server/src/aiStrategy.js
- * Wrapper to integrate AIEngine into the sequential Autobot cycle.
+ * Wrapper para integrar el AIEngine en el ciclo secuencial del Autobot.
  */
 
 const aiEngine = require('./ai/AIEngine');
 
 /**
- * Executes an AI analysis cycle.
- * @param {Object} dependencies - Data injected from the central engine (botCycle).
+ * Ejecuta un ciclo de análisis de IA.
+ * @param {Object} dependencies - Datos inyectados desde el motor central.
  */
 async function runAIStrategy(dependencies) {
-    // 1. Integrity Verification (Fail-fast)
+    // 1. Verificación de Integridad (Fail-fast)
     if (!dependencies || !dependencies.botState || !dependencies.currentPrice) {
         return;
     }
@@ -20,35 +18,37 @@ async function runAIStrategy(dependencies) {
     const { currentPrice, botState, userId, io, log } = dependencies;
 
     try {
-        // 2. State Control: Check if AI is enabled for THIS specific user
+        // 2. Control de Estado: ¿La IA está activada para ESTE usuario?
+        // Verificamos en la config específica del bot del usuario
         if (!botState.config?.ai?.enabled) {
             return;
         }
 
-        // 3. Dynamic Socket Synchronization
-        // Ensures the AI engine can broadcast updates to the specific user's dashboard room
-        if (!aiEngine.io && io) {
+        // 3. Sincronización Dinámica del Socket
+        // Inyectamos el servidor IO al motor de IA si aún no lo tiene
+        if (io && typeof aiEngine.setIo === 'function') {
             aiEngine.setIo(io);
         }
 
         /**
-         * 4. Predictive Analysis Execution
-         * Note: Ensure aiEngine internal broadcasts use the 'user_${userId}' room convention.
+         * 4. Ejecución del Análisis Predictivo
+         * El aiEngine debe estar preparado para manejar peticiones por userId
+         * para que los resultados lleguen al room: `user_${userId}`.
          */
         
-        // AI engine processes data in isolation for this specific userId
+        // El motor de IA analiza el precio actual bajo el contexto del usuario
+        // Esto permite que el AI Engine guarde su propio historial por usuario si fuera necesario
         await aiEngine.analyze(currentPrice, userId);
 
     } catch (error) {
-        // Isolated Error: A failure in one user's AI logic won't stop the bot for others
+        // Error Aislado: Un fallo en la IA de un usuario no detiene el ciclo de otros
         if (log) {
             log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
         }
-        console.error(`[CRITICAL-AI][User: ${userId}]:`, error);
+        console.error(`[AI-STRATEGY][User: ${userId}]:`, error);
     }
 }
 
-// Clean export without global state variables
 module.exports = {
     runAIStrategy
 };

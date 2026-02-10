@@ -6,39 +6,41 @@
  * Evita el spam de logs pero mantiene la alerta crítica por usuario.
  */
 
-// Usamos un Map para rastrear el tiempo del último log por cada usuario de forma independiente
+// Mapa persistente en memoria del proceso para control de frecuencia de logs
 const lastLogTimes = new Map();
 
 async function run(dependencies) {
     const { userId, log, botState } = dependencies;
     const now = Date.now();
 
-    // Recuperamos el último log de este usuario específico (ID puro)
     const userKey = userId.toString();
     const userLastLog = lastLogTimes.get(userKey) || 0;
 
-    // Log cada 10 minutos para no saturar el socket ni el historial del celular
+    // 1. CONTROL DE SPAM: Solo actuamos cada 10 minutos por usuario
     if (now - userLastLog < 600000) return;
 
-    // Verificamos si hay "monedas huérfanas" (posición abierta sin bot que la cuide)
+    // 2. DETECCIÓN DE POSICIONES HUÉRFANAS
     const ac = parseFloat(botState.lac || 0);
 
     if (ac > 0) {
-        // ALERTA CRÍTICA: Hay capital pero el bot está detenido.
-        log(`[L-STOPPED] ⚠️ Bot detenido con posición abierta (${ac.toFixed(6)} BTC). El Take Profit y DCA NO están funcionando. ¡Se requiere atención manual!`, 'warning');
+        // Alerta visible para el usuario en su Dashboard
+        log(`[L-STOPPED] ⚠️ Bot detenido con posición activa (${ac.toFixed(6)} BTC). TP y DCA desactivados. Requiere atención manual.`, 'warning');
     } else {
-        // Log informativo silencioso para el servidor
-        console.log(`[L-STOPPED] [User: ${userId}] Inactivo sin posiciones.`);
+        // Log interno del sistema (no molesta al usuario)
+        console.log(`[SYS] Strategy Stopped - User: ${userId} - No orphans found.`);
     }
 
-    // Actualizamos el tiempo para este usuario
+    // 3. ACTUALIZACIÓN DE ÚLTIMO LOG
     lastLogTimes.set(userKey, now);
 
-    // Mantenimiento preventivo del Map
-    if (lastLogTimes.size > 500) {
-        // Si el mapa crece, eliminamos registros muy antiguos en lugar de limpiar todo
-        for (let [key, time] of lastLogTimes) {
-            if (now - time > 3600000) lastLogTimes.delete(key);
+    // 4. MANTENIMIENTO DEL MAP (Evitar fuga de memoria)
+    // Realizamos limpieza solo si el mapa es grande, de forma asíncrona o esporádica
+    if (lastLogTimes.size > 1000) {
+        // Limpiamos entradas con más de 2 horas de antigüedad
+        for (const [key, time] of lastLogTimes) {
+            if (now - time > 7200000) {
+                lastLogTimes.delete(key);
+            }
         }
     }
 }

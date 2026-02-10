@@ -1,4 +1,4 @@
-//BSB/server/src/au/states/short/SPaused.js
+// BSB/server/src/au/states/short/SPaused.js
 
 /**
  * S-PAUSED STATE (SHORT):
@@ -6,7 +6,7 @@
  * Monitoriza si el precio entra en zona de ganancia para cerrar la posición actual.
  */
 
-const { calculateShortTargets } = require('../../../../autobotCalculations');
+const { calculateShortTargets, calculateShortCoverage } = require('../../../../autobotCalculations');
 const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 
 async function run(dependencies) {
@@ -23,24 +23,22 @@ async function run(dependencies) {
     const availableUSDT = parseFloat(realUSDT || 0);
     const currentSBalance = parseFloat(botState.sbalance || 0);
 
-    // Lectura de variables raíz (Acrónimos Short)
-    const ac = parseFloat(botState.sac || 0);  // Monedas acumuladas (vendidas)
+    const ac = parseFloat(botState.sac || 0);  // Monedas vendidas
     const ppc = parseFloat(botState.sppc || 0); // Precio promedio de venta
     const orderCountInCycle = parseInt(botState.socc || 0);
-    // Priorizamos el Stop de recompra (PC) si existe, sino el Target Price original
+    
+    // Priorizamos el Stop de recompra (PC) del Trailing si existe
     const targetPrice = parseFloat(botState.spc || botState.stprice || 0);
 
     // --- 1. LÓGICA DE RECUPERACIÓN (SALIDA A BUYING) ---
-    // Si ya tenemos una posición abierta (ac > 0) y el precio cae a zona de profit,
-    // saltamos a BUYING para cerrar. No necesitamos capital extra para cerrar un Short.
+    // Si el precio cae a zona de profit, no importa si no hay balance para DCA, ¡podemos cerrar!
     if (ac > 0 && targetPrice > 0 && currentPrice <= targetPrice) {
-        log(`🚀 [S-RECOVERY] ¡Precio en zona de ganancia (${currentPrice.toFixed(2)})! Saltando a BUYING para cerrar posición.`, 'success');
+        log(`🚀 [S-RECOVERY] Precio en zona de profit (${currentPrice.toFixed(2)}). Saltando a BUYING para cerrar.`, 'success');
         await updateBotState('BUYING', 'short'); 
         return;
     }
 
-    // --- 2. RECALCULAR REQUERIMIENTOS ---
-    // Recalculamos el costo del siguiente DCA basado en la config actual del usuario
+    // --- 2. RECALCULAR REQUERIMIENTOS Y PROYECCIÓN ---
     const recalculation = calculateShortTargets(
         ppc || currentPrice,
         config.short, 
@@ -49,33 +47,45 @@ async function run(dependencies) {
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
-    // Actualizamos los indicadores de la siguiente orden en el documento del usuario
-    await updateSStateData({ 
+    // Calculamos la cobertura visual para que el usuario vea en el mapa hasta dónde aguanta su Short
+    const coverageInfo = calculateShortCoverage(
+        currentSBalance,
+        botState.slep || currentPrice,
+        config.short.purchaseUsdt,
+        (config.short.price_var / 100),
+        parseFloat(config.short.size_var || 0),
+        orderCountInCycle,
+        (config.short.price_step_inc / 100)
+    );
+
+    // Actualizamos indicadores Short en el documento del usuario
+    await updateGeneralBotState({ 
         srca: requiredAmount, 
-        sncp: recalculation.nextCoveragePrice 
+        sncp: recalculation.nextCoveragePrice,
+        scoverage: coverageInfo.coveragePrice,
+        snorder: coverageInfo.numberOfOrders
     });
 
     // --- 3. RESET DE INDICADORES ---
-    // Si no hay posición abierta y el balance no alcanza ni para la primera orden, limpiamos métricas de cobertura
-    if (ac <= 0 && currentSBalance < requiredAmount && botState.snorder !== 0) {
-        log(`[S-RESET] Limpiando indicadores Short: Balance insuficiente para nueva orden.`, 'warning');
-        await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
+    if (ac <= 0 && currentSBalance < (config.short.purchaseUsdt || MIN_USDT_VALUE_FOR_BITMART)) {
+        if (botState.scoverage !== 0) {
+            log(`[S-RESET] Sin fondos para nueva apertura Short. Limpiando proyección.`, 'warning');
+            await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
+        }
         return; 
     }
 
     // --- 4. VERIFICACIÓN DE REANUDACIÓN ---
-    // Verificamos si el usuario ya tiene fondos suficientes en su "bolsa" del bot y en BitMart
     const canResume = currentSBalance >= requiredAmount && 
                       availableUSDT >= requiredAmount && 
                       requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
 
     if (canResume) {
-        log(`✅ [S-FUNDS] Capital restaurado (${availableUSDT.toFixed(2)} USDT). Reanudando búsqueda en SELLING...`, 'success');
+        log(`✅ [S-FUNDS] Capital recuperado (${availableUSDT.toFixed(2)} USDT). Reanudando DCA en SELLING...`, 'success');
         await updateBotState('SELLING', 'short');
     } else {
-        // Heartbeat para el Dashboard: Informa al usuario cuánto le falta para que el bot siga trabajando
         const missing = (requiredAmount - Math.min(availableUSDT, currentSBalance)).toFixed(2);
-        log(`[S-PAUSED] ⏸️ Esperando fondos | Necesario: ${requiredAmount.toFixed(2)} | Falta: ${missing} USDT | Orden: #${orderCountInCycle + 1}`, 'debug');
+        log(`[S-PAUSED] ⏸️ Esperando fondos | Necesario: ${requiredAmount.toFixed(2)} | Falta: ${missing} USDT | DCA: #${orderCountInCycle + 1}`, 'debug');
     }
 } 
 

@@ -209,9 +209,15 @@ const bitmartService = {
         });
     },
 
-    placeOrder: async (symbol, side, type, amount, price, creds) => {
+placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = null) => { // <--- Añadimos clientOrderId
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
+        
+        // Si enviamos un clientOrderId, lo adjuntamos al cuerpo de la petición
+        if (clientOrderId) {
+            body.clientOrderId = clientOrderId; 
+        }
+
         if (type.toLowerCase() === 'limit') {
             body.size = amount.toString();
             body.price = price.toString();
@@ -219,17 +225,15 @@ const bitmartService = {
             if (sideLower === 'buy') body.notional = amount.toString();
             else body.size = amount.toString();
         }
+        
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
         return res.data;
     },
 
-    // Gestión de WebSockets por usuario
-    initOrderWebSocket,
-    stopOrderWebSocket, 
-
-    getRecentOrders: async (symbol, creds) => bitmartService.getHistoryOrders({ symbol, limit: 100 }, creds),
-    placeMarketOrder: async ({ symbol, side, notional }, creds) => 
-        bitmartService.placeOrder(symbol, side, 'market', notional, null, creds)
-};
+    // Actualizamos también placeMarketOrder para que pueda recibir y pasar el ID
+    placeMarketOrder: async ({ symbol, side, notional, size, clientOrderId }, creds) => {
+        const amount = side.toLowerCase() === 'buy' ? notional : size;
+        return bitmartService.placeOrder(symbol, side, 'market', amount, null, creds, clientOrderId);
+    }
 
 module.exports = bitmartService;

@@ -1,13 +1,12 @@
-//BSB/server/autobotLogic.js
-
 /**
- * Archivo: BSB/server/autobotLogic.js
- * Versión: BSB 2026 - Motor de Ciclos Unificado (Multi-usuario) - REPARADO
+ * BSB/server/autobotLogic.js
+ * Motor de Ciclos Unificado - Refactorizado para Claridad y Rendimiento.
  */
 
 const Autobot = require('./models/Autobot');
 const bitmartService = require('./services/bitmartService');
-// Eliminamos las importaciones de setDependencies que causaban el error
+const orchestrator = require('./src/au/utils/cycleOrchestrator');
+
 const { runLongStrategy } = require('./src/longStrategy');
 const { runShortStrategy } = require('./src/shortStrategy');
 const { runAIStrategy } = require('./src/aiStrategy'); 
@@ -20,114 +19,18 @@ const {
     calculatePotentialProfit 
 } = require('./autobotCalculations');
 
-// Monitores de órdenes
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
 const { monitorAndConsolidateSell: monitorLongSell } = require('./src/au/states/long/LongSellConsolidator'); 
 const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
 const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/states/short/ShortBuyConsolidator');
 
-let io;
-let isProcessing = false; 
-let lastCyclePrice = 0; 
+let isProcessing = false;
 
 /**
- * CONFIGURACIÓN DE SOCKETS
- */
-function setIo(socketIo) { 
-    io = socketIo; 
-}
-
-function getLastPrice() { 
-    return lastCyclePrice; 
-}
-
-/**
- * SISTEMA DE LOGS PRIVADOS
- */
-function log(message, type = 'info', userId = null) {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`[${timestamp}] [${type.toUpperCase()}] ${userId ? `[User: ${userId}] ` : ''}${message}`);
-    if (io) {
-        if (userId) {
-            // REPARADO: Se eliminó el prefijo 'user_' para coincidir con el join de server.js
-            io.to(userId.toString()).emit('bot-log', { message, type });
-        } else {
-            io.emit('bot-log', { message, type });
-        }
-    }
-}
-
-/**
- * SINCRONIZACIÓN FRONTEND
- */
-async function syncFrontendState(currentPrice, botState, userId) {
-    if (io && botState && userId) {
-        const priceToEmit = parseFloat(currentPrice || lastCyclePrice || 0);
-        // REPARADO: Se eliminó el prefijo 'user_' para aislamiento correcto
-        io.to(userId.toString()).emit('bot-state-update', { 
-            ...botState, 
-            price: priceToEmit,
-            serverTime: Date.now() 
-        });
-    }
-}
-
-/**
- * PERSISTENCIA DE CAMBIOS (COMMIT)
- */
-async function commitChanges(userId, changeSet, currentPrice) {
-    if (!userId || Object.keys(changeSet).length === 0) return null;
-
-    try {
-        changeSet.lastUpdate = new Date();
-        
-        const updated = await Autobot.findOneAndUpdate(
-            { userId }, 
-            { $set: changeSet }, 
-            { new: true, lean: true }
-        );
-
-        if (updated) {
-            await syncFrontendState(currentPrice, updated, userId);
-            return updated;
-        }
-    } catch (error) {
-        console.error(`[DB-ERROR] User ${userId}: ${error.message}`);
-    }
-    return null;
-}
-
-/**
- * ACTUALIZACIÓN DE SALDOS REALES
- */
-async function slowBalanceCacheUpdate(userId) {
-    let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
-    try {
-        const balancesArray = await bitmartService.getBalance(userId);
-        const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-        const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-        availableUSDT = parseFloat(usdtBalance?.available || 0);
-        availableBTC = parseFloat(btcBalance?.available || 0);
-        apiSuccess = true;
-    } catch (error) {
-        const current = await Autobot.findOne({ userId }).lean();
-        availableUSDT = current?.lastAvailableUSDT || 0;
-        availableBTC = current?.lastAvailableBTC || 0;
-    }
-    
-    const updated = await Autobot.findOneAndUpdate({ userId }, {
-        $set: { lastAvailableUSDT: availableUSDT, lastAvailableBTC: availableBTC, lastBalanceCheck: new Date() }
-    }, { new: true, upsert: true, lean: true });
-
-    if (updated) await syncFrontendState(lastCyclePrice, updated, userId);
-    return apiSuccess;
-}
-
-/**
- * GESTIÓN DE CONFIGURACIÓN
+ * GESTIÓN DE CONFIGURACIÓN (Lógica Completa)
  */
 async function updateConfig(userId, newConfig) {
-    const currentPrice = lastCyclePrice;
+    const currentPrice = orchestrator.getLastPrice();
     const currentBot = await Autobot.findOne({ userId }).lean();
     if (!currentBot) return null;
 
@@ -157,13 +60,13 @@ async function updateConfig(userId, newConfig) {
         $set: { config: finalConfig, lastUpdate: new Date() } 
     }, { new: true }).lean();
 
-    log('✅ Configuración guardada correctamente.', 'success', userId);
-    if (bot) await syncFrontendState(currentPrice, bot, userId);
+    orchestrator.log('✅ Configuración guardada correctamente.', 'success', userId);
+    if (bot) await orchestrator.syncFrontendState(currentPrice, bot, userId);
     return bot;
 }
 
 /**
- * ENCENDIDO DE ESTRATEGIA
+ * ENCENDIDO DE ESTRATEGIA (Lógica Completa)
  */
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
@@ -183,13 +86,13 @@ async function startSide(userId, side, config) {
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
-    log(`🚀 Estrategia ${side.toUpperCase()} encendida.`, 'success', userId);
-    await slowBalanceCacheUpdate(userId);
+    orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} encendida.`, 'success', userId);
+    await orchestrator.slowBalanceCacheUpdate(userId);
     return bot;
 }
 
 /**
- * APAGADO DE ESTRATEGIA
+ * APAGADO DE ESTRATEGIA (Lógica Completa)
  */
 async function stopSide(userId, side) {
     const botState = await Autobot.findOne({ userId }).lean();
@@ -206,9 +109,9 @@ async function stopSide(userId, side) {
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
-    if (bot) await syncFrontendState(lastCyclePrice, bot, userId);
+    if (bot) await orchestrator.syncFrontendState(orchestrator.getLastPrice(), bot, userId);
 
-    log(`🛑 Estrategia ${side.toUpperCase()} apagada.`, 'warning', userId);
+    orchestrator.log(`🛑 Estrategia ${side.toUpperCase()} apagada.`, 'warning', userId);
     return bot;
 }
 
@@ -223,7 +126,7 @@ async function botCycle(priceFromWebSocket) {
         if (isNaN(currentPrice) || currentPrice <= 0) return;
         
         isProcessing = true; 
-        lastCyclePrice = currentPrice;
+        orchestrator.setLastPrice(currentPrice);
 
         const activeBots = await Autobot.find({
             $or: [
@@ -239,22 +142,41 @@ async function botCycle(priceFromWebSocket) {
 
             const dependencies = {
                 userId,
-                log: (msg, type) => log(msg, type, userId),
-                io, bitmartService, Autobot, currentPrice,
+                log: (msg, type) => orchestrator.log(msg, type, userId),
+                io: null, bitmartService, Autobot, currentPrice,
                 availableUSDT: botState.lastAvailableUSDT, 
                 availableBTC: botState.lastAvailableBTC,
                 botState, config: botState.config,
-                // REPARADO: Se inyectan los ciclos actuales para que saveExecutedOrder sea válido en la DB
                 lcycle: botState.lcycle || 0,
                 scycle: botState.scycle || 0,
                 aicycle: botState.aicycle || 0,
+
+                placeLongOrder: async (params, creds) => {
+                    return await bitmartService.placeMarketOrder({
+                        ...params,
+                        clientOrderId: `L_${botState.lcycle || 0}_${Date.now()}`
+                    }, creds);
+                },
+                placeShortOrder: async (params, creds) => {
+                    return await bitmartService.placeMarketOrder({
+                        ...params,
+                        clientOrderId: `S_${botState.scycle || 0}_${Date.now()}`
+                    }, creds);
+                },
+                placeAIOrder: async (params, creds) => {
+                    return await bitmartService.placeMarketOrder({
+                        ...params,
+                        clientOrderId: `AI_${botState.aicycle || 0}_${Date.now()}`
+                    }, creds);
+                },
+
                 updateBotState: async (val, strat) => { 
                     changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; 
                 },
                 updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
                 updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
                 updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
-                syncFrontendState: (price, state) => syncFrontendState(price, state, userId)
+                syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
             // MONITOR DE ÓRDENES
@@ -296,25 +218,30 @@ async function botCycle(priceFromWebSocket) {
                 }
             }
 
-            // EJECUCIÓN (Ahora pasamos las dependencias directamente)
+            // EJECUCIÓN
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
             await runAIStrategy(dependencies); 
 
             // GUARDADO POR USUARIO
-            await commitChanges(userId, changeSet, currentPrice);
+            await orchestrator.commitChanges(userId, changeSet, currentPrice);
         }
         
     } catch (error) {
-        log(`❌ Error crítico en el ciclo: ${error.message}`, 'error');
+        orchestrator.log(`❌ Error crítico en el ciclo: ${error.message}`, 'error');
     } finally {
         isProcessing = false; 
     }
 }
 
 module.exports = {
-    setIo, 
-    start: () => log('🚀 Autobot Iniciado', 'success'), 
-    stop: () => log('🛑 Autobot Detenido', 'warning'),
-    log, botCycle, slowBalanceCacheUpdate, syncFrontendState, getLastPrice, updateConfig, startSide, stopSide
+    setIo: orchestrator.setIo, 
+    start: () => orchestrator.log('🚀 Autobot Iniciado', 'success'), 
+    stop: () => orchestrator.log('🛑 Autobot Detenido', 'warning'),
+    log: orchestrator.log, 
+    botCycle, 
+    slowBalanceCacheUpdate: orchestrator.slowBalanceCacheUpdate, 
+    syncFrontendState: orchestrator.syncFrontendState, 
+    getLastPrice: orchestrator.getLastPrice, 
+    updateConfig, startSide, stopSide
 };

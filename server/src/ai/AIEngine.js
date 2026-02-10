@@ -1,10 +1,5 @@
 // BSB/server/src/au/engines/AIEngine.js
 
-/**
- * AIEngine.js - Predictive Execution Engine
- * Manages Trailing Stops and Signal Execution per User.
- */
-
 const Autobot = require('../../models/Autobot');
 const Order = require('../../models/Order'); 
 const MarketSignal = require('../../models/MarketSignal'); 
@@ -13,51 +8,52 @@ const StrategyManager = require('./StrategyManager');
 class AIEngine {
     constructor() {
         this.io = null;
-        this.TRAILING_PERCENT = 0.005; // 0.5% allowed pullback
-        this.EXCHANGE_FEE = 0.001;     // 0.1% estimated fee
+        this.TRAILING_PERCENT = 0.005; // 0.5% pullback
+        this.EXCHANGE_FEE = 0.001;     // 0.1% fee estimado
     }
 
     setIo(io) { this.io = io; }
 
     async analyze(price, userId) {
-        if (!userId) return;
+        if (!userId || !price) return;
 
         try {
+            // Usamos .lean() para rendimiento, pero recordamos que es solo lectura
             const bot = await Autobot.findOne({ userId }).lean();
-            if (!bot || bot.aistate !== 'RUNNING') return;
+            if (!bot || bot.aistate !== 'RUNNING' || !bot.config?.ai?.enabled) return;
 
             const lastEntryPrice = bot.ailastEntryPrice || 0;
             let highestPrice = bot.aihighestPrice || 0;
 
-            // 1. OPEN POSITION MANAGEMENT (Trailing Stop)
+            // 1. GESTIÓN DE POSICIÓN ABIERTA (Trailing Stop Virtual)
             if (lastEntryPrice > 0) {
-                // Update peak price if current price is higher
                 if (price > highestPrice) {
                     highestPrice = price;
                     await Autobot.updateOne({ userId }, { $set: { aihighestPrice: highestPrice } });
                 }
 
-                // Dynamic Stop Calculation
                 const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
                 
                 if (price <= stopPrice) {
-                    this._log(userId, `🎯 Trailing Stop triggered: Exit @ $${price}`, 0.95);
+                    this._log(userId, `🎯 AI: Trailing Stop activado. Salida @ $${price.toFixed(2)}`, 0.95);
                     await this._trade(userId, 'SELL', price, 1.0, bot);
                     return; 
                 }
             }
 
-            // 2. SEARCH FOR NEW ENTRIES (If no open position)
+            // 2. BÚSQUEDA DE ENTRADAS (Si no hay posición activa)
             if (lastEntryPrice === 0) {
-                const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).lean();
+                const SYMBOL = bot.config?.symbol || 'BTC_USDT';
+                const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
+                
                 if (marketData && marketData.history && marketData.history.length >= 50) {
                     await this._executeStrategy(userId, price, marketData.history, bot);
                 } else if (Math.random() > 0.98) {
-                    this._log(userId, "Calibrating AI sensors...", 0.1, true);
+                    this._log(userId, "Calibrando sensores neuronales...", 0.1, true);
                 }
             }
         } catch (error) {
-            console.error(`❌ AI Analyze Error (User: ${userId}):`, error);
+            console.error(`❌ AI Engine Error (User: ${userId}):`, error);
         }
     }
 
@@ -67,11 +63,11 @@ class AIEngine {
 
         const { confidence, message } = analysis;
         
-        // 85% confidence threshold to enter trade
+        // Umbral de confianza del 85% para entrar
         if (confidence >= 0.85) {
+            this._log(userId, `🚀 AI: Señal de alta confianza (${(confidence * 100).toFixed(0)}%). Entrando...`, confidence);
             await this._trade(userId, 'BUY', price, confidence, bot);
         } else if (Math.random() > 0.95) {
-            // Visual feedback for the user dashboard
             this._log(userId, message, confidence);
         }
     }
@@ -89,19 +85,18 @@ class AIEngine {
             if (side === 'BUY') {
                 nextEntryPrice = price;
                 nextHighestPrice = price;
-                newBalance -= fee; // Deduct fee on entry
+                newBalance = parseFloat((currentBalance - fee).toFixed(2));
             } else {
-                // PNL = ((Sell Price / Buy Price) - 1) * Capital - Fee
                 const profitFactor = (price / bot.ailastEntryPrice);
                 netProfit = (currentBalance * (profitFactor - 1)) - fee;
-                newBalance += netProfit;
+                newBalance = parseFloat((currentBalance + netProfit).toFixed(2));
             }
 
             const stopAtCycle = bot.config?.ai?.stopAtCycle || false;
             const shouldStop = side === 'SELL' && stopAtCycle;
             const newState = shouldStop ? 'STOPPED' : 'RUNNING';
 
-            // Atomic update for AI state
+            // Actualización Atómica
             await Autobot.updateOne({ userId }, { 
                 $set: {
                     aibalance: newBalance,
@@ -110,26 +105,25 @@ class AIEngine {
                     aistate: newState,
                     'config.ai.enabled': !shouldStop
                 },
-                $inc: { total_profit: side === 'SELL' ? netProfit : 0 }
+                $inc: { total_profit: side === 'SELL' ? parseFloat(netProfit.toFixed(4)) : 0 }
             });
 
-            // Log order for analytics
+            // Registro de Orden (Simulada/Analytics)
             await Order.create({
                 userId,
                 strategy: 'ai',
-                cycleIndex: bot.aicycle || 0,
                 executionMode: 'SIMULATED',
                 orderId: `ai_${userId.toString().slice(-4)}_${Date.now()}`,
                 side,
                 price,
-                size: currentBalance / price,
+                size: parseFloat((currentBalance / price).toFixed(6)),
                 notional: currentBalance,
                 status: 'FILLED'
             });
 
             this._broadcastStatus(userId, {
                 aistate: newState,
-                virtualBalance: newBalance.toFixed(2),
+                virtualBalance: newBalance,
                 lastEntryPrice: nextEntryPrice
             });
 

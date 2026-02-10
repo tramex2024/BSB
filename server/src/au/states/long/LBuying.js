@@ -9,7 +9,7 @@ const { monitorAndConsolidate } = require('./LongBuyConsolidator');
  */
 async function run(dependencies) {
     const {
-        userId, // ID puro inyectado (ej: 698808...)
+        userId,
         botState, 
         currentPrice, 
         config, 
@@ -17,7 +17,9 @@ async function run(dependencies) {
         updateBotState, 
         updateLStateData, 
         updateGeneralBotState,
-        availableUSDT 
+        availableUSDT,
+        // --- INYECCIÓN DE LA FUNCIÓN FIRMADA ---
+        placeLongOrder 
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -25,14 +27,13 @@ async function run(dependencies) {
 
     try {
         // 1. MONITOREO DE ÓRDENES PENDIENTES
-        // Se pasa el userId para que el monitor consulte solo las órdenes de este usuario
         const orderIsActive = await monitorAndConsolidate(
             botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId
         );
         
         if (orderIsActive) return; 
         
-        // 2. LOG DE SEGUIMIENTO (Aislamiento de logs verificado)
+        // 2. LOG DE SEGUIMIENTO
         if (parseFloat(botState.lppc || 0) > 0) {
             const nextPrice = parseFloat(botState.lncp || 0);
             const targetTP = parseFloat(botState.ltprice || 0);
@@ -52,11 +53,12 @@ async function run(dependencies) {
             const purchaseAmount = parseFloat(config.long.purchaseUsdt);
             
             if (availableUSDT >= purchaseAmount && botState.lbalance >= purchaseAmount) {
-                log("🚀 [L-BUY] Starting Long cycle. Placing first exponential buy...", 'info');
-                // IMPORTANTE: El manager ahora recibe el userId para firmar la orden correctamente
-                await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, userId); 
+                log("🚀 [L-BUY] Iniciando ciclo Long. Ejecutando primera orden firmada...", 'info');
+                
+                // --- CAMBIO: Pasamos placeLongOrder en lugar de userId ---
+                await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, placeLongOrder); 
             } else {
-                log(`⚠️ [L-BUY] Insufficient funds for opening.`, 'warning');
+                log(`⚠️ [L-BUY] Fondos insuficientes para apertura.`, 'warning');
                 await updateBotState('PAUSED', LSTATE); 
             }
             return; 
@@ -64,8 +66,7 @@ async function run(dependencies) {
 
         // 4. TRANSICIÓN A VENTA (Target Profit alcanzado)
         if (botState.ltprice > 0 && currentPrice >= botState.ltprice) {
-            log(`💰 [L-BUY] Target Profit (${botState.ltprice.toFixed(2)}) reached. Activating Trailing Stop...`, 'success');
-            
+            log(`💰 [L-BUY] Target Profit alcanzado. Pasando a SELLING (Trailing)...`, 'success');
             await updateGeneralBotState({ lpm: 0, lpc: 0 });
             await updateBotState('SELLING', LSTATE);
             return;
@@ -79,23 +80,23 @@ async function run(dependencies) {
         const isPriceLowEnough = nextPriceThreshold > 0 && currentPrice <= nextPriceThreshold;
 
         if (!botState.llastOrder && isPriceLowEnough) {
-            // Protección contra doble compra en el mismo precio
             if (lastExecutionPrice > 0 && currentPrice >= lastExecutionPrice) {
-                log(`[L-BUY] 🛑 Security Lock: Price not lower than last purchase.`, 'warning');
+                log(`[L-BUY] 🛑 Bloqueo de seguridad: El precio no es menor a la última compra.`, 'warning');
                 return; 
             }
 
             const hasFunds = (availableUSDT >= requiredAmount && botState.lbalance >= requiredAmount);
 
             if (hasFunds && requiredAmount > 0) {
-                log(`📉 [L-BUY] Triggering Exponential DCA: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
+                log(`📉 [L-BUY] Disparando DCA Exponencial: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
                 try {
-                    await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, userId);
+                    // --- CAMBIO: Pasamos placeLongOrder en lugar de userId ---
+                    await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, placeLongOrder);
                 } catch (error) {
-                    log(`❌ [L-BUY] DCA Execution Error: ${error.message}`, 'error');
+                    log(`❌ [L-BUY] Error en ejecución de DCA: ${error.message}`, 'error');
                 }
             } else {
-                log(`🚫 [L-BUY] Insufficient balance for exponential DCA.`, 'error');
+                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial.`, 'error');
                 await updateBotState('PAUSED', LSTATE);
             }
             return;
