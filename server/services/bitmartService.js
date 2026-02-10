@@ -36,23 +36,29 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         'X-BM-TIMESTAMP': timestamp,
     };
 
-    // --- BIFURCACIÓN DE SEGURIDAD ---
-    // Si la ruta NO incluye 'quotation', 'ticker' o 'klines' (endpoints públicos), 
-    // requerimos credenciales obligatoriamente.
     const isPublic = path.includes('/spot/v1/ticker') || 
                      path.includes('/spot/quotation/v3/klines') ||
                      path.includes('/spot/v1/symbols/details');
 
     if (!isPublic) {
         if (!userCreds || !userCreds.apiKey || !userCreds.secretKey) {
-            throw new Error(`${LOG_PREFIX} Operación rechazada: Este endpoint requiere API Keys vinculadas.`);
+            throw new Error(`${LOG_PREFIX} Operación rechazada: API Keys faltantes.`);
         }
 
         const { apiKey, secretKey, apiMemo } = userCreds;
         const bodyForSign = method === 'POST' ? JSON.stringify(body) : '';
         
-        // El formato de firma de BitMart: timestamp#memo#body
-        const message = `${timestamp}#${apiMemo || ''}#${bodyForSign}`;
+        // --- CORRECCIÓN DE FIRMA PARA V4 ---
+        let message = "";
+        if (path.includes('/v4/') || path.includes('/v2/')) {
+            // BitMart V4/V2 Auth Pattern
+            message = `${timestamp}#${apiMemo}#${bodyForSign}`;
+        } else {
+            // BitMart V1 Pattern
+            message = `${timestamp}#${apiMemo}#${method}${path}${bodyForSign}`;
+        }
+        
+        // IMPORTANTE: Si el memo está vacío, el string debe llevar el # igual: timestamp##body
         const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
         headers['X-BM-KEY'] = apiKey;

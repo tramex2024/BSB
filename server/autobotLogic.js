@@ -138,6 +138,13 @@ async function botCycle(priceFromWebSocket) {
 
         for (const botState of activeBots) {
             const userId = botState.userId;
+
+            // VALIDACIÓN PREVIA DE SEGURIDAD
+         if (!botState.lastAvailableUSDT && botState.lstate === 'RUNNING') {
+             // Si el bot está corriendo pero no tiene saldo registrado, 
+             // forzamos una actualización de balance antes de procesar estrategias.
+             await orchestrator.slowBalanceCacheUpdate(userId);
+         }
             const changeSet = {};
 
             const dependencies = {

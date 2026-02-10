@@ -241,27 +241,44 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// --- 11. Sincronización de Órdenes Abiertas cada 30 segundos
+// --- 11. Sincronización de Órdenes Abiertas cada 30 segundos ---
 setInterval(async () => {
     try {
-        const User = require('./models/User');
-        const { decrypt } = require('./utils/encryption');
-        
-        const users = await User.find({ bitmartApiKey: { $exists: true, $ne: "" } });
+        if (mongoose.connection.readyState !== 1) return; // Si no hay DB, no hacemos nada
+
+        // Buscamos usuarios que tengan al menos la API KEY y la SECRET
+        const users = await User.find({ 
+            bitmartApiKey: { $exists: true, $ne: "" },
+            bitmartSecretKeyEncrypted: { $exists: true, $ne: "" } 
+        });
         
         for (const user of users) {
-            const credentials = {
-                apiKey: decrypt(user.bitmartApiKey),
-                secretKey: decrypt(user.bitmartSecretKeyEncrypted),
-                memo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ""
-            };
-            // Llamamos al sincronizador
-            await orderSyncService.syncOpenOrders(user._id, credentials, io);
+            try {
+                // DESENCRIPTACIÓN SEGURA
+                const credentials = {
+                    apiKey: decrypt(user.bitmartApiKey),
+                    secretKey: decrypt(user.bitmartSecretKeyEncrypted),
+                    memo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ""
+                };
+
+                // Si por alguna razón el desencriptado falló y devolvió vacío
+                if (!credentials.apiKey || !credentials.secretKey) {
+                    console.warn(`[SYNC] ⚠️ Credenciales inválidas para el usuario: ${user._id}`);
+                    continue;
+                }
+
+                // Llamamos al sincronizador
+                await orderSyncService.syncOpenOrders(user._id, credentials, io);
+
+            } catch (userErr) {
+                // Este catch evita que el error de UN usuario detenga la sincronización de los DEMÁS
+                console.error(`❌ Error sincronizando órdenes para usuario ${user._id}:`, userErr.message);
+            }
         }
     } catch (err) {
-        console.error("❌ Error en el loop de sincronización:", err.message);
+        console.error("❌ Error CRÍTICO en el loop de sincronización general:", err.message);
     }
-}, 30000); // 30 segundos es un buen equilibrio para no saturar la API
+}, 30000);
 
 // --- 12. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO Y SALAS) ---
 io.on('connection', async (socket) => {
