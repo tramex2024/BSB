@@ -235,5 +235,6 @@ placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = nul
         const amount = side.toLowerCase() === 'buy' ? notional : size;
         return bitmartService.placeOrder(symbol, side, 'market', amount, null, creds, clientOrderId);
     }
+};
 
 module.exports = bitmartService;
