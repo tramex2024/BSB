@@ -1,8 +1,7 @@
-// BSB/server/src/au/states/long/LPaused.js
-
 /**
  * L-PAUSED STATE:
  * Gestiona la espera por fondos insuficientes y la recuperación del ciclo.
+ * Corregido: Sincronización de cobertura con precio de mercado real (2026).
  */
 
 const { calculateLongTargets, calculateLongCoverage } = require('../../../../autobotCalculations');
@@ -36,7 +35,7 @@ async function run(dependencies) {
     }
 
     // --- 2. RECALCULAR TARGETS Y COBERTURA ---
-    // Importante: Usamos la config actual por si el usuario la cambió mientras estaba en pausa
+    // Calculamos los objetivos basados en la configuración actual
     const recalculation = calculateLongTargets(
         ppc, 
         config.long, 
@@ -45,10 +44,14 @@ async function run(dependencies) {
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
-    // Actualizamos la cobertura visual para el Dashboard
+    /**
+     * ACTUALIZACIÓN CRÍTICA: 
+     * Usamos currentPrice SIEMPRE para la cobertura visual. 
+     * Esto elimina el valor "congelado" de 83k si el llep era antiguo.
+     */
     const coverageInfo = calculateLongCoverage(
         currentLBalance,
-        botState.llep || currentPrice,
+        currentPrice, // <--- Prioridad total al mercado actual
         config.long.purchaseUsdt,
         (config.long.price_var / 100),
         parseFloat(config.long.size_var || 0),
@@ -56,7 +59,7 @@ async function run(dependencies) {
         (config.long.price_step_inc / 100)
     );
 
-    // Sincronizamos indicadores para que el usuario vea cuánto le falta para reanudar
+    // Sincronizamos indicadores para que el usuario vea la realidad del mercado
     await updateGeneralBotState({ 
         lrca: requiredAmount, 
         lncp: recalculation.nextCoveragePrice,
@@ -64,27 +67,27 @@ async function run(dependencies) {
         lnorder: coverageInfo.numberOfOrders
     });
 
-    // --- 3. RESET DE INDICADORES (Si no hay posición activa) ---
+    // --- 3. RESET DE INDICADORES (Si no hay posición activa y no hay fondos) ---
     if (ac <= 0 && currentLBalance < (config.long.purchaseUsdt || MIN_USDT_VALUE_FOR_BITMART)) {
         if (botState.lcoverage !== 0) {
-            log(`[L-RESET] Sin fondos para nueva orden inicial. Limpiando proyección.`, 'warning');
+            log(`[L-RESET] Sin fondos suficientes para nueva orden. Limpiando proyección visual.`, 'warning');
             await updateGeneralBotState({ lcoverage: 0, lnorder: 0 }); 
         }
         return; 
     }
 
     // --- 4. VERIFICACIÓN DE REANUDACIÓN ---
-    // canResume ahora es más estricto: balance interno Y real en exchange deben cumplir
+    // Verificamos que tanto el balance asignado como el real en Bitmart permitan continuar
     const canResume = currentLBalance >= requiredAmount && 
                       availableUSDT >= requiredAmount && 
                       requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
 
     if (canResume) {
-        log(`✅ [L-FUNDS] Capital recuperado (${availableUSDT.toFixed(2)} USDT). Reanudando COMPRAS...`, 'success');
+        log(`✅ [L-FUNDS] Capital detectado (${availableUSDT.toFixed(2)} USDT). Reanudando COMPRAS...`, 'success');
         await updateBotState('BUYING', 'long');
     } else {
-        // Log informativo de bajo nivel (debug)
-        log(`[L-PAUSED] ⏸️ Esperando fondos | Disp: ${currentLBalance.toFixed(2)} | Reqd: ${requiredAmount.toFixed(2)} | Sig. Orden: #${orderCountInCycle + 1}`, 'debug');
+        // Log de bajo impacto para monitoreo en consola
+        console.log(`[User: ${userId}] [L-PAUSED] Esperando fondos: ${currentLBalance.toFixed(2)}/${requiredAmount.toFixed(2)} USDT`);
     }
 } 
 
