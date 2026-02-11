@@ -208,25 +208,61 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
     }
 }
 
-            // MATEMÁTICAS LONG
+            // --- MATEMÁTICAS LONG (Persistencia Corregida) ---
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
+                const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
+                const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
+                const activeLAC = changeSet.lac !== undefined ? changeSet.lac : (botState.lac || 0);
+
                 if (activeLPPC > 0) {
-                    const { coveragePrice, numberOfOrders } = calculateLongCoverage(botState.lbalance, currentPrice, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), changeSet.locc || botState.locc || 0, parseNumber(botState.config.long.price_step_inc));
-                    changeSet.lcoverage = coveragePrice;
-                    changeSet.lnorder = numberOfOrders;
-                    changeSet.lprofit = calculatePotentialProfit(activeLPPC, (changeSet.lac || botState.lac || 0), currentPrice, 'long');
+                    const longCov = calculateLongCoverage(
+                        activeLBalance, 
+                        currentPrice, 
+                        botState.config.long.purchaseUsdt, 
+                        parseNumber(botState.config.long.price_var) / 100, 
+                        parseNumber(botState.config.long.size_var), 
+                        activeLOCC, 
+                        parseNumber(botState.config.long.price_step_inc)
+                    );
+                    
+                    changeSet.lcoverage = longCov.coveragePrice;
+                    changeSet.lnorder = longCov.numberOfOrders;
+                    changeSet.lprofit = calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long');
+                } else {
+                    // Si no hay posición, forzamos el reset en la persistencia
+                    changeSet.lcoverage = 0;
+                    changeSet.lnorder = 0;
+                    changeSet.lprofit = 0;
                 }
             }
 
-            // MATEMÁTICAS SHORT
+            // --- MATEMÁTICAS SHORT (Persistencia Corregida) ---
             if (botState.sstate !== 'STOPPED' && botState.config.short) {
                 const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
+                const activeSBalance = changeSet.sbalance !== undefined ? changeSet.sbalance : (botState.sbalance || 0);
+                const activeSOCC = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
+                const activeSAC = changeSet.sac !== undefined ? changeSet.sac : (botState.sac || 0);
+
                 if (activeSPPC > 0) {
-                    const { coveragePrice, numberOfOrders } = calculateShortCoverage(botState.sbalance, currentPrice, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), changeSet.socc || botState.socc || 0, parseNumber(botState.config.short.price_step_inc));
-                    changeSet.scoverage = coveragePrice;
-                    changeSet.snorder = numberOfOrders;
-                    changeSet.sprofit = calculatePotentialProfit(activeSPPC, (changeSet.sac || botState.sac || 0), currentPrice, 'short');
+                    const shortCov = calculateShortCoverage(
+                        activeSBalance, 
+                        currentPrice, 
+                        botState.config.short.purchaseUsdt, 
+                        parseNumber(botState.config.short.price_var) / 100, 
+                        parseNumber(botState.config.short.size_var), 
+                        activeSOCC, 
+                        parseNumber(botState.config.short.price_step_inc)
+                    );
+
+                    changeSet.scoverage = shortCov.coveragePrice;
+                    changeSet.snorder = shortCov.numberOfOrders;
+                    changeSet.sprofit = calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short');
+                } else {
+                    // Si no hay posición, forzamos el reset en la persistencia
+                    changeSet.scoverage = 0;
+                    changeSet.snorder = 0;
+                    changeSet.sprofit = 0;
                 }
             }
 
