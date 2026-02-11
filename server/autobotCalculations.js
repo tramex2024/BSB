@@ -83,15 +83,16 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // CÁLCULO PROYECTIVO: Actualizamos el precio de la cobertura primero.
-        // Usamos (orderCount) o (orderCount - 1) según tu preferencia de step.
-        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
-        simulationPrice = simulationPrice * (1 - currentStep);
-
-        // Si no hay balance, dejamos de contar órdenes, pero el precio ya se actualizó arriba
+        // VALIDACIÓN REAL: Si no hay saldo para pagar la SIGUIENTE, nos detenemos YA.
+        // Esto garantiza que si numberOfExtraOrders es 0, el precio sea currentMarketPrice.
         if (remainingBalance < nextOrderAmount) break;
         
+        // Si llegamos aquí, es porque SÍ hay saldo para esta cobertura.
         remainingBalance -= nextOrderAmount;
+        
+        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
+        simulationPrice = simulationPrice * (1 - currentStep);
+        
         orderCount++;
         numberOfExtraOrders++;
     }
@@ -134,13 +135,14 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // CÁLCULO PROYECTIVO: Actualizamos el precio hacia arriba (Short)
-        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
-        simulationPrice = simulationPrice * (1 + currentStep);
-
+        // VALIDACIÓN REAL
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
+        
+        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
+        simulationPrice = simulationPrice * (1 + currentStep);
+        
         orderCount++;
         numberOfExtraOrders++;
     }
