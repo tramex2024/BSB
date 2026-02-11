@@ -76,25 +76,32 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
  */
 function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
-    let simulationPrice = parseNumber(currentMarketPrice); // <--- Valor inicial: Precio actual
+    let currentPrice = parseNumber(currentMarketPrice); 
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // Si el balance es menor al mínimo para operar (ej. 5 USDT), 
-    // ni siquiera entramos al while y devolvemos el simulationPrice (Precio Actual).
-    while (numberOfExtraOrders < 50 && remainingBalance >= getExponentialAmount(baseAmount, orderCount, sizeVar)) {
+    // IMPORTANTE: Si el balance no alcanza para NINGUNA orden extra, 
+    // el coveragePrice devuelto será exactamente currentMarketPrice.
+    let coveragePrice = currentPrice; 
+
+    while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
+        
+        // Si no hay dinero para la siguiente cobertura real, salimos.
+        // El coveragePrice se queda con el valor de la última orden que SÍ se pudo pagar.
+        if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
         const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
-        simulationPrice = simulationPrice * (1 - currentStep);
+        // Solo actualizamos el precio de cobertura si el balance alcanzó para pagarla
+        coveragePrice = coveragePrice * (1 - currentStep);
         
         orderCount++;
         numberOfExtraOrders++;
     }
 
-    return { coveragePrice: simulationPrice, numberOfOrders: numberOfExtraOrders };
+    return { coveragePrice: coveragePrice, numberOfOrders: numberOfExtraOrders };
 }
 
 // ==========================================
