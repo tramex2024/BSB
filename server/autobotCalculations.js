@@ -76,18 +76,15 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
  */
 function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
-    let simulationPrice = parseNumber(currentMarketPrice); 
+    let simulationPrice = parseNumber(currentMarketPrice); // <--- Valor inicial: Precio actual
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    while (numberOfExtraOrders < 50) {
+    // Si el balance es menor al mínimo para operar (ej. 5 USDT), 
+    // ni siquiera entramos al while y devolvemos el simulationPrice (Precio Actual).
+    while (numberOfExtraOrders < 50 && remainingBalance >= getExponentialAmount(baseAmount, orderCount, sizeVar)) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // VALIDACIÓN REAL: Si no hay saldo para pagar la SIGUIENTE, nos detenemos YA.
-        // Esto garantiza que si numberOfExtraOrders es 0, el precio sea currentMarketPrice.
-        if (remainingBalance < nextOrderAmount) break;
-        
-        // Si llegamos aquí, es porque SÍ hay saldo para esta cobertura.
         remainingBalance -= nextOrderAmount;
         
         const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
