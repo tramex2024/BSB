@@ -2,7 +2,7 @@
  * BSB/server/autobotCalculations.js
  * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
  * BASADO EN LÓGICA EXPONENCIAL DINÁMICA 2026.
- * * ATENCIÓN: No modificar operadores matemáticos.
+ * * ATENCIÓN: No modificar operadores matemáticos fundamentales.
  */
 
 const parseNumber = (val) => {
@@ -16,13 +16,12 @@ const parseNumber = (val) => {
  */
 function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     const base = parseNumber(baseAmount);
-    const count = parseNumber(orderCount); // n-ésima cobertura
+    const count = parseNumber(orderCount); 
     const sVar = parseNumber(sizeVar);
 
     if (base <= 0) return 0;
     const multiplier = 1 + (sVar / 100);
     
-    // Si count es 0 (primera orden), devuelve base. 
     return base * Math.pow(multiplier, count);
 }
 
@@ -43,19 +42,17 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
     const p = parseNumber(entryPrice);
     const netProfitDec = parseNumber(targetProfitNet) / 100;
     
-    // Markup = Profit deseado + Comisiones (Entrada + Salida)
     const totalMarkup = netProfitDec + (feeRate * 2);
 
     return side === 'long' ? p * (1 + totalMarkup) : p * (1 - totalMarkup);
 }
 
 // ==========================================
-//               LÓGICA PARA LONG
+//                LÓGICA PARA LONG
 // ==========================================
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
-    // Añadimos valores por defecto para evitar NaN
     const priceVarDec = parseNumber(config?.price_var || 0) / 100;
     const priceVarInc = parseNumber(config?.price_step_inc || 0);
     const profitPercent = parseNumber(config?.profit_percent || config?.trigger || 0);
@@ -63,8 +60,6 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const purchaseUsdt = parseNumber(config?.purchaseUsdt || 0);
     
     const feeRate = 0.001;
-
-    // Usamos currentOrderCount para la siguiente cobertura
     const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
 
     return {
@@ -74,6 +69,11 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
     };
 }
 
+/**
+ * Calcula la cobertura Long de forma PROYECTIVA.
+ * Actualiza el precio de simulación antes de validar el balance para asegurar 
+ * que el dato cambie con el tick del mercado.
+ */
 function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let simulationPrice = parseNumber(currentMarketPrice); 
@@ -83,13 +83,15 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // Si no alcanza para la siguiente orden, salimos del bucle.
-        // Si es la primera iteración, simulationPrice conservará el currentMarketPrice.
+        // CÁLCULO PROYECTIVO: Actualizamos el precio de la cobertura primero.
+        // Usamos (orderCount) o (orderCount - 1) según tu preferencia de step.
+        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
+        simulationPrice = simulationPrice * (1 - currentStep);
+
+        // Si no hay balance, dejamos de contar órdenes, pero el precio ya se actualizó arriba
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
-        const currentStep = getExponentialPriceStep(priceVarDec, orderCount - 1, priceVarIncrement);
-        simulationPrice = simulationPrice * (1 - currentStep);
         orderCount++;
         numberOfExtraOrders++;
     }
@@ -98,16 +100,15 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
 }
 
 // ==========================================
-//               LÓGICA PARA SHORT
+//                LÓGICA PARA SHORT
 // ==========================================
 
 function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
-    const conf = config || {}; // Protección si config llega null
+    const conf = config || {}; 
     
     const priceVarDec = parseNumber(conf.price_var) / 100;
     const priceVarInc = parseNumber(conf.price_step_inc || 0);
-    // Busca ambos nombres por si acaso
     const profitPercent = parseNumber(conf.profit_percent || conf.trigger || 0);
     const sizeVar = parseNumber(conf.size_var || 0);
     const purchaseUsdt = parseNumber(conf.purchaseUsdt || 0);
@@ -121,6 +122,9 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     };
 }
 
+/**
+ * Calcula la cobertura Short de forma PROYECTIVA.
+ */
 function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let simulationPrice = parseNumber(currentMarketPrice); 
@@ -130,13 +134,13 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // Si no alcanza para la siguiente orden, salimos del bucle.
-        // Si es la primera iteración, simulationPrice conservará el currentMarketPrice.
+        // CÁLCULO PROYECTIVO: Actualizamos el precio hacia arriba (Short)
+        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
+        simulationPrice = simulationPrice * (1 + currentStep);
+
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
-        const currentStep = getExponentialPriceStep(priceVarDec, orderCount - 1, priceVarIncrement);
-        simulationPrice = simulationPrice * (1 + currentStep);
         orderCount++;
         numberOfExtraOrders++;
     }
@@ -145,7 +149,7 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
 }
 
 // ==========================================
-//               PNL Y UTILIDADES
+//                PNL Y UTILIDADES
 // ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {

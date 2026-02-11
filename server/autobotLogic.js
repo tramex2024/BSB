@@ -27,7 +27,7 @@ const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/sta
 let isProcessing = false;
 
 /**
- * GESTIÓN DE CONFIGURACIÓN (Lógica Completa)
+ * GESTIÓN DE CONFIGURACIÓN
  */
 async function updateConfig(userId, newConfig) {
     const currentPrice = orchestrator.getLastPrice();
@@ -66,7 +66,7 @@ async function updateConfig(userId, newConfig) {
 }
 
 /**
- * ENCENDIDO DE ESTRATEGIA (Lógica Completa)
+ * ENCENDIDO DE ESTRATEGIA
  */
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
@@ -92,7 +92,7 @@ async function startSide(userId, side, config) {
 }
 
 /**
- * APAGADO DE ESTRATEGIA (Lógica Completa)
+ * APAGADO DE ESTRATEGIA
  */
 async function stopSide(userId, side) {
     const botState = await Autobot.findOne({ userId }).lean();
@@ -138,14 +138,12 @@ async function botCycle(priceFromWebSocket) {
 
         for (const botState of activeBots) {
             const userId = botState.userId;
+            const changeSet = {};
 
             // VALIDACIÓN PREVIA DE SEGURIDAD
-         if (!botState.lastAvailableUSDT && botState.lstate === 'RUNNING') {
-             // Si el bot está corriendo pero no tiene saldo registrado, 
-             // forzamos una actualización de balance antes de procesar estrategias.
-             await orchestrator.slowBalanceCacheUpdate(userId);
-         }
-            const changeSet = {};
+            if (!botState.lastAvailableUSDT && botState.lstate === 'RUNNING') {
+                await orchestrator.slowBalanceCacheUpdate(userId);
+            }
 
             const dependencies = {
                 userId,
@@ -186,82 +184,78 @@ async function botCycle(priceFromWebSocket) {
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-           // --- MONITOR DE ÓRDENES LONG ---
-if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-    if (botState.llastOrder.side === 'buy') {
-        // Agregamos userId al final
-        await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-    } else {
-        // Agregamos userId al final
-        await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-    }
-}
+            // --- MONITOR DE ÓRDENES ---
+            if (botState.llastOrder && botState.lstate !== 'STOPPED') {
+                if (botState.llastOrder.side === 'buy') {
+                    await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+                } else {
+                    await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+                }
+            }
 
-// --- MONITOR DE ÓRDENES SHORT ---
-if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-    if (botState.slastOrder.side === 'sell') { 
-        // Agregamos userId al final
-        await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-    } else {
-        // Agregamos userId al final
-        await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-    }
-}
+            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+                if (botState.slastOrder.side === 'sell') { 
+                    await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+                } else {
+                    await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
+                }
+            }
 
-      // --- MATEMÁTICAS LONG (Sincronización Total con Precio Real) ---
-if (botState.lstate !== 'STOPPED' && botState.config.long) {
-    const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
-    const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
-    const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
-    const activeLAC = changeSet.lac !== undefined ? changeSet.lac : (botState.lac || 0);
+            // --- MATEMÁTICAS LONG ---
+            if (botState.lstate !== 'STOPPED' && botState.config.long) {
+                const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
+                const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
 
-    // Eliminamos el "if (activeLPPC > 0)" para que el coverage se calcule siempre
-    const longCov = calculateLongCoverage(
-        activeLBalance, 
-        currentPrice, 
-        botState.config.long.purchaseUsdt, 
-        parseNumber(botState.config.long.price_var) / 100, 
-        parseNumber(botState.config.long.size_var), 
-        activeLOCC, 
-        parseNumber(botState.config.long.price_step_inc)
-    );
-    
-    changeSet.lcoverage = longCov.coveragePrice;
-    changeSet.lnorder = longCov.numberOfOrders;
-    
-    // El PNL sí depende de tener una posición activa
-    changeSet.lprofit = activeLPPC > 0 ? calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long') : 0;
-}
+                const longCov = calculateLongCoverage(
+                    activeLBalance, 
+                    currentPrice, 
+                    botState.config.long.purchaseUsdt, 
+                    parseNumber(botState.config.long.price_var) / 100, 
+                    parseNumber(botState.config.long.size_var), 
+                    activeLOCC, 
+                    parseNumber(botState.config.long.price_step_inc)
+                );
+                
+                changeSet.lcoverage = longCov.coveragePrice;
+                changeSet.lnorder = longCov.numberOfOrders;
+                
+                const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
+                const activeLAC = changeSet.lac !== undefined ? changeSet.lac : (botState.lac || 0);
+                changeSet.lprofit = activeLPPC > 0 ? calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long') : 0;
+            }
 
-// --- MATEMÁTICAS SHORT (Sincronización Total con Precio Real) ---
-if (botState.sstate !== 'STOPPED' && botState.config.short) {
-    const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
-    const activeSBalance = changeSet.sbalance !== undefined ? changeSet.sbalance : (botState.sbalance || 0);
-    const activeSOCC = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
-    const activeSAC = changeSet.sac !== undefined ? changeSet.sac : (botState.sac || 0);
+            // --- MATEMÁTICAS SHORT ---
+            if (botState.sstate !== 'STOPPED' && botState.config.short) {
+                const activeSBalance = changeSet.sbalance !== undefined ? changeSet.sbalance : (botState.sbalance || 0);
+                const activeSOCC = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
 
-    // Eliminamos el "if (activeSPPC > 0)"
-    const shortCov = calculateShortCoverage(
-        activeSBalance, 
-        currentPrice, 
-        botState.config.short.purchaseUsdt, 
-        parseNumber(botState.config.short.price_var) / 100, 
-        parseNumber(botState.config.short.size_var), 
-        activeSOCC, 
-        parseNumber(botState.config.short.price_step_inc)
-    );
+                const shortCov = calculateShortCoverage(
+                    activeSBalance, 
+                    currentPrice, 
+                    botState.config.short.purchaseUsdt, 
+                    parseNumber(botState.config.short.price_var) / 100, 
+                    parseNumber(botState.config.short.size_var), 
+                    activeSOCC, 
+                    parseNumber(botState.config.short.price_step_inc)
+                );
 
-    changeSet.scoverage = shortCov.coveragePrice;
-    changeSet.snorder = shortCov.numberOfOrders;
-    
-    // El PNL sí depende de tener una posición activa
-    changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
-}
+                changeSet.scoverage = shortCov.coveragePrice;
+                changeSet.snorder = shortCov.numberOfOrders;
+                
+                const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
+                const activeSAC = changeSet.sac !== undefined ? changeSet.sac : (botState.sac || 0);
+                changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
+            }
 
-            // EJECUCIÓN
+            // --- EJECUCIÓN DE ESTRATEGIAS ---
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
             await runAIStrategy(dependencies); 
+
+            // --- FORZADO DE ACTUALIZACIÓN ---
+            // Añadimos lastUpdate al changeSet para asegurar que el orquestador
+            // siempre detecte un cambio y emita el tick al frontend y DB.
+            changeSet.lastUpdate = new Date();
 
             // GUARDADO POR USUARIO
             await orchestrator.commitChanges(userId, changeSet, currentPrice);
