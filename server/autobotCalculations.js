@@ -50,7 +50,7 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
 }
 
 // ==========================================
-//              LÓGICA PARA LONG
+//               LÓGICA PARA LONG
 // ==========================================
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
@@ -98,7 +98,7 @@ function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVar
 }
 
 // ==========================================
-//              LÓGICA PARA SHORT
+//               LÓGICA PARA SHORT
 // ==========================================
 
 function calculateShortTargets(lastPrice, config, currentOrderCount) {
@@ -145,7 +145,7 @@ function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVa
 }
 
 // ==========================================
-//              PNL Y UTILIDADES
+//               PNL Y UTILIDADES
 // ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
