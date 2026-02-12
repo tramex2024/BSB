@@ -87,7 +87,9 @@ async function startSide(userId, side, config) {
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
     orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} encendida.`, 'success', userId);
-    await orchestrator.slowBalanceCacheUpdate(userId);
+    
+    // Sincronización inmediata al encender (Balance y Órdenes 'ex')
+    await orchestrator.slowBalanceCacheUpdate(userId); 
     return bot;
 }
 
@@ -253,8 +255,6 @@ async function botCycle(priceFromWebSocket) {
             await runAIStrategy(dependencies); 
 
             // --- FORZADO DE ACTUALIZACIÓN ---
-            // Añadimos lastUpdate al changeSet para asegurar que el orquestador
-            // siempre detecte un cambio y emita el tick al frontend y DB.
             changeSet.lastUpdate = new Date();
 
             // GUARDADO POR USUARIO
@@ -267,6 +267,28 @@ async function botCycle(priceFromWebSocket) {
         isProcessing = false; 
     }
 }
+
+/**
+ * MOTOR DE SINCRONIZACIÓN LENTA (Background Sync)
+ * Actualiza balances y órdenes de exchange para TODOS los usuarios.
+ */
+function startGlobalSync() {
+    // Ejecutar cada 30 segundos
+    setInterval(async () => {
+        try {
+            const allBots = await Autobot.find({}).lean();
+            for (const bot of allBots) {
+                // Sincroniza saldo y órdenes 'ex' en la colección Order
+                await orchestrator.slowBalanceCacheUpdate(bot.userId);
+            }
+        } catch (err) {
+            console.error("[GLOBAL-SYNC-ERROR]:", err.message);
+        }
+    }, 30000); 
+}
+
+// Arrancamos el sincronizador global al cargar el módulo
+startGlobalSync();
 
 module.exports = {
     setIo: orchestrator.setIo, 

@@ -1,21 +1,28 @@
-//BSB/server/src/au/states/short/SRunning.js
-
 /**
  * S-RUNNING STATE (SHORT):
  * Monitorea señales de mercado para abrir una posición en corto.
+ * Corregido: Sincronización de proyección visual en tiempo real (2026).
  */
 
 const MarketSignal = require('../../../../models/MarketSignal');
+const { calculateShortCoverage } = require('../../../../autobotCalculations');
 
 async function run(dependencies) {
     // 1. Contexto inyectado
-    const { userId, botState, log, updateBotState, currentPrice } = dependencies;
+    const { 
+        userId, 
+        botState, 
+        log, 
+        updateBotState, 
+        currentPrice, 
+        updateGeneralBotState,
+        config 
+    } = dependencies;
     
     // 0. Bloqueo de seguridad: Precio inválido
     if (!currentPrice || currentPrice <= 0) return; 
 
     // 1. VERIFICACIÓN DE POSICIÓN HUÉRFANA
-    // Si ya hay activos en 'sac', debemos estar gestionando la venta, no buscando señal.
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
@@ -24,6 +31,24 @@ async function run(dependencies) {
         return; 
     }
 
+    // --- NUEVO: ACTUALIZACIÓN DE PROYECCIÓN VISUAL SHORT ---
+    // Proyectamos el techo de protección (scoverage) basado en el precio actual
+    // mientras esperamos la señal de entrada.
+    const coverageInfo = calculateShortCoverage(
+        parseFloat(botState.sbalance || 0),
+        currentPrice, // Base real de mercado para el Short
+        config.short.purchaseUsdt,
+        (config.short.price_var / 100),
+        parseFloat(config.short.size_var || 0),
+        0, // Orden inicial
+        (config.short.price_step_inc / 100)
+    );
+
+    await updateGeneralBotState({ 
+        scoverage: coverageInfo.coveragePrice,
+        snorder: coverageInfo.numberOfOrders
+    });
+
     try {
         // 2. CONSULTA DE SEÑALES GLOBALES
         const SYMBOL = botState.config?.symbol || 'BTC_USDT';
@@ -31,7 +56,7 @@ async function run(dependencies) {
 
         if (!globalSignal) return;
 
-        // Log de monitoreo (Heartbeat) filtrado por userId
+        // Log de monitoreo (Heartbeat)
         log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
 
         // 3. VALIDACIÓN DE OBSOLESCENCIA
@@ -42,7 +67,6 @@ async function run(dependencies) {
         }
 
         // 4. LÓGICA DE ACTIVACIÓN
-        // En Short, entramos cuando la señal es 'SELL' (el mercado está arriba y esperamos que baje)
         if (globalSignal.signal === 'SELL') { 
             log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
             

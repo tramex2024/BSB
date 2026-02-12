@@ -1,23 +1,47 @@
 const MarketSignal = require('../../../../models/MarketSignal');
+const { calculateLongCoverage } = require('../../../../autobotCalculations');
 
 /**
  * RUNNING STATE (LONG):
  * Estado de espera activa. Busca señales de compra para iniciar el ciclo.
  */
 async function run(dependencies) {
-    // 1. Extraemos userId de las dependencias inyectadas por autobotLogic
-    // IMPORTANTE: userId ya viene como el String/ID puro (ej: 698808...)
-    const { userId, botState, log, updateBotState } = dependencies;
+    const { 
+        userId, 
+        botState, 
+        log, 
+        updateBotState, 
+        currentPrice, 
+        updateGeneralBotState,
+        config 
+    } = dependencies;
     
-    // 2. SECURITY CHECK (Flat Architecture)
-    // Si ya hay balance (lac > 0), el bot debe estar gestionando la posición.
+    // 1. SECURITY CHECK (Flat Architecture)
     if (parseFloat(botState.lac || 0) > 0) {
         log("[L-RUNNING] 🛡️ Open position detected (lac > 0). Correcting state to BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
         return; 
     }
 
-    // 3. GLOBAL SIGNAL QUERY
+    // --- NUEVO: ACTUALIZACIÓN DE PROYECCIÓN VISUAL ---
+    // Mientras esperamos la señal, actualizamos el Dashboard con lo que pasaría
+    // si entráramos en este preciso segundo.
+    const coverageInfo = calculateLongCoverage(
+        parseFloat(botState.lbalance || 0),
+        currentPrice, // Base real de mercado
+        config.long.purchaseUsdt,
+        (config.long.price_var / 100),
+        parseFloat(config.long.size_var || 0),
+        0, // Empezamos desde la orden 0
+        (config.long.price_step_inc / 100)
+    );
+
+    await updateGeneralBotState({ 
+        lcoverage: coverageInfo.coveragePrice,
+        lnorder: coverageInfo.numberOfOrders
+    });
+
+    // 2. GLOBAL SIGNAL QUERY
     try {
         const currentSymbol = botState.config?.symbol || 'BTC_USDT';
         const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
@@ -27,10 +51,8 @@ async function run(dependencies) {
             return;
         }
 
-        // 4. FRESHNESS VALIDATION
+        // 3. FRESHNESS VALIDATION
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
-
-        // REPARADO: El log inyectado ya emite a la sala del userId sin prefijos.
         log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
 
         if (!signalTime) {
@@ -45,18 +67,14 @@ async function run(dependencies) {
             return;
         }
 
-        // 5. ACTIVATION LOGIC (Market Entry)
-        // Solo si la señal es BUY, cambiamos el estado para que LBuying tome el control.
+        // 4. ACTIVATION LOGIC (Market Entry)
         if (globalSignal.signal === 'BUY') { 
             log(`🚀 [L-SIGNAL] BUY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)} | Entering Market...`, 'success');
-            
-            // Transición a BUYING: LBuying.js ejecutará la primera orden exponencial.
             await updateBotState('BUYING', 'long'); 
             return; 
         }
 
     } catch (error) {
-        // El aislamiento asegura que este error no tire el bot de otros usuarios
         log(`[L-RUNNING] ❌ Error reading signals: ${error.message}`, 'error');
     }
 }

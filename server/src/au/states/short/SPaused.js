@@ -1,9 +1,7 @@
-// BSB/server/src/au/states/short/SPaused.js
-
 /**
  * S-PAUSED STATE (SHORT):
  * Gestiona la espera cuando el capital es insuficiente para el siguiente DCA.
- * Monitoriza si el precio entra en zona de ganancia para cerrar la posición actual.
+ * Corregido: Sincronización de cobertura con precio de mercado real (2026).
  */
 
 const { calculateShortTargets, calculateShortCoverage } = require('../../../../autobotCalculations');
@@ -23,7 +21,7 @@ async function run(dependencies) {
     const availableUSDT = parseFloat(realUSDT || 0);
     const currentSBalance = parseFloat(botState.sbalance || 0);
 
-    const ac = parseFloat(botState.sac || 0);  // Monedas vendidas
+    const ac = parseFloat(botState.sac || 0);  // Monedas vendidas (posición Short abierta)
     const ppc = parseFloat(botState.sppc || 0); // Precio promedio de venta
     const orderCountInCycle = parseInt(botState.socc || 0);
     
@@ -31,7 +29,7 @@ async function run(dependencies) {
     const targetPrice = parseFloat(botState.spc || botState.stprice || 0);
 
     // --- 1. LÓGICA DE RECUPERACIÓN (SALIDA A BUYING) ---
-    // Si el precio cae a zona de profit, no importa si no hay balance para DCA, ¡podemos cerrar!
+    // Si el precio cae a zona de profit, podemos cerrar independientemente del balance
     if (ac > 0 && targetPrice > 0 && currentPrice <= targetPrice) {
         log(`🚀 [S-RECOVERY] Precio en zona de profit (${currentPrice.toFixed(2)}). Saltando a BUYING para cerrar.`, 'success');
         await updateBotState('BUYING', 'short'); 
@@ -47,10 +45,15 @@ async function run(dependencies) {
 
     const requiredAmount = recalculation.requiredCoverageAmount;
 
-    // Calculamos la cobertura visual para que el usuario vea en el mapa hasta dónde aguanta su Short
+    /**
+     * ACTUALIZACIÓN CRÍTICA:
+     * Usamos currentPrice SIEMPRE para la cobertura visual.
+     * En Short, esto proyecta hasta qué precio de SUBIDA aguanta la posición 
+     * tomando como base el precio actual del mercado.
+     */
     const coverageInfo = calculateShortCoverage(
         currentSBalance,
-        botState.slep || currentPrice,
+        currentPrice, // <--- Eliminamos botState.slep para asegurar tiempo real
         config.short.purchaseUsdt,
         (config.short.price_var / 100),
         parseFloat(config.short.size_var || 0),
@@ -58,7 +61,7 @@ async function run(dependencies) {
         (config.short.price_step_inc / 100)
     );
 
-    // Actualizamos indicadores Short en el documento del usuario
+    // Actualizamos indicadores Short para limpiar valores basura de la DB
     await updateGeneralBotState({ 
         srca: requiredAmount, 
         sncp: recalculation.nextCoveragePrice,
@@ -66,10 +69,10 @@ async function run(dependencies) {
         snorder: coverageInfo.numberOfOrders
     });
 
-    // --- 3. RESET DE INDICADORES ---
+    // --- 3. RESET DE INDICADORES (Si no hay posición y no hay fondos) ---
     if (ac <= 0 && currentSBalance < (config.short.purchaseUsdt || MIN_USDT_VALUE_FOR_BITMART)) {
         if (botState.scoverage !== 0) {
-            log(`[S-RESET] Sin fondos para nueva apertura Short. Limpiando proyección.`, 'warning');
+            log(`[S-RESET] Sin fondos para nueva apertura Short. Limpiando proyección visual.`, 'warning');
             await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
         }
         return; 
@@ -85,7 +88,8 @@ async function run(dependencies) {
         await updateBotState('SELLING', 'short');
     } else {
         const missing = (requiredAmount - Math.min(availableUSDT, currentSBalance)).toFixed(2);
-        log(`[S-PAUSED] ⏸️ Esperando fondos | Necesario: ${requiredAmount.toFixed(2)} | Falta: ${missing} USDT | DCA: #${orderCountInCycle + 1}`, 'debug');
+        // Log informativo de bajo nivel
+        console.log(`[User: ${userId}] [S-PAUSED] Esperando fondos: Faltan ${missing} USDT`);
     }
 } 
 

@@ -1,22 +1,34 @@
 /**
  * BSB/server/src/au/utils/cycleOrchestrator.js
- * Herramientas de soporte para el ciclo de ejecución multi-usuario.
+ * Herramientas de soporte para el ciclo de ejecución multi-usuario y sincronización de Exchange.
  */
 
 const Autobot = require('../../../models/Autobot');
+const Order = require('../../../models/Order'); // Modelo para el espejo de órdenes
 const bitmartService = require('../../../services/bitmartService');
 
 let io;
 let lastCyclePrice = 0;
 
 const orchestrator = {
+    /**
+     * Configura la instancia de Socket.io
+     */
     setIo: (socketIo) => { io = socketIo; },
-    setLastPrice: (price) => { lastCyclePrice = parseFloat(price); }, // Forzamos float
+
+    /**
+     * Actualiza y recupera el último precio conocido del mercado
+     */
+    setLastPrice: (price) => { lastCyclePrice = parseFloat(price); },
     getLastPrice: () => lastCyclePrice,
 
+    /**
+     * Sistema de logs centralizado con emisión a salas de Socket.io por userId
+     */
     log: (message, type = 'info', userId = null) => {
         const timestamp = new Date().toLocaleTimeString();
         console.log(`[${timestamp}] [${type.toUpperCase()}] ${userId ? `[User: ${userId}] ` : ''}${message}`);
+        
         if (io) {
             const room = userId ? userId.toString() : null;
             if (room) {
@@ -27,9 +39,11 @@ const orchestrator = {
         }
     },
 
+    /**
+     * Sincroniza el estado del bot y el precio actual con el frontend
+     */
     syncFrontendState: async (currentPrice, botState, userId) => {
         if (io && botState && userId) {
-            // Prioridad absoluta al precio que viene del ticker
             const priceToEmit = parseFloat(currentPrice) || lastCyclePrice || 0;
             
             io.to(userId.toString()).emit('bot-state-update', { 
@@ -40,8 +54,10 @@ const orchestrator = {
         }
     },
 
+    /**
+     * Guarda cambios en MongoDB y dispara la actualización al frontend
+     */
     commitChanges: async (userId, changeSet, currentPrice) => {
-        // Ahora permitimos que se guarde siempre gracias al lastUpdate que añadimos en autobotLogic
         if (!userId || Object.keys(changeSet).length === 0) return null;
         
         try {
@@ -52,7 +68,6 @@ const orchestrator = {
                 { new: true, lean: true }
             );
             if (updated) {
-                // Pasamos el currentPrice explícito para evitar desfases
                 await orchestrator.syncFrontendState(currentPrice, updated, userId);
                 return updated;
             }
@@ -62,39 +77,78 @@ const orchestrator = {
         return null;
     },
 
-    slowBalanceCacheUpdate: async (userId) => {
+    /**
+     * SINCRONIZACIÓN MAESTRA (Saldos + Órdenes de Exchange)
+     * Este método se encarga de mantener la DB como un espejo de BitMart para órdenes 'ex'.
+     */
+    slowBalanceCacheUpdate: async (userId, userCreds) => {
         let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
-        try {
-            const balancesArray = await bitmartService.getBalance(userId);
-            if (!balancesArray || !Array.isArray(balancesArray)) throw new Error("Balance vacío");
-
-            const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
-            const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-            
-            availableUSDT = parseFloat(usdtBalance?.available || 0);
-            availableBTC = parseFloat(btcBalance?.available || 0);
-            apiSuccess = true;
-        } catch (error) {
-            // Si falla la API, no hacemos nada para no pisar datos con ceros
-            console.error(`[BALANCE-FETCH-ERROR] ${userId}: ${error.message}`);
-            return false;
-        }
         
-        // ACTUALIZACIÓN SILENCIOSA: 
-        // Solo actualizamos balance sin emitir estado completo inmediatamente
-        // para dejar que el ciclo principal del bot (el tick) sea el que mande los precios.
-        const updated = await Autobot.findOneAndUpdate({ userId }, {
-            $set: { 
-                lastAvailableUSDT: availableUSDT, 
-                lastAvailableBTC: availableBTC, 
-                lastBalanceCheck: new Date() 
-            }
-        }, { new: true, lean: true });
+        try {
+            // 1. Petición paralela a BitMart (Optimización de tiempo)
+            const [balancesArray, openOrdersRes] = await Promise.all([
+                bitmartService.getBalance(userCreds),
+                bitmartService.getOpenOrders(null, userCreds) 
+            ]);
 
-        // Solo sincronizamos si el bot está detenido. 
-        // Si está corriendo, el botCycle se encargará de emitir los datos frescos en el siguiente tick.
-        if (updated && (updated.lstate === 'STOPPED' && updated.sstate === 'STOPPED')) {
-            await orchestrator.syncFrontendState(lastCyclePrice, updated, userId);
+            // 2. Procesar Balances
+            if (balancesArray && Array.isArray(balancesArray)) {
+                const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
+                const btcBalance = balancesArray.find(b => b.currency === 'BTC');
+                
+                availableUSDT = parseFloat(usdtBalance?.available || 0);
+                availableBTC = parseFloat(btcBalance?.available || 0);
+                apiSuccess = true;
+            }
+
+            // 3. Sincronizar Órdenes Abiertas (Estrategia: 'ex')
+            // Borramos órdenes previas del exchange para evitar duplicados o "fantasmas"
+            await Order.deleteMany({ userId, strategy: 'ex' });
+
+            const bitmartOrders = openOrdersRes.orders || [];
+            if (bitmartOrders.length > 0) {
+                const ordersToSave = bitmartOrders.map(o => {
+                    // Normalización de status: BitMart usa 'new', '8', 'pending', etc.
+                    const rawStatus = (o.status || '').toString().toLowerCase();
+                    const isPending = ['new', '8', 'pending', 'partially_filled'].includes(rawStatus);
+
+                    return {
+                        userId,
+                        strategy: 'ex',
+                        cycleIndex: 0,
+                        executionMode: 'REAL',
+                        orderId: o.orderId || o.order_id,
+                        symbol: o.symbol || 'BTC_USDT',
+                        side: (o.side || 'BUY').toUpperCase(),
+                        type: (o.type || 'LIMIT').toUpperCase(),
+                        size: parseFloat(o.size || o.amount || 0),
+                        price: parseFloat(o.price || 0),
+                        notional: parseFloat(o.notional || (o.size * o.price) || 0),
+                        status: isPending ? 'PENDING' : 'FILLED',
+                        orderTime: new Date(parseInt(o.create_time || o.order_time || Date.now()))
+                    };
+                });
+
+                await Order.insertMany(ordersToSave);
+            }
+
+            // 4. Actualizar documento del Bot con los nuevos balances
+            const updated = await Autobot.findOneAndUpdate({ userId }, {
+                $set: { 
+                    lastAvailableUSDT: availableUSDT, 
+                    lastAvailableBTC: availableBTC, 
+                    lastBalanceCheck: new Date() 
+                }
+            }, { new: true, lean: true });
+
+            // 5. Si el bot está detenido, forzamos actualización para que el front vea los cambios
+            if (updated && (updated.lstate === 'STOPPED' && updated.sstate === 'STOPPED')) {
+                await orchestrator.syncFrontendState(lastCyclePrice, updated, userId);
+            }
+
+        } catch (error) {
+            console.error(`[SYNC-FETCH-ERROR] ${userId}: ${error.message}`);
+            return false;
         }
         
         return apiSuccess;

@@ -7,6 +7,7 @@ function createOrderHtml(order) {
     const isBuy = side === 'buy';
     const sideTheme = isBuy ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5';
     
+    // Tomamos el estado y nos aseguramos de que acepte PENDING de nuestra DB
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
     
@@ -19,7 +20,8 @@ function createOrderHtml(order) {
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
     const fullOrderId = (order.orderId || '').toString();
 
-    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(rawState);
+    // Añadimos 'PENDING' a la lista de estados que muestran el botón de cancelar
+    const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(rawState);
 
     return `
     <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
@@ -61,17 +63,18 @@ function createOrderHtml(order) {
     </div>`;
 }
 
+// DENTRO DE public/js/modules/orders.js
+
 export async function fetchOrders(status, orderListElement) {
     if (!orderListElement) return;
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        // CAMBIAMOS EL ENDPOINT:
-        // De: /api/orders/${status}
-        // A: /api/users/bitmart/history-orders
-        const data = await fetchFromBackend(`/api/users/bitmart/history-orders?status=${status}&symbol=BTC_USDT`);
+        // CAMBIO CLAVE: Apuntamos a la ruta de ordersRoutes.js
+        // Antes: /api/users/bitmart/history-orders?status=${status}...
+        // Ahora: /api/orders/${status}
+        const data = await fetchFromBackend(`/api/orders/${status}`);
         
-        // El controlador 'getHistoryOrders' devuelve el array directamente
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
@@ -93,16 +96,18 @@ window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
 
     try {
-        // CORRECCIÓN RUTA: Necesitaremos crear esta ruta en userController 
-        // o apuntar a una válida. Por ahora la ajustamos al nuevo estándar:
         const data = await fetchFromBackend(`/api/users/bitmart/cancel-order`, {
             method: 'POST',
             body: JSON.stringify({ orderId, symbol: 'BTC_USDT' })
         });
         
         if (data.success) {
+            // Buscamos el contenedor actual para refrescar la vista
             const activeContainer = document.getElementById('au-order-list');
-            if (activeContainer) fetchOrders('all', activeContainer);
+            if (activeContainer) {
+                // Refrescamos la pestaña actual (usando 'opened' o 'all' según sea necesario)
+                fetchOrders('opened', activeContainer);
+            }
         } else {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }

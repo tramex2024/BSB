@@ -12,21 +12,30 @@ const getOrders = async (req, res) => {
     try {
         let filter = { userId: userId };
 
-        // Sincronizamos con los Enums del Modelo Order.js (Todo en MAYÚSCULAS)
+        // Sincronizamos con la lógica de BitMart y tus pestañas del Front
         switch (status.toLowerCase()) {
             case 'opened':
-                filter.status = 'OPEN'; // O 'PENDING' según tu lógica de BitMart
+                /**
+                 * Solo mostramos órdenes que están esperando ser tomadas por el mercado.
+                 * El sync del orchestrator mapea 'NEW' y 'PENDING' de BitMart a 'PENDING'.
+                 */
+                filter.status = 'PENDING'; 
                 break;
                 
             case 'filled':
-                filter.status = 'FILLED'; // <--- CORREGIDO: Antes decía 'Filled'
+                /**
+                 * Aquí incluimos las completadas y las que ya empezaron a llenarse.
+                 * Como operas a mercado, estas pasan por aquí casi de inmediato.
+                 */
+                filter.status = { $in: ['FILLED'] }; 
                 break;
                 
             case 'cancelled':
-                filter.status = 'CANCELED'; // <--- CORREGIDO: Antes decía 'Canceled'
+                filter.status = 'CANCELED'; 
                 break;
                 
             case 'all':
+                // Sin filtro de estado
                 break;
                 
             default:
@@ -40,7 +49,6 @@ const getOrders = async (req, res) => {
 
         console.log(`[ORDER-CONTROLLER] ✅ Enviando ${orders.length} órdenes.`);
         
-        // Retornamos el array directamente para que el frontend lo mapee
         return res.status(200).json(orders);
         
     } catch (error) {
