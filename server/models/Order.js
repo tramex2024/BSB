@@ -15,19 +15,21 @@ const orderSchema = new mongoose.Schema({
     strategy: { 
         type: String,
         lowercase: true,
-        enum: ['long', 'short', 'ai'], // 👈 Minúsculas para coincidir con tu lógica
+        // AGREGAMOS 'ex' a la lista para permitir órdenes externas
+        enum: ['long', 'short', 'ai', 'ex'], 
         required: true,
         index: true
     },
-    // Índice del ciclo al que pertenece (Crucial para reportes)
+    // Índice del ciclo al que pertenece
     cycleIndex: { 
         type: Number, 
-        required: true 
+        required: false, // 👈 Cambiado a false para que las órdenes 'ex' puedan guardarse con 0 o vacío
+        default: 0
     },
     executionMode: { 
         type: String, 
         enum: ['REAL', 'SIMULATED'], 
-        default: 'REAL' // 👈 Cambiado a REAL por defecto para evitar sustos
+        default: 'REAL'
     },
     // ID único devuelto por BitMart
     orderId: { 
