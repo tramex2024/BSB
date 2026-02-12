@@ -96,7 +96,7 @@ const orchestrator = {
             // 2. Desciframos para BitMart con los nombres EXACTOS del bitmartService.js
             const userCreds = {
                 apiKey: decrypt(user.bitmartApiKey),
-                secretKey: decrypt(user.bitmartSecretKeyEncrypted), // <--- ANTES DECÍA apiSecret (ERROR)
+                secretKey: decrypt(user.bitmartSecretKeyEncrypted),
                 apiMemo: decrypt(user.bitmartApiMemo)
             };
 
@@ -122,8 +122,18 @@ const orchestrator = {
             const bitmartOrders = openOrdersRes?.orders || [];
             if (bitmartOrders.length > 0) {
                 const ordersToSave = bitmartOrders.map(o => {
-                    const rawStatus = (o.status || '').toString().toLowerCase();
-                    const isPending = ['new', '8', 'pending', 'partially_filled', 'open'].includes(rawStatus);
+                    const rawStatus = String(o.status || '').toLowerCase();
+                    
+                    // MAPEADOR ESTRICTO: No asume nada.
+                    let finalStatus = 'PENDING'; 
+                    
+                    if (['6', 'filled', 'fully_filled'].includes(rawStatus)) {
+                        finalStatus = 'FILLED';
+                    } else if (['7', 'canceled', 'cancelled'].includes(rawStatus)) {
+                        finalStatus = 'CANCELED';
+                    } else if (['4', '8', 'new', 'partially_filled', 'open', 'active'].includes(rawStatus)) {
+                        finalStatus = 'PENDING';
+                    }
 
                     return {
                         userId,
@@ -137,7 +147,7 @@ const orchestrator = {
                         size: parseFloat(o.size || o.amount || 0),
                         price: parseFloat(o.price || 0),
                         notional: parseFloat(o.notional || (parseFloat(o.size || 0) * parseFloat(o.price || 0)) || 0),
-                        status: isPending ? 'PENDING' : 'FILLED',
+                        status: finalStatus,
                         orderTime: new Date(parseInt(o.create_time || o.order_time || Date.now()))
                     };
                 });
