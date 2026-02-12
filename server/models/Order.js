@@ -23,7 +23,7 @@ const orderSchema = new mongoose.Schema({
     // Índice del ciclo al que pertenece
     cycleIndex: { 
         type: Number, 
-        required: false, // 👈 Cambiado a false para que las órdenes 'ex' puedan guardarse con 0 o vacío
+        required: true, // 👈 Cambiado a false para que las órdenes 'ex' puedan guardarse con 0 o vacío
         default: 0
     },
     executionMode: { 
