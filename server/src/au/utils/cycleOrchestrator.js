@@ -4,8 +4,10 @@
  */
 
 const Autobot = require('../../../models/Autobot');
+const User = require('../../../models/User'); // Importado para rescatar API Keys
 const Order = require('../../../models/Order'); // Modelo para el espejo de órdenes
 const bitmartService = require('../../../services/bitmartService');
+const { decrypt } = require('../../../utils/encryption'); 
 
 let io;
 let lastCyclePrice = 0;
@@ -79,19 +81,32 @@ const orchestrator = {
 
     /**
      * SINCRONIZACIÓN MAESTRA (Saldos + Órdenes de Exchange)
-     * Este método se encarga de mantener la DB como un espejo de BitMart para órdenes 'ex'.
      */
-    slowBalanceCacheUpdate: async (userId, userCreds) => {
+    slowBalanceCacheUpdate: async (userId) => {
         let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
         
         try {
-            // 1. Petición paralela a BitMart (Optimización de tiempo)
+            // 1. Buscamos al usuario para obtener llaves cifradas
+            const user = await User.findById(userId).lean();
+            if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
+                orchestrator.log("No se pudieron obtener las API Keys del usuario para sincronizar.", "error", userId);
+                return false;
+            }
+
+            // 2. Desciframos para BitMart con los nombres EXACTOS del bitmartService.js
+            const userCreds = {
+                apiKey: decrypt(user.bitmartApiKey),
+                secretKey: decrypt(user.bitmartSecretKeyEncrypted), // <--- ANTES DECÍA apiSecret (ERROR)
+                apiMemo: decrypt(user.bitmartApiMemo)
+            };
+
+            // 3. Petición paralela a BitMart
             const [balancesArray, openOrdersRes] = await Promise.all([
                 bitmartService.getBalance(userCreds),
                 bitmartService.getOpenOrders(null, userCreds) 
             ]);
 
-            // 2. Procesar Balances
+            // 4. Procesar Balances
             if (balancesArray && Array.isArray(balancesArray)) {
                 const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
                 const btcBalance = balancesArray.find(b => b.currency === 'BTC');
@@ -101,16 +116,14 @@ const orchestrator = {
                 apiSuccess = true;
             }
 
-            // 3. Sincronizar Órdenes Abiertas (Estrategia: 'ex')
-            // Borramos órdenes previas del exchange para evitar duplicados o "fantasmas"
+            // 5. Sincronizar Órdenes Abiertas (Estrategia: 'ex')
             await Order.deleteMany({ userId, strategy: 'ex' });
 
-            const bitmartOrders = openOrdersRes.orders || [];
+            const bitmartOrders = openOrdersRes?.orders || [];
             if (bitmartOrders.length > 0) {
                 const ordersToSave = bitmartOrders.map(o => {
-                    // Normalización de status: BitMart usa 'new', '8', 'pending', etc.
                     const rawStatus = (o.status || '').toString().toLowerCase();
-                    const isPending = ['new', '8', 'pending', 'partially_filled'].includes(rawStatus);
+                    const isPending = ['new', '8', 'pending', 'partially_filled', 'open'].includes(rawStatus);
 
                     return {
                         userId,
@@ -123,7 +136,7 @@ const orchestrator = {
                         type: (o.type || 'LIMIT').toUpperCase(),
                         size: parseFloat(o.size || o.amount || 0),
                         price: parseFloat(o.price || 0),
-                        notional: parseFloat(o.notional || (o.size * o.price) || 0),
+                        notional: parseFloat(o.notional || (parseFloat(o.size || 0) * parseFloat(o.price || 0)) || 0),
                         status: isPending ? 'PENDING' : 'FILLED',
                         orderTime: new Date(parseInt(o.create_time || o.order_time || Date.now()))
                     };
@@ -132,7 +145,7 @@ const orchestrator = {
                 await Order.insertMany(ordersToSave);
             }
 
-            // 4. Actualizar documento del Bot con los nuevos balances
+            // 6. Actualizar documento del Bot
             const updated = await Autobot.findOneAndUpdate({ userId }, {
                 $set: { 
                     lastAvailableUSDT: availableUSDT, 
@@ -141,7 +154,6 @@ const orchestrator = {
                 }
             }, { new: true, lean: true });
 
-            // 5. Si el bot está detenido, forzamos actualización para que el front vea los cambios
             if (updated && (updated.lstate === 'STOPPED' && updated.sstate === 'STOPPED')) {
                 await orchestrator.syncFrontendState(lastCyclePrice, updated, userId);
             }
