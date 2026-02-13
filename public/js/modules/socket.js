@@ -130,14 +130,20 @@ export function initSocket() {
         }
     });
 
-    socket.on('open-orders-update', (data) => {
+    socket.on('open-orders-update', async (data) => {
         const rawOrders = Array.isArray(data) ? data : (data.orders || []);
         
-        // CORRECCIÓN: Filtramos para que acepte tanto 'ai' como 'aibot'
+        // 1. Actualización para AIBOT
         const aiOrders = rawOrders.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
-
         if (aiBotUI?.updateOpenOrdersTable) {
             aiBotUI.updateOpenOrdersTable(aiOrders);
+        }
+
+        // 2. NUEVA LÓGICA RESTAURADA: Actualización para AUTOBOT
+        const auOrderList = document.getElementById('au-order-list');
+        if (auOrderList) {
+            const { fetchOrders } = await import('./orders.js');
+            fetchOrders('autobot', 'all', auOrderList);
         }
     });
 
