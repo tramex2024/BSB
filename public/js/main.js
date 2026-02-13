@@ -8,6 +8,7 @@ import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
 import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
 import { initSocket } from './modules/socket.js'; 
+import { fetchOrders } from './modules/orders.js'; // Sincronización de órdenes persistente
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -106,6 +107,16 @@ export async function initializeTab(tabName) {
                     module.updateDistributionWidget(currentBotState);
                 }
             }
+
+            // --- PERSISTENCIA ESPECÍFICA PARA AIBOT AL REGRESAR DE NAVEGACIÓN ---
+            if (tabName === 'aibot') {
+                const aiOpenOrdersCont = document.getElementById('ai-open-orders-body');
+                const aiHistoryCont = document.getElementById('ai-history-table-body');
+                
+                // Forzamos la carga de órdenes reales desde la DB para que no aparezca vacío
+                if (aiOpenOrdersCont) fetchOrders('aibot', 'opened', aiOpenOrdersCont);
+                if (aiHistoryCont) fetchOrders('aibot', 'all', aiHistoryCont);
+            }
         }
 
         // Sincronización estética de elementos de IA
@@ -123,7 +134,12 @@ function syncAIElementsInDOM() {
     if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
     if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
     
-    aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle);
+    // Sincronización del botón basada en el estado real
+    aiBotUI.setRunningStatus(
+        currentBotState.isRunning, 
+        currentBotState.stopAtCycle || currentBotState.config.ai.stopAtCycle,
+        currentBotState.historyCount || 0
+    );
 }
 
 // --- GLOBAL EVENT DELEGATION ---
