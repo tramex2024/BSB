@@ -63,22 +63,28 @@ function createOrderHtml(order) {
     </div>`;
 }
 
-// DENTRO DE public/js/modules/orders.js
-
-export async function fetchOrders(status, orderListElement) {
-    if (!orderListElement) return;
+/**
+ * FETCH ORDERS SEGMENTADO
+ * @param {string} strategy - 'autobot' o 'aibot'
+ * @param {string} status - 'opened', 'filled', 'cancelled', 'all'
+ * @param {HTMLElement} orderListElement - El contenedor donde se renderizan
+ */
+export async function fetchOrders(strategy, status, orderListElement) {
+    // SEGURIDAD: Si no hay contenedor o los parámetros son incorrectos, abortamos para evitar el 404
+    if (!orderListElement || !strategy || !status || typeof strategy !== 'string') {
+        return;
+    }
+    
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        // CAMBIO CLAVE: Apuntamos a la ruta de ordersRoutes.js
-        // Antes: /api/users/bitmart/history-orders?status=${status}...
-        // Ahora: /api/orders/${status}
-        const data = await fetchFromBackend(`/api/orders/${status}`);
+        // Petición al backend incluyendo la estrategia en la ruta
+        const data = await fetchFromBackend(`/api/orders/${strategy}/${status}`);
         
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders</div>`;
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders in ${strategy}</div>`;
             return;
         }
 
@@ -102,11 +108,16 @@ window.cancelOrder = async (orderId) => {
         });
         
         if (data.success) {
-            // Buscamos el contenedor actual para refrescar la vista
-            const activeContainer = document.getElementById('au-order-list');
-            if (activeContainer) {
-                // Refrescamos la pestaña actual (usando 'opened' o 'all' según sea necesario)
-                fetchOrders('opened', activeContainer);
+            // Buscamos qué contenedor de órdenes está visible actualmente para refrescar
+            const auContainer = document.getElementById('au-order-list');
+            const aiContainer = document.getElementById('ai-order-list');
+
+            if (auContainer) {
+                // Refrescamos órdenes de Autobot
+                fetchOrders('autobot', 'all', auContainer);
+            } else if (aiContainer) {
+                // Refrescamos órdenes de AIBot
+                fetchOrders('aibot', 'all', aiContainer);
             }
         } else {
             alert(`Error: ${data.message || 'Could not cancel'}`);

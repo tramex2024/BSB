@@ -39,7 +39,6 @@ export function initializeDashboardView(initialState) {
     }
 
     // 3. Configurar Eventos y Botones Locales
-    // NOTA: setupSocketListeners ha sido eliminado porque socket.js centraliza todo.
     setupActionButtons();
     setupAnalyticsFilters();
     
@@ -49,6 +48,46 @@ export function initializeDashboardView(initialState) {
     // 5. Estado de conexión inicial
     updateHealthStatus('health-market-ws-text', socket?.connected);
     updateHealthStatus('health-user-ws-text', socket?.connected);
+}
+
+/**
+ * --- NUEVA FUNCIÓN: SYSTEM TERMINAL LOG ---
+ * Agrega una entrada al System Terminal con efectos visuales
+ */
+export function addTerminalLog(msg, type = 'info') {
+    const logContainer = document.getElementById('dashboard-logs');
+    if (!logContainer) return;
+
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const colors = {
+        info: 'text-gray-400 border-gray-700',
+        success: 'text-emerald-400 border-emerald-500/50',
+        warning: 'text-yellow-400 border-yellow-500/50',
+        error: 'text-red-400 border-red-500/50'
+    };
+
+    const logEntry = document.createElement('div');
+    // Efecto de entrada y colores dinámicos
+    logEntry.className = `flex gap-2 py-1 px-2 border-l-2 bg-white/5 mb-1 text-[10px] font-mono transition-all duration-500 rounded-r animate-fadeIn ${colors[type] || colors.info}`;
+    
+    logEntry.innerHTML = `
+        <span class="opacity-30 font-bold">[${timestamp}]</span>
+        <span class="flex-grow tracking-tighter uppercase">${msg}</span>
+        <i class="fas fa-circle text-[6px] self-center animate-pulse ${type === 'success' ? 'text-emerald-500' : 'text-gray-600'}"></i>
+    `;
+
+    // Insertar al principio y limitar a 40 entradas
+    logContainer.prepend(logEntry);
+    while (logContainer.childNodes.length > 40) {
+        logContainer.lastChild.remove();
+    }
+
+    // Efecto de parpadeo visual en el contenedor (Pulso)
+    const terminalBox = logContainer.parentElement;
+    terminalBox.classList.add('ring-1', 'ring-indigo-500/30');
+    setTimeout(() => terminalBox.classList.remove('ring-1', 'ring-indigo-500/30'), 800);
 }
 
 /**
@@ -77,7 +116,6 @@ function setupActionButtons() {
             el.onclick = async () => {
                 const isRunning = el.textContent.includes("STOP");
                 await toggleBotSideState(isRunning, btn.side);
-                // La actualización visual vendrá vía Socket -> socket.js -> uiManager
             };
         }
     });

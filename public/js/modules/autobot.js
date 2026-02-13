@@ -8,7 +8,7 @@ import { fetchOrders } from './orders.js';
 import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
 import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
-import { socket } from './socket.js'; // Importamos el socket central
+import { socket } from './socket.js'; 
 import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
@@ -88,7 +88,7 @@ export async function initializeAutobotView() {
         const btn = document.getElementById(id);
         if (!btn) return;
 
-        // Limpieza de eventos anteriores
+        // Limpieza de eventos anteriores para evitar duplicados
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
@@ -114,7 +114,6 @@ export async function initializeAutobotView() {
                 newBtn.disabled = true;
                 newBtn.textContent = isRunning ? "STOPPING..." : "STARTING...";
                 await toggleBotSideState(isRunning, sideName);
-                // El cambio visual final vendrá por el socket a través de socket.js -> uiManager
             } catch (err) {
                 displayMessage(`Error in ${sideName} engine`, 'error');
                 updateControlsState(currentBotState); 
@@ -124,31 +123,36 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones (Dashboard y Tab)
+    // Inicializar botones (Tanto los del Dashboard como los de la Tab)
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
     setupSideBtn('btn-start-ai', 'ai');
 
-    // Sincronización visual inmediata al cargar la pestaña
+    // Sincronización visual inmediata
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico
-    setTimeout(() => {
-        const chartContainer = document.getElementById('au-tvchart');
-        if (chartContainer) {
+    // Inicializar Gráfico de TradingView (Solo si estamos en la pestaña Autobot)
+    const chartContainer = document.getElementById('au-tvchart');
+    if (chartContainer) {
+        setTimeout(() => {
             if (window.currentChart) {
                 try { window.currentChart.remove(); } catch(e) {}
             }
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-        }
-    }, 300);
+        }, 300);
+    }
 
-    // Iniciar pestañas de órdenes
-    setupOrderTabs(auOrderList);
+    // Iniciar pestañas de órdenes solo si el contenedor existe
+    if (auOrderList) {
+        setupOrderTabs(auOrderList);
+    }
 }
 
+/**
+ * Gestión de pestañas de órdenes dentro de Autobot
+ */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     if (!orderTabs.length || !container) return;
@@ -169,11 +173,13 @@ function setupOrderTabs(container) {
             const selectedId = e.currentTarget.id;
             setActiveTabStyle(selectedId);
             currentTab = selectedId.replace('tab-', '');
-            fetchOrders(currentTab, container);
+            
+            // Petición correcta: estrategia 'autobot' + estado
+            fetchOrders('autobot', currentTab, container);
         };
     });
 
-    // Carga inicial
+    // Carga inicial por defecto
     setActiveTabStyle('tab-all');
-    fetchOrders('all', container);
+    fetchOrders('autobot', 'all', container);
 }
