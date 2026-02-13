@@ -8,23 +8,6 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* FIX CRÍTICO: Forzamos que el contenedor principal 
-           ignore cualquier restricción de ancho previa.
-        */
-        #main-content {
-            display: grid !important;
-            grid-template-columns: 100% !important;
-            width: 100% !important;
-            max-width: 100vw !important;
-        }
-        
-        /* Aseguramos que el contenido inyectado también se expanda */
-        #main-content > div {
-            width: 100% !important;
-            max-width: 100% !important;
-        }
-    </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex flex-col">
 
@@ -46,6 +29,7 @@
             <div class="status-ball-container">
                 <span id="status-dot" class="status-dot-base status-red" title="Estado de Conexión"></span>
             </div>
+            
             <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
             <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
         </div>
@@ -55,7 +39,7 @@
         <p id="log-message">Sincronizando con Bitmart API...</p>
     </div>
 
-    <main id="main-content" class="relative flex-1 p-4 md:p-6 bg-gray-900 overflow-x-hidden min-h-[calc(100vh-6rem)]">
+    <main id="main-content" class="relative flex-1 flex flex-col items-stretch p-4 md:p-6 min-h-[calc(100vh-4rem)] overflow-x-hidden">
         <div class="flex items-center justify-center h-64">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
         </div>
@@ -68,10 +52,19 @@
                 <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-api-modal"></i>
             </div>
             <form id="api-form" class="space-y-4">
-                <input type="text" id="api-key" placeholder="API Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                <input type="password" id="secret-key" placeholder="Secret Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                <input type="password" id="api-memo" placeholder="API Memo" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition">SAVE & VALIDATE</button>
+                <input type="text" id="api-key" placeholder="API Key" 
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+                
+                <input type="password" id="secret-key" placeholder="Secret Key" 
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+                
+                <input type="password" id="api-memo" placeholder="API Memo (Passphrase)" 
+                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+
+                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">
+                    SAVE & VALIDATE
+                </button>
+                <p id="api-status-message" class="text-xs text-center text-gray-500"></p>
             </form>
         </div>
     </div>
@@ -79,19 +72,41 @@
     <div id="auth-modal" class="modal">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold">Acceso</h2>
+                <h2 class="text-xl font-bold">Acceso de Usuario</h2>
                 <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-auth-modal"></i>
             </div>
             <form id="auth-form" class="space-y-4">
-                <input type="email" id="email" placeholder="tu@email.com" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
-                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition">CONTINUAR</button>
+                <div id="email-section">
+                    <label class="text-xs text-gray-400 block mb-1">Correo Electrónico</label>
+                    <input type="email" id="email" placeholder="tu@email.com" required
+                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
+                </div>
+                <div id="token-section" style="display: none;">
+                    <label class="text-xs text-gray-400 block mb-1">Código de Verificación</label>
+                    <input type="text" id="token" placeholder="Ingresa el código" 
+                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none font-mono text-center text-lg tracking-widest">
+                </div>
+                <button type="submit" id="auth-button" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">CONTINUAR</button>
+                <p id="auth-message" class="text-xs text-center"></p>
             </form>
+        </div>
+    </div>
+
+    <div id="logout-modal" class="modal">
+        <div class="modal-content border border-red-900/30">
+            <h2 class="text-xl font-bold text-white mb-2">Sign Out?</h2>
+            <p class="text-gray-400 text-sm mb-6">Necesitarás un nuevo código para volver a entrar.</p>
+            <div class="flex space-x-3">
+                <button id="cancel-logout" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold transition">CANCELAR</button>
+                <button id="confirm-logout" class="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold transition">LOG OUT</button>
+            </div>
         </div>
     </div>
 
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>
