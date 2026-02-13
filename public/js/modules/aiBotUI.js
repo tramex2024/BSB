@@ -100,24 +100,23 @@ const aiBotUI = {
             const time = tradeDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
             return `
-                <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group">
-                    <td class="px-6 py-3 text-gray-500 text-[9px] group-hover:text-gray-300">
-                        ${time}
-                    </td>
-                    <td class="px-6 py-3">
-                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} font-black text-[8px] border ${isBuy ? 'border-emerald-500/20' : 'border-red-500/20'}">
-                            ${trade.side ? trade.side.toUpperCase() : 'N/A'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">
-                        $${parseFloat(trade.price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
-                    </td>
-                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">
-                        $${parseFloat(trade.amount || trade.size || 0).toFixed(2)}
-                    </td>
-                    <td class="px-6 py-3 text-center">
-                        <span class="${score >= 85 ? 'text-emerald-400' : 'text-blue-400'} font-bold">${Math.round(score)}%</span>
-                    </td>
+             <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group w-full">
+        <td class="px-4 py-3 text-gray-500 text-[9px] group-hover:text-gray-300 whitespace-nowrap">
+            ${time}
+        </td>
+        <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} font-black text-[8px] border ${isBuy ? 'border-emerald-500/20' : 'border-red-500/20'}">
+                ${trade.side ? trade.side.toUpperCase() : 'N/A'}
+            </span>
+        </td>
+        <td class="px-4 py-3 text-right font-mono text-white text-[10px]">
+            $${parseFloat(trade.price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
+        </td>
+        <td class="px-4 py-3 text-right font-mono text-gray-400 text-[10px]">
+            $${parseFloat(trade.amount || trade.size || 0).toFixed(2)}
+        </td>
+        <td class="px-4 py-3 text-right"> <span class="${score >= 85 ? 'text-emerald-400' : 'text-blue-400'} font-bold">${Math.round(score)}%</span>
+        </td>
                 </tr>
             `;
         }).join('');
@@ -143,27 +142,26 @@ const aiBotUI = {
             const amount = parseFloat(order.amount || order.size || 0);
 
             return `
-                <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
-                    <td class="px-6 py-3 font-mono text-[9px] text-blue-400">
-                        ${id ? id.toString().slice(-6) : '---'}
-                    </td>
-                    <td class="px-6 py-3">
-                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">
-                            ${isBuy ? 'BUY' : 'SELL'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-3 text-right font-mono text-white text-[10px]">
-                        $${price.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                    </td>
-                    <td class="px-6 py-3 text-right font-mono text-gray-400 text-[10px]">
-                        ${amount.toFixed(4)} BTC
-                    </td>
-                    <td class="px-6 py-3 text-right">
-                        <button onclick="window.cancelOrder('${id}')" class="text-red-500/50 hover:text-red-500 transition-colors">
-                            <i class="fas fa-times-circle"></i>
-                        </button>
-                    </td>
-                </tr>
+              <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all w-full">
+        <td class="px-4 py-3 font-mono text-[9px] text-blue-400">
+            ${id ? id.toString().slice(-6) : '---'}
+        </td>
+        <td class="px-4 py-3">
+            <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">
+                ${isBuy ? 'BUY' : 'SELL'}
+            </span>
+        </td>
+        <td class="px-4 py-3 text-right font-mono text-white text-[10px]">
+            $${price.toLocaleString(undefined, {minimumFractionDigits: 2})}
+        </td>
+        <td class="px-4 py-3 text-right font-mono text-gray-400 text-[10px]">
+            ${amount.toFixed(4)} BTC
+        </td>
+        <td class="px-4 py-3 text-right"> <button onclick="window.cancelOrder('${id}')" class="text-red-500/50 hover:text-red-500 transition-colors">
+                <i class="fas fa-times-circle"></i>
+            </button>
+        </td>
+    </tr>
             `;
         }).join('');
     },
