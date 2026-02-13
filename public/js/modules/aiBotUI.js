@@ -1,6 +1,7 @@
 /**
  * AI Bot Interface Module - Optimized 2026
  * Integration: Centralized Button State & Neural Sync
+ * Fix: AI/AIBOT Strategy Mapping & Persistence
  */
 
 const aiBotUI = {
@@ -78,19 +79,25 @@ const aiBotUI = {
         const tbody = document.getElementById('ai-history-table-body');
         if (!tbody) return;
 
+        // CORRECCIÓN: Filtrado inclusivo para que no desaparezcan si en DB son 'ai'
         const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
+        const filteredTrades = tradesList.filter(t => t.strategy === 'ai' || t.strategy === 'aibot');
         
-        if (tradesList.length === 0) {
+        if (filteredTrades.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-10 text-center italic text-gray-600 uppercase text-[10px]">No trades in this session</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = tradesList.map(trade => {
+        tbody.innerHTML = filteredTrades.map(trade => {
             const isBuy = (trade.side || '').toUpperCase() === 'BUY';
             const score = trade.confidenceScore || (trade.confidence * 100) || 0;
             
-            const rawTime = trade.orderTime || trade.updateTime || trade.timestamp;
-            const time = rawTime ? new Date(Number(rawTime)).toLocaleTimeString() : '---';
+            // Normalización de tiempo para MongoDB ($date) o String
+            let tradeDate;
+            if (trade.orderTime?.$date) tradeDate = new Date(trade.orderTime.$date);
+            else tradeDate = new Date(trade.orderTime || trade.updateTime || Date.now());
+            
+            const time = tradeDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
             return `
                 <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group">
@@ -120,14 +127,16 @@ const aiBotUI = {
         const tbody = document.getElementById('ai-open-orders-body'); 
         if (!tbody) return;
 
+        // CORRECCIÓN: Filtro de estrategia para órdenes abiertas
         const ordersList = Array.isArray(orders) ? orders : (orders.orders || []);
+        const filteredOrders = ordersList.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
 
-        if (ordersList.length === 0) {
+        if (filteredOrders.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 uppercase text-[9px] tracking-widest opacity-50">No Open Positions</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = ordersList.map(order => {
+        tbody.innerHTML = filteredOrders.map(order => {
             const isBuy = (order.side || '').toUpperCase() === 'BUY';
             const id = order.orderId || order.order_id || '';
             const price = parseFloat(order.price || 0);
@@ -150,7 +159,7 @@ const aiBotUI = {
                         ${amount.toFixed(4)} BTC
                     </td>
                     <td class="px-6 py-3 text-right">
-                        <button class="text-red-500/50 hover:text-red-500 transition-colors">
+                        <button onclick="window.cancelOrder('${id}')" class="text-red-500/50 hover:text-red-500 transition-colors">
                             <i class="fas fa-times-circle"></i>
                         </button>
                     </td>
@@ -170,22 +179,17 @@ const aiBotUI = {
         const aiInput = document.getElementById('ai-amount-usdt');
         const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-        // Sincronizar Checkbox si viene el dato
         if (stopCycleCheck && stopAtCycle !== null) {
-            if (stopCycleCheck.checked !== !!stopAtCycle) {
-                stopCycleCheck.checked = !!stopAtCycle;
-            }
+            stopCycleCheck.checked = !!stopAtCycle;
         }
 
         if (isRunning) {
             if (btn) {
-                // Solo actualizamos si el texto ha cambiado para evitar el parpadeo
                 const isAnalyzing = (historyCount < 50);
                 const targetText = isAnalyzing ? `ANALYZING... (${historyCount}/50)` : "STOP AI CORE";
                 
                 if (btn.innerText !== targetText) {
                     btn.innerText = targetText;
-                    // Aplicamos los estilos solo si cambian
                     if (isAnalyzing) {
                         btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse transition-all";
                     } else {

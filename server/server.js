@@ -241,44 +241,50 @@ setInterval(async () => {
     } catch (e) { console.error("Error Balance Loop:", e); }
 }, 10000);
 
-// --- 11. Sincronización de Órdenes Abiertas cada 30 segundos ---
+// --- 11. Sincronización de Órdenes Abiertas con "Freno de Mano" para errores 401 ---
 setInterval(async () => {
     try {
-        if (mongoose.connection.readyState !== 1) return; // Si no hay DB, no hacemos nada
+        if (mongoose.connection.readyState !== 1) return;
 
-        // Buscamos usuarios que tengan al menos la API KEY y la SECRET
+        // Buscamos usuarios activos que NO estén marcados con error de API
         const users = await User.find({ 
             bitmartApiKey: { $exists: true, $ne: "" },
-            bitmartSecretKeyEncrypted: { $exists: true, $ne: "" } 
+            bitmartSecretKeyEncrypted: { $exists: true, $ne: "" },
+            apiStatus: { $ne: "INVALID_CREDENTIALS" } // <--- Filtro inteligente
         });
         
         for (const user of users) {
             try {
-                // DESENCRIPTACIÓN SEGURA
                 const credentials = {
                     apiKey: decrypt(user.bitmartApiKey),
                     secretKey: decrypt(user.bitmartSecretKeyEncrypted),
                     memo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ""
                 };
 
-                // Si por alguna razón el desencriptado falló y devolvió vacío
-                if (!credentials.apiKey || !credentials.secretKey) {
-                    console.warn(`[SYNC] ⚠️ Credenciales inválidas para el usuario: ${user._id}`);
-                    continue;
-                }
+                if (!credentials.apiKey || !credentials.secretKey) continue;
 
-                // Llamamos al sincronizador
+                // Intentamos sincronizar
                 await orderSyncService.syncOpenOrders(user._id, credentials, io);
 
             } catch (userErr) {
-                // Este catch evita que el error de UN usuario detenga la sincronización de los DEMÁS
-                console.error(`❌ Error sincronizando órdenes para usuario ${user._id}:`, userErr.message);
+                // Si el error es 401 (Unauthorized), desactivamos sincronización para este usuario
+                if (userErr.message.includes('401') || userErr.message.includes('Unauthorized')) {
+                    console.error(`⚠️ [SYNC] Bloqueando sincronización para ${user._id} por llaves inválidas.`);
+                    await User.updateOne({ _id: user._id }, { $set: { apiStatus: "INVALID_CREDENTIALS" } });
+                    
+                    // Notificar al frontend del usuario específico
+                    io.to(user._id.toString()).emit('api-error', { 
+                        message: "Tus API Keys de BitMart son inválidas o expiraron. Por favor actualízalas." 
+                    });
+                } else {
+                    console.error(`❌ Error sincronizando órdenes para usuario ${user._id}:`, userErr.message);
+                }
             }
         }
     } catch (err) {
-        console.error("❌ Error CRÍTICO en el loop de sincronización general:", err.message);
+        console.error("❌ Error CRÍTICO en el loop de sincronización:", err.message);
     }
-}, 30000);
+}, 60000); // <--- Aumentamos a 60 segundos para dar respiro al servidor
 
 // --- 12. EVENTOS SOCKET.IO (REPARADO PARA MULTIUSUARIO Y SALAS) ---
 io.on('connection', async (socket) => {

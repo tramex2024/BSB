@@ -89,7 +89,7 @@ function createOrderHtml(order) {
 }
 
 /**
- * FETCH ORDERS SEGMENTADO
+ * FETCH ORDERS SEGMENTADO (Corregido para mapeo ai/aibot)
  */
 export async function fetchOrders(strategy, status, orderListElement) {
     if (!orderListElement || !strategy || !status || typeof strategy !== 'string') return;
@@ -97,7 +97,11 @@ export async function fetchOrders(strategy, status, orderListElement) {
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        const data = await fetchFromBackend(`/api/orders/${strategy}/${status}`);
+        // --- TRADUCCIÓN DE ESTRATEGIA ---
+        // Si el frontend pide 'aibot', le pedimos al backend 'ai' que es como está en tu DB
+        const dbStrategy = strategy === 'aibot' ? 'ai' : strategy;
+        
+        const data = await fetchFromBackend(`/api/orders/${dbStrategy}/${status}`);
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {

@@ -1,44 +1,41 @@
 /**
  * BSB/server/controllers/orderController.js
+ * Corregido: Mapeo de estados y estrategias 2026
  */
 const Order = require('../models/Order');
 
 const getOrders = async (req, res) => {
-    // Ahora extraemos ambos parámetros de la URL
     const { strategy, status } = req.params; 
     const userId = req.user.id; 
-
-    console.log(`[ORDER-CONTROLLER] 📊 Consulta: User ${userId} | Tab: ${strategy} | Status: ${status}`);
 
     try {
         let filter = { userId: userId };
 
-        // --- PASO 1: Filtrar por Pestaña (Estrategias) ---
+        // --- PASO 1: Filtrar por Estrategia ---
         const tab = strategy.toLowerCase();
         if (tab === 'autobot') {
-            // En AUTOBOT vemos los bots manuales/ciclos y las órdenes externas
             filter.strategy = { $in: ['long', 'short', 'ex'] };
         } else if (tab === 'aibot') {
-            // En AIBOT solo lo que pertenece a la IA
-            filter.strategy = 'ai';
+            // Buscamos tanto 'ai' como 'aibot' por si acaso hay mezcla en la DB
+            filter.strategy = { $in: ['ai', 'aibot'] }; 
         } else {
-            // Por seguridad, si mandan algo raro, filtramos por la palabra exacta
             filter.strategy = tab;
         }
 
-        // --- PASO 2: Filtrar por Estado ---
+        // --- PASO 2: Filtrar por Estado (CORREGIDO) ---
         switch (status.toLowerCase()) {
             case 'opened':
-                filter.status = 'PENDING'; 
+                // Las órdenes abiertas en BitMart pueden ser NEW o PARTIALLY_FILLED
+                filter.status = { $in: ['NEW', 'PARTIALLY_FILLED', 'PENDING', 'OPEN', 'ACTIVE'] }; 
                 break;
             case 'filled':
                 filter.status = 'FILLED'; 
                 break;
             case 'cancelled':
-                filter.status = 'CANCELED'; 
+                filter.status = { $in: ['CANCELED', 'CANCELLED'] }; 
                 break;
             case 'all':
-                // Sin filtro de estado para ver todo lo de esa pestaña
+                // Sin filtro de estado
                 break;
             default:
                 return res.status(400).json({ success: false, message: 'Estado inválido.' });
@@ -47,7 +44,10 @@ const getOrders = async (req, res) => {
         const orders = await Order.find(filter)
             .sort({ orderTime: -1 }) 
             .limit(100)
-                .lean();
+            .lean();
+
+        // Log de depuración para que veas qué está pasando en Render
+        console.log(`[ORDER-CONTROLLER] ✅ Enviando ${orders.length} órdenes para ${strategy}/${status}`);
 
         return res.status(200).json(orders);
         

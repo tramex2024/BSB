@@ -1,6 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
+ * Corregido: Mapeo de estrategias AI/AIBOT para persistencia visual
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -110,7 +111,7 @@ export function initSocket() {
         // 1. Log estándar
         logStatus(data.message, data.type || 'info');
         
-        // 2. Enviar al Terminal del Dashboard (NUEVO)
+        // 2. Enviar al Terminal del Dashboard
         sendToDashboardTerminal(data.message, data.type || 'info');
 
         // 3. Enviar a la UI de la IA si existe
@@ -124,22 +125,30 @@ export function initSocket() {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         
-        // Si hay una decisión de compra/venta, avisar al terminal
         if (data.message && data.message.includes('ORDER')) {
             sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
         }
     });
 
     socket.on('open-orders-update', (data) => {
-        const orders = Array.isArray(data) ? data : (data.orders || []);
+        const rawOrders = Array.isArray(data) ? data : (data.orders || []);
+        
+        // CORRECCIÓN: Filtramos para que acepte tanto 'ai' como 'aibot'
+        const aiOrders = rawOrders.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
+
         if (aiBotUI?.updateOpenOrdersTable) {
-            aiBotUI.updateOpenOrdersTable(orders);
+            aiBotUI.updateOpenOrdersTable(aiOrders);
         }
     });
 
     socket.on('ai-history-update', (trades) => {
+        if (!Array.isArray(trades)) return;
+
+        // CORRECCIÓN: Aseguramos que el historial reconozca la estrategia de la DB
+        const aiHistory = trades.filter(t => t.strategy === 'ai' || t.strategy === 'aibot');
+
         if (aiBotUI?.updateHistoryTable) {
-            aiBotUI.updateHistoryTable(trades);
+            aiBotUI.updateHistoryTable(aiHistory);
         }
     });
 
