@@ -9,6 +9,6 @@ const userController = require('../controllers/userController');
 router.use(userController.authenticateToken);
 
 // GET /api/orders/:status (all, opened, filled, cancelled)
-router.get('/:status', orderController.getOrders);
+router.get('/:strategy/:status', orderController.getOrders);
 
 module.exports = router;
