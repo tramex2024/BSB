@@ -10,37 +10,51 @@ import { formatCurrency } from './ui/formatters.js';
 export let socket = null;
 let connectionWatchdog = null;
 
+/**
+ * Función auxiliar para enviar logs al Terminal del Dashboard si existe
+ */
+async function sendToDashboardTerminal(msg, type) {
+    const dashboardLogs = document.getElementById('dashboard-logs');
+    if (dashboardLogs) {
+        try {
+            // Importamos la función solo cuando es necesaria
+            const { addTerminalLog } = await import('./dashboard.js');
+            addTerminalLog(msg, type);
+        } catch (e) {
+            console.warn("Dashboard Terminal no disponible en esta vista");
+        }
+    }
+}
+
 export function initSocket() {
-    // 1. Recuperamos credenciales del localStorage
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
 
-    // Evitamos duplicar conexiones o conectar sin sesión
     if (socket?.connected || !token || !userId) {
         if (!token || !userId) console.warn("⚠️ Socket: No hay sesión activa para conectar.");
         return;
     }
 
-    // 2. CONEXIÓN AUTENTICADA: Enviamos token y userId en el handshake
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        auth: { token },      // El middleware del backend validará este token
-        query: { userId }     // El backend usará esto para unirnos a la sala user_userId
+        auth: { token },      
+        query: { userId }     
     });
 
     socket.on('connect', () => {
         resetWatchdog();
-        // Pedimos el estado inicial específico de nuestro bot al conectar
         socket.emit('get-bot-state'); 
         console.log(`✅ Socket: Connected as User ${userId}`);
+        sendToDashboardTerminal("Sistema Conectado: Ready", "success");
     });
 
     socket.on('disconnect', () => {
         console.warn("❌ Socket: Disconnected from Backend");
         updateConnectionStatus('DISCONNECTED');
+        sendToDashboardTerminal("Conexión Perdida con Servidor", "error");
     });
 
     socket.on('connect_error', (err) => {
@@ -50,7 +64,7 @@ export function initSocket() {
         }
     });
 
-    // --- RECEPCIÓN DE PRECIO (Público) ---
+    // --- RECEPCIÓN DE PRECIO ---
     socket.on('marketData', (data) => {
         resetWatchdog();
         if (data?.price) {
@@ -65,22 +79,19 @@ export function initSocket() {
         }
     });
 
-    // --- ESTADO GLOBAL DEL BOT (Privado - Solo para este usuario) ---
+    // --- ESTADO GLOBAL DEL BOT ---
     socket.on('bot-state-update', (state) => {
         if (!state) return;
 
-        // Mezclamos la configuración recibida con la local
         if (state.config) {
             currentBotState.config = { ...currentBotState.config, ...state.config };
         }
         
         Object.assign(currentBotState, state);
 
-        // Derivamos el estado de ejecución de la IA
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
 
-        // Actualización integral de la UI
         updateBotUI(currentBotState);
 
         if (aiBotUI) {
@@ -92,10 +103,17 @@ export function initSocket() {
         }
     });
 
-    // --- LOGS PRIVADOS ---
+    // --- LOGS PRIVADOS (Aquí conectamos con el Terminal) ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
+        
+        // 1. Log estándar
         logStatus(data.message, data.type || 'info');
+        
+        // 2. Enviar al Terminal del Dashboard (NUEVO)
+        sendToDashboardTerminal(data.message, data.type || 'info');
+
+        // 3. Enviar a la UI de la IA si existe
         if (aiBotUI?.addLogEntry) {
             aiBotUI.addLogEntry(data.message, (data.type === 'success' ? 0.9 : 0.5));
         }
@@ -105,6 +123,11 @@ export function initSocket() {
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        
+        // Si hay una decisión de compra/venta, avisar al terminal
+        if (data.message && data.message.includes('ORDER')) {
+            sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
+        }
     });
 
     socket.on('open-orders-update', (data) => {
