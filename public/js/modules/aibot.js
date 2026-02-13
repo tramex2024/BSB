@@ -7,7 +7,10 @@
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { socket } from './socket.js';
-import { fetchOrders } from './orders.js'; // Importación vital para el nuevo plan
+import { fetchOrders } from './orders.js';
+
+// Variable para rastrear el estado de la pestaña actual dentro de AI
+let currentAiStatusTab = 'all';
 
 /**
  * Inicializa la vista de IA y sincroniza componentes
@@ -18,28 +21,30 @@ export function initializeAibotView() {
     // 1. Configurar listeners de inputs y botones
     setupAIControls();
     
-    // 2. Sincronización de UI con el estado global (currentBotState)
+    // 2. Sincronización de UI con el estado global
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-    if (aiInput) {
+    if (aiInput && currentBotState.config?.ai) {
         aiInput.value = currentBotState.config.ai.amountUsdt || "";
     }
-    if (stopAtCycleCheck) {
+    if (stopAtCycleCheck && currentBotState.config?.ai) {
         stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
     }
 
     // Aplicar estado visual al botón START/STOP
-    aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.stopAtCycle);
+    aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.config?.ai?.stopAtCycle);
 
     // 3. CARGA DE ÓRDENES SEGMENTADAS
-    // Buscamos el contenedor de la lista de órdenes en la pestaña AI
     const aiOrderList = document.getElementById('ai-order-list');
     if (aiOrderList) {
-        // Al entrar, cargamos por defecto todas las órdenes con estrategia 'ai'
-        fetchOrders('aibot', 'all', aiOrderList);
+        // Forzamos la limpieza del contenedor antes de cargar para evitar efectos visuales raros
+        aiOrderList.innerHTML = '<div class="text-center py-10 opacity-50 font-mono text-[10px]">SYNCING AI DATABASE...</div>';
         
-        // Inicializamos las pestañas internas de la sección AI (Opened, Filled, etc)
+        // Cargamos específicamente 'aibot'
+        fetchOrders('aibot', currentAiStatusTab, aiOrderList);
+        
+        // Inicializamos las pestañas internas
         setupAiOrderTabs(aiOrderList);
     }
 }
@@ -52,16 +57,20 @@ function setupAiOrderTabs(container) {
     if (!tabs.length || !container) return;
 
     tabs.forEach(tab => {
+        // Reset de eventos para evitar duplicados al navegar entre pestañas de la app
+        tab.onclick = null; 
+
         tab.onclick = (e) => {
-            // Extraemos el estado del ID del botón (ej: ai-tab-opened -> opened)
+            // Extraemos el estado: ai-tab-opened -> opened
             const status = e.currentTarget.id.replace('ai-tab-', '');
+            currentAiStatusTab = status; // Guardamos para cuando regrese a la pestaña
             
-            // Llamamos al fetch especificando que somos la pestaña 'aibot'
+            // Renderizado visual de pestaña activa
+            tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
+            e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
+
+            // Llamada segura
             fetchOrders('aibot', status, container);
-            
-            // Lógica visual para activar la pestaña seleccionada
-            tabs.forEach(t => t.classList.remove('active-tab-style')); // Ajustar según tus clases CSS
-            e.currentTarget.classList.add('active-tab-style');
         };
     });
 }
@@ -70,42 +79,27 @@ function setupAiOrderTabs(container) {
  * Configuración de controles: Inputs, Checkboxes y Botón Principal
  */
 function setupAIControls() {
-    const aiInputs = [
-        document.getElementById('ai-amount-usdt'),
-        document.getElementById('auamountai-usdt')
-    ];
-    
-    const stopCycleChecks = [
-        document.getElementById('au-stop-ai-at-cycle'),
-        document.getElementById('ai-stop-at-cycle')
-    ];
-
+    // Usamos delegación o IDs específicos para evitar que los controles de Autobot se mezclen
+    const aiInput = document.getElementById('ai-amount-usdt');
+    const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
     const btnStartAi = document.getElementById('btn-start-ai');
 
-    // Sincronización de Inputs de Capital
-    aiInputs.forEach(input => {
-        if (!input) return;
-        input.addEventListener('change', async () => {
-            const val = parseFloat(input.value);
+    if (aiInput) {
+        aiInput.onchange = async () => {
+            const val = parseFloat(aiInput.value);
             if (isNaN(val) || val <= 0) return;
-            // Espejo visual entre inputs si existen en varios sitios
-            aiInputs.forEach(i => { if(i && i !== input) i.value = val; });
             await saveAIConfig({ amountUsdt: val });
-        });
-    });
+        };
+    }
 
-    // Sincronización de Checkboxes (Stop at Cycle)
-    stopCycleChecks.forEach(check => {
-        if (!check) return;
-        check.addEventListener('change', async () => {
-            const state = check.checked;
-            stopCycleChecks.forEach(c => { if(c && c !== check) c.checked = state; });
-            await saveAIConfig({ stopAtCycle: state });
-        });
-    });
+    if (stopCycleCheck) {
+        stopCycleCheck.onchange = async () => {
+            await saveAIConfig({ stopAtCycle: stopCycleCheck.checked });
+        };
+    }
 
-    // Botón de Encendido/Apagado (Toggle)
     if (btnStartAi) {
+        // Clonamos para limpiar listeners previos
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
@@ -114,7 +108,7 @@ function setupAIControls() {
             const action = isCurrentlyEnabled ? 'stop' : 'start';
             
             newBtn.disabled = true;
-            newBtn.textContent = "PROCESSING...";
+            newBtn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
 
             try {
                 const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
@@ -129,7 +123,7 @@ function setupAIControls() {
                 const result = await response.json();
                 if (result.success) {
                     currentBotState.isRunning = result.isRunning;
-                    aiBotUI.setRunningStatus(result.isRunning, currentBotState.stopAtCycle);
+                    aiBotUI.setRunningStatus(result.isRunning, currentBotState.config?.ai?.stopAtCycle);
                 }
             } catch (error) {
                 console.error("❌ AI Toggle Error:", error);
@@ -137,6 +131,33 @@ function setupAIControls() {
                 newBtn.disabled = false;
             }
         });
+    }
+}
+
+/**
+ * Guarda la configuración de la IA en el backend
+ */
+async function saveAIConfig(payload) {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        if (data.success && aiBotUI.addLogEntry) {
+            const key = Object.keys(payload)[0];
+            const msg = key === 'stopAtCycle' 
+                ? `Smart Cycle: ${payload[key] ? 'ENABLED' : 'DISABLED'}`
+                : `AI: Capital updated to $${payload[key]}`;
+            aiBotUI.addLogEntry(msg, 0.5);
+        }
+    } catch (error) {
+        console.error("❌ Error saving AI config:", error);
     }
 }
 

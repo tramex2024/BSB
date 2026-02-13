@@ -1,26 +1,51 @@
 // public/js/modules/orders.js
 
-import { fetchFromBackend } from './api.js'; // Importamos tu función genérica
+import { fetchFromBackend } from './api.js';
 
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
     const sideTheme = isBuy ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : 'text-red-400 border-red-500/20 bg-red-500/5';
     
-    // Tomamos el estado y nos aseguramos de que acepte PENDING de nuestra DB
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
     
-    const timestamp = order.orderTime || order.createTime || Date.now();
-    const date = new Date(Number(timestamp)).toLocaleString('en-GB', { 
-        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
-    });
+    // --- CORRECCIÓN DE FECHA AQUÍ ---
+    let finalDate = "---";
+    try {
+        // Intentamos obtener la fecha de varias fuentes posibles en el objeto
+        const rawTime = order.orderTime || order.createdAt || order.createTime;
+        
+        if (rawTime) {
+            let dateObj;
+            // Si es el formato de MongoDB con $date
+            if (rawTime.$date) {
+                dateObj = new Date(rawTime.$date);
+            } 
+            // Si ya es un objeto Date o un string ISO
+            else if (isNaN(rawTime) && new Date(rawTime) !== "Invalid Date") {
+                dateObj = new Date(rawTime);
+            }
+            // Si es un timestamp numérico
+            else {
+                dateObj = new Date(Number(rawTime));
+            }
+
+            if (!isNaN(dateObj.getTime())) {
+                finalDate = dateObj.toLocaleString('en-GB', { 
+                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+                });
+            }
+        }
+    } catch (e) {
+        console.warn("Error parsing date for order:", order.orderId);
+    }
+    // --------------------------------
 
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
     const fullOrderId = (order.orderId || '').toString();
 
-    // Añadimos 'PENDING' a la lista de estados que muestran el botón de cancelar
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(rawState);
 
     return `
@@ -52,7 +77,7 @@ function createOrderHtml(order) {
         </div>
 
         <div class="w-1/4 flex flex-col items-end gap-1">
-            <p class="text-[10px] text-gray-400">${date}</p>
+            <p class="text-[10px] text-gray-400">${finalDate}</p>
             ${isCancellable ? `
                 <button onclick="window.cancelOrder('${fullOrderId}')" 
                         class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
@@ -65,22 +90,14 @@ function createOrderHtml(order) {
 
 /**
  * FETCH ORDERS SEGMENTADO
- * @param {string} strategy - 'autobot' o 'aibot'
- * @param {string} status - 'opened', 'filled', 'cancelled', 'all'
- * @param {HTMLElement} orderListElement - El contenedor donde se renderizan
  */
 export async function fetchOrders(strategy, status, orderListElement) {
-    // SEGURIDAD: Si no hay contenedor o los parámetros son incorrectos, abortamos para evitar el 404
-    if (!orderListElement || !strategy || !status || typeof strategy !== 'string') {
-        return;
-    }
+    if (!orderListElement || !strategy || !status || typeof strategy !== 'string') return;
     
     orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
 
     try {
-        // Petición al backend incluyendo la estrategia en la ruta
         const data = await fetchFromBackend(`/api/orders/${strategy}/${status}`);
-        
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
@@ -96,7 +113,7 @@ export async function fetchOrders(strategy, status, orderListElement) {
 }
 
 /**
- * BRIDGE GLOBAL
+ * BRIDGE GLOBAL PARA CANCELAR
  */
 window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
@@ -108,17 +125,10 @@ window.cancelOrder = async (orderId) => {
         });
         
         if (data.success) {
-            // Buscamos qué contenedor de órdenes está visible actualmente para refrescar
             const auContainer = document.getElementById('au-order-list');
             const aiContainer = document.getElementById('ai-order-list');
-
-            if (auContainer) {
-                // Refrescamos órdenes de Autobot
-                fetchOrders('autobot', 'all', auContainer);
-            } else if (aiContainer) {
-                // Refrescamos órdenes de AIBot
-                fetchOrders('aibot', 'all', aiContainer);
-            }
+            if (auContainer) fetchOrders('autobot', 'all', auContainer);
+            if (aiContainer) fetchOrders('aibot', 'all', aiContainer);
         } else {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }
