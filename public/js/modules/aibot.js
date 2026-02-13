@@ -38,7 +38,7 @@ export function initializeAibotView() {
     // 3. CARGA DE ÓRDENES SEGMENTADAS
     const aiOrderList = document.getElementById('ai-order-list');
     if (aiOrderList) {
-        // Forzamos la limpieza del contenedor antes de cargar para evitar efectos visuales raros
+        // Forzamos la limpieza del contenedor antes de cargar
         aiOrderList.innerHTML = '<div class="text-center py-10 opacity-50 font-mono text-[10px]">SYNCING AI DATABASE...</div>';
         
         // Cargamos específicamente 'aibot'
@@ -57,19 +57,18 @@ function setupAiOrderTabs(container) {
     if (!tabs.length || !container) return;
 
     tabs.forEach(tab => {
-        // Reset de eventos para evitar duplicados al navegar entre pestañas de la app
+        // Reset de eventos para evitar duplicados al navegar
         tab.onclick = null; 
 
         tab.onclick = (e) => {
-            // Extraemos el estado: ai-tab-opened -> opened
             const status = e.currentTarget.id.replace('ai-tab-', '');
-            currentAiStatusTab = status; // Guardamos para cuando regrese a la pestaña
+            currentAiStatusTab = status; 
             
             // Renderizado visual de pestaña activa
             tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
             e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
 
-            // Llamada segura
+            // Llamada segura especificando 'aibot'
             fetchOrders('aibot', status, container);
         };
     });
@@ -79,7 +78,6 @@ function setupAiOrderTabs(container) {
  * Configuración de controles: Inputs, Checkboxes y Botón Principal
  */
 function setupAIControls() {
-    // Usamos delegación o IDs específicos para evitar que los controles de Autobot se mezclen
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
     const btnStartAi = document.getElementById('btn-start-ai');
@@ -99,7 +97,6 @@ function setupAIControls() {
     }
 
     if (btnStartAi) {
-        // Clonamos para limpiar listeners previos
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
@@ -131,33 +128,6 @@ function setupAIControls() {
                 newBtn.disabled = false;
             }
         });
-    }
-}
-
-/**
- * Guarda la configuración de la IA en el backend
- */
-async function saveAIConfig(payload) {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify(payload)
-        });
-        
-        const data = await response.json();
-        if (data.success && aiBotUI.addLogEntry) {
-            const key = Object.keys(payload)[0];
-            const msg = key === 'stopAtCycle' 
-                ? `Smart Cycle: ${payload[key] ? 'ENABLED' : 'DISABLED'}`
-                : `AI: Capital updated to $${payload[key]}`;
-            aiBotUI.addLogEntry(msg, 0.5);
-        }
-    } catch (error) {
-        console.error("❌ Error saving AI config:", error);
     }
 }
 
