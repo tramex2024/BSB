@@ -33,19 +33,30 @@ export function initializeAibotView() {
     }
 
     // Aplicar estado visual al botón START/STOP
-    aiBotUI.setRunningStatus(currentBotState.isRunning, currentBotState.config?.ai?.stopAtCycle);
+    aiBotUI.setRunningStatus(
+        currentBotState.isRunning, 
+        currentBotState.config?.ai?.stopAtCycle,
+        currentBotState.historyCount || 0
+    );
 
     // 3. CARGA DE ÓRDENES SEGMENTADAS
-    const aiOrderList = document.getElementById('ai-order-list');
+    const aiOrderList = document.getElementById('ai-open-orders-body'); // Ajustado al ID del tbody
+    const aiHistoryList = document.getElementById('ai-history-table-body'); // Ajustado al ID del historial
+
     if (aiOrderList) {
-        // Forzamos la limpieza del contenedor antes de cargar
-        aiOrderList.innerHTML = '<div class="text-center py-10 opacity-50 font-mono text-[10px]">SYNCING AI DATABASE...</div>';
-        
-        // Cargamos específicamente 'aibot'
-        fetchOrders('aibot', currentAiStatusTab, aiOrderList);
-        
-        // Inicializamos las pestañas internas
-        setupAiOrderTabs(aiOrderList);
+        // Cargamos específicamente las abiertas de 'aibot'
+        fetchOrders('aibot', 'opened', aiOrderList);
+    }
+
+    if (aiHistoryList) {
+        // Cargamos el historial de 'aibot'
+        fetchOrders('aibot', 'all', aiHistoryList);
+    }
+    
+    // Inicializamos las pestañas internas de filtrado (si existen en el HTML)
+    const tabsContainer = document.getElementById('ai-order-list'); 
+    if (tabsContainer) {
+        setupAiOrderTabs(tabsContainer);
     }
 }
 
@@ -97,6 +108,7 @@ function setupAIControls() {
     }
 
     if (btnStartAi) {
+        // Clonamos para limpiar listeners previos
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
@@ -120,7 +132,11 @@ function setupAIControls() {
                 const result = await response.json();
                 if (result.success) {
                     currentBotState.isRunning = result.isRunning;
-                    aiBotUI.setRunningStatus(result.isRunning, currentBotState.config?.ai?.stopAtCycle);
+                    aiBotUI.setRunningStatus(
+                        result.isRunning, 
+                        currentBotState.config?.ai?.stopAtCycle,
+                        currentBotState.historyCount || 0
+                    );
                 }
             } catch (error) {
                 console.error("❌ AI Toggle Error:", error);
@@ -146,12 +162,18 @@ async function saveAIConfig(payload) {
         });
         
         const data = await response.json();
-        if (data.success && aiBotUI.addLogEntry) {
-            const key = Object.keys(payload)[0];
-            const msg = key === 'stopAtCycle' 
-                ? `Smart Cycle: ${payload[key] ? 'ENABLED' : 'DISABLED'}`
-                : `AI: Capital updated to $${payload[key]}`;
-            aiBotUI.addLogEntry(msg, 0.5);
+        if (data.success) {
+            // Actualizar estado global
+            if (payload.amountUsdt !== undefined) currentBotState.config.ai.amountUsdt = payload.amountUsdt;
+            if (payload.stopAtCycle !== undefined) currentBotState.config.ai.stopAtCycle = payload.stopAtCycle;
+
+            if (aiBotUI.addLogEntry) {
+                const key = Object.keys(payload)[0];
+                const msg = key === 'stopAtCycle' 
+                    ? `Smart Cycle: ${payload[key] ? 'ENABLED' : 'DISABLED'}`
+                    : `AI: Capital updated to $${payload[key]}`;
+                aiBotUI.addLogEntry(msg, 0.5);
+            }
         }
     } catch (error) {
         console.error("❌ Error saving AI config:", error);
@@ -161,7 +183,7 @@ async function saveAIConfig(payload) {
 /**
  * Notificaciones Visuales y Sonoras
  */
-function showAiToast(order) {
+export function showAiToast(order) {
     const toast = document.createElement('div');
     const isBuy = order.side.toUpperCase() === 'BUY';
     toast.className = `fixed bottom-5 right-5 z-50 p-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-500 transform translate-y-0 ${
@@ -184,7 +206,7 @@ function showAiToast(order) {
     }, 4000);
 }
 
-function playNeuralSound(side) {
+export function playNeuralSound(side) {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
