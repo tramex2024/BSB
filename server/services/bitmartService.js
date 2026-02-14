@@ -1,15 +1,20 @@
 /**
  * BSB/server/services/bitmartService.js
- * SERVICIO REST BITMART - Versión 2026 Blindada
+ * SERVICIO REST BITMART - Versión 2026 Blindada con Sincronización V4
  */
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
+const querystring = require('querystring');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
+const DEFAULT_V4_POST_MEMO = 'GainBot';
 
-// --- UTILIDAD DE ORDENAMIENTO PARA FIRMA (Añadido para evitar 401) ---
+// =========================================================================
+// UTILIDADES DE FIRMA Y CACHÉ
+// =========================================================================
+
 function sortObjectKeys(obj) {
     if (typeof obj !== 'object' || obj === null) return obj;
     if (Array.isArray(obj)) return obj.map(item => sortObjectKeys(item));
@@ -21,43 +26,56 @@ function sortObjectKeys(obj) {
     return sortedObj;
 }
 
-// =========================================================================
-// MOTOR DE FIRMA Y CACHÉ DINÁMICO
-// =========================================================================
 const tickerCache = new Map(); 
 const klinesCache = new Map(); 
-
 const CACHE_TTL = 2000;  
 const KLINES_TTL = 15000;
 
+// =========================================================================
+// MOTOR DE PETICIONES (makeRequest)
+// =========================================================================
+
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
+    // Sincronización de tiempo (Usamos el reloj local, BitMart acepta un margen de 10s)
     const timestamp = Date.now().toString();
     const headers = {
         'Content-Type': 'application/json',
         'X-BM-TIMESTAMP': timestamp,
+        'User-Agent': 'axios/1.9.0'
     };
 
     if (userCreds) {
         const { apiKey, secretKey, apiMemo } = userCreds;
-        
+
+        // Workaround para Memo en V4 POST
+        let currentMemo = apiMemo;
+        if (method === 'POST' && path.includes('/v4/') && (!currentMemo || currentMemo === "")) {
+            currentMemo = DEFAULT_V4_POST_MEMO;
+        }
+
         let bodyOrQuery = "";
         if (method === 'GET') {
-            // Ordenar alfabéticamente para la firma de la Query String
+            // Regla BitMart: Parámetros ordenados alfabéticamente en la Query String
             const sortedParams = sortObjectKeys(params);
-            bodyOrQuery = new URLSearchParams(sortedParams).toString();
+            bodyOrQuery = querystring.stringify(sortedParams);
         } else if (method === 'POST') {
-            // Ordenar alfabéticamente para la firma del Body JSON
+            // Regla BitMart V4: El body debe estar ordenado y si está vacío es ""
             const sortedBody = sortObjectKeys(body);
             bodyOrQuery = (sortedBody && Object.keys(sortedBody).length > 0) ? JSON.stringify(sortedBody) : "";
         }
 
-        const memoStr = apiMemo || "";
-        const message = `${timestamp}#${memoStr}#${bodyOrQuery}`;
+        const memoForHash = (currentMemo === null || currentMemo === undefined) ? '' : String(currentMemo);
+        
+        // Construcción del mensaje: timestamp#memo#body
+        const message = (memoForHash === '') 
+            ? `${timestamp}#${bodyOrQuery}`
+            : `${timestamp}#${memoForHash}#${bodyOrQuery}`;
+
         const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
         headers['X-BM-KEY'] = apiKey;
         headers['X-BM-SIGN'] = sign;
-        if (apiMemo) headers['X-BM-MEMO'] = apiMemo;
+        if (memoForHash !== '') headers['X-BM-MEMO'] = memoForHash;
     }
 
     try {
@@ -68,9 +86,11 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
             timeout: 10000 
         };
 
-        // ENVIAR DATOS ORDENADOS: Crucial para que BitMart no rechace la firma
-        if (method === 'GET') config.params = sortObjectKeys(params);
-        else config.data = sortObjectKeys(body);
+        if (method === 'GET') {
+            config.params = sortObjectKeys(params);
+        } else {
+            config.data = sortObjectKeys(body);
+        }
 
         const response = await axios(config);
         if (response.data.code === 1000) return response.data;
@@ -79,15 +99,16 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 
     } catch (error) {
         if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}. Revisa el orden de parámetros.`);
+            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}.`);
         }
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO (Mantenida 100% igual)
+// LÓGICA DE NEGOCIO (Manteniendo tus funciones de BSB 2026)
 // =========================================================================
+
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
 const bitmartService = {
@@ -118,7 +139,6 @@ const bitmartService = {
     getTicker: async (symbol) => {
         const now = Date.now();
         const cached = tickerCache.get(symbol);
-
         if (cached?.promise) return cached.promise;
         if (cached?.data && (now - cached.timestamp < CACHE_TTL)) return cached.data;
 
@@ -133,7 +153,6 @@ const bitmartService = {
                 throw err;
             }
         })();
-
         tickerCache.set(symbol, { ...cached, promise });
         return promise;
     },
@@ -164,7 +183,6 @@ const bitmartService = {
                 throw err;
             }
         })();
-
         klinesCache.set(cacheKey, { ...cached, promise });
         return promise;
     },
@@ -172,20 +190,12 @@ const bitmartService = {
     getOpenOrders: async (symbol, creds) => {
         const safeSymbol = symbol || 'BTC_USDT';
         const normalizedSymbol = safeSymbol.includes('_') ? safeSymbol : safeSymbol.replace('USDT', '_USDT');
-        
         try {
-            const res = await makeRequest(
-                'POST', 
-                '/spot/v4/query/open-orders', 
-                {}, 
-                { symbol: normalizedSymbol, limit: 100 }, 
-                creds
-            );
-
+            const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol: normalizedSymbol, limit: 100 }, creds);
             const orders = res.data?.list || res.data || [];
             return { orders: Array.isArray(orders) ? orders : [] };
         } catch (error) {
-            console.error(`${LOG_PREFIX} Error en getOpenOrders para ${normalizedSymbol}:`, error.message);
+            console.error(`${LOG_PREFIX} Error en getOpenOrders:`, error.message);
             throw error;
         }
     },
@@ -193,24 +203,14 @@ const bitmartService = {
     getHistoryOrders: async (options = {}, creds) => {
         const symbol = options.symbol || 'BTC_USDT';
         const normalizedSymbol = symbol.includes('_') ? symbol : symbol.replace('USDT', '_USDT');
-
-        const requestBody = {
-            symbol: normalizedSymbol,
-            orderMode: 'spot',
-            limit: options.limit || 100
-        };
-        
+        const requestBody = { symbol: normalizedSymbol, orderMode: 'spot', limit: options.limit || 100 };
         const statusStr = options.order_state || options.status;
         if (statusStr && statusStr !== 'all') {
             const statusCode = orderStatusMap[statusStr];
             if (statusCode !== undefined) requestBody.status = statusCode;
         }
-
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody, creds);
-        
         let rawOrders = res.data?.list || res.data || [];
-        if (res.data?.data?.list) rawOrders = res.data.data.list;
-
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
             ...o,
             price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
@@ -222,9 +222,7 @@ const bitmartService = {
     placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = null) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
-        
         if (clientOrderId) body.clientOrderId = clientOrderId; 
-
         if (type.toLowerCase() === 'limit') {
             body.size = amount.toString();
             body.price = price.toString();
@@ -232,14 +230,8 @@ const bitmartService = {
             if (sideLower === 'buy') body.notional = amount.toString();
             else body.size = amount.toString();
         }
-        
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
         return res.data;
-    },
-
-    placeMarketOrder: async ({ symbol, side, notional, size, clientOrderId }, creds) => {
-        const amount = side.toLowerCase() === 'buy' ? notional : size;
-        return bitmartService.placeOrder(symbol, side, 'market', amount, null, creds, clientOrderId);
     }
 };
 
