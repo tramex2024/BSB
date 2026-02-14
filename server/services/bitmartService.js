@@ -2,12 +2,11 @@
 
 /**
  * BSB/server/services/bitmartService.js
- * SERVICIO REST BITMART - Optimizado para Multi-usuario y Caché por Símbolo
+ * SERVICIO REST BITMART - Versión 2026 Blindada
  */
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
-const { initOrderWebSocket, stopOrderWebSocket } = require('./bitmartWs');
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
@@ -15,19 +14,14 @@ const LOG_PREFIX = '[BITMART_SERVICE]';
 // =========================================================================
 // MOTOR DE FIRMA Y CACHÉ DINÁMICO
 // =========================================================================
-const tickerCache = new Map(); // Mapa para: symbol -> {data, timestamp, promise}
-const klinesCache = new Map(); // Mapa para: symbol_interval -> {data, timestamp, promise}
+const tickerCache = new Map(); 
+const klinesCache = new Map(); 
 
 const CACHE_TTL = 2000;  
 const KLINES_TTL = 15000;
 
 /**
- * Realiza peticiones a la API de BitMart.
- * @param {string} method - 'GET' o 'POST'
- * @param {string} path - Endpoint de la API
- * @param {Object} params - Parámetros para GET
- * @param {Object} body - Payload para POST
- * @param {Object|null} userCreds - Credenciales {apiKey, secretKey, apiMemo}
+ * Realiza peticiones a la API de BitMart con lógica de firma V4 corregida.
  */
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
     const timestamp = Date.now().toString();
@@ -39,17 +33,20 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
     if (userCreds) {
         const { apiKey, secretKey, apiMemo } = userCreds;
         
-        // BITMART V4 REGLA DE ORO: 
-        // Si es GET, el body es ""
-        // Si es POST y el objeto está vacío, el body es "" (NO "{}")
-        let bodyForSign = "";
-        if (method === 'POST' && body && Object.keys(body).length > 0) {
-            bodyForSign = JSON.stringify(body);
+        // REGLA DE ORO V4: 
+        // 1. Si es GET, se usa la query string.
+        // 2. Si es POST y no hay datos, el body DEBE ser "" (string vacío), no "{}"
+        let bodyOrQuery = "";
+        if (method === 'GET') {
+            const queryParams = new URLSearchParams(params).toString();
+            bodyOrQuery = queryParams;
+        } else if (method === 'POST') {
+            bodyOrQuery = (body && Object.keys(body).length > 0) ? JSON.stringify(body) : "";
         }
 
-        // Construcción del mensaje EXACTA para V4
         const memoStr = apiMemo || "";
-        const message = `${timestamp}#${memoStr}#${bodyForSign}`;
+        // El mensaje para la firma es estrictamente: timestamp#memo#bodyOrQuery
+        const message = `${timestamp}#${memoStr}#${bodyOrQuery}`;
         
         const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
@@ -71,14 +68,13 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 
         const response = await axios(config);
 
-        // BitMart Success Code: 1000
         if (response.data.code === 1000) return response.data;
 
         throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
         if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}. Revisa el Formato del Mensaje.`);
+            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}. Verifica API Key/Secret/Memo.`);
         }
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
@@ -149,7 +145,12 @@ const bitmartService = {
             try {
                 const res = await makeRequest('GET', '/spot/quotation/v3/klines', { symbol, step: interval, size: limit });
                 const data = res.data.map(c => ({
-                    timestamp: parseInt(c[0]), open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5])
+                    timestamp: parseInt(c[0]), 
+                    open: parseFloat(c[1]), 
+                    high: parseFloat(c[2]), 
+                    low: parseFloat(c[3]), 
+                    close: parseFloat(c[4]), 
+                    volume: parseFloat(c[5])
                 }));
                 klinesCache.set(cacheKey, { data, timestamp: Date.now(), promise: null });
                 return data;
@@ -164,11 +165,12 @@ const bitmartService = {
     },
 
     /**
-     * Obtiene órdenes abiertas con normalización de símbolo
+     * Obtiene órdenes abiertas con protección contra nulos y normalización
      */
     getOpenOrders: async (symbol, creds) => {
-        // BitMart V4 REQUIERE guion bajo (ej: BTC_USDT)
-        const normalizedSymbol = symbol.includes('_') ? symbol : symbol.replace('USDT', '_USDT');
+        // 🛡️ SOLUCIÓN AL ERROR 'includes' de null
+        const safeSymbol = symbol || 'BTC_USDT';
+        const normalizedSymbol = safeSymbol.includes('_') ? safeSymbol : safeSymbol.replace('USDT', '_USDT');
         
         try {
             const res = await makeRequest(
@@ -179,7 +181,6 @@ const bitmartService = {
                 creds
             );
 
-            // BitMart puede devolver la lista en diferentes niveles según la versión
             const orders = res.data?.list || res.data || [];
             return { orders: Array.isArray(orders) ? orders : [] };
         } catch (error) {
@@ -188,9 +189,6 @@ const bitmartService = {
         }
     },
 
-    /**
-     * Obtiene historial con normalización de símbolo
-     */
     getHistoryOrders: async (options = {}, creds) => {
         const symbol = options.symbol || 'BTC_USDT';
         const normalizedSymbol = symbol.includes('_') ? symbol : symbol.replace('USDT', '_USDT');
@@ -214,21 +212,17 @@ const bitmartService = {
 
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
             ...o,
-            // Normalizamos campos de precio y cantidad para la UI
             price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
             size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
             orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
         }));
     },
 
-placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = null) => { // <--- Añadimos clientOrderId
+    placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = null) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
         
-        // Si enviamos un clientOrderId, lo adjuntamos al cuerpo de la petición
-        if (clientOrderId) {
-            body.clientOrderId = clientOrderId; 
-        }
+        if (clientOrderId) body.clientOrderId = clientOrderId; 
 
         if (type.toLowerCase() === 'limit') {
             body.size = amount.toString();
@@ -238,11 +232,11 @@ placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = nul
             else body.size = amount.toString();
         }
         
+        // El endpoint de órdenes sigue siendo v2 en BitMart para estabilidad
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
         return res.data;
     },
 
-    // Actualizamos también placeMarketOrder para que pueda recibir y pasar el ID
     placeMarketOrder: async ({ symbol, side, notional, size, clientOrderId }, creds) => {
         const amount = side.toLowerCase() === 'buy' ? notional : size;
         return bitmartService.placeOrder(symbol, side, 'market', amount, null, creds, clientOrderId);
