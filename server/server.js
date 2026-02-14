@@ -205,17 +205,20 @@ const initializePrivateWebSockets = async () => {
                 const userIdStr = user._id.toString();
 
                 bitmartWs.initOrderWebSocket(userIdStr, credentials, async (ordersData) => {
+    // Aseguramos que ordersData no sea null antes de procesar
+    if (!ordersData) return;
+
     console.log(`[BACKEND-WS] 📥 Orden detectada via WS para: ${userIdStr}`);
     
-    // CORRECCIÓN: Llamamos a la función con el nombre correcto y detectamos la estrategia
-    // Nota: ordersData suele ser un array o un objeto dependiendo del evento de BitMart
-    const strategy = ordersData.clientOrderId?.startsWith('L_') ? 'long' : 
-                     ordersData.clientOrderId?.startsWith('S_') ? 'short' : 'ai';
+    // Detectamos estrategia con fallback seguro
+    const cId = ordersData.clientOrderId || "";
+    const strategy = cId.startsWith('L_') ? 'long' : 
+                     cId.startsWith('S_') ? 'short' : 'ai';
 
     await orderPersistenceService.saveExecutedOrder(ordersData, strategy, userIdStr);
 
+    // 📢 Emisión a la sala específica del usuario
     io.to(userIdStr).emit('open-orders-update', ordersData);
-    io.to(userIdStr).emit('ai-history-update', ordersData);
 });
             } catch (err) {
                 console.error(`❌ Error en WS privado para ${user.email}:`, err.message);
@@ -264,6 +267,7 @@ setInterval(async () => {
                 if (!credentials.apiKey || !credentials.secretKey) continue;
 
                 // Intentamos sincronizar
+                const defaultSymbol = "BTC_USDT";
                 await orderSyncService.syncOpenOrders(user._id, credentials, io);
 
             } catch (userErr) {
