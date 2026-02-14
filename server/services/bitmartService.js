@@ -36,33 +36,25 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         'X-BM-TIMESTAMP': timestamp,
     };
 
-    const isPublic = path.includes('/ticker') || path.includes('/klines') || path.includes('/symbols/details');
-
-    if (!isPublic) {
-        if (!userCreds || !userCreds.apiKey || !userCreds.secretKey) {
-            throw new Error(`${LOG_PREFIX} API Keys faltantes.`);
-        }
-
+    if (userCreds) {
         const { apiKey, secretKey, apiMemo } = userCreds;
         
-        // 1. Preparamos el body exactamente como el archivo antiguo
-        let bodyForSign = (method === 'POST') ? JSON.stringify(body) : '';
-        
-        // 2. LÓGICA DE FIRMA UNIFICADA (Probada en archivo antiguo)
-        // Eliminamos el method y el path para V2/V4 y endpoints de cuenta
-        let message = "";
-        if (path.includes('/v4/') || path.includes('/v2/') || path.includes('/account/')) {
-            message = `${timestamp}#${apiMemo || ''}#${bodyForSign}`;
-        } else {
-            // Solo para V1 Spot (Ticker, etc si fueran privados)
-            message = `${timestamp}#${apiMemo || ''}#${method}${path}${bodyForSign}`;
+        // BITMART V4 REGLA DE ORO: 
+        // Si es GET, el body es ""
+        // Si es POST y el objeto está vacío, el body es "" (NO "{}")
+        let bodyForSign = "";
+        if (method === 'POST' && body && Object.keys(body).length > 0) {
+            bodyForSign = JSON.stringify(body);
         }
+
+        // Construcción del mensaje EXACTA para V4
+        const memoStr = apiMemo || "";
+        const message = `${timestamp}#${memoStr}#${bodyForSign}`;
         
         const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
         headers['X-BM-KEY'] = apiKey;
         headers['X-BM-SIGN'] = sign;
-        // Opcional: BitMart a veces pide el memo en el header para V4
         if (apiMemo) headers['X-BM-MEMO'] = apiMemo;
     }
 
