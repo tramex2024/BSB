@@ -36,34 +36,33 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         'X-BM-TIMESTAMP': timestamp,
     };
 
-    const isPublic = path.includes('/ticker') || path.includes('/klines') || path.includes('/symbols/details');
+    const isPublic = path.includes('/spot/v1/ticker') || 
+                     path.includes('/spot/quotation/v3/klines') ||
+                     path.includes('/spot/v1/symbols/details');
 
     if (!isPublic) {
         if (!userCreds || !userCreds.apiKey || !userCreds.secretKey) {
-            throw new Error(`${LOG_PREFIX} API Keys faltantes.`);
+            throw new Error(`${LOG_PREFIX} Operación rechazada: API Keys faltantes.`);
         }
 
         const { apiKey, secretKey, apiMemo } = userCreds;
+        const bodyForSign = method === 'POST' ? JSON.stringify(body) : '';
         
-        // 1. Preparamos el body exactamente como el archivo antiguo
-        let bodyForSign = (method === 'POST') ? JSON.stringify(body) : '';
-        
-        // 2. LÓGICA DE FIRMA UNIFICADA (Probada en archivo antiguo)
-        // Eliminamos el method y el path para V2/V4 y endpoints de cuenta
+        // --- CORRECCIÓN DE FIRMA PARA V4 ---
         let message = "";
-        if (path.includes('/v4/') || path.includes('/v2/') || path.includes('/account/')) {
-            message = `${timestamp}#${apiMemo || ''}#${bodyForSign}`;
+        if (path.includes('/v4/') || path.includes('/v2/')) {
+            // BitMart V4/V2 Auth Pattern
+            message = `${timestamp}#${apiMemo}#${bodyForSign}`;
         } else {
-            // Solo para V1 Spot (Ticker, etc si fueran privados)
-            message = `${timestamp}#${apiMemo || ''}#${method}${path}${bodyForSign}`;
+            // BitMart V1 Pattern
+            message = `${timestamp}#${apiMemo}#${method}${path}${bodyForSign}`;
         }
         
+        // IMPORTANTE: Si el memo está vacío, el string debe llevar el # igual: timestamp##body
         const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
         headers['X-BM-KEY'] = apiKey;
         headers['X-BM-SIGN'] = sign;
-        // Opcional: BitMart a veces pide el memo en el header para V4
-        if (apiMemo) headers['X-BM-MEMO'] = apiMemo;
     }
 
     try {
@@ -74,20 +73,30 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
             timeout: 10000 
         };
 
-        if (method === 'GET') config.params = params;
-        else config.data = body;
+        if (method === 'GET') {
+            config.params = params;
+        } else {
+            config.data = body;
+        }
 
         const response = await axios(config);
 
-        // BitMart Success Code: 1000
-        if (response.data.code === 1000) return response.data;
+        // BitMart usa el código 1000 para "Success"
+        if (response.data.code === 1000) {
+            return response.data;
+        }
 
-        throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
+        // Manejo de errores específicos de la API de BitMart
+        throw new Error(`BitMart API Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
-        if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}. Revisa el Formato del Mensaje.`);
+        // Error de Rate Limit (Demasiadas peticiones)
+        if (error.response?.status === 429) {
+            console.error(`${LOG_PREFIX} 🚨 RATE LIMIT DETECTADO en ${path}`);
+            throw new Error("RATE_LIMIT_EXCEEDED");
         }
+
+        // Errores de red o de la lógica de arriba
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
 }
@@ -171,41 +180,18 @@ const bitmartService = {
         return promise;
     },
 
-    /**
-     * Obtiene órdenes abiertas con normalización de símbolo
-     */
     getOpenOrders: async (symbol, creds) => {
-        // BitMart V4 REQUIERE guion bajo (ej: BTC_USDT)
-        const normalizedSymbol = symbol.includes('_') ? symbol : symbol.replace('USDT', '_USDT');
-        
-        try {
-            const res = await makeRequest(
-                'POST', 
-                '/spot/v4/query/open-orders', 
-                {}, 
-                { symbol: normalizedSymbol, limit: 100 }, 
-                creds
-            );
-
-            // BitMart puede devolver la lista en diferentes niveles según la versión
-            const orders = res.data?.list || res.data || [];
-            return { orders: Array.isArray(orders) ? orders : [] };
-        } catch (error) {
-            console.error(`${LOG_PREFIX} Error en getOpenOrders para ${normalizedSymbol}:`, error.message);
-            throw error;
-        }
+        const res = await makeRequest('POST', '/spot/v4/query/open-orders', {}, { symbol, limit: 100 }, creds);
+        let orders = res.data?.data?.list || res.data?.data || res.data || [];
+        return { orders: Array.isArray(orders) ? orders : [] };
     },
 
-    /**
-     * Obtiene historial con normalización de símbolo
-     */
     getHistoryOrders: async (options = {}, creds) => {
-        const symbol = options.symbol || 'BTC_USDT';
-        const normalizedSymbol = symbol.includes('_') ? symbol : symbol.replace('USDT', '_USDT');
-
         const requestBody = {
-            symbol: normalizedSymbol,
+            symbol: options.symbol || 'BTC_USDT',
             orderMode: 'spot',
+            startTime: options.startTime,
+            endTime: options.endTime,
             limit: options.limit || 100
         };
         
@@ -217,16 +203,16 @@ const bitmartService = {
 
         const res = await makeRequest('POST', '/spot/v4/query/history-orders', {}, requestBody, creds);
         
-        let rawOrders = res.data?.list || res.data || [];
-        if (res.data?.data?.list) rawOrders = res.data.data.list;
+        let rawOrders = res.data?.data?.list || res.data?.data || res.data || [];
 
-        return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
-            ...o,
-            // Normalizamos campos de precio y cantidad para la UI
-            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
-            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
-        }));
+        return (Array.isArray(rawOrders) ? rawOrders : []).map(o => {
+            return {
+                ...o,
+                price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
+                size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
+                orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
+            };
+        });
     },
 
 placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = null) => { // <--- Añadimos clientOrderId
