@@ -133,17 +133,25 @@ export function initSocket() {
     socket.on('open-orders-update', async (data) => {
         const rawOrders = Array.isArray(data) ? data : (data.orders || []);
         
-        // 1. Actualización para AIBOT
+        // 1. Actualización para AIBOT (Se mantiene igual)
         const aiOrders = rawOrders.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
         if (aiBotUI?.updateOpenOrdersTable) {
             aiBotUI.updateOpenOrdersTable(aiOrders);
         }
 
-        // 2. NUEVA LÓGICA RESTAURADA: Actualización para AUTOBOT
+        // 2. LÓGICA OPTIMIZADA PARA AUTOBOT
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {
-            const { fetchOrders } = await import('./orders.js');
-            fetchOrders('autobot', 'all', auOrderList);
+            // Buscamos qué pestaña tiene el estilo de "activa" actualmente
+            const activeTabBtn = document.querySelector('.autobot-tabs button.text-emerald-400');
+            const currentTab = activeTabBtn ? activeTabBtn.id.replace('tab-', '') : 'opened';
+
+            // Solo recargamos si estamos en una pestaña que incluya órdenes abiertas
+            if (currentTab === 'opened' || currentTab === 'all' || currentTab === 'open') {
+                const { fetchOrders } = await import('./orders.js');
+                // IMPORTANTE: Pasamos un cuarto parámetro 'true' para indicar que es una actualización silenciosa
+                fetchOrders('autobot', currentTab, auOrderList, true); 
+            }
         }
     });
 

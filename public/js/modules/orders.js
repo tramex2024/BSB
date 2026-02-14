@@ -1,5 +1,3 @@
-// public/js/modules/orders.js
-
 import { fetchFromBackend } from './api.js';
 
 function createOrderHtml(order) {
@@ -10,24 +8,17 @@ function createOrderHtml(order) {
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
     
-    // --- CORRECCIÓN DE FECHA AQUÍ ---
+    // --- PROCESAMIENTO DE FECHA ---
     let finalDate = "---";
     try {
-        // Intentamos obtener la fecha de varias fuentes posibles en el objeto
         const rawTime = order.orderTime || order.createdAt || order.createTime;
-        
         if (rawTime) {
             let dateObj;
-            // Si es el formato de MongoDB con $date
             if (rawTime.$date) {
                 dateObj = new Date(rawTime.$date);
-            } 
-            // Si ya es un objeto Date o un string ISO
-            else if (isNaN(rawTime) && new Date(rawTime) !== "Invalid Date") {
+            } else if (isNaN(rawTime) && new Date(rawTime) !== "Invalid Date") {
                 dateObj = new Date(rawTime);
-            }
-            // Si es un timestamp numérico
-            else {
+            } else {
                 dateObj = new Date(Number(rawTime));
             }
 
@@ -40,7 +31,6 @@ function createOrderHtml(order) {
     } catch (e) {
         console.warn("Error parsing date for order:", order.orderId);
     }
-    // --------------------------------
 
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
@@ -89,19 +79,28 @@ function createOrderHtml(order) {
 }
 
 /**
- * FETCH ORDERS SEGMENTADO (Corregido para mapeo ai/aibot)
+ * FETCH ORDERS SEGMENTADO
+ * @param {string} strategy - 'autobot' o 'aibot'
+ * @param {string} status - 'opened', 'filled', 'cancelled', 'all'
+ * @param {HTMLElement} orderListElement - Contenedor DOM
+ * @param {boolean} silent - Si es true, no muestra el spinner (usado por el socket)
  */
-export async function fetchOrders(strategy, status, orderListElement) {
+export async function fetchOrders(strategy, status, orderListElement, silent = false) {
     if (!orderListElement || !strategy || !status || typeof strategy !== 'string') return;
     
-    orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
+    // Solo mostramos el spinner si NO es una actualización silenciosa
+    if (!silent) {
+        orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
+    }
 
     try {
-        // --- TRADUCCIÓN DE ESTRATEGIA ---
-        // Si el frontend pide 'aibot', le pedimos al backend 'ai' que es como está en tu DB
+        // Mapeo de estrategia para DB
         const dbStrategy = strategy === 'aibot' ? 'ai' : strategy;
         
-        const data = await fetchFromBackend(`/api/orders/${dbStrategy}/${status}`);
+        // TRADUCCIÓN DE STATUS: Normalizamos 'opened' (del HTML) a 'open' (del Backend)
+        const dbStatus = status === 'opened' ? 'open' : status;
+        
+        const data = await fetchFromBackend(`/api/orders/${dbStrategy}/${dbStatus}`);
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
@@ -112,7 +111,9 @@ export async function fetchOrders(strategy, status, orderListElement) {
         orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
     } catch (error) {
         console.error("Fetch Orders Error:", error);
-        orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
+        if (!silent) {
+            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
+        }
     }
 }
 
@@ -131,6 +132,7 @@ window.cancelOrder = async (orderId) => {
         if (data.success) {
             const auContainer = document.getElementById('au-order-list');
             const aiContainer = document.getElementById('ai-order-list');
+            // Al cancelar, refrescamos la vista actual (usando 'all' por seguridad o el estado previo)
             if (auContainer) fetchOrders('autobot', 'all', auContainer);
             if (aiContainer) fetchOrders('aibot', 'all', aiContainer);
         } else {

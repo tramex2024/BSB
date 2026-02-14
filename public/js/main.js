@@ -117,6 +117,13 @@ export async function initializeTab(tabName) {
                 if (aiOpenOrdersCont) fetchOrders('aibot', 'opened', aiOpenOrdersCont);
                 if (aiHistoryCont) fetchOrders('aibot', 'all', aiHistoryCont);
             }
+            
+            // --- PERSISTENCIA ESPECÍFICA PARA AUTOBOT AL REGRESAR DE NAVEGACIÓN ---
+		if (tabName === 'autobot') {
+    		const auOrderList = document.getElementById('au-order-list');
+    		// Cargamos 'opened' por defecto al entrar a la pestaña
+    		if (auOrderList) fetchOrders('autobot', 'opened', auOrderList);
+	    }
         }
 
         // Sincronización estética de elementos de IA
