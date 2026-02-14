@@ -1,5 +1,8 @@
 import { fetchFromBackend } from './api.js';
 
+/**
+ * Renders the HTML for a single order row
+ */
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
     const isBuy = side === 'buy';
@@ -8,7 +11,7 @@ function createOrderHtml(order) {
     const rawState = (order.state || order.status || 'UNKNOWN').toUpperCase();
     const isFilled = rawState.includes('FILLED');
     
-    // --- PROCESAMIENTO DE FECHA ---
+    // --- DATE PROCESSING ---
     let finalDate = "---";
     try {
         const rawTime = order.orderTime || order.createdAt || order.createTime;
@@ -16,7 +19,7 @@ function createOrderHtml(order) {
             let dateObj;
             if (rawTime.$date) {
                 dateObj = new Date(rawTime.$date);
-            } else if (isNaN(rawTime) && new Date(rawTime) !== "Invalid Date") {
+            } else if (isNaN(rawTime) && !isNaN(Date.parse(rawTime))) {
                 dateObj = new Date(rawTime);
             } else {
                 dateObj = new Date(Number(rawTime));
@@ -34,15 +37,16 @@ function createOrderHtml(order) {
 
     const price = parseFloat(order.price || 0).toFixed(2);
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
-    const fullOrderId = (order.orderId || '').toString();
+    const fullOrderId = (order.orderId || order.order_id || '').toString();
 
+    // Determine if the order can be cancelled based on typical BitMart statuses
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(rawState);
 
     return `
     <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
         <div class="flex items-center gap-4 w-1/4">
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase">Side</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Side</span>
                 <div class="${sideTheme} py-0.5 px-2 rounded-md w-fit flex items-center gap-1">
                     <span class="font-black text-xs uppercase">${side}</span>
                 </div>
@@ -51,15 +55,15 @@ function createOrderHtml(order) {
 
         <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase">Price</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Price</span>
                 <span class="text-gray-100 font-mono text-sm">$${price}</span>
             </div>
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase">Amount</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Amount</span>
                 <span class="text-gray-300 font-mono text-sm">${quantity}</span>
             </div>
             <div class="flex flex-col items-center">
-                <span class="text-[9px] text-gray-500 font-bold uppercase">Status</span>
+                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Status</span>
                 <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
                     ${rawState}
                 </span>
@@ -67,44 +71,42 @@ function createOrderHtml(order) {
         </div>
 
         <div class="w-1/4 flex flex-col items-end gap-1">
-            <p class="text-[10px] text-gray-400">${finalDate}</p>
+            <p class="text-[10px] text-gray-400 font-mono">${finalDate}</p>
             ${isCancellable ? `
                 <button onclick="window.cancelOrder('${fullOrderId}')" 
                         class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
                     Cancel
                 </button>
-            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right">ID: ${fullOrderId}</p>`}
+            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right opacity-50">ID: ${fullOrderId.slice(-6)}</p>`}
         </div>
     </div>`;
 }
 
 /**
  * FETCH ORDERS SEGMENTADO
- * @param {string} strategy - 'autobot' o 'aibot'
- * @param {string} status - 'opened', 'filled', 'cancelled', 'all'
- * @param {HTMLElement} orderListElement - Contenedor DOM
- * @param {boolean} silent - Si es true, no muestra el spinner (usado por el socket)
  */
 export async function fetchOrders(strategy, status, orderListElement, silent = false) {
     if (!orderListElement || !strategy || !status || typeof strategy !== 'string') return;
     
-    // Solo mostramos el spinner si NO es una actualización silenciosa
     if (!silent) {
         orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
     }
 
     try {
-        // Mapeo de estrategia para DB
+        // 1. Mapeo de estrategia para DB (aibot -> ai)
         const dbStrategy = strategy === 'aibot' ? 'ai' : strategy;
         
-        // TRADUCCIÓN DE STATUS: Normalizamos 'opened' (del HTML) a 'open' (del Backend)
-        const dbStatus = status === 'opened' ? 'open' : status;
-        
+        // 2. CORRECCIÓN DE STATUS (Frontend 'opened' -> Backend 'opened')
+        // Si el backend sigue dando 400 con 'open', asegúrate de usar 'opened' o 'all'
+        let dbStatus = status;
+        if (status === 'open') dbStatus = 'opened'; 
+        if (status === 'history') dbStatus = 'closed';
+
         const data = await fetchFromBackend(`/api/orders/${dbStrategy}/${dbStatus}`);
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-xs uppercase tracking-widest">No ${status} orders in ${strategy}</div>`;
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-[10px] uppercase tracking-widest">No ${status} orders found</div>`;
             return;
         }
 
@@ -112,13 +114,13 @@ export async function fetchOrders(strategy, status, orderListElement, silent = f
     } catch (error) {
         console.error("Fetch Orders Error:", error);
         if (!silent) {
-            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold">ERROR LOADING</div>`;
+            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold uppercase">Error loading ${status} orders</div>`;
         }
     }
 }
 
 /**
- * BRIDGE GLOBAL PARA CANCELAR
+ * GLOBAL BRIDGE FOR CANCELLATION
  */
 window.cancelOrder = async (orderId) => {
     if (!confirm(`Cancel order ${orderId}?`)) return;
@@ -130,11 +132,11 @@ window.cancelOrder = async (orderId) => {
         });
         
         if (data.success) {
+            // Refrescar ambas listas para mantener consistencia
             const auContainer = document.getElementById('au-order-list');
             const aiContainer = document.getElementById('ai-order-list');
-            // Al cancelar, refrescamos la vista actual (usando 'all' por seguridad o el estado previo)
-            if (auContainer) fetchOrders('autobot', 'all', auContainer);
-            if (aiContainer) fetchOrders('aibot', 'all', aiContainer);
+            if (auContainer) fetchOrders('autobot', 'opened', auContainer);
+            if (aiContainer) fetchOrders('aibot', 'opened', aiContainer);
         } else {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }
