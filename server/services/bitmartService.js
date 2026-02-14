@@ -42,12 +42,11 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         
         let bodyOrQuery = "";
         if (method === 'GET') {
-            // Ordenamos parámetros para la firma GET
+            // Ordenar alfabéticamente para la firma de la Query String
             const sortedParams = sortObjectKeys(params);
-            const queryParams = new URLSearchParams(sortedParams).toString();
-            bodyOrQuery = queryParams;
+            bodyOrQuery = new URLSearchParams(sortedParams).toString();
         } else if (method === 'POST') {
-            // Ordenamos el body para la firma POST y manejamos el string vacío
+            // Ordenar alfabéticamente para la firma del Body JSON
             const sortedBody = sortObjectKeys(body);
             bodyOrQuery = (sortedBody && Object.keys(sortedBody).length > 0) ? JSON.stringify(sortedBody) : "";
         }
@@ -69,7 +68,7 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
             timeout: 10000 
         };
 
-        // Importante: Usamos los objetos ordenados también en el envío
+        // ENVIAR DATOS ORDENADOS: Crucial para que BitMart no rechace la firma
         if (method === 'GET') config.params = sortObjectKeys(params);
         else config.data = sortObjectKeys(body);
 
@@ -80,7 +79,7 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 
     } catch (error) {
         if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}.`);
+            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}. Revisa el orden de parámetros.`);
         }
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
