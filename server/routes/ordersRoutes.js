@@ -8,7 +8,16 @@ const userController = require('../controllers/userController');
 // Protegemos todas las rutas
 router.use(userController.authenticateToken);
 
-// GET /api/orders/:status (all, opened, filled, cancelled)
+/**
+ * NUEVA RUTA: Filtrado dinámico para Autobot
+ * Maneja: /api/orders/autobot/filter?strategy=long
+ */
+router.get('/autobot/filter', orderController.getOrders);
+
+/**
+ * RUTA ORIGINAL (Legado): Soporte para Dashboard y AIBot
+ * GET /api/orders/:strategy/:status (all, opened, filled, cancelled)
+ */
 router.get('/:strategy/:status', orderController.getOrders);
 
 module.exports = router;

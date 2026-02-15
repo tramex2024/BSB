@@ -180,11 +180,30 @@
                 <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
                 
                 <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
-                    <button id="tab-opened" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">Opened</button>
-                    <button id="tab-filled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Filled</button>
-                    <button id="tab-cancelled" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">Canceled</button>
-                    <button id="tab-all" class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">All</button>
-                </div>
+    <button id="tab-ex" 
+            data-strategy="ex" 
+            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">
+        Open
+    </button>
+    
+    <button id="tab-long" 
+            data-strategy="long" 
+            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
+        Long
+    </button>
+    
+    <button id="tab-short" 
+            data-strategy="short" 
+            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
+        Short
+    </button>
+    
+    <button id="tab-all-strategies" 
+            data-strategy="all" 
+            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
+        All
+    </button>
+</div>
             </div>
 
             <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">

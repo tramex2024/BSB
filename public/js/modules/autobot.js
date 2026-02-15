@@ -1,6 +1,6 @@
 /**
  * autobot.js - Core Logic for Trading Tabs
- * Integration: WebSocket Sync & Centralized State 2026
+ * Integration: Strategy-based Filtering 2026 - FULL VERSION
  */
 
 import { initializeChart } from './chart.js';
@@ -13,11 +13,12 @@ import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
 const MIN_USDT_AMOUNT = 6.00;
-let currentTab = 'all';
+let currentStrategyTab = 'all'; 
 let configDebounceTimeout = null;
 
 /**
  * Valida que los montos cumplan con el mínimo del exchange
+ * REINTEGRADO: Crucial para el inicio de las estrategias
  */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
@@ -40,6 +41,7 @@ function validateSideInputs(side) {
 
 /**
  * Escucha cambios en los inputs (Dashboard + Tabs)
+ * REINTEGRADO: Sin esto el bot no guarda los cambios de configuración
  */
 function setupConfigListeners() {
     const configIds = [
@@ -88,14 +90,13 @@ export async function initializeAutobotView() {
         const btn = document.getElementById(id);
         if (!btn) return;
 
-        // Limpieza de eventos anteriores para evitar duplicados
+        // Clonamos para limpiar eventos viejos
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
         newBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            // Verificación basada en el estado central
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
                              sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
                              currentBotState.config.ai.enabled);
@@ -123,17 +124,16 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones (Tanto los del Dashboard como los de la Tab)
+    // Inicializar botones
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
     setupSideBtn('btn-start-ai', 'ai');
 
-    // Sincronización visual inmediata
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico de TradingView (Solo si estamos en la pestaña Autobot)
+    // Inicializar Gráfico
     const chartContainer = document.getElementById('au-tvchart');
     if (chartContainer) {
         setTimeout(() => {
@@ -144,14 +144,14 @@ export async function initializeAutobotView() {
         }, 300);
     }
 
-    // Iniciar pestañas de órdenes solo si el contenedor existe
     if (auOrderList) {
         setupOrderTabs(auOrderList);
     }
 }
 
 /**
- * Gestión de pestañas de órdenes dentro de Autobot
+ * Gestión de pestañas de órdenes por ESTRATEGIA
+ * NUEVA LÓGICA: Ahora usa data-strategy y los nuevos filtros.
  */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
@@ -159,27 +159,26 @@ function setupOrderTabs(container) {
 
     const setActiveTabStyle = (selectedId) => {
         orderTabs.forEach(btn => {
-            btn.classList.remove('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
+            btn.classList.remove('text-emerald-500', 'bg-gray-800');
             btn.classList.add('text-gray-500');
             if (btn.id === selectedId) {
                 btn.classList.remove('text-gray-500');
-                btn.classList.add('text-emerald-400', 'font-bold', 'border-b-2', 'border-emerald-500');
+                btn.classList.add('text-emerald-500', 'bg-gray-800');
             }
         });
     };
 
     orderTabs.forEach(tab => {
         tab.onclick = (e) => {
-            const selectedId = e.currentTarget.id;
-            setActiveTabStyle(selectedId);
-            currentTab = selectedId.replace('tab-', '');
-            
-            // Petición correcta: estrategia 'autobot' + estado
-            fetchOrders('autobot', currentTab, container);
+            const btn = e.currentTarget;
+            const strategy = btn.getAttribute('data-strategy');
+            setActiveTabStyle(btn.id);
+            currentStrategyTab = strategy;
+            fetchOrders(strategy, container);
         };
     });
 
-    // Carga inicial por defecto
-    setActiveTabStyle('tab-all');
-    fetchOrders('autobot', 'all', container);
+    // Carga inicial
+    setActiveTabStyle('tab-all-strategies');
+    fetchOrders('all', container);
 }

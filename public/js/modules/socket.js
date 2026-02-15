@@ -143,14 +143,14 @@ export function initSocket() {
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {
             // Buscamos qué pestaña tiene el estilo de "activa" actualmente
+            // CAMBIO: Ahora usamos data-strategy para mayor precisión
             const activeTabBtn = document.querySelector('.autobot-tabs button.text-emerald-400');
-            const currentTab = activeTabBtn ? activeTabBtn.id.replace('tab-', '') : 'opened';
-
-            // Solo recargamos si estamos en una pestaña que incluya órdenes abiertas
-            if (currentTab === 'opened' || currentTab === 'all' || currentTab === 'open') {
+            
+            if (activeTabBtn) {
+                const currentStrategy = activeTabBtn.getAttribute('data-strategy') || 'all';
                 const { fetchOrders } = await import('./orders.js');
-                // IMPORTANTE: Pasamos un cuarto parámetro 'true' para indicar que es una actualización silenciosa
-                fetchOrders('autobot', currentTab, auOrderList, true); 
+                // Refresco silencioso (true)
+                fetchOrders(currentStrategy, auOrderList, true); 
             }
         }
     });

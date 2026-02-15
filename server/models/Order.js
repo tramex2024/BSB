@@ -1,6 +1,7 @@
 /**
  * BSB/server/models/Order.js
  * REGISTRO INDIVIDUAL DE OPERACIONES EN EL EXCHANGE
+ * Versión Sincronizada 2026 - Valores de Estrategia Estrictos
  */
 
 const mongoose = require('mongoose');
@@ -15,15 +16,15 @@ const orderSchema = new mongoose.Schema({
     strategy: { 
         type: String,
         lowercase: true,
-        // AGREGAMOS 'ex' a la lista para permitir órdenes externas
+        // Valores estrictos: 'ex' para BitMart API, 'long/short/ai' para estrategias internas
         enum: ['long', 'short', 'ai', 'ex'], 
         required: true,
         index: true
     },
-    // Índice del ciclo al que pertenece
+    // Índice del ciclo al que pertenece (0 para órdenes 'ex')
     cycleIndex: { 
         type: Number, 
-        required: true, // 👈 Cambiado a false para que las órdenes 'ex' puedan guardarse con 0 o vacío
+        required: false, 
         default: 0
     },
     executionMode: { 
@@ -50,19 +51,22 @@ const orderSchema = new mongoose.Schema({
     size: { type: Number, required: true },       // Cantidad de Crypto (BTC)
     price: { type: Number, required: true },      // Precio de ejecución
     notional: { type: Number },                   // Total en USDT (size * price)
-    fee: { type: Number, default: 0 },            // Comisión pagada (Opcional)
+    fee: { type: Number, default: 0 },            // Comisión pagada
     
     status: { 
         type: String, 
         default: 'FILLED',
-        enum: ['FILLED', 'CANCELED', 'PARTIALLY_FILLED', 'PENDING']
+        uppercase: true,
+        // Estados reales que BitMart reporta en sus diferentes versiones de API
+        enum: ['FILLED', 'CANCELED', 'CANCELLED', 'PARTIALLY_FILLED', 'PENDING', 'NEW', 'OPEN', 'ACTIVE']
     },
     orderTime: { type: Date, default: Date.now }
 }, { 
     timestamps: true 
 });
 
-// Índice compuesto para auditorías rápidas
-orderSchema.index({ userId: 1, cycleIndex: 1, strategy: 1 });
+// Índices para optimización de consultas
+orderSchema.index({ userId: 1, strategy: 1, status: 1 });
+orderSchema.index({ orderTime: -1 });
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -113,17 +113,17 @@ export async function initializeTab(tabName) {
                 const aiOpenOrdersCont = document.getElementById('ai-open-orders-body');
                 const aiHistoryCont = document.getElementById('ai-history-table-body');
                 
-                // Forzamos la carga de órdenes reales desde la DB para que no aparezca vacío
+                // Para AIBOT mantenemos la lógica de estado (opened/all) ya que es un motor distinto
                 if (aiOpenOrdersCont) fetchOrders('aibot', 'opened', aiOpenOrdersCont);
                 if (aiHistoryCont) fetchOrders('aibot', 'all', aiHistoryCont);
             }
             
             // --- PERSISTENCIA ESPECÍFICA PARA AUTOBOT AL REGRESAR DE NAVEGACIÓN ---
-		if (tabName === 'autobot') {
-    		const auOrderList = document.getElementById('au-order-list');
-    		// Cargamos 'opened' por defecto al entrar a la pestaña
-    		if (auOrderList) fetchOrders('autobot', 'opened', auOrderList);
-	    }
+            if (tabName === 'autobot') {
+                const auOrderList = document.getElementById('au-order-list');
+                // CAMBIO: Ahora cargamos 'all' por defecto para coincidir con la nueva lógica de estrategias
+                if (auOrderList) fetchOrders('all', auOrderList);
+            }
         }
 
         // Sincronización estética de elementos de IA

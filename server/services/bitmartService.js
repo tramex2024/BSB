@@ -36,7 +36,7 @@ const KLINES_TTL = 15000;
 // =========================================================================
 
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    // Sincronización de tiempo (Usamos el reloj local, BitMart acepta un margen de 10s)
+    // Sincronización de tiempo
     const timestamp = Date.now().toString();
     const headers = {
         'Content-Type': 'application/json',
@@ -59,7 +59,7 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
             const sortedParams = sortObjectKeys(params);
             bodyOrQuery = querystring.stringify(sortedParams);
         } else if (method === 'POST') {
-            // Regla BitMart V4: El body debe estar ordenado y si está vacío es ""
+            // Regla BitMart V4: El body debe estar ordenado
             const sortedBody = sortObjectKeys(body);
             bodyOrQuery = (sortedBody && Object.keys(sortedBody).length > 0) ? JSON.stringify(sortedBody) : "";
         }
@@ -106,7 +106,7 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 }
 
 // =========================================================================
-// LÓGICA DE NEGOCIO (Manteniendo tus funciones de BSB 2026)
+// LÓGICA DE NEGOCIO
 // =========================================================================
 
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
@@ -230,6 +230,7 @@ const bitmartService = {
             if (sideLower === 'buy') body.notional = amount.toString();
             else body.size = amount.toString();
         }
+        // Nota: Mantiene v2/submit_order para compatibilidad de ejecución rápida
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
         return res.data;
     }

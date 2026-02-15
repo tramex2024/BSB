@@ -205,21 +205,21 @@ const initializePrivateWebSockets = async () => {
                 const userIdStr = user._id.toString();
 
                 bitmartWs.initOrderWebSocket(userIdStr, credentials, async (ordersData) => {
-    // Aseguramos que ordersData no sea null antes de procesar
-    if (!ordersData) return;
+                    if (!ordersData) return;
 
-    console.log(`[BACKEND-WS] 📥 Orden detectada via WS para: ${userIdStr}`);
-    
-    // Detectamos estrategia con fallback seguro
-    const cId = ordersData.clientOrderId || "";
-    const strategy = cId.startsWith('L_') ? 'long' : 
-                     cId.startsWith('S_') ? 'short' : 'ai';
+                    console.log(`[BACKEND-WS] 📥 Orden detectada via WS para: ${userIdStr}`);
+                    
+                    const cId = ordersData.clientOrderId || "";
+                    // AJUSTE: Mapeo estricto de estrategia para consistencia con DB y Frontend
+                    const strategy = cId.startsWith('L_') ? 'long' : 
+                                     cId.startsWith('S_') ? 'short' : 
+                                     cId.startsWith('AI_') ? 'ai' : 'ex';
 
-    await orderPersistenceService.saveExecutedOrder(ordersData, strategy, userIdStr);
+                    await orderPersistenceService.saveExecutedOrder(ordersData, strategy, userIdStr);
 
-    // 📢 Emisión a la sala específica del usuario
-    io.to(userIdStr).emit('open-orders-update', ordersData);
-});
+                    // 📢 Emisión a la sala específica del usuario con la estrategia detectada
+                    io.to(userIdStr).emit('open-orders-update', { ...ordersData, strategy });
+                });
             } catch (err) {
                 console.error(`❌ Error en WS privado para ${user.email}:`, err.message);
             }

@@ -1,6 +1,7 @@
 /**
  * BSB/server/services/orderSyncService.js
  * Sincronizador de Órdenes Abiertas (Espejo BitMart -> DB)
+ * Refactorizado: Mapeo estricto de prefijos para pestañas 2026
  */
 const Order = require('../models/Order');
 const bitmartService = require('./bitmartService');
@@ -10,27 +11,28 @@ const syncOpenOrders = async (userId, credentials, io) => {
     if (!userId) return;
     
     try {
-        // Aseguramos que el símbolo sea un string válido para evitar el error .includes()
+        // Aseguramos que el símbolo sea un string válido
         const symbol = 'BTC_USDT'; 
         
         // 1. Obtener órdenes abiertas reales desde BitMart
-        // El servicio ya tiene el fix para manejar el body vacío en V4
         const bitmartResponse = await bitmartService.getOpenOrders(symbol, credentials);
         const remoteOpenOrders = bitmartResponse.orders || [];
 
-        // 2. Limpiar de nuestra DB local SOLO las que están NEW o PENDING para este usuario
-        // Usamos userId.toString() para asegurar consistencia en la query
+        // 2. Limpiar de nuestra DB local SOLO las que están activas para este usuario
+        // Esto evita duplicados antes de re-insertar el estado actual de BitMart
         await Order.deleteMany({
             userId: userId.toString(),
-            status: { $in: ['NEW', 'PENDING', 'PARTIALLY_FILLED'] }
+            status: { $in: ['NEW', 'PENDING', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'] }
         });
 
         // 3. Preparar las órdenes de BitMart para nuestra DB
         const ordersToInsert = remoteOpenOrders.map(bo => {
-            let strategy = 'ex'; // 'ex' para órdenes externas/manuales
+            let strategy = 'ex'; // Por defecto: externa/manual
             
-            // Verificación segura del prefijo del bot
+            // Verificación del prefijo del bot (Client Order ID)
             const cId = bo.clientOrderId || "";
+            
+            // Mapeo exacto para las pestañas del Frontend
             if (cId.startsWith('L_')) strategy = 'long';
             else if (cId.startsWith('S_')) strategy = 'short';
             else if (cId.startsWith('AI_')) strategy = 'ai';
@@ -56,7 +58,7 @@ const syncOpenOrders = async (userId, credentials, io) => {
             await Order.insertMany(ordersToInsert);
         }
 
-        // 5. Emitir al Frontend vía Socket
+        // 5. Emitir al Frontend vía Socket (Sincronización en tiempo real)
         if (io) {
             const userIdStr = userId.toString();
             
@@ -66,21 +68,22 @@ const syncOpenOrders = async (userId, credentials, io) => {
                 .limit(50)
                 .lean();
             
+            // Refresco de Historial (Pestaña All / History)
             io.to(userIdStr).emit('ai-history-update', updatedHistory);
             
+            // Refresco de Órdenes Abiertas
             const openOnly = updatedHistory.filter(o => 
-                ['NEW', 'PARTIALLY_FILLED'].includes(o.status)
+                ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE'].includes(o.status)
             );
             io.to(userIdStr).emit('open-orders-update', openOnly);
         }
 
         if (ordersToInsert.length > 0) {
-            console.log(`Sync [${userId}]: ${ordersToInsert.length} órdenes abiertas detectadas.`);
+            console.log(`[SYNC] ✅ User ${userId}: ${ordersToInsert.length} órdenes sincronizadas.`);
         }
         
     } catch (error) {
-        // Si el error es 401, lo lanzamos hacia arriba para que server.js 
-        // active el "freno de mano" y bloquee al usuario.
+        // Lanzamos error crítico de credenciales para que server.js detenga los motores
         if (error.message.includes('401') || error.message.includes('Unauthorized')) {
             throw error; 
         }

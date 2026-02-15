@@ -39,7 +39,6 @@ function createOrderHtml(order) {
     const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
     const fullOrderId = (order.orderId || order.order_id || '').toString();
 
-    // Determine if the order can be cancelled based on typical BitMart statuses
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(rawState);
 
     return `
@@ -64,7 +63,7 @@ function createOrderHtml(order) {
             </div>
             <div class="flex flex-col items-center">
                 <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Status</span>
-                <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-400/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
                     ${rawState}
                 </span>
             </div>
@@ -83,30 +82,23 @@ function createOrderHtml(order) {
 }
 
 /**
- * FETCH ORDERS SEGMENTADO
+ * FETCH ORDERS CON FILTRO DE ESTRATEGIA (ex, long, short, all)
  */
-export async function fetchOrders(strategy, status, orderListElement, silent = false) {
-    if (!orderListElement || !strategy || !status || typeof strategy !== 'string') return;
+export async function fetchOrders(strategyType, orderListElement, silent = false) {
+    if (!orderListElement || !strategyType) return;
     
     if (!silent) {
-        orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500"></i></div>`;
+        orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
     }
 
     try {
-        // 1. Mapeo de estrategia para DB (aibot -> ai)
-        const dbStrategy = strategy === 'aibot' ? 'ai' : strategy;
-        
-        // 2. CORRECCIÓN DE STATUS (Frontend 'opened' -> Backend 'opened')
-        // Si el backend sigue dando 400 con 'open', asegúrate de usar 'opened' o 'all'
-        let dbStatus = status;
-        if (status === 'open') dbStatus = 'opened'; 
-        if (status === 'history') dbStatus = 'closed';
-
-        const data = await fetchFromBackend(`/api/orders/${dbStrategy}/${dbStatus}`);
+        // Ahora consultamos un endpoint que filtre por el campo 'strategy' de la base de datos
+        // Ejemplo de URL: /api/orders/autobot?strategy=long
+        const data = await fetchFromBackend(`/api/orders/autobot/filter?strategy=${strategyType}`);
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-[10px] uppercase tracking-widest">No ${status} orders found</div>`;
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-[10px] uppercase tracking-widest font-bold">No orders found for strategy: ${strategyType}</div>`;
             return;
         }
 
@@ -114,7 +106,7 @@ export async function fetchOrders(strategy, status, orderListElement, silent = f
     } catch (error) {
         console.error("Fetch Orders Error:", error);
         if (!silent) {
-            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold uppercase">Error loading ${status} orders</div>`;
+            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold uppercase">Error loading orders</div>`;
         }
     }
 }
@@ -132,11 +124,12 @@ window.cancelOrder = async (orderId) => {
         });
         
         if (data.success) {
-            // Refrescar ambas listas para mantener consistencia
+            // Buscamos cuál es el botón activo actualmente en el panel para refrescar la lista correcta
+            const activeTab = document.querySelector('.autobot-tabs button.bg-gray-800');
+            const strategy = activeTab ? activeTab.id.replace('tab-', '') : 'ex';
+            
             const auContainer = document.getElementById('au-order-list');
-            const aiContainer = document.getElementById('ai-order-list');
-            if (auContainer) fetchOrders('autobot', 'opened', auContainer);
-            if (aiContainer) fetchOrders('aibot', 'opened', aiContainer);
+            if (auContainer) fetchOrders(strategy, auContainer);
         } else {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }
