@@ -6,7 +6,6 @@
 
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
-import { socket } from './socket.js';
 import { fetchOrders } from './orders.js';
 
 // Variable para rastrear el estado de la pestaña actual dentro de AI
@@ -38,17 +37,15 @@ export function initializeAibotView() {
         currentBotState.historyCount || 0
     );
 
-    // 3. CARGA DE ÓRDENES SEGMENTADAS (CORREGIDO)
-    // Pasamos el ID como STRING y la estrategia correcta 'ai'
-    if (document.getElementById('ai-history-table-body')) {
-        fetchOrders('ai', 'all', 'ai-history-table-body');
+    // 3. CARGA DE ÓRDENES (CORREGIDO PARA TU ORDERS.JS ORIGINAL)
+    const aiTableBody = document.getElementById('ai-history-table-body');
+    if (aiTableBody) {
+        // Usamos solo los 2 parámetros que acepta tu orders.js: la estrategia 'ai' y el ELEMENTO html
+        fetchOrders('ai', aiTableBody);
     }
     
     // Inicializamos las pestañas internas
-    const tabsContainer = document.getElementById('ai-order-list'); 
-    if (tabsContainer) {
-        setupAiOrderTabs();
-    }
+    setupAiOrderTabs();
 }
 
 /**
@@ -56,10 +53,9 @@ export function initializeAibotView() {
  */
 function setupAiOrderTabs() {
     const tabs = document.querySelectorAll('.aibot-tabs button');
+    const aiTableBody = document.getElementById('ai-history-table-body');
     
     tabs.forEach(tab => {
-        tab.onclick = null; 
-
         tab.onclick = (e) => {
             const status = e.currentTarget.id.replace('ai-tab-', '');
             currentAiStatusTab = status; 
@@ -67,8 +63,10 @@ function setupAiOrderTabs() {
             tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
             e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
 
-            // CORRECCIÓN: Estrategia 'ai' y pasar ID del contenedor como string
-            fetchOrders('ai', status, 'ai-history-table-body');
+            // Refrescamos llamando a fetchOrders con la estrategia 'ai'
+            if (aiTableBody) {
+                fetchOrders('ai', aiTableBody);
+            }
         };
     });
 }
@@ -151,7 +149,6 @@ async function saveAIConfig(payload) {
         
         const data = await response.json();
         if (data.success) {
-            // Actualizar estado global
             if (payload.amountUsdt !== undefined) currentBotState.config.ai.amountUsdt = payload.amountUsdt;
             if (payload.stopAtCycle !== undefined) currentBotState.config.ai.stopAtCycle = payload.stopAtCycle;
 
