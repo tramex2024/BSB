@@ -18,10 +18,10 @@ let currentAiStatusTab = 'all';
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing segregated interface...");
     
-    // 1. Configurar listeners de inputs y botones
+    // 1. Configurar listeners
     setupAIControls();
     
-    // 2. Sincronización de UI con el estado global
+    // 2. Sincronización de UI
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
 
@@ -32,55 +32,43 @@ export function initializeAibotView() {
         stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
     }
 
-    // Aplicar estado visual al botón START/STOP
     aiBotUI.setRunningStatus(
         currentBotState.isRunning, 
         currentBotState.config?.ai?.stopAtCycle,
         currentBotState.historyCount || 0
     );
 
-    // 3. CARGA DE ÓRDENES SEGMENTADAS
-    const aiOrderList = document.getElementById('ai-open-orders-body'); // Ajustado al ID del tbody
-    const aiHistoryList = document.getElementById('ai-history-table-body'); // Ajustado al ID del historial
-
-    if (aiOrderList) {
-        // Cargamos específicamente las abiertas de 'aibot'
-        fetchOrders('aibot', 'opened', aiOrderList);
-    }
-
-    if (aiHistoryList) {
-        // Cargamos el historial de 'aibot'
-        fetchOrders('aibot', 'all', aiHistoryList);
+    // 3. CARGA DE ÓRDENES SEGMENTADAS (CORREGIDO)
+    // Pasamos el ID como STRING y la estrategia correcta 'ai'
+    if (document.getElementById('ai-history-table-body')) {
+        fetchOrders('ai', 'all', 'ai-history-table-body');
     }
     
-    // Inicializamos las pestañas internas de filtrado (si existen en el HTML)
+    // Inicializamos las pestañas internas
     const tabsContainer = document.getElementById('ai-order-list'); 
     if (tabsContainer) {
-        setupAiOrderTabs(tabsContainer);
+        setupAiOrderTabs();
     }
 }
 
 /**
  * Gestiona los clics en las pestañas de filtros dentro de AIBOT
  */
-function setupAiOrderTabs(container) {
+function setupAiOrderTabs() {
     const tabs = document.querySelectorAll('.aibot-tabs button');
-    if (!tabs.length || !container) return;
-
+    
     tabs.forEach(tab => {
-        // Reset de eventos para evitar duplicados al navegar
         tab.onclick = null; 
 
         tab.onclick = (e) => {
             const status = e.currentTarget.id.replace('ai-tab-', '');
             currentAiStatusTab = status; 
             
-            // Renderizado visual de pestaña activa
             tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
             e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
 
-            // Llamada segura especificando 'aibot'
-            fetchOrders('aibot', status, container);
+            // CORRECCIÓN: Estrategia 'ai' y pasar ID del contenedor como string
+            fetchOrders('ai', status, 'ai-history-table-body');
         };
     });
 }

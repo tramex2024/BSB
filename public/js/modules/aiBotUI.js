@@ -80,6 +80,7 @@ const aiBotUI = {
         if (!tbody) return;
 
         const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
+        // Filtro mejorado para aceptar ambos nombres de estrategia
         const filteredTrades = tradesList.filter(t => t.strategy === 'ai' || t.strategy === 'aibot');
         
         if (filteredTrades.length === 0) {
@@ -97,7 +98,6 @@ const aiBotUI = {
             
             const time = tradeDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-            // FIX: Padding px-6 y w-full para alineación total
             return `
                 <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group">
                     <td class="px-6 py-4 text-gray-500 text-[9px] group-hover:text-gray-300 whitespace-nowrap">
@@ -129,6 +129,7 @@ const aiBotUI = {
         if (!tbody) return;
 
         const ordersList = Array.isArray(orders) ? orders : (orders.orders || []);
+        // Filtro mejorado
         const filteredOrders = ordersList.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
 
         if (filteredOrders.length === 0) {
@@ -142,7 +143,6 @@ const aiBotUI = {
             const price = parseFloat(order.price || 0);
             const amount = parseFloat(order.amount || order.size || 0);
 
-            // FIX: Padding px-6 para coincidir con el header
             return `
                 <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
                     <td class="px-6 py-4 font-mono text-[9px] text-blue-400">
@@ -169,9 +169,6 @@ const aiBotUI = {
         }).join('');
     },
 
-    /**
-     * GLOBAL SYNC: UI state driven by Backend + historyCount logic
-     */
     setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 50) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');
