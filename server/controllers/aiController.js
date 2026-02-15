@@ -3,7 +3,7 @@
  * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA CON AIEngine
  */
 
-const aiEngine = require('../src/au/engines/AIEngine'); // Ajustado a la ruta de tu motor
+const aiEngine = require('../src/ai/AIEngine'); // Ajustado a la ruta de tu motor
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 
