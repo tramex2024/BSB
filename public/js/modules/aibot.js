@@ -6,6 +6,7 @@
 
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
+import { socket } from './socket.js';
 import { fetchOrders } from './orders.js';
 
 // Variable para rastrear el estado de la pestaña actual dentro de AI
@@ -37,15 +38,18 @@ export function initializeAibotView() {
         currentBotState.historyCount || 0
     );
 
-    // 3. CARGA DE ÓRDENES (CORREGIDO PARA TU ORDERS.JS ORIGINAL)
+    // 3. CARGA DE ÓRDENES SEGMENTADAS
+    // IMPORTANTE: Pasamos el ELEMENTO directamente para evitar el error de innerHTML
     const aiTableBody = document.getElementById('ai-history-table-body');
     if (aiTableBody) {
-        // Usamos solo los 2 parámetros que acepta tu orders.js: la estrategia 'ai' y el ELEMENTO html
         fetchOrders('ai', aiTableBody);
     }
     
     // Inicializamos las pestañas internas
-    setupAiOrderTabs();
+    const tabsContainer = document.getElementById('ai-order-list'); 
+    if (tabsContainer) {
+        setupAiOrderTabs();
+    }
 }
 
 /**
@@ -56,6 +60,8 @@ function setupAiOrderTabs() {
     const aiTableBody = document.getElementById('ai-history-table-body');
     
     tabs.forEach(tab => {
+        tab.onclick = null; 
+
         tab.onclick = (e) => {
             const status = e.currentTarget.id.replace('ai-tab-', '');
             currentAiStatusTab = status; 
@@ -63,7 +69,7 @@ function setupAiOrderTabs() {
             tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
             e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
 
-            // Refrescamos llamando a fetchOrders con la estrategia 'ai'
+            // Llamamos a fetchOrders con los 2 parámetros que espera tu orders.js
             if (aiTableBody) {
                 fetchOrders('ai', aiTableBody);
             }
@@ -94,7 +100,6 @@ function setupAIControls() {
     }
 
     if (btnStartAi) {
-        // Clonamos para limpiar listeners previos
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
@@ -166,7 +171,7 @@ async function saveAIConfig(payload) {
 }
 
 /**
- * Notificaciones Visuales y Sonoras
+ * Notificaciones Visuales
  */
 export function showAiToast(order) {
     const toast = document.createElement('div');
@@ -191,6 +196,9 @@ export function showAiToast(order) {
     }, 4000);
 }
 
+/**
+ * Sonido de ejecución
+ */
 export function playNeuralSound(side) {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
