@@ -23,7 +23,6 @@ export const currentBotState = {
     aibalance: 0,
     isRunning: false,
     stopAtCycle: false,
-    historyCount: 50, // Agregado para consistencia con el motor
     config: {
         symbol: 'BTCUSDT',
         long: { amountUsdt: 0, enabled: false },
@@ -148,7 +147,7 @@ function syncAIElementsInDOM() {
     // Sincronización del botón basada en el estado real
     aiBotUI.setRunningStatus(
         currentBotState.isRunning, 
-        currentBotState.config.ai.stopAtCycle, // Priorizamos el objeto config
+        currentBotState.stopAtCycle || currentBotState.config.ai.stopAtCycle,
         currentBotState.historyCount || 0
     );
 }
@@ -174,14 +173,8 @@ document.addEventListener('click', async (e) => {
             });
             const data = await res.json();
             if (data.success) {
-                // Sincronización del estado global con la respuesta del servidor
                 currentBotState.isRunning = data.isRunning;
-                aiBotUI.setRunningStatus(
-                    data.isRunning, 
-                    currentBotState.config.ai.stopAtCycle, 
-                    50
-                );
-                logStatus(data.message, "success");
+                aiBotUI.setRunningStatus(data.isRunning, currentBotState.stopAtCycle);
             }
         } catch (err) {
             console.error("Error toggling AI:", err);
