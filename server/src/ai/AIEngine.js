@@ -52,18 +52,23 @@ class AIEngine {
             }
 
             // --- BÚSQUEDA DE ENTRADAS (Si no hay posición activa) ---
-            if (lastEntryPrice === 0) {
-                const SYMBOL = bot.config?.symbol || 'BTC_USDT';
-                const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
-                
-                // AUDITORÍA: Si no hay 50 datos, ahora ENVIAMOS UN LOG al usuario en lugar de ignorarlo.
-                if (!marketData || !marketData.history || marketData.history.length < 50) {
-                    const currentCount = marketData?.history?.length || 0;
-                    if (Math.random() > 0.85) { // No saturar el socket, enviar cada pocos ticks
-                        this._log(userId, `Sincronizando: ${currentCount}/50 datos de mercado...`, 0.2, true);
-                    }
-                    return;
-                }
+           if (lastEntryPrice === 0) {
+    // Forzamos el formato BTC_USDT que es el que usa tu MarketSignal Schema
+    let SYMBOL = bot.config?.symbol || 'BTC_USDT';
+    
+    // Si el símbolo viene como BTCUSDT (sin guion), lo convertimos a BTC_USDT
+    if (SYMBOL === 'BTCUSDT') SYMBOL = 'BTC_USDT';
+
+    const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
+    
+    if (!marketData || !marketData.history || marketData.history.length < 50) {
+        const currentCount = marketData?.history?.length || 0;
+        // Solo logueamos si realmente el motor está intentando analizar
+        if (Math.random() > 0.85) { 
+            this._log(userId, `Sincronizando: ${currentCount}/50 datos (${SYMBOL})...`, 0.2, true);
+        }
+        return;
+    }
 
                 await this._executeStrategy(userId, price, marketData.history, bot);
             }
