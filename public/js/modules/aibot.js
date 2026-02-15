@@ -1,27 +1,23 @@
 /**
  * File: public/js/modules/aibot.js
- * AI Core - View Management (Segmented Version)
- * Integration: Segregated Strategy Fetching 2026
+ * AI Core - View Management (Card Style Version 2026)
+ * Integration: Unified Design Standard
  */
 
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
-import { socket } from './socket.js';
 import { fetchOrders } from './orders.js';
-
-// Variable para rastrear el estado de la pestaña actual dentro de AI
-let currentAiStatusTab = 'all';
 
 /**
  * Inicializa la vista de IA y sincroniza componentes
  */
 export function initializeAibotView() {
-    console.log("🚀 AI System: Syncing segregated interface...");
+    console.log("🚀 AI System: Syncing card-style interface...");
     
-    // 1. Configurar listeners
+    // 1. Configurar listeners de inputs y botones
     setupAIControls();
     
-    // 2. Sincronización de UI
+    // 2. Sincronización de UI con el estado global
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
 
@@ -38,17 +34,13 @@ export function initializeAibotView() {
         currentBotState.historyCount || 0
     );
 
-    // 3. CARGA DE ÓRDENES SEGMENTADAS
-    // IMPORTANTE: Pasamos el ELEMENTO directamente para evitar el error de innerHTML
-    const aiTableBody = document.getElementById('ai-history-table-body');
-    if (aiTableBody) {
-        fetchOrders('ai', aiTableBody);
-    }
-    
-    // Inicializamos las pestañas internas
-    const tabsContainer = document.getElementById('ai-order-list'); 
-    if (tabsContainer) {
-        setupAiOrderTabs();
+    // 3. CARGA DE ÓRDENES (UNIFICADO AL ESTILO CARD)
+    // Usamos el contenedor div 'ai-order-list' en lugar de un tbody de tabla
+    const aiOrderCont = document.getElementById('ai-order-list'); 
+    if (aiOrderCont) {
+        // Cargamos estrategia 'ai' usando el motor de orders.js
+        fetchOrders('ai', aiOrderCont);
+        setupAiOrderTabs(); // Inicializamos las pestañas internas si existen
     }
 }
 
@@ -57,21 +49,23 @@ export function initializeAibotView() {
  */
 function setupAiOrderTabs() {
     const tabs = document.querySelectorAll('.aibot-tabs button');
-    const aiTableBody = document.getElementById('ai-history-table-body');
+    const aiOrderCont = document.getElementById('ai-order-list');
     
     tabs.forEach(tab => {
-        tab.onclick = null; 
+        tab.onclick = null; // Limpiar eventos previos
 
         tab.onclick = (e) => {
-            const status = e.currentTarget.id.replace('ai-tab-', '');
-            currentAiStatusTab = status; 
+            // El status puede ser 'ai' (para órdenes abiertas) o 'all' (para historial)
+            // según cómo tengas definido el data-strategy en tu HTML
+            const strategy = e.currentTarget.getAttribute('data-strategy') || 'ai';
             
+            // Estilo visual de pestaña activa (Emerald)
             tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
             e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
 
-            // Llamamos a fetchOrders con los 2 parámetros que espera tu orders.js
-            if (aiTableBody) {
-                fetchOrders('ai', aiTableBody);
+            // Llamamos a fetchOrders con el estilo unificado de 2 parámetros
+            if (aiOrderCont) {
+                fetchOrders(strategy, aiOrderCont);
             }
         };
     });
@@ -171,7 +165,7 @@ async function saveAIConfig(payload) {
 }
 
 /**
- * Notificaciones Visuales
+ * Notificaciones Visuales (Toasts)
  */
 export function showAiToast(order) {
     const toast = document.createElement('div');
@@ -197,7 +191,7 @@ export function showAiToast(order) {
 }
 
 /**
- * Sonido de ejecución
+ * Sonido de ejecución (Feedback auditivo)
  */
 export function playNeuralSound(side) {
     try {

@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Corregido: Mapeo de estrategias AI/AIBOT para persistencia visual
+ * Actualización: Unificación de diseño visual (Card Style) para AI
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -18,7 +18,6 @@ async function sendToDashboardTerminal(msg, type) {
     const dashboardLogs = document.getElementById('dashboard-logs');
     if (dashboardLogs) {
         try {
-            // Importamos la función solo cuando es necesaria
             const { addTerminalLog } = await import('./dashboard.js');
             addTerminalLog(msg, type);
         } catch (e) {
@@ -104,17 +103,13 @@ export function initSocket() {
         }
     });
 
-    // --- LOGS PRIVADOS (Aquí conectamos con el Terminal) ---
+    // --- LOGS PRIVADOS ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
         
-        // 1. Log estándar
         logStatus(data.message, data.type || 'info');
-        
-        // 2. Enviar al Terminal del Dashboard
         sendToDashboardTerminal(data.message, data.type || 'info');
 
-        // 3. Enviar a la UI de la IA si existe
         if (aiBotUI?.addLogEntry) {
             aiBotUI.addLogEntry(data.message, (data.type === 'success' ? 0.9 : 0.5));
         }
@@ -130,39 +125,33 @@ export function initSocket() {
         }
     });
 
+    // LÓGICA UNIFICADA DE ÓRDENES (ESTILO CARD)
     socket.on('open-orders-update', async (data) => {
-        const rawOrders = Array.isArray(data) ? data : (data.orders || []);
-        
-        // 1. Actualización para AIBOT (Se mantiene igual)
-        const aiOrders = rawOrders.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
-        if (aiBotUI?.updateOpenOrdersTable) {
-            aiBotUI.updateOpenOrdersTable(aiOrders);
+        // 1. Refresco para AIBOT (Cajas bonitas)
+        const aiOrderList = document.getElementById('ai-order-list');
+        if (aiOrderList) {
+            const { fetchOrders } = await import('./orders.js');
+            fetchOrders('ai', aiOrderList, true); // true = refresco silencioso
         }
 
-        // 2. LÓGICA OPTIMIZADA PARA AUTOBOT
+        // 2. Refresco para AUTOBOT
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {
-            // Buscamos qué pestaña tiene el estilo de "activa" actualmente
-            // CAMBIO: Ahora usamos data-strategy para mayor precisión
             const activeTabBtn = document.querySelector('.autobot-tabs button.text-emerald-400');
-            
             if (activeTabBtn) {
                 const currentStrategy = activeTabBtn.getAttribute('data-strategy') || 'all';
                 const { fetchOrders } = await import('./orders.js');
-                // Refresco silencioso (true)
                 fetchOrders(currentStrategy, auOrderList, true); 
             }
         }
     });
 
-    socket.on('ai-history-update', (trades) => {
-        if (!Array.isArray(trades)) return;
-
-        // CORRECCIÓN: Aseguramos que el historial reconozca la estrategia de la DB
-        const aiHistory = trades.filter(t => t.strategy === 'ai' || t.strategy === 'aibot');
-
-        if (aiBotUI?.updateHistoryTable) {
-            aiBotUI.updateHistoryTable(aiHistory);
+    socket.on('ai-history-update', async (trades) => {
+        // Al recibir historial, refrescamos el contenedor de la IA usando el motor de cards
+        const aiOrderList = document.getElementById('ai-order-list');
+        if (aiOrderList) {
+            const { fetchOrders } = await import('./orders.js');
+            fetchOrders('ai', aiOrderList, true);
         }
     });
 

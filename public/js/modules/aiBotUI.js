@@ -1,12 +1,12 @@
 /**
  * AI Bot Interface Module - Optimized 2026
- * Integration: Centralized Button State & Neural Sync
- * Fix: Full-Width Table Symmetry & Neural Alignment
+ * Integration: Card-Style Unification & Neural Sync
+ * Fix: Removed legacy table logic to support global Card design
  */
 
 const aiBotUI = {
     /**
-     * Updates the confidence circle and descriptive text
+     * Actualiza el círculo de confianza y el texto descriptivo
      */
     updateConfidence: (confidence, serverMessage = null, isAnalyzing = false) => {
         const circle = document.getElementById('ai-confidence-circle');
@@ -47,6 +47,9 @@ const aiBotUI = {
         }
     },
 
+    /**
+     * Sistema de Logs Neuronales (Mantener para estética de consola IA)
+     */
     addLog: function(message, type = 'info') {
         const mockConfidence = (type === 'success') ? 0.90 : 0.50;
         this.addLogEntry(message, mockConfidence);
@@ -74,101 +77,10 @@ const aiBotUI = {
             container.removeChild(container.lastChild);
         }
     },
-   
-    updateHistoryTable: (trades) => {
-        const tbody = document.getElementById('ai-history-table-body');
-        if (!tbody) return;
 
-        const tradesList = Array.isArray(trades) ? trades : (trades.data || []);
-        // Filtro mejorado para aceptar ambos nombres de estrategia
-        const filteredTrades = tradesList.filter(t => t.strategy === 'ai' || t.strategy === 'aibot');
-        
-        if (filteredTrades.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-10 text-center italic text-gray-600 uppercase text-[10px]">No trades in this session</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = filteredTrades.map(trade => {
-            const isBuy = (trade.side || '').toUpperCase() === 'BUY';
-            const score = trade.confidenceScore || (trade.confidence * 100) || 0;
-            
-            let tradeDate;
-            if (trade.orderTime?.$date) tradeDate = new Date(trade.orderTime.$date);
-            else tradeDate = new Date(trade.orderTime || trade.updateTime || Date.now());
-            
-            const time = tradeDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-            return `
-                <tr class="hover:bg-blue-500/5 transition-colors border-b border-blue-500/5 group">
-                    <td class="px-6 py-4 text-gray-500 text-[9px] group-hover:text-gray-300 whitespace-nowrap">
-                        ${time}
-                    </td>
-                    <td class="px-6 py-4">
-                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} font-black text-[8px] border ${isBuy ? 'border-emerald-500/20' : 'border-red-500/20'}">
-                            ${trade.side ? trade.side.toUpperCase() : 'N/A'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-right font-mono text-white text-[10px]">
-                        $${parseFloat(trade.price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
-                    </td>
-                    <td class="px-6 py-4 text-right font-mono text-gray-400 text-[10px]">
-                        $${parseFloat(trade.amount || trade.size || 0).toFixed(2)}
-                    </td>
-                    <td class="px-6 py-4 text-center"> 
-                        <span class="${score >= 85 ? 'text-emerald-400' : 'text-blue-400'} font-bold font-mono">
-                            ${Math.round(score)}%
-                        </span>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    },
-
-    updateOpenOrdersTable: function(orders) {
-        const tbody = document.getElementById('ai-open-orders-body'); 
-        if (!tbody) return;
-
-        const ordersList = Array.isArray(orders) ? orders : (orders.orders || []);
-        // Filtro mejorado
-        const filteredOrders = ordersList.filter(o => o.strategy === 'ai' || o.strategy === 'aibot');
-
-        if (filteredOrders.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 uppercase text-[9px] tracking-widest opacity-50">No Open Positions</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = filteredOrders.map(order => {
-            const isBuy = (order.side || '').toUpperCase() === 'BUY';
-            const id = order.orderId || order.order_id || '';
-            const price = parseFloat(order.price || 0);
-            const amount = parseFloat(order.amount || order.size || 0);
-
-            return `
-                <tr class="border-b border-blue-500/5 hover:bg-white/[0.02] transition-all">
-                    <td class="px-6 py-4 font-mono text-[9px] text-blue-400">
-                        ${id ? id.toString().slice(-6) : '---'}
-                    </td>
-                    <td class="px-6 py-4">
-                        <span class="px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'} font-bold text-[8px] border border-current/20">
-                            ${isBuy ? 'BUY' : 'SELL'}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-right font-mono text-white text-[10px]">
-                        $${price.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                    </td>
-                    <td class="px-6 py-4 text-right font-mono text-gray-400 text-[10px]">
-                        ${amount.toFixed(4)} BTC
-                    </td>
-                    <td class="px-6 py-4 text-right"> 
-                        <button onclick="window.cancelOrder('${id}')" class="text-red-500/50 hover:text-red-500 transition-colors">
-                            <i class="fas fa-times-circle text-sm"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    },
-
+    /**
+     * Sincronización de estados del Botón y Feedback Visual
+     */
     setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 50) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');

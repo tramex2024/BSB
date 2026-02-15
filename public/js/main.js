@@ -2,6 +2,7 @@
  * main.js - Central Hub
  * AI Core English Version 2026
  * Refactorización: Estado Global Multiusuario y Sincronización
+ * Actualización: Unificación de diseño de órdenes (Card Style)
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -109,19 +110,21 @@ export async function initializeTab(tabName) {
             }
 
             // --- PERSISTENCIA ESPECÍFICA PARA AIBOT AL REGRESAR DE NAVEGACIÓN ---
+            // Corregido: Ahora usa el formato de 2 parámetros para fetchOrders y unifica estilo card
             if (tabName === 'aibot') {
-                const aiOpenOrdersCont = document.getElementById('ai-open-orders-body');
-                const aiHistoryCont = document.getElementById('ai-history-table-body');
-                
-                // Para AIBOT mantenemos la lógica de estado (opened/all) ya que es un motor distinto
-                if (aiOpenOrdersCont) fetchOrders('aibot', 'opened', aiOpenOrdersCont);
-                if (aiHistoryCont) fetchOrders('aibot', 'all', aiHistoryCont);
+                const aiOrderList = document.getElementById('ai-order-list'); // Nuevo contenedor unificado
+                if (aiOrderList) {
+                    fetchOrders('ai', aiOrderList);
+                } else {
+                    // Fallback por si aún existen los IDs antiguos de tabla
+                    const aiHistoryCont = document.getElementById('ai-history-table-body');
+                    if (aiHistoryCont) fetchOrders('ai', aiHistoryCont);
+                }
             }
             
             // --- PERSISTENCIA ESPECÍFICA PARA AUTOBOT AL REGRESAR DE NAVEGACIÓN ---
             if (tabName === 'autobot') {
                 const auOrderList = document.getElementById('au-order-list');
-                // CAMBIO: Ahora cargamos 'all' por defecto para coincidir con la nueva lógica de estrategias
                 if (auOrderList) fetchOrders('all', auOrderList);
             }
         }
@@ -206,6 +209,5 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLoginIcon();
     
     // 4. Load initial view (Dashboard)
-    // The currentBotState will now sync correctly once the socket connects
     initializeTab('dashboard'); 
 });
