@@ -97,38 +97,32 @@
         </div>
     </div>
 
-    <div class="mt-4 flex-1">
+    <div class="mt-4 flex-1 w-full">
         <div class="flex items-center justify-between mb-4 px-2">
             <div class="flex items-center gap-2">
                 <div class="w-1.5 h-4 bg-blue-500 rounded-full"></div>
                 <h3 class="text-white text-xs font-black tracking-widest uppercase">Registro de Operaciones Neurales</h3>
             </div>
+            
+            <div class="flex gap-2 aibot-tabs">
+                <button id="ai-tab-active" data-strategy="ai" class="active-tab-style text-[9px] font-black uppercase px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/50 transition-all">
+                    Activas
+                </button>
+                <button id="ai-tab-all" data-strategy="ai-history" class="text-[9px] font-black uppercase px-4 py-1.5 rounded-full bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-white transition-all">
+                    Historial
+                </button>
+            </div>
+
             <div class="flex space-x-2 items-center bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
                 <span id="ai-sync-dot" class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-pulse"></span>
-                <span id="ai-sync-text" class="text-[9px] text-blue-300 font-black uppercase">DISCONNECTED</span>
+                <span id="ai-sync-text" class="text-[9px] text-blue-300 font-black uppercase">STANDBY</span>
             </div>
         </div>
         
-        <div class="bg-gray-800/50 rounded-3xl border-2 border-blue-500/10 overflow-hidden backdrop-blur-sm shadow-2xl w-full">
-            <div class="overflow-x-auto w-full">
-                <table class="w-full text-[11px] font-mono text-left table-auto">
-                    <thead>
-                        <tr class="text-blue-400/70 border-b border-blue-500/10 bg-blue-500/5 text-[9px]">
-                            <th class="px-6 py-5 font-black uppercase tracking-widest">Timestamp</th>
-                            <th class="px-6 py-5 font-black uppercase tracking-widest">Operación</th>
-                            <th class="px-6 py-5 font-black uppercase tracking-widest text-right">Precio</th>
-                            <th class="px-6 py-5 font-black uppercase tracking-widest text-right">Monto (USDT)</th>
-                            <th class="px-6 py-5 font-black uppercase tracking-widest text-center">IA Conf.</th>
-                        </tr>
-                    </thead>
-                    <tbody id="ai-history-table-body" class="divide-y divide-blue-500/5 w-full">
-                        <tr class="text-gray-500">
-                            <td colspan="5" class="px-6 py-12 text-center italic tracking-widest uppercase text-[10px]">
-                                Esperando datos del flujo neural...
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div id="ai-order-list" class="grid grid-cols-1 gap-4 w-full pb-10">
+            <div class="text-center py-20 opacity-20">
+                <i class="fas fa-brain animate-pulse text-4xl text-blue-500 mb-4"></i>
+                <p class="text-[10px] text-blue-400 font-mono uppercase tracking-[0.3em]">Cargando flujo de datos...</p>
             </div>
         </div>
     </div>

@@ -308,3 +308,25 @@ main#main-content { margin-top: 0; }
     border: 1px solid var(--dark-border);
     z-index: 100;
 }
+
+/* Asegura que el contenedor de la lista de órdenes ocupe todo el ancho disponible */
+#ai-order-list {
+    display: grid !important;
+    grid-template-columns: 1fr !important; /* Una sola columna que ocupa todo */
+    width: 100% !important;
+    min-width: 100%;
+}
+
+/* Si en el futuro quieres 2 columnas en pantallas muy grandes */
+@media (min-width: 1280px) {
+    #ai-order-list {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 1.5rem;
+    }
+}
+
+/* Fix para que los elementos dentro de las cards no se desborden */
+.order-card {
+    width: 100% !important;
+    box-sizing: border-box;
+}
