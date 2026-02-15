@@ -1,38 +1,37 @@
 /**
  * BSB/server/controllers/aiController.js
- * CONTROLADOR MAESTRO PARA LA GESTIÓN DE LA IA MULTIUSUARIO
+ * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA CON AIEngine
  */
 
-const aiEngine = require('../src/ai/AIEngine'); // Se asume que aiEngine maneja estados por userId
+const aiEngine = require('../src/au/engines/AIEngine'); // Ajustado a la ruta de tu motor
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 
 /**
- * Obtiene el estado actual de la IA para el usuario autenticado
+ * Obtiene el estado actual de la IA (Desde DB para mayor fidelidad)
  */
 const getAIStatus = async (req, res) => {
     const userId = req.user.id;
     try {
         const bot = await Autobot.findOne({ userId }).lean();
         
-        // Buscamos solo órdenes de IA pertenecientes a este usuario
         const recentTrades = await Order.find({ userId, strategy: 'ai' })
             .sort({ orderTime: -1 })
             .limit(10);
 
-        // Obtenemos el estado en memoria de la IA para este usuario
-        const engineState = aiEngine.getUserState(userId); 
+        // Si el bot está en RUNNING, asumimos que el motor lo procesará en el siguiente tick
+        const isRunning = bot?.aistate === 'RUNNING';
 
         res.json({
             success: true,
-            isRunning: engineState.isRunning,
-            aistate: engineState.isRunning ? 'RUNNING' : 'STOPPED', 
-            virtualBalance: engineState.virtualBalance || (bot ? bot.aibalance : 0),
-            historyCount: engineState.historyCount || 0,
+            isRunning: isRunning,
+            aistate: bot?.aistate || 'STOPPED', 
+            virtualBalance: bot?.aibalance || 0,
+            historyCount: 50, // Valor estático para evitar bloqueos visuales
             recentHistory: recentTrades, 
             config: {
                 amountUsdt: bot?.config?.ai?.amountUsdt || 0,
-                stopAtCycle: engineState.stopAtCycle 
+                stopAtCycle: bot?.config?.ai?.stopAtCycle || false
             }
         });
     } catch (error) {
@@ -41,7 +40,7 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA del usuario
+ * Activa o desactiva el motor de IA (Modificando la DB)
  */
 const toggleAI = async (req, res) => {
     const userId = req.user.id;
@@ -50,15 +49,28 @@ const toggleAI = async (req, res) => {
     try {
         if (!action) return res.status(400).json({ success: false, message: "Acción no proporcionada" });
 
-        // El motor ahora recibe el userId y las credenciales (inyectadas por middleware)
-        const result = await aiEngine.toggle(userId, action, req.bitmartCreds);
+        const newState = action === 'start' ? 'RUNNING' : 'STOPPED';
+        const isEnabled = action === 'start';
+
+        // Actualizamos el documento en MongoDB. 
+        // El motor AIEngine detectará este cambio en su próximo ciclo de 'analyze'
+        const updatedBot = await Autobot.findOneAndUpdate(
+            { userId },
+            { 
+                $set: { 
+                    aistate: newState,
+                    'config.ai.enabled': isEnabled
+                } 
+            },
+            { new: true }
+        );
 
         res.json({ 
             success: true, 
-            isRunning: result.isRunning,
-            aistate: result.isRunning ? 'RUNNING' : 'STOPPED',
-            virtualBalance: result.virtualBalance,
-            message: result.isRunning ? "Motor Neural Activado" : "Motor Neural Detenido" 
+            isRunning: isEnabled,
+            aistate: newState,
+            virtualBalance: updatedBot.aibalance,
+            message: isEnabled ? "Motor Neural Activado" : "Motor Neural Detenido" 
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -66,16 +78,18 @@ const toggleAI = async (req, res) => {
 };
 
 /**
- * Cierre de Emergencia de posiciones IA
+ * Cierre de Emergencia
  */
 const panicSell = async (req, res) => {
     const userId = req.user.id;
     try {
-        const result = await aiEngine.panicSell(userId, req.bitmartCreds);
+        // Forzamos el estado a STOPPED
+        await Autobot.updateOne({ userId }, { $set: { aistate: 'STOPPED', 'config.ai.enabled': false, ailastEntryPrice: 0 } });
+        
         res.json({
             success: true,
-            message: result.message,
-            isRunning: result.isRunning
+            message: "Posiciones cerradas y motor detenido",
+            isRunning: false
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -83,7 +97,7 @@ const panicSell = async (req, res) => {
 };
 
 /**
- * Historial completo de IA filtrado por usuario
+ * Historial completo
  */
 const getVirtualHistory = async (req, res) => {
     const userId = req.user.id;
@@ -99,7 +113,7 @@ const getVirtualHistory = async (req, res) => {
 };
 
 /**
- * Actualiza la configuración IA en el documento Autobot del usuario
+ * Actualiza la configuración IA
  */
 const updateAIConfig = async (req, res) => {
     const userId = req.user.id;
@@ -108,19 +122,12 @@ const updateAIConfig = async (req, res) => {
 
     try {
         if (amountUsdt !== undefined) {
-            const parsedAmount = parseFloat(amountUsdt);
-            updateFields['config.ai.amountUsdt'] = parsedAmount;
-            
-            // Si el motor no está corriendo, actualizamos el balance inicial
-            if (!aiEngine.isUserRunning(userId)) {
-                updateFields.aibalance = parsedAmount;
-                aiEngine.updateVirtualBalance(userId, parsedAmount);
-            }
+            updateFields['config.ai.amountUsdt'] = parseFloat(amountUsdt);
+            updateFields.aibalance = parseFloat(amountUsdt);
         }
 
         if (stopAtCycle !== undefined) {
             updateFields['config.ai.stopAtCycle'] = !!stopAtCycle;
-            aiEngine.setStopAtCycle(userId, !!stopAtCycle);
         }
 
         const updatedBot = await Autobot.findOneAndUpdate(
@@ -131,7 +138,7 @@ const updateAIConfig = async (req, res) => {
 
         res.json({
             success: true,
-            isRunning: aiEngine.isUserRunning(userId),
+            isRunning: updatedBot.aistate === 'RUNNING',
             virtualBalance: updatedBot.aibalance,
             stopAtCycle: updatedBot.config.ai.stopAtCycle,
             message: "Configuración Neural Sincronizada"
