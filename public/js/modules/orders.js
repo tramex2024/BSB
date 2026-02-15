@@ -82,32 +82,23 @@ function createOrderHtml(order) {
 }
 
 /**
- * FETCH ORDERS CON FILTRO DE ESTRATEGIA (Refactorizado para AI y Autobot)
- * status puede ser 'all', 'filled', 'opened', etc.
+ * FETCH ORDERS CON FILTRO DE ESTRATEGIA (ex, long, short, all)
  */
-export async function fetchOrders(strategyType, status = 'all', containerRef, silent = false) {
-    // Si recibimos un ID (texto), buscamos el elemento. Si ya es el elemento, lo usamos.
-    const orderListElement = typeof containerRef === 'string' 
-        ? document.getElementById(containerRef) 
-        : containerRef;
-
+export async function fetchOrders(strategyType, orderListElement, silent = false) {
     if (!orderListElement || !strategyType) return;
     
     if (!silent) {
-        orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-blue-500 text-xl"></i></div>`;
+        orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
     }
 
     try {
-        // Normalizamos la estrategia: si es 'aibot' lo pasamos a 'ai'
-        const safeStrategy = strategyType === 'aibot' ? 'ai' : strategyType;
-        
-        // Construimos la URL con filtro de estrategia y estado
-        const url = `/api/orders/autobot/filter?strategy=${safeStrategy}&status=${status}`;
-        const data = await fetchFromBackend(url);
+        // Ahora consultamos un endpoint que filtre por el campo 'strategy' de la base de datos
+        // Ejemplo de URL: /api/orders/autobot?strategy=long
+        const data = await fetchFromBackend(`/api/orders/autobot/filter?strategy=${strategyType}`);
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-[10px] uppercase tracking-widest font-bold">No orders found for: ${safeStrategy}</div>`;
+            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-[10px] uppercase tracking-widest font-bold">No orders found for strategy: ${strategyType}</div>`;
             return;
         }
 
@@ -133,20 +124,12 @@ window.cancelOrder = async (orderId) => {
         });
         
         if (data.success) {
-            // Refrescar según donde estemos (AI o Autobot)
-            const aiTable = document.getElementById('ai-history-table-body');
-            const auContainer = document.getElementById('au-order-list');
+            // Buscamos cuál es el botón activo actualmente en el panel para refrescar la lista correcta
+            const activeTab = document.querySelector('.autobot-tabs button.bg-gray-800');
+            const strategy = activeTab ? activeTab.id.replace('tab-', '') : 'ex';
             
-            // Si existe la tabla de IA y estamos en esa pestaña, refrescamos IA
-            if (aiTable && document.querySelector('.aibot-tabs')) {
-                 fetchOrders('ai', 'all', 'ai-history-table-body');
-            } 
-            // Si no, refrescamos el Autobot normal
-            else if (auContainer) {
-                const activeTab = document.querySelector('.autobot-tabs button.bg-gray-800');
-                const strategy = activeTab ? activeTab.id.replace('tab-', '') : 'ex';
-                fetchOrders(strategy, 'all', auContainer);
-            }
+            const auContainer = document.getElementById('au-order-list');
+            if (auContainer) fetchOrders(strategy, auContainer);
         } else {
             alert(`Error: ${data.message || 'Could not cancel'}`);
         }
