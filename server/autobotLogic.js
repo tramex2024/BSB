@@ -147,10 +147,12 @@ async function botCycle(priceFromWebSocket) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
             }
 
+            // MODIFICACIÓN EN DEPENDENCIES: Obtenemos el socket real del orchestrator
             const dependencies = {
                 userId,
                 log: (msg, type) => orchestrator.log(msg, type, userId),
-                io: null, bitmartService, Autobot, currentPrice,
+                io: orchestrator.io || null, // CAMBIO: Inyectamos la instancia real de Socket.io
+                bitmartService, Autobot, currentPrice,
                 availableUSDT: botState.lastAvailableUSDT, 
                 availableBTC: botState.lastAvailableBTC,
                 botState, config: botState.config,
@@ -273,12 +275,10 @@ async function botCycle(priceFromWebSocket) {
  * Actualiza balances y órdenes de exchange para TODOS los usuarios.
  */
 function startGlobalSync() {
-    // Ejecutar cada 30 segundos
     setInterval(async () => {
         try {
             const allBots = await Autobot.find({}).lean();
             for (const bot of allBots) {
-                // Sincroniza saldo y órdenes 'ex' en la colección Order
                 await orchestrator.slowBalanceCacheUpdate(bot.userId);
             }
         } catch (err) {
@@ -287,7 +287,6 @@ function startGlobalSync() {
     }, 30000); 
 }
 
-// Arrancamos el sincronizador global al cargar el módulo
 startGlobalSync();
 
 module.exports = {
