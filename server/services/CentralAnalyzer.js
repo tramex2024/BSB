@@ -25,7 +25,8 @@ class CentralAnalyzer {
     async init(io) {
         this.io = io;
         console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo inicializado.");
-        this.analyze().catch(console.error);
+        // Ejecución inmediata al arrancar
+        await this.analyze();
     }
 
     updatePrice(price) {
@@ -38,10 +39,10 @@ class CentralAnalyzer {
 
             // 1. OBTENCIÓN DE DATOS
             if (!candles) {
-                // Pedimos un poco más del límite (300) para procesar y luego recortar a 250
                 const raw = await bitmartService.getKlines(this.symbol, '1', 300);
                 candles = raw.map(c => ({
-                    timestamp: c.timestamp || Date.now(),
+                    // UNIFICACIÓN DE TIMESTAMP: Forzamos milisegundos para consistencia en DB
+                    timestamp: String(c.timestamp).length === 10 ? c.timestamp * 1000 : c.timestamp,
                     high: parseFloat(c.high),
                     low: parseFloat(c.low),
                     open: parseFloat(c.open || c.close),
@@ -53,7 +54,6 @@ class CentralAnalyzer {
             if (!candles || candles.length === 0) return;
 
             // --- CONTROL DE CRECIMIENTO ---
-            // Nos aseguramos de quedarnos solo con las últimas X velas
             if (candles.length > this.config.MAX_HISTORY) {
                 candles = candles.slice(-this.config.MAX_HISTORY);
             }
@@ -87,7 +87,6 @@ class CentralAnalyzer {
             const signal = this._getSignal(curRSI21, prevRSI21);
 
             // 3. PERSISTENCIA EN MONGODB
-            // Usamos $set para REEMPLAZAR el array history con el nuevo set recortado
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -97,14 +96,14 @@ class CentralAnalyzer {
                     adx: curADX,
                     stochK: curStoch.k,
                     stochD: curStoch.d,
-                    signal: signal.action,
+                    signal: signal.action, // SIEMPRE será uno de los del ENUM
                     reason: signal.reason,
-                    currentRSI: curRSI14, // Para compatibilidad con tu Schema legacy
+                    currentRSI: curRSI14, 
                     prevRSI: prevRSI21 || curRSI21,
                     lastUpdate: new Date(),
-                    history: candles // Array ya recortado a MAX_HISTORY
+                    history: candles // El array ahora fluirá hasta 250
                 },
-                { upsert: true, new: true }
+                { upsert: true, new: true, runValidators: true }
             );
 
             // 4. NOTIFICACIÓN GLOBAL
@@ -128,11 +127,12 @@ class CentralAnalyzer {
 
     _getSignal(current, prev) {
         const diff = current - prev;
-        // Cambiado "HOLD" por "WAIT" para que coincida con tu MarketSignal Schema Enum
+        // Lógica unificada para usar HOLD
         if (prev <= 30 && current > 30) return { action: "BUY", reason: "Cruce 30 al alza" };
         if (prev < 32 && diff >= this.config.MOMENTUM_THRESHOLD) return { action: "BUY", reason: "Fuerza RSI" };
         if (prev >= 70 && current < 70) return { action: "SELL", reason: "Cruce 70 a la baja" };
-        return { action: "HOLD", reason: "Estable" };
+        
+        return { action: "HOLD", reason: "Estable" }; 
     }
 }
 

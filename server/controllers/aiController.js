@@ -1,14 +1,14 @@
 /**
  * BSB/server/controllers/aiController.js
- * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA CON AIEngine
+ * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA
  */
 
-const aiEngine = require('../src/ai/AIEngine'); // Ajustado a la ruta de tu motor
+const aiEngine = require('../src/ai/AIEngine'); 
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 
 /**
- * Obtiene el estado actual de la IA (Desde DB para mayor fidelidad)
+ * Obtiene el estado actual de la IA
  */
 const getAIStatus = async (req, res) => {
     const userId = req.user.id;
@@ -19,7 +19,7 @@ const getAIStatus = async (req, res) => {
             .sort({ orderTime: -1 })
             .limit(10);
 
-        // Si el bot está en RUNNING, asumimos que el motor lo procesará en el siguiente tick
+        // Aseguramos que el estado sea un booleano limpio
         const isRunning = bot?.aistate === 'RUNNING';
 
         res.json({
@@ -27,7 +27,8 @@ const getAIStatus = async (req, res) => {
             isRunning: isRunning,
             aistate: bot?.aistate || 'STOPPED', 
             virtualBalance: bot?.aibalance || 0,
-            historyCount: 50, // Valor estático para evitar bloqueos visuales
+            // Cambiado a un conteo real para que el Frontend sepa cuántas órdenes hay
+            historyCount: recentTrades.length, 
             recentHistory: recentTrades, 
             config: {
                 amountUsdt: bot?.config?.ai?.amountUsdt || 0,
@@ -40,7 +41,7 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA (Modificando la DB)
+ * Activa o desactiva el motor de IA
  */
 const toggleAI = async (req, res) => {
     const userId = req.user.id;
@@ -52,18 +53,20 @@ const toggleAI = async (req, res) => {
         const newState = action === 'start' ? 'RUNNING' : 'STOPPED';
         const isEnabled = action === 'start';
 
-        // Actualizamos el documento en MongoDB. 
-        // El motor AIEngine detectará este cambio en su próximo ciclo de 'analyze'
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId },
             { 
                 $set: { 
                     aistate: newState,
-                    'config.ai.enabled': isEnabled
+                    'config.ai.enabled': isEnabled,
+                    // Si se detiene, limpiamos el precio de entrada para evitar falsos positivos
+                    ...(action !== 'start' && { ailastEntryPrice: 0 })
                 } 
             },
             { new: true }
         );
+
+        if (!updatedBot) return res.status(404).json({ success: false, message: "Bot no encontrado" });
 
         res.json({ 
             success: true, 

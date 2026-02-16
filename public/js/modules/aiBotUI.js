@@ -1,12 +1,12 @@
 /**
  * AI Bot Interface Module - Optimized 2026
  * Integration: Card-Style Unification & Neural Sync
- * Fix: Removed legacy table logic to support global Card design
+ * Sync: Updated to 250 candles buffer & HOLD state standard
  */
 
 const aiBotUI = {
     /**
-     * Actualiza el círculo de confianza y el texto descriptivo
+     * Actualiza el círculo de confianza y el texto descriptivo del motor neural
      */
     updateConfidence: (confidence, serverMessage = null, isAnalyzing = false) => {
         const circle = document.getElementById('ai-confidence-circle');
@@ -15,40 +15,47 @@ const aiBotUI = {
         
         if (!circle || !valueText || !predictionText) return;
 
+        // Normalización del porcentaje (soporta 0-1 o 0-100)
         const percent = confidence <= 1 ? confidence * 100 : confidence;
         const offset = 364.4 - (percent / 100) * 364.4;
         
         circle.style.strokeDashoffset = offset;
         valueText.innerText = `${Math.round(percent)}%`;
 
-        if (percent >= 85) circle.style.stroke = "#10b981"; 
-        else if (percent >= 50) circle.style.stroke = "#3b82f6"; 
-        else circle.style.stroke = "#6366f1"; 
+        // Colores dinámicos según confianza
+        if (percent >= 85) circle.style.stroke = "#10b981"; // Emerald
+        else if (percent >= 50) circle.style.stroke = "#3b82f6"; // Blue
+        else circle.style.stroke = "#6366f1"; // Indigo
 
         predictionText.classList.remove('text-blue-300', 'text-emerald-400', 'text-gray-500', 'animate-pulse');
 
+        // Estado de Análisis Inicial (Arranque del motor)
         if (isAnalyzing) {
-            predictionText.innerText = serverMessage || ">> ANALYZING NEURAL FLOW...";
+            predictionText.innerText = ">> ANALYZING NEURAL FLOW...";
             predictionText.classList.add('text-blue-300', 'animate-pulse');
             return;
         }
 
+        // Mapeo de Mensajes del Servidor (Sin WAIT)
         if (serverMessage) {
-            predictionText.innerText = `>> ${serverMessage.toUpperCase()}`;
+            // Traducimos HOLD a un término más profesional para el usuario
+            const displayMsg = serverMessage === 'HOLD' ? 'STABLE: SCANNING TREND' : serverMessage;
+            predictionText.innerText = `>> ${displayMsg.toUpperCase()}`;
             predictionText.classList.add(percent >= 85 ? 'text-emerald-400' : 'text-blue-300');
         } else {
+            // Lógica por defecto basada en confianza
             if (percent >= 85) {
                 predictionText.innerText = ">> STRONG MOMENTUM: ENTRY SIGNAL";
                 predictionText.classList.add('text-emerald-400');
             } else {
-                predictionText.innerText = ">> CALIBRATING: AWAITING VOLUME";
+                predictionText.innerText = ">> NEUTRAL: CALIBRATING VOLUMES";
                 predictionText.classList.add('text-gray-500');
             }
         }
     },
 
     /**
-     * Sistema de Logs Neuronales (Mantener para estética de consola IA)
+     * Sistema de Logs Neuronales (Consola estética de IA)
      */
     addLog: function(message, type = 'info') {
         const mockConfidence = (type === 'success') ? 0.90 : 0.50;
@@ -73,15 +80,16 @@ const aiBotUI = {
         
         container.prepend(logEntry);
 
+        // Limitar logs para no saturar el DOM
         if (container.children.length > 25) {
             container.removeChild(container.lastChild);
         }
     },
 
     /**
-     * Sincronización de estados del Botón y Feedback Visual
+     * Sincronización de estados del Botón y Feedback Visual Global
      */
-    setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 50) => {
+    setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 0) => {
         const btn = document.getElementById('btn-start-ai');
         const dot = document.getElementById('ai-status-dot');
         const syncDot = document.getElementById('ai-sync-dot');
@@ -93,10 +101,16 @@ const aiBotUI = {
             stopCycleCheck.checked = !!stopAtCycle;
         }
 
+        // Umbral mínimo de velas para considerar que el motor "ya sabe qué hacer"
+        const MIN_ANALYSIS_BUFFER = 20;
+
         if (isRunning) {
             if (btn) {
-                const isAnalyzing = (historyCount < 50);
-                const targetText = isAnalyzing ? `ANALYZING... (${historyCount}/50)` : "STOP AI CORE";
+                const isAnalyzing = (historyCount < MIN_ANALYSIS_BUFFER);
+                // Si el motor está llenando las 250 velas, mostramos el progreso inicial
+                const targetText = isAnalyzing 
+                    ? `SYNCING... (${historyCount}/${MIN_ANALYSIS_BUFFER})` 
+                    : "STOP AI CORE";
                 
                 if (btn.innerText !== targetText) {
                     btn.innerText = targetText;
@@ -108,6 +122,7 @@ const aiBotUI = {
                 }
             }
 
+            // Indicadores de actividad (Emerald Pulse)
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
@@ -117,6 +132,7 @@ const aiBotUI = {
                 aiInput.classList.add('opacity-40', 'cursor-not-allowed');
             }
         } else {
+            // Estado de Apagado / Standby (Blue Theme)
             if (btn && btn.innerText !== "START AI CORE") {
                 btn.innerText = "START AI CORE";
                 btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
@@ -130,6 +146,7 @@ const aiBotUI = {
                 aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
             }
 
+            // Reset del círculo de confianza al detener
             const circle = document.getElementById('ai-confidence-circle');
             if (circle) circle.style.strokeDashoffset = 364.4;
         }

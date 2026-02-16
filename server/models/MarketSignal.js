@@ -39,7 +39,7 @@ const MarketSignalSchema = new mongoose.Schema({
         type: String, 
         required: true,
         // En MarketSignal.js
-enum: ['BUY', 'SELL', 'HOLD', 'WAIT', 'STRONG_BUY', 'STRONG_SELL'] 
+enum: ['BUY', 'SELL', 'HOLD', 'STRONG_BUY', 'STRONG_SELL'] 
     }, 
     reason: { type: String },
 
