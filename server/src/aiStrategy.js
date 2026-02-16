@@ -3,7 +3,7 @@
  * Wrapper para integrar el AIEngine en el ciclo secuencial del Autobot.
  */
 
-const aiEngine = require('./ai/AIEngine'); // Asegúrate que la ruta sea correcta
+const aiEngine = require('./au/engines/AIEngine'); // Asegúrate que la ruta sea correcta
 
 async function runAIStrategy(dependencies) {
     if (!dependencies || !dependencies.botState || !dependencies.currentPrice) {

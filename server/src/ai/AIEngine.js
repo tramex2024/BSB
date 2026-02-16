@@ -52,7 +52,7 @@ class AIEngine {
             }
 
             // --- BÚSQUEDA DE ENTRADAS (Si no hay posición activa) ---
-           if (lastEntryPrice === 0) {
+          if (lastEntryPrice === 0) {
     // Forzamos el formato BTC_USDT que es el que usa tu MarketSignal Schema
     let SYMBOL = bot.config?.symbol || 'BTC_USDT';
     
@@ -69,7 +69,6 @@ class AIEngine {
         }
         return;
     }
-
                 await this._executeStrategy(userId, price, marketData.history, bot);
             }
         } catch (error) {
