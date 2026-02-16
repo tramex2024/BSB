@@ -1,11 +1,12 @@
 /**
  * BSB/server/controllers/aiController.js
- * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA
+ * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA (Velas vs Órdenes)
  */
 
 const aiEngine = require('../src/ai/AIEngine'); 
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
+const MarketSignal = require('../models/MarketSignal'); // <--- IMPORTANTE
 
 /**
  * Obtiene el estado actual de la IA
@@ -15,11 +16,14 @@ const getAIStatus = async (req, res) => {
     try {
         const bot = await Autobot.findOne({ userId }).lean();
         
+        // 1. Obtenemos el conteo REAL de velas del mercado
+        const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).select('history');
+        const candleCount = marketData?.history?.length || 0;
+
         const recentTrades = await Order.find({ userId, strategy: 'ai' })
             .sort({ orderTime: -1 })
             .limit(10);
 
-        // Aseguramos que el estado sea un booleano limpio
         const isRunning = bot?.aistate === 'RUNNING';
 
         res.json({
@@ -27,8 +31,8 @@ const getAIStatus = async (req, res) => {
             isRunning: isRunning,
             aistate: bot?.aistate || 'STOPPED', 
             virtualBalance: bot?.aibalance || 0,
-            // Cambiado a un conteo real para que el Frontend sepa cuántas órdenes hay
-            historyCount: recentTrades.length, 
+            // CLAVE: Enviamos el conteo de velas para que el botón sepa que hay datos técnicos
+            historyCount: candleCount, 
             recentHistory: recentTrades, 
             config: {
                 amountUsdt: bot?.config?.ai?.amountUsdt || 0,
@@ -59,7 +63,6 @@ const toggleAI = async (req, res) => {
                 $set: { 
                     aistate: newState,
                     'config.ai.enabled': isEnabled,
-                    // Si se detiene, limpiamos el precio de entrada para evitar falsos positivos
                     ...(action !== 'start' && { ailastEntryPrice: 0 })
                 } 
             },
@@ -68,11 +71,15 @@ const toggleAI = async (req, res) => {
 
         if (!updatedBot) return res.status(404).json({ success: false, message: "Bot no encontrado" });
 
+        // Al arrancar, también devolvemos el conteo de velas para refrescar la UI
+        const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).select('history');
+
         res.json({ 
             success: true, 
             isRunning: isEnabled,
             aistate: newState,
             virtualBalance: updatedBot.aibalance,
+            historyCount: marketData?.history?.length || 0, // <--- REFREZCO DE UI
             message: isEnabled ? "Motor Neural Activado" : "Motor Neural Detenido" 
         });
     } catch (error) {
@@ -86,7 +93,6 @@ const toggleAI = async (req, res) => {
 const panicSell = async (req, res) => {
     const userId = req.user.id;
     try {
-        // Forzamos el estado a STOPPED
         await Autobot.updateOne({ userId }, { $set: { aistate: 'STOPPED', 'config.ai.enabled': false, ailastEntryPrice: 0 } });
         
         res.json({
