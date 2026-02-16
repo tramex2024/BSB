@@ -15,51 +15,50 @@ const aiBotUI = {
         
         if (!circle || !valueText || !predictionText) return;
 
-        // Normalización del porcentaje (soporta 0-1 o 0-100)
+        // Normalización del porcentaje
         const percent = confidence <= 1 ? confidence * 100 : confidence;
         const offset = 364.4 - (percent / 100) * 364.4;
         
         circle.style.strokeDashoffset = offset;
         valueText.innerText = `${Math.round(percent)}%`;
 
-        // Colores dinámicos según confianza
-        if (percent >= 85) circle.style.stroke = "#10b981"; // Emerald
-        else if (percent >= 50) circle.style.stroke = "#3b82f6"; // Blue
-        else circle.style.stroke = "#6366f1"; // Indigo
+        // Colores dinámicos: Verde (Alta), Azul (Media), Indigo (Baja/Neutral)
+        if (percent >= 85) circle.style.stroke = "#10b981"; 
+        else if (percent >= 50) circle.style.stroke = "#3b82f6"; 
+        else circle.style.stroke = "#6366f1"; 
 
         predictionText.classList.remove('text-blue-300', 'text-emerald-400', 'text-gray-500', 'animate-pulse');
 
-        // Estado de Análisis Inicial (Arranque del motor)
         if (isAnalyzing) {
             predictionText.innerText = ">> ANALYZING NEURAL FLOW...";
             predictionText.classList.add('text-blue-300', 'animate-pulse');
             return;
         }
 
-        // Mapeo de Mensajes del Servidor (Sin WAIT)
         if (serverMessage) {
-            // Traducimos HOLD a un término más profesional para el usuario
+            // Cambio de terminología: de WAIT a SCANNING/STABLE
             const displayMsg = serverMessage === 'HOLD' ? 'STABLE: SCANNING TREND' : serverMessage;
             predictionText.innerText = `>> ${displayMsg.toUpperCase()}`;
             predictionText.classList.add(percent >= 85 ? 'text-emerald-400' : 'text-blue-300');
         } else {
-            // Lógica por defecto basada en confianza
             if (percent >= 85) {
                 predictionText.innerText = ">> STRONG MOMENTUM: ENTRY SIGNAL";
                 predictionText.classList.add('text-emerald-400');
             } else {
-                predictionText.innerText = ">> NEUTRAL: CALIBRATING VOLUMES";
+                // Estado normal cuando no hay señal clara
+                predictionText.innerText = ">> NEUTRAL: SCANNING MARKET";
                 predictionText.classList.add('text-gray-500');
             }
         }
     },
 
     /**
-     * Sistema de Logs Neuronales (Consola estética de IA)
+     * Sistema de Logs Neuronales
      */
     addLog: function(message, type = 'info') {
-        const mockConfidence = (type === 'success') ? 0.90 : 0.50;
-        this.addLogEntry(message, mockConfidence);
+        // En lugar de un 50% fijo, usamos un valor neutro que no pinte verde (emerald)
+        const confidenceValue = (type === 'success') ? 0.90 : 0.01; 
+        this.addLogEntry(message, confidenceValue);
     },
 
     addLogEntry: (message, confidence = 0) => {
@@ -69,8 +68,8 @@ const aiBotUI = {
         const time = new Date().toLocaleTimeString([], { hour12: false });
         const logEntry = document.createElement('div');
         
-        const borderColor = confidence >= 0.85 ? 'border-emerald-500' : 'border-blue-500';
-        const textColor = confidence >= 0.85 ? 'text-emerald-400' : 'text-gray-300';
+        const borderColor = confidence >= 0.85 ? 'border-emerald-500' : 'border-blue-500/30';
+        const textColor = confidence >= 0.85 ? 'text-emerald-400' : 'text-gray-400';
 
         logEntry.className = `text-[9px] border-l-2 ${borderColor} pl-2 mb-1 py-1 bg-white/5 animate-fadeIn`;
         logEntry.innerHTML = `
@@ -79,15 +78,11 @@ const aiBotUI = {
         `;
         
         container.prepend(logEntry);
-
-        // Limitar logs para no saturar el DOM
-        if (container.children.length > 25) {
-            container.removeChild(container.lastChild);
-        }
+        if (container.children.length > 25) container.removeChild(container.lastChild);
     },
 
     /**
-     * Sincronización de estados del Botón y Feedback Visual Global
+     * Sincronización de estados del Botón y Feedback Visual
      */
     setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 0) => {
         const btn = document.getElementById('btn-start-ai');
@@ -101,38 +96,32 @@ const aiBotUI = {
             stopCycleCheck.checked = !!stopAtCycle;
         }
 
-        // Umbral mínimo de velas para considerar que el motor "ya sabe qué hacer"
-        const MIN_ANALYSIS_BUFFER = 20;
-
+        // AJUSTE: Solo mostramos SYNCING si realmente no hay NADA de datos (0)
+        // Si hay al menos 1 vela, el bot ya está "activo" procesando el flujo.
         if (isRunning) {
             if (btn) {
-                const isAnalyzing = (historyCount < MIN_ANALYSIS_BUFFER);
-                // Si el motor está llenando las 250 velas, mostramos el progreso inicial
-                const targetText = isAnalyzing 
-                    ? `SYNCING... (${historyCount}/${MIN_ANALYSIS_BUFFER})` 
-                    : "STOP AI CORE";
+                const isSyncing = (historyCount === 0);
+                const targetText = isSyncing ? "INITIALIZING CORE..." : "STOP AI CORE";
                 
                 if (btn.innerText !== targetText) {
                     btn.innerText = targetText;
-                    if (isAnalyzing) {
-                        btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse transition-all";
+                    if (isSyncing) {
+                        btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse";
                     } else {
                         btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
                     }
                 }
             }
 
-            // Indicadores de actividad (Emerald Pulse)
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
             
-            if (aiInput && !aiInput.disabled) {
+            if (aiInput) {
                 aiInput.disabled = true;
-                aiInput.classList.add('opacity-40', 'cursor-not-allowed');
+                aiInput.classList.add('opacity-40');
             }
         } else {
-            // Estado de Apagado / Standby (Blue Theme)
             if (btn && btn.innerText !== "START AI CORE") {
                 btn.innerText = "START AI CORE";
                 btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
@@ -141,12 +130,10 @@ const aiBotUI = {
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
             
-            if (aiInput && aiInput.disabled) {
+            if (aiInput) {
                 aiInput.disabled = false;
-                aiInput.classList.remove('opacity-40', 'cursor-not-allowed');
+                aiInput.classList.remove('opacity-40');
             }
-
-            // Reset del círculo de confianza al detener
             const circle = document.getElementById('ai-confidence-circle');
             if (circle) circle.style.strokeDashoffset = 364.4;
         }
