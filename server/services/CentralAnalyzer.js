@@ -132,7 +132,7 @@ class CentralAnalyzer {
         if (prev <= 30 && current > 30) return { action: "BUY", reason: "Cruce 30 al alza" };
         if (prev < 32 && diff >= this.config.MOMENTUM_THRESHOLD) return { action: "BUY", reason: "Fuerza RSI" };
         if (prev >= 70 && current < 70) return { action: "SELL", reason: "Cruce 70 a la baja" };
-        return { action: "WAIT", reason: "Estable" };
+        return { action: "HOLD", reason: "Estable" };
     }
 }
 
