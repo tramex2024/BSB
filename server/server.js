@@ -160,7 +160,7 @@ function setupMarketWS(io) {
                     await MarketSignal.updateOne(
                         { symbol: 'BTC_USDT' },
                         { 
-                            $push: { history: { $each: [closedCandle], $slice: -100 } },
+                            $push: { history: { $each: [closedCandle], $slice: -250 } },
                             $set: { lastUpdate: new Date() }
                         },
                         { upsert: true }
