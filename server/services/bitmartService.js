@@ -157,7 +157,7 @@ const bitmartService = {
         return promise;
     },
 
-    getKlines: async (symbol, interval, limit = 200) => {
+    getKlines: async (symbol, interval, limit = 250) => {
         const now = Date.now();
         const cacheKey = `${symbol}_${interval}`;
         const cached = klinesCache.get(cacheKey);

@@ -19,17 +19,15 @@ class AIEngine {
         this.io = io;
     }
 
-    /**
+     /**
      * Punto de entrada principal: Analiza el precio y decide si actuar.
      */
     async analyze(price, userId) {
         if (!userId || !price) return;
 
         try {
-            // 1. Buscamos el bot. Eliminamos la dependencia rígida de config.ai.enabled
-            // para que si aistate es RUNNING, el motor intente trabajar.
+            // 1. Buscamos el bot y verificamos estado
             const bot = await Autobot.findOne({ userId }).lean();
-            
             if (!bot || bot.aistate !== 'RUNNING') return;
 
             const lastEntryPrice = bot.ailastEntryPrice || 0;
@@ -52,23 +50,36 @@ class AIEngine {
             }
 
             // --- BÚSQUEDA DE ENTRADAS (Si no hay posición activa) ---
-          if (lastEntryPrice === 0) {
-    // Forzamos el formato BTC_USDT que es el que usa tu MarketSignal Schema
-    let SYMBOL = bot.config?.symbol || 'BTC_USDT';
-    
-    // Si el símbolo viene como BTCUSDT (sin guion), lo convertimos a BTC_USDT
-    if (SYMBOL === 'BTCUSDT') SYMBOL = 'BTC_USDT';
+            if (lastEntryPrice === 0) {
+                // Traducción robusta del símbolo
+                let SYMBOL = bot.config?.symbol || 'BTC_USDT';
+                if (!SYMBOL.includes('_')) {
+                    SYMBOL = SYMBOL.replace('USDT', '_USDT');
+                }
 
-    const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
+                const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
+                
+                // 2. Validación y Feedback dinámico de sincronización
+                const currentCount = marketData?.history?.length || 0;
+                const REQUIRED_SAMPLES = 200;
+
+                if (!marketData || marketData.history.length < REQUIRED_SAMPLES) {
+    const currentCount = marketData?.history?.length || 0;
+    const progress = currentCount / REQUIRED_SAMPLES;
     
-    if (!marketData || !marketData.history || marketData.history.length < 50) {
-        const currentCount = marketData?.history?.length || 0;
-        // Solo logueamos si realmente el motor está intentando analizar
-        if (Math.random() > 0.85) { 
-            this._log(userId, `Sincronizando: ${currentCount}/50 datos (${SYMBOL})...`, 0.2, true);
-        }
-        return;
-    }
+    this._log(
+        userId, 
+        `Colectando datos: ${currentCount}/${REQUIRED_SAMPLES} velas...`, 
+        progress, 
+        true
+    );
+    return;
+}
+
+                // 3. Ejecución si tenemos los datos completos
+                // Enviamos un pequeño log de "Calculando..." antes de ejecutar
+                this._log(userId, "AI Engine: Calculating Prediction...", 0.9, true);
+                
                 await this._executeStrategy(userId, price, marketData.history, bot);
             }
         } catch (error) {
@@ -77,17 +88,34 @@ class AIEngine {
     }
 
     async _executeStrategy(userId, price, history, bot) {
+        // 1. Cálculo de indicadores a través del StrategyManager
         const analysis = StrategyManager.calculate(history);
-        if (!analysis) return;
-
-        const { confidence, message } = analysis;
         
-        if (confidence >= 0.75) {
-            this._log(userId, `🚀 AI: Señal confirmada (${(confidence * 100).toFixed(0)}%). Entrando...`, confidence);
-            await this._trade(userId, 'BUY', price, confidence, bot);
-        } else if (Math.random() > 0.90) {
-            this._log(userId, message, confidence);
+        if (!analysis) {
+            this._log(userId, "AI Engine: Waiting for technical indicators...", 0.5, true);
+            return;
         }
+
+        const { confidence, message, trend, rsi } = analysis;
+        
+        // 2. LÓGICA DE DECISIÓN (ENTRADA)
+        // Umbral de confianza del 75% para comprar
+        if (confidence >= 0.75) {
+            this._log(userId, `🚀 AI Signal: ${message} (${(confidence * 100).toFixed(0)}%). Buying...`, confidence);
+            await this._trade(userId, 'BUY', price, confidence, bot);
+            return;
+        }
+
+        // 3. FEEDBACK CUANDO NO HAY SEÑAL (WAITING STATE)
+        // En lugar de un random del 90%, actualizamos el mensaje si hay cambios significativos 
+        // o para mostrar los indicadores actuales al usuario.
+        
+        const rsiValue = rsi ? rsi.toFixed(2) : 'N/A';
+        const statusMsg = `AI Watching: ${trend || 'Neutral'} (RSI: ${rsiValue}) - Conf: ${(confidence * 100).toFixed(0)}%`;
+
+        // Enviamos el log con flag 'isAnalyzing: true' para que el botón muestre este texto
+        // pero mantenga el spinner o estado de análisis.
+        this._log(userId, statusMsg, confidence, true);
     }
 
     async _trade(userId, side, price, confidence, bot) {

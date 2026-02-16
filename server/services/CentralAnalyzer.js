@@ -1,5 +1,3 @@
-// server/src/services/CentralAnalyzer.js
-
 /**
  * BSB/server/services/CentralAnalyzer.js
  * Motor de Indicadores Técnicos Globales (Optimizado para BSB 2026)
@@ -26,36 +24,40 @@ class CentralAnalyzer {
     async init(io) {
         this.io = io;
         console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo inicializado.");
+        // Opcional: Ejecutar un primer análisis al arrancar para llenar la DB
+        this.analyze().catch(console.error);
     }
 
     updatePrice(price) {
         this.lastPrice = price;
     }
 
-    /**
-     * Se ejecuta cada vez que una vela se cierra o el server lo solicita.
-     * Ahora recibe las velas directamente para no pedirlas a la API si ya existen.
-     */
     async analyze(externalCandles = null) {
         try {
             let candles = externalCandles;
 
-            // Si no nos pasan velas, las pedimos (Fallback)
+            // --- MEJORA: Aumentamos a 250 para cubrir la EMA 200 de la IA ---
             if (!candles) {
-                const raw = await bitmartService.getKlines(this.symbol, '1', 100);
+                // Pedimos 250 velas para asegurar que StrategyManager tenga datos suficientes
+                const raw = await bitmartService.getKlines(this.symbol, '1', 250);
                 candles = raw.map(c => ({
+                    timestamp: c.timestamp || Date.now(), // Aseguramos que haya timestamp
                     high: parseFloat(c.high),
                     low: parseFloat(c.low),
-                    close: parseFloat(c.close)
+                    open: parseFloat(c.open || c.close),
+                    close: parseFloat(c.close),
+                    volume: parseFloat(c.volume || 0)
                 }));
             }
+
+            if (!candles || candles.length === 0) return;
 
             const closes = candles.map(c => c.close);
             const highs = candles.map(c => c.high);
             const lows = candles.map(c => c.low);
             const price = this.lastPrice || closes[closes.length - 1];
 
-            // 1. CÁLCULO DE INDICADORES (Usando los datos históricos + precio actual)
+            // 1. CÁLCULO DE INDICADORES
             const rsi14Arr = RSI.calculate({ values: [...closes.slice(0, -1), price], period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: [...closes.slice(0, -1), price], period: this.config.RSI_21 });
             
@@ -70,7 +72,6 @@ class CentralAnalyzer {
                 signalPeriod: 3
             });
 
-            // 2. EXTRACCIÓN DE VALORES ACTUALES
             const curRSI14 = rsi14Arr[rsi14Arr.length - 1];
             const curRSI21 = rsi21Arr[rsi21Arr.length - 1];
             const prevRSI21 = rsi21Arr[rsi21Arr.length - 2];
@@ -79,7 +80,7 @@ class CentralAnalyzer {
 
             const signal = this._getSignal(curRSI21, prevRSI21);
 
-            // 3. PERSISTENCIA EN MONGODB
+            // --- 3. PERSISTENCIA EN MONGODB (Actualizando el historial para la IA) ---
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -91,7 +92,9 @@ class CentralAnalyzer {
                     stochD: curStoch.d,
                     signal: signal.action,
                     reason: signal.reason,
-                    lastUpdate: new Date()
+                    lastUpdate: new Date(),
+                    // INSERTAMOS LAS VELAS AQUÍ: Así el motor de IA las encuentra siempre
+                    history: candles 
                 },
                 { upsert: true, new: true }
             );
