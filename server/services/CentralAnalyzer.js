@@ -1,7 +1,7 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
  * Motor de Indicadores Técnicos Globales (Optimizado para BSB 2026)
- * Versión: Sync 250 Candles & Zero-Point Calibration
+ * Versión: Sync 250 Candles & Zero-Point Calibration (Fix: Anti-Overwrite)
  */
 
 const { RSI, ADX, Stochastic } = require('technicalindicators');
@@ -86,7 +86,6 @@ class CentralAnalyzer {
             const prevRSI21 = rsi21Arr[rsi21Arr.length - 2] || curRSI21;
             const curADX = adxArr[adxArr.length - 1]?.adx || 0;
             
-            // Ajuste: Si no hay datos suficientes, devolvemos 0 para indicar calibración
             const curStoch = stochArr.length > 0 
                 ? stochArr[stochArr.length - 1] 
                 : { k: 0, d: 0 }; 
@@ -94,6 +93,7 @@ class CentralAnalyzer {
             const signal = this._getSignal(curRSI21, prevRSI21);
 
             // 3. PERSISTENCIA EN MONGODB
+            // [CAMBIO CLAVE]: Se ha eliminado 'history: candles' para evitar sobreescribir el array del WS
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -107,8 +107,8 @@ class CentralAnalyzer {
                     reason: signal.reason,
                     currentRSI: curRSI14, 
                     prevRSI: prevRSI21,
-                    lastUpdate: new Date(),
-                    history: candles // Persistimos el array de 250
+                    lastUpdate: new Date()
+                    // history NO se actualiza aquí para proteger la acumulación del WebSocket
                 },
                 { upsert: true, new: true, runValidators: true }
             );
@@ -123,7 +123,7 @@ class CentralAnalyzer {
                     stochK: curStoch.k,
                     stochD: curStoch.d,
                     signal: signal.action,
-                    historyCount: candles.length // Enviamos el conteo real para el frontend
+                    historyCount: updatedSignal.history ? updatedSignal.history.length : candles.length
                 });
             }
 

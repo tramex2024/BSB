@@ -155,16 +155,27 @@ function setupMarketWS(io) {
                 lastKnownPrice = price; 
                 centralAnalyzer.updatePrice(price);
 
+                // --- GESTIÓN DE VELAS (Fuente de Verdad Única para el Historial) ---
                 const closedCandle = candleBuilder.processTick(price, volume);
                 if (closedCandle) {
+                    // Solo el WebSocket añade velas y mantiene el límite de 250
                     await MarketSignal.updateOne(
                         { symbol: 'BTC_USDT' },
                         { 
-                            $push: { history: { $each: [closedCandle], $slice: -250 } },
+                            $push: { 
+                                history: { 
+                                    $each: [closedCandle], 
+                                    $slice: -250 
+                                } 
+                            },
                             $set: { lastUpdate: new Date() }
                         },
                         { upsert: true }
                     );
+                    
+                    // Ejecutamos el análisis técnico inmediatamente después de cerrar la vela
+                    // para que los indicadores se calculen con el historial actualizado.
+                    await centralAnalyzer.analyze();
                 }
 
                 io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });

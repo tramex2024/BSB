@@ -60,21 +60,21 @@ class AIEngine {
                 const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
                 
                 // 2. Validación y Feedback dinámico de sincronización
+                // AJUSTE: Sincronizamos con el límite de 250 de la arquitectura global
                 const currentCount = marketData?.history?.length || 0;
-                const REQUIRED_SAMPLES = 200;
+                const REQUIRED_SAMPLES = 250; 
 
-                if (!marketData || marketData.history.length < REQUIRED_SAMPLES) {
-    const currentCount = marketData?.history?.length || 0;
-    const progress = currentCount / REQUIRED_SAMPLES;
-    
-    this._log(
-        userId, 
-        `Colectando datos: ${currentCount}/${REQUIRED_SAMPLES} velas...`, 
-        progress, 
-        true
-    );
-    return;
-}
+                if (!marketData || currentCount < REQUIRED_SAMPLES) {
+                    const progress = currentCount / REQUIRED_SAMPLES;
+                    
+                    this._log(
+                        userId, 
+                        `Colectando datos: ${currentCount}/${REQUIRED_SAMPLES} velas...`, 
+                        progress, 
+                        true
+                    );
+                    return;
+                }
 
                 // 3. Ejecución si tenemos los datos completos
                 // Enviamos un pequeño log de "Calculando..." antes de ejecutar
@@ -107,20 +107,14 @@ class AIEngine {
         }
 
         // 3. FEEDBACK CUANDO NO HAY SEÑAL (WAITING STATE)
-        // En lugar de un random del 90%, actualizamos el mensaje si hay cambios significativos 
-        // o para mostrar los indicadores actuales al usuario.
-        
         const rsiValue = rsi ? rsi.toFixed(2) : 'N/A';
         const statusMsg = `AI Watching: ${trend || 'Neutral'} (RSI: ${rsiValue}) - Conf: ${(confidence * 100).toFixed(0)}%`;
 
-        // Enviamos el log con flag 'isAnalyzing: true' para que el botón muestre este texto
-        // pero mantenga el spinner o estado de análisis.
         this._log(userId, statusMsg, confidence, true);
     }
 
     async _trade(userId, side, price, confidence, bot) {
         try {
-            // Aseguramos que el balance nunca sea NaN
             const currentBalance = parseFloat(bot.aibalance || bot.config?.ai?.amountUsdt || 100);
             const fee = currentBalance * this.EXCHANGE_FEE;
             

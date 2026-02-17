@@ -1,11 +1,15 @@
 // BSB/server/src/au/engines/StrategyManager.js
+/**
+ * Strategy Manager - Cerebro Matemático (Versión Auditada 2026)
+ * Optimizado para confluencia de indicadores y filtros institucionales.
+ */
 
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
 class StrategyManager {
     static calculate(history) {
-        // Mínimo 200 velas para que la EMA 200 sea precisa
-        if (!history || history.length < 200) return null;
+        // Sincronizado a 250 para máxima precisión en EMA 200 y filtrado de ruido
+        if (!history || history.length < 250) return null;
 
         const closeValues = history.map(c => parseFloat(c.close));
         const highValues = history.map(c => parseFloat(c.high));
@@ -23,7 +27,7 @@ class StrategyManager {
                 values: closeValues, rsiPeriod: 14, stochasticPeriod: 14, kPeriod: 3, dPeriod: 3
             });
             
-            if (stochResult.length < 2) return null; // Evitar error si no hay suficientes resultados
+            if (stochResult.length < 2) return null; 
             const latestStoch = stochResult[stochResult.length - 1];
             const prevStoch = stochResult[stochResult.length - 2];
 
@@ -41,7 +45,7 @@ class StrategyManager {
             const isBullishCross = lastEma9 > lastEma21;
             const isAboveInstitutional = currentPrice > lastEma200;
 
-            // --- SCORE ENGINE ---
+            // --- SCORE ENGINE (Lógica de Pesos) ---
             let score = 0;
 
             // A: Tendencia Macro (40%)
@@ -76,6 +80,7 @@ class StrategyManager {
                 trend: isAboveInstitutional ? 'bullish' : 'bearish',
                 confidence: confidence,
                 price: currentPrice,
+                rsi: latestStoch?.k, // Alias para compatibilidad con el log de AIEngine
                 message: this._generateMessage(isAboveInstitutional, latestADX, latestStoch, confidence)
             };
         } catch (e) {
