@@ -1,56 +1,83 @@
 const mongoose = require('mongoose');
+const axios = require('axios');
 
-async function migrateOrdersOnly() {
+async function reach250Velas() {
+    const uri = 'mongodb+srv://tramex2024:vIHKxhFCqFOXC4tf@cluster0.y0qkdw4.mongodb.net/bsb?retryWrites=true&w=majority&appName=Cluster0';
+    const SYMBOL = 'BTC_USDT';
+
     try {
-        const uri = 'mongodb+srv://tramex2024:vIHKxhFCqFOXC4tf@cluster0.y0qkdw4.mongodb.net/bsb?retryWrites=true&w=majority&appName=Cluster0';
-        
-        // ID del usuario que debe ser dueño de estas órdenes
-        const TARGET_USER_ID = new mongoose.Types.ObjectId("69880862881f8789a039d0a3");
-
-        console.log("🔗 Conectando a MongoDB para migración de órdenes...");
+        console.log("🔗 Conectando a MongoDB...");
         await mongoose.connect(uri);
+        const signalsCollection = mongoose.connection.collection('marketsignals');
 
-        const ordersCollection = mongoose.connection.collection('orders');
+        // 1. PRIMER LLAMADO: Las 200 más recientes
+        console.log(`📡 Solicitando bloque 1 (Recientes)...`);
+        const res1 = await axios.get('https://api-cloud.bitmart.com/spot/quotation/v3/klines', {
+            params: { symbol: SYMBOL, limit: 200, step: 1 },
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const klines1 = res1.data.data;
 
-        // 1. OBTENER TODAS LAS ÓRDENES
-        const allOrders = await ordersCollection.find({}).toArray();
-        console.log(`📦 Encontradas ${allOrders.length} órdenes para procesar.`);
+        // 2. SEGUNDO LLAMADO: Basado en el timestamp de la más antigua del bloque anterior
+        // Usamos el parámetro 'before' con el timestamp de la primera vela recibida
+        const oldestTimestamp = klines1[0][0]; 
+        console.log(`📡 Solicitando bloque 2 (Históricas para completar)...`);
+        const res2 = await axios.get('https://api-cloud.bitmart.com/spot/quotation/v3/klines', {
+            params: { 
+                symbol: SYMBOL, 
+                limit: 100, 
+                step: 1, 
+                before: oldestTimestamp 
+            },
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const klines2 = res2.data.data;
 
-        let updatedCount = 0;
+        // 3. COMBINAR Y FORMATEAR
+        const allKlines = [...klines1, ...klines2];
+        const formatted = allKlines.map(k => ({
+            timestamp: parseInt(k[0]) * 1000,
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+            volume: parseFloat(k[5])
+        }));
 
-        for (const order of allOrders) {
-            // Preparamos los datos normalizados
-            const normalizedData = {
-                userId: TARGET_USER_ID,
-                status: (order.status || 'FILLED').toUpperCase(),
-                side: (order.side || 'BUY').toUpperCase(),
-                type: (order.type || 'MARKET').toUpperCase(),
-                strategy: (order.strategy || 'long').toLowerCase(),
-                // Si no tiene cycleIndex, le ponemos 0 por defecto
-                cycleIndex: order.cycleIndex !== undefined ? order.cycleIndex : 0
-            };
+        // 4. LIMPIEZA DE DUPLICADOS Y RECORTE A 250
+        const uniqueMap = new Map();
+        formatted.forEach(v => uniqueMap.set(v.timestamp, v));
+        
+        const finalHistory = Array.from(uniqueMap.values())
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .slice(-250); // Tomamos las 250 más nuevas de este conjunto
 
-            await ordersCollection.updateOne(
-                { _id: order._id },
-                { $set: normalizedData }
-            );
-            updatedCount++;
-        }
+        console.log(`✅ Procesadas ${finalHistory.length} velas únicas.`);
 
-        console.log(`\n✅ MIGRACIÓN COMPLETADA`);
+        // 5. ACTUALIZAR DB
+        await signalsCollection.updateOne(
+            { symbol: SYMBOL },
+            { 
+                $set: { 
+                    history: finalHistory,
+                    lastUpdate: new Date()
+                } 
+            },
+            { upsert: true }
+        );
+
+        console.log(`\n🚀 OBJETIVO ALCANZADO`);
         console.log(`---------------------------------`);
-        console.log(`- Órdenes procesadas: ${updatedCount}`);
-        console.log(`- Vinculadas al Usuario: ${TARGET_USER_ID}`);
-        console.log(`- Status normalizados: (Ej: 'Filled' -> 'FILLED')`);
+        console.log(`- Total final en DB: ${finalHistory.length}`);
+        console.log(`- Rango: ${new Date(finalHistory[0].timestamp).toLocaleString()} a ${new Date(finalHistory[finalHistory.length-1].timestamp).toLocaleString()}`);
         console.log(`---------------------------------`);
-        console.log(`🚀 Ahora el frontend debería mostrar todo correctamente.`);
 
     } catch (err) {
-        console.error("❌ Error durante la migración:", err.message);
+        console.error("❌ Error:", err.message);
     } finally {
         await mongoose.disconnect();
         process.exit();
     }
 }
 
-migrateOrdersOnly();
+reach250Velas();

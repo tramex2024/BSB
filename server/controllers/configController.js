@@ -7,16 +7,13 @@ const Autobot = require('../models/Autobot');
 const bitmartService = require('../services/bitmartService'); 
 const autobotLogic = require('../autobotLogic'); 
 
-/**
- * Obtiene la configuración específica del usuario autenticado
- */
 async function getBotConfig(req, res) {
     try {
-        const userId = req.user.id; // Extraído del token JWT
+        const userId = req.user.id;
         const botState = await Autobot.findOne({ userId }).lean();
         
         if (!botState) {
-            return res.status(404).json({ success: false, message: "No se encontró configuración para este usuario." });
+            return res.status(404).json({ success: false, message: "No se encontró configuración." });
         }
         
         return res.json({ success: true, config: botState.config });
@@ -26,45 +23,41 @@ async function getBotConfig(req, res) {
     }
 }
 
-/**
- * Actualiza la configuración, valida fondos en BitMart y sincroniza motores
- */
 async function updateBotConfig(req, res) {
     try {
         const userId = req.user.id;
         const { config: newConfig } = req.body; 
         
         if (!newConfig) {
-            return res.status(400).json({ success: false, message: "No se proporcionaron datos de configuración." });
+            return res.status(400).json({ success: false, message: "No se proporcionaron datos." });
         }
 
-        // 1. RECUPERAR ESTADO Y VALIDAR FONDOS REALES
         let botState = await Autobot.findOne({ userId });
-        if (!botState) return res.status(404).json({ success: false, message: "Bot no inicializado para este usuario." });
+        if (!botState) return res.status(404).json({ success: false, message: "Bot no inicializado." });
 
-        // IMPORTANTE: Pasamos req.bitmartCreds (inyectadas por el middleware)
         const { availableUSDT } = await bitmartService.getAvailableTradingBalances(req.bitmartCreds);
         
         const assignedUSDT_Long = newConfig.long?.amountUsdt !== undefined ? parseFloat(newConfig.long.amountUsdt) : botState.config.long.amountUsdt;
         const assignedUSDT_Short = newConfig.short?.amountUsdt !== undefined ? parseFloat(newConfig.short.amountUsdt) : botState.config.short.amountUsdt;
         const assignedUSDT_AI = newConfig.ai?.amountUsdt !== undefined ? parseFloat(newConfig.ai.amountUsdt) : (botState.config.ai?.amountUsdt || 0);
 
-        // Validación de margen (tolerancia de 5 USDT por fluctuaciones)
         if ((assignedUSDT_Long + assignedUSDT_Short + assignedUSDT_AI) > (availableUSDT + 5)) {
              return res.status(400).json({ 
                  success: false, 
-                 message: `Fondos insuficientes en BitMart. Tienes ${availableUSDT.toFixed(2)} USDT y el bot requiere ${(assignedUSDT_Long + assignedUSDT_Short + assignedUSDT_AI).toFixed(2)}.` 
+                 message: `Fondos insuficientes. Tienes ${availableUSDT.toFixed(2)} USDT.` 
              });
         }
 
-        // 2. FUNCIÓN DE AYUDA PARA MERGE (Limpia valores nulos/vacíos)
         const mergeValue = (newValue, oldValue) => {
             if (newValue === undefined || newValue === null || newValue === "") return oldValue;
             const parsed = parseFloat(newValue);
             return isNaN(parsed) ? oldValue : parsed;
         };
 
-        // 3. PREPARACIÓN DE LA ACTUALIZACIÓN SEGMENTADA
+        // --- PROTECCIÓN DE ESTADO (BLINDAJE) ---
+        // Solo permitimos actualizar parámetros técnicos. 
+        // El estado 'enabled' NO se toca desde aquí para evitar arranques accidentales.
+        
         const update = {
             'config.long.amountUsdt': assignedUSDT_Long,
             'config.long.purchaseUsdt': mergeValue(newConfig.long?.purchaseUsdt, botState.config.long.purchaseUsdt),
@@ -83,42 +76,35 @@ async function updateBotConfig(req, res) {
             'config.short.stopAtCycle': newConfig.short?.stopAtCycle !== undefined ? !!newConfig.short.stopAtCycle : botState.config.short.stopAtCycle,
 
             'config.ai.amountUsdt': assignedUSDT_AI,
-            'config.ai.stopAtCycle': newConfig.ai?.stopAtCycle !== undefined ? !!newConfig.ai.stopAtCycle : (botState.config.ai?.stopAtCycle || false),
-            'config.ai.enabled': newConfig.ai?.enabled !== undefined ? !!newConfig.ai.enabled : (botState.config.ai?.enabled || false)
+            'config.ai.stopAtCycle': newConfig.ai?.stopAtCycle !== undefined ? !!newConfig.ai.stopAtCycle : (botState.config.ai?.stopAtCycle || false)
+            // 🛡️ 'config.ai.enabled' ELIMINADO: No se permite cambiar estado en este endpoint.
         };
 
-        // Si la IA no está en una operación activa, actualizamos su balance de trabajo
         if ((botState.ailastEntryPrice || 0) === 0) {
             update.aibalance = assignedUSDT_AI;
         }
 
-        // 4. PERSISTENCIA ATÓMICA POR USUARIO
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
             { $set: update }, 
             { new: true, runValidators: true }
         ).lean();
 
-        // 5. SINCRONIZACIÓN CON EL MOTOR EN MEMORIA
         if (updatedBot) {
             const lastPrice = autobotLogic.getLastPrice();
-            // syncFrontendState ahora debe manejar el userId internamente
             await autobotLogic.syncFrontendState(lastPrice, updatedBot, userId);
         }
 
         return res.json({ 
             success: true, 
-            message: "Configuración actualizada y sincronizada.", 
+            message: "Parámetros actualizados correctamente.", 
             data: updatedBot.config 
         });
 
     } catch (error) {
         console.error("❌ Error en updateBotConfig:", error);
-        return res.status(500).json({ success: false, message: "Error interno al actualizar la configuración." });
+        return res.status(500).json({ success: false, message: "Error interno al actualizar." });
     }
 }
 
-module.exports = { 
-    updateBotConfig, 
-    getBotConfig 
-};
+module.exports = { updateBotConfig, getBotConfig };

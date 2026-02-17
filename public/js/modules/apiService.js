@@ -82,7 +82,6 @@ export function getBotConfiguration() {
         const rawValue = el.value.trim();
         if (rawValue === "") {
             const parts = path.split('.');
-            // Intento de recuperación del estado actual si el campo está vacío
             if (parts.length === 2) {
                 return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
             }
@@ -95,9 +94,8 @@ export function getBotConfiguration() {
 
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
-    // Esta es la estructura masiva que mantiene la integridad de tu base de datos
     return {
-        symbol: "BTC_USDT", 
+        symbol: "BTC_USDT", // Mantenemos tu estándar original
         long: {
             amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt'),
             purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt'),
@@ -106,7 +104,8 @@ export function getBotConfiguration() {
             profit_percent: getNum('autriggerl', 'long.profit_percent'),   
             price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
-            enabled: true
+            // CRÍTICO: Enviamos el estado real del motor, no un valor fijo
+            enabled: currentBotState.lstate !== 'STOPPED'
         },
         short: {
             amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
@@ -116,12 +115,14 @@ export function getBotConfiguration() {
             profit_percent: getNum('autriggers', 'short.profit_percent'),   
             price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
-            enabled: true
+            // CRÍTICO: Enviamos el estado real del motor, no un valor fijo
+            enabled: currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
             amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
             stopAtCycle: getCheck('ai-stop-at-cycle'),
-            enabled: true
+            // CRÍTICO: Usamos el estado global de ejecución de la IA
+            enabled: currentBotState.isRunning || false
         }
     };
 }

@@ -4,8 +4,8 @@
  */
 
 const Autobot = require('../../../models/Autobot');
-const User = require('../../../models/User'); // Importado para rescatar API Keys
-const Order = require('../../../models/Order'); // Modelo para el espejo de órdenes
+const User = require('../../../models/User'); 
+const Order = require('../../../models/Order'); 
 const bitmartService = require('../../../services/bitmartService');
 const { decrypt } = require('../../../utils/encryption'); 
 
@@ -13,20 +13,10 @@ let io;
 let lastCyclePrice = 0;
 
 const orchestrator = {
-    /**
-     * Configura la instancia de Socket.io
-     */
     setIo: (socketIo) => { io = socketIo; },
-
-    /**
-     * Actualiza y recupera el último precio conocido del mercado
-     */
     setLastPrice: (price) => { lastCyclePrice = parseFloat(price); },
     getLastPrice: () => lastCyclePrice,
 
-    /**
-     * Sistema de logs centralizado con emisión a salas de Socket.io por userId
-     */
     log: (message, type = 'info', userId = null) => {
         const timestamp = new Date().toLocaleTimeString();
         console.log(`[${timestamp}] [${type.toUpperCase()}] ${userId ? `[User: ${userId}] ` : ''}${message}`);
@@ -42,12 +32,13 @@ const orchestrator = {
     },
 
     /**
-     * Sincroniza el estado del bot y el precio actual con el frontend
+     * Sincroniza el estado del bot con el frontend de forma segura.
      */
     syncFrontendState: async (currentPrice, botState, userId) => {
         if (io && botState && userId) {
             const priceToEmit = parseFloat(currentPrice) || lastCyclePrice || 0;
             
+            // BLINDAJE: Nos aseguramos de emitir una estructura limpia
             io.to(userId.toString()).emit('bot-state-update', { 
                 ...botState, 
                 price: priceToEmit,
@@ -56,9 +47,6 @@ const orchestrator = {
         }
     },
 
-    /**
-     * Guarda cambios en MongoDB y dispara la actualización al frontend
-     */
     commitChanges: async (userId, changeSet, currentPrice) => {
         if (!userId || Object.keys(changeSet).length === 0) return null;
         
@@ -70,6 +58,7 @@ const orchestrator = {
                 { new: true, lean: true }
             );
             if (updated) {
+                // Emitimos la actualización real tras el cambio en base de datos
                 await orchestrator.syncFrontendState(currentPrice, updated, userId);
                 return updated;
             }
@@ -80,60 +69,43 @@ const orchestrator = {
     },
 
     /**
-     * SINCRONIZACIÓN MAESTRA (Saldos + Órdenes de Exchange)
+     * SINCRONIZACIÓN MAESTRA DE BALANCE Y ÓRDENES
      */
     slowBalanceCacheUpdate: async (userId) => {
         let availableUSDT = 0, availableBTC = 0, apiSuccess = false;
         
         try {
-            // 1. Buscamos al usuario para obtener llaves cifradas
             const user = await User.findById(userId).lean();
-            if (!user || !user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-                orchestrator.log("No se pudieron obtener las API Keys del usuario para sincronizar.", "error", userId);
-                return false;
-            }
+            if (!user || !user.bitmartApiKey) return false;
 
-            // 2. Desciframos para BitMart con los nombres EXACTOS del bitmartService.js
             const userCreds = {
                 apiKey: decrypt(user.bitmartApiKey),
                 secretKey: decrypt(user.bitmartSecretKeyEncrypted),
                 apiMemo: decrypt(user.bitmartApiMemo)
             };
 
-            // 3. Petición paralela a BitMart
             const [balancesArray, openOrdersRes] = await Promise.all([
                 bitmartService.getBalance(userCreds),
                 bitmartService.getOpenOrders(null, userCreds) 
             ]);
 
-            // 4. Procesar Balances
             if (balancesArray && Array.isArray(balancesArray)) {
                 const usdtBalance = balancesArray.find(b => b.currency === 'USDT');
                 const btcBalance = balancesArray.find(b => b.currency === 'BTC');
-                
                 availableUSDT = parseFloat(usdtBalance?.available || 0);
                 availableBTC = parseFloat(btcBalance?.available || 0);
                 apiSuccess = true;
             }
 
-            // 5. Sincronizar Órdenes Abiertas (Estrategia: 'ex')
+            // Sincronización de órdenes externas ('ex')
             await Order.deleteMany({ userId, strategy: 'ex' });
-
             const bitmartOrders = openOrdersRes?.orders || [];
             if (bitmartOrders.length > 0) {
                 const ordersToSave = bitmartOrders.map(o => {
                     const rawStatus = String(o.status || '').toLowerCase();
-                    
-                    // MAPEADOR ESTRICTO: No asume nada.
                     let finalStatus = 'PENDING'; 
-                    
-                    if (['6', 'filled', 'fully_filled'].includes(rawStatus)) {
-                        finalStatus = 'FILLED';
-                    } else if (['7', 'canceled', 'cancelled'].includes(rawStatus)) {
-                        finalStatus = 'CANCELED';
-                    } else if (['4', '8', 'new', 'partially_filled', 'open', 'active'].includes(rawStatus)) {
-                        finalStatus = 'PENDING';
-                    }
+                    if (['6', 'filled', 'fully_filled'].includes(rawStatus)) finalStatus = 'FILLED';
+                    else if (['7', 'canceled', 'cancelled'].includes(rawStatus)) finalStatus = 'CANCELED';
 
                     return {
                         userId,
@@ -144,18 +116,16 @@ const orchestrator = {
                         symbol: o.symbol || 'BTC_USDT',
                         side: (o.side || 'BUY').toUpperCase(),
                         type: (o.type || 'LIMIT').toUpperCase(),
-                        size: parseFloat(o.size || o.amount || 0),
+                        size: parseFloat(o.size || 0),
                         price: parseFloat(o.price || 0),
-                        notional: parseFloat(o.notional || (parseFloat(o.size || 0) * parseFloat(o.price || 0)) || 0),
                         status: finalStatus,
-                        orderTime: new Date(parseInt(o.create_time || o.order_time || Date.now()))
+                        orderTime: new Date(parseInt(o.create_time || Date.now()))
                     };
                 });
-
                 await Order.insertMany(ordersToSave);
             }
 
-            // 6. Actualizar documento del Bot
+            // Actualización del balance en el documento del Bot
             const updated = await Autobot.findOneAndUpdate({ userId }, {
                 $set: { 
                     lastAvailableUSDT: availableUSDT, 
@@ -164,7 +134,9 @@ const orchestrator = {
                 }
             }, { new: true, lean: true });
 
-            if (updated && (updated.lstate === 'STOPPED' && updated.sstate === 'STOPPED')) {
+            // CAMBIO CRÍTICO: Sincronizamos SIEMPRE que haya una actualización exitosa, 
+            // no solo cuando está STOPPED, para que el frontend tenga el balance real.
+            if (updated) {
                 await orchestrator.syncFrontendState(lastCyclePrice, updated, userId);
             }
 
@@ -172,7 +144,6 @@ const orchestrator = {
             console.error(`[SYNC-FETCH-ERROR] ${userId}: ${error.message}`);
             return false;
         }
-        
         return apiSuccess;
     }
 };
