@@ -1,7 +1,6 @@
 /**
  * AI Bot Interface Module - Optimized 2026
- * Integration: Card-Style Unification & Neural Sync
- * Sync: Updated to 250 candles buffer & HOLD state standard
+ * Versión Blindada: Prevención de parpadeo y suavizado de transiciones
  */
 
 const aiBotUI = {
@@ -15,19 +14,24 @@ const aiBotUI = {
         
         if (!circle || !valueText || !predictionText) return;
 
-        // Normalización del porcentaje
-        const percent = confidence <= 1 ? confidence * 100 : confidence;
+        // Normalización: Aseguramos que siempre sea un número válido entre 0 y 100
+        let percent = confidence <= 1 ? confidence * 100 : confidence;
+        if (isNaN(percent)) percent = 0;
+
+        // 364.4 es la circunferencia del SVG. Calculamos el desplazamiento (offset).
         const offset = 364.4 - (percent / 100) * 364.4;
         
+        // Aplicamos transición suave para evitar saltos bruscos
+        circle.style.transition = "stroke-dashoffset 0.8s ease-in-out, stroke 0.5s ease";
         circle.style.strokeDashoffset = offset;
         valueText.innerText = `${Math.round(percent)}%`;
 
-        // Colores dinámicos: Verde (Alta), Azul (Media), Indigo (Baja/Neutral)
-        if (percent >= 85) circle.style.stroke = "#10b981"; 
-        else if (percent >= 50) circle.style.stroke = "#3b82f6"; 
-        else circle.style.stroke = "#6366f1"; 
+        // Colores dinámicos según el nivel de confianza
+        if (percent >= 85) circle.style.stroke = "#10b981"; // Verde (Alta)
+        else if (percent >= 50) circle.style.stroke = "#3b82f6"; // Azul (Media)
+        else circle.style.stroke = "#6366f1"; // Indigo (Baja/Neutral)
 
-        predictionText.classList.remove('text-blue-300', 'text-emerald-400', 'text-gray-500', 'animate-pulse');
+        predictionText.className = 'font-mono text-[10px] mt-2 transition-all duration-300';
 
         if (isAnalyzing) {
             predictionText.innerText = ">> ANALYZING NEURAL FLOW...";
@@ -36,7 +40,6 @@ const aiBotUI = {
         }
 
         if (serverMessage) {
-            // Cambio de terminología: de WAIT a SCANNING/STABLE
             const displayMsg = serverMessage === 'HOLD' ? 'STABLE: SCANNING TREND' : serverMessage;
             predictionText.innerText = `>> ${displayMsg.toUpperCase()}`;
             predictionText.classList.add(percent >= 85 ? 'text-emerald-400' : 'text-blue-300');
@@ -45,7 +48,6 @@ const aiBotUI = {
                 predictionText.innerText = ">> STRONG MOMENTUM: ENTRY SIGNAL";
                 predictionText.classList.add('text-emerald-400');
             } else {
-                // Estado normal cuando no hay señal clara
                 predictionText.innerText = ">> NEUTRAL: SCANNING MARKET";
                 predictionText.classList.add('text-gray-500');
             }
@@ -53,14 +55,16 @@ const aiBotUI = {
     },
 
     /**
-     * Sistema de Logs Neuronales
+     * Sistema de Logs Neuronales (Puente)
      */
     addLog: function(message, type = 'info') {
-        // En lugar de un 50% fijo, usamos un valor neutro que no pinte verde (emerald)
         const confidenceValue = (type === 'success') ? 0.90 : 0.01; 
         this.addLogEntry(message, confidenceValue);
     },
 
+    /**
+     * Inserta una entrada de log en la consola de la IA
+     */
     addLogEntry: (message, confidence = 0) => {
         const container = document.getElementById('ai-log-container');
         if (!container) return;
@@ -78,11 +82,12 @@ const aiBotUI = {
         `;
         
         container.prepend(logEntry);
+        // Mantener solo los últimos 25 mensajes para no saturar la memoria
         if (container.children.length > 25) container.removeChild(container.lastChild);
     },
 
     /**
-     * Sincronización de estados del Botón y Feedback Visual
+     * Sincronización de estados del Botón y Feedback Visual (Punto de Verdad)
      */
     setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 0) => {
         const btn = document.getElementById('btn-start-ai');
@@ -96,21 +101,15 @@ const aiBotUI = {
             stopCycleCheck.checked = !!stopAtCycle;
         }
 
-        // AJUSTE: Solo mostramos SYNCING si realmente no hay NADA de datos (0)
-        // Si hay al menos 1 vela, el bot ya está "activo" procesando el flujo.
         if (isRunning) {
             if (btn) {
                 const isSyncing = (historyCount === 0);
                 const targetText = isSyncing ? "INITIALIZING CORE..." : "STOP AI CORE";
                 
-                if (btn.innerText !== targetText) {
-                    btn.innerText = targetText;
-                    if (isSyncing) {
-                        btn.className = "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse";
-                    } else {
-                        btn.className = "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
-                    }
-                }
+                btn.innerText = targetText;
+                btn.className = isSyncing 
+                    ? "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse"
+                    : "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
             }
 
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
@@ -122,7 +121,8 @@ const aiBotUI = {
                 aiInput.classList.add('opacity-40');
             }
         } else {
-            if (btn && btn.innerText !== "START AI CORE") {
+            // ESTADO STANDBY (Bot apagado)
+            if (btn) {
                 btn.innerText = "START AI CORE";
                 btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
             }
@@ -134,8 +134,14 @@ const aiBotUI = {
                 aiInput.disabled = false;
                 aiInput.classList.remove('opacity-40');
             }
-            const circle = document.getElementById('ai-confidence-circle');
-            if (circle) circle.style.strokeDashoffset = 364.4;
+
+            // BLINDAJE CONTRA PARPADEO:
+            // Solo reseteamos visualmente el círculo si la confianza reportada es realmente 0%
+            const valueText = document.getElementById('ai-confidence-value');
+            if (valueText && valueText.innerText === "0%") {
+                const circle = document.getElementById('ai-confidence-circle');
+                if (circle) circle.style.strokeDashoffset = 364.4;
+            }
         }
     }
 };
