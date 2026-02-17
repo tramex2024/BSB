@@ -92,40 +92,41 @@ class CentralAnalyzer {
 
             const signal = this._getSignal(curRSI21, prevRSI21);
 
-            // 3. PERSISTENCIA EN MONGODB
-            // [CAMBIO CLAVE]: Se ha eliminado 'history: candles' para evitar sobreescribir el array del WS
-            const updatedSignal = await MarketSignal.findOneAndUpdate(
-                { symbol: this.symbol },
-                {
-                    currentPrice: price,
-                    rsi14: curRSI14,
-                    rsi21: curRSI21,
-                    adx: curADX,
-                    stochK: curStoch.k,
-                    stochD: curStoch.d,
-                    signal: signal.action, 
-                    reason: signal.reason,
-                    currentRSI: curRSI14, 
-                    prevRSI: prevRSI21,
-                    lastUpdate: new Date()
-                    // history NO se actualiza aquí para proteger la acumulación del WebSocket
-                },
-                { upsert: true, new: true, runValidators: true }
-            );
+           // --- 3. PERSISTENCIA EN MONGODB (Optimizado: Solo lo funcional) ---
+const updatedSignal = await MarketSignal.findOneAndUpdate(
+    { symbol: this.symbol },
+    {
+        currentPrice: price,
+        rsi14: curRSI14,
+        rsi21: curRSI21,
+        adx: curADX,
+        stochK: curStoch.k,
+        stochD: curStoch.d,
+        signal: signal.action, 
+        reason: signal.reason,
+        // SE MANTIENE: prevRSI es necesario para calcular la acción BUY/SELL en _getSignal
+        prevRSI: prevRSI21, 
+        // ELIMINADO: currentRSI (Redundante, ya tienes rsi14/rsi21)
+        lastUpdate: new Date()
+    },
+    { upsert: true, new: true, runValidators: true }
+);
 
-            // 4. NOTIFICACIÓN GLOBAL VÍA SOCKETS
-            if (this.io) {
-                this.io.emit('market-signal-update', { 
-                    price, 
-                    rsi14: curRSI14, 
-                    rsi21: curRSI21, 
-                    adx: curADX, 
-                    stochK: curStoch.k,
-                    stochD: curStoch.d,
-                    signal: signal.action,
-                    historyCount: updatedSignal.history ? updatedSignal.history.length : candles.length
-                });
-            }
+// --- 4. NOTIFICACIÓN GLOBAL VÍA SOCKETS ---
+if (this.io) {
+    this.io.emit('market-signal-update', { 
+        price, 
+        rsi14: curRSI14, 
+        rsi21: curRSI21, 
+        adx: curADX, 
+        stochK: curStoch.k,
+        stochD: curStoch.d,
+        signal: signal.action,
+        // Enviamos prevRSI por si el frontend necesita dibujar la flecha de tendencia
+        prevRSI: prevRSI21,
+        historyCount: candles.length 
+    });
+}
 
             return updatedSignal;
 
