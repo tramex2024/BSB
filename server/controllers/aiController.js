@@ -1,12 +1,12 @@
 /**
  * BSB/server/controllers/aiController.js
- * CONTROLADOR MAESTRO - VERSIÓN SINCRONIZADA (Velas vs Órdenes)
+ * CONTROLADOR MAESTRO - VERSIÓN BLINDADA (Sincronización Total)
  */
 
 const aiEngine = require('../src/ai/AIEngine'); 
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
-const MarketSignal = require('../models/MarketSignal'); // <--- IMPORTANTE
+const MarketSignal = require('../models/MarketSignal');
 
 /**
  * Obtiene el estado actual de la IA
@@ -16,7 +16,7 @@ const getAIStatus = async (req, res) => {
     try {
         const bot = await Autobot.findOne({ userId }).lean();
         
-        // 1. Obtenemos el conteo REAL de velas del mercado
+        // Obtenemos el conteo REAL de velas del mercado
         const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).select('history');
         const candleCount = marketData?.history?.length || 0;
 
@@ -24,14 +24,11 @@ const getAIStatus = async (req, res) => {
             .sort({ orderTime: -1 })
             .limit(10);
 
-        const isRunning = bot?.aistate === 'RUNNING';
-
         res.json({
             success: true,
-            isRunning: isRunning,
+            isRunning: bot?.aistate === 'RUNNING',
             aistate: bot?.aistate || 'STOPPED', 
             virtualBalance: bot?.aibalance || 0,
-            // CLAVE: Enviamos el conteo de velas para que el botón sepa que hay datos técnicos
             historyCount: candleCount, 
             recentHistory: recentTrades, 
             config: {
@@ -45,7 +42,7 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA
+ * Activa o desactiva el motor de IA con notificación inmediata al motor
  */
 const toggleAI = async (req, res) => {
     const userId = req.user.id;
@@ -57,6 +54,7 @@ const toggleAI = async (req, res) => {
         const newState = action === 'start' ? 'RUNNING' : 'STOPPED';
         const isEnabled = action === 'start';
 
+        // 1. Actualización en Base de Datos
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId },
             { 
@@ -66,12 +64,18 @@ const toggleAI = async (req, res) => {
                     ...(action !== 'start' && { ailastEntryPrice: 0 })
                 } 
             },
-            { new: true }
+            { new: true, lean: true }
         );
 
         if (!updatedBot) return res.status(404).json({ success: false, message: "Bot no encontrado" });
 
-        // Al arrancar, también devolvemos el conteo de velas para refrescar la UI
+        // 2. SINCRONIZACIÓN MANUAL: 
+        // Forzamos un log inmediato a través del motor para que el WebSocket 
+        // emita el estado de "Analizando" antes de que el frontend dude.
+        if (isEnabled && aiEngine && aiEngine._log) {
+            aiEngine._log(userId, "Iniciando Motor Neural...", 0.01, true);
+        }
+
         const marketData = await MarketSignal.findOne({ symbol: 'BTC_USDT' }).select('history');
 
         res.json({ 
@@ -79,7 +83,7 @@ const toggleAI = async (req, res) => {
             isRunning: isEnabled,
             aistate: newState,
             virtualBalance: updatedBot.aibalance,
-            historyCount: marketData?.history?.length || 0, // <--- REFREZCO DE UI
+            historyCount: marketData?.history?.length || 0,
             message: isEnabled ? "Motor Neural Activado" : "Motor Neural Detenido" 
         });
     } catch (error) {
@@ -95,6 +99,11 @@ const panicSell = async (req, res) => {
     try {
         await Autobot.updateOne({ userId }, { $set: { aistate: 'STOPPED', 'config.ai.enabled': false, ailastEntryPrice: 0 } });
         
+        // Notificamos al motor que se detenga inmediatamente si hay procesos pendientes
+        if (aiEngine && aiEngine._broadcastStatus) {
+            aiEngine._broadcastStatus(userId, { aistate: 'STOPPED' });
+        }
+
         res.json({
             success: true,
             message: "Posiciones cerradas y motor detenido",
@@ -142,14 +151,14 @@ const updateAIConfig = async (req, res) => {
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
             { $set: updateFields }, 
-            { new: true }
+            { new: true, lean: true }
         );
 
         res.json({
             success: true,
             isRunning: updatedBot.aistate === 'RUNNING',
             virtualBalance: updatedBot.aibalance,
-            stopAtCycle: updatedBot.config.ai.stopAtCycle,
+            stopAtCycle: updatedBot.config?.ai?.stopAtCycle,
             message: "Configuración Neural Sincronizada"
         });
     } catch (error) {

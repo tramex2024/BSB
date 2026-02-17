@@ -1,6 +1,6 @@
 /**
  * BSB/server/src/au/engines/AIEngine.js
- * AI Engine - Motor de Decisiones Neuronales (Versión Auditada 2026)
+ * AI Engine - Motor de Decisiones Neuronales (Versión Estabilizada 2026)
  */
 
 const Autobot = require('../../models/Autobot');
@@ -19,21 +19,17 @@ class AIEngine {
         this.io = io;
     }
 
-     /**
-     * Punto de entrada principal: Analiza el precio y decide si actuar.
-     */
     async analyze(price, userId) {
         if (!userId || !price) return;
 
         try {
-            // 1. Buscamos el bot y verificamos estado
             const bot = await Autobot.findOne({ userId }).lean();
             if (!bot || bot.aistate !== 'RUNNING') return;
 
             const lastEntryPrice = bot.ailastEntryPrice || 0;
             let highestPrice = bot.aihighestPrice || 0;
 
-            // --- GESTIÓN DE POSICIÓN ABIERTA (Trailing Stop) ---
+            // --- GESTIÓN DE POSICIÓN ABIERTA ---
             if (lastEntryPrice > 0) {
                 if (price > highestPrice) {
                     highestPrice = price;
@@ -49,9 +45,8 @@ class AIEngine {
                 }
             }
 
-            // --- BÚSQUEDA DE ENTRADAS (Si no hay posición activa) ---
+            // --- BÚSQUEDA DE ENTRADAS ---
             if (lastEntryPrice === 0) {
-                // Traducción robusta del símbolo
                 let SYMBOL = bot.config?.symbol || 'BTC_USDT';
                 if (!SYMBOL.includes('_')) {
                     SYMBOL = SYMBOL.replace('USDT', '_USDT');
@@ -59,26 +54,25 @@ class AIEngine {
 
                 const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
                 
-                // 2. Validación y Feedback dinámico de sincronización
-                // AJUSTE: Sincronizamos con el límite de 250 de la arquitectura global
                 const currentCount = marketData?.history?.length || 0;
                 const REQUIRED_SAMPLES = 250; 
 
+                // CORRECCIÓN CRÍTICA: Mantener el botón encendido durante la carga
                 if (!marketData || currentCount < REQUIRED_SAMPLES) {
                     const progress = currentCount / REQUIRED_SAMPLES;
                     
+                    // Emitimos confianza mínima (0.01) para que la UI no se resetee a STANDBY
                     this._log(
                         userId, 
                         `Colectando datos: ${currentCount}/${REQUIRED_SAMPLES} velas...`, 
-                        progress, 
+                        0.01, 
                         true
                     );
                     return;
                 }
 
-                // 3. Ejecución si tenemos los datos completos
-                // Enviamos un pequeño log de "Calculando..." antes de ejecutar
-                this._log(userId, "AI Engine: Calculating Prediction...", 0.9, true);
+                // Feedback visual de procesamiento
+                this._log(userId, "AI Engine: Calculating Prediction...", 0.1, true);
                 
                 await this._executeStrategy(userId, price, marketData.history, bot);
             }
@@ -88,28 +82,26 @@ class AIEngine {
     }
 
     async _executeStrategy(userId, price, history, bot) {
-        // 1. Cálculo de indicadores a través del StrategyManager
         const analysis = StrategyManager.calculate(history);
         
         if (!analysis) {
-            this._log(userId, "AI Engine: Waiting for technical indicators...", 0.5, true);
+            // Si el análisis falla, enviamos confianza 0.01 en lugar de 0 para bloquear el parpadeo
+            this._log(userId, "AI Engine: Waiting for technical indicators...", 0.01, true);
             return;
         }
 
         const { confidence, message, trend, rsi } = analysis;
         
-        // 2. LÓGICA DE DECISIÓN (ENTRADA)
-        // Umbral de confianza del 75% para comprar
         if (confidence >= 0.75) {
             this._log(userId, `🚀 AI Signal: ${message} (${(confidence * 100).toFixed(0)}%). Buying...`, confidence);
             await this._trade(userId, 'BUY', price, confidence, bot);
             return;
         }
 
-        // 3. FEEDBACK CUANDO NO HAY SEÑAL (WAITING STATE)
         const rsiValue = rsi ? rsi.toFixed(2) : 'N/A';
         const statusMsg = `AI Watching: ${trend || 'Neutral'} (RSI: ${rsiValue}) - Conf: ${(confidence * 100).toFixed(0)}%`;
 
+        // Aseguramos que isAnalyzing sea true mientras no haya una orden para mantener la UI activa
         this._log(userId, statusMsg, confidence, true);
     }
 
@@ -137,7 +129,6 @@ class AIEngine {
             const shouldStop = side === 'SELL' && stopAtCycle;
             const newState = shouldStop ? 'STOPPED' : 'RUNNING';
 
-            // Actualización de la base de datos
             await Autobot.updateOne({ userId }, { 
                 $set: {
                     aibalance: newBalance,
@@ -149,7 +140,6 @@ class AIEngine {
                 $inc: { total_profit: side === 'SELL' ? parseFloat(netProfit.toFixed(4)) : 0 }
             });
 
-            // Registro de orden
             const orderData = {
                 userId,
                 strategy: 'ai',
@@ -165,7 +155,6 @@ class AIEngine {
 
             await Order.create(orderData);
 
-            // Notificaciones en tiempo real
             this._broadcastStatus(userId, {
                 aistate: newState,
                 virtualBalance: newBalance,

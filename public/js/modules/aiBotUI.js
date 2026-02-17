@@ -33,38 +33,38 @@ const aiBotUI = {
 
         predictionText.className = 'font-mono text-[10px] mt-2 transition-all duration-300';
 
-        if (isAnalyzing) {
+        // Prioridad 1: Estado de Análisis Colectando Datos
+        if (isAnalyzing || percent === 1) { 
             predictionText.innerText = ">> ANALYZING NEURAL FLOW...";
-            predictionText.classList.add('text-blue-300', 'animate-pulse');
+            predictionText.className = 'font-mono text-[10px] mt-2 text-blue-300 animate-pulse';
             return;
         }
 
+        // Prioridad 2: Mensaje del Servidor
         if (serverMessage) {
             const displayMsg = serverMessage === 'HOLD' ? 'STABLE: SCANNING TREND' : serverMessage;
             predictionText.innerText = `>> ${displayMsg.toUpperCase()}`;
-            predictionText.classList.add(percent >= 85 ? 'text-emerald-400' : 'text-blue-300');
+            predictionText.className = `font-mono text-[10px] mt-2 ${percent >= 75 ? 'text-emerald-400' : 'text-blue-300'}`;
         } else {
-            if (percent >= 85) {
+            // Prioridad 3: Mensaje por Defecto según Score
+            if (percent >= 75) {
                 predictionText.innerText = ">> STRONG MOMENTUM: ENTRY SIGNAL";
-                predictionText.classList.add('text-emerald-400');
+                predictionText.className = 'font-mono text-[10px] mt-2 text-emerald-400';
             } else {
                 predictionText.innerText = ">> NEUTRAL: SCANNING MARKET";
-                predictionText.classList.add('text-gray-500');
+                predictionText.className = 'font-mono text-[10px] mt-2 text-gray-500';
             }
         }
     },
 
     /**
-     * Sistema de Logs Neuronales (Puente)
+     * Sistema de Logs Neuronales
      */
     addLog: function(message, type = 'info') {
         const confidenceValue = (type === 'success') ? 0.90 : 0.01; 
         this.addLogEntry(message, confidenceValue);
     },
 
-    /**
-     * Inserta una entrada de log en la consola de la IA
-     */
     addLogEntry: (message, confidence = 0) => {
         const container = document.getElementById('ai-log-container');
         if (!container) return;
@@ -72,8 +72,8 @@ const aiBotUI = {
         const time = new Date().toLocaleTimeString([], { hour12: false });
         const logEntry = document.createElement('div');
         
-        const borderColor = confidence >= 0.85 ? 'border-emerald-500' : 'border-blue-500/30';
-        const textColor = confidence >= 0.85 ? 'text-emerald-400' : 'text-gray-400';
+        const borderColor = confidence >= 0.75 ? 'border-emerald-500' : 'border-blue-500/30';
+        const textColor = confidence >= 0.75 ? 'text-emerald-400' : 'text-gray-400';
 
         logEntry.className = `text-[9px] border-l-2 ${borderColor} pl-2 mb-1 py-1 bg-white/5 animate-fadeIn`;
         logEntry.innerHTML = `
@@ -82,12 +82,11 @@ const aiBotUI = {
         `;
         
         container.prepend(logEntry);
-        // Mantener solo los últimos 25 mensajes para no saturar la memoria
         if (container.children.length > 25) container.removeChild(container.lastChild);
     },
 
     /**
-     * Sincronización de estados del Botón y Feedback Visual (Punto de Verdad)
+     * Sincronización de estados del Botón
      */
     setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 0) => {
         const btn = document.getElementById('btn-start-ai');
@@ -103,25 +102,19 @@ const aiBotUI = {
 
         if (isRunning) {
             if (btn) {
-                const isSyncing = (historyCount === 0);
-                const targetText = isSyncing ? "INITIALIZING CORE..." : "STOP AI CORE";
-                
-                btn.innerText = targetText;
+                // Si historyCount es bajo, estamos cargando velas
+                const isSyncing = (historyCount < 200); 
+                btn.innerText = isSyncing ? "INITIALIZING NEURAL CORE..." : "STOP AI CORE";
                 btn.className = isSyncing 
-                    ? "w-full py-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-2xl font-black text-xs animate-pulse"
+                    ? "w-full py-4 bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 rounded-2xl font-black text-xs animate-pulse cursor-wait"
                     : "w-full py-4 bg-red-600/90 hover:bg-red-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-red-900/40 active:scale-95";
             }
 
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
-            
-            if (aiInput) {
-                aiInput.disabled = true;
-                aiInput.classList.add('opacity-40');
-            }
+            if (aiInput) { aiInput.disabled = true; aiInput.classList.add('opacity-40'); }
         } else {
-            // ESTADO STANDBY (Bot apagado)
             if (btn) {
                 btn.innerText = "START AI CORE";
                 btn.className = "w-full py-4 bg-blue-600/90 hover:bg-blue-500 text-white rounded-2xl font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/40 active:scale-95";
@@ -129,19 +122,11 @@ const aiBotUI = {
             if (dot) dot.className = "w-2.5 h-2.5 bg-gray-500 rounded-full shadow-none";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
-            
-            if (aiInput) {
-                aiInput.disabled = false;
-                aiInput.classList.remove('opacity-40');
-            }
+            if (aiInput) { aiInput.disabled = false; aiInput.classList.remove('opacity-40'); }
 
-            // BLINDAJE CONTRA PARPADEO:
-            // Solo reseteamos visualmente el círculo si la confianza reportada es realmente 0%
-            const valueText = document.getElementById('ai-confidence-value');
-            if (valueText && valueText.innerText === "0%") {
-                const circle = document.getElementById('ai-confidence-circle');
-                if (circle) circle.style.strokeDashoffset = 364.4;
-            }
+            // Solo reseteamos visualmente si no hay rastros de análisis previo
+            const circle = document.getElementById('ai-confidence-circle');
+            if (circle) circle.style.strokeDashoffset = 364.4;
         }
     }
 };
