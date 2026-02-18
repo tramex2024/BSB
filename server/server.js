@@ -110,6 +110,9 @@ const emitBotState = (io, state) => {
         ...state,
         lstate: state.lstate, 
         sstate: state.sstate,
+        aistate: state.aistate,
+        aibalance: state.aibalance,
+        ailastEntryPrice: state.ailastEntryPrice,
         total_profit: state.total_profit,
         lbalance: state.lbalance, 
         sbalance: state.sbalance,
@@ -224,7 +227,7 @@ const initializePrivateWebSockets = async () => {
                     // AJUSTE: Mapeo estricto de estrategia para consistencia con DB y Frontend
                     const strategy = cId.startsWith('L_') ? 'long' : 
                                      cId.startsWith('S_') ? 'short' : 
-                                     cId.startsWith('AI_') ? 'ai' : 'ex';
+                                     cId.toUpperCase().startsWith('AI_') ? 'ai' : 'ex';
 
                     await orderPersistenceService.saveExecutedOrder(ordersData, strategy, userIdStr);
 
@@ -245,7 +248,7 @@ setInterval(async () => {
     try {
         if (mongoose.connection.readyState === 1) {
             const activeBots = await Autobot.find({ 
-                $or: [{ lstate: 'RUNNING' }, { sstate: 'RUNNING' }] 
+                $or: [{ lstate: { $ne: 'STOPPED' } }, { sstate: { $ne: 'STOPPED' } }, { aistate: { $ne: 'STOPPED' } }] 
             }).select('userId');
             
             for(const bot of activeBots) {

@@ -1,30 +1,52 @@
 /**
  * BSB/server/src/aiStrategy.js
- * Wrapper para integrar el AIEngine en el ciclo secuencial del Autobot.
+ * Versión Blindada: Adaptador de ejecución para el Motor de IA.
  */
 
-const aiEngine = require('./ai/AIEngine'); // Asegúrate que la ruta sea correcta
+const aiEngine = require('./ai/AIEngine');
 
 async function runAIStrategy(dependencies) {
+    // 1. Validación de integridad de datos
     if (!dependencies || !dependencies.botState || !dependencies.currentPrice) {
         return;
     }
 
-    const { currentPrice, botState, userId, io, log } = dependencies;
+    const { 
+        currentPrice, 
+        botState, 
+        userId, 
+        io, 
+        log, 
+        placeAIOrder,           // Inyectado desde autobotLogic
+        updateAIStateData,      // Inyectado desde autobotLogic
+        updateBotState          // Inyectado desde autobotLogic
+    } = dependencies;
 
     try {
-        // CORRECCIÓN: Si el estado es RUNNING, permitimos el análisis 
-        // aunque el flag anidado 'enabled' tenga lag de sincronización.
-        if (botState.aistate !== 'RUNNING') {
+        // 2. FILTRO DE ESTADO OPERATIVO
+        if (!botState.aistate || botState.aistate === 'STOPPED') {
             return;
         }
 
-        if (io && typeof aiEngine.setIo === 'function') {
+        // 3. OPTIMIZACIÓN DE SOCKET (Solo si el Engine tiene el método)
+        if (io && aiEngine.io !== io && typeof aiEngine.setIo === 'function') {
             aiEngine.setIo(io);
         }
 
-        // Ejecución del Análisis
-        await aiEngine.analyze(currentPrice, userId);
+        /**
+         * 4. EJECUCIÓN DE ANÁLISIS Y ACCIÓN
+         * Pasamos las funciones de ejecución (placeAIOrder, etc.) al Engine.
+         * Esto permite que el Engine decida QUÉ hacer, pero que use el 
+         * canal oficial de la IA para ejecutar las órdenes.
+         */
+        await aiEngine.analyze(currentPrice, userId, {
+            ...botState,
+            // Sobreescribimos con las funciones oficiales del orquestador
+            placeAIOrder,
+            updateAIStateData,
+            updateBotState,
+            log
+        });
 
     } catch (error) {
         if (log) {

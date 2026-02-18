@@ -1,6 +1,6 @@
 /**
  * BSB/server/autobotLogic.js
- * Motor de Ciclos Unificado - Refactorizado para Claridad y Rendimiento.
+ * Motor de Ciclos Unificado - Versión Integra 2026 (Long, Short & IA)
  */
 
 const Autobot = require('./models/Autobot');
@@ -66,11 +66,25 @@ async function updateConfig(userId, newConfig) {
 }
 
 /**
- * ENCENDIDO DE ESTRATEGIA
+ * ENCENDIDO DE ESTRATEGIA (Refactorizado para incluir IA)
  */
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
-    const cleanData = side === 'long' ? CLEAN_LONG_ROOT : CLEAN_SHORT_ROOT;
+    if (!botState) throw new Error("Bot no encontrado");
+
+    let cleanData = {};
+    let stateField = '';
+
+    if (side === 'long') {
+        cleanData = CLEAN_LONG_ROOT;
+        stateField = 'lstate';
+    } else if (side === 'short') {
+        cleanData = CLEAN_SHORT_ROOT;
+        stateField = 'sstate';
+    } else if (side === 'ai') {
+        // La IA usualmente mantiene su historial, pero reiniciamos su estado operativo
+        stateField = 'aistate';
+    }
     
     const finalConfig = JSON.parse(JSON.stringify(botState.config));
     if (config && config[side]) {
@@ -81,14 +95,13 @@ async function startSide(userId, side, config) {
 
     const update = {
         ...cleanData, 
-        [side === 'long' ? 'lstate' : 'sstate']: 'RUNNING',
+        [stateField]: 'RUNNING',
         config: finalConfig
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
     orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} encendida.`, 'success', userId);
     
-    // Sincronización inmediata al encender (Balance y Órdenes 'ex')
     await orchestrator.slowBalanceCacheUpdate(userId); 
     return bot;
 }
@@ -100,7 +113,7 @@ async function stopSide(userId, side) {
     const botState = await Autobot.findOne({ userId }).lean();
     if (!botState) throw new Error("Bot no encontrado");
 
-    const stateField = side === 'long' ? 'lstate' : 'sstate'; 
+    const stateField = side === 'long' ? 'lstate' : (side === 'short' ? 'sstate' : 'aistate'); 
     const newConfig = JSON.parse(JSON.stringify(botState.config));
     if (newConfig[side]) newConfig[side].enabled = false;
 
@@ -134,7 +147,7 @@ async function botCycle(priceFromWebSocket) {
             $or: [
                 { lstate: { $ne: 'STOPPED' } },
                 { sstate: { $ne: 'STOPPED' } },
-                { aistate: 'RUNNING' }
+                { aistate: { $ne: 'STOPPED' } }
             ]
         }).lean();
 
@@ -143,15 +156,14 @@ async function botCycle(priceFromWebSocket) {
             const changeSet = {};
 
             // VALIDACIÓN PREVIA DE SEGURIDAD
-            if (!botState.lastAvailableUSDT && botState.lstate === 'RUNNING') {
+            if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
             }
 
-            // MODIFICACIÓN EN DEPENDENCIES: Obtenemos el socket real del orchestrator
             const dependencies = {
                 userId,
                 log: (msg, type) => orchestrator.log(msg, type, userId),
-                io: orchestrator.io || null, // CAMBIO: Inyectamos la instancia real de Socket.io
+                io: orchestrator.io || null,
                 bitmartService, Autobot, currentPrice,
                 availableUSDT: botState.lastAvailableUSDT, 
                 availableBTC: botState.lastAvailableBTC,
@@ -180,15 +192,17 @@ async function botCycle(priceFromWebSocket) {
                 },
 
                 updateBotState: async (val, strat) => { 
-                    changeSet[strat === 'long' ? 'lstate' : 'sstate'] = val; 
+                    const field = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
+                    changeSet[field] = val; 
                 },
                 updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
                 updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
+                updateAIStateData: async (fields) => { Object.assign(changeSet, fields); }, // AÑADIDO PARA IA
                 updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-            // --- MONITOR DE ÓRDENES ---
+            // --- MONITOR DE ÓRDENES (LONG & SHORT) ---
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
                 if (botState.llastOrder.side === 'buy') {
                     await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
@@ -209,20 +223,9 @@ async function botCycle(priceFromWebSocket) {
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
-
-                const longCov = calculateLongCoverage(
-                    activeLBalance, 
-                    currentPrice, 
-                    botState.config.long.purchaseUsdt, 
-                    parseNumber(botState.config.long.price_var) / 100, 
-                    parseNumber(botState.config.long.size_var), 
-                    activeLOCC, 
-                    parseNumber(botState.config.long.price_step_inc)
-                );
-                
+                const longCov = calculateLongCoverage(activeLBalance, currentPrice, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), activeLOCC, parseNumber(botState.config.long.price_step_inc));
                 changeSet.lcoverage = longCov.coveragePrice;
                 changeSet.lnorder = longCov.numberOfOrders;
-                
                 const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
                 const activeLAC = changeSet.lac !== undefined ? changeSet.lac : (botState.lac || 0);
                 changeSet.lprofit = activeLPPC > 0 ? calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long') : 0;
@@ -232,20 +235,9 @@ async function botCycle(priceFromWebSocket) {
             if (botState.sstate !== 'STOPPED' && botState.config.short) {
                 const activeSBalance = changeSet.sbalance !== undefined ? changeSet.sbalance : (botState.sbalance || 0);
                 const activeSOCC = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
-
-                const shortCov = calculateShortCoverage(
-                    activeSBalance, 
-                    currentPrice, 
-                    botState.config.short.purchaseUsdt, 
-                    parseNumber(botState.config.short.price_var) / 100, 
-                    parseNumber(botState.config.short.size_var), 
-                    activeSOCC, 
-                    parseNumber(botState.config.short.price_step_inc)
-                );
-
+                const shortCov = calculateShortCoverage(activeSBalance, currentPrice, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), activeSOCC, parseNumber(botState.config.short.price_step_inc));
                 changeSet.scoverage = shortCov.coveragePrice;
                 changeSet.snorder = shortCov.numberOfOrders;
-                
                 const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
                 const activeSAC = changeSet.sac !== undefined ? changeSet.sac : (botState.sac || 0);
                 changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
@@ -254,12 +246,12 @@ async function botCycle(priceFromWebSocket) {
             // --- EJECUCIÓN DE ESTRATEGIAS ---
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
-            await runAIStrategy(dependencies); 
+            if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies); 
 
             // --- FORZADO DE ACTUALIZACIÓN ---
             changeSet.lastUpdate = new Date();
 
-            // GUARDADO POR USUARIO
+            // GUARDADO POR USUARIO (Unifica todos los cambios de Long, Short e IA en una sola escritura)
             await orchestrator.commitChanges(userId, changeSet, currentPrice);
         }
         
@@ -271,8 +263,7 @@ async function botCycle(priceFromWebSocket) {
 }
 
 /**
- * MOTOR DE SINCRONIZACIÓN LENTA (Background Sync)
- * Actualiza balances y órdenes de exchange para TODOS los usuarios.
+ * MOTOR DE SINCRONIZACIÓN LENTA
  */
 function startGlobalSync() {
     setInterval(async () => {
