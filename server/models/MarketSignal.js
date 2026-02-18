@@ -33,7 +33,7 @@ const MarketSignalSchema = new mongoose.Schema({
     macdHist: { type: Number },
 
     // --- LEGADO Y COMPATIBILIDAD ---
-    //currentRSI: { type: Number, required: true }, 
+    currentRSI: { type: Number, required: true }, 
     prevRSI: { type: Number, required: true },
     signal: { 
         type: String, 
