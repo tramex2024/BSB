@@ -107,6 +107,7 @@ const updatedSignal = await MarketSignal.findOneAndUpdate(
         // SE MANTIENE: prevRSI es necesario para calcular la acción BUY/SELL en _getSignal
         prevRSI: prevRSI21, 
         // ELIMINADO: currentRSI (Redundante, ya tienes rsi14/rsi21)
+        currentRSI: curRSI14,
         lastUpdate: new Date()
     },
     { upsert: true, new: true, runValidators: true }
@@ -124,6 +125,7 @@ if (this.io) {
         signal: signal.action,
         // Enviamos prevRSI por si el frontend necesita dibujar la flecha de tendencia
         prevRSI: prevRSI21,
+        currentRSI: curRSI14,
         historyCount: candles.length 
     });
 }
