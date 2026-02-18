@@ -1,6 +1,6 @@
 /**
  * BSB/server/src/au/engines/AIEngine.js
- * AI Engine - Motor de Decisiones Neuronales (Integrado con Orquestador 2026)
+ * AI Engine - Motor de Decisiones Neuronales (MODO SANDBOX SEGURO)
  */
 
 const Order = require('../../models/Order'); 
@@ -11,34 +11,27 @@ class AIEngine {
     constructor() {
         this.io = null;
         this.TRAILING_PERCENT = 0.005; // 0.5%
-        this.EXCHANGE_FEE = 0.001;     // 0.1%
+        this.EXCHANGE_FEE = 0.001;     // 0.1% (Simulamos comisión para realismo)
     }
 
     setIo(io) {
         this.io = io;
     }
 
-    /**
-     * @param {number} price - Precio actual de mercado
-     * @param {string} userId - ID del usuario
-     * @param {object} context - Inyectado desde aiStrategy (contiene botState, placeAIOrder, etc.)
-     */
     async analyze(price, userId, context) {
         if (!userId || !price || !context) return;
 
         try {
-            // Usamos el botState que ya viene del orquestador (fresco de la DB)
             const bot = context; 
             if (bot.aistate !== 'RUNNING') return;
 
             const lastEntryPrice = bot.ailastEntryPrice || 0;
             let highestPrice = bot.aihighestPrice || 0;
 
-            // --- GESTIÓN DE POSICIÓN ABIERTA (TRAILING STOP) ---
+            // --- GESTIÓN DE POSICIÓN ABIERTA (TRAILING STOP SIMULADO) ---
             if (lastEntryPrice > 0) {
                 if (price > highestPrice) {
                     highestPrice = price;
-                    // Actualizamos vía orquestador, no directo a DB
                     await context.updateAIStateData({ aihighestPrice: highestPrice });
                 }
 
@@ -93,41 +86,44 @@ class AIEngine {
         }
     }
 
+    /**
+     * MÉTODO BLINDADO: Solo base de datos, cero Bitmart.
+     */
     async _trade(userId, side, price, context) {
         try {
             const bot = context;
-            const currentBalance = parseFloat(bot.aibalance || bot.config?.ai?.amountUsdt || 100);
-            const fee = currentBalance * this.EXCHANGE_FEE;
+            const currentBalance = parseFloat(bot.aibalance || 0);
+            const investmentAmount = parseFloat(bot.config?.ai?.amountUsdt || 100);
             
             let newBalance = currentBalance;
             let nextEntryPrice = 0;
             let nextHighestPrice = 0;
             let netProfit = 0;
 
-            // 1. EJECUCIÓN DE ORDEN REAL/SIMULADA EN EL EXCHANGE
-            // Usamos placeAIOrder inyectado que ya maneja clientOrderId AI_...
-            const orderResult = await context.placeAIOrder({
-                symbol: bot.config.symbol,
-                side: side.toLowerCase(),
-                type: 'market',
-                arg: { usd: currentBalance }
-            });
-
-            // 2. CÁLCULO DE RESULTADOS
+            // 1. CÁLCULO DE SIMULACIÓN MATEMÁTICA
             if (side === 'BUY') {
+                // En compra virtual, el balance ya se inicializó con amountUsdt en el controller
+                // pero si queremos descontar una "comisión" simulada:
+                const fee = investmentAmount * this.EXCHANGE_FEE;
                 nextEntryPrice = price;
                 nextHighestPrice = price;
                 newBalance = parseFloat((currentBalance - fee).toFixed(2));
             } else {
+                // VENTA: Calculamos el profit comparando con el precio de entrada guardado
                 const profitFactor = (price / bot.ailastEntryPrice);
+                const fee = (currentBalance * profitFactor) * this.EXCHANGE_FEE;
+                
                 netProfit = (currentBalance * (profitFactor - 1)) - fee;
                 newBalance = parseFloat((currentBalance + netProfit).toFixed(2));
+                
+                nextEntryPrice = 0;
+                nextHighestPrice = 0;
             }
 
-            const shouldStop = side === 'SELL' && bot.config?.ai?.stopAtCycle;
+            const shouldStop = (side === 'SELL' && bot.config?.ai?.stopAtCycle);
             const newState = shouldStop ? 'STOPPED' : 'RUNNING';
 
-            // 3. ACTUALIZACIÓN DE ESTADO VÍA ORQUESTADOR (Atomic Set)
+            // 2. ACTUALIZACIÓN ATÓMICA EN DB (Sincronizado con el Orquestador)
             const changes = {
                 aibalance: newBalance,
                 ailastEntryPrice: nextEntryPrice,
@@ -139,34 +135,39 @@ class AIEngine {
             await context.updateAIStateData(changes);
             
             if (side === 'SELL') {
+                // Registramos el profit en el bot general solo como estadística
                 await context.updateGeneralBotState({ 
                     $inc: { total_profit: parseFloat(netProfit.toFixed(4)) } 
                 });
             }
 
-            // 4. PERSISTENCIA EN HISTORIAL DE ÓRDENES
+            // 3. CREACIÓN DE LA ORDEN VIRTUAL
+            // Esta es la orden que verá el frontend en la lista 'ai'
             await Order.create({
                 userId,
                 strategy: 'ai',
-                executionMode: 'REAL', // Cambiado a REAL porque ahora usamos el orquestador
-                orderId: orderResult?.orderId || `ai_${Date.now()}`,
+                executionMode: 'SIMULATED', 
+                orderId: `v_ai_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
                 side,
                 price,
-                size: parseFloat((currentBalance / price).toFixed(6)),
-                notional: currentBalance,
+                size: parseFloat((investmentAmount / price).toFixed(6)),
+                notional: investmentAmount,
                 status: 'FILLED',
                 orderTime: new Date()
             });
 
-            // 5. NOTIFICACIÓN FRONTEND
+            // 4. NOTIFICACIÓN POR SOCKET
             this._broadcastStatus(userId, {
                 aistate: newState,
                 virtualBalance: newBalance,
                 lastEntryPrice: nextEntryPrice
             });
 
+            context.log(`✅ AI ${side} Virtual Ejecutado @ $${price}`, 'success');
+
         } catch (error) {
-            context.log(`❌ AI Trade Error: ${error.message}`, 'error');
+            console.error("❌ Error en Trade Virtual de IA:", error);
+            context.log(`❌ AI Virtual Error: ${error.message}`, 'error');
         }
     }
 
