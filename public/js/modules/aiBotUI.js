@@ -1,6 +1,6 @@
 /**
  * AI Bot Interface Module - Optimized 2026
- * Versión Blindada: Prevención de parpadeo y suavizado de transiciones
+ * Versión Blindada: Integración con Orquestador Multi-Estrategia
  */
 
 const aiBotUI = {
@@ -18,35 +18,30 @@ const aiBotUI = {
         let percent = confidence <= 1 ? confidence * 100 : confidence;
         if (isNaN(percent)) percent = 0;
 
-        // 364.4 es la circunferencia del SVG. Calculamos el desplazamiento (offset).
         const offset = 364.4 - (percent / 100) * 364.4;
         
-        // Aplicamos transición suave para evitar saltos bruscos
         circle.style.transition = "stroke-dashoffset 0.8s ease-in-out, stroke 0.5s ease";
         circle.style.strokeDashoffset = offset;
         valueText.innerText = `${Math.round(percent)}%`;
 
         // Colores dinámicos según el nivel de confianza
-        if (percent >= 85) circle.style.stroke = "#10b981"; // Verde (Alta)
-        else if (percent >= 50) circle.style.stroke = "#3b82f6"; // Azul (Media)
-        else circle.style.stroke = "#6366f1"; // Indigo (Baja/Neutral)
+        if (percent >= 85) circle.style.stroke = "#10b981"; // Verde
+        else if (percent >= 50) circle.style.stroke = "#3b82f6"; // Azul
+        else circle.style.stroke = "#6366f1"; // Indigo
 
         predictionText.className = 'font-mono text-[10px] mt-2 transition-all duration-300';
 
-        // Prioridad 1: Estado de Análisis Colectando Datos
         if (isAnalyzing || percent === 1) { 
             predictionText.innerText = ">> ANALYZING NEURAL FLOW...";
             predictionText.className = 'font-mono text-[10px] mt-2 text-blue-300 animate-pulse';
             return;
         }
 
-        // Prioridad 2: Mensaje del Servidor
         if (serverMessage) {
             const displayMsg = serverMessage === 'HOLD' ? 'STABLE: SCANNING TREND' : serverMessage;
             predictionText.innerText = `>> ${displayMsg.toUpperCase()}`;
             predictionText.className = `font-mono text-[10px] mt-2 ${percent >= 75 ? 'text-emerald-400' : 'text-blue-300'}`;
         } else {
-            // Prioridad 3: Mensaje por Defecto según Score
             if (percent >= 75) {
                 predictionText.innerText = ">> STRONG MOMENTUM: ENTRY SIGNAL";
                 predictionText.className = 'font-mono text-[10px] mt-2 text-emerald-400';
@@ -58,11 +53,15 @@ const aiBotUI = {
     },
 
     /**
-     * Sistema de Logs Neuronales
+     * Sistema de Logs Neuronales - Adaptado para mensajes del orquestador
      */
     addLog: function(message, type = 'info') {
-        const confidenceValue = (type === 'success') ? 0.90 : 0.01; 
-        this.addLogEntry(message, confidenceValue);
+        // Mapeo de confianza visual según el tipo de log del servidor
+        let visualConfidence = 0.01;
+        if (type === 'success' || type === 'buy' || type === 'sell') visualConfidence = 0.90;
+        if (type === 'warning') visualConfidence = 0.50;
+
+        this.addLogEntry(message, visualConfidence);
     },
 
     addLogEntry: (message, confidence = 0) => {
@@ -86,7 +85,7 @@ const aiBotUI = {
     },
 
     /**
-     * Sincronización de estados del Botón
+     * Sincronización de estados del Botón y Campos
      */
     setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 0) => {
         const btn = document.getElementById('btn-start-ai');
@@ -102,7 +101,7 @@ const aiBotUI = {
 
         if (isRunning) {
             if (btn) {
-                // Si historyCount es bajo, estamos cargando velas
+                // Sincronización con el flujo de datos (200 velas mínimo para el motor neural)
                 const isSyncing = (historyCount < 200); 
                 btn.innerText = isSyncing ? "INITIALIZING NEURAL CORE..." : "STOP AI CORE";
                 btn.className = isSyncing 
@@ -113,7 +112,12 @@ const aiBotUI = {
             if (dot) dot.className = "w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse";
             if (syncText) syncText.innerText = "AI CORE ACTIVE";
-            if (aiInput) { aiInput.disabled = true; aiInput.classList.add('opacity-40'); }
+            
+            // Bloqueamos input para evitar cambios de capital con órdenes abiertas
+            if (aiInput) { 
+                aiInput.disabled = true; 
+                aiInput.classList.add('opacity-40', 'cursor-not-allowed'); 
+            }
         } else {
             if (btn) {
                 btn.innerText = "START AI CORE";
@@ -122,9 +126,12 @@ const aiBotUI = {
             if (dot) dot.className = "w-2.5 h-2.5 bg-gray-500 rounded-full shadow-none";
             if (syncDot) syncDot.className = "w-1.5 h-1.5 bg-gray-500 rounded-full";
             if (syncText) syncText.innerText = "STANDBY";
-            if (aiInput) { aiInput.disabled = false; aiInput.classList.remove('opacity-40'); }
+            
+            if (aiInput) { 
+                aiInput.disabled = false; 
+                aiInput.classList.remove('opacity-40', 'cursor-not-allowed'); 
+            }
 
-            // Solo reseteamos visualmente si no hay rastros de análisis previo
             const circle = document.getElementById('ai-confidence-circle');
             if (circle) circle.style.strokeDashoffset = 364.4;
         }

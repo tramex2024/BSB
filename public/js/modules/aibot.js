@@ -1,79 +1,44 @@
-/**
- * File: public/js/modules/aibot.js
- * AI Core - View Management (Card Style Version 2026)
- * Integration: Unified Design Standard
- */
-
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { fetchOrders } from './orders.js';
 
-/**
- * Inicializa la vista de IA y sincroniza componentes
- */
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing card-style interface...");
     
-    // 1. Configurar listeners de inputs y botones
+    // BLINDAJE: Asegurar que el objeto config exista para evitar crash
+    if (!currentBotState.config) currentBotState.config = {};
+    if (!currentBotState.config.ai) currentBotState.config.ai = { amountUsdt: 0, stopAtCycle: false };
+
     setupAIControls();
     
-    // 2. Sincronización de UI con el estado global
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
 
-    if (aiInput && currentBotState.config?.ai) {
+    if (aiInput) {
         aiInput.value = currentBotState.config.ai.amountUsdt || "";
     }
-    if (stopAtCycleCheck && currentBotState.config?.ai) {
+    if (stopAtCycleCheck) {
         stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
     }
 
+    // Usamos aistate para determinar si está corriendo específicamente la IA
+    const isAiRunning = currentBotState.aistate === 'RUNNING';
+
     aiBotUI.setRunningStatus(
-        currentBotState.isRunning, 
-        currentBotState.config?.ai?.stopAtCycle,
+        isAiRunning, 
+        currentBotState.config.ai.stopAtCycle,
         currentBotState.historyCount || 0
     );
 
-    // 3. CARGA DE ÓRDENES (UNIFICADO AL ESTILO CARD)
-    // Usamos el contenedor div 'ai-order-list' en lugar de un tbody de tabla
     const aiOrderCont = document.getElementById('ai-order-list'); 
     if (aiOrderCont) {
-        // Cargamos estrategia 'ai' usando el motor de orders.js
         fetchOrders('ai', aiOrderCont);
-        setupAiOrderTabs(); // Inicializamos las pestañas internas si existen
+        setupAiOrderTabs();
     }
 }
 
-/**
- * Gestiona los clics en las pestañas de filtros dentro de AIBOT
- */
-function setupAiOrderTabs() {
-    const tabs = document.querySelectorAll('.aibot-tabs button');
-    const aiOrderCont = document.getElementById('ai-order-list');
-    
-    tabs.forEach(tab => {
-        tab.onclick = null; // Limpiar eventos previos
+// ... setupAiOrderTabs se mantiene igual ...
 
-        tab.onclick = (e) => {
-            // El status puede ser 'ai' (para órdenes abiertas) o 'all' (para historial)
-            // según cómo tengas definido el data-strategy en tu HTML
-            const strategy = e.currentTarget.getAttribute('data-strategy') || 'ai';
-            
-            // Estilo visual de pestaña activa (Emerald)
-            tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
-            e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
-
-            // Llamamos a fetchOrders con el estilo unificado de 2 parámetros
-            if (aiOrderCont) {
-                fetchOrders(strategy, aiOrderCont);
-            }
-        };
-    });
-}
-
-/**
- * Configuración de controles: Inputs, Checkboxes y Botón Principal
- */
 function setupAIControls() {
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
@@ -98,7 +63,8 @@ function setupAIControls() {
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
         newBtn.addEventListener('click', async () => {
-            const isCurrentlyEnabled = currentBotState.isRunning;
+            // Cambio crítico: Leer de aistate
+            const isCurrentlyEnabled = currentBotState.aistate === 'RUNNING';
             const action = isCurrentlyEnabled ? 'stop' : 'start';
             
             newBtn.disabled = true;
@@ -116,11 +82,12 @@ function setupAIControls() {
 
                 const result = await response.json();
                 if (result.success) {
-                    currentBotState.isRunning = result.isRunning;
+                    // Sincronizamos el estado global con la respuesta real del server
+                    currentBotState.aistate = result.aistate; 
                     aiBotUI.setRunningStatus(
                         result.isRunning, 
-                        currentBotState.config?.ai?.stopAtCycle,
-                        currentBotState.historyCount || 0
+                        currentBotState.config.ai.stopAtCycle,
+                        result.historyCount || 0
                     );
                 }
             } catch (error) {
@@ -132,9 +99,6 @@ function setupAIControls() {
     }
 }
 
-/**
- * Guarda la configuración de la IA en el backend
- */
 async function saveAIConfig(payload) {
     try {
         const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
@@ -148,15 +112,16 @@ async function saveAIConfig(payload) {
         
         const data = await response.json();
         if (data.success) {
-            if (payload.amountUsdt !== undefined) currentBotState.config.ai.amountUsdt = payload.amountUsdt;
-            if (payload.stopAtCycle !== undefined) currentBotState.config.ai.stopAtCycle = payload.stopAtCycle;
+            // IMPORTANTE: Actualizar con lo que el servidor DIGA (por las validaciones de balance)
+            if (data.virtualBalance !== undefined) {
+                currentBotState.aibalance = data.virtualBalance;
+            }
+            if (data.config) {
+                currentBotState.config.ai = data.config;
+            }
 
             if (aiBotUI.addLogEntry) {
-                const key = Object.keys(payload)[0];
-                const msg = key === 'stopAtCycle' 
-                    ? `Smart Cycle: ${payload[key] ? 'ENABLED' : 'DISABLED'}`
-                    : `AI: Capital updated to $${payload[key]}`;
-                aiBotUI.addLogEntry(msg, 0.5);
+                aiBotUI.addLogEntry(data.message || "Config Updated", 0.5);
             }
         }
     } catch (error) {

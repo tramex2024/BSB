@@ -31,6 +31,8 @@ const MarketSignal = require('./models/MarketSignal');
 // Utilidades
 const { decrypt } = require('./utils/encryption'); // <--- PARA DESENCRIPTAR LLAVES AL INICIO
 
+const aiRoutes = require('./routes/aiRoutes');
+
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;

@@ -1,4 +1,8 @@
-// BSB/server/routes/aiRoutes.js
+/**
+ * BSB/server/routes/aiRoutes.js
+ * RUTAS DEL MOTOR NEURAL IA
+ * Prefijo en server.js: /api/ai
+ */
 
 const express = require('express');
 const router = express.Router();
@@ -6,36 +10,37 @@ const aiController = require('../controllers/aiController');
 const userController = require('../controllers/userController'); // Middleware de JWT
 const bitmartAuthMiddleware = require('../middleware/bitmartAuthMiddleware'); // Inyector de credenciales
 
-/**
- * RUTAS DEL MOTOR NEURAL IA
- * Prefijo en server.js: /api/ai
- */
-
-// 1. Protección Global: Nadie entra a la IA sin un token válido
+// 1. PROTECCIÓN GLOBAL: Middleware de autenticación JWT
+// Todas las rutas siguientes requieren que el usuario esté logueado.
 router.use(userController.authenticateToken);
 
 /**
- * @desc Obtiene balance virtual, estado de ejecución y configuración.
+ * @route   GET /api/ai/status
+ * @desc    Obtiene balance virtual, estado de ejecución y configuración.
  */
 router.get('/status', aiController.getAIStatus);
 
 /**
- * @desc Obtiene los últimos trades virtuales (filtrados por userId).
+ * @route   GET /api/ai/history
+ * @desc    Obtiene los últimos trades virtuales (filtrados por userId).
  */
 router.get('/history', aiController.getVirtualHistory);
 
 /**
- * @desc Enciende/Apaga el motor (Requiere llaves para operar en BitMart).
+ * @route   POST /api/ai/toggle
+ * @desc    Enciende o Apaga el motor (Requiere validación de llaves BitMart).
  */
 router.post('/toggle', bitmartAuthMiddleware, aiController.toggleAI);
 
 /**
- * @desc Actualiza parámetros de configuración en el documento Autobot.
+ * @route   POST /api/ai/config
+ * @desc    Actualiza parámetros de configuración (monto, stopAtCycle).
  */
 router.post('/config', aiController.updateAIConfig);
 
 /**
- * @desc CIERRE DE EMERGENCIA: Vende todo y detiene el bot (Requiere llaves).
+ * @route   POST /api/ai/panic
+ * @desc    CIERRE DE EMERGENCIA: Detiene el motor y limpia estados de entrada.
  */
 router.post('/panic', bitmartAuthMiddleware, aiController.panicSell);
 
