@@ -2,6 +2,35 @@ import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { fetchOrders } from './orders.js';
 
+/**
+ * Gestiona los clics en las pestañas de filtros dentro de AIBOT
+ * Esta es la función que faltaba y causaba el ReferenceError
+ */
+function setupAiOrderTabs() {
+    const tabs = document.querySelectorAll('.aibot-tabs button');
+    const aiOrderCont = document.getElementById('ai-order-list');
+    
+    if (!tabs.length) return; // Seguridad si no hay pestañas aún
+
+    tabs.forEach(tab => {
+        tab.onclick = null; // Limpiar eventos previos para evitar duplicados
+
+        tab.onclick = (e) => {
+            // El status puede ser 'ai' (abiertas) o 'all' (historial)
+            const strategy = e.currentTarget.getAttribute('data-strategy') || 'ai';
+            
+            // Estilo visual de pestaña activa (Esmeralda para IA)
+            tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
+            e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
+
+            // Llamamos a fetchOrders con la estrategia seleccionada
+            if (aiOrderCont) {
+                fetchOrders(strategy, aiOrderCont);
+            }
+        };
+    });
+}
+
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing card-style interface...");
     
@@ -36,8 +65,6 @@ export function initializeAibotView() {
         setupAiOrderTabs();
     }
 }
-
-// ... setupAiOrderTabs se mantiene igual ...
 
 function setupAIControls() {
     const aiInput = document.getElementById('ai-amount-usdt');
