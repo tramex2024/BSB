@@ -1,6 +1,6 @@
 /**
  * BSB/server/src/au/engines/AIEngine.js
- * Motor de Decisiones - Versión Refactorizada (Compounding Mode)
+ * Motor de Decisiones - Versión con Historial de Ciclos para Dashboard
  */
 const Order = require('../../models/Order'); 
 const MarketSignal = require('../../models/MarketSignal'); 
@@ -21,23 +21,22 @@ class AIEngine {
 
         try {
             const bot = context;
-            
-            // 1. GESTIÓN DE RIESGO
             const riskStatus = RiskManager.checkOperatingState(bot);
+            
             if (riskStatus.action === 'RESUME') {
                 this._log(userId, "🔄 AI: Saldo operativo detectado. Reanudando...", 0.1);
                 await context.updateAIStateData({ aistate: 'RUNNING' });
                 return;
             }
+            
             if (bot.aistate !== 'RUNNING') {
-                if (bot.aistate === 'PAUSED') this._log(userId, `⚠️ AI PAUSED: Saldo insuficiente ($${parseFloat(bot.aibalance).toFixed(2)})`, 0.01, true);
+                if (bot.aistate === 'PAUSED') this._log(userId, `⚠️ AI PAUSED: Esperando fondos ($${parseFloat(bot.aibalance).toFixed(2)})`, 0.01, true);
                 if (riskStatus.action === 'PAUSE') await context.updateAIStateData({ aistate: 'PAUSED' });
                 return;
             }
 
             const lastEntryPrice = bot.ailastEntryPrice || 0;
 
-            // 2. GESTIÓN DE POSICIÓN ABIERTA
             if (lastEntryPrice > 0) {
                 let highestPrice = bot.aihighestPrice || 0;
                 if (price > highestPrice) {
@@ -53,15 +52,11 @@ class AIEngine {
                 }
             }
 
-            // 3. ANÁLISIS DE MERCADO PARA ENTRADA
             if (lastEntryPrice === 0) {
                 const SYMBOL = (bot.config?.symbol || 'BTC_USDT').replace('USDT', '_USDT');
                 const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
                 
-                if (!marketData || marketData.history?.length < 250) {
-                    this._log(userId, "Colectando datos...", 0.01, true);
-                    return;
-                }
+                if (!marketData || marketData.history?.length < 250) return;
 
                 const analysis = StrategyManager.calculate(marketData.history);
                 if (analysis && analysis.confidence >= 0.75) {
@@ -72,7 +67,7 @@ class AIEngine {
                 }
             }
         } catch (error) {
-            console.error(`❌ AI Engine Error (User: ${userId}):`, error);
+            console.error(`❌ AI Engine Error:`, error);
         }
     }
 
@@ -81,37 +76,71 @@ class AIEngine {
             const bot = context;
             const investmentAmount = RiskManager.calculateInvestment(bot);
             const fee = investmentAmount * this.EXCHANGE_FEE;
+            const currentCycleIndex = Number(bot.aicycle || 0);
             
             let newBalance = parseFloat(bot.aibalance);
             let netProfit = 0;
 
             if (side === 'BUY') {
-                // Bloqueamos el capital en la entrada (restando comisión)
                 newBalance = parseFloat((newBalance - fee).toFixed(2));
+                
+                await context.updateAIStateData({
+                    aibalance: newBalance,
+                    ailastEntryPrice: price,
+                    aihighestPrice: price,
+                    aistartTime: new Date(), // Inicio del reloj para el dashboard
+                    ainorder: 1 // La IA siempre entra con 1 orden
+                });
             } else {
-                // Calculamos profit sobre la inversión inicial de este ciclo
+                // LÓGICA DE VENTA Y CIERRE DE CICLO
                 const profitFactor = (price / bot.ailastEntryPrice);
-                netProfit = (investmentAmount * (profitFactor - 1)) - fee;
-                newBalance = parseFloat((investmentAmount + netProfit).toFixed(2));
-            }
+                const grossRecovery = investmentAmount * profitFactor;
+                const sellFee = grossRecovery * this.EXCHANGE_FEE;
+                
+                netProfit = (grossRecovery - investmentAmount) - sellFee;
+                const totalRecovery = grossRecovery - sellFee;
+                newBalance = parseFloat((totalRecovery).toFixed(2));
 
-            const shouldStop = (side === 'SELL' && bot.config?.ai?.stopAtCycle);
-            const nextState = shouldStop ? 'STOPPED' : (newBalance < RiskManager.MIN_TRADE_AMOUNT ? 'PAUSED' : 'RUNNING');
+                // --- REGISTRO EN TRADE CYCLES (Para el Dashboard) ---
+                if (context.logSuccessfulCycle && bot.aistartTime) {
+                    await context.logSuccessfulCycle({
+                        userId,
+                        autobotId: bot._id,
+                        symbol: bot.config.symbol || 'BTC_USDT',
+                        strategy: 'AI', // Identificador para el filtro del frontend
+                        cycleIndex: currentCycleIndex + 1,
+                        startTime: bot.aistartTime,
+                        endTime: new Date(),
+                        averagePPC: bot.ailastEntryPrice,
+                        finalSellPrice: price,
+                        orderCount: 1,
+                        initialInvestment: investmentAmount,
+                        finalRecovery: totalRecovery,
+                        netProfit: netProfit,
+                        profitPercentage: (netProfit / investmentAmount) * 100
+                    });
+                }
 
-            await context.updateAIStateData({
-                aibalance: newBalance,
-                ailastEntryPrice: side === 'BUY' ? price : 0,
-                aihighestPrice: side === 'BUY' ? price : 0,
-                aistate: nextState,
-                'config.ai.enabled': nextState !== 'STOPPED'
-            });
+                const shouldStop = bot.config?.ai?.stopAtCycle === true;
+                const nextState = shouldStop ? 'STOPPED' : (newBalance < 5 ? 'PAUSED' : 'RUNNING');
 
-            if (side === 'SELL') {
+                await context.updateAIStateData({
+                    aibalance: newBalance,
+                    ailastEntryPrice: 0,
+                    aihighestPrice: 0,
+                    aistartTime: null,
+                    aicycle: currentCycleIndex + 1,
+                    ainorder: 0,
+                    aistate: nextState,
+                    'config.ai.enabled': !shouldStop
+                });
+
                 await context.updateGeneralBotState({ 
                     $inc: { total_profit: parseFloat(netProfit.toFixed(4)) } 
                 });
             }
 
+            // Persistencia de la orden individual
             await Order.create({
                 userId, strategy: 'ai', executionMode: 'SIMULATED',
                 orderId: `v_ai_${Date.now()}`, side, price,
@@ -119,8 +148,9 @@ class AIEngine {
                 notional: investmentAmount, status: 'FILLED', orderTime: new Date()
             });
 
-            this._broadcastStatus(userId, { aistate: nextState, virtualBalance: newBalance });
-            context.log(`✅ AI ${side} Virtual @ $${price} (Total: $${investmentAmount.toFixed(2)})`, 'success');
+            this._broadcastStatus(userId, { aistate: bot.aistate, virtualBalance: newBalance });
+            context.log(`✅ AI ${side} @ $${price}`, 'success');
+
         } catch (error) {
             context.log(`❌ AI Trade Error: ${error.message}`, 'error');
         }
