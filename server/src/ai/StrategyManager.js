@@ -1,14 +1,11 @@
-// BSB/server/src/au/engines/StrategyManager.js
 /**
- * Strategy Manager - Cerebro Matemático (Versión Auditada 2026)
- * Optimizado para confluencia de indicadores y filtros institucionales.
+ * BSB/server/src/au/engines/StrategyManager.js
+ * Cerebro Matemático - Lógica de Indicadores Confluentes
  */
-
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
 class StrategyManager {
     static calculate(history) {
-        // Sincronizado a 250 para máxima precisión en EMA 200 y filtrado de ruido
         if (!history || history.length < 250) return null;
 
         const closeValues = history.map(c => parseFloat(c.close));
@@ -16,13 +13,9 @@ class StrategyManager {
         const lowValues = history.map(c => parseFloat(c.low));
         
         try {
-            // 1. ADX - Fuerza de la tendencia
-            const adxResult = ADX.calculate({
-                high: highValues, low: lowValues, close: closeValues, period: 14
-            });
+            const adxResult = ADX.calculate({ high: highValues, low: lowValues, close: closeValues, period: 14 });
             const latestADX = adxResult.length > 0 ? adxResult[adxResult.length - 1].adx : 0;
 
-            // 2. Stochastic RSI - Momentum y Timing
             const stochResult = StochasticRSI.calculate({
                 values: closeValues, rsiPeriod: 14, stochasticPeriod: 14, kPeriod: 3, dPeriod: 3
             });
@@ -31,7 +24,6 @@ class StrategyManager {
             const latestStoch = stochResult[stochResult.length - 1];
             const prevStoch = stochResult[stochResult.length - 2];
 
-            // 3. EMAs - Filtro de Estructura Institucional
             const ema9 = EMA.calculate({ period: 9, values: closeValues });
             const ema21 = EMA.calculate({ period: 21, values: closeValues });
             const ema200 = EMA.calculate({ period: 200, values: closeValues });
@@ -41,37 +33,30 @@ class StrategyManager {
             const lastEma200 = ema200[ema200.length - 1];
             const currentPrice = closeValues[closeValues.length - 1];
 
-            // Diagnóstico de tendencia
             const isBullishCross = lastEma9 > lastEma21;
             const isAboveInstitutional = currentPrice > lastEma200;
 
-            // --- SCORE ENGINE (Lógica de Pesos) ---
             let score = 0;
-
-            // A: Tendencia Macro (40%)
+            // Tendencia Institucional
             if (isAboveInstitutional) {
                 score += 30; 
                 if (isBullishCross) score += 10;
             } else {
-                score -= 30; // Bloqueo de compras en tendencia bajista macro
+                score -= 30; 
             }
 
-            // B: Momentum (40%)
+            // Momentum Stochastic
             if (latestStoch && prevStoch) {
                 const kDiff = latestStoch.k - prevStoch.k;
-                // Sobrevendido con giro alcista
                 if (latestStoch.k < 25 && kDiff > 3) score += 40;
-                // Sobrecomprado (Penalización por riesgo de reversión)
                 else if (latestStoch.k > 80) score -= 50;
-                // Impulso alcista medio
                 else if (kDiff > 5) score += 15;
             }
 
-            // C: Volatilidad ADX (20%)
+            // Volatilidad ADX
             if (latestADX > 25) score += 20; 
-            else if (latestADX < 15) score -= 40; // Rango lateral = Peligro de señales falsas
+            else if (latestADX < 15) score -= 40;
 
-            // Normalización de Confianza (0.0 a 1.0)
             const confidence = Math.max(0, Math.min(1, score / 100));
 
             return {
@@ -80,19 +65,18 @@ class StrategyManager {
                 trend: isAboveInstitutional ? 'bullish' : 'bearish',
                 confidence: confidence,
                 price: currentPrice,
-                rsi: latestStoch?.k, // Alias para compatibilidad con el log de AIEngine
                 message: this._generateMessage(isAboveInstitutional, latestADX, latestStoch, confidence)
             };
         } catch (e) {
-            console.error("❌ Error Matemático en StrategyManager:", e);
+            console.error("❌ Error en StrategyManager:", e);
             return null;
         }
     }
 
     static _generateMessage(bullish, adx, stoch, conf) {
         if (conf >= 0.85) return "🚀 ALTA CONFIANZA: Alineación técnica total.";
-        if (stoch && stoch.k > 80) return "⚠️ AGOTAMIENTO: El precio está sobreextendido.";
-        if (adx < 18) return "😴 BAJO VOLUMEN: Mercado lateral o inactivo.";
+        if (stoch && stoch.k > 80) return "⚠️ AGOTAMIENTO: Sobrecompra detectada.";
+        if (adx < 18) return "😴 BAJO VOLUMEN: El mercado no tiene fuerza.";
         if (!bullish) return "📉 FILTRO MACRO: Tendencia bajista dominante.";
         return "🔍 ESCANEANDO: Buscando confluencia óptima...";
     }
