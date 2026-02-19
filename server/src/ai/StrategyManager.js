@@ -1,6 +1,5 @@
 /**
  * BSB/server/src/au/engines/StrategyManager.js
- * Cerebro Matemático - Lógica de Indicadores Confluentes
  */
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
@@ -37,7 +36,6 @@ class StrategyManager {
             const isAboveInstitutional = currentPrice > lastEma200;
 
             let score = 0;
-            // Tendencia Institucional
             if (isAboveInstitutional) {
                 score += 30; 
                 if (isBullishCross) score += 10;
@@ -45,7 +43,6 @@ class StrategyManager {
                 score -= 30; 
             }
 
-            // Momentum Stochastic
             if (latestStoch && prevStoch) {
                 const kDiff = latestStoch.k - prevStoch.k;
                 if (latestStoch.k < 25 && kDiff > 3) score += 40;
@@ -53,7 +50,6 @@ class StrategyManager {
                 else if (kDiff > 5) score += 15;
             }
 
-            // Volatilidad ADX
             if (latestADX > 25) score += 20; 
             else if (latestADX < 15) score -= 40;
 
@@ -68,7 +64,7 @@ class StrategyManager {
                 message: this._generateMessage(isAboveInstitutional, latestADX, latestStoch, confidence)
             };
         } catch (e) {
-            console.error("❌ Error en StrategyManager:", e);
+            console.error("❌ AI Math Error:", e);
             return null;
         }
     }
