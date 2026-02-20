@@ -2,7 +2,7 @@ import { fetchFromBackend } from './api.js';
 
 /**
  * Renders the HTML for a single order row
- * RESTAURADO: Versión original para Autobot
+ * Muestra el ID completo para Autobot y AIBot
  */
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
@@ -77,7 +77,7 @@ function createOrderHtml(order) {
                         class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
                     Cancel
                 </button>
-            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right opacity-50">ID: ${fullOrderId.slice(-6)}</p>`}
+            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right opacity-50">ID: ${fullOrderId}</p>`}
         </div>
     </div>`;
 }
