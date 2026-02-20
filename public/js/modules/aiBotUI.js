@@ -1,10 +1,10 @@
 /**
  * AI Bot Interface Module - Optimized 2026
- * Versión Blindada: Eliminación de parpadeos y optimización de renderizado
+ * Versión Blindada: Eliminación de parpadeos y estabilización de logs
  */
 
 const aiBotUI = {
-    // Variable interna para evitar re-renderizados idénticos y jitter visual
+    // Variables internas para evitar re-renderizados idénticos y jitter visual
     lastPercent: -1,
     lastMsg: '',
 
@@ -23,24 +23,23 @@ const aiBotUI = {
         percent = Math.max(0, Math.min(100, percent)); // Clamp entre 0 y 100
         if (isNaN(percent)) percent = 0;
 
-        // 2. Filtro de Estabilidad: Si el cambio es insignificante, no movemos la aguja
+        // 2. Filtro de Estabilidad
         if (Math.abs(this.lastPercent - percent) < 0.5 && !isAnalyzing && this.lastPercent !== -1) {
-            // Solo actualizamos el mensaje si ha cambiado
+            // No hacemos nada si el cambio es insignificante
         } else {
             this.lastPercent = percent;
             const offset = 364.4 - (percent / 100) * 364.4;
             
-            // Aplicamos la transición solo si es necesario mover
             circle.style.transition = "stroke-dashoffset 0.8s ease-out, stroke 0.5s ease";
             circle.style.strokeDashoffset = offset;
             valueText.innerText = `${Math.round(percent)}%`;
 
-            // Colores dinámicos optimizados
+            // Colores dinámicos
             const color = percent >= 85 ? "#10b981" : (percent >= 50 ? "#3b82f6" : "#6366f1");
             if (circle.style.stroke !== color) circle.style.stroke = color;
         }
 
-        // 3. Gestión de Mensajes sin parpadeo de clases
+        // 3. Gestión de Mensajes
         let msg = "";
         let msgClass = "font-mono text-[10px] mt-2 transition-all duration-300 ";
 
@@ -56,7 +55,6 @@ const aiBotUI = {
             msgClass += percent >= 75 ? "text-emerald-400" : "text-gray-500";
         }
 
-        // Solo inyectamos en el DOM si el mensaje cambió realmente
         if (this.lastMsg !== msg) {
             predictionText.innerText = msg;
             predictionText.className = msgClass;
@@ -75,24 +73,47 @@ const aiBotUI = {
         this.addLogEntry(message, visualConfidence);
     },
 
-    addLogEntry: (message, confidence = 0) => {
+    addLogEntry: function(message, confidence = 0) {
         const container = document.getElementById('ai-log-container');
-        if (!container) return;
+        if (!container || !message) return;
 
-        // Evitar mensajes duplicados idénticos seguidos
-        if (container.firstChild && container.firstChild.innerText.includes(message)) return;
+        // Limpiar placeholder inicial
+        if (container.querySelector('.italic')) container.innerHTML = '';
 
-        const time = new Date().toLocaleTimeString([], { hour12: false });
+        // Filtro Anti-Error y Anti-Duplicados (Blindado)
+        const lastEntryText = container.firstChild?.innerText || "";
+        if (lastEntryText.includes(message)) return;
+
+        const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const logEntry = document.createElement('div');
         
-        const isHighConf = confidence >= 0.75;
-        const borderColor = isHighConf ? 'border-emerald-500' : 'border-blue-500/30';
-        const textColor = isHighConf ? 'text-emerald-400' : 'text-gray-400';
+        // --- Lógica de Colores Dinámicos ---
+        let borderColor = 'border-blue-500/30';
+        let textColor = 'text-gray-400';
+        let bgColor = 'bg-white/5';
 
-        logEntry.className = `text-[9px] border-l-2 ${borderColor} pl-2 mb-1 py-1 bg-white/5 animate-fadeIn`;
+        const upperMsg = message.toUpperCase();
+
+        if (upperMsg.includes('👁️')) {
+            if (upperMsg.includes('PAUSED')) {
+                borderColor = 'border-yellow-500/50';
+                textColor = 'text-yellow-200/70';
+                bgColor = 'bg-yellow-500/5';
+            } else {
+                borderColor = 'border-blue-400';
+                textColor = 'text-blue-100';
+                bgColor = 'bg-blue-500/5';
+            }
+        } else if (confidence >= 0.75 || upperMsg.includes('SUCCESS')) {
+            borderColor = 'border-emerald-500';
+            textColor = 'text-emerald-400';
+            bgColor = 'bg-emerald-500/10';
+        }
+
+        logEntry.className = `text-[9px] border-l-2 ${borderColor} pl-2 mb-1 py-1 ${bgColor} animate-fadeIn font-mono flex gap-2`;
         logEntry.innerHTML = `
-            <span class="text-blue-500 font-mono opacity-70">[${time}]</span> 
-            <span class="${textColor} font-mono">${message}</span>
+            <span class="text-blue-500 opacity-50 shrink-0">[${time}]</span> 
+            <span class="${textColor}">${message}</span>
         `;
         
         container.prepend(logEntry);
@@ -102,7 +123,7 @@ const aiBotUI = {
     /**
      * Sincronización de estados del Botón y Campos
      */
-    setRunningStatus: (isRunning, stopAtCycle = null, historyCount = 0) => {
+    setRunningStatus: function(isRunning, stopAtCycle = null, historyCount = 0) {
         const btn = document.getElementById('btn-start-ai');
         const elements = {
             dot: document.getElementById('ai-status-dot'),
@@ -120,7 +141,6 @@ const aiBotUI = {
             const isSyncing = (historyCount < 200);
             if (btn) {
                 const targetText = isSyncing ? "INITIALIZING NEURAL CORE..." : "STOP AI CORE";
-                // Solo actualizamos si el texto es diferente para no cortar animaciones CSS
                 if (btn.innerText !== targetText) {
                     btn.innerText = targetText;
                     btn.className = isSyncing 
