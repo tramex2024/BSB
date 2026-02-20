@@ -32,14 +32,14 @@ export function initializeChart(containerId, symbol) {
         "support_host": "https://www.tradingview.com",
         "studies": [
             "RSI@tv-basicstudies",      
-            "BB@tv-basicstudies",       
+            "BB@tv-basicstudies",        
             "MACD@tv-basicstudies"      
         ],
         "overrides": {
             "mainSeriesProperties.style": 1,
             "paneProperties.background": "#111827",
-            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.05)",
-            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)",
+            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)", // Restaurado y mejorado
+            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.08)",
             "paneProperties.legendProperties.showStudyArguments": true,
             "paneProperties.legendProperties.showStudyTitles": true,
             "paneProperties.legendProperties.showStudyValues": true,
@@ -49,7 +49,7 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Optimizada para recibir puntos de tiempo formateados y aplicar degradado
+ * Restaurado con todas las opciones de parámetros y lógica de degradado Pro
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
@@ -57,25 +57,25 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const ctx = canvas.getContext('2d');
 
-    // Destrucción limpia de la instancia previa para evitar el error "Canvas in use"
+    // Destrucción limpia para evitar solapamientos
     if (equityChartInstance) {
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
 
-    if (!data || data.length === 0) return;
+    if (!data) return;
 
-    // Normalización de datos: manejamos tanto array directo como objeto {points: []}
+    // Normalización: Soportamos array directo o el objeto {points: []} del MetricsManager
     const points = Array.isArray(data) ? data : (data.points || []);
     if (points.length === 0) return;
 
-    // --- Lógica de Etiquetas Inteligentes ---
     const labels = points.map((d, i) => d.time || `Ciclo ${i + 1}`);
     
     let dataPoints = [];
     let labelText = '';
     let color = '#10b981'; 
 
+    // RESTAURADO: Lógica completa de selección de parámetros
     switch (parameter) {
         case 'durationHours':
             dataPoints = points.map(c => parseFloat(c.durationHours || 0));
@@ -96,10 +96,10 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#10b981';
     }
 
-    // Configuración del degradado (Sombras bajo la curva)
+    // MEJORA: Degradado con mayor profundidad visual
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, `${color}66`); // Opacidad inicial (verde suave)
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Desvanecimiento a negro/transparente
+    gradient.addColorStop(0, `${color}66`); 
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
     equityChartInstance = new Chart(ctx, {
         type: 'line',
@@ -110,14 +110,14 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 data: dataPoints,
                 borderColor: color,
                 backgroundColor: gradient,
-                borderWidth: 2,
+                borderWidth: 3, // Mayor énfasis
                 pointBackgroundColor: color,
                 pointBorderColor: '#111827',
-                pointBorderWidth: 1,
+                pointBorderWidth: 2,
                 pointHoverRadius: 6,
-                tension: 0.4, 
+                tension: 0.35, 
                 fill: true,
-                pointRadius: labels.length > 50 ? 0 : 3
+                pointRadius: points.length > 50 ? 0 : 3
             }]
         },
         options: {
@@ -146,19 +146,17 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 y: {
                     beginAtZero: false,
                     grid: { 
-                        color: 'rgba(255, 255, 255, 0.08)', // Líneas horizontales finas visibles
+                        color: 'rgba(255, 255, 255, 0.12)', // Contraste corregido para visibilidad
                         drawBorder: false 
                     },
                     ticks: { 
                         color: '#9ca3af', 
-                        font: { size: 10 },
+                        font: { size: 10, family: 'monospace' },
                         callback: (value) => `$${value}` 
                     }
                 },
                 x: {
-                    grid: { 
-                        display: false // Usualmente el grid vertical se oculta para estética limpia
-                    },
+                    grid: { display: false },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 9 },

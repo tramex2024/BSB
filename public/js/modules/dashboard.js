@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Sincronizada 2026)
- * Estado: Corregido renderizado inicial y delegación a chart.js
+ * Estado: Corregido manejo de eventos y ciclo de vida de gráficos
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -32,22 +32,20 @@ export function initializeDashboardView(initialState) {
     // 2. Sincronización inmediata con el estado global (UI y Dona)
     if (stateToUse) {
         updateBotUI(stateToUse);
-        setTimeout(() => {
+        // Usamos requestAnimationFrame para asegurar que el DOM esté renderizado
+        requestAnimationFrame(() => {
             updateDistributionWidget(stateToUse);
-        }, 300);
+        });
     }
 
     // 3. Configurar Eventos y Botones Locales
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // 4. Escuchar actualizaciones desde MetricsManager
-    // Importante: No removemos el listener para que siempre esté activo
-    window.addEventListener('metricsUpdated', (e) => {
-        if (e.detail) {
-            renderEquityCurve(e.detail);
-        }
-    });
+    // 4. [CORRECCIÓN] Escuchar actualizaciones desde MetricsManager
+    // Eliminamos el listener previo para evitar duplicidad de renders
+    window.removeEventListener('metricsUpdated', handleMetricsUpdate);
+    window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
     // 5. Carga inicial de analítica (Equity)
     refreshAnalytics();
@@ -58,18 +56,29 @@ export function initializeDashboardView(initialState) {
 }
 
 /**
+ * Handler nombrado para poder removerlo y evitar fugas de memoria
+ */
+function handleMetricsUpdate(e) {
+    if (e.detail) {
+        renderEquityCurve(e.detail);
+    }
+}
+
+/**
  * Refresca analítica y fuerza el primer dibujado
  */
 async function refreshAnalytics() {
     try {
         const curveData = await fetchEquityCurveData();
         if (curveData) {
-            // Guardamos los datos en el manager
             Metrics.setAnalyticsData(curveData);
             
-            // FORZAMOS el renderizado inicial manualmente
-            const initialFiltered = Metrics.getFilteredData();
-            renderEquityCurve(initialFiltered);
+            // Forzamos el renderizado inicial con un pequeño delay 
+            // para que el canvas de Chart.js tome sus dimensiones reales
+            setTimeout(() => {
+                const initialFiltered = Metrics.getFilteredData();
+                renderEquityCurve(initialFiltered);
+            }, 100);
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -177,7 +186,7 @@ export function updateDistributionWidget(state) {
 
         if (total > 0) {
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-            balanceChart.update();
+            balanceChart.update('none'); // Update sin animaciones bruscas
 
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');

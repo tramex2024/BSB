@@ -1,5 +1,6 @@
 /**
- * //BSB/public/js/modules/metricsManager.js - Especializado en cálculos de eficiencia y rentabilidad
+ * metricsManager.js - Motor de Análisis de Rentabilidad
+ * Versión: Corregida para compatibilidad con MongoDB y Sync en Tiempo Real
  */
 
 let cycleHistoryData = [];
@@ -7,17 +8,21 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * Recibe los datos del backend y dispara la actualización de la UI
+ * Normaliza y almacena los datos, disparando la actualización
  */
 export function setAnalyticsData(data) {
-    if (data && Array.isArray(data)) {
-        cycleHistoryData = data;
-    } else if (data && data.success && Array.isArray(data.data)) {
-        cycleHistoryData = data.data;
-    } else {
-        console.warn("⚠️ Metrics: Datos recibidos no tienen formato de array válido");
-        cycleHistoryData = [];
-    }
+    // Soporte para diferentes estructuras de respuesta
+    const rawData = Array.isArray(data) ? data : (data?.data || data?.history || []);
+    
+    // Limpieza de datos: Eliminamos nulos y aseguramos valores numéricos
+    cycleHistoryData = rawData.filter(c => c !== null).map(cycle => ({
+        ...cycle,
+        netProfit: parseFloat(cycle.netProfit || 0),
+        profitPercentage: parseFloat(cycle.profitPercentage || 0),
+        // Normalización de fechas MongoDB ($date) o String ISO
+        processedDate: cycle.endTime?.$date ? new Date(cycle.endTime.$date) : 
+                       (cycle.endTime ? new Date(cycle.endTime) : new Date())
+    }));
     
     updateMetricsDisplay();
 }
@@ -33,16 +38,14 @@ export function setBotFilter(filter) {
 }
 
 /**
- * Calcula los KPIs y prepara los datos para el gráfico
+ * Calcula KPIs y emite evento para el Dashboard
  */
 function updateMetricsDisplay() {
-    if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
-        return resetKPIs();
-    }
+    if (!cycleHistoryData.length) return resetKPIs();
 
     const filtered = currentBotFilter === 'all' 
         ? cycleHistoryData 
-        : cycleHistoryData.filter(c => c && c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
+        : cycleHistoryData.filter(c => c.strategy?.toLowerCase() === currentBotFilter.toLowerCase());
 
     const totalCycles = filtered.length;
     if (totalCycles === 0) return resetKPIs();
@@ -53,19 +56,14 @@ function updateMetricsDisplay() {
     let totalTimeMs = 0;
 
     filtered.forEach(cycle => {
-        if (!cycle) return;
+        totalProfitPct += cycle.profitPercentage;
+        totalNetProfitUsdt += cycle.netProfit;
+        if (cycle.netProfit > 0) winningCycles++;
 
-        totalProfitPct += (parseFloat(cycle.profitPercentage) || 0);
-        totalNetProfitUsdt += (parseFloat(cycle.netProfit) || 0);
-        
-        if ((parseFloat(cycle.netProfit) || 0) > 0) winningCycles++;
+        const start = cycle.startTime?.$date ? new Date(cycle.startTime.$date) : new Date(cycle.startTime);
+        const end = cycle.processedDate;
 
-        const start = cycle.startTime?.$date ? new Date(cycle.startTime.$date) : 
-                     (cycle.startTime ? new Date(cycle.startTime) : null);
-        const end = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : 
-                   (cycle.endTime ? new Date(cycle.endTime) : null);
-
-        if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
             const diff = end.getTime() - start.getTime();
             if (diff > 0) totalTimeMs += diff;
         }
@@ -74,31 +72,27 @@ function updateMetricsDisplay() {
     const avgProfit = totalProfitPct / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     const totalHours = totalTimeMs / (1000 * 60 * 60);
-    const profitPerHour = totalHours > 0.01 ? (totalNetProfitUsdt / totalHours) : totalNetProfitUsdt;
+    const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Actualizar textos en el Dashboard
+    // Renderizado de KPIs
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', 
         `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
         `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`
     );
-    
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, 
         `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`
     );
-    
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, 
         `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`
     );
 
-    // --- COMUNICACIÓN CON EL DASHBOARD ---
-    // En lugar de llamar a una función externa, enviamos los datos listos al bus de eventos
+    // Notificación al Dashboard
     try {
         const chartData = getFilteredData({ bot: currentBotFilter, param: currentChartParameter });
-        const event = new CustomEvent('metricsUpdated', { detail: chartData });
-        window.dispatchEvent(event);
-    } catch (chartError) {
-        console.error("Error al preparar datos del gráfico:", chartError);
+        window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
+    } catch (e) {
+        console.error("❌ Metrics: Error en despacho de evento", e);
     }
 }
 
@@ -117,35 +111,26 @@ function renderText(id, text, className = null) {
     }
 }
 
-/**
- * Procesa los datos para que el Dashboard pueda renderizar el gráfico
- */
 export function getFilteredData(filter) {
-    if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
-        return { points: [] };
-    }
+    const targetFilter = filter?.bot || currentBotFilter;
+    const targetParam = filter?.param || currentChartParameter;
 
-    const filtered = filter.bot === 'all' 
+    const filtered = targetFilter === 'all' 
         ? cycleHistoryData 
-        : cycleHistoryData.filter(c => c && c.strategy?.toLowerCase() === filter.bot.toLowerCase());
+        : cycleHistoryData.filter(c => c.strategy?.toLowerCase() === targetFilter.toLowerCase());
 
     let accumulated = 0;
     const points = filtered.map(cycle => {
-        const val = parseFloat(cycle.netProfit || 0);
-        accumulated += val;
-
-        const rawDate = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : (cycle.endTime ? new Date(cycle.endTime) : new Date());
+        accumulated += cycle.netProfit;
         
-        let timeLabel = "00:00";
-        if (!isNaN(rawDate.getTime())) {
-            const h = rawDate.getHours().toString().padStart(2, '0');
-            const m = rawDate.getMinutes().toString().padStart(2, '0');
-            timeLabel = `${h}:${m}`;
-        }
+        const date = cycle.processedDate;
+        const timeLabel = !isNaN(date.getTime()) 
+            ? `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+            : "00:00";
 
         return {
             time: timeLabel,
-            value: filter.param === 'accumulatedProfit' ? accumulated : (parseFloat(cycle.profitPercentage) || 0)
+            value: targetParam === 'accumulatedProfit' ? accumulated : cycle.profitPercentage
         };
     });
 
