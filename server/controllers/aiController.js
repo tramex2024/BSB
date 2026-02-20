@@ -4,7 +4,7 @@
  * Gestión de Motor Neural en entorno simulado/independiente.
  */
 
-const aiEngine = require('../src/au/engines/AIEngine'); // Ruta corregida a la nueva estructura
+const aiEngine = require('../src/ai/AIEngine'); // Ruta corregida a la nueva estructura
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 const MarketSignal = require('../models/MarketSignal');
