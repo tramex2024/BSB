@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Auditoría Anti-Parpadeo e Integración de Métricas (RESTAURADO)
+ * Actualización: Restauración completa con inyección de renderizado de balance
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -12,7 +12,7 @@ export let socket = null;
 let connectionWatchdog = null;
 
 /**
- * Función auxiliar para enviar logs al Terminal del Dashboard si existe
+ * Función auxiliar para enviar logs al Terminal del Dashboard
  */
 async function sendToDashboardTerminal(msg, type) {
     const dashboardLogs = document.getElementById('dashboard-logs');
@@ -21,7 +21,7 @@ async function sendToDashboardTerminal(msg, type) {
             const { addTerminalLog } = await import('./dashboard.js');
             addTerminalLog(msg, type);
         } catch (e) {
-            console.warn("Dashboard Terminal no disponible en esta vista");
+            console.warn("Dashboard Terminal no disponible");
         }
     }
 }
@@ -31,7 +31,7 @@ export function initSocket() {
     const userId = localStorage.getItem('userId');
 
     if (socket?.connected || !token || !userId) {
-        if (!token || !userId) console.warn("⚠️ Socket: No hay sesión activa para conectar.");
+        if (!token || !userId) console.warn("⚠️ Socket: No hay sesión activa.");
         return;
     }
 
@@ -65,7 +65,7 @@ export function initSocket() {
     });
 
     // --- RECEPCIÓN DE PRECIO ---
-    socket.on('marketData', (data) => {
+    socket.on('marketData', async (data) => {
         resetWatchdog();
         if (data?.price) {
             const newPrice = parseFloat(data.price);
@@ -75,6 +75,12 @@ export function initSocket() {
             if (priceEl) {
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
                 currentBotState.lastPrice = newPrice;
+            }
+
+            // [INYECCIÓN] Actualizar visualización de balance si estamos en Dashboard
+            if (document.getElementById('balanceDonutChart')) {
+                const { updateDistributionWidget } = await import('./dashboard.js');
+                updateDistributionWidget(currentBotState);
             }
         }
     });
@@ -89,8 +95,7 @@ export function initSocket() {
         
         Object.assign(currentBotState, state);
 
-        // [CORRECCIÓN AUDITORÍA] Sincronización con MetricsManager
-        // Inyectamos los datos en el motor de métricas si existen en el estado
+        // Sincronización con MetricsManager
         if (state.history || state.cycleHistory) {
             try {
                 const Metrics = await import('./metricsManager.js');
@@ -104,6 +109,12 @@ export function initSocket() {
         currentBotState.isRunning = aiIsActive;
 
         updateBotUI(currentBotState);
+
+        // [INYECCIÓN] Forzar actualización de Dona y Rayitas con nuevos balances
+        if (document.getElementById('balanceDonutChart')) {
+            const { updateDistributionWidget } = await import('./dashboard.js');
+            updateDistributionWidget(currentBotState);
+        }
 
         if (aiBotUI) {
             aiBotUI.setRunningStatus(
@@ -147,7 +158,7 @@ export function initSocket() {
         }
     });
 
-    // LÓGICA UNIFICADA DE ÓRDENES (CONSERVANDO DEBOUNCE ORIGINAL)
+    // LÓGICA DE ÓRDENES CON DEBOUNCE
     socket.on('open-orders-update', async (data) => {
         const now = Date.now();
         if (currentBotState._lastOrderFetch && (now - currentBotState._lastOrderFetch < 1000)) return;
@@ -162,11 +173,9 @@ export function initSocket() {
         const auOrderList = document.getElementById('au-order-list');
         if (auOrderList) {
             const activeTabBtn = document.querySelector('.autobot-tabs button.text-emerald-400');
-            if (activeTabBtn) {
-                const currentStrategy = activeTabBtn.getAttribute('data-strategy') || 'all';
-                const { fetchOrders } = await import('./orders.js');
-                fetchOrders(currentStrategy, auOrderList, true); 
-            }
+            const currentStrategy = activeTabBtn ? (activeTabBtn.getAttribute('data-strategy') || 'all') : 'all';
+            const { fetchOrders } = await import('./orders.js');
+            fetchOrders(currentStrategy, auOrderList, true); 
         }
     });
 
@@ -176,7 +185,6 @@ export function initSocket() {
             const { fetchOrders } = await import('./orders.js');
             fetchOrders('ai', aiOrderList, true);
         }
-        // [NUEVO] También actualizamos métricas si el historial de IA cambia
         if (trades) {
             const Metrics = await import('./metricsManager.js');
             Metrics.setAnalyticsData(trades);

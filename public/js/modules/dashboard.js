@@ -183,29 +183,49 @@ function initBalanceChart() {
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
     
-    const usdt = parseFloat(state.lastAvailableUSDT || 0);
-    const btcAmount = parseFloat(state.lastAvailableBTC || 0);
-    const price = parseFloat(state.price || 0);
+    // Forzamos conversión numérica absoluta para evitar errores de cálculo
+    const usdt = Math.max(0, parseFloat(state.lastAvailableUSDT || 0));
+    const btcAmount = Math.max(0, parseFloat(state.lastAvailableBTC || 0));
+    const price = Math.max(0, parseFloat(state.price || 0));
     
+    // Actualizar textos primero (esto ya te funciona)
+    const uText = document.getElementById('aubalance-usdt');
+    const bText = document.getElementById('aubalance-btc');
+    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if(bText) bText.innerText = btcAmount.toFixed(6);
+
+    // Lógica de Proporciones para la Dona y las Rayitas (Barras)
     if (price > 0) {
         const btcInUsdt = btcAmount * price;
         const total = usdt + btcInUsdt;
 
         if (total > 0) {
+            // 1. Actualizar el Círculo (Dona)
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-            balanceChart.update('none'); // Update suave sin saltos
+            balanceChart.update('none'); 
 
+            // 2. Actualizar las Rayitas (Progress Bars)
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');
-            if (usdtBar) usdtBar.style.width = `${(usdt / total) * 100}%`;
-            if (btcBar) btcBar.style.width = `${(btcInUsdt / total) * 100}%`;
+            
+            // Calculamos el porcentaje
+            const usdtPct = (usdt / total) * 100;
+            const btcPct = (btcInUsdt / total) * 100;
+
+            if (usdtBar) {
+                usdtBar.style.transition = "width 0.8s ease-in-out";
+                usdtBar.style.width = `${usdtPct}%`;
+            }
+            if (btcBar) {
+                btcBar.style.transition = "width 0.8s ease-in-out";
+                btcBar.style.width = `${btcPct}%`;
+            }
+
+            console.log(`📊 Distribución: USDT ${usdtPct.toFixed(1)}% | BTC ${btcPct.toFixed(1)}%`);
         }
+    } else {
+        console.warn("⚠️ Dashboard: Esperando precio de mercado para calcular proporciones...");
     }
-    
-    const uText = document.getElementById('aubalance-usdt');
-    const bText = document.getElementById('aubalance-btc');
-    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
-    if(bText) bText.innerText = btcAmount.toFixed(6);
 }
 
 function setupAnalyticsFilters() {
