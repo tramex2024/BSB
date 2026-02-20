@@ -1,6 +1,6 @@
 /**
- * dashboard.js - Controlador de Interfaz (Versión Sincronizada 2026)
- * Estado: Corregido manejo de eventos y ciclo de vida de gráficos
+ * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
+ * Estado: Corregido error de auto-borrado y reseteo de balance.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -26,13 +26,13 @@ export function initializeDashboardView(initialState) {
 
     const stateToUse = initialState || currentBotState;
 
-    // 1. Inicializar Gráfico de Balance (Dona)
+    // 1. Inicializar Gráfico de Balance (Dona) 
+    // Corregido para no pisar datos existentes
     initBalanceChart();
 
-    // 2. Sincronización inmediata con el estado global (UI y Dona)
+    // 2. Sincronización inmediata con el estado global
     if (stateToUse) {
         updateBotUI(stateToUse);
-        // Usamos requestAnimationFrame para asegurar que el DOM esté renderizado
         requestAnimationFrame(() => {
             updateDistributionWidget(stateToUse);
         });
@@ -42,22 +42,18 @@ export function initializeDashboardView(initialState) {
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // 4. [CORRECCIÓN] Escuchar actualizaciones desde MetricsManager
-    // Eliminamos el listener previo para evitar duplicidad de renders
+    // 4. Gestión de eventos de Metrics (Evita duplicados)
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
-    // 5. Carga inicial de analítica (Equity)
+    // 5. Carga de analítica (Equity) - Se ejecuta al final
     refreshAnalytics();
 
-    // 6. Estado de conexión inicial
+    // 6. Estado de conexión
     updateHealthStatus('health-market-ws-text', socket?.connected);
     updateHealthStatus('health-user-ws-text', socket?.connected);
 }
 
-/**
- * Handler nombrado para poder removerlo y evitar fugas de memoria
- */
 function handleMetricsUpdate(e) {
     if (e.detail) {
         renderEquityCurve(e.detail);
@@ -65,20 +61,25 @@ function handleMetricsUpdate(e) {
 }
 
 /**
- * Refresca analítica y fuerza el primer dibujado
+ * Refresca analítica con protección contra borrado accidental
  */
 async function refreshAnalytics() {
     try {
+        // Renderizado preventivo si ya tenemos datos locales
+        const initialPoints = Metrics.getFilteredData();
+        if (initialPoints?.points?.length > 0) {
+            renderEquityCurve(initialPoints);
+        }
+
         const curveData = await fetchEquityCurveData();
-        if (curveData) {
+        if (curveData && Array.isArray(curveData) && curveData.length > 0) {
             Metrics.setAnalyticsData(curveData);
             
-            // Forzamos el renderizado inicial con un pequeño delay 
-            // para que el canvas de Chart.js tome sus dimensiones reales
+            // Timeout estratégico para esperar que el DOM se asiente
             setTimeout(() => {
-                const initialFiltered = Metrics.getFilteredData();
-                renderEquityCurve(initialFiltered);
-            }, 100);
+                const updatedData = Metrics.getFilteredData();
+                renderEquityCurve(updatedData);
+            }, 300);
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -92,7 +93,7 @@ function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.onclick = async () => {
-            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
+            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots.");
             if (confirmPanic) await triggerPanicStop();
         };
     }
@@ -151,26 +152,32 @@ export function addTerminalLog(msg, type = 'info') {
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
-    if (balanceChart) balanceChart.destroy();
 
-    balanceChart = new Chart(canvas.getContext('2d'), {
-        type: 'doughnut',
-        data: {
-            labels: ['USDT', 'BTC'],
-            datasets: [{ 
-                data: [100, 0], 
-                backgroundColor: ['#10b981', '#fb923c'], 
-                borderWidth: 0, 
-                cutout: '75%'
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { legend: { display: false } },
-            animation: { duration: 800 }
-        }
-    });
+    if (!balanceChart) {
+        balanceChart = new Chart(canvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['USDT', 'BTC'],
+                datasets: [{ 
+                    data: [100, 0], 
+                    backgroundColor: ['#10b981', '#fb923c'], 
+                    borderWidth: 0, 
+                    cutout: '75%'
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } },
+                animation: { duration: 800 }
+            }
+        });
+    }
+
+    // Si ya tenemos balance en el estado global, lo aplicamos de inmediato
+    if (currentBotState.lastAvailableUSDT || currentBotState.lastAvailableBTC) {
+        updateDistributionWidget(currentBotState);
+    }
 }
 
 export function updateDistributionWidget(state) {
@@ -186,7 +193,7 @@ export function updateDistributionWidget(state) {
 
         if (total > 0) {
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-            balanceChart.update('none'); // Update sin animaciones bruscas
+            balanceChart.update('none'); // Update suave sin saltos
 
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');

@@ -1,11 +1,10 @@
 /**
- * main.js - Central Hub
- * AI Core English Version 2026
- * Unified Global Control Logic
+ * main.js - Central Hub (Pro-Sync 2026)
+ * Estado: Corregida persistencia de balance y gestión de estados de IA
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
-import { updateBotUI, updateControlsState } from './modules/uiManager.js'; 
+import { updateBotUI } from './modules/uiManager.js'; 
 import aiBotUI from './modules/aiBotUI.js';
 import { initSocket } from './modules/socket.js'; 
 import { fetchOrders } from './modules/orders.js'; 
@@ -14,16 +13,20 @@ import { fetchOrders } from './modules/orders.js';
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 
-// Fuente única de verdad para toda la aplicación
+// Fuente única de verdad (Single Source of Truth)
 export const currentBotState = {
     price: 0,
+    lastPrice: 0,
     lstate: 'STOPPED',
     sstate: 'STOPPED',
-    aistate: 'STOPPED', // Fuente de verdad para el motor neural
+    aistate: 'STOPPED',
     aibalance: 0,
     isRunning: false,
     stopAtCycle: false,
     historyCount: 0,
+    // [MEJORA] Añadidos campos de balance para persistencia entre pestañas
+    lastAvailableUSDT: 0,
+    lastAvailableBTC: 0,
     config: {
         symbol: 'BTC_USDT', 
         long: { amountUsdt: 0, enabled: false },
@@ -47,7 +50,7 @@ const views = {
 export function logStatus(message, type = 'info') {
     if (type === 'error') logQueue = [{ message, type }]; 
     else {
-        if (logQueue.length >= 2) logQueue.shift();
+        if (logQueue.length >= 3) logQueue.shift(); // Aumentado a 3 para mejor flujo
         logQueue.push({ message, type });
     }
     if (!isProcessingLog) processNextLog();
@@ -65,8 +68,7 @@ function processNextLog() {
     const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
     logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
     
-    // Suavizado de 1.2s para mayor dinamismo
-    setTimeout(() => processNextLog(), 1200);
+    setTimeout(() => processNextLog(), 1500);
 }
 
 // --- APP INITIALIZATION ---
@@ -84,6 +86,7 @@ export function initializeFullApp() {
 
 // --- TAB MANAGEMENT ---
 export async function initializeTab(tabName) {
+    // Limpieza de intervalos previos
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
 
@@ -94,7 +97,7 @@ export async function initializeTab(tabName) {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         
-        // Prevención de parpadeo: solo inyectar si el contenido cambia
+        // Inyectamos HTML si es diferente
         if (mainContent.innerHTML !== html) {
             mainContent.innerHTML = html;
         }
@@ -105,20 +108,21 @@ export async function initializeTab(tabName) {
             const initFn = module[initFnName];
             
             if (initFn) {
+                // [NUEVO] Pasamos el estado global para que la vista nazca con datos
                 await initFn(currentBotState);
+                
+                // Asegurar sincronización inmediata de elementos de balance
                 if (tabName === 'dashboard' && module.updateDistributionWidget) {
                     module.updateDistributionWidget(currentBotState);
                 }
             }
 
+            // Gestión de Órdenes por Pestaña
             if (tabName === 'aibot') {
                 const aiOrderList = document.getElementById('ai-order-list');
-                if (aiOrderList) {
-                    fetchOrders('ai', aiOrderList);
-                } else {
-                    const aiHistoryCont = document.getElementById('ai-history-table-body');
-                    if (aiHistoryCont) fetchOrders('ai', aiHistoryCont);
-                }
+                const aiHistoryCont = document.getElementById('ai-history-table-body');
+                if (aiOrderList) fetchOrders('ai', aiOrderList);
+                if (aiHistoryCont) fetchOrders('ai', aiHistoryCont);
             }
             
             if (tabName === 'autobot') {
@@ -127,6 +131,8 @@ export async function initializeTab(tabName) {
             }
         }
 
+        // Actualizar UI general con el estado actual
+        updateBotUI(currentBotState);
         syncAIElementsInDOM();
 
     } catch (error) { 
@@ -143,14 +149,16 @@ function syncAIElementsInDOM() {
     
     const isAiRunning = currentBotState.aistate === 'RUNNING';
 
-    aiBotUI.setRunningStatus(
-        isAiRunning, 
-        currentBotState.config.ai.stopAtCycle,
-        currentBotState.historyCount || 0
-    );
+    if (aiBotUI) {
+        aiBotUI.setRunningStatus(
+            isAiRunning, 
+            currentBotState.config.ai.stopAtCycle,
+            currentBotState.historyCount || 0
+        );
+    }
 }
 
-// --- GLOBAL EVENT DELEGATION (Lógica Centralizada de IA) ---
+// --- GLOBAL EVENT DELEGATION (Lógica de Botones AI) ---
 document.addEventListener('click', async (e) => {
     const btnAi = e.target.closest('#btn-start-ai');
     if (btnAi) {
@@ -238,5 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
+    
+    // Iniciar siempre en dashboard
     initializeTab('dashboard'); 
 });
