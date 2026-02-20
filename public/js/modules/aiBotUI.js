@@ -1,6 +1,6 @@
 /**
  * AI Bot Interface Module - Optimized 2026
- * Versión Blindada: Eliminación de parpadeos y estabilización de logs
+ * Versión Blindada: Soporte para tags AI-RUNNING / AI-PAUSED
  */
 
 const aiBotUI = {
@@ -80,22 +80,23 @@ const aiBotUI = {
         // Limpiar placeholder inicial
         if (container.querySelector('.italic')) container.innerHTML = '';
 
-        // Filtro Anti-Error y Anti-Duplicados (Blindado)
+        // Filtro Anti-Error y Anti-Duplicados (Blindado con Optional Chaining)
         const lastEntryText = container.firstChild?.innerText || "";
         if (lastEntryText.includes(message)) return;
 
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const logEntry = document.createElement('div');
         
-        // --- Lógica de Colores Dinámicos ---
+        // --- Lógica de Colores Dinámicos (Detectando tags AI-) ---
         let borderColor = 'border-blue-500/30';
         let textColor = 'text-gray-400';
         let bgColor = 'bg-white/5';
 
         const upperMsg = message.toUpperCase();
 
-        if (upperMsg.includes('👁️')) {
-            if (upperMsg.includes('PAUSED')) {
+        // Soporte para AI-RUNNING y AI-PAUSED
+        if (upperMsg.includes('👁️') || upperMsg.includes('AI-')) {
+            if (upperMsg.includes('PAUSED') || upperMsg.includes('AI-PAUSED')) {
                 borderColor = 'border-yellow-500/50';
                 textColor = 'text-yellow-200/70';
                 bgColor = 'bg-yellow-500/5';
@@ -104,7 +105,7 @@ const aiBotUI = {
                 textColor = 'text-blue-100';
                 bgColor = 'bg-blue-500/5';
             }
-        } else if (confidence >= 0.75 || upperMsg.includes('SUCCESS')) {
+        } else if (confidence >= 0.75 || upperMsg.includes('SUCCESS') || upperMsg.includes('EXECUTED')) {
             borderColor = 'border-emerald-500';
             textColor = 'text-emerald-400';
             bgColor = 'bg-emerald-500/10';
