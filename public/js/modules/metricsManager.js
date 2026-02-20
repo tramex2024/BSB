@@ -1,12 +1,14 @@
 /**
  * //BSB/public/js/modules/metricsManager.js - Especializado en cálculos de eficiencia y rentabilidad
  */
-import { renderEquityCurve } from './chart.js';
 
 let cycleHistoryData = [];
 let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
+/**
+ * Recibe los datos del backend y dispara la actualización de la UI
+ */
 export function setAnalyticsData(data) {
     if (data && Array.isArray(data)) {
         cycleHistoryData = data;
@@ -30,6 +32,9 @@ export function setBotFilter(filter) {
     updateMetricsDisplay();
 }
 
+/**
+ * Calcula los KPIs y prepara los datos para el gráfico
+ */
 function updateMetricsDisplay() {
     if (!Array.isArray(cycleHistoryData) || cycleHistoryData.length === 0) {
         return resetKPIs();
@@ -71,6 +76,7 @@ function updateMetricsDisplay() {
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const profitPerHour = totalHours > 0.01 ? (totalNetProfitUsdt / totalHours) : totalNetProfitUsdt;
 
+    // Actualizar textos en el Dashboard
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', 
         `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
@@ -85,10 +91,14 @@ function updateMetricsDisplay() {
         `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`
     );
 
+    // --- COMUNICACIÓN CON EL DASHBOARD ---
+    // En lugar de llamar a una función externa, enviamos los datos listos al bus de eventos
     try {
-        renderEquityCurve(filtered, currentChartParameter);
+        const chartData = getFilteredData({ bot: currentBotFilter, param: currentChartParameter });
+        const event = new CustomEvent('metricsUpdated', { detail: chartData });
+        window.dispatchEvent(event);
     } catch (chartError) {
-        console.error("Error renderizando curva de equidad:", chartError);
+        console.error("Error al preparar datos del gráfico:", chartError);
     }
 }
 
@@ -124,7 +134,6 @@ export function getFilteredData(filter) {
         const val = parseFloat(cycle.netProfit || 0);
         accumulated += val;
 
-        // --- CORRECCIÓN CRÍTICA: Formateo de fecha manual para evitar error de rango "22" ---
         const rawDate = cycle.endTime?.$date ? new Date(cycle.endTime.$date) : (cycle.endTime ? new Date(cycle.endTime) : new Date());
         
         let timeLabel = "00:00";

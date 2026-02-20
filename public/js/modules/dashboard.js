@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Sincronizada 2026)
- * Estado: Limpieza de listeners de Socket (Movidos a socket.js)
+ * Estado: Corregido renderizado de Balance y enlace de Métricas
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -27,32 +27,39 @@ export function initializeDashboardView(initialState) {
     const stateToUse = initialState || currentBotState;
 
     // 1. Inicializar Gráficos
-    initBalanceChart(stateToUse);
+    initBalanceChart(); // Ya no necesita el state aquí, se actualiza en el paso 2
     initEquityChart();
 
     // 2. Sincronización inmediata con el estado global
     if (stateToUse) {
         updateBotUI(stateToUse);
+        // Pequeño delay para asegurar que el canvas de Chart.js esté listo
         setTimeout(() => {
             updateDistributionWidget(stateToUse);
-        }, 100);
+        }, 300);
     }
 
     // 3. Configurar Eventos y Botones Locales
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // 4. Carga de analítica
+    // 4. Escuchar actualizaciones desde MetricsManager
+    window.addEventListener('metricsUpdated', (e) => {
+        if (e.detail) {
+            updateEquityChart(e.detail);
+        }
+    });
+
+    // 5. Carga inicial de analítica
     refreshAnalytics();
 
-    // 5. Estado de conexión inicial
+    // 6. Estado de conexión inicial
     updateHealthStatus('health-market-ws-text', socket?.connected);
     updateHealthStatus('health-user-ws-text', socket?.connected);
 }
 
 /**
- * --- NUEVA FUNCIÓN: SYSTEM TERMINAL LOG ---
- * Agrega una entrada al System Terminal con efectos visuales
+ * AGREGAR LOG AL TERMINAL
  */
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
@@ -69,7 +76,6 @@ export function addTerminalLog(msg, type = 'info') {
     };
 
     const logEntry = document.createElement('div');
-    // Efecto de entrada y colores dinámicos
     logEntry.className = `flex gap-2 py-1 px-2 border-l-2 bg-white/5 mb-1 text-[10px] font-mono transition-all duration-500 rounded-r animate-fadeIn ${colors[type] || colors.info}`;
     
     logEntry.innerHTML = `
@@ -78,16 +84,10 @@ export function addTerminalLog(msg, type = 'info') {
         <i class="fas fa-circle text-[6px] self-center animate-pulse ${type === 'success' ? 'text-emerald-500' : 'text-gray-600'}"></i>
     `;
 
-    // Insertar al principio y limitar a 40 entradas
     logContainer.prepend(logEntry);
     while (logContainer.childNodes.length > 40) {
         logContainer.lastChild.remove();
     }
-
-    // Efecto de parpadeo visual en el contenedor (Pulso)
-    const terminalBox = logContainer.parentElement;
-    terminalBox.classList.add('ring-1', 'ring-indigo-500/30');
-    setTimeout(() => terminalBox.classList.remove('ring-1', 'ring-indigo-500/30'), 800);
 }
 
 /**
@@ -98,9 +98,7 @@ function setupActionButtons() {
     if (panicBtn) {
         panicBtn.onclick = async () => {
             const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
-            if (confirmPanic) {
-                await triggerPanicStop();
-            }
+            if (confirmPanic) await triggerPanicStop();
         };
     }
 
@@ -129,18 +127,7 @@ async function refreshAnalytics() {
         const curveData = await fetchEquityCurveData();
         if (curveData) {
             Metrics.setAnalyticsData(curveData);
-            
-            const bSel = document.getElementById('chart-bot-selector');
-            const pSel = document.getElementById('chart-param-selector');
-
-            const currentFilter = {
-                bot: bSel?.value || 'all',
-                param: pSel?.value || 'accumulatedProfit'
-            };
-            const filteredData = Metrics.getFilteredData(currentFilter);
-            
-            if (!equityChart) initEquityChart();
-            updateEquityChart(filteredData);
+            // El updateEquityChart se disparará vía el evento 'metricsUpdated'
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -149,7 +136,7 @@ async function refreshAnalytics() {
 
 // --- GESTIÓN DE GRÁFICOS ---
 
-function initBalanceChart(state) {
+function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
     if (balanceChart) balanceChart.destroy();
@@ -159,7 +146,7 @@ function initBalanceChart(state) {
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: [1, 0], 
+                data: [100, 0], // Valores iniciales placeholder
                 backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
@@ -213,6 +200,9 @@ function initEquityChart() {
     });
 }
 
+/**
+ * Actualiza el círculo de balance y las barras de progreso
+ */
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
     
@@ -225,9 +215,11 @@ export function updateDistributionWidget(state) {
         const total = usdt + btcInUsdt;
 
         if (total > 0) {
+            // Actualización del gráfico de dona
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
-            balanceChart.update('none');
+            balanceChart.update();
 
+            // Actualización de las barras horizontales
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');
             if (usdtBar) usdtBar.style.width = `${(usdt / total) * 100}%`;
@@ -235,17 +227,21 @@ export function updateDistributionWidget(state) {
         }
     }
     
+    // Actualización de textos
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
     if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
     if(bText) bText.innerText = btcAmount.toFixed(6);
 }
 
+/**
+ * Renderiza los puntos en la curva de equity
+ */
 export function updateEquityChart(data) {
     if (!equityChart || !data || !data.points) return;
     equityChart.data.labels = data.points.map(p => p.time);
     equityChart.data.datasets[0].data = data.points.map(p => p.value);
-    equityChart.update('none');
+    equityChart.update();
 }
 
 function setupAnalyticsFilters() {
