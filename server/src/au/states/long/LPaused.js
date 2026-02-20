@@ -87,7 +87,7 @@ async function run(dependencies) {
         await updateBotState('BUYING', 'long');
     } else {
         // Log de bajo impacto para monitoreo en consola
-        console.log(`[User: ${userId}] [L-PAUSED] Esperando fondos: ${currentLBalance.toFixed(2)}/${requiredAmount.toFixed(2)} USDT`);
+        log(`[L-PAUSED] 👁️ Waiting for funds: ${currentLBalance.toFixed(2)}/${requiredAmount.toFixed(2)} USDT`, 'debug');
     }
 } 
 
