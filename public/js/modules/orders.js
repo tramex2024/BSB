@@ -1,7 +1,7 @@
 import { fetchFromBackend } from './api.js';
 
 /**
- * Renders the HTML for a single order row
+ * Renders the HTML for a single order row - Optimized for Full Width
  */
 function createOrderHtml(order) {
     const side = (order.side || 'buy').toLowerCase();
@@ -41,72 +41,81 @@ function createOrderHtml(order) {
 
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(rawState);
 
+    // CAMBIO CLAVE: Se eliminan los w-1/4 restrictivos y se usa w-full con flex-grow
     return `
-    <div class="bg-gray-900/40 border border-gray-800 p-3 rounded-lg mb-2 flex items-center justify-between border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'}">
-        <div class="flex items-center gap-4 w-1/4">
-            <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Side</span>
-                <div class="${sideTheme} py-0.5 px-2 rounded-md w-fit flex items-center gap-1">
-                    <span class="font-black text-xs uppercase">${side}</span>
-                </div>
+    <div class="w-full bg-gray-900/40 border border-gray-800 p-4 rounded-xl mb-3 flex items-center border-l-4 ${isBuy ? 'border-l-emerald-500' : 'border-l-red-500'} transition-all hover:bg-gray-800/60 shadow-md">
+        
+        <div class="flex flex-col min-w-[80px]">
+            <span class="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-1">Side</span>
+            <div class="${sideTheme} py-1 px-3 rounded-lg border w-fit">
+                <span class="font-black text-xs uppercase">${side}</span>
             </div>
         </div>
 
-        <div class="flex-1 grid grid-cols-3 gap-2 border-x border-gray-700/30 px-4">
+        <div class="flex-1 grid grid-cols-3 gap-4 border-x border-gray-700/30 px-6 mx-4">
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Price</span>
-                <span class="text-gray-100 font-mono text-sm">$${price}</span>
+                <span class="text-[9px] text-gray-500 font-black uppercase tracking-widest">Entry Price</span>
+                <span class="text-gray-100 font-mono text-sm font-bold">$${price}</span>
             </div>
             <div class="flex flex-col">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Amount</span>
+                <span class="text-[9px] text-gray-500 font-black uppercase tracking-widest">Amount</span>
                 <span class="text-gray-300 font-mono text-sm">${quantity}</span>
             </div>
-            <div class="flex flex-col items-center">
-                <span class="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">Status</span>
-                <span class="px-2 py-0.5 rounded text-[9px] font-bold ${isFilled ? 'bg-emerald-400/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}">
+            <div class="flex flex-col items-center justify-center">
+                <span class="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-1">Status</span>
+                <span class="px-3 py-0.5 rounded-full text-[9px] font-black tracking-tighter ${isFilled ? 'bg-emerald-400/10 text-emerald-400' : 'bg-orange-500/10 text-orange-400'}">
                     ${rawState}
                 </span>
             </div>
         </div>
 
-        <div class="w-1/4 flex flex-col items-end gap-1">
-            <p class="text-[10px] text-gray-400 font-mono">${finalDate}</p>
+        <div class="flex flex-col items-end min-w-[120px]">
+            <span class="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-1">Execution</span>
+            <p class="text-[10px] text-gray-300 font-mono font-bold">${finalDate}</p>
             ${isCancellable ? `
                 <button onclick="window.cancelOrder('${fullOrderId}')" 
-                        class="mt-1 px-3 py-1 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-bold uppercase rounded transition-all">
-                    Cancel
+                        class="mt-2 px-4 py-1.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[9px] font-black uppercase rounded-lg transition-all border border-red-500/20 shadow-lg shadow-red-900/20 active:scale-95">
+                    Cancel Order
                 </button>
-            ` : `<p class="text-[8px] text-gray-500 font-mono break-all text-right opacity-50">ID: ${fullOrderId.slice(-6)}</p>`}
+            ` : `<p class="text-[8px] text-gray-500 font-mono mt-2 opacity-40">REF: ${fullOrderId.slice(-8)}</p>`}
         </div>
     </div>`;
 }
 
 /**
- * FETCH ORDERS CON FILTRO DE ESTRATEGIA (ex, long, short, all)
+ * FETCH ORDERS CON FILTRO DE ESTRATEGIA
  */
 export async function fetchOrders(strategyType, orderListElement, silent = false) {
     if (!orderListElement || !strategyType) return;
     
     if (!silent) {
-        orderListElement.innerHTML = `<div class="py-10 text-center"><i class="fas fa-circle-notch fa-spin text-emerald-500 text-xl"></i></div>`;
+        orderListElement.innerHTML = `
+            <div class="py-20 text-center w-full">
+                <i class="fas fa-brain fa-spin text-blue-500 text-3xl mb-4 opacity-50"></i>
+                <p class="text-[10px] text-blue-400 font-mono uppercase tracking-[0.3em]">Neural Fetching...</p>
+            </div>`;
     }
 
     try {
-        // Ahora consultamos un endpoint que filtre por el campo 'strategy' de la base de datos
-        // Ejemplo de URL: /api/orders/autobot?strategy=long
         const data = await fetchFromBackend(`/api/orders/autobot/filter?strategy=${strategyType}`);
         const ordersArray = Array.isArray(data) ? data : [];
         
         if (ordersArray.length === 0) {
-            orderListElement.innerHTML = `<div class="py-10 text-center text-gray-500 text-[10px] uppercase tracking-widest font-bold">No orders found for strategy: ${strategyType}</div>`;
+            orderListElement.innerHTML = `
+                <div class="py-20 text-center w-full bg-gray-800/20 rounded-3xl border-2 border-dashed border-gray-700">
+                    <p class="text-gray-500 text-[10px] uppercase tracking-widest font-black">No neural activity detected</p>
+                    <p class="text-[8px] text-gray-600 font-mono mt-1">Strategy: ${strategyType.toUpperCase()}</p>
+                </div>`;
             return;
         }
 
+        // Inyectamos las órdenes
         orderListElement.innerHTML = ordersArray.map(order => createOrderHtml(order)).join('');
+        
     } catch (error) {
         console.error("Fetch Orders Error:", error);
         if (!silent) {
-            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold uppercase">Error loading orders</div>`;
+            orderListElement.innerHTML = `<div class="text-center py-10 text-red-500 text-[10px] font-bold uppercase">Critical link failure: Orders inaccessible</div>`;
         }
     }
 }
@@ -115,7 +124,7 @@ export async function fetchOrders(strategyType, orderListElement, silent = false
  * GLOBAL BRIDGE FOR CANCELLATION
  */
 window.cancelOrder = async (orderId) => {
-    if (!confirm(`Cancel order ${orderId}?`)) return;
+    if (!confirm(`Confirm deactivation of order ${orderId}?`)) return;
 
     try {
         const data = await fetchFromBackend(`/api/users/bitmart/cancel-order`, {
@@ -124,14 +133,15 @@ window.cancelOrder = async (orderId) => {
         });
         
         if (data.success) {
-            // Buscamos cuál es el botón activo actualmente en el panel para refrescar la lista correcta
-            const activeTab = document.querySelector('.autobot-tabs button.bg-gray-800');
-            const strategy = activeTab ? activeTab.id.replace('tab-', '') : 'ex';
-            
-            const auContainer = document.getElementById('au-order-list');
-            if (auContainer) fetchOrders(strategy, auContainer);
+            // Refrescar el panel de IA específicamente si estamos ahí
+            const aiContainer = document.getElementById('ai-order-list');
+            if (aiContainer) {
+                // Buscamos si el tab de historial o activas está marcado
+                const isHistory = document.getElementById('ai-tab-all')?.classList.contains('active-tab-style');
+                fetchOrders(isHistory ? 'ai-history' : 'ai', aiContainer);
+            }
         } else {
-            alert(`Error: ${data.message || 'Could not cancel'}`);
+            alert(`Abort Failure: ${data.message || 'Check connection'}`);
         }
     } catch (error) {
         console.error("Cancel Error:", error);
