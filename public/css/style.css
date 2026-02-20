@@ -183,12 +183,12 @@ input:disabled {
 
 /* --- ESTADOS DINÁMICOS (COLORES) --- */
 .text-emerald-400 { color: #34d399 !important; } /* RUNNING */
-.text-red-400     { color: #f87171 !important; } /* STOPPED */
-.text-blue-400    { color: #60a5fa !important; } /* BUYING */
-.text-yellow-400  { color: #fbbf24 !important; } /* SELLING */
-.text-purple-400  { color: #a855f7 !important; } /* NO_COVERAGE */
-.text-orange-400  { color: #fb923c !important; } /* PAUSED */
-.text-gray-400    { color: #9ca3af !important; } /* UNKNOWN */
+.text-red-400      { color: #f87171 !important; } /* STOPPED */
+.text-blue-400     { color: #60a5fa !important; } /* BUYING */
+.text-yellow-400   { color: #fbbf24 !important; } /* SELLING */
+.text-purple-400   { color: #a855f7 !important; } /* NO_COVERAGE */
+.text-orange-400   { color: #fb923c !important; } /* PAUSED */
+.text-gray-400     { color: #9ca3af !important; } /* UNKNOWN */
 
 /* --- RESPONSIVE MOBILE --- */
 @media (max-width: 640px) {
@@ -241,18 +241,6 @@ main#main-content { margin-top: 0; }
     color: #ffffff;
 }
 
-/* Custom Scrollbar para el Log Neural */
-.custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.2);
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #3b82f6;
-    border-radius: 10px;
-}
-
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
@@ -263,13 +251,11 @@ main#main-content { margin-top: 0; }
 
 /* --- MEJORAS ESPECÍFICAS PARA NÚCLEO IA --- */
 
-/* 1. Refuerzo visual para inputs bloqueados en IA */
 #ai-amount-usdt:disabled + div {
     color: var(--danger) !important;
     opacity: 0.8;
 }
 
-/* 2. Animación de rotación para estados de carga */
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -279,20 +265,17 @@ main#main-content { margin-top: 0; }
     animation: spin 3s linear infinite;
 }
 
-/* 3. Estilo para el botón de Panic Sell activo */
 #btn-panic-ai:active {
     background-color: var(--danger);
     transform: scale(0.95);
     filter: brightness(1.2);
 }
 
-/* 4. Efecto de "Glow" para el círculo de confianza según el color */
 #ai-confidence-circle {
     filter: drop-shadow(0 0 5px currentColor);
     transition: stroke-dashoffset 1s ease-out, stroke 0.5s ease;
 }
 
-/* 5. Tooltip simple para estados de sincronización */
 [data-tooltip]:hover::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -309,24 +292,26 @@ main#main-content { margin-top: 0; }
     z-index: 100;
 }
 
-/* Asegura que el contenedor de la lista de órdenes ocupe todo el ancho disponible */
+/* --- FIX DEFINITIVO: ANCHO COMPLETO PARA AI-ORDER-LIST --- */
 #ai-order-list {
-    display: grid !important;
-    grid-template-columns: 1fr !important; /* Una sola columna que ocupa todo */
+    display: flex !important;
+    flex-direction: column !important;
     width: 100% !important;
-    min-width: 100%;
+    min-width: 100% !important;
+    gap: 8px;
 }
 
-/* Si en el futuro quieres 2 columnas en pantallas muy grandes */
-@media (min-width: 1280px) {
-    #ai-order-list {
-        grid-template-columns: 1fr 1fr !important;
-        gap: 1.5rem;
-    }
-}
-
-/* Fix para que los elementos dentro de las cards no se desborden */
-.order-card {
+/* Fuerza a los divs inyectados por JS a ocupar el 100% */
+#ai-order-list > div {
     width: 100% !important;
+    min-width: 100% !important;
+    display: flex !important;
     box-sizing: border-box;
+}
+
+@media (min-width: 1280px) {
+    /* Mantenemos una sola columna para que las órdenes se vean largas y elegantes */
+    #ai-order-list {
+        grid-template-columns: 1fr !important;
+    }
 }
