@@ -1,16 +1,16 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Sincronizada 2026)
- * Estado: Corregido renderizado de Balance y enlace de Métricas
+ * Estado: Limpieza de funciones de gráfico delegadas a chart.js
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
 import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
+import { renderEquityCurve } from './chart.js';
 
 // Instancias globales de gráficos
 let balanceChart = null; 
-let equityChart = null;
 
 const sounds = {
     buy: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
@@ -26,14 +26,12 @@ export function initializeDashboardView(initialState) {
 
     const stateToUse = initialState || currentBotState;
 
-    // 1. Inicializar Gráficos
-    initBalanceChart(); // Ya no necesita el state aquí, se actualiza en el paso 2
-    initEquityChart();
+    // 1. Inicializar Gráfico de Balance
+    initBalanceChart();
 
     // 2. Sincronización inmediata con el estado global
     if (stateToUse) {
         updateBotUI(stateToUse);
-        // Pequeño delay para asegurar que el canvas de Chart.js esté listo
         setTimeout(() => {
             updateDistributionWidget(stateToUse);
         }, 300);
@@ -43,10 +41,10 @@ export function initializeDashboardView(initialState) {
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // 4. Escuchar actualizaciones desde MetricsManager
+    // 4. Escuchar actualizaciones desde MetricsManager para el gráfico de Equity
     window.addEventListener('metricsUpdated', (e) => {
         if (e.detail) {
-            updateEquityChart(e.detail);
+            renderEquityCurve(e.detail);
         }
     });
 
@@ -120,14 +118,13 @@ function setupActionButtons() {
 }
 
 /**
- * Refresca analítica (Gráfico de Equity)
+ * Refresca analítica
  */
 async function refreshAnalytics() {
     try {
         const curveData = await fetchEquityCurveData();
         if (curveData) {
             Metrics.setAnalyticsData(curveData);
-            // El updateEquityChart se disparará vía el evento 'metricsUpdated'
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -146,7 +143,7 @@ function initBalanceChart() {
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: [100, 0], // Valores iniciales placeholder
+                data: [100, 0], 
                 backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
@@ -157,45 +154,6 @@ function initBalanceChart() {
             maintainAspectRatio: false, 
             plugins: { legend: { display: false } },
             animation: { duration: 800 }
-        }
-    });
-}
-
-function initEquityChart() {
-    const canvas = document.getElementById('equityCurveChart');
-    if (!canvas) return;
-    if (equityChart) equityChart.destroy();
-
-    const ctx = canvas.getContext('2d');
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
-    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
-
-    equityChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                data: [],
-                borderColor: '#10b981',
-                borderWidth: 2,
-                fill: true,
-                backgroundColor: gradient,
-                tension: 0.4,
-                pointRadius: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { display: false },
-                y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#64748b', font: { size: 9 } }
-                }
-            }
         }
     });
 }
@@ -215,11 +173,9 @@ export function updateDistributionWidget(state) {
         const total = usdt + btcInUsdt;
 
         if (total > 0) {
-            // Actualización del gráfico de dona
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
             balanceChart.update();
 
-            // Actualización de las barras horizontales
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');
             if (usdtBar) usdtBar.style.width = `${(usdt / total) * 100}%`;
@@ -227,21 +183,10 @@ export function updateDistributionWidget(state) {
         }
     }
     
-    // Actualización de textos
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
     if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
     if(bText) bText.innerText = btcAmount.toFixed(6);
-}
-
-/**
- * Renderiza los puntos en la curva de equity
- */
-export function updateEquityChart(data) {
-    if (!equityChart || !data || !data.points) return;
-    equityChart.data.labels = data.points.map(p => p.time);
-    equityChart.data.datasets[0].data = data.points.map(p => p.value);
-    equityChart.update();
 }
 
 function setupAnalyticsFilters() {
@@ -250,7 +195,7 @@ function setupAnalyticsFilters() {
 
     const update = () => {
         const filtered = Metrics.getFilteredData({ bot: bSel.value, param: pSel.value });
-        updateEquityChart(filtered);
+        renderEquityCurve(filtered);
     };
 
     if (bSel) bSel.onchange = update;

@@ -49,7 +49,7 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Optimizada para recibir puntos de tiempo formateados
+ * Optimizada para recibir puntos de tiempo formateados y aplicar degradado
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
@@ -65,10 +65,12 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     if (!data || data.length === 0) return;
 
-    // --- MEJORA: Lógica de Etiquetas Inteligentes ---
-    // Si la data viene procesada por getFilteredData de metricsManager, tendrá .time
-    // Si no, usamos el índice del ciclo como respaldo.
-    const labels = data.map((d, i) => d.time || `Ciclo ${i + 1}`);
+    // Normalización de datos: manejamos tanto array directo como objeto {points: []}
+    const points = Array.isArray(data) ? data : (data.points || []);
+    if (points.length === 0) return;
+
+    // --- Lógica de Etiquetas Inteligentes ---
+    const labels = points.map((d, i) => d.time || `Ciclo ${i + 1}`);
     
     let dataPoints = [];
     let labelText = '';
@@ -76,18 +78,17 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     switch (parameter) {
         case 'durationHours':
-            dataPoints = data.map(c => parseFloat(c.durationHours || 0));
+            dataPoints = points.map(c => parseFloat(c.durationHours || 0));
             labelText = 'Duración (Horas)';
             color = '#f59e0b';
             break;
         case 'initialInvestment':
-            dataPoints = data.map(c => parseFloat(c.initialInvestment || 0));
+            dataPoints = points.map(c => parseFloat(c.initialInvestment || 0));
             labelText = 'Inversión Inicial (USDT)';
             color = '#3b82f6';
             break;
         default:
-            // Soportamos tanto el objeto procesado {value} como el crudo {netProfit}
-            dataPoints = data.map(c => {
+            dataPoints = points.map(c => {
                 if (c.value !== undefined) return c.value;
                 return parseFloat(c.accumulatedProfit || c.netProfit || 0);
             });
@@ -95,9 +96,10 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#10b981';
     }
 
+    // Configuración del degradado (Sombras bajo la curva)
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, `${color}66`); // Color con opacidad 40%
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0, `${color}66`); // Opacidad inicial
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Desvanecimiento
 
     equityChartInstance = new Chart(ctx, {
         type: 'line',
@@ -115,7 +117,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 pointHoverRadius: 6,
                 tension: 0.4, 
                 fill: true,
-                pointRadius: labels.length > 50 ? 0 : 3 // Ocultar puntos si hay demasiada data
+                pointRadius: labels.length > 50 ? 0 : 3
             }]
         },
         options: {
@@ -156,7 +158,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                         font: { size: 9 },
                         maxRotation: 0,
                         autoSkip: true,
-                        maxTicksLimit: 10 // No saturar el eje X
+                        maxTicksLimit: 10
                     }
                 }
             }
