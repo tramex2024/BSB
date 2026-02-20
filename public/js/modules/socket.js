@@ -103,18 +103,25 @@ export function initSocket() {
         }
     });
 
-    // --- LOGS PRIVADOS ---
-    socket.on('bot-log', (data) => {
-        if (!data?.message) return;
-        
-        logStatus(data.message, data.type || 'info');
-        sendToDashboardTerminal(data.message, data.type || 'info');
+    // --- LOGS PRIVADOS (Versión Blindada 2026) ---
+socket.on('bot-log', (data) => {
+    if (!data?.message) return;
+    
+    // 1. Notificación Global (Barra de estado inferior)
+    logStatus(data.message, data.type || 'info');
+    
+    // 2. Terminal del Dashboard
+    sendToDashboardTerminal(data.message, data.type || 'info');
 
-        if (aiBotUI?.addLogEntry) {
-            // Se inyecta la confianza visual basada en el tipo para el log de la IA
-            aiBotUI.addLogEntry(data.message, (data.type === 'success' ? 0.9 : 0.5));
-        }
-    });
+    // 3. Flujo Neural de la pestaña AIBOT
+    // Forzamos la búsqueda del contenedor para asegurar que la pestaña está activa
+    const logContainer = document.getElementById('ai-log-container');
+    if (logContainer && aiBotUI?.addLogEntry) {
+        // Calculamos confianza visual para el estilo del borde
+        const visualConf = (data.type === 'success' || data.type === 'buy' || data.type === 'sell') ? 0.9 : 0.5;
+        aiBotUI.addLogEntry(data.message, visualConf);
+    }
+});
 
     // --- ACTUALIZACIONES DE IA Y ÓRDENES ---
     socket.on('ai-decision-update', (data) => {
