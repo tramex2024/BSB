@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Unificación de diseño visual (Card Style) para AI
+ * Actualización: Auditoría Anti-Parpadeo y Optimización de Tráfico
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -111,6 +111,7 @@ export function initSocket() {
         sendToDashboardTerminal(data.message, data.type || 'info');
 
         if (aiBotUI?.addLogEntry) {
+            // Se inyecta la confianza visual basada en el tipo para el log de la IA
             aiBotUI.addLogEntry(data.message, (data.type === 'success' ? 0.9 : 0.5));
         }
     });
@@ -118,6 +119,9 @@ export function initSocket() {
     // --- ACTUALIZACIONES DE IA Y ÓRDENES ---
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
+
+        // Auditoría: Solo disparamos la actualización si hay un cambio real
+        // para evitar que la aguja de confianza parpadee innecesariamente
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         
         if (data.message && data.message.includes('ORDER')) {
@@ -125,13 +129,18 @@ export function initSocket() {
         }
     });
 
-    // LÓGICA UNIFICADA DE ÓRDENES (ESTILO CARD)
+    // LÓGICA UNIFICADA DE ÓRDENES (OPTIMIZADA CON DEBOUNCE)
     socket.on('open-orders-update', async (data) => {
+        // Auditoría: Evitamos fetchs simultáneos que saturan el Render
+        const now = Date.now();
+        if (currentBotState._lastOrderFetch && (now - currentBotState._lastOrderFetch < 1000)) return;
+        currentBotState._lastOrderFetch = now;
+
         // 1. Refresco para AIBOT (Cajas bonitas)
         const aiOrderList = document.getElementById('ai-order-list');
         if (aiOrderList) {
             const { fetchOrders } = await import('./orders.js');
-            fetchOrders('ai', aiOrderList, true); // true = refresco silencioso
+            fetchOrders('ai', aiOrderList, true); 
         }
 
         // 2. Refresco para AUTOBOT
@@ -147,7 +156,7 @@ export function initSocket() {
     });
 
     socket.on('ai-history-update', async (trades) => {
-        // Al recibir historial, refrescamos el contenedor de la IA usando el motor de cards
+        // Al recibir historial, refrescamos el contenedor de la IA de forma silenciosa
         const aiOrderList = document.getElementById('ai-order-list');
         if (aiOrderList) {
             const { fetchOrders } = await import('./orders.js');

@@ -4,7 +4,7 @@
  * Gestión de Motor Neural en entorno simulado/independiente.
  */
 
-const aiEngine = require('../src/ai/AIEngine'); 
+const aiEngine = require('../src/au/engines/AIEngine'); // Ruta corregida a la nueva estructura
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 const MarketSignal = require('../models/MarketSignal');
@@ -161,7 +161,10 @@ const updateAIConfig = async (req, res) => {
             
             // Sincronizamos el balance virtual con la nueva inversión configurada
             // solo si no hay una operación en curso (Sandbox safety)
-            const currentBot = await Autobot.findOne({ userId }).select('ailastEntryPrice').lean();
+            const currentBot = await Autobot.findOne({ userId }).select('ailastEntryPrice aibalance').lean();
+            
+            // Lógica de Interés Compuesto: Si el balance es 0 o no existe, inicializamos.
+            // Si el balance ya existe pero no hay posición abierta, actualizamos al nuevo input.
             if (!currentBot?.ailastEntryPrice || currentBot.ailastEntryPrice === 0) {
                 updateFields.aibalance = val;
             }

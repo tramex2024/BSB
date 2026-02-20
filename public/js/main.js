@@ -1,6 +1,7 @@
 /**
  * main.js - Central Hub
  * AI Core English Version 2026
+ * Unified Global Control Logic
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -18,9 +19,11 @@ export const currentBotState = {
     price: 0,
     lstate: 'STOPPED',
     sstate: 'STOPPED',
+    aistate: 'STOPPED', // Fuente de verdad para el motor neural
     aibalance: 0,
     isRunning: false,
     stopAtCycle: false,
+    historyCount: 0,
     config: {
         symbol: 'BTC_USDT', 
         long: { amountUsdt: 0, enabled: false },
@@ -62,7 +65,8 @@ function processNextLog() {
     const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
     logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
     
-    setTimeout(() => processNextLog(), 2500);
+    // Suavizado de 1.2s para mayor dinamismo
+    setTimeout(() => processNextLog(), 1200);
 }
 
 // --- APP INITIALIZATION ---
@@ -88,7 +92,12 @@ export async function initializeTab(tabName) {
 
     try {
         const response = await fetch(`./${tabName}.html`);
-        mainContent.innerHTML = await response.text();
+        const html = await response.text();
+        
+        // Prevención de parpadeo: solo inyectar si el contenido cambia
+        if (mainContent.innerHTML !== html) {
+            mainContent.innerHTML = html;
+        }
         
         if (views[tabName]) {
             const module = await views[tabName]();
@@ -132,31 +141,88 @@ function syncAIElementsInDOM() {
     if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
     if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
     
+    const isAiRunning = currentBotState.aistate === 'RUNNING';
+
     aiBotUI.setRunningStatus(
-        currentBotState.isRunning, 
-        currentBotState.stopAtCycle || currentBotState.config.ai.stopAtCycle,
+        isAiRunning, 
+        currentBotState.config.ai.stopAtCycle,
         currentBotState.historyCount || 0
     );
 }
 
-// --- GLOBAL EVENT DELEGATION (CORREGIDO) ---
+// --- GLOBAL EVENT DELEGATION (Lógica Centralizada de IA) ---
 document.addEventListener('click', async (e) => {
-    if (e.target && e.target.id === 'btn-start-ai') {
-        // COMENTADO PARA EVITAR CONFLICTO CON aibot.js / autobot.js
-        // console.log("Clic detectado en main.js - Ignorado para evitar duplicidad.");
-        return; 
-        
-        /* Se deja el bloque original por si necesitas revertir, 
-           pero el "return" arriba evita que se ejecute la doble petición.
-        */
-        /*
-        const btnAi = e.target;
-        const isCurrentlyEnabled = currentBotState.isRunning;
+    const btnAi = e.target.closest('#btn-start-ai');
+    if (btnAi) {
+        if (btnAi.disabled) return;
+
+        const isCurrentlyEnabled = currentBotState.aistate === 'RUNNING';
         const action = isCurrentlyEnabled ? 'stop' : 'start';
-        // ... (resto del código original)
-        */
+        
+        btnAi.disabled = true;
+        const originalHTML = btnAi.innerHTML;
+        btnAi.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
+
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({ action })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                currentBotState.aistate = result.aistate;
+                currentBotState.isRunning = result.isRunning;
+                
+                aiBotUI.setRunningStatus(
+                    result.isRunning, 
+                    currentBotState.config.ai.stopAtCycle,
+                    result.historyCount || 0
+                );
+            }
+        } catch (error) {
+            console.error("❌ Global AI Toggle Error:", error);
+            btnAi.innerHTML = originalHTML;
+        } finally {
+            btnAi.disabled = false;
+        }
     }
 });
+
+// Delegación global para configuración de IA (Inputs)
+document.addEventListener('change', async (e) => {
+    if (e.target && e.target.id === 'ai-amount-usdt') {
+        const val = parseFloat(e.target.value);
+        if (isNaN(val) || val <= 0) return;
+        await saveAIConfigGlobal({ amountUsdt: val });
+    }
+    
+    if (e.target && e.target.id === 'ai-stop-at-cycle') {
+        await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
+    }
+});
+
+async function saveAIConfigGlobal(payload) {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (data.success) {
+            if (data.config) currentBotState.config.ai = { ...currentBotState.config.ai, ...data.config };
+            logStatus(data.message || "AI Config Updated", "success");
+        }
+    } catch (e) { console.error("Error saving global config", e); }
+}
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
