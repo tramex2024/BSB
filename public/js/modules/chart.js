@@ -10,13 +10,16 @@ export function initializeChart(containerId, symbol) {
     if (!container) return;
 
     container.innerHTML = '';
-    container.style.height = "500px"; 
+    
+    // --- AMPLIACIÓN HACIA ABAJO ---
+    // Aumentamos de 500px a 650px para dar más aire a los indicadores (RSI, MACD)
+    container.style.height = "650px"; 
     container.style.width = "100%";
 
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
     new TradingView.widget({
-        "autosize": true,
+        "autosize": true, // Importante: permite que el widget llene los 650px definidos arriba
         "symbol": `BITMART:${symbol}`,
         "interval": savedInterval,
         "timezone": "Etc/UTC",
@@ -32,13 +35,13 @@ export function initializeChart(containerId, symbol) {
         "support_host": "https://www.tradingview.com",
         "studies": [
             "RSI@tv-basicstudies",      
-            "BB@tv-basicstudies",        
+            "BB@tv-basicstudies",         
             "MACD@tv-basicstudies"      
         ],
         "overrides": {
             "mainSeriesProperties.style": 1,
             "paneProperties.background": "#111827",
-            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)", // Restaurado y mejorado
+            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)",
             "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.08)",
             "paneProperties.legendProperties.showStudyArguments": true,
             "paneProperties.legendProperties.showStudyTitles": true,
@@ -49,15 +52,20 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Restaurado con todas las opciones de parámetros y lógica de degradado Pro
+ * Restaurado con altura ampliada y lógica de degradado Pro
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
 
+    // --- AMPLIACIÓN DEL CONTENEDOR DE LA CURVA ---
+    // Forzamos al contenedor del canvas a tener más altura para mejor lectura
+    if (canvas.parentElement) {
+        canvas.parentElement.style.height = "450px"; 
+    }
+
     const ctx = canvas.getContext('2d');
 
-    // Destrucción limpia para evitar solapamientos
     if (equityChartInstance) {
         equityChartInstance.destroy();
         equityChartInstance = null;
@@ -65,7 +73,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     if (!data) return;
 
-    // Normalización: Soportamos array directo o el objeto {points: []} del MetricsManager
     const points = Array.isArray(data) ? data : (data.points || []);
     if (points.length === 0) return;
 
@@ -75,7 +82,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     let labelText = '';
     let color = '#10b981'; 
 
-    // RESTAURADO: Lógica completa de selección de parámetros
     switch (parameter) {
         case 'durationHours':
             dataPoints = points.map(c => parseFloat(c.durationHours || 0));
@@ -96,8 +102,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#10b981';
     }
 
-    // MEJORA: Degradado con mayor profundidad visual
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    // El degradado ahora se adapta a la nueva altura (450px)
+    const gradient = ctx.createLinearGradient(0, 0, 0, 450);
     gradient.addColorStop(0, `${color}66`); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
@@ -110,7 +116,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 data: dataPoints,
                 borderColor: color,
                 backgroundColor: gradient,
-                borderWidth: 3, // Mayor énfasis
+                borderWidth: 3,
                 pointBackgroundColor: color,
                 pointBorderColor: '#111827',
                 pointBorderWidth: 2,
@@ -122,7 +128,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: false, // Permite que use la altura que le dimos al contenedor
             interaction: {
                 intersect: false,
                 mode: 'index',
@@ -146,7 +152,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 y: {
                     beginAtZero: false,
                     grid: { 
-                        color: 'rgba(255, 255, 255, 0.12)', // Contraste corregido para visibilidad
+                        color: 'rgba(255, 255, 255, 0.12)', 
                         drawBorder: false 
                     },
                     ticks: { 
