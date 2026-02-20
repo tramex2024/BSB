@@ -103,23 +103,35 @@ export function initSocket() {
         }
     });
 
-    // --- LOGS PRIVADOS (Versión Blindada 2026) ---
+// --- LOGS PRIVADOS Y DEBUG STREAM ---
 socket.on('bot-log', (data) => {
     if (!data?.message) return;
-    
-    // 1. Notificación Global (Barra de estado inferior)
-    logStatus(data.message, data.type || 'info');
-    
-    // 2. Terminal del Dashboard
-    sendToDashboardTerminal(data.message, data.type || 'info');
 
-    // 3. Flujo Neural de la pestaña AIBOT
-    // Forzamos la búsqueda del contenedor para asegurar que la pestaña está activa
-    const logContainer = document.getElementById('ai-log-container');
-    if (logContainer && aiBotUI?.addLogEntry) {
-        // Calculamos confianza visual para el estilo del borde
-        const visualConf = (data.type === 'success' || data.type === 'buy' || data.type === 'sell') ? 0.9 : 0.5;
-        aiBotUI.addLogEntry(data.message, visualConf);
+    const msg = data.message;
+    const isDebug = msg.includes('[DEBUG]') || msg.includes('👁️');
+
+    // 1. Si es un mensaje de estado constante (DEBUG), NO lo mandamos al logStatus global
+    // para no "tapar" los mensajes de éxito/error de la barra inferior.
+    if (!isDebug) {
+        logStatus(msg, data.type || 'info');
+    }
+
+    // 2. Terminal del Dashboard (Siempre recibe todo)
+    sendToDashboardTerminal(msg, data.type || 'info');
+
+    // 3. Neural Stream (Pestaña AIBot)
+    // Buscamos el contenedor del flujo neural
+    const aiLogContainer = document.getElementById('ai-log-container');
+    if (aiLogContainer) {
+        // Limpiamos el mensaje de "Estableciendo enlace..." si existe
+        if (aiLogContainer.innerText.includes("Estableciendo enlace")) {
+            aiLogContainer.innerHTML = '';
+        }
+        
+        // Usamos el formato de confianza para el estilo visual
+        // Los logs de DEBUG los ponemos con confianza neutra (azul)
+        const visualConf = isDebug ? 0.5 : (data.type === 'success' ? 0.9 : 0.5);
+        aiBotUI.addLogEntry(msg, visualConf);
     }
 });
 
