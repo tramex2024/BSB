@@ -98,8 +98,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     // Configuración del degradado (Sombras bajo la curva)
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, `${color}66`); // Opacidad inicial
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Desvanecimiento
+    gradient.addColorStop(0, `${color}66`); // Opacidad inicial (verde suave)
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Desvanecimiento a negro/transparente
 
     equityChartInstance = new Chart(ctx, {
         type: 'line',
@@ -144,7 +144,11 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    beginAtZero: false,
+                    grid: { 
+                        color: 'rgba(255, 255, 255, 0.08)', // Líneas horizontales finas visibles
+                        drawBorder: false 
+                    },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 10 },
@@ -152,7 +156,9 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     }
                 },
                 x: {
-                    grid: { display: false },
+                    grid: { 
+                        display: false // Usualmente el grid vertical se oculta para estética limpia
+                    },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 9 },

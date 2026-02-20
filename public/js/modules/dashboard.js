@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Sincronizada 2026)
- * Estado: Limpieza de funciones de gráfico delegadas a chart.js
+ * Estado: Corregido renderizado inicial y delegación a chart.js
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -26,10 +26,10 @@ export function initializeDashboardView(initialState) {
 
     const stateToUse = initialState || currentBotState;
 
-    // 1. Inicializar Gráfico de Balance
+    // 1. Inicializar Gráfico de Balance (Dona)
     initBalanceChart();
 
-    // 2. Sincronización inmediata con el estado global
+    // 2. Sincronización inmediata con el estado global (UI y Dona)
     if (stateToUse) {
         updateBotUI(stateToUse);
         setTimeout(() => {
@@ -41,19 +41,68 @@ export function initializeDashboardView(initialState) {
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // 4. Escuchar actualizaciones desde MetricsManager para el gráfico de Equity
+    // 4. Escuchar actualizaciones desde MetricsManager
+    // Importante: No removemos el listener para que siempre esté activo
     window.addEventListener('metricsUpdated', (e) => {
         if (e.detail) {
             renderEquityCurve(e.detail);
         }
     });
 
-    // 5. Carga inicial de analítica
+    // 5. Carga inicial de analítica (Equity)
     refreshAnalytics();
 
     // 6. Estado de conexión inicial
     updateHealthStatus('health-market-ws-text', socket?.connected);
     updateHealthStatus('health-user-ws-text', socket?.connected);
+}
+
+/**
+ * Refresca analítica y fuerza el primer dibujado
+ */
+async function refreshAnalytics() {
+    try {
+        const curveData = await fetchEquityCurveData();
+        if (curveData) {
+            // Guardamos los datos en el manager
+            Metrics.setAnalyticsData(curveData);
+            
+            // FORZAMOS el renderizado inicial manualmente
+            const initialFiltered = Metrics.getFilteredData();
+            renderEquityCurve(initialFiltered);
+        }
+    } catch (e) { 
+        console.error("❌ Error en Dashboard Metrics:", e.message); 
+    }
+}
+
+/**
+ * CONFIGURACIÓN DE BOTONES
+ */
+function setupActionButtons() {
+    const panicBtn = document.getElementById('panic-btn');
+    if (panicBtn) {
+        panicBtn.onclick = async () => {
+            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
+            if (confirmPanic) await triggerPanicStop();
+        };
+    }
+
+    const btnConfigs = [
+        { id: 'austartl-btn', side: 'long' },
+        { id: 'austarts-btn', side: 'short' },
+        { id: 'btn-start-ai', side: 'ai' }
+    ];
+
+    btnConfigs.forEach(btn => {
+        const el = document.getElementById(btn.id);
+        if (el) {
+            el.onclick = async () => {
+                const isRunning = el.textContent.includes("STOP");
+                await toggleBotSideState(isRunning, btn.side);
+            };
+        }
+    });
 }
 
 /**
@@ -88,49 +137,6 @@ export function addTerminalLog(msg, type = 'info') {
     }
 }
 
-/**
- * CONFIGURACIÓN DE BOTONES
- */
-function setupActionButtons() {
-    const panicBtn = document.getElementById('panic-btn');
-    if (panicBtn) {
-        panicBtn.onclick = async () => {
-            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y se cancelarán órdenes.");
-            if (confirmPanic) await triggerPanicStop();
-        };
-    }
-
-    const btnConfigs = [
-        { id: 'austartl-btn', side: 'long' },
-        { id: 'austarts-btn', side: 'short' },
-        { id: 'btn-start-ai', side: 'ai' }
-    ];
-
-    btnConfigs.forEach(btn => {
-        const el = document.getElementById(btn.id);
-        if (el) {
-            el.onclick = async () => {
-                const isRunning = el.textContent.includes("STOP");
-                await toggleBotSideState(isRunning, btn.side);
-            };
-        }
-    });
-}
-
-/**
- * Refresca analítica
- */
-async function refreshAnalytics() {
-    try {
-        const curveData = await fetchEquityCurveData();
-        if (curveData) {
-            Metrics.setAnalyticsData(curveData);
-        }
-    } catch (e) { 
-        console.error("❌ Error en Dashboard Metrics:", e.message); 
-    }
-}
-
 // --- GESTIÓN DE GRÁFICOS ---
 
 function initBalanceChart() {
@@ -158,9 +164,6 @@ function initBalanceChart() {
     });
 }
 
-/**
- * Actualiza el círculo de balance y las barras de progreso
- */
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
     
