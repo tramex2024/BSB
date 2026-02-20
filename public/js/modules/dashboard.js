@@ -153,28 +153,37 @@ function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
 
-    if (!balanceChart) {
-        balanceChart = new Chart(canvas.getContext('2d'), {
-            type: 'doughnut',
-            data: {
-                labels: ['USDT', 'BTC'],
-                datasets: [{ 
-                    data: [100, 0], 
-                    backgroundColor: ['#10b981', '#fb923c'], 
-                    borderWidth: 0, 
-                    cutout: '75%'
-                }]
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { legend: { display: false } },
-                animation: { duration: 800 }
-            }
-        });
+    // 1. LIMPIEZA CRÍTICA: Si ya existía una instancia de una visita anterior, la destruimos.
+    // Esto libera el canvas para que Chart.js pueda dibujar en el nuevo elemento del DOM.
+    if (balanceChart) {
+        balanceChart.destroy();
+        balanceChart = null; 
     }
 
-    // Si ya tenemos balance en el estado global, lo aplicamos de inmediato
+    const ctx = canvas.getContext('2d');
+    
+    // 2. Creamos la nueva instancia
+    balanceChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['USDT', 'BTC'],
+            datasets: [{ 
+                data: [100, 0], // Valores temporales
+                backgroundColor: ['#10b981', '#fb923c'], 
+                borderWidth: 0, 
+                cutout: '75%'
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { display: false } },
+            animation: { duration: 400 } // Animación más rápida para que se sienta fluido al volver
+        }
+    });
+
+    // 3. RECUPERACIÓN INMEDIATA: 
+    // Si ya tenemos balances guardados en el estado global, los pintamos DE UNA VEZ.
     if (currentBotState.lastAvailableUSDT || currentBotState.lastAvailableBTC) {
         updateDistributionWidget(currentBotState);
     }
