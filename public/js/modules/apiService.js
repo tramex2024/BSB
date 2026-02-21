@@ -129,7 +129,7 @@ export function getBotConfiguration() {
  */
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
-    
+    console.log("DATOS A ENVIAR:", JSON.stringify(config, null, 2));
     // Validación mínima para no romper el exchange
     if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
         displayMessage("⚠️ El monto mínimo es $5", 'error');
