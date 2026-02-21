@@ -65,22 +65,25 @@ function handleMetricsUpdate(e) {
  */
 async function refreshAnalytics() {
     try {
-        const initialPoints = Metrics.getFilteredData();
-        if (initialPoints?.points?.length > 0) {
-            renderEquityCurve(initialPoints);
-        }
-
-        const curveData = await fetchEquityCurveData();
-        if (curveData && Array.isArray(curveData) && curveData.length > 0) {
-            Metrics.setAnalyticsData(curveData);
+        // 1. Intentar cargar desde el servidor primero
+        const response = await fetchEquityCurveData();
+        
+        // Verificamos la nueva estructura del backend { success: true, data: [...] }
+        if (response && response.success && Array.isArray(response.data)) {
+            // 2. Guardar en el gestor de métricas
+            Metrics.setAnalyticsData(response.data);
             
-            setTimeout(() => {
-                const updatedData = Metrics.getFilteredData();
-                renderEquityCurve(updatedData);
-            }, 300);
+            // 3. Renderizar inmediatamente los datos filtrados
+            const filtered = Metrics.getFilteredData();
+            renderEquityCurve(filtered);
+            
+            addTerminalLog("ANALYTICS: CURVA DE EQUIDAD ACTUALIZADA", 'success');
+        } else {
+            addTerminalLog("ANALYTICS: SIN DATOS HISTÓRICOS", 'warning');
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
+        addTerminalLog("ERROR AL CARGAR ANALÍTICA", 'error');
     }
 }
 

@@ -7,27 +7,39 @@ const mongoose = require('mongoose');
 const TradeCycle = require('../models/TradeCycle');
 
 /**
- * 1. OBTENER KPIs de Ciclos Cerrados (Win Rate, Profit Medio, etc.)
+ * 1. OBTENER KPIs de Ciclos (Corregido: Soporte para 'all' y documentos sin status)
  */
 exports.getCycleKpis = async (req, res) => {
     const userId = req.user.id;
-    const strategyFilter = req.query.strategy || 'Long';
+    const strategyFilter = req.query.strategy || 'all';
 
     try {
+        // 1. Construir el objeto de match dinámicamente
+        const matchStage = {
+            userId: new mongoose.Types.ObjectId(userId)
+        };
+
+        // 2. Si no es 'all', normalizamos y filtramos por estrategia
+        if (strategyFilter !== 'all') {
+            const formattedStrategy = strategyFilter.charAt(0).toUpperCase() + strategyFilter.slice(1).toLowerCase();
+            matchStage.strategy = formattedStrategy;
+        }
+
+        // NOTA: Hemos omitido status: 'COMPLETED' para asegurar que lea tus datos actuales.
+        // Si en el futuro agregas el campo status a la DB, puedes volver a incluirlo aquí.
+
         const kpis = await TradeCycle.aggregate([
-            {
-                $match: {
-                    userId: new mongoose.Types.ObjectId(userId), 
-                    strategy: strategyFilter,
-                    status: 'COMPLETED'
-                }
-            },
+            { $match: matchStage },
             {
                 $group: {
                     _id: null,
                     totalCycles: { $sum: 1 }, 
                     averageProfitPercentage: { $avg: '$profitPercentage' }, 
-                    totalNetProfit: { $sum: '$netProfit' }
+                    totalNetProfit: { $sum: '$netProfit' },
+                    // Calculamos ciclos ganadores para el Win Rate
+                    winningCycles: {
+                        $sum: { $cond: [{ $gt: ["$netProfit", 0] }, 1, 0] }
+                    }
                 }
             },
             {
@@ -35,12 +47,20 @@ exports.getCycleKpis = async (req, res) => {
                     _id: 0,
                     totalCycles: 1,
                     averageProfitPercentage: { $round: ["$averageProfitPercentage", 2] },
-                    totalNetProfit: { $round: ["$totalNetProfit", 2] }
+                    totalNetProfit: { $round: ["$totalNetProfit", 2] },
+                    winRate: { 
+                        $multiply: [ { $divide: ["$winningCycles", "$totalCycles"] }, 100 ] 
+                    }
                 }
             }
         ]);
         
-        const result = kpis.length > 0 ? kpis[0] : { totalCycles: 0, averageProfitPercentage: 0, totalNetProfit: 0 };
+        const result = kpis.length > 0 ? kpis[0] : { 
+            totalCycles: 0, 
+            averageProfitPercentage: 0, 
+            totalNetProfit: 0,
+            winRate: 0 
+        };
 
         res.json({ success: true, data: result }); 
 
@@ -55,17 +75,26 @@ exports.getCycleKpis = async (req, res) => {
  */
 exports.getEquityCurveData = async (req, res) => {
     const userId = req.user.id;
-    const strategyFilter = req.query.strategy || 'Long'; 
+    let strategyFilter = req.query.strategy; 
 
     try {
-        const cycles = await TradeCycle.find({
-            userId: new mongoose.Types.ObjectId(userId),
-            strategy: strategyFilter,
-            status: 'COMPLETED'
-        })
-        .sort({ endTime: 1 })
-        .select('endTime netProfit')
-        .lean();
+        // 1. Construcción dinámica del filtro
+        const query = { 
+            userId: new mongoose.Types.ObjectId(userId)
+            // Quitamos status: 'COMPLETED' temporalmente o lo hacemos flexible
+        };
+
+        // 2. Lógica para "all" y normalización de Mayúsculas
+        if (strategyFilter && strategyFilter !== 'all') {
+            // Convierte 'long' en 'Long', 'short' en 'Short', etc.
+            const formattedStrategy = strategyFilter.charAt(0).toUpperCase() + strategyFilter.slice(1).toLowerCase();
+            query.strategy = formattedStrategy;
+        }
+
+        const cycles = await TradeCycle.find(query)
+            .sort({ endTime: 1 })
+            .select('endTime netProfit strategy') // Añadimos strategy para debug
+            .lean();
         
         if (!cycles || cycles.length === 0) {
             return res.json({ success: true, data: [] });
@@ -76,8 +105,9 @@ exports.getEquityCurveData = async (req, res) => {
             cumulativeProfit += (cycle.netProfit || 0);
             return {
                 timestamp: cycle.endTime,
-                profit: parseFloat((cycle.netProfit || 0).toFixed(2)),
-                cumulative: parseFloat(cumulativeProfit.toFixed(2))
+                strategy: cycle.strategy, // Útil para el frontend
+                profit: parseFloat((cycle.netProfit || 0).toFixed(4)),
+                cumulative: parseFloat(cumulativeProfit.toFixed(4))
             };
         });
 
