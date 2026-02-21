@@ -153,7 +153,7 @@ export async function sendConfigToBackend() {
     try {
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
-            body: JSON.stringify({ config })
+            body: JSON.stringify( config )
         });
 
         if (data && data.success) {
