@@ -1,7 +1,7 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
  * Estado: Sincronizado con validaciones de AI y Autobot.
- * Actualización: Escucha activa de inputs de presupuesto.
+ * Actualización: Filtros vinculados a MetricsManager.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -40,7 +40,7 @@ export function initializeDashboardView(initialState) {
 
     // 3. Configurar Eventos y Botones Locales
     setupActionButtons();
-    setupAnalyticsFilters();
+    setupAnalyticsFilters(); // <--- Aquí se vinculan los selectores
     
     // 4. Gestión de eventos de Metrics (Evita duplicados)
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
@@ -65,17 +65,11 @@ function handleMetricsUpdate(e) {
  */
 async function refreshAnalytics() {
     try {
-        // 1. Intentar cargar desde el servidor primero
         const response = await fetchEquityCurveData();
         
-        // Verificamos la nueva estructura del backend { success: true, data: [...] }
         if (response && response.success && Array.isArray(response.data)) {
-            // 2. Guardar en el gestor de métricas
+            // 1. Enviamos los TradeCycles al manager
             Metrics.setAnalyticsData(response.data);
-            
-            // 3. Renderizar inmediatamente los datos filtrados
-            const filtered = Metrics.getFilteredData();
-            renderEquityCurve(filtered);
             
             addTerminalLog("ANALYTICS: CURVA DE EQUIDAD ACTUALIZADA", 'success');
         } else {
@@ -84,6 +78,28 @@ async function refreshAnalytics() {
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
         addTerminalLog("ERROR AL CARGAR ANALÍTICA", 'error');
+    }
+}
+
+/**
+ * CONFIGURACIÓN DE FILTROS DE ANALÍTICA (Long, Short, AI)
+ * Esta función conecta los selectores HTML con el MetricsManager
+ */
+function setupAnalyticsFilters() {
+    const bSel = document.getElementById('chart-bot-selector');
+    const pSel = document.getElementById('chart-param-selector');
+
+    if (bSel) {
+        bSel.onchange = () => {
+            console.log(`🔍 Filtrando Dashboard por: ${bSel.value}`);
+            Metrics.setBotFilter(bSel.value); // Esto actualiza KPIs y dispara el evento del gráfico
+        };
+    }
+
+    if (pSel) {
+        pSel.onchange = () => {
+            Metrics.setChartParameter(pSel.value); // Esto actualiza el eje Y y dispara el evento
+        };
     }
 }
 
@@ -99,7 +115,6 @@ function setupActionButtons() {
         };
     }
 
-    // Mapeo de botones a sus respectivas estrategias
     const btnConfigs = [
         { id: 'austartl-btn', side: 'long' },
         { id: 'austarts-btn', side: 'short' },
@@ -120,34 +135,25 @@ function setupActionButtons() {
         }
     });
 
-    // --- SINCRONIZACIÓN DE INPUTS DE PRESUPUESTO EN DASHBOARD ---
-    // Detectamos cambios en los inputs de "Total Budget" del Dashboard
     const quickInputs = [
         { id: 'auamountl-usdt', label: 'LONG' },
         { id: 'auamounts-usdt', label: 'SHORT' },
-        { id: 'auamountai-usdt', label: 'AI' }, // ID alternativo según tu HTML
-        { id: 'ai-amount-usdt', label: 'AI' }   // ID alternativo común
+        { id: 'auamountai-usdt', label: 'AI' }
     ];
 
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
             el.onchange = async () => {
-                console.log(`💾 Dashboard: Guardando nuevo presupuesto para ${input.label}...`);
                 const res = await sendConfigToBackend();
                 if (res && res.success) {
                     addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
-                } else {
-                    addTerminalLog(`ERROR AL GUARDAR ${input.label} BUDGET`, 'error');
                 }
             };
         }
     });
 }
 
-/**
- * AGREGAR LOG AL TERMINAL
- */
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
     if (!logContainer) return;
@@ -163,7 +169,7 @@ export function addTerminalLog(msg, type = 'info') {
     };
 
     const logEntry = document.createElement('div');
-    logEntry.className = `flex gap-2 py-1 px-2 border-l-2 bg-white/5 mb-1 text-[10px] font-mono transition-all duration-500 rounded-r animate-fadeIn ${colors[type] || colors.info}`;
+    logEntry.className = `flex gap-2 py-1 px-2 border-l-2 bg-white/5 mb-1 text-[10px] font-mono rounded-r animate-fadeIn ${colors[type] || colors.info}`;
     
     logEntry.innerHTML = `
         <span class="opacity-30 font-bold">[${timestamp}]</span>
@@ -176,8 +182,6 @@ export function addTerminalLog(msg, type = 'info') {
         logContainer.lastChild.remove();
     }
 }
-
-// --- GESTIÓN DE GRÁFICOS ---
 
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
@@ -240,27 +244,10 @@ export function updateDistributionWidget(state) {
             const usdtPct = (usdt / total) * 100;
             const btcPct = (btcInUsdt / total) * 100;
 
-            if (usdtBar) {
-                usdtBar.style.width = `${usdtPct}%`;
-            }
-            if (btcBar) {
-                btcBar.style.width = `${btcPct}%`;
-            }
+            if (usdtBar) usdtBar.style.width = `${usdtPct}%`;
+            if (btcBar) btcBar.style.width = `${btcPct}%`;
         }
     }
-}
-
-function setupAnalyticsFilters() {
-    const bSel = document.getElementById('chart-bot-selector');
-    const pSel = document.getElementById('chart-param-selector');
-
-    const update = () => {
-        const filtered = Metrics.getFilteredData({ bot: bSel.value, param: pSel.value });
-        renderEquityCurve(filtered);
-    };
-
-    if (bSel) bSel.onchange = update;
-    if (pSel) pSel.onchange = update;
 }
 
 function updateHealthStatus(textId, isOnline) {
