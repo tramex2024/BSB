@@ -126,10 +126,15 @@ export function getBotConfiguration() {
             enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-            amountUsdt:      getNum('ai-amount-usdt', 'ai.amountUsdt', MINIMOS.amount) || getNum('auamountai-usdt', 'ai.amountUsdt', MINIMOS.amount),
-            stopAtCycle:     getCheck('ai-stop-at-cycle', 'ai.stopAtCycle') || getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle'),
-            enabled:         currentBotState.config?.ai?.enabled || false
-        }
+    // Intentamos capturar desde el ID del Dashboard o el ID de la pestaña AI
+    amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
+                getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
+                
+    stopAtCycle: getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || 
+                 getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
+                 
+    enabled: currentBotState.config?.ai?.enabled || false
+}
     };
 }
 
