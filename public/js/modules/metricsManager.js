@@ -95,30 +95,37 @@ export function getFilteredData(filter) {
     const targetFilter = filter?.bot || currentBotFilter;
     const targetParam = filter?.param || currentChartParameter;
 
-    // CORRECCIÓN DE FILTRO: Mismo proceso de limpieza para el gráfico
-    const cleanFilter = targetFilter.replace('strategy_', '').toLowerCase();
-
+    // 1. Filtrado Insensible a Mayúsculas
     const filtered = cycleHistoryData.filter(c => {
         if (targetFilter === 'all') return true;
-        return c.strategy?.toLowerCase() === cleanFilter;
+        // Comparamos long vs Long de forma segura
+        return c.strategy?.toLowerCase() === targetFilter.toLowerCase();
     });
 
-    // Ordenar por fecha para que la línea no salte de atrás hacia adelante
+    // 2. ORDENAR por fecha (Crucial para que la línea no esté en 0 o saltando)
     filtered.sort((a, b) => a.processedDate - b.processedDate);
 
     let accumulated = 0;
-    const points = filtered.map(cycle => {
-        accumulated += cycle.netProfit;
-        const date = cycle.processedDate;
-        const timeLabel = !isNaN(date.getTime()) 
-            ? `${date.getDate()}/${date.getMonth()+1} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
-            : "---";
+    
+    // 3. Crear puntos (Empezando desde 0 si hay datos)
+    const points = [];
+    if (filtered.length > 0) {
+        points.push({ time: 'Start', value: 0 }); // Punto inicial
+        
+        filtered.forEach(cycle => {
+            accumulated += cycle.netProfit;
+            
+            const date = cycle.processedDate;
+            const timeLabel = !isNaN(date.getTime()) 
+                ? `${date.getDate()}/${date.getMonth()+1} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
+                : "---";
 
-        return {
-            time: timeLabel,
-            value: targetParam === 'accumulatedProfit' ? parseFloat(accumulated.toFixed(4)) : cycle.profitPercentage
-        };
-    });
+            points.push({
+                time: timeLabel,
+                value: targetParam === 'accumulatedProfit' ? parseFloat(accumulated.toFixed(4)) : cycle.profitPercentage
+            });
+        });
+    }
 
     return { points };
 }

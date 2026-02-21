@@ -12,14 +12,13 @@ export function initializeChart(containerId, symbol) {
     container.innerHTML = '';
     
     // --- AMPLIACIÓN HACIA ABAJO ---
-    // Aumentamos de 500px a 650px para dar más aire a los indicadores (RSI, MACD)
     container.style.height = "650px"; 
     container.style.width = "100%";
 
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
     new TradingView.widget({
-        "autosize": true, // Importante: permite que el widget llene los 650px definidos arriba
+        "autosize": true, 
         "symbol": `BITMART:${symbol}`,
         "interval": savedInterval,
         "timezone": "Etc/UTC",
@@ -35,7 +34,7 @@ export function initializeChart(containerId, symbol) {
         "support_host": "https://www.tradingview.com",
         "studies": [
             "RSI@tv-basicstudies",      
-            "BB@tv-basicstudies",         
+            "BB@tv-basicstudies",          
             "MACD@tv-basicstudies"      
         ],
         "overrides": {
@@ -52,14 +51,13 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Restaurado con altura ampliada y lógica de degradado Pro
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
+    // Usamos el ID exacto que tienes en tu HTML
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
 
-    // --- AMPLIACIÓN DEL CONTENEDOR DE LA CURVA ---
-    // Forzamos al contenedor del canvas a tener más altura para mejor lectura
+    // --- AJUSTE DE ALTURA ---
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
@@ -71,11 +69,12 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         equityChartInstance = null;
     }
 
-    if (!data) return;
+    // Si no hay datos, salimos para evitar errores de renderizado
+    if (!data || (Array.isArray(data) && data.length === 0) || (data.points && data.points.length === 0)) {
+        return;
+    }
 
     const points = Array.isArray(data) ? data : (data.points || []);
-    if (points.length === 0) return;
-
     const labels = points.map((d, i) => d.time || `Ciclo ${i + 1}`);
     
     let dataPoints = [];
@@ -94,15 +93,15 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#3b82f6';
             break;
         default:
+            // OPTIMIZACIÓN: Priorizamos 'value' que es lo que envía el metricsManager corregido
             dataPoints = points.map(c => {
-                if (c.value !== undefined) return c.value;
+                if (c.value !== undefined) return parseFloat(c.value);
                 return parseFloat(c.accumulatedProfit || c.netProfit || 0);
             });
             labelText = 'Capital Acumulado (USDT)';
             color = '#10b981';
     }
 
-    // El degradado ahora se adapta a la nueva altura (450px)
     const gradient = ctx.createLinearGradient(0, 0, 0, 450);
     gradient.addColorStop(0, `${color}66`); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
@@ -128,7 +127,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false, // Permite que use la altura que le dimos al contenedor
+            maintainAspectRatio: false,
             interaction: {
                 intersect: false,
                 mode: 'index',
@@ -144,7 +143,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     displayColors: false,
                     padding: 10,
                     callbacks: {
-                        label: (context) => ` ${context.parsed.y.toFixed(2)} USDT`
+                        label: (context) => ` ${context.parsed.y.toFixed(4)} USDT`
                     }
                 }
             },
@@ -152,13 +151,13 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 y: {
                     beginAtZero: false,
                     grid: { 
-                        color: 'rgba(255, 255, 255, 0.12)', 
+                        color: 'rgba(255, 255, 255, 0.08)', 
                         drawBorder: false 
                     },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 10, family: 'monospace' },
-                        callback: (value) => `$${value}` 
+                        callback: (value) => `$${value.toFixed(2)}` 
                     }
                 },
                 x: {
@@ -168,7 +167,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                         font: { size: 9 },
                         maxRotation: 0,
                         autoSkip: true,
-                        maxTicksLimit: 10
+                        maxTicksLimit: 8
                     }
                 }
             }
