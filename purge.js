@@ -1,83 +1,58 @@
 const mongoose = require('mongoose');
-const axios = require('axios');
 
-async function reach250Velas() {
+async function migrateCycles() {
+    // Tu URI de conexión
     const uri = 'mongodb+srv://tramex2024:vIHKxhFCqFOXC4tf@cluster0.y0qkdw4.mongodb.net/bsb?retryWrites=true&w=majority&appName=Cluster0';
-    const SYMBOL = 'BTC_USDT';
+    
+    // DATOS DE IDENTIDAD (Auditados)
+    const TARGET_USER_ID = new mongoose.Types.ObjectId("69880862881f8789a039d0a3");
+    const TARGET_BOT_ID = new mongoose.Types.ObjectId("690fd622ced7eb324d1ffa2f");
 
     try {
-        console.log("🔗 Conectando a MongoDB...");
+        console.log("🔗 Conectando a MongoDB para migración de ciclos...");
         await mongoose.connect(uri);
-        const signalsCollection = mongoose.connection.collection('marketsignals');
+        const cyclesCollection = mongoose.connection.collection('tradecycles');
 
-        // 1. PRIMER LLAMADO: Las 200 más recientes
-        console.log(`📡 Solicitando bloque 1 (Recientes)...`);
-        const res1 = await axios.get('https://api-cloud.bitmart.com/spot/quotation/v3/klines', {
-            params: { symbol: SYMBOL, limit: 200, step: 1 },
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+        // 1. Auditamos cuántos ciclos hay sin dueño para este bot
+        const count = await cyclesCollection.countDocuments({ 
+            autobotId: TARGET_BOT_ID,
+            userId: { $exists: false } 
         });
-        const klines1 = res1.data.data;
 
-        // 2. SEGUNDO LLAMADO: Basado en el timestamp de la más antigua del bloque anterior
-        // Usamos el parámetro 'before' con el timestamp de la primera vela recibida
-        const oldestTimestamp = klines1[0][0]; 
-        console.log(`📡 Solicitando bloque 2 (Históricas para completar)...`);
-        const res2 = await axios.get('https://api-cloud.bitmart.com/spot/quotation/v3/klines', {
-            params: { 
-                symbol: SYMBOL, 
-                limit: 100, 
-                step: 1, 
-                before: oldestTimestamp 
-            },
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
-        const klines2 = res2.data.data;
+        if (count === 0) {
+            console.log("⚠️ No se encontraron ciclos huérfanos para este bot. Tal vez ya fueron actualizados.");
+        } else {
+            console.log(`🔎 Encontrados ${count} ciclos para reparar.`);
 
-        // 3. COMBINAR Y FORMATEAR
-        const allKlines = [...klines1, ...klines2];
-        const formatted = allKlines.map(k => ({
-            timestamp: parseInt(k[0]) * 1000,
-            open: parseFloat(k[1]),
-            high: parseFloat(k[2]),
-            low: parseFloat(k[3]),
-            close: parseFloat(k[4]),
-            volume: parseFloat(k[5])
-        }));
+            // 2. Ejecutamos la migración
+            // $set: añade el userId
+            // También podemos aprovechar para asegurar que el status sea COMPLETED
+            const result = await cyclesCollection.updateMany(
+                { 
+                    autobotId: TARGET_BOT_ID,
+                    userId: { $exists: false } 
+                },
+                { 
+                    $set: { 
+                        userId: TARGET_USER_ID,
+                        status: 'COMPLETED'
+                    } 
+                }
+            );
 
-        // 4. LIMPIEZA DE DUPLICADOS Y RECORTE A 250
-        const uniqueMap = new Map();
-        formatted.forEach(v => uniqueMap.set(v.timestamp, v));
-        
-        const finalHistory = Array.from(uniqueMap.values())
-            .sort((a, b) => a.timestamp - b.timestamp)
-            .slice(-250); // Tomamos las 250 más nuevas de este conjunto
-
-        console.log(`✅ Procesadas ${finalHistory.length} velas únicas.`);
-
-        // 5. ACTUALIZAR DB
-        await signalsCollection.updateOne(
-            { symbol: SYMBOL },
-            { 
-                $set: { 
-                    history: finalHistory,
-                    lastUpdate: new Date()
-                } 
-            },
-            { upsert: true }
-        );
-
-        console.log(`\n🚀 OBJETIVO ALCANZADO`);
-        console.log(`---------------------------------`);
-        console.log(`- Total final en DB: ${finalHistory.length}`);
-        console.log(`- Rango: ${new Date(finalHistory[0].timestamp).toLocaleString()} a ${new Date(finalHistory[finalHistory.length-1].timestamp).toLocaleString()}`);
-        console.log(`---------------------------------`);
+            console.log(`---------------------------------`);
+            console.log(`✅ MIGRACIÓN EXITOSA`);
+            console.log(`- Documentos modificados: ${result.modifiedCount}`);
+            console.log(`- Vinculados al User: ${TARGET_USER_ID}`);
+            console.log(`---------------------------------`);
+        }
 
     } catch (err) {
-        console.error("❌ Error:", err.message);
+        console.error("❌ Error en la migración:", err.message);
     } finally {
         await mongoose.disconnect();
         process.exit();
     }
 }
 
-reach250Velas();
+migrateCycles();
