@@ -1,6 +1,7 @@
 /**
  * autobot.js - Core Logic for Trading Tabs
  * Integration: Strategy-based Filtering 2026 - FULL VERSION
+ * Actualización: Validación preventiva de montos técnicos y semáforo de edición
  */
 
 import { initializeChart } from './chart.js';
@@ -13,12 +14,13 @@ import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
 const MIN_USDT_AMOUNT = 6.00;
+const MIN_TECH_VALUE = 0.1; // Protección para price_var, size_var, etc.
+
 let currentStrategyTab = 'all'; 
 let configDebounceTimeout = null;
 
 /**
  * Valida que los montos cumplan con el mínimo del exchange
- * REINTEGRADO: Crucial para el inicio de las estrategias
  */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
@@ -30,12 +32,10 @@ function validateSideInputs(side) {
         if (!input) return;
         const val = parseFloat(input.value);
         if (isNaN(val) || val < MIN_USDT_AMOUNT) {
-    input.classList.add('border-red-500', 'animate-shake');
-    // Quitamos la clase después de que termine la animación (500ms) 
-    // para que pueda volver a sonar si el usuario falla otra vez.
-    setTimeout(() => input.classList.remove('animate-shake'), 500);
-    isValid = false;
-} else {
+            input.classList.add('border-red-500', 'animate-shake');
+            setTimeout(() => input.classList.remove('animate-shake'), 500);
+            isValid = false;
+        } else {
             input.classList.remove('border-red-500', 'animate-shake');
         }
     });
@@ -44,7 +44,7 @@ function validateSideInputs(side) {
 
 /**
  * Escucha cambios en los inputs (Dashboard + Tabs)
- * REINTEGRADO: Sin esto el bot no guarda los cambios de configuración
+ * REINTEGRADO: Con validación de seguridad contra ceros accidentales
  */
 function setupConfigListeners() {
     const configIds = [
@@ -61,13 +61,28 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
+            // Marcamos que este input está bajo edición activa
             activeEdits[id] = Date.now();
 
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
+            
             configDebounceTimeout = setTimeout(async () => {
-                if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
+                const val = parseFloat(el.value);
+
+                // 🛡️ PROTECCIÓN CRÍTICA: 
+                // Si no es un checkbox y el valor es basura, 0 o menor al mínimo técnico, abortamos el envío
+                if (el.type !== 'checkbox') {
+                    if (el.value === "" || isNaN(val)) return;
+                    
+                    // Si es un campo de configuración técnica (steps, vars, increments) y es < 0.1
+                    if (!id.includes('amount') && !id.includes('purchase') && val < MIN_TECH_VALUE) {
+                        console.warn(`⚠️ Valor demasiado bajo para ${id}, no se enviará.`);
+                        return;
+                    }
+                }
 
                 try {
+                    // El apiService ahora usará el semáforo para bloquear al socket
                     await sendConfigToBackend();
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
@@ -93,7 +108,6 @@ export async function initializeAutobotView() {
         const btn = document.getElementById(id);
         if (!btn) return;
 
-        // Clonamos para limpiar eventos viejos
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
 
@@ -127,7 +141,6 @@ export async function initializeAutobotView() {
         });
     };
 
-    // Inicializar botones
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
     setupSideBtn('austartai-btn', 'ai'); 
@@ -136,7 +149,6 @@ export async function initializeAutobotView() {
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializar Gráfico
     const chartContainer = document.getElementById('au-tvchart');
     if (chartContainer) {
         setTimeout(() => {
@@ -152,10 +164,6 @@ export async function initializeAutobotView() {
     }
 }
 
-/**
- * Gestión de pestañas de órdenes por ESTRATEGIA
- * NUEVA LÓGICA: Ahora usa data-strategy y los nuevos filtros.
- */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     if (!orderTabs.length || !container) return;
@@ -181,7 +189,6 @@ function setupOrderTabs(container) {
         };
     });
 
-    // Carga inicial
     setActiveTabStyle('tab-all-strategies');
     fetchOrders('all', container);
 }

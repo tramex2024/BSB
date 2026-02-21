@@ -1,12 +1,13 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Restauración completa con inyección de renderizado de balance
+ * Actualización: Blindaje contra rebote de datos durante edición activa
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { updateBotUI } from './uiManager.js'; 
 import { formatCurrency } from './ui/formatters.js';
+import { activeEdits } from './ui/controls.js'; // Importamos el registro de ediciones
 
 export let socket = null;
 let connectionWatchdog = null;
@@ -77,7 +78,6 @@ export function initSocket() {
                 currentBotState.lastPrice = newPrice;
             }
 
-            // [INYECCIÓN] Actualizar visualización de balance si estamos en Dashboard
             if (document.getElementById('balanceDonutChart')) {
                 const { updateDistributionWidget } = await import('./dashboard.js');
                 updateDistributionWidget(currentBotState);
@@ -85,15 +85,32 @@ export function initSocket() {
         }
     });
 
-    // --- ESTADO GLOBAL DEL BOT ---
+    // --- ESTADO GLOBAL DEL BOT (CORREGIDO CON ESCUDO) ---
     socket.on('bot-state-update', async (state) => {
         if (!state) return;
 
-        if (state.config) {
-            currentBotState.config = { ...currentBotState.config, ...state.config };
+        // 🛡️ ESCUDO TÉRMICO: Verificamos si hay alguna edición activa en los últimos 2 segundos
+        const now = Date.now();
+        const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
+
+        if (isEditing) {
+            // Si el usuario está editando, solo actualizamos datos de balance y estados, pero NO la config
+            console.log("🛡️ Socket: Edición activa detectada. Protegiendo inputs...");
+            
+            // Actualizamos balances sin tocar 'config' para evitar el "salto a cero"
+            currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
+            currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
+            currentBotState.lstate = state.lstate || currentBotState.lstate;
+            currentBotState.sstate = state.sstate || currentBotState.sstate;
+            currentBotState.aistate = state.aistate || currentBotState.aistate;
+        } else {
+            // Si NO está editando, sincronizamos todo normalmente
+            if (state.config) {
+                currentBotState.config = { ...currentBotState.config, ...state.config };
+            }
+            Object.assign(currentBotState, state);
+            updateBotUI(currentBotState);
         }
-        
-        Object.assign(currentBotState, state);
 
         // Sincronización con MetricsManager
         if (state.history || state.cycleHistory) {
@@ -108,9 +125,7 @@ export function initSocket() {
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
 
-        updateBotUI(currentBotState);
-
-        // [INYECCIÓN] Forzar actualización de Dona y Rayitas con nuevos balances
+        // Forzar actualización de Dona y Rayitas con nuevos balances (Siempre se hace)
         if (document.getElementById('balanceDonutChart')) {
             const { updateDistributionWidget } = await import('./dashboard.js');
             updateDistributionWidget(currentBotState);
@@ -128,21 +143,15 @@ export function initSocket() {
     // --- LOGS PRIVADOS Y DEBUG STREAM ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
-
         const msg = data.message;
         const isDebug = msg.includes('[DEBUG]') || msg.includes('👁️');
 
-        if (!isDebug) {
-            logStatus(msg, data.type || 'info');
-        }
-
+        if (!isDebug) logStatus(msg, data.type || 'info');
         sendToDashboardTerminal(msg, data.type || 'info');
 
         const aiLogContainer = document.getElementById('ai-log-container');
         if (aiLogContainer) {
-            if (aiLogContainer.innerText.includes("Estableciendo enlace")) {
-                aiLogContainer.innerHTML = '';
-            }
+            if (aiLogContainer.innerText.includes("Estableciendo enlace")) aiLogContainer.innerHTML = '';
             const visualConf = isDebug ? 0.5 : (data.type === 'success' ? 0.9 : 0.5);
             aiBotUI.addLogEntry(msg, visualConf);
         }
@@ -152,13 +161,11 @@ export function initSocket() {
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
-        
         if (data.message && data.message.includes('ORDER')) {
             sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
         }
     });
 
-    // LÓGICA DE ÓRDENES CON DEBOUNCE
     socket.on('open-orders-update', async (data) => {
         const now = Date.now();
         if (currentBotState._lastOrderFetch && (now - currentBotState._lastOrderFetch < 1000)) return;
