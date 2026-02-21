@@ -1,8 +1,9 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
  * Estado: Sincronizado con validaciones de AI y Autobot.
+ * Actualización: Escucha activa de inputs de presupuesto.
  */
-import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
+import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
 import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
@@ -84,7 +85,7 @@ async function refreshAnalytics() {
 }
 
 /**
- * CONFIGURACIÓN DE BOTONES (Long, Short, AI)
+ * CONFIGURACIÓN DE BOTONES (Long, Short, AI) Y INPUTS RÁPIDOS
  */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
@@ -106,14 +107,36 @@ function setupActionButtons() {
         const el = document.getElementById(btn.id);
         if (el) {
             el.onclick = async () => {
-                // Determinamos si está corriendo basándonos en el texto o el estado global
                 let isRunning = false;
                 if (btn.side === 'long') isRunning = currentBotState.lstate !== 'STOPPED';
                 else if (btn.side === 'short') isRunning = currentBotState.sstate !== 'STOPPED';
                 else if (btn.side === 'ai') isRunning = currentBotState.aistate === 'RUNNING';
 
-                // Llamamos a la función centralizada de apiService.js
                 await toggleBotSideState(isRunning, btn.side);
+            };
+        }
+    });
+
+    // --- SINCRONIZACIÓN DE INPUTS DE PRESUPUESTO EN DASHBOARD ---
+    // Detectamos cambios en los inputs de "Total Budget" del Dashboard
+    const quickInputs = [
+        { id: 'auamountl-usdt', label: 'LONG' },
+        { id: 'auamounts-usdt', label: 'SHORT' },
+        { id: 'auamountai-usdt', label: 'AI' }, // ID alternativo según tu HTML
+        { id: 'ai-amount-usdt', label: 'AI' }   // ID alternativo común
+    ];
+
+    quickInputs.forEach(input => {
+        const el = document.getElementById(input.id);
+        if (el) {
+            el.onchange = async () => {
+                console.log(`💾 Dashboard: Guardando nuevo presupuesto para ${input.label}...`);
+                const res = await sendConfigToBackend();
+                if (res && res.success) {
+                    addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
+                } else {
+                    addTerminalLog(`ERROR AL GUARDAR ${input.label} BUDGET`, 'error');
+                }
             };
         }
     });
