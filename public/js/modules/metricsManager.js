@@ -7,26 +7,44 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * Normaliza y almacena exclusivamente datos de TradeCycles
+ * metricsManager.js - Versión Corregida para Renderizado
  */
 export function setAnalyticsData(data) {
-    // 1. Extraer el array de datos con seguridad
+    // 1. Extraer el array de datos (Soporta el formato {success: true, data: [...]})
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     
-    // 2. Limpiar y normalizar: Aseguramos que solo procesamos ciclos con netProfit
-    cycleHistoryData = rawData.filter(c => c && c.netProfit !== undefined).map(cycle => ({
-        ...cycle,
-        netProfit: parseFloat(cycle.netProfit || 0),
-        profitPercentage: parseFloat(cycle.profitPercentage || 0),
-        // Normalización de fecha para ordenamiento
-        processedDate: cycle.endTime?.$date ? new Date(cycle.endTime.$date) : 
-                       (cycle.endTime ? new Date(cycle.endTime) : new Date())
-    }));
+    // 2. Mapeo inteligente (Normaliza los nombres de campos del servidor vs los de la DB)
+    cycleHistoryData = rawData.map(c => {
+        // Buscamos netProfit O profit (lo que venga del servidor)
+        const profitValue = c.netProfit !== undefined ? c.netProfit : (c.profit || 0);
+        
+        // Buscamos la fecha en endTime o en timestamp
+        let rawDate = c.endTime || c.timestamp;
+        let finalDate;
+
+        if (rawDate?.$date) {
+            finalDate = new Date(rawDate.$date);
+        } else if (rawDate) {
+            finalDate = new Date(rawDate);
+        } else {
+            finalDate = new Date();
+        }
+
+        return {
+            ...c,
+            netProfit: parseFloat(profitValue),
+            profitPercentage: parseFloat(c.profitPercentage || 0),
+            processedDate: finalDate,
+            // Aseguramos que 'strategy' exista para el filtro
+            strategy: c.strategy || 'Unknown'
+        };
+    });
     
-    // Ordenar cronológicamente para que la curva tenga sentido
+    // 3. Ordenar y Limpiar
+    cycleHistoryData = cycleHistoryData.filter(c => !isNaN(c.processedDate.getTime()));
     cycleHistoryData.sort((a, b) => a.processedDate - b.processedDate);
     
-    console.log(`📊 Metrics: ${cycleHistoryData.length} ciclos cargados.`);
+    console.log(`📊 Metrics: ${cycleHistoryData.length} ciclos normalizados para la gráfica.`);
     updateMetricsDisplay();
 }
 
