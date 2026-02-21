@@ -51,9 +51,9 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
+ * Versión Blindada: Grid persistente y manejo de datos fantasma
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
-    // Usamos el ID exacto que tienes en tu HTML
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
 
@@ -69,13 +69,15 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         equityChartInstance = null;
     }
 
-    // Si no hay datos, salimos para evitar errores de renderizado
-    if (!data || (Array.isArray(data) && data.length === 0) || (data.points && data.points.length === 0)) {
-        return;
-    }
+    // --- MANEJO DE DATOS BLINDADO ---
+    // Obtenemos los puntos independientemente del formato
+    const rawPoints = Array.isArray(data) ? data : (data?.points || []);
+    
+    // Si no hay datos, creamos una estructura mínima para que el grid se renderice
+    const hasData = rawPoints.length > 0;
+    const points = hasData ? rawPoints : [{ time: 'Sin datos', value: 0 }];
 
-    const points = Array.isArray(data) ? data : (data.points || []);
-    const labels = points.map((d, i) => d.time || `Ciclo ${i + 1}`);
+    const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
     
     let dataPoints = [];
     let labelText = '';
@@ -93,8 +95,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#3b82f6';
             break;
         default:
-            // OPTIMIZACIÓN: Priorizamos 'value' que es lo que envía el metricsManager corregido
             dataPoints = points.map(c => {
+                // Priorizamos 'value' que es el estándar de nuestro metricsManager
                 if (c.value !== undefined) return parseFloat(c.value);
                 return parseFloat(c.accumulatedProfit || c.netProfit || 0);
             });
@@ -103,7 +105,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     }
 
     const gradient = ctx.createLinearGradient(0, 0, 0, 450);
-    gradient.addColorStop(0, `${color}66`); 
+    gradient.addColorStop(0, hasData ? `${color}66` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
     equityChartInstance = new Chart(ctx, {
@@ -113,7 +115,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             datasets: [{
                 label: labelText,
                 data: dataPoints,
-                borderColor: color,
+                borderColor: hasData ? color : 'rgba(255, 255, 255, 0.2)',
                 backgroundColor: gradient,
                 borderWidth: 3,
                 pointBackgroundColor: color,
@@ -122,7 +124,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 pointHoverRadius: 6,
                 tension: 0.35, 
                 fill: true,
-                pointRadius: points.length > 50 ? 0 : 3
+                pointRadius: (hasData && points.length < 50) ? 3 : 0
             }]
         },
         options: {
@@ -135,6 +137,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             plugins: {
                 legend: { display: false },
                 tooltip: {
+                    enabled: hasData, // Solo mostrar tooltip si hay datos reales
                     backgroundColor: '#1f2937',
                     titleColor: '#9ca3af',
                     bodyColor: '#fff',
@@ -149,7 +152,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             },
             scales: {
                 y: {
-                    beginAtZero: false,
+                    beginAtZero: true, // Forzado para mantener la línea de 0 visible
                     grid: { 
                         color: 'rgba(255, 255, 255, 0.08)', 
                         drawBorder: false 
@@ -161,7 +164,10 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     }
                 },
                 x: {
-                    grid: { display: false },
+                    grid: { 
+                        display: true, // Activado para dar estructura
+                        color: 'rgba(255, 255, 255, 0.03)' 
+                    },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 9 },
