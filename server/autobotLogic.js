@@ -66,11 +66,49 @@ async function updateConfig(userId, newConfig) {
 }
 
 /**
- * ENCENDIDO DE ESTRATEGIA (Refactorizado para incluir IA)
+ * ENCENDIDO DE ESTRATEGIA (Blindado con Validación de Solvencia 2026)
  */
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
     if (!botState) throw new Error("Bot no encontrado");
+
+    const currentPrice = orchestrator.getLastPrice();
+    const finalConfig = JSON.parse(JSON.stringify(botState.config));
+    
+    // 1. Sincronizar configuración si se pasó alguna en la petición
+    if (config && config[side]) {
+        Object.assign(finalConfig[side], config[side]);
+    }
+
+    // --- 🛡️ BLOQUE DE SEGURIDAD: VALIDACIÓN DE SALDO ANTES DE INICIAR ---
+    const availUSDT = botState.lastAvailableUSDT || 0;
+    const availBTC = botState.lastAvailableBTC || 0;
+
+    if (side === 'long' || side === 'ai') {
+        const amountNeeded = parseFloat(finalConfig[side]?.amountUsdt || 0);
+        const currentInStrategy = (side === 'long' ? botState.lbalance : botState.aibalance) || 0;
+        
+        // ¿Necesitamos más USDT de los que tenemos libres?
+        const missingUSDT = amountNeeded - currentInStrategy;
+        
+        if (missingUSDT > (availUSDT + 2)) { // Margen de $2 para fees/variación
+            throw new Error(`Saldo USDT insuficiente para iniciar ${side.toUpperCase()}. Necesitas $${missingUSDT.toFixed(2)} adicionales.`);
+        }
+    } 
+    
+    else if (side === 'short') {
+        const amountShortUsdt = parseFloat(finalConfig.short?.amountUsdt || 0);
+        const alreadySoldUsdt = botState.sbalance || 0;
+        const missingShortUsdt = amountShortUsdt - alreadySoldUsdt;
+
+        if (missingShortUsdt > 0) {
+            const btcNeeded = missingShortUsdt / currentPrice;
+            if (availBTC < btcNeeded) {
+                throw new Error(`Saldo BTC insuficiente para cubrir el SHORT. Requieres ${btcNeeded.toFixed(6)} BTC.`);
+            }
+        }
+    }
+    // --- FIN DEL BLINDAJE ---
 
     let cleanData = {};
     let stateField = '';
@@ -82,13 +120,7 @@ async function startSide(userId, side, config) {
         cleanData = CLEAN_SHORT_ROOT;
         stateField = 'sstate';
     } else if (side === 'ai') {
-        // La IA usualmente mantiene su historial, pero reiniciamos su estado operativo
         stateField = 'aistate';
-    }
-    
-    const finalConfig = JSON.parse(JSON.stringify(botState.config));
-    if (config && config[side]) {
-        Object.assign(finalConfig[side], config[side]);
     }
     
     if (finalConfig[side]) finalConfig[side].enabled = true;
@@ -100,7 +132,8 @@ async function startSide(userId, side, config) {
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
-    orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} encendida.`, 'success', userId);
+    
+    orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} validada y encendida.`, 'success', userId);
     
     await orchestrator.slowBalanceCacheUpdate(userId); 
     return bot;
