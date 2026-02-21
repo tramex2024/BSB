@@ -1,29 +1,29 @@
+// public/js/modules/aiBot.js
+
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { fetchOrders } from './orders.js';
+import { displayMessage } from './uiManager.js';
 
 /**
  * Gestiona los clics en las pestañas de filtros dentro de AIBOT
- * Esta es la función que faltaba y causaba el ReferenceError
  */
 function setupAiOrderTabs() {
     const tabs = document.querySelectorAll('.aibot-tabs button');
     const aiOrderCont = document.getElementById('ai-order-list');
     
-    if (!tabs.length) return; // Seguridad si no hay pestañas aún
+    if (!tabs.length) return;
 
     tabs.forEach(tab => {
-        tab.onclick = null; // Limpiar eventos previos para evitar duplicados
+        tab.onclick = null; // Limpiar eventos previos
 
         tab.onclick = (e) => {
-            // El status puede ser 'ai' (abiertas) o 'all' (historial)
             const strategy = e.currentTarget.getAttribute('data-strategy') || 'ai';
             
             // Estilo visual de pestaña activa (Esmeralda para IA)
             tabs.forEach(t => t.classList.remove('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500'));
             e.currentTarget.classList.add('active-tab-style', 'text-emerald-400', 'border-b-2', 'border-emerald-500');
 
-            // Llamamos a fetchOrders con la estrategia seleccionada
             if (aiOrderCont) {
                 fetchOrders(strategy, aiOrderCont);
             }
@@ -31,12 +31,15 @@ function setupAiOrderTabs() {
     });
 }
 
+/**
+ * Inicializa la vista del AI Bot y sincroniza el estado global
+ */
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing card-style interface...");
     
-    // BLINDAJE: Asegurar que el objeto config exista para evitar crash
+    // BLINDAJE: Asegurar integridad del objeto config
     if (!currentBotState.config) currentBotState.config = {};
-    if (!currentBotState.config.ai) currentBotState.config.ai = { amountUsdt: 0, stopAtCycle: false };
+    if (!currentBotState.config.ai) currentBotState.config.ai = { amountUsdt: 6.0, stopAtCycle: false };
 
     setupAIControls();
     
@@ -50,7 +53,7 @@ export function initializeAibotView() {
         stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
     }
 
-    // Usamos aistate para determinar si está corriendo específicamente la IA
+    // Usamos aistate para determinar el estado de ejecución
     const isAiRunning = currentBotState.aistate === 'RUNNING';
 
     aiBotUI.setRunningStatus(
@@ -66,6 +69,9 @@ export function initializeAibotView() {
     }
 }
 
+/**
+ * Configura los event listeners de los controles de IA
+ */
 function setupAIControls() {
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
@@ -74,7 +80,12 @@ function setupAIControls() {
     if (aiInput) {
         aiInput.onchange = async () => {
             const val = parseFloat(aiInput.value);
-            if (isNaN(val) || val <= 0) return;
+            // Validación de mínimo de exchange 6.0 USDT
+            if (isNaN(val) || val < 6.0) {
+                displayMessage("Mínimo requerido: 6.0 USDT", "error");
+                aiInput.value = 6.0;
+                return;
+            }
             await saveAIConfig({ amountUsdt: val });
         };
     }
@@ -90,9 +101,8 @@ function setupAIControls() {
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
         
         newBtn.addEventListener('click', async () => {
-            // Cambio crítico: Leer de aistate
-            const isCurrentlyEnabled = currentBotState.aistate === 'RUNNING';
-            const action = isCurrentlyEnabled ? 'stop' : 'start';
+            const isCurrentlyRunning = currentBotState.aistate === 'RUNNING';
+            const action = isCurrentlyRunning ? 'stop' : 'start';
             
             newBtn.disabled = true;
             newBtn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
@@ -109,16 +119,19 @@ function setupAIControls() {
 
                 const result = await response.json();
                 if (result.success) {
-                    // Sincronizamos el estado global con la respuesta real del server
                     currentBotState.aistate = result.aistate; 
                     aiBotUI.setRunningStatus(
-                        result.isRunning, 
+                        result.aistate === 'RUNNING', 
                         currentBotState.config.ai.stopAtCycle,
                         result.historyCount || 0
                     );
+                    displayMessage(`AI Core: ${action.toUpperCase()} exitoso`, "success");
+                } else {
+                    displayMessage(result.message || "Error en el motor AI", "error");
                 }
             } catch (error) {
                 console.error("❌ AI Toggle Error:", error);
+                displayMessage("Error de conexión con el motor AI", "error");
             } finally {
                 newBtn.disabled = false;
             }
@@ -126,33 +139,46 @@ function setupAIControls() {
     }
 }
 
-async function saveAIConfig(payload) {
+/**
+ * Guarda la configuración de la IA sin corromper el resto de estrategias
+ */
+async function saveAIConfig(aiPayload) {
     try {
+        // Blindaje: Combinamos la config actual para no borrar Long/Short en el servidor
+        const mergedConfig = {
+            ...currentBotState.config,
+            ai: {
+                ...currentBotState.config.ai,
+                ...aiPayload
+            }
+        };
+
         const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ config: mergedConfig }) 
         });
         
         const data = await response.json();
         if (data.success) {
-            // IMPORTANTE: Actualizar con lo que el servidor DIGA (por las validaciones de balance)
+            // Sincronizamos el estado global con la respuesta validada del server
+            if (data.config) {
+                currentBotState.config.ai = data.config.ai || data.config;
+            }
             if (data.virtualBalance !== undefined) {
                 currentBotState.aibalance = data.virtualBalance;
             }
-            if (data.config) {
-                currentBotState.config.ai = data.config;
-            }
 
             if (aiBotUI.addLogEntry) {
-                aiBotUI.addLogEntry(data.message || "Config Updated", 0.5);
+                aiBotUI.addLogEntry(data.message || "AI Config Sincronizada", 0.5);
             }
         }
     } catch (error) {
         console.error("❌ Error saving AI config:", error);
+        displayMessage("Error al sincronizar configuración AI", "error");
     }
 }
 

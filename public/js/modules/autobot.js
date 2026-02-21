@@ -1,7 +1,6 @@
 /**
  * autobot.js - Core Logic for Trading Tabs
- * Integration: Strategy-based Filtering 2026 - FULL VERSION
- * Actualización: Validación preventiva de montos técnicos y semáforo de edición
+ * Versión Purificada 2026: Solo Autobot (Long & Short)
  */
 
 import { initializeChart } from './chart.js';
@@ -14,13 +13,12 @@ import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
 const MIN_USDT_AMOUNT = 6.00;
-const MIN_TECH_VALUE = 0.1; // Protección para price_var, size_var, etc.
 
 let currentStrategyTab = 'all'; 
 let configDebounceTimeout = null;
 
 /**
- * Valida que los montos cumplan con el mínimo del exchange
+ * Valida que los montos cumplan con el mínimo del exchange antes de iniciar
  */
 function validateSideInputs(side) {
     const suffix = side === 'long' ? 'l' : 's';
@@ -43,16 +41,13 @@ function validateSideInputs(side) {
 }
 
 /**
- * Escucha cambios en los inputs (Dashboard + Tabs)
- * REINTEGRADO: Con validación de seguridad contra ceros accidentales
+ * Escucha cambios en los inputs exclusivamente del Autobot
  */
 function setupConfigListeners() {
     const configIds = [
         'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
         'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
-        'auamountai-usdt', 'ai-amount-usdt', 
-        'au-stop-long-at-cycle', 'au-stop-short-at-cycle', 
-        'au-stop-ai-at-cycle', 'ai-stop-at-cycle'
+        'au-stop-long-at-cycle', 'au-stop-short-at-cycle'
     ];
     
     configIds.forEach(id => {
@@ -61,28 +56,19 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
-            // Marcamos que este input está bajo edición activa
+            // Marcamos edición activa para que el socket no interrumpa
             activeEdits[id] = Date.now();
 
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             
             configDebounceTimeout = setTimeout(async () => {
-                const val = parseFloat(el.value);
+                const val = el.type === 'checkbox' ? el.checked : el.value;
 
-                // 🛡️ PROTECCIÓN CRÍTICA: 
-                // Si no es un checkbox y el valor es basura, 0 o menor al mínimo técnico, abortamos el envío
-                if (el.type !== 'checkbox') {
-                    if (el.value === "" || isNaN(val)) return;
-                    
-                    // Si es un campo de configuración técnica (steps, vars, increments) y es < 0.1
-                    if (!id.includes('amount') && !id.includes('purchase') && val < MIN_TECH_VALUE) {
-                        console.warn(`⚠️ Valor demasiado bajo para ${id}, no se enviará.`);
-                        return;
-                    }
-                }
+                // Si el campo está vacío y no es checkbox, no enviamos basura a la DB
+                if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
 
                 try {
-                    // El apiService ahora usará el semáforo para bloquear al socket
+                    // Sincronización inmediata con DB
                     await sendConfigToBackend();
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
@@ -93,7 +79,7 @@ function setupConfigListeners() {
 }
 
 /**
- * Inicializa la vista y sincroniza los botones espejo
+ * Inicializa la vista del Autobot
  */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
@@ -102,7 +88,7 @@ export async function initializeAutobotView() {
     setupConfigListeners();
 
     /**
-     * Lógica de botones Start/Stop
+     * Lógica de botones Start/Stop (Long & Short únicamente)
      */
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
@@ -115,14 +101,14 @@ export async function initializeAutobotView() {
             e.preventDefault();
             
             const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
-                             sideName === 'short' ? currentBotState.sstate !== 'STOPPED' : 
-                             currentBotState.config.ai.enabled);
+                             currentBotState.sstate !== 'STOPPED');
             
             if (isRunning) {
                 const confirmed = await askConfirmation(sideName);
                 if (!confirmed) return;
             } else {
-                if (sideName !== 'ai' && !validateSideInputs(sideName)) {
+                // Validamos montos mínimos SOLO al intentar iniciar
+                if (!validateSideInputs(sideName)) {
                     displayMessage(`Min $${MIN_USDT_AMOUNT} USDT required for ${sideName.toUpperCase()}`, 'error');
                     return;
                 }
@@ -143,8 +129,6 @@ export async function initializeAutobotView() {
 
     setupSideBtn('austartl-btn', 'long');
     setupSideBtn('austarts-btn', 'short');
-    setupSideBtn('austartai-btn', 'ai'); 
-    setupSideBtn('btn-start-ai', 'ai');
 
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);

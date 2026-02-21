@@ -1,8 +1,8 @@
 // public/js/modules/apiService.js
 
 /**
- * apiService.js - Comunicaciones REST con Blindaje de Mínimos (2026)
- * Sincronizado con el Modelo de Mongoose y Protección de UI
+ * apiService.js - Comunicaciones REST Sincronizadas (2026)
+ * Auditado: Corrección de estructura POST y manejo inteligente de pestañas
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
@@ -10,17 +10,17 @@ import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 // 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI mientras guardamos
 export let isSavingConfig = false;
 
-// --- CONFIGURACIÓN DE MÍNIMOS (Espejo del Modelo de Mongoose) ---
+// --- CONFIGURACIÓN DE MÍNIMOS (Mantenidos para validación, pero sin bloqueo de escritura) ---
 const MINIMOS = {
-    amount: 6.0,      // Mínimo para Amount USDT
-    purchase: 6.0,    // Mínimo para Purchase USDT
-    variation: 0.1,   // Mínimo para price_var y size_var
-    profit: 0.1,      // Mínimo para profit_percent
-    step: 0           // price_step_inc permitido en 0
+    amount: 6.0,
+    purchase: 6.0,
+    variation: 0.1,
+    profit: 0.1,
+    step: 0
 };
 
 /**
- * Función base para peticiones privadas con Timeout y AbortController
+ * Función base para peticiones privadas
  */
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
@@ -58,17 +58,11 @@ async function privateFetch(endpoint, options = {}) {
         return result; 
 
     } catch (error) {
-        if (error.name === 'AbortError') {
-            logStatus("❌ Tiempo de espera agotado", "error");
-        } else {
-            logStatus("❌ Error de red o conexión", "error");
-        }
         return { success: false, message: error.message };
     }
 }
 
 // --- SECCIÓN: ANALYTICS ---
-
 export async function fetchCycleKpis(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
 }
@@ -80,36 +74,40 @@ export async function fetchEquityCurveData(strategy = 'all') {
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
 /**
- * Recolecta la configuración de la UI con validación de umbrales mínimos
+ * Recolecta la configuración de la UI de forma inteligente
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
         const el = document.getElementById(id);
-        if (!el) return minVal;
+        
+        // 🛡️ Si el elemento no está en el DOM (otra pestaña), rescatamos del estado global
+        if (!el) {
+            const parts = path.split('.');
+            return currentBotState.config?.[parts[0]]?.[parts[1]] ?? minVal;
+        }
         
         let rawValue = el.value.trim();
         let val;
 
-        // 1. Manejo de campo vacío: Rescatar del estado global para no enviar 0
         if (rawValue === "") {
             const parts = path.split('.');
-            val = currentBotState.config?.[parts[0]]?.[parts[1]] || minVal;
+            val = currentBotState.config?.[parts[0]]?.[parts[1]] ?? minVal;
         } else {
             val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
         }
 
-        // 2. BLINDAJE: Si es NaN o menor al mínimo, forzar el mínimo de seguridad
-        if (isNaN(val) || val < minVal) {
-            console.warn(`🛡️ Ajuste preventivo en ${id}: ${val} -> ${minVal}`);
-            // Actualizamos visualmente para que el usuario sepa que se corrigió
-            if (el.value !== "") el.value = minVal; 
-            return minVal;
-        }
-
-        return val;
+        // Devolvemos el valor sin forzar el input visualmente para no interrumpir al usuario
+        return isNaN(val) ? minVal : val;
     };
 
-    const getCheck = (id) => document.getElementById(id)?.checked || false;
+    const getCheck = (id, path) => {
+        const el = document.getElementById(id);
+        if (!el) {
+            const parts = path.split('.');
+            return currentBotState.config?.[parts[0]]?.[parts[1]] ?? false;
+        }
+        return el.checked;
+    };
 
     return {
         symbol: "BTC_USDT",
@@ -120,7 +118,7 @@ export function getBotConfiguration() {
             size_var: getNum('audecrementl', 'long.size_var', MINIMOS.variation),
             profit_percent: getNum('autriggerl', 'long.profit_percent', MINIMOS.profit),
             price_step_inc: getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
-            stopAtCycle: getCheck('au-stop-long-at-cycle'),
+            stopAtCycle: getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
             enabled: currentBotState.lstate !== 'STOPPED'
         },
         short: {
@@ -130,12 +128,12 @@ export function getBotConfiguration() {
             size_var: getNum('audecrements', 'short.size_var', MINIMOS.variation),
             profit_percent: getNum('autriggers', 'short.profit_percent', MINIMOS.profit),
             price_step_inc: getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
-            stopAtCycle: getCheck('au-stop-short-at-cycle'),
+            stopAtCycle: getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
             enabled: currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
             amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt', MINIMOS.amount) || getNum('ai-amount-usdt', 'ai.amountUsdt', MINIMOS.amount),
-            stopAtCycle: getCheck('au-stop-ai-at-cycle') || getCheck('ai-stop-at-cycle'),
+            stopAtCycle: getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
             enabled: currentBotState.config?.ai?.enabled || false
         }
     };
@@ -145,28 +143,25 @@ export function getBotConfiguration() {
  * Envía la configuración al Backend bloqueando actualizaciones de socket
  */
 export async function sendConfigToBackend() {
-    const config = getBotConfiguration();
-    
-    // El escudo se activa antes de la petición para ignorar rebotes de socket
+    const configData = getBotConfiguration();
     isSavingConfig = true; 
     
     try {
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
-            body: JSON.stringify( config )
+            body: JSON.stringify({ config: configData }) // ✅ CORREGIDO: Envuelto en propiedad 'config'
         });
 
         if (data && data.success) {
-            displayMessage("✅ Configuración sincronizada", 'success');
+            // Log silencioso para no molestar durante la edición
+            console.log("💾 Configuración sincronizada en DB");
         } else {
-            displayMessage(data?.message || "Error al guardar", 'error');
+            console.warn("⚠️ Fallo en sincronización:", data?.message);
         }
         return data;
     } catch (err) {
-        displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        // Mantenemos el escudo activo 1 segundo extra para asegurar que el socket se calme
         setTimeout(() => { isSavingConfig = false; }, 1000);
     }
 }

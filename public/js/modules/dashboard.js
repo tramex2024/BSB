@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Corregido error de auto-borrado y reseteo de balance.
+ * Estado: Sincronizado con validaciones de AI y Autobot.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -27,7 +27,6 @@ export function initializeDashboardView(initialState) {
     const stateToUse = initialState || currentBotState;
 
     // 1. Inicializar Gráfico de Balance (Dona) 
-    // Corregido para no pisar datos existentes
     initBalanceChart();
 
     // 2. Sincronización inmediata con el estado global
@@ -46,7 +45,7 @@ export function initializeDashboardView(initialState) {
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
-    // 5. Carga de analítica (Equity) - Se ejecuta al final
+    // 5. Carga de analítica (Equity)
     refreshAnalytics();
 
     // 6. Estado de conexión
@@ -65,7 +64,6 @@ function handleMetricsUpdate(e) {
  */
 async function refreshAnalytics() {
     try {
-        // Renderizado preventivo si ya tenemos datos locales
         const initialPoints = Metrics.getFilteredData();
         if (initialPoints?.points?.length > 0) {
             renderEquityCurve(initialPoints);
@@ -75,7 +73,6 @@ async function refreshAnalytics() {
         if (curveData && Array.isArray(curveData) && curveData.length > 0) {
             Metrics.setAnalyticsData(curveData);
             
-            // Timeout estratégico para esperar que el DOM se asiente
             setTimeout(() => {
                 const updatedData = Metrics.getFilteredData();
                 renderEquityCurve(updatedData);
@@ -87,17 +84,18 @@ async function refreshAnalytics() {
 }
 
 /**
- * CONFIGURACIÓN DE BOTONES
+ * CONFIGURACIÓN DE BOTONES (Long, Short, AI)
  */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.onclick = async () => {
-            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots.");
+            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y cerrarán posiciones.");
             if (confirmPanic) await triggerPanicStop();
         };
     }
 
+    // Mapeo de botones a sus respectivas estrategias
     const btnConfigs = [
         { id: 'austartl-btn', side: 'long' },
         { id: 'austarts-btn', side: 'short' },
@@ -108,7 +106,13 @@ function setupActionButtons() {
         const el = document.getElementById(btn.id);
         if (el) {
             el.onclick = async () => {
-                const isRunning = el.textContent.includes("STOP");
+                // Determinamos si está corriendo basándonos en el texto o el estado global
+                let isRunning = false;
+                if (btn.side === 'long') isRunning = currentBotState.lstate !== 'STOPPED';
+                else if (btn.side === 'short') isRunning = currentBotState.sstate !== 'STOPPED';
+                else if (btn.side === 'ai') isRunning = currentBotState.aistate === 'RUNNING';
+
+                // Llamamos a la función centralizada de apiService.js
                 await toggleBotSideState(isRunning, btn.side);
             };
         }
@@ -153,8 +157,6 @@ function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
 
-    // 1. LIMPIEZA CRÍTICA: Si ya existía una instancia de una visita anterior, la destruimos.
-    // Esto libera el canvas para que Chart.js pueda dibujar en el nuevo elemento del DOM.
     if (balanceChart) {
         balanceChart.destroy();
         balanceChart = null; 
@@ -162,13 +164,12 @@ function initBalanceChart() {
 
     const ctx = canvas.getContext('2d');
     
-    // 2. Creamos la nueva instancia
     balanceChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['USDT', 'BTC'],
             datasets: [{ 
-                data: [100, 0], // Valores temporales
+                data: [100, 0],
                 backgroundColor: ['#10b981', '#fb923c'], 
                 borderWidth: 0, 
                 cutout: '75%'
@@ -178,12 +179,10 @@ function initBalanceChart() {
             responsive: true, 
             maintainAspectRatio: false, 
             plugins: { legend: { display: false } },
-            animation: { duration: 400 } // Animación más rápida para que se sienta fluido al volver
+            animation: { duration: 400 }
         }
     });
 
-    // 3. RECUPERACIÓN INMEDIATA: 
-    // Si ya tenemos balances guardados en el estado global, los pintamos DE UNA VEZ.
     if (currentBotState.lastAvailableUSDT || currentBotState.lastAvailableBTC) {
         updateDistributionWidget(currentBotState);
     }
@@ -192,48 +191,36 @@ function initBalanceChart() {
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
     
-    // Forzamos conversión numérica absoluta para evitar errores de cálculo
     const usdt = Math.max(0, parseFloat(state.lastAvailableUSDT || 0));
     const btcAmount = Math.max(0, parseFloat(state.lastAvailableBTC || 0));
     const price = Math.max(0, parseFloat(state.price || 0));
     
-    // Actualizar textos primero (esto ya te funciona)
     const uText = document.getElementById('aubalance-usdt');
     const bText = document.getElementById('aubalance-btc');
     if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
     if(bText) bText.innerText = btcAmount.toFixed(6);
 
-    // Lógica de Proporciones para la Dona y las Rayitas (Barras)
     if (price > 0) {
         const btcInUsdt = btcAmount * price;
         const total = usdt + btcInUsdt;
 
         if (total > 0) {
-            // 1. Actualizar el Círculo (Dona)
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
             balanceChart.update('none'); 
 
-            // 2. Actualizar las Rayitas (Progress Bars)
             const usdtBar = document.getElementById('usdt-bar');
             const btcBar = document.getElementById('btc-bar');
             
-            // Calculamos el porcentaje
             const usdtPct = (usdt / total) * 100;
             const btcPct = (btcInUsdt / total) * 100;
 
             if (usdtBar) {
-                usdtBar.style.transition = "width 0.8s ease-in-out";
                 usdtBar.style.width = `${usdtPct}%`;
             }
             if (btcBar) {
-                btcBar.style.transition = "width 0.8s ease-in-out";
                 btcBar.style.width = `${btcPct}%`;
             }
-
-            console.log(`📊 Distribución: USDT ${usdtPct.toFixed(1)}% | BTC ${btcPct.toFixed(1)}%`);
         }
-    } else {
-        console.warn("⚠️ Dashboard: Esperando precio de mercado para calcular proporciones...");
     }
 }
 
