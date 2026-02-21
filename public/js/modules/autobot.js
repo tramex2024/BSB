@@ -30,9 +30,12 @@ function validateSideInputs(side) {
         if (!input) return;
         const val = parseFloat(input.value);
         if (isNaN(val) || val < MIN_USDT_AMOUNT) {
-            input.classList.add('border-red-500', 'animate-shake');
-            isValid = false;
-        } else {
+    input.classList.add('border-red-500', 'animate-shake');
+    // Quitamos la clase después de que termine la animación (500ms) 
+    // para que pueda volver a sonar si el usuario falla otra vez.
+    setTimeout(() => input.classList.remove('animate-shake'), 500);
+    isValid = false;
+} else {
             input.classList.remove('border-red-500', 'animate-shake');
         }
     });

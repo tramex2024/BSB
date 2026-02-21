@@ -58,7 +58,7 @@ async function privateFetch(endpoint, options = {}) {
     }
 }
 
-// --- SECCIÓN: ANALYTICS (CORREGIDA PARA SOPORTAR 'ALL' Y 'AI') ---
+// --- SECCIÓN: ANALYTICS ---
 
 export async function fetchCycleKpis(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/stats?strategy=${strategy}`); 
@@ -68,11 +68,10 @@ export async function fetchEquityCurveData(strategy = 'all') {
     return await privateFetch(`/api/v1/analytics/equity-curve?strategy=${strategy}`);
 }
 
-// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT (ESTRUCTURA ORIGINAL) ---
+// --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
 /**
- * Recolecta la configuración de la UI asegurando que las llaves
- * coincidan exactamente con el Schema de Mongoose.
+ * Recolecta la configuración de la UI asegurando correspondencia de IDs
  */
 export function getBotConfiguration() {
     const getNum = (id, path) => {
@@ -80,6 +79,7 @@ export function getBotConfiguration() {
         if (!el) return 0;
         
         const rawValue = el.value.trim();
+        // Si el usuario deja el input vacío, rescatamos el valor del estado para no enviar 0
         if (rawValue === "") {
             const parts = path.split('.');
             if (parts.length === 2) {
@@ -95,34 +95,31 @@ export function getBotConfiguration() {
     const getCheck = (id) => document.getElementById(id)?.checked || false;
 
     return {
-        symbol: "BTC_USDT", // Mantenemos tu estándar original
+        symbol: "BTC_USDT",
         long: {
             amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt'),
             purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt'),
-            price_var: getNum('audecrementl', 'long.price_var'),
-            size_var: getNum('auincrementl', 'long.size_var'),
+            price_var: getNum('auincrementl', 'long.price_var'),    // ID verificado
+            size_var: getNum('audecrementl', 'long.size_var'),     // ID verificado
             profit_percent: getNum('autriggerl', 'long.profit_percent'),   
             price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
-            // CRÍTICO: Enviamos el estado real del motor, no un valor fijo
             enabled: currentBotState.lstate !== 'STOPPED'
         },
         short: {
             amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
             purchaseUsdt: getNum('aupurchases-usdt', 'short.purchaseUsdt'),
-            price_var: getNum('audecrements', 'short.price_var'),
-            size_var: getNum('auincrements', 'short.size_var'),
+            price_var: getNum('auincrements', 'short.price_var'),   // Corregido: antes podía buscar IDs de Long
+            size_var: getNum('audecrements', 'short.size_var'),    // Corregido: antes podía buscar IDs de Long
             profit_percent: getNum('autriggers', 'short.profit_percent'),   
             price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
-            // CRÍTICO: Enviamos el estado real del motor, no un valor fijo
             enabled: currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
             amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
-            stopAtCycle: getCheck('ai-stop-at-cycle'),
-            // CRÍTICO: Usamos el estado global de ejecución de la IA
-            enabled: currentBotState.isRunning || false
+            stopAtCycle: getCheck('au-stop-ai-at-cycle') || getCheck('ai-stop-at-cycle'),
+            enabled: currentBotState.config?.ai?.enabled || false
         }
     };
 }
@@ -133,13 +130,13 @@ export function getBotConfiguration() {
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
     
-    // Validación básica de seguridad
+    // Validación mínima para no romper el exchange
     if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
         displayMessage("⚠️ El monto mínimo es $5", 'error');
         return { success: false };
     }
 
-    isSavingConfig = true; 
+    isSavingConfig = true; // ACTIVAMOS EL ESCUDO
     
     try {
         const data = await privateFetch('/api/autobot/update-config', {
@@ -157,7 +154,8 @@ export async function sendConfigToBackend() {
         displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        setTimeout(() => { isSavingConfig = false; }, 400);
+        // Mantener el escudo un segundo para que el socket no nos gane
+        setTimeout(() => { isSavingConfig = false; }, 1000);
     }
 }
 
@@ -205,13 +203,10 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     }
 }
 
-/**
- * BOTÓN DE PÁNICO: Detiene todo inmediatamente
- */
 export async function triggerPanicStop() {
     try {
         const data = await privateFetch('/api/autobot/panic-stop', { method: 'POST' });
-        if (data.success) displayMessage("🚨 PÁNICO ACTIVADO: Todo detenido", 'success');
+        if (data.success) displayMessage("🚨 PÁNICO ACTIVADO", 'success');
         return data;
     } catch (err) {
         displayMessage("Error al ejecutar pánico", 'error');

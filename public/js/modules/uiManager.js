@@ -143,8 +143,12 @@ export function updateControlsState(state) {
     const sState = state.sstate;
     const aiState = state.aistate;
 
+    // IDs de los inputs que se bloquean cuando el bot está encendido
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
+    
+    // CORRECCIÓN: Asegúrate de que estos IDs tengan la "s" al final para el Short
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
+    
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
 
     // Si el estado viene en el mensaje, actualizamos el botón correspondiente
