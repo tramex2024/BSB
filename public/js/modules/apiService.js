@@ -2,7 +2,7 @@
 
 /**
  * apiService.js - Comunicaciones REST Sincronizadas (2026)
- * Auditado: Corrección de estructura POST y manejo inteligente de pestañas
+ * Auditado: Corrección de inversión de PriceVar/SizeVar y rescate de estado global.
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
@@ -10,7 +10,7 @@ import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 // 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI mientras guardamos
 export let isSavingConfig = false;
 
-// --- CONFIGURACIÓN DE MÍNIMOS (Mantenidos para validación, pero sin bloqueo de escritura) ---
+// --- CONFIGURACIÓN DE MÍNIMOS ---
 const MINIMOS = {
     amount: 6.0,
     purchase: 6.0,
@@ -25,7 +25,7 @@ const MINIMOS = {
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     if (!token) {
-        logStatus("⚠️ Sesión no encontrada. Por favor inicie sesión.", "error");
+        logStatus("⚠️ Sesión no encontrada.", "error");
         return { success: false, message: "Sesión no encontrada." };
     }
 
@@ -50,12 +50,7 @@ async function privateFetch(endpoint, options = {}) {
             return { success: false, message: "Unauthorized" };
         }
 
-        const result = await response.json().catch(() => ({ 
-            success: response.ok, 
-            message: response.statusText 
-        }));
-
-        return result; 
+        return await response.json(); 
 
     } catch (error) {
         return { success: false, message: error.message };
@@ -74,29 +69,34 @@ export async function fetchEquityCurveData(strategy = 'all') {
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
 /**
- * Recolecta la configuración de la UI de forma inteligente
+ * Recolecta la configuración de la UI de forma inteligente.
+ * CORREGIDO: Inversión de Price Var y Size Var detectada en el HTML.
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
         const el = document.getElementById(id);
         
-        // 🛡️ Si el elemento no está en el DOM (otra pestaña), rescatamos del estado global
+        // 🛡️ RESCATE: Si el elemento no existe (otra pestaña), rescatamos del estado global
         if (!el) {
             const parts = path.split('.');
-            return currentBotState.config?.[parts[0]]?.[parts[1]] ?? minVal;
+            let savedVal = currentBotState.config;
+            for (const part of parts) {
+                if (savedVal) savedVal = savedVal[part];
+            }
+            return savedVal ?? minVal;
         }
         
         let rawValue = el.value.trim();
-        let val;
-
         if (rawValue === "") {
             const parts = path.split('.');
-            val = currentBotState.config?.[parts[0]]?.[parts[1]] ?? minVal;
-        } else {
-            val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
+            let savedVal = currentBotState.config;
+            for (const part of parts) {
+                if (savedVal) savedVal = savedVal[part];
+            }
+            return savedVal ?? minVal;
         }
 
-        // Devolvemos el valor sin forzar el input visualmente para no interrumpir al usuario
+        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
         return isNaN(val) ? minVal : val;
     };
 
@@ -104,37 +104,46 @@ export function getBotConfiguration() {
         const el = document.getElementById(id);
         if (!el) {
             const parts = path.split('.');
-            return currentBotState.config?.[parts[0]]?.[parts[1]] ?? false;
+            let savedVal = currentBotState.config;
+            for (const part of parts) {
+                if (savedVal) savedVal = savedVal[part];
+            }
+            return savedVal ?? false;
         }
         return el.checked;
     };
 
+    /**
+     * NOTA TÉCNICA: En tu HTML:
+     * id="auincrementl" es "Size Multiplier" -> Debe ir a size_var
+     * id="audecrementl" es "Safety Drop" -> Debe ir a price_var
+     */
     return {
         symbol: "BTC_USDT",
         long: {
-            amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
-            purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
-            price_var: getNum('auincrementl', 'long.price_var', MINIMOS.variation),
-            size_var: getNum('audecrementl', 'long.size_var', MINIMOS.variation),
-            profit_percent: getNum('autriggerl', 'long.profit_percent', MINIMOS.profit),
-            price_step_inc: getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
-            stopAtCycle: getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
-            enabled: currentBotState.lstate !== 'STOPPED'
+            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
+            purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
+            price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), // Drop -> Price Var
+            size_var:        getNum('auincrementl', 'long.size_var', 1),                // Multiplier -> Size Var
+            profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit),
+            price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
+            stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
+            enabled:         currentBotState.lstate !== 'STOPPED'
         },
         short: {
-            amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
-            purchaseUsdt: getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
-            price_var: getNum('auincrements', 'short.price_var', MINIMOS.variation),
-            size_var: getNum('audecrements', 'short.size_var', MINIMOS.variation),
-            profit_percent: getNum('autriggers', 'short.profit_percent', MINIMOS.profit),
-            price_step_inc: getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
-            stopAtCycle: getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
-            enabled: currentBotState.sstate !== 'STOPPED' 
+            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
+            purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
+            price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation), // Rise -> Price Var
+            size_var:        getNum('auincrements', 'short.size_var', 1),                // Multiplier -> Size Var
+            profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit),
+            price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
+            stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
+            enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt', MINIMOS.amount) || getNum('ai-amount-usdt', 'ai.amountUsdt', MINIMOS.amount),
-            stopAtCycle: getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
-            enabled: currentBotState.config?.ai?.enabled || false
+            amountUsdt:      getNum('ai-amount-usdt', 'ai.amountUsdt', MINIMOS.amount),
+            stopAtCycle:     getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
+            enabled:         currentBotState.aistate === 'RUNNING'
         }
     };
 }
@@ -149,14 +158,11 @@ export async function sendConfigToBackend() {
     try {
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
-            body: JSON.stringify({ config: configData }) // ✅ CORREGIDO: Envuelto en propiedad 'config'
+            body: JSON.stringify({ config: configData })
         });
 
         if (data && data.success) {
-            // Log silencioso para no molestar durante la edición
             console.log("💾 Configuración sincronizada en DB");
-        } else {
-            console.warn("⚠️ Fallo en sincronización:", data?.message);
         }
         return data;
     } catch (err) {
@@ -173,21 +179,20 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
     const sideKey = side.toLowerCase(); 
     const action = isRunning ? 'stop' : 'start';
     
-    let btnId;
-    if (sideKey === 'long') btnId = 'austartl-btn';
-    else if (sideKey === 'short') btnId = 'austarts-btn';
-    else if (sideKey === 'ai') btnId = 'btn-start-ai'; 
+    let btnId = (sideKey === 'long') ? 'austartl-btn' : 
+                (sideKey === 'short') ? 'austarts-btn' : 'btn-start-ai';
 
     const btn = document.getElementById(btnId);
 
     if (btn) {
         btn.disabled = true;
-        btn.classList.add('opacity-50');
         btn.textContent = isRunning ? "STOPPING..." : "STARTING...";
     }
 
     try {
+        // Obtenemos config blindada
         const config = providedConfig || getBotConfiguration();
+        
         const data = await privateFetch(`/api/autobot/${action}/${sideKey}`, {
             method: 'POST',
             body: JSON.stringify({ config }) 
@@ -203,10 +208,7 @@ export async function toggleBotSideState(isRunning, side, providedConfig = null)
         displayMessage(err.message, 'error');
         return { success: false };
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.classList.remove('opacity-50');
-        }
+        if (btn) btn.disabled = false;
     }
 }
 
