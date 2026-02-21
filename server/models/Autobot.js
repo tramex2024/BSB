@@ -87,27 +87,27 @@ const autobotSchema = new mongoose.Schema({
         symbol: { type: String, default: "BTC_USDT" },
         long: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number },
-            purchaseUsdt: { type: Number },
-            price_var: { type: Number },
-            size_var: { type: Number },
-            profit_percent: { type: Number },
-            price_step_inc: { type: Number },
+            amountUsdt: { type: Number, default: 20, min: 6 },
+            purchaseUsdt: { type: Number, default: 6, min: 6 },
+            price_var: { type: Number, default: 1.0, min: 0.1 },
+            size_var: { type: Number, default: 1.1, min: 0.1 },
+            profit_percent: { type: Number, default: 1.2, min: 0.1 },
+            price_step_inc: { type: Number, default: 0, min: 0 },
             stopAtCycle: { type: Boolean, default: false }
         },
         short: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number },
-            purchaseUsdt: { type: Number },
-            price_var: { type: Number },
-            size_var: { type: Number },
-            profit_percent: { type: Number },
-            price_step_inc: { type: Number },
+            amountUsdt: { type: Number, default: 20, min: 6 },
+            purchaseUsdt: { type: Number, default: 6, min: 6 },
+            price_var: { type: Number, default: 1.0, min: 0.1 },
+            size_var: { type: Number, default: 1.1, min: 0.1 },
+            profit_percent: { type: Number, default: 1.2, min: 0.1 },
+            price_step_inc: { type: Number, default: 0, min: 0 },
             stopAtCycle: { type: Boolean, default: false }
         },
         ai: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number },
+            amountUsdt: { type: Number, default: 20, min: 6 },
             stopAtCycle: { type: Boolean, default: false }
         }
     },

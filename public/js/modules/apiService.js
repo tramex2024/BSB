@@ -1,14 +1,23 @@
 // public/js/modules/apiService.js
 
 /**
- * apiService.js - Comunicaciones REST
- * Sincronizado con Motor Exponencial y Garantía de Desbloqueo de UI
+ * apiService.js - Comunicaciones REST con Blindaje de Mínimos (2026)
+ * Sincronizado con el Modelo de Mongoose y Protección de UI
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
-// 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI con datos viejos mientras guardamos
+// 🛡️ ESCUDO: Evita que el Socket sobrescriba la UI mientras guardamos
 export let isSavingConfig = false;
+
+// --- CONFIGURACIÓN DE MÍNIMOS (Espejo del Modelo de Mongoose) ---
+const MINIMOS = {
+    amount: 6.0,      // Mínimo para Amount USDT
+    purchase: 6.0,    // Mínimo para Purchase USDT
+    variation: 0.1,   // Mínimo para price_var y size_var
+    profit: 0.1,      // Mínimo para profit_percent
+    step: 0           // price_step_inc permitido en 0
+};
 
 /**
  * Función base para peticiones privadas con Timeout y AbortController
@@ -71,25 +80,33 @@ export async function fetchEquityCurveData(strategy = 'all') {
 // --- SECCIÓN: CONFIGURACIÓN Y CONTROL DEL BOT ---
 
 /**
- * Recolecta la configuración de la UI asegurando correspondencia de IDs
+ * Recolecta la configuración de la UI con validación de umbrales mínimos
  */
 export function getBotConfiguration() {
-    const getNum = (id, path) => {
+    const getNum = (id, path, minVal = 0) => {
         const el = document.getElementById(id);
-        if (!el) return 0;
+        if (!el) return minVal;
         
-        const rawValue = el.value.trim();
-        // Si el usuario deja el input vacío, rescatamos el valor del estado para no enviar 0
+        let rawValue = el.value.trim();
+        let val;
+
+        // 1. Manejo de campo vacío: Rescatar del estado global para no enviar 0
         if (rawValue === "") {
             const parts = path.split('.');
-            if (parts.length === 2) {
-                return currentBotState.config?.[parts[0]]?.[parts[1]] || 0;
-            }
-            return 0;
+            val = currentBotState.config?.[parts[0]]?.[parts[1]] || minVal;
+        } else {
+            val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
         }
 
-        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
-        return isNaN(val) ? 0 : val;
+        // 2. BLINDAJE: Si es NaN o menor al mínimo, forzar el mínimo de seguridad
+        if (isNaN(val) || val < minVal) {
+            console.warn(`🛡️ Ajuste preventivo en ${id}: ${val} -> ${minVal}`);
+            // Actualizamos visualmente para que el usuario sepa que se corrigió
+            if (el.value !== "") el.value = minVal; 
+            return minVal;
+        }
+
+        return val;
     };
 
     const getCheck = (id) => document.getElementById(id)?.checked || false;
@@ -97,27 +114,27 @@ export function getBotConfiguration() {
     return {
         symbol: "BTC_USDT",
         long: {
-            amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt'),
-            purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt'),
-            price_var: getNum('auincrementl', 'long.price_var'),    // ID verificado
-            size_var: getNum('audecrementl', 'long.size_var'),     // ID verificado
-            profit_percent: getNum('autriggerl', 'long.profit_percent'),   
-            price_step_inc: getNum('aupricestep-l', 'long.price_step_inc'), 
+            amountUsdt: getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
+            purchaseUsdt: getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
+            price_var: getNum('auincrementl', 'long.price_var', MINIMOS.variation),
+            size_var: getNum('audecrementl', 'long.size_var', MINIMOS.variation),
+            profit_percent: getNum('autriggerl', 'long.profit_percent', MINIMOS.profit),
+            price_step_inc: getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
             stopAtCycle: getCheck('au-stop-long-at-cycle'),
             enabled: currentBotState.lstate !== 'STOPPED'
         },
         short: {
-            amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt'),
-            purchaseUsdt: getNum('aupurchases-usdt', 'short.purchaseUsdt'),
-            price_var: getNum('auincrements', 'short.price_var'),   // Corregido: antes podía buscar IDs de Long
-            size_var: getNum('audecrements', 'short.size_var'),    // Corregido: antes podía buscar IDs de Long
-            profit_percent: getNum('autriggers', 'short.profit_percent'),   
-            price_step_inc: getNum('aupricestep-s', 'short.price_step_inc'), 
+            amountUsdt: getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
+            purchaseUsdt: getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
+            price_var: getNum('auincrements', 'short.price_var', MINIMOS.variation),
+            size_var: getNum('audecrements', 'short.size_var', MINIMOS.variation),
+            profit_percent: getNum('autriggers', 'short.profit_percent', MINIMOS.profit),
+            price_step_inc: getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
             stopAtCycle: getCheck('au-stop-short-at-cycle'),
             enabled: currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt') || getNum('ai-amount-usdt', 'ai.amountUsdt'),
+            amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt', MINIMOS.amount) || getNum('ai-amount-usdt', 'ai.amountUsdt', MINIMOS.amount),
             stopAtCycle: getCheck('au-stop-ai-at-cycle') || getCheck('ai-stop-at-cycle'),
             enabled: currentBotState.config?.ai?.enabled || false
         }
@@ -129,14 +146,9 @@ export function getBotConfiguration() {
  */
 export async function sendConfigToBackend() {
     const config = getBotConfiguration();
-    console.log("DATOS A ENVIAR:", JSON.stringify(config, null, 2));
-    // Validación mínima para no romper el exchange
-    if (config.long.amountUsdt > 0 && config.long.amountUsdt < 5) {
-        displayMessage("⚠️ El monto mínimo es $5", 'error');
-        return { success: false };
-    }
-
-    isSavingConfig = true; // ACTIVAMOS EL ESCUDO
+    
+    // El escudo se activa antes de la petición para ignorar rebotes de socket
+    isSavingConfig = true; 
     
     try {
         const data = await privateFetch('/api/autobot/update-config', {
@@ -154,7 +166,7 @@ export async function sendConfigToBackend() {
         displayMessage("Error crítico de conexión", 'error');
         return { success: false };
     } finally {
-        // Mantener el escudo un segundo para que el socket no nos gane
+        // Mantenemos el escudo activo 1 segundo extra para asegurar que el socket se calme
         setTimeout(() => { isSavingConfig = false; }, 1000);
     }
 }
