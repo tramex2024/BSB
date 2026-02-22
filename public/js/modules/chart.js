@@ -51,38 +51,36 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Versión Blindada: Grid persistente y manejo de datos fantasma
+ * Versión Ultra-Blindada: Reseteo de contexto y gradientes dinámicos
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
 
-    // --- AJUSTE DE ALTURA ---
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
 
     const ctx = canvas.getContext('2d');
 
+    // 1. DESTRUCCIÓN TOTAL Y LIMPIEZA DE CANVAS
     if (equityChartInstance) {
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
+    // Limpiamos el rectángulo para evitar "fantasmas" visuales
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // --- MANEJO DE DATOS BLINDADO ---
-    // Obtenemos los puntos independientemente del formato
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
-    
-    // Si no hay datos, creamos una estructura mínima para que el grid se renderice
     const hasData = rawPoints.length > 0;
-    const points = hasData ? rawPoints : [{ time: 'Sin datos', value: 0 }];
+    const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
-    
     let dataPoints = [];
     let labelText = '';
     let color = '#10b981'; 
 
+    // 2. SELECCIÓN DE PARÁMETRO
     switch (parameter) {
         case 'durationHours':
             dataPoints = points.map(c => parseFloat(c.durationHours || 0));
@@ -96,7 +94,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             break;
         default:
             dataPoints = points.map(c => {
-                // Priorizamos 'value' que es el estándar de nuestro metricsManager
                 if (c.value !== undefined) return parseFloat(c.value);
                 return parseFloat(c.accumulatedProfit || c.netProfit || 0);
             });
@@ -104,10 +101,14 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             color = '#10b981';
     }
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, 450);
-    gradient.addColorStop(0, hasData ? `${color}66` : 'rgba(255, 255, 255, 0.05)'); 
+    // 3. CREACIÓN DE GRADIENTE SEGURO
+    // Usamos la altura del canvas real para el gradiente
+    const chartHeight = canvas.clientHeight || 450;
+    const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
+    gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
+    // 4. NUEVA INSTANCIA
     equityChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -117,19 +118,22 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 data: dataPoints,
                 borderColor: hasData ? color : 'rgba(255, 255, 255, 0.2)',
                 backgroundColor: gradient,
-                borderWidth: 3,
+                borderWidth: 2, // Bajado a 2 para mayor elegancia
                 pointBackgroundColor: color,
                 pointBorderColor: '#111827',
-                pointBorderWidth: 2,
-                pointHoverRadius: 6,
-                tension: 0.35, 
+                pointBorderWidth: 1,
+                pointHoverRadius: 5,
+                tension: 0.3, // Menos tensión para evitar curvas extrañas en pocos puntos
                 fill: true,
-                pointRadius: (hasData && points.length < 50) ? 3 : 0
+                pointRadius: (hasData && points.length < 40) ? 3 : 0
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+                duration: 400 // Animación rápida para que el cambio de filtro sea fluido
+            },
             interaction: {
                 intersect: false,
                 mode: 'index',
@@ -137,10 +141,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    enabled: hasData, // Solo mostrar tooltip si hay datos reales
+                    enabled: hasData,
                     backgroundColor: '#1f2937',
-                    titleColor: '#9ca3af',
-                    bodyColor: '#fff',
                     borderColor: color,
                     borderWidth: 1,
                     displayColors: false,
@@ -152,11 +154,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             },
             scales: {
                 y: {
-                    beginAtZero: true, // Forzado para mantener la línea de 0 visible
-                    grid: { 
-                        color: 'rgba(255, 255, 255, 0.08)', 
-                        drawBorder: false 
-                    },
+                    // beginAtZero: true, // Quitamos esto si quieres ver mejor las variaciones pequeñas
+                    grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 10, family: 'monospace' },
@@ -164,16 +163,13 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     }
                 },
                 x: {
-                    grid: { 
-                        display: true, // Activado para dar estructura
-                        color: 'rgba(255, 255, 255, 0.03)' 
-                    },
+                    grid: { display: false },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 9 },
                         maxRotation: 0,
                         autoSkip: true,
-                        maxTicksLimit: 8
+                        maxTicksLimit: 6 // Menos ticks para evitar solapamiento
                     }
                 }
             }
