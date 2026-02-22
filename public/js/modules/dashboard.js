@@ -87,15 +87,13 @@ async function refreshAnalytics() {
  */
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
-    const pSel = document.getElementById('chart-param-selector');
-
     if (bSel) {
         bSel.onchange = () => {
-            console.log(`🔍 Filtrando Dashboard por: ${bSel.value}`);
-            Metrics.setBotFilter(bSel.value); // Esto actualiza KPIs y dispara el evento del gráfico
+            // SOLO cambia el filtro, NO carga datos de nuevo
+            Metrics.setBotFilter(bSel.value); 
         };
     }
-
+}
     if (pSel) {
         pSel.onchange = () => {
             Metrics.setChartParameter(pSel.value); // Esto actualiza el eje Y y dispara el evento

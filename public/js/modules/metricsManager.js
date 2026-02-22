@@ -12,44 +12,44 @@ let currentBotFilter = 'all';
  * Limpia la memoria antes de cargar para evitar duplicados.
  */
 export function setAnalyticsData(data) {
-    // 1. REINICIO DE MEMORIA: Evita que los ciclos se sumen infinitamente
-    cycleHistoryData = [];
+    // 1. REINICIO TOTAL
+    cycleHistoryData = []; 
 
-    // 2. Extraer el array de datos con seguridad
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     
-    // 3. Mapeo inteligente (Soporta formato DB y formato procesado del Servidor)
-    cycleHistoryData = rawData.map(c => {
-        // Normalización de Profit: busca netProfit (DB) o profit (API)
-        const profitValue = c.netProfit !== undefined ? c.netProfit : (c.profit || 0);
+    // 2. MAPEO Y FILTRO DE DUPLICADOS (Blindaje por _id)
+    const uniqueMap = new Map();
+
+    rawData.forEach(c => {
+        // Usamos el ID de MongoDB o el timestamp como llave única
+        const id = c._id?.$oid || c._id || c.timestamp || Math.random();
         
-        // Normalización de Fechas: busca endTime (DB), timestamp (API) o $date (Mongo)
-        let rawDate = c.endTime || c.timestamp;
-        let finalDate;
+        if (!uniqueMap.has(id)) {
+            const profitValue = c.netProfit !== undefined ? c.netProfit : (c.profit || 0);
+            
+            let rawDate = c.endTime || c.timestamp;
+            let finalDate;
+            if (rawDate?.$date) finalDate = new Date(rawDate.$date);
+            else if (rawDate) finalDate = new Date(rawDate);
+            else finalDate = new Date();
 
-        if (rawDate?.$date) {
-            finalDate = new Date(rawDate.$date);
-        } else if (rawDate) {
-            finalDate = new Date(rawDate);
-        } else {
-            finalDate = new Date();
+            uniqueMap.set(id, {
+                ...c,
+                netProfit: parseFloat(profitValue),
+                profitPercentage: parseFloat(c.profitPercentage || 0),
+                processedDate: finalDate,
+                strategy: (c.strategy || 'unknown').toLowerCase()
+            });
         }
-
-        return {
-            ...c,
-            netProfit: parseFloat(profitValue),
-            profitPercentage: parseFloat(c.profitPercentage || 0),
-            processedDate: finalDate,
-            // Aseguramos que 'strategy' exista y esté normalizada para el filtro
-            strategy: (c.strategy || 'Unknown').toLowerCase()
-        };
     });
+
+    // Convertimos el Map de nuevo a un Array
+    cycleHistoryData = Array.from(uniqueMap.values());
     
-    // 4. Ordenamiento Cronológico (Crítico para que la gráfica no se "vuelva loca")
-    cycleHistoryData = cycleHistoryData.filter(c => !isNaN(c.processedDate.getTime()));
+    // 3. ORDENAMIENTO
     cycleHistoryData.sort((a, b) => a.processedDate - b.processedDate);
     
-    console.log(`📊 Metrics: ${cycleHistoryData.length} ciclos cargados y normalizados.`);
+    console.log(`📊 Metrics: ${cycleHistoryData.length} ciclos ÚNICOS cargados.`);
     updateMetricsDisplay();
 }
 
