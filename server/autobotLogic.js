@@ -1,6 +1,7 @@
 /**
  * BSB/server/autobotLogic.js
  * Motor de Ciclos Unificado - Versión Integra 2026 (Long, Short & IA)
+ * FIX: Desencriptación de Memo y Logs de Auditoría
  */
 
 const Autobot = require('./models/Autobot');
@@ -8,7 +9,7 @@ const User = require('./models/User');
 const bitmartService = require('./services/bitmartService');
 const orchestrator = require('./src/au/utils/cycleOrchestrator');
 
-// REPARACIÓN DE RUTA: Importamos específicamente 'decrypt' desde tu archivo encryption.js
+// REPARACIÓN DE RUTA: Importamos 'decrypt' desde tu archivo encryption.js
 const { decrypt } = require('./utils/encryption'); 
 
 const { runLongStrategy } = require('./src/longStrategy');
@@ -190,12 +191,23 @@ async function botCycle(priceFromWebSocket) {
                 continue;
             }
 
-            // Desencriptamos la Secret Key para la firma HMAC
-            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted);
+            // --- LÓGICA DE DESENCRIPTACIÓN Y AUDITORÍA ---
+            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
+            let decryptedMemo = "";
+            try {
+                // Intentamos desencriptar el memo si viene encriptado
+                decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
+            } catch (e) {
+                // Si falla la desencriptación, asumimos que es texto plano
+                decryptedMemo = (user.bitmartApiMemo || "").trim();
+            }
+
+            // LOG DE SEGURIDAD PARA VER EN CONSOLA (Sin quemar fondos)
+            console.log(`[AUTH_CHECK] User: ${userId} | Memo Desencrip: "${decryptedMemo}" | Key: ${user.bitmartApiKey.substring(0,6)}...`);
 
             const userCreds = {
-                apiKey: user.bitmartApiKey,
-                apiMemo: user.bitmartApiMemo,
+                apiKey: user.bitmartApiKey.trim(),
+                apiMemo: decryptedMemo,
                 secretKey: decryptedSecret
             };
 
@@ -215,7 +227,6 @@ async function botCycle(priceFromWebSocket) {
                 scycle: botState.scycle || 0,
                 aicycle: botState.aicycle || 0,
 
-                // Inyección de órdenes con credenciales del usuario actual
                 placeLongOrder: async (params) => {
                     const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
                     return await bitmartService.placeOrder(
@@ -255,7 +266,7 @@ async function botCycle(priceFromWebSocket) {
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-            // --- Monitoreo ---
+            // --- Monitoreo de Órdenes (Lógica de Consolidación) ---
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
                 if (botState.llastOrder.side === 'buy') {
                     await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
@@ -272,7 +283,7 @@ async function botCycle(priceFromWebSocket) {
                 }
             }
 
-            // --- Cálculos Matemáticos ---
+            // --- Cálculos Matemáticos de Cobertura y PNL ---
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
