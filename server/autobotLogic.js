@@ -191,25 +191,31 @@ async function botCycle(priceFromWebSocket) {
                 continue;
             }
 
-            // --- LÓGICA DE DESENCRIPTACIÓN Y AUDITORÍA ---
-            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
-            let decryptedMemo = "";
-            try {
-                // Intentamos desencriptar el memo si viene encriptado
-                decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
-            } catch (e) {
-                // Si falla la desencriptación, asumimos que es texto plano
-                decryptedMemo = (user.bitmartApiMemo || "").trim();
-            }
+            // --- LÓGICA DE DESENCRIPTACIÓN Y AUDITORÍA REPARADA ---
 
-            // LOG DE SEGURIDAD PARA VER EN CONSOLA (Sin quemar fondos)
-            console.log(`[AUTH_CHECK] User: ${userId} | Memo Desencrip: "${decryptedMemo}" | Key: ${user.bitmartApiKey.substring(0,6)}...`);
+// 1. DESENCRIPTAR API KEY (Aquí estaba el fallo, faltaba el decrypt)
+const decryptedApiKey = decrypt(user.bitmartApiKey).trim();
 
-            const userCreds = {
-                apiKey: user.bitmartApiKey.trim(),
-                apiMemo: decryptedMemo,
-                secretKey: decryptedSecret
-            };
+// 2. DESENCRIPTAR SECRET
+const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
+
+// 3. DESENCRIPTAR MEMO
+let decryptedMemo = "";
+try {
+    decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
+} catch (e) {
+    decryptedMemo = (user.bitmartApiMemo || "").trim();
+}
+
+// LOG DE SEGURIDAD REVISADO
+// Ahora verás que la Key es mucho más corta que el hash de 96 caracteres
+console.log(`[AUTH_CHECK] User: ${userId} | Memo: "${decryptedMemo}" | Key Limpia: ${decryptedApiKey.substring(0,6)}...`);
+
+const userCreds = {
+    apiKey: decryptedApiKey, // <--- AHORA PASAMOS LA KEY DESENCRIPTADA
+    apiMemo: decryptedMemo,
+    secretKey: decryptedSecret
+};
 
             if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
