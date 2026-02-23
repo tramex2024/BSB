@@ -115,16 +115,26 @@ const bitmartService = {
         } catch (e) { return { availableUSDT: 0, availableBTC: 0 }; }
     },
 
+   // --- Órdenes (Escritura) ---
     placeOrder: async (symbol, side, type, amount, price, creds) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
 
+        // Función interna para evitar decimales infinitos que rompen la firma
+        const cleanNum = (n, precision = 8) => {
+            const num = parseFloat(n);
+            // Si es USDT (notional), máximo 2 decimales. Si es BTC (size), hasta 8.
+            const p = (sideLower === 'buy' && type.toLowerCase() === 'market') ? 2 : precision;
+            return num.toFixed(p).replace(/\.?0+$/, ""); // Quita ceros innecesarios al final
+        };
+
         if (type.toLowerCase() === 'limit') {
-            body.size = String(amount);
-            body.price = String(price);
+            body.size = cleanNum(amount);
+            body.price = cleanNum(price, 2);
         } else {
-            if (sideLower === 'buy') body.notional = String(amount);
-            else body.size = String(amount);
+            // Lógica de mercado
+            if (sideLower === 'buy') body.notional = cleanNum(amount, 2); // <--- FIX AQUÍ
+            else body.size = cleanNum(amount);
         }
 
         return await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
