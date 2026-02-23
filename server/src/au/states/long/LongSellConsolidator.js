@@ -8,19 +8,19 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
  * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.
  * @param {userId} - Inyectado para asegurar que consultamos la API Key correcta.
  */
-async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId) {
+async function monitorAndConsolidateLongSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) { // <--- AÑADIDO userCreds y nombre cambiado
     
     const lastOrder = botState.llastOrder;
 
-    // Validación de seguridad para evitar procesar órdenes de compra aquí
+    // Validación de seguridad
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false; 
     }
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Extraemos las credenciales para la firma de la API BitMart
-    const creds = botState.config?.creds || null;
+    // 🟢 AUDITORÍA: Usamos las credenciales inyectadas
+    const creds = userCreds;
 
     try {
         // 1. CONSULTA AISLADA: Pasamos creds (extraídas del config) para usar su API KEY
@@ -81,4 +81,4 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
     }
 }
 
-module.exports = { monitorAndConsolidateSell };
+module.exports = { monitorAndConsolidateLongSell };

@@ -25,7 +25,7 @@ const {
 } = require('./autobotCalculations');
 
 const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
-const { monitorAndConsolidateSell: monitorLongSell } = require('./src/au/states/long/LongSellConsolidator'); 
+const { monitorAndConsolidateLongSell: monitorLongSell } = require('./src/au/states/long/LongSellConsolidator'); 
 const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
 const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/states/short/ShortBuyConsolidator');
 
@@ -274,20 +274,21 @@ const userCreds = {
 
             // --- Monitoreo de Órdenes (Lógica de Consolidación) ---
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-                if (botState.llastOrder.side === 'buy') {
-                    await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-                } else {
-                    await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-                }
-            }
+    if (botState.llastOrder.side === 'buy') {
+        // Agregamos 'userCreds' como último argumento
+        await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+    } else {
+        await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+    }
+}
 
-            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-                if (botState.slastOrder.side === 'sell') { 
-                    await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-                } else {
-                    await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
-                }
-            }
+if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+    if (botState.slastOrder.side === 'sell') { 
+        await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+    } else {
+        await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+    }
+}
 
             // --- Cálculos Matemáticos de Cobertura y PNL ---
             if (botState.lstate !== 'STOPPED' && botState.config.long) {

@@ -20,7 +20,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
     const orderIdString = String(lastOrder.order_id);
 
     // 🟢 AUDITORÍA: Extraemos las credenciales del botState para la firma de la API
-    const creds = botState.config?.creds || null;
+    const creds = userCreds;
 
     try {
         // Consultamos BitMart usando el contexto del usuario para acceder a sus API Keys

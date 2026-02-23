@@ -7,8 +7,8 @@ const { handleSuccessfulShortSell } = require('../../managers/shortDataManager')
  * Monitorea órdenes de VENTA (apertura o DCA de Short).
  * Asegura que los activos vendidos se registren correctamente en el 'sac' del usuario.
  */
-async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId) {
-    // Referencia directa al slot de órdenes pendientes del Short
+async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) { // <--- Añadido userCreds
+    
     const lastOrder = botState.slastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
@@ -17,8 +17,8 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Extraemos las credenciales para que el servicio pueda firmar la petición
-    const creds = botState.config?.creds || null;
+    // 🟢 AUDITORÍA: Usamos las credenciales inyectadas desde el orquestador
+    const creds = userCreds; // <--- CAMBIO CLAVE
 
     try {
         // Consultamos BitMart usando el contexto del usuario específico (API Keys aisladas)

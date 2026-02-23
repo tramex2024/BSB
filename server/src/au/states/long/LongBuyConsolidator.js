@@ -8,7 +8,7 @@ const { handleSuccessfulBuy } = require('../../managers/longDataManager');
  * El "vigilante" que espera a que BitMart confirme la ejecución.
  * @param {userId} - Añadido para soporte multi-usuario.
  */
-async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId) {
+async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) { // <--- Añadido userCreds
     
     // 1. Verificación de existencia de orden
     const lastOrder = botState.llastOrder;
@@ -19,8 +19,8 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Extraemos las credenciales para que el servicio pueda firmar la petición
-    const creds = botState.config?.creds || null;
+    // 🟢 AUDITORÍA: Usamos las credenciales inyectadas, no las de botState.config
+    const creds = userCreds; // <--- CAMBIO CLAVE
 
     try {
         // 2. CONSULTA AISLADA POR USUARIO
