@@ -22,12 +22,12 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
     const apiMemo = (userCreds?.apiMemo || process.env.BITMART_API_MEMO || "").trim();
 
     // ---------------------------------------------------------
-    // LOGS DE AUDITORÍA TOTAL (BORRAR TRAS VALIDAR)
-    console.log("--- [AUDITORÍA DE CREDENCIALES] ---");
-    console.log(`API_KEY:    [${apiKey}]`);
-    console.log(`SECRET_KEY: [${secretKey}]`);
-    console.log(`API_MEMO:   [${apiMemo}]`);
-    console.log("----------------------------------");
+   // ESTOS SON LOS LOGS QUE QUIERES VER PARA COMPARAR
+    console.log("--- [AUDITORÍA FINAL BITMART SERVICE] ---");
+    console.log(`KEY REAL:    [${apiKey}]`);
+    console.log(`SECRET REAL: [${secretKey}]`);
+    console.log(`MEMO REAL:   [${apiMemo}]`);
+    console.log("-----------------------------------------");
     // ---------------------------------------------------------
 
     if (!apiKey || !secretKey) {
