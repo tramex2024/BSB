@@ -21,34 +21,23 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
     const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
     const apiMemo = (userCreds?.apiMemo || process.env.BITMART_API_MEMO || "").trim();
 
-    // ---------------------------------------------------------
-   // ESTOS SON LOS LOGS QUE QUIERES VER PARA COMPARAR
-    console.log("--- [AUDITORÍA FINAL BITMART SERVICE] ---");
-    console.log(`KEY REAL:    [${apiKey}]`);
-    console.log(`SECRET REAL: [${secretKey}]`);
-    console.log(`MEMO REAL:   [${apiMemo}]`);
-    console.log("-----------------------------------------");
-    // ---------------------------------------------------------
-
     if (!apiKey || !secretKey) {
         throw new Error("Credenciales de BitMart faltantes.");
     }
 
     const timestamp = Date.now().toString();
 
-    // 2. Preparación del String para la Firma
+   // 2. Preparación del String para la Firma
     let bodyOrQuery = "";
     if (method === 'GET') {
-        const query = querystring.stringify(params);
-        bodyOrQuery = query ? query : "";
+        bodyOrQuery = Object.keys(params).length > 0 ? querystring.stringify(params) : "";
     } else {
-        // IMPORTANTE: BitMart requiere el JSON sin espacios para la firma
+        // FORZAMOS JSON COMPACTO SIN ESPACIOS
         bodyOrQuery = (body && Object.keys(body).length > 0) ? JSON.stringify(body) : "";
     }
 
-    // 3. Generación de Firma (CORREGIDO cconst -> const)
     const message = `${timestamp}#${apiMemo}#${bodyOrQuery}`;
-    const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex); // Forzamos Hex
+    const sign = CryptoJS.HmacSHA256(message, secretKey).toString();
 
     const headers = {
         'Content-Type': 'application/json',
@@ -70,7 +59,8 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         if (method === 'GET') {
             config.params = params;
         } else {
-            // USAMOS EL MISMO STRING QUE FIRMAMOS PARA EVITAR DISCREPANCIAS
+            // AQUÍ ESTÁ EL TRUCO: Enviamos el string EXACTO que firmamos
+            // No dejamos que Axios lo vuelva a procesar
             config.data = bodyOrQuery; 
         }
 
