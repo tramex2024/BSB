@@ -1,4 +1,4 @@
-espera que no soy programador:  /**
+ /**
  * metricsManager.js - Motor de Análisis de Rentabilidad (TradeCycles Only)
  * Versión Final Blindada - Corrección de Duplicados y Renderizado
  */
