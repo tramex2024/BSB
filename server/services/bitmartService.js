@@ -16,30 +16,30 @@ const tickerCache = new Map();
 const CACHE_TTL = 2000;  
 
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    // 1. Prioridad y Limpieza de Credenciales (Vital para evitar 401)
+    // 1. Limpieza de Credenciales
     const apiKey = (userCreds?.apiKey || process.env.BITMART_API_KEY || "").trim();
     const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
     const apiMemo = (userCreds?.apiMemo || process.env.BITMART_API_MEMO || "").trim();
 
     if (!apiKey || !secretKey) {
-        throw new Error("Credenciales de BitMart faltantes (API Key o Secret).");
+        throw new Error("Credenciales de BitMart faltantes.");
     }
 
     const timestamp = Date.now().toString();
 
-    // 2. Preparación de String para la Firma
+    // 2. Preparación del String para la Firma
     let bodyOrQuery = "";
     if (method === 'GET') {
         const query = querystring.stringify(params);
         bodyOrQuery = query ? query : "";
     } else {
-        // En POST, el body no debe tener espacios (JSON compacto)
+        // IMPORTANTE: BitMart requiere el JSON sin espacios para la firma
         bodyOrQuery = (body && Object.keys(body).length > 0) ? JSON.stringify(body) : "";
     }
 
-    // 3. Generación de Firma HMAC-SHA256 (Formato: timestamp#memo#body)
+    // 3. Generación de Firma (CORREGIDO cconst -> const)
     const message = `${timestamp}#${apiMemo}#${bodyOrQuery}`;
-    const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
+    const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex); // Forzamos Hex
 
     const headers = {
         'Content-Type': 'application/json',
@@ -61,24 +61,20 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         if (method === 'GET') {
             config.params = params;
         } else {
-            // Enviamos el objeto body directamente; axios lo stringificará
-            config.data = body; 
+            // USAMOS EL MISMO STRING QUE FIRMAMOS PARA EVITAR DISCREPANCIAS
+            config.data = bodyOrQuery; 
         }
 
         const response = await axios(config);
         
         if (response.data.code === 1000) return response.data;
-
         throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
         if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada. 
-                Detalles de firma:
-                Path: ${path}
-                API Key (inicio): ${apiKey.substring(0, 6)}...
-                Timestamp: ${timestamp}
-                Message: ${message}`);
+            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada.`);
+            console.error(`Message firmado: ${message}`);
+            console.error(`Firma generada: ${sign}`);
         }
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
