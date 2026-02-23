@@ -1,47 +1,43 @@
 /**
  * BSB/server/services/bitmartService.js
- * SERVICIO REST BITMART - Versión 2026 Restaurada y Completa
+ * SERVICIO REST BITMART - Versión 2026 Reparada (Fix 401)
  */
 
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
-// Importante: Asegúrate de que este archivo exista en tu carpeta services
 const { initOrderWebSocket } = require('./bitmartWs'); 
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
 
-// =========================================================================
-// MOTOR DE CACHÉ
-// =========================================================================
+// Motores de caché
 const tickerCache = new Map(); 
-const klinesCache = new Map(); 
 const CACHE_TTL = 2000;  
-const KLINES_TTL = 15000;
-
-// =========================================================================
-// MOTOR DE PETICIONES (makeRequest)
-// =========================================================================
 
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    // 1. Prioridad de Credenciales: Usuario inyectado > Variables de Entorno
-    const apiKey = userCreds?.apiKey || process.env.BITMART_API_KEY;
-    const secretKey = userCreds?.secretKey || process.env.BITMART_SECRET_KEY;
-    const apiMemo = userCreds?.apiMemo || process.env.BITMART_API_MEMO;
+    // 1. Prioridad y Limpieza de Credenciales (Vital para evitar 401)
+    const apiKey = (userCreds?.apiKey || process.env.BITMART_API_KEY || "").trim();
+    const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
+    const apiMemo = (userCreds?.apiMemo || process.env.BITMART_API_MEMO || "").trim();
+
+    if (!apiKey || !secretKey) {
+        throw new Error("Credenciales de BitMart faltantes (API Key o Secret).");
+    }
 
     const timestamp = Date.now().toString();
 
-    // 2. Preparación de Body/Query para la Firma (Lógica Legacy de Éxito)
+    // 2. Preparación de String para la Firma
     let bodyOrQuery = "";
     if (method === 'GET') {
-        bodyOrQuery = querystring.stringify(params);
-    } else if (method === 'POST') {
-        // Mantenemos el JSON.stringify directo sin ordenar llaves para evitar 401
+        const query = querystring.stringify(params);
+        bodyOrQuery = query ? query : "";
+    } else {
+        // En POST, el body no debe tener espacios (JSON compacto)
         bodyOrQuery = (body && Object.keys(body).length > 0) ? JSON.stringify(body) : "";
     }
 
-    // 3. Generación de Firma HMAC-SHA256
+    // 3. Generación de Firma HMAC-SHA256 (Formato: timestamp#memo#body)
     const message = `${timestamp}#${apiMemo}#${bodyOrQuery}`;
     const sign = CryptoJS.HmacSHA256(message, secretKey).toString(CryptoJS.enc.Hex);
 
@@ -62,19 +58,27 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
             timeout: 10000 
         };
 
-        if (method === 'GET') config.params = params;
-        else config.data = body;
+        if (method === 'GET') {
+            config.params = params;
+        } else {
+            // Enviamos el objeto body directamente; axios lo stringificará
+            config.data = body; 
+        }
 
         const response = await axios(config);
         
-        // Código 1000 es éxito en BitMart
         if (response.data.code === 1000) return response.data;
 
         throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
         if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada en ${path}. Verifica Credenciales.`);
+            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada. 
+                Detalles de firma:
+                Path: ${path}
+                API Key (inicio): ${apiKey.substring(0, 6)}...
+                Timestamp: ${timestamp}
+                Message: ${message}`);
         }
         throw new Error(`BitMart Request Failed [${path}]: ${error.message}`);
     }
@@ -87,7 +91,6 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 const orderStatusMap = { 'filled': 1, 'cancelled': 6, 'all': 0 };
 
 const bitmartService = {
-    // --- Autenticación y Balances ---
     validateApiKeys: async (creds) => {
         try {
             const wallet = await bitmartService.getBalance(creds);
@@ -112,18 +115,16 @@ const bitmartService = {
         } catch (e) { return { availableUSDT: 0, availableBTC: 0 }; }
     },
 
-    // --- Órdenes (Escritura) ---
     placeOrder: async (symbol, side, type, amount, price, creds) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
 
         if (type.toLowerCase() === 'limit') {
-            body.size = amount.toString();
-            body.price = price.toString();
+            body.size = String(amount);
+            body.price = String(price);
         } else {
-            // Lógica de mercado: Compras usan notional (USDT), Ventas usan size (BTC)
-            if (sideLower === 'buy') body.notional = amount.toString();
-            else body.size = amount.toString();
+            if (sideLower === 'buy') body.notional = String(amount);
+            else body.size = String(amount);
         }
 
         return await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
@@ -135,7 +136,6 @@ const bitmartService = {
         return bitmartService.placeOrder(symbol, side, 'market', amount, null, creds);
     },
 
-    // --- Consultas (Lectura) ---
     getOpenOrders: async (symbol, creds) => {
         const safeSymbol = symbol || 'BTC_USDT';
         try {
@@ -143,7 +143,6 @@ const bitmartService = {
             const orders = res.data?.list || res.data?.data?.list || [];
             return { orders: Array.isArray(orders) ? orders : [] };
         } catch (error) {
-            console.error(`${LOG_PREFIX} Error en getOpenOrders:`, error.message);
             return { orders: [] };
         }
     },
@@ -178,26 +177,19 @@ const bitmartService = {
         } catch (e) { return null; }
     },
 
-    // --- Mercado ---
     getTicker: async (symbol) => {
         const now = Date.now();
         const cached = tickerCache.get(symbol);
-        if (cached?.promise) return cached.promise;
         if (cached?.data && (now - cached.timestamp < CACHE_TTL)) return cached.data;
 
-        const promise = (async () => {
-            try {
-                const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
-                const data = res.data.tickers.find(t => t.symbol === symbol);
-                tickerCache.set(symbol, { data, timestamp: Date.now(), promise: null });
-                return data;
-            } catch (err) {
-                tickerCache.delete(symbol);
-                throw err;
-            }
-        })();
-        tickerCache.set(symbol, { ...cached, promise });
-        return promise;
+        try {
+            const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
+            const data = res.data.tickers.find(t => t.symbol === symbol);
+            tickerCache.set(symbol, { data, timestamp: Date.now() });
+            return data;
+        } catch (err) {
+            throw err;
+        }
     },
 
     getKlines: async (symbol, interval, limit = 200) => {
@@ -214,7 +206,6 @@ const bitmartService = {
         } catch (e) { return []; }
     },
 
-    // --- Helpers Adicionales ---
     initOrderWebSocket,
     getRecentOrders: async (symbol, creds) => bitmartService.getHistoryOrders({ symbol, limit: 50 }, creds)
 };
