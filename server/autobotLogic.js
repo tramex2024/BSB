@@ -4,8 +4,12 @@
  */
 
 const Autobot = require('./models/Autobot');
+const User = require('./models/User'); 
 const bitmartService = require('./services/bitmartService');
 const orchestrator = require('./src/au/utils/cycleOrchestrator');
+
+// REPARACIÓN DE RUTA: Importamos específicamente 'decrypt' desde tu archivo encryption.js
+const { decrypt } = require('./utils/encryption'); 
 
 const { runLongStrategy } = require('./src/longStrategy');
 const { runShortStrategy } = require('./src/shortStrategy');
@@ -66,7 +70,7 @@ async function updateConfig(userId, newConfig) {
 }
 
 /**
- * ENCENDIDO DE ESTRATEGIA (Blindado con Validación de Solvencia 2026)
+ * ENCENDIDO DE ESTRATEGIA
  */
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
@@ -75,27 +79,22 @@ async function startSide(userId, side, config) {
     const currentPrice = orchestrator.getLastPrice();
     const finalConfig = JSON.parse(JSON.stringify(botState.config));
     
-    // 1. Sincronizar configuración si se pasó alguna en la petición
     if (config && config[side]) {
         Object.assign(finalConfig[side], config[side]);
     }
 
-    // --- 🛡️ BLOQUE DE SEGURIDAD: VALIDACIÓN DE SALDO ANTES DE INICIAR ---
     const availUSDT = botState.lastAvailableUSDT || 0;
     const availBTC = botState.lastAvailableBTC || 0;
 
     if (side === 'long' || side === 'ai') {
         const amountNeeded = parseFloat(finalConfig[side]?.amountUsdt || 0);
         const currentInStrategy = (side === 'long' ? botState.lbalance : botState.aibalance) || 0;
-        
-        // ¿Necesitamos más USDT de los que tenemos libres?
         const missingUSDT = amountNeeded - currentInStrategy;
         
-        if (missingUSDT > (availUSDT + 2)) { // Margen de $2 para fees/variación
+        if (missingUSDT > (availUSDT + 2)) { 
             throw new Error(`Saldo USDT insuficiente para iniciar ${side.toUpperCase()}. Necesitas $${missingUSDT.toFixed(2)} adicionales.`);
         }
     } 
-    
     else if (side === 'short') {
         const amountShortUsdt = parseFloat(finalConfig.short?.amountUsdt || 0);
         const alreadySoldUsdt = botState.sbalance || 0;
@@ -108,7 +107,6 @@ async function startSide(userId, side, config) {
             }
         }
     }
-    // --- FIN DEL BLINDAJE ---
 
     let cleanData = {};
     let stateField = '';
@@ -132,9 +130,7 @@ async function startSide(userId, side, config) {
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
-    
     orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} validada y encendida.`, 'success', userId);
-    
     await orchestrator.slowBalanceCacheUpdate(userId); 
     return bot;
 }
@@ -158,7 +154,6 @@ async function stopSide(userId, side) {
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
     if (bot) await orchestrator.syncFrontendState(orchestrator.getLastPrice(), bot, userId);
-
     orchestrator.log(`🛑 Estrategia ${side.toUpperCase()} apagada.`, 'warning', userId);
     return bot;
 }
@@ -188,7 +183,22 @@ async function botCycle(priceFromWebSocket) {
             const userId = botState.userId;
             const changeSet = {};
 
-            // VALIDACIÓN PREVIA DE SEGURIDAD
+            // 1. Obtención de Credenciales en Tiempo Real
+            const user = await User.findById(userId).lean();
+            if (!user || !user.bitmartApiKey) {
+                orchestrator.log(`⚠️ Salto: Usuario ${userId} sin llaves API.`, 'error', userId);
+                continue;
+            }
+
+            // Desencriptamos la Secret Key para la firma HMAC
+            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted);
+
+            const userCreds = {
+                apiKey: user.bitmartApiKey,
+                apiMemo: user.bitmartApiMemo,
+                secretKey: decryptedSecret
+            };
+
             if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
             }
@@ -205,42 +215,33 @@ async function botCycle(priceFromWebSocket) {
                 scycle: botState.scycle || 0,
                 aicycle: botState.aicycle || 0,
 
-                // REPARACIÓN: Llamada directa a placeOrder con desglose de parámetros
-                placeLongOrder: async (params, creds) => {
+                // Inyección de órdenes con credenciales del usuario actual
+                placeLongOrder: async (params) => {
                     const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
                     return await bitmartService.placeOrder(
-                        params.symbol, 
-                        params.side, 
-                        params.type, 
-                        params.notional || params.size, 
-                        params.price || null, 
-                        creds, 
-                        clientOrderId
+                        params.symbol, params.side, params.type, 
+                        params.notional || params.size, params.price || null, 
+                        userCreds, clientOrderId
                     );
                 },
-                placeShortOrder: async (params, creds) => {
+                placeShortOrder: async (params) => {
                     const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
                     return await bitmartService.placeOrder(
-                        params.symbol, 
-                        params.side, 
-                        params.type, 
-                        params.notional || params.size, 
-                        params.price || null, 
-                        creds, 
-                        clientOrderId
+                        params.symbol, params.side, params.type, 
+                        params.notional || params.size, params.price || null, 
+                        userCreds, clientOrderId
                     );
                 },
-                placeAIOrder: async (params, creds) => {
+                placeAIOrder: async (params) => {
                     const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
                     return await bitmartService.placeOrder(
-                        params.symbol, 
-                        params.side, 
-                        params.type, 
-                        params.notional || params.size, 
-                        params.price || null, 
-                        creds, 
-                        clientOrderId
+                        params.symbol, params.side, params.type, 
+                        params.notional || params.size, params.price || null, 
+                        userCreds, clientOrderId
                     );
+                },
+                placeMarketOrder: async (params) => {
+                    return await bitmartService.placeMarketOrder(params, userCreds);
                 },
 
                 updateBotState: async (val, strat) => { 
@@ -249,12 +250,12 @@ async function botCycle(priceFromWebSocket) {
                 },
                 updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
                 updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
-                updateAIStateData: async (fields) => { Object.assign(changeSet, fields); }, // AÑADIDO PARA IA
+                updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
                 updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-            // --- MONITOR DE ÓRDENES (LONG & SHORT) ---
+            // --- Monitoreo ---
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
                 if (botState.llastOrder.side === 'buy') {
                     await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId);
@@ -271,7 +272,7 @@ async function botCycle(priceFromWebSocket) {
                 }
             }
 
-            // --- MATEMÁTICAS LONG ---
+            // --- Cálculos Matemáticos ---
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
@@ -283,7 +284,6 @@ async function botCycle(priceFromWebSocket) {
                 changeSet.lprofit = activeLPPC > 0 ? calculatePotentialProfit(activeLPPC, activeLAC, currentPrice, 'long') : 0;
             }
 
-            // --- MATEMÁTICAS SHORT ---
             if (botState.sstate !== 'STOPPED' && botState.config.short) {
                 const activeSBalance = changeSet.sbalance !== undefined ? changeSet.sbalance : (botState.sbalance || 0);
                 const activeSOCC = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
@@ -295,15 +295,12 @@ async function botCycle(priceFromWebSocket) {
                 changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
             }
 
-            // --- EJECUCIÓN DE ESTRATEGIAS ---
+            // --- Ejecución de Estrategias ---
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
             if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies); 
 
-            // --- FORZADO DE ACTUALIZACIÓN ---
             changeSet.lastUpdate = new Date();
-
-            // GUARDADO POR USUARIO (Unifica todos los cambios de Long, Short e IA en una sola escritura)
             await orchestrator.commitChanges(userId, changeSet, currentPrice);
         }
         
