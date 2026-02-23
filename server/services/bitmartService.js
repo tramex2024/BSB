@@ -21,6 +21,15 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
     const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
     const apiMemo = (userCreds?.apiMemo || process.env.BITMART_API_MEMO || "").trim();
 
+    // ---------------------------------------------------------
+    // LOGS DE AUDITORÍA TOTAL (BORRAR TRAS VALIDAR)
+    console.log("--- [AUDITORÍA DE CREDENCIALES] ---");
+    console.log(`API_KEY:    [${apiKey}]`);
+    console.log(`SECRET_KEY: [${secretKey}]`);
+    console.log(`API_MEMO:   [${apiMemo}]`);
+    console.log("----------------------------------");
+    // ---------------------------------------------------------
+
     if (!apiKey || !secretKey) {
         throw new Error("Credenciales de BitMart faltantes.");
     }
