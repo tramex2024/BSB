@@ -24,9 +24,9 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
     // ---------------------------------------------------------
     // LOGS DE AUDITORÍA TOTAL (BORRAR TRAS VALIDAR)
     console.log("--- [AUDITORÍA DE CREDENCIALES] ---");
-    console.log(`API_KEY:    [${apiKey}]`);
-    console.log(`SECRET_KEY: [${secretKey}]`);
-    console.log(`API_MEMO:   [${apiMemo}]`);
+   // console.log(`API_KEY:    [${apiKey}]`);
+   // console.log(`SECRET_KEY: [${secretKey}]`);
+   // console.log(`API_MEMO:   [${apiMemo}]`);
     console.log("----------------------------------");
     // ---------------------------------------------------------
 
