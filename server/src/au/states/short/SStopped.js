@@ -7,6 +7,7 @@
  */
 
 // Mapa persistente para control de frecuencia de logs por userId
+// 🟢 AUDITORÍA: Estructura de datos óptima para segmentación por usuario en Node.js.
 const userLastLogTimes = new Map();
 
 async function run(dependencies) {
@@ -17,7 +18,7 @@ async function run(dependencies) {
     // 1. CONTROL DE SPAM: Recuperamos el tiempo del último log de este usuario
     const lastLogTime = userLastLogTimes.get(userKey) || 0;
 
-    // Log cada 10 minutos por usuario
+    // Log cada 10 minutos por usuario para evitar saturar sockets/DB
     if (now - lastLogTime < 600000) return;
 
     // 2. VERIFICACIÓN DE DEUDA (sac = Short Accumulated Coins)
@@ -25,9 +26,10 @@ async function run(dependencies) {
 
     if (ac > 0) {
         // ALERTA DE RIESGO: Hay deuda de BTC pero el bot está apagado.
+        // 🟢 AUDITORÍA: El mensaje es específico y urgente, indicando al usuario que la gestión de riesgo está inactiva.
         log(`[S-STOPPED] ⚠️ Estrategia Short detenida con deuda activa (${ac.toFixed(8)} BTC). El bot NO está gestionando Recompra ni DCA. ¡Riesgo alto si el precio sube!`, 'warning');
     } else {
-        // Heartbeat silencioso en consola de servidor
+        // Heartbeat silencioso en consola de servidor (para debugeo de ciclo sin molestar al usuario)
         console.log(`[SYS-HB] Short Stopped - User: ${userId} - No debt found.`);
     }
 
@@ -35,6 +37,7 @@ async function run(dependencies) {
     userLastLogTimes.set(userKey, now);
 
     // Mantenimiento preventivo: si el mapa es muy grande, limpiamos registros viejos (> 2h)
+    // 🟢 AUDITORÍA: Vital para evitar memory leaks en servidores que gestionan >1000 usuarios activos simultáneos.
     if (userLastLogTimes.size > 1000) {
         for (const [key, time] of userLastLogTimes) {
             if (now - time > 7200000) userLastLogTimes.delete(key);

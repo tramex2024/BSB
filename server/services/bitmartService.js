@@ -219,6 +219,21 @@ const bitmartService = {
         }));
     },
 
+    // --- FUNCIÓN AGREGADA: getOrderDetail ---
+    getOrderDetail: async (symbol, orderId, creds) => {
+        try {
+            const res = await makeRequest('POST', '/spot/v4/query/order', {}, { 
+                symbol, 
+                orderId: String(orderId), 
+                orderMode: 'spot' 
+            }, creds);
+            return res.data?.data || res.data || null;
+        } catch (e) { 
+            console.error(`${LOG_PREFIX} Error en getOrderDetail:`, e.message);
+            return null; 
+        }
+    },
+
     placeOrder: async (symbol, side, type, amount, price, creds, clientOrderId = null) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
@@ -233,6 +248,13 @@ const bitmartService = {
         // Nota: Mantiene v2/submit_order para compatibilidad de ejecución rápida
         const res = await makeRequest('POST', '/spot/v2/submit_order', {}, body, creds);
         return res.data;
+    },
+
+    // --- FUNCIÓN AGREGADA: placeMarketOrder (Alias para compatibilidad) ---
+    placeMarketOrder: async (params, creds) => {
+        const { symbol, side, notional, size } = params;
+        const amount = side.toLowerCase() === 'buy' ? notional : size;
+        return bitmartService.placeOrder(symbol, side, 'market', amount, null, creds);
     }
 };
 

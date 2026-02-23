@@ -19,14 +19,19 @@ async function monitorAndConsolidateSell(botState, SYMBOL, log, updateLStateData
 
     const orderIdString = String(lastOrder.order_id);
 
+    // 🟢 AUDITORÍA: Extraemos las credenciales para la firma de la API BitMart
+    const creds = botState.config?.creds || null;
+
     try {
-        // 1. CONSULTA AISLADA: Pasamos userId para usar su API KEY
-        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, userId);
+        // 1. CONSULTA AISLADA: Pasamos creds (extraídas del config) para usar su API KEY
+        // 🟢 CORRECCIÓN: Se reemplaza userId por creds para cumplir con la firma V4
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
 
         // Respaldo: Si la API no responde el detalle, buscamos en el historial reciente del usuario
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
-            const recentOrders = await getRecentOrders(SYMBOL, userId);
+            // 🟢 CORRECCIÓN: Se reemplaza userId por creds
+            const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
         }

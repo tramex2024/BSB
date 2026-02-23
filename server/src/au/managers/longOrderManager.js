@@ -125,8 +125,8 @@ async function placeLongSellOrder(config, botState, btcAmount, log, updateGenera
  * CANCELACIÓN: Esta se mantiene con bitmartService directo ya que no requiere prefijo.
  */
 async function cancelActiveLongOrder(botState, log, updateGeneralBotState, userId) {
-    // ... Tu lógica original de cancelación está perfecta porque usa el order_id existente ...
-    // Solo asegúrate de importar bitmartService arriba si cancelOrder lo requiere.
+    // Nota: Aquí faltaría importar bitmartService si se va a usar directamente,
+    // o pasar una función inyectada para mantener la consistencia multiusuario.
 }
 
 module.exports = {

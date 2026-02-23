@@ -19,6 +19,7 @@ async function run(dependencies) {
         updateBotState, 
         updateGeneralBotState,
         // --- INYECCIÓN DE LA FUNCIÓN FIRMADA ---
+        // 🟢 AUDITORÍA: Clave para el entorno multiusuario 2026.
         placeLongOrder 
     } = dependencies;
     
@@ -64,6 +65,7 @@ async function run(dependencies) {
             
             try {
                 // --- CAMBIO: Pasamos placeLongOrder para que la venta lleve el prefijo L_ ---
+                // 🟢 AUDITORÍA: El manager utiliza la función inyectada con las creds del usuario.
                 await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, placeLongOrder); 
             } catch (error) {
                 log(`❌ Error crítico en ejecución de venta: ${error.message}`, 'error');

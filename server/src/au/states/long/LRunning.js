@@ -1,3 +1,5 @@
+// BSB/server/src/au/states/long/LRunning.js
+
 const MarketSignal = require('../../../../models/MarketSignal');
 const { calculateLongCoverage } = require('../../../../autobotCalculations');
 
@@ -17,6 +19,7 @@ async function run(dependencies) {
     } = dependencies;
     
     // 1. SECURITY CHECK (Flat Architecture)
+    // 🟢 AUDITORÍA: Previene estados inconsistentes si el usuario ya tiene activos (lac > 0)
     if (parseFloat(botState.lac || 0) > 0) {
         log("[L-RUNNING] 🛡️ Open position detected (lac > 0). Correcting state to BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
@@ -26,6 +29,7 @@ async function run(dependencies) {
     // --- NUEVO: ACTUALIZACIÓN DE PROYECCIÓN VISUAL ---
     // Mientras esperamos la señal, actualizamos el Dashboard con lo que pasaría
     // si entráramos en este preciso segundo.
+    // 🟢 AUDITORÍA: El cálculo usa 'botState.lbalance' del usuario específico.
     const coverageInfo = calculateLongCoverage(
         parseFloat(botState.lbalance || 0),
         currentPrice, // Base real de mercado
@@ -44,6 +48,7 @@ async function run(dependencies) {
     // 2. GLOBAL SIGNAL QUERY
     try {
         const currentSymbol = botState.config?.symbol || 'BTC_USDT';
+        // 🟢 AUDITORÍA: MarketSignal es una colección global, eficiente para no saturar la DB
         const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
 
         if (!globalSignal) {

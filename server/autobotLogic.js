@@ -205,23 +205,42 @@ async function botCycle(priceFromWebSocket) {
                 scycle: botState.scycle || 0,
                 aicycle: botState.aicycle || 0,
 
+                // REPARACIÓN: Llamada directa a placeOrder con desglose de parámetros
                 placeLongOrder: async (params, creds) => {
-                    return await bitmartService.placeMarketOrder({
-                        ...params,
-                        clientOrderId: `L_${botState.lcycle || 0}_${Date.now()}`
-                    }, creds);
+                    const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
+                    return await bitmartService.placeOrder(
+                        params.symbol, 
+                        params.side, 
+                        params.type, 
+                        params.notional || params.size, 
+                        params.price || null, 
+                        creds, 
+                        clientOrderId
+                    );
                 },
                 placeShortOrder: async (params, creds) => {
-                    return await bitmartService.placeMarketOrder({
-                        ...params,
-                        clientOrderId: `S_${botState.scycle || 0}_${Date.now()}`
-                    }, creds);
+                    const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
+                    return await bitmartService.placeOrder(
+                        params.symbol, 
+                        params.side, 
+                        params.type, 
+                        params.notional || params.size, 
+                        params.price || null, 
+                        creds, 
+                        clientOrderId
+                    );
                 },
                 placeAIOrder: async (params, creds) => {
-                    return await bitmartService.placeMarketOrder({
-                        ...params,
-                        clientOrderId: `AI_${botState.aicycle || 0}_${Date.now()}`
-                    }, creds);
+                    const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
+                    return await bitmartService.placeOrder(
+                        params.symbol, 
+                        params.side, 
+                        params.type, 
+                        params.notional || params.size, 
+                        params.price || null, 
+                        creds, 
+                        clientOrderId
+                    );
                 },
 
                 updateBotState: async (val, strat) => { 

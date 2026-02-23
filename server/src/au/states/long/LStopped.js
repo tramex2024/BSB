@@ -7,6 +7,7 @@
  */
 
 // Mapa persistente en memoria del proceso para control de frecuencia de logs
+// 🟢 AUDITORÍA: El uso de Map es eficiente para acceso por userId (userKey)
 const lastLogTimes = new Map();
 
 async function run(dependencies) {
@@ -24,6 +25,7 @@ async function run(dependencies) {
 
     if (ac > 0) {
         // Alerta visible para el usuario en su Dashboard
+        // 🟢 AUDITORÍA: Importante para evitar que el usuario olvide activos "atrapados" sin gestión de riesgo.
         log(`[L-STOPPED] ⚠️ Bot detenido con posición activa (${ac.toFixed(6)} BTC). TP y DCA desactivados. Requiere atención manual.`, 'warning');
     } else {
         // Log interno del sistema (no molesta al usuario)
@@ -35,6 +37,7 @@ async function run(dependencies) {
 
     // 4. MANTENIMIENTO DEL MAP (Evitar fuga de memoria)
     // Realizamos limpieza solo si el mapa es grande, de forma asíncrona o esporádica
+    // 🟢 AUDITORÍA: Crítico en multiusuario para mantener la estabilidad del servidor.
     if (lastLogTimes.size > 1000) {
         // Limpiamos entradas con más de 2 horas de antigüedad
         for (const [key, time] of lastLogTimes) {

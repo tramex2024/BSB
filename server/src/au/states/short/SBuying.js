@@ -15,8 +15,7 @@ async function run(dependencies) {
         userId, 
         botState, currentPrice, config, log, 
         updateBotState, updateGeneralBotState,
-        logSuccessfulCycle,
-        // Inyectamos la función firmada
+        // 🟢 AUDITORÍA: placeShortOrder lleva el contexto atómico del usuario.
         placeShortOrder 
     } = dependencies;
     
@@ -28,6 +27,7 @@ async function run(dependencies) {
     const pc = parseFloat(botState.spc || 0);       // Stop de recompra (precio gatillo)
 
     // 1. BLOQUEO DE SEGURIDAD
+    // 🟢 AUDITORÍA: Evita duplicar órdenes si ya hay una "en vuelo".
     if (slastOrder) {
         log(`[S-BUYING] ⏳ Orden activa detectada. Esperando consolidación...`, 'debug');
         return;
@@ -61,7 +61,7 @@ async function run(dependencies) {
             log(`💰 [S-CLOSE] Rebote detectado: ${currentPrice.toFixed(2)} >= ${triggerPrice.toFixed(2)}. Ejecutando recompra...`, 'success');
             
             try {
-                // Pasamos placeShortOrder para que la orden lleve el prefijo S_
+                // 🟢 AUDITORÍA: El manager utiliza la función firmada por usuario para cerrar el ciclo.
                 await placeShortBuyOrder(config, botState, acBuying, log, updateGeneralBotState, currentPrice, placeShortOrder); 
             } catch (error) {
                 log(`❌ Error crítico en recompra Short: ${error.message}`, 'error');

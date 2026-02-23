@@ -1,10 +1,12 @@
 /**
  * BSB/server/src/au/engines/StrategyManager.js
+ * Motor Analítico: Sistema de Confluencia Multivariable.
  */
 const { ADX, StochasticRSI, EMA } = require('technicalindicators');
 
 class StrategyManager {
     static calculate(history) {
+        // 🟢 AUDITORÍA: Requisito de 250 velas para garantizar que la EMA 200 sea precisa.
         if (!history || history.length < 250) return null;
 
         const closeValues = history.map(c => parseFloat(c.close));
@@ -12,6 +14,7 @@ class StrategyManager {
         const lowValues = history.map(c => parseFloat(c.low));
         
         try {
+            // 1. CÁLCULO DE INDICADORES
             const adxResult = ADX.calculate({ high: highValues, low: lowValues, close: closeValues, period: 14 });
             const latestADX = adxResult.length > 0 ? adxResult[adxResult.length - 1].adx : 0;
 
@@ -32,27 +35,36 @@ class StrategyManager {
             const lastEma200 = ema200[ema200.length - 1];
             const currentPrice = closeValues[closeValues.length - 1];
 
+            // 2. SISTEMA DE SCORING (Puntuación de Confianza)
             const isBullishCross = lastEma9 > lastEma21;
             const isAboveInstitutional = currentPrice > lastEma200;
 
             let score = 0;
+            
+            // Filtro Macro (Tendencia Principal)
             if (isAboveInstitutional) {
                 score += 30; 
                 if (isBullishCross) score += 10;
             } else {
-                score -= 30; 
+                score -= 30; // 🔴 AUDITORÍA: Penalización fuerte por estar debajo de EMA 200.
             }
 
+            // Oscilador (Momento de entrada)
             if (latestStoch && prevStoch) {
                 const kDiff = latestStoch.k - prevStoch.k;
+                // Sobrevendido con giro alcista
                 if (latestStoch.k < 25 && kDiff > 3) score += 40;
+                // Sobrecomprado
                 else if (latestStoch.k > 80) score -= 50;
+                // Momentum alcista general
                 else if (kDiff > 5) score += 15;
             }
 
-            if (latestADX > 25) score += 20; 
-            else if (latestADX < 15) score -= 40;
+            // Volatilidad y Fuerza (ADX)
+            if (latestADX > 25) score += 20; // Tendencia fuerte
+            else if (latestADX < 15) score -= 40; // Rango lateral/peligroso
 
+            // 3. NORMALIZACIÓN DE RESULTADOS
             const confidence = Math.max(0, Math.min(1, score / 100));
 
             return {
@@ -69,6 +81,9 @@ class StrategyManager {
         }
     }
 
+    /**
+     * Traduce los datos técnicos a lenguaje humano para el Dashboard.
+     */
     static _generateMessage(bullish, adx, stoch, conf) {
         if (conf >= 0.85) return "🚀 ALTA CONFIANZA: Alineación técnica total.";
         if (stoch && stoch.k > 80) return "⚠️ AGOTAMIENTO: Sobrecompra detectada.";

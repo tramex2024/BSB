@@ -15,6 +15,7 @@ const LStopped = require('./au/states/long/LStopped');
  */
 async function runLongStrategy(dependencies) {
     // 1. Verificación de integridad (Fail-fast)
+    // 🟢 AUDITORÍA: userId es mandatorio para asegurar que ningún proceso corra sin identidad
     if (!dependencies || !dependencies.botState || !dependencies.userId) {
         return; 
     }
@@ -62,6 +63,7 @@ async function runLongStrategy(dependencies) {
         }
     } catch (error) {
         // Aislamiento de errores: El fallo de un usuario no afecta al resto del botCycle
+        // 🟢 AUDITORÍA: El uso de userId en el console.error permite debugear fallos específicos sin mezclar logs
         log(`🔥 Error in LongStrategy [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-LONG][User: ${userId}]:`, error);
     }

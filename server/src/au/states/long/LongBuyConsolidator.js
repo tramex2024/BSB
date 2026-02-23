@@ -19,10 +19,13 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
 
     const orderIdString = String(lastOrder.order_id);
 
+    // 🟢 AUDITORÍA: Extraemos las credenciales para que el servicio pueda firmar la petición
+    const creds = botState.config?.creds || null;
+
     try {
         // 2. CONSULTA AISLADA POR USUARIO
-        // Pasamos userId para que bitmartService use las credenciales correctas
-        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, userId);
+        // Pasamos creds para la API de BitMart
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
         let filledVolume = parseFloat(
             finalDetails?.filledSize || 
@@ -32,7 +35,7 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
 
         // --- LÓGICA DE RESPALDO POR USUARIO ---
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
-            const recentOrders = await getRecentOrders(SYMBOL, userId);
+            const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
                 filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);

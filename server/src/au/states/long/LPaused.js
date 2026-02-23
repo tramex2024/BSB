@@ -28,6 +28,7 @@ async function run(dependencies) {
 
     // --- 1. RECOVERY LOGIC (EXIT TO SELLING) ---
     // Si el precio alcanza el TP proyectado, salimos a vender lo que tengamos
+    // 🟢 AUDITORÍA: Permite que el bot recupere la rentabilidad incluso si no pudo completar todos los DCA.
     if (ac > 0 && botState.ltprice > 0 && currentPrice >= botState.ltprice) {
         log(`🚀 [L-RECOVERY] ¡Precio TP alcanzado (${botState.ltprice.toFixed(2)})! Saliendo de pausa para VENDER.`, 'success');
         await updateBotState('SELLING', 'long'); 
@@ -35,7 +36,6 @@ async function run(dependencies) {
     }
 
     // --- 2. RECALCULAR TARGETS Y COBERTURA ---
-    // Calculamos los objetivos basados en la configuración actual
     const recalculation = calculateLongTargets(
         ppc, 
         config.long, 
@@ -47,7 +47,7 @@ async function run(dependencies) {
     /**
      * ACTUALIZACIÓN CRÍTICA: 
      * Usamos currentPrice SIEMPRE para la cobertura visual. 
-     * Esto elimina el valor "congelado" de 83k si el llep era antiguo.
+     * Esto elimina el valor "congelado" si el llep era antiguo.
      */
     const coverageInfo = calculateLongCoverage(
         currentLBalance,
@@ -60,6 +60,7 @@ async function run(dependencies) {
     );
 
     // Sincronizamos indicadores para que el usuario vea la realidad del mercado
+    // 🟢 AUDITORÍA: Persistencia en la DB específica del usuario mediante updateGeneralBotState
     await updateGeneralBotState({ 
         lrca: requiredAmount, 
         lncp: recalculation.nextCoveragePrice,
@@ -77,7 +78,7 @@ async function run(dependencies) {
     }
 
     // --- 4. VERIFICACIÓN DE REANUDACIÓN ---
-    // Verificamos que tanto el balance asignado como el real en Bitmart permitan continuar
+    // 🟢 AUDITORÍA: Se verifica contra realUSDT (Bitmart) y lbalance (Asignado en App)
     const canResume = currentLBalance >= requiredAmount && 
                       availableUSDT >= requiredAmount && 
                       requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;

@@ -1,4 +1,4 @@
-//BSB/server/src/au/managers/long/LongDataManager.js
+// BSB/server/src/au/managers/long/LongDataManager.js
 
 const { saveExecutedOrder } = require('../../../services/orderPersistenceService');
 const { calculateLongCoverage, parseNumber, getExponentialAmount } = require('../../../autobotCalculations');

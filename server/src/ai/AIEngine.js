@@ -1,8 +1,5 @@
-/**
- * BSB/server/src/au/engines/AIEngine.js
- * Motor de Decisiones - Versión Producción 2026 (Dashboard Ready)
- * Actualización: Estandarización de logs "Eye Monitor" con prefijo AI
- */
+// BSB/server/src/au/engines/AIEngine.js
+
 const Order = require('../../models/Order'); 
 const MarketSignal = require('../../models/MarketSignal'); 
 const StrategyManager = require('./StrategyManager');
@@ -11,8 +8,8 @@ const RiskManager = require('./AIRiskManager');
 class AIEngine {
     constructor() {
         this.io = null;
-        this.TRAILING_PERCENT = 0.005; 
-        this.EXCHANGE_FEE = 0.001;     
+        this.TRAILING_PERCENT = 0.005; // 0.5% 
+        this.EXCHANGE_FEE = 0.001;     // 0.1% 
     }
 
     setIo(io) { this.io = io; }
@@ -24,7 +21,8 @@ class AIEngine {
             const bot = context;
             const riskStatus = RiskManager.checkOperatingState(bot);
             
-            // 1. MANEJO DE ESTADOS (Auto-Resume / Auto-Pause)
+            // 1. GESTIÓN DE ESTADOS (Auto-Resume / Auto-Pause)
+            // 🟢 AUDITORÍA: Permite que la IA se autogestione según la liquidez del usuario
             if (riskStatus.action === 'RESUME') {
                 context.log(`[AI-RUNNING] 👁️ Balance detected. Resuming Neural Core...`, 'debug');
                 await context.updateAIStateData({ aistate: 'RUNNING' });
@@ -33,7 +31,6 @@ class AIEngine {
             
             if (bot.aistate !== 'RUNNING') {
                 if (bot.aistate === 'PAUSED') {
-                    // Log estandarizado con prefijo AI
                     context.log(`[AI-PAUSED] 👁️ Waiting for funds: $${parseFloat(bot.aibalance).toFixed(2)} USDT`, 'debug');
                 }
                 if (riskStatus.action === 'PAUSE') await context.updateAIStateData({ aistate: 'PAUSED' });
@@ -43,6 +40,7 @@ class AIEngine {
             const lastEntryPrice = bot.ailastEntryPrice || 0;
 
             // 2. GESTIÓN DE POSICIÓN ACTIVA (TRAILING STOP)
+            // 🟢 AUDITORÍA: Lógica de protección de beneficios dinámica
             if (lastEntryPrice > 0) {
                 let highestPrice = bot.aihighestPrice || 0;
                 if (price > highestPrice) {
@@ -51,8 +49,6 @@ class AIEngine {
                 }
 
                 const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
-                
-                // Log de monitoreo con prefijo AI
                 context.log(`[AI-RUNNING] 👁️ Trailing Position | Stop: $${stopPrice.toFixed(2)} | Current: $${price.toFixed(2)}`, 'debug');
 
                 if (price <= stopPrice) {
@@ -78,10 +74,8 @@ class AIEngine {
                     this._log(userId, `🚀 AI Signal: ${analysis.message}`, analysis.confidence);
                     await this._trade(userId, 'BUY', price, context);
                 } else if (analysis) {
-                    // Log estandarizado con prefijo AI
+                    // Feedback visual de confianza para el Dashboard del usuario
                     context.log(`[AI-RUNNING] 👁️ Scan: ${analysis.trend} | Confidence: ${(analysis.confidence * 100).toFixed(0)}% | Price: $${price.toFixed(2)}`, 'debug');
-                    
-                    // Actualizar el medidor visual de confianza en el Dashboard
                     this._log(userId, `AI Watching: ${analysis.trend}`, analysis.confidence, true);
                 }
             }
@@ -111,6 +105,7 @@ class AIEngine {
                     ainorder: 1
                 });
             } else {
+                // Cálculo de PNL al cerrar posición
                 const profitFactor = (price / bot.ailastEntryPrice);
                 const grossRecovery = investmentAmount * profitFactor;
                 const sellFee = grossRecovery * this.EXCHANGE_FEE;
@@ -157,6 +152,7 @@ class AIEngine {
                 });
             }
 
+            // Registro persistente en la colección de Órdenes
             await Order.create({
                 userId, strategy: 'ai', executionMode: 'SIMULATED',
                 orderId: `v_ai_${Date.now()}`, side, price,

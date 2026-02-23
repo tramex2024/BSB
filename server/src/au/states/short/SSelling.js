@@ -14,7 +14,7 @@ async function run(dependencies) {
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
         availableUSDT,
-        // Inyectamos la función firmada para el Short
+        // 🟢 AUDITORÍA: Inyección de la función firmada. Crucial para multiusuario.
         placeShortOrder 
     } = dependencies;
 
@@ -23,7 +23,7 @@ async function run(dependencies) {
 
     try {
         // 1. MONITOR DE ÓRDENES ACTIVAS
-        // Este monitor ahora será más eficiente porque solo buscará órdenes con prefijo S_
+        // 🟢 AUDITORÍA: Se pasa el userId para trazabilidad y limpieza de slots pendientes.
         const orderIsActive = await monitorShortSell(
             botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId
         );
@@ -51,7 +51,7 @@ async function run(dependencies) {
 
             if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
                 log(`🚀 [S-SELL] Iniciando ciclo Short FIRMADO.`, 'info');
-                // Pasamos placeShortOrder en lugar de userId
+                // 🟢 AUDITORÍA: Pasamos placeShortOrder (contexto atómico del usuario).
                 await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
             } else {
                 log(`⚠️ [S-SELL] Fondos insuficientes para abrir posición Short.`, 'warning');
@@ -92,7 +92,7 @@ async function run(dependencies) {
             if (hasBalance && requiredAmount > 0) {
                 log(`📈 [S-SELL] Precio en zona de DCA. Incrementando cobertura FIRMADA...`, 'warning');
                 try {
-                    // Pasamos placeShortOrder
+                    // 🟢 AUDITORÍA: Pasamos placeShortOrder para firmar con prefijo S_
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice, placeShortOrder);
                 } catch (error) {
                     log(`❌ [S-SELL] Error al colocar cobertura: ${error.message}`, 'error');

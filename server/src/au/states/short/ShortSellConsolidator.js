@@ -17,9 +17,13 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
     const orderIdString = String(lastOrder.order_id);
 
+    // 🟢 AUDITORÍA: Extraemos las credenciales para que el servicio pueda firmar la petición
+    const creds = botState.config?.creds || null;
+
     try {
         // Consultamos BitMart usando el contexto del usuario específico (API Keys aisladas)
-        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, userId);
+        // 🟢 CORRECCIÓN: Se utiliza 'creds' para la firma V4 de la API
+        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
         // Normalización de tamaño ejecutado (BTC vendidos para el Short)
         let filledSize = parseFloat(
@@ -30,7 +34,8 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
         // 1. Back-up: Si la consulta directa es ambigua, revisamos el historial reciente del usuario
         if (!finalDetails || (isNaN(filledSize) && finalDetails.state !== 'new')) {
-            const recentOrders = await getRecentOrders(SYMBOL, userId);
+            // 🟢 CORRECCIÓN: Se utiliza 'creds'
+            const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
                 filledSize = parseFloat(finalDetails.filledSize || finalDetails.size || 0);

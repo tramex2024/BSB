@@ -15,6 +15,7 @@ const SStopped = require('./au/states/short/SStopped');
  */
 async function runShortStrategy(dependencies) {
     // 1. Validación de seguridad
+    // 🟢 AUDITORÍA: fail-fast para evitar ejecuciones sin estado definido.
     if (!dependencies || !dependencies.botState) return;
 
     const { botState, userId, log } = dependencies;
@@ -60,6 +61,7 @@ async function runShortStrategy(dependencies) {
         }
     } catch (error) {
         // Aislamiento de errores para no afectar a otros usuarios en el loop
+        // 🟢 AUDITORÍA: El console.error segmentado por userId es vital para el soporte técnico multiusuario.
         log(`🔥 ShortStrategy Error [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-SHORT][User: ${userId}]:`, error);
     }
