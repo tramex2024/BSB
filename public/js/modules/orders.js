@@ -37,7 +37,7 @@ function createOrderHtml(order) {
     }
 
     const price = parseFloat(order.price || 0).toFixed(2);
-    const quantity = parseFloat(order.size || order.amount || 0).toFixed(4);
+    const quantity = parseFloat(order.size || order.amount || 0).toFixed(6);
     const fullOrderId = (order.orderId || order.order_id || '').toString();
 
     const isCancellable = ['NEW', 'PARTIALLY_FILLED', 'OPEN', 'ACTIVE', 'PENDING'].includes(rawState);
