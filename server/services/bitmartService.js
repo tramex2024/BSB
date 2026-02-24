@@ -16,19 +16,9 @@ const tickerCache = new Map();
 const CACHE_TTL = 2000;  
 
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
-    // 1. LOG DE AUDITORÍA INICIAL (Para ver qué entra a la función)
-    console.log(`${LOG_PREFIX} [DEBUG-AUTH] Iniciando request: ${path}`);
-    console.log(`${LOG_PREFIX} [DEBUG-AUTH] userCreds recibidos:`, userCreds ? { 
-        hasKey: !!userCreds.apiKey, 
-        hasSecret: !!userCreds.secretKey, 
-        memo: userCreds.apiMemo || userCreds.memo 
-    } : "NULL (Usando .env)");
-
-    // 2. Extracción y Normalización de Credenciales
+    // 1. Extracción y Normalización de Credenciales
     const apiKey = (userCreds?.apiKey || process.env.BITMART_API_KEY || "").trim();
     const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
-    
-    // CORRECCIÓN CLAVE: Aceptamos 'apiMemo' (v4) o 'memo' (proporcionado por server.js)
     const apiMemo = (userCreds?.apiMemo || userCreds?.memo || process.env.BITMART_API_MEMO || "").trim();
 
     if (!apiKey || !secretKey) {
@@ -37,23 +27,19 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
 
     const timestamp = Date.now().toString();
 
-    // 3. Preparación del String para la Firma (Cuerpo o Query)
+    // 2. Preparación del String para la Firma
     let bodyOrQuery = "";
     if (method === 'GET') {
-        // En GET, BitMart v4 usa los query params ordenados para la firma
         bodyOrQuery = Object.keys(params).length > 0 ? querystring.stringify(params) : "";
     } else {
-        // IMPORTANTE: Para POST/v4, el JSON debe ser idéntico al que se envía en 'data'
-        // JSON.stringify sin espacios asegura compatibilidad total con la firma
         bodyOrQuery = (body && Object.keys(body).length > 0) ? JSON.stringify(body) : "";
     }
 
-    // 4. Generación de Firma HMAC SHA256
-    // Estructura: timestamp#memo#body
+    // 3. Generación de Firma HMAC SHA256
     const message = `${timestamp}#${apiMemo}#${bodyOrQuery}`;
     const sign = CryptoJS.HmacSHA256(message, secretKey).toString();
 
-    // 5. Configuración de Headers según Estándar BitMart
+    // 4. Configuración de Headers
     const headers = {
         'Content-Type': 'application/json',
         'X-BM-KEY': apiKey,
@@ -63,7 +49,6 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         'User-Agent': 'GainBot_V2_2026'
     };
 
-    // 6. Ejecución de la Petición con Axios
     try {
         const config = { 
             method, 
@@ -75,15 +60,11 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         if (method === 'GET') {
             config.params = params;
         } else {
-            // BLOQUEO DE INTEGRIDAD: 
-            // Enviamos 'bodyOrQuery' directamente (string) para que Axios no añada
-            // espacios o cambie el orden de los campos, lo cual invalidaría la firma.
             config.data = bodyOrQuery; 
         }
 
         const response = await axios(config);
         
-        // BitMart usa el código 1000 para operaciones exitosas
         if (response.data.code === 1000 || response.data.message === 'OK') {
             return response.data;
         }
@@ -91,15 +72,10 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
-        // Auditoría extendida en caso de error de autenticación
-        if (error.response?.status === 401 || error.message.includes('401')) {
-            console.error(`${LOG_PREFIX} ❌ ERROR 401: Firma rechazada por BitMart.`);
-            console.error(`[AUDIT] Path: ${path}`);
-            console.error(`[AUDIT] Message firmado: "${message}"`); // Aquí verás si hay ##
-            console.error(`[AUDIT] Firma generada: ${sign}`);
-            console.error(`[AUDIT] Key utilizada: ${apiKey.substring(0, 8)}...`);
+        // Solo dejamos el log de error 401 para diagnóstico rápido si las llaves caducan
+        if (error.response?.status === 401) {
+            console.error(`[BITMART] ❌ Error 401 en ${path}. Verifica las API Keys del usuario.`);
         }
-        
         throw new Error(`BitMart Request Failed [${path}]: ${error.response?.data?.message || error.message}`);
     }
 }
