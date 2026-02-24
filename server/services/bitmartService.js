@@ -16,6 +16,19 @@ const tickerCache = new Map();
 const CACHE_TTL = 2000;  
 
 async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
+
+    //------------------------------------------------------
+
+    // LOG DE AUDITORÍA INICIAL
+    console.log(`${LOG_PREFIX} [DEBUG-AUTH] Iniciando request: ${path}`);
+    console.log(`${LOG_PREFIX} [DEBUG-AUTH] userCreds recibidos:`, userCreds ? { 
+        hasKey: !!userCreds.apiKey, 
+        hasSecret: !!userCreds.secretKey, 
+        memo: userCreds.apiMemo || userCreds.memo 
+    } : "NULL (Usando .env)");
+
+    //------------------------------------------------------
+    
     // 1. Limpieza de Credenciales
     const apiKey = (userCreds?.apiKey || process.env.BITMART_API_KEY || "").trim();
     const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
