@@ -17,10 +17,11 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
 
+    // 🛑 SEGURIDAD REFORZADA: Si el volumen es 0, lanzamos error y NO limpiamos llastOrder.
+    // Esto obliga al bot a reintentar la consolidación en el próximo tick.
     if (executedQty <= 0 || executedPrice <= 0) {
-        log('[L-DATA] ⚠️ Ejecución inválida capturada por el consolidador.', 'error');
-        await updateGeneralBotState({ llastOrder: null });
-        return;
+        log('[L-DATA] ⚠️ Ejecución inválida o incompleta. Manteniendo orden para reintento de auditoría.', 'warning');
+        return; // Salimos sin ejecutar updateGeneralBotState({ llastOrder: null })
     }
 
     // --- 1. CÁLCULOS DE ACUMULADOS ---
@@ -57,7 +58,6 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         parseNumber(price_step_inc || 0)
     );
 
-    // PERSISTENCIA REPARADA: Incluimos el lcycle para que el historial lo agrupe bien
     const currentCycleIndex = Number(botState.lcycle || 0);
     await saveExecutedOrder(
         { ...orderDetails, side: 'buy' }, 
@@ -66,7 +66,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         currentCycleIndex
     );
 
-    // ACTUALIZACIÓN EN DB
+    // ACTUALIZACIÓN EN DB: Solo llegamos aquí si hay datos reales (>0)
     await updateGeneralBotState({
         lbalance: finalizedLBalance,
         lac: newTotalQty,        
@@ -103,7 +103,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const profitNeto = totalUsdtReceived - totalInvestment;
         const currentCycleIndex = Number(botStateObj.lcycle || 0);
 
-        // GUARDAR VENTA: Incluimos cycleIndex para el cierre
         try {
             await saveExecutedOrder({ 
                 ...orderDetails, 
@@ -117,7 +116,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
             log(`⚠️ Error al persistir venta: ${saveError.message}`, 'error');
         }
 
-        // REGISTRO DE CICLO: El resumen final del profit
         if (logSuccessfulCycle && botStateObj.lstartTime) {
             try {
                 await logSuccessfulCycle({
@@ -144,7 +142,6 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
         const newLBalance = parseFloat((botStateObj.lbalance + totalUsdtReceived).toFixed(8));
         const shouldStopLong = config.long?.stopAtCycle === true;
 
-        // RESET Y INCREMENTO DE CICLO
         await updateGeneralBotState({
             ...CLEAN_LONG_ROOT, 
             lbalance: newLBalance,
