@@ -1,5 +1,4 @@
 // server/services/inputs.js
-
 const MIN_PURCHASE = 6.00;
 const MAX_ORDERS = 15;
 
@@ -17,6 +16,7 @@ function calculateBalancedParams(totalAmount, strategyType) {
         config.price_step_inc = 0.07;
     }
 
+    // Escalamiento de compra inicial si el capital es alto
     if (totalAmount > 600) {
         config.purchaseUsdt = parseFloat(((totalAmount / 350) * MIN_PURCHASE).toFixed(2));
     }
@@ -32,5 +32,4 @@ function processUserInputs(amtL, amtS, amtAI) {
     };
 }
 
-// ESTO ES VITAL PARA QUE EL REQUIRE NO DE ERROR
 module.exports = { processUserInputs };
