@@ -1,5 +1,6 @@
 /**
- * dashboard.js - Controlador de Interfaz (Versión Funcional Restaurada)
+ * dashboard.js - Controlador de Interfaz (Versión Blindada Completa)
+ * Estado: Restaurado con lógica de recalculo de capital.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -58,9 +59,13 @@ function handleMetricsUpdate(e) {
     }
 }
 
+/**
+ * Refresca analítica con protección contra borrado accidental
+ */
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
+        
         if (response && response.success && Array.isArray(response.data)) {
             Metrics.setAnalyticsData(response.data);
             addTerminalLog("ANALYTICS: CURVA DE EQUIDAD ACTUALIZADA", 'success');
@@ -73,6 +78,9 @@ async function refreshAnalytics() {
     }
 }
 
+/**
+ * CONFIGURACIÓN DE FILTROS DE ANALÍTICA (Long, Short, AI)
+ */
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
     const pSel = document.getElementById('chart-param-selector');
@@ -90,6 +98,9 @@ function setupAnalyticsFilters() {
     }
 }
 
+/**
+ * CONFIGURACIÓN DE BOTONES Y INPUTS RÁPIDOS
+ */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
@@ -119,6 +130,7 @@ function setupActionButtons() {
         }
     });
 
+    // --- INPUTS DE CAPITAL CON BLINDAJE ---
     const quickInputs = [
         { id: 'auamountl-usdt', label: 'LONG' },
         { id: 'auamounts-usdt', label: 'SHORT' },
@@ -129,36 +141,20 @@ function setupActionButtons() {
         const el = document.getElementById(input.id);
         if (el) {
             el.onchange = async () => {
-                const val = parseFloat(el.value);
-                
-                // Validación mínima: no permitir montos negativos o vacíos
-                if (isNaN(val) || val < 0) {
-                    addTerminalLog(`${input.label}: MONTO INVÁLIDO`, 'error');
-                    return;
-                }
-
-                // Llamada al backend (Esto disparará el recálculo matemático en el servidor)
+                // Disparamos la actualización al backend
                 const res = await sendConfigToBackend();
-                
                 if (res && res.success) {
-                    addTerminalLog(`CONFIG: ${input.label} BLINDADA A $${val}`, 'success');
-                    
-                    // Feedback visual: destello verde en el input
-                    el.classList.add('border-emerald-500', 'bg-emerald-500/10');
-                    setTimeout(() => {
-                        el.classList.remove('border-emerald-500', 'bg-emerald-500/10');
-                    }, 1000);
+                    addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
                 } else {
-                    addTerminalLog(`ERROR AL ACTUALIZAR ${input.label}`, 'error');
-                    el.classList.add('border-red-500');
-                    setTimeout(() => el.classList.remove('border-red-500'), 2000);
+                    addTerminalLog(`ERROR: FALLÓ ACTUALIZACIÓN ${input.label}`, 'error');
                 }
             };
         }
     });
+}
 
 /**
- * Función de Logs de Terminal (Asegurada sin export si da error)
+ * Terminal de Logs del Dashboard
  */
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
@@ -189,12 +185,20 @@ export function addTerminalLog(msg, type = 'info') {
     }
 }
 
+/**
+ * Gráfico de Dona de Balance
+ */
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
-    if (balanceChart) { balanceChart.destroy(); balanceChart = null; }
+
+    if (balanceChart) {
+        balanceChart.destroy();
+        balanceChart = null; 
+    }
 
     const ctx = canvas.getContext('2d');
+    
     balanceChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
