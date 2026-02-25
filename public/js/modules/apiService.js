@@ -70,24 +70,8 @@ export async function fetchEquityCurveData(strategy = 'all') {
  * Versión Híbrida: Soporta Blindaje Automático (Dashboard) y Control Manual (Tabs)
  */
 export function getBotConfiguration() {
-    
-    // 1. Obtenedor base: Si no hay input o está vacío, rescata del estado actual
-    const getNum = (id, path, minVal = 0) => {
-        const el = document.getElementById(id);
-        if (!el || el.value.trim() === "") {
-            const parts = path.split('.');
-            const val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
-            return val ?? minVal;
-        }
-        const val = parseFloat(el.value.replace(/[^0-9.-]+/g,""));
-        return isNaN(val) ? minVal : val;
-    };
-
-    /**
-     * 2. Obtenedor Opcional: Clave para el blindaje automático.
-     * Si el input NO está en el DOM (usuario en Dashboard), devuelve undefined.
-     * Esto le indica al servidor que debe aplicar el recalculo matemático (shield).
-     */
+    // Obtenedor Opcional: Si el input no existe en la pantalla actual, envía undefined.
+    // Esto es lo que le dice al servidor: "No toques la configuración técnica, usa el Shield".
     const getOptionalNum = (id) => {
         const el = document.getElementById(id);
         if (!el) return undefined; 
@@ -95,6 +79,15 @@ export function getBotConfiguration() {
         if (rawValue === "") return undefined;
         const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
         return isNaN(val) ? undefined : val;
+    };
+
+    const getNum = (id, path, minVal = 0) => {
+        const el = document.getElementById(id);
+        if (!el || el.value.trim() === "") {
+            const parts = path.split('.');
+            return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? minVal;
+        }
+        return parseFloat(el.value.replace(/[^0-9.-]+/g,"")) || minVal;
     };
 
     const getCheck = (id, path) => {
@@ -109,39 +102,28 @@ export function getBotConfiguration() {
     return {
         symbol: "BTC_USDT",
         long: {
-            // El Amount SIEMPRE se envía (es el disparador del blindaje)
-            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
-            
-            // Los técnicos son opcionales: si no existen en el DOM, el server los calcula
+            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', 100),
             purchaseUsdt:    getOptionalNum('aupurchasel-usdt'),
             price_var:       getOptionalNum('audecrementl'), 
             size_var:        getOptionalNum('auincrementl'),
             profit_percent:  getOptionalNum('autriggerl'),
             price_step_inc:  getOptionalNum('aupricestep-l'),
-            
             stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
             enabled:         currentBotState.lstate !== 'STOPPED'
         },
         short: {
-            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
-            
+            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', 100),
             purchaseUsdt:    getOptionalNum('aupurchases-usdt'),
             price_var:       getOptionalNum('audecrements'),
             size_var:        getOptionalNum('auincrements'),
             profit_percent:  getOptionalNum('autriggers'),
             price_step_inc:  getOptionalNum('aupricestep-s'),
-            
             stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
             enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-            // Prioridad a los IDs del Dashboard, fallback a la pestaña AI
-            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
-                             getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
-                             
-            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || 
-                             getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
-                             
+            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100),
+            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle'),
             enabled:         currentBotState.config?.ai?.enabled || false
         }
     };

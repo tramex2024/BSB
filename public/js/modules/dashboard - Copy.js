@@ -129,33 +129,14 @@ function setupActionButtons() {
         const el = document.getElementById(input.id);
         if (el) {
             el.onchange = async () => {
-                const val = parseFloat(el.value);
-                
-                // Validación mínima: no permitir montos negativos o vacíos
-                if (isNaN(val) || val < 0) {
-                    addTerminalLog(`${input.label}: MONTO INVÁLIDO`, 'error');
-                    return;
-                }
-
-                // Llamada al backend (Esto disparará el recálculo matemático en el servidor)
                 const res = await sendConfigToBackend();
-                
                 if (res && res.success) {
-                    addTerminalLog(`CONFIG: ${input.label} BLINDADA A $${val}`, 'success');
-                    
-                    // Feedback visual: destello verde en el input
-                    el.classList.add('border-emerald-500', 'bg-emerald-500/10');
-                    setTimeout(() => {
-                        el.classList.remove('border-emerald-500', 'bg-emerald-500/10');
-                    }, 1000);
-                } else {
-                    addTerminalLog(`ERROR AL ACTUALIZAR ${input.label}`, 'error');
-                    el.classList.add('border-red-500');
-                    setTimeout(() => el.classList.remove('border-red-500'), 2000);
+                    addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
                 }
             };
         }
     });
+}
 
 /**
  * Función de Logs de Terminal (Asegurada sin export si da error)
