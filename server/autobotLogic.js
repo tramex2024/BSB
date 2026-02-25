@@ -31,6 +31,11 @@ const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/sta
 
 let isProcessing = false;
 
+if (newConfig.ai) {
+    if (!finalConfig.ai) finalConfig.ai = {}; // Esto evita el crash
+    Object.assign(finalConfig.ai, newConfig.ai);
+}
+
 /**
  * GESTIÓN DE CONFIGURACIÓN
  */
@@ -354,7 +359,9 @@ module.exports = {
     log: orchestrator.log, 
     botCycle, 
     slowBalanceCacheUpdate: orchestrator.slowBalanceCacheUpdate, 
-    syncFrontendState: orchestrator.syncFrontendState, 
+    syncFrontendState: async (price, state, uid) => {
+        return await orchestrator.syncFrontendState(price, state, uid);
+    }, 
     getLastPrice: orchestrator.getLastPrice, 
     updateConfig, startSide, stopSide
 };

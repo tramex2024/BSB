@@ -52,44 +52,56 @@ const orchestrator = {
     },
 
     /**
-     * commitChanges: Gestión atómica de la base de datos.
+     * commitChanges: Gestión atómica de la base de datos con sincronización de estado.
+     * Ubicación: server/src/au/utils/cycleOrchestrator.js
      */
     commitChanges: async (userId, changeSet, currentPrice) => {
-        if (!userId || Object.keys(changeSet).length === 0) return null;
+        if (!userId || !changeSet || Object.keys(changeSet).length === 0) return null;
         
         try {
+            // Inicializamos la estructura de la consulta
             const updateQuery = { $set: {}, $inc: {} };
             
+            // Distribuimos los cambios según el operador
             for (const key in changeSet) {
                 if (key === '$inc') {
                     Object.assign(updateQuery.$inc, changeSet[key]);
                 } else if (key.startsWith('$')) {
-                    // Soporte para otros operadores de mongo si fuera necesario
+                    // Soporte para otros operadores (como $push o $unset)
                     updateQuery[key] = changeSet[key];
                 } else {
+                    // Por defecto es una actualización de campo ($set)
                     updateQuery.$set[key] = changeSet[key];
                 }
             }
 
+            // Limpieza: Eliminamos operadores vacíos para evitar errores de sintaxis en MongoDB
             if (Object.keys(updateQuery.$inc).length === 0) delete updateQuery.$inc;
+            
             if (Object.keys(updateQuery.$set).length === 0) {
                 delete updateQuery.$set;
             } else {
+                // Si hay campos para actualizar, estampamos la fecha
                 updateQuery.$set.lastUpdate = new Date();
             }
 
+            // Ejecución atómica en MongoDB
             const updated = await Autobot.findOneAndUpdate(
                 { userId }, 
                 updateQuery, 
-                { new: true, lean: true }
+                { new: true, lean: true, runValidators: true }
             );
 
             if (updated) {
-                await orchestrator.syncFrontendState(currentPrice, updated, userId);
+                // Sincronización asíncrona: No usamos 'await' aquí para que la DB 
+                // responda rápido aunque el socket esté lento.
+                orchestrator.syncFrontendState(currentPrice, updated, userId)
+                    .catch(err => console.error(`[SYNC-EMIT-ERROR] User ${userId}:`, err.message));
+                
                 return updated;
             }
         } catch (error) {
-            console.error(`[DB-ERROR] User ${userId}: ${error.message}`);
+            console.error(`[DB-ERROR] Crítico en commitChanges para User ${userId}:`, error.message);
         }
         return null;
     },
