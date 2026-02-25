@@ -1,7 +1,7 @@
 /**
  * BSB/server/autobotLogic.js
  * Motor de Ciclos Unificado - Versión Integra 2026 (Long, Short & IA)
- * FIX: Desencriptación de Memo y Logs de Auditoría
+ * FIX: ReferenceError: newConfig is not defined
  */
 
 const Autobot = require('./models/Autobot');
@@ -31,10 +31,7 @@ const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/sta
 
 let isProcessing = false;
 
-if (newConfig.ai) {
-    if (!finalConfig.ai) finalConfig.ai = {}; // Esto evita el crash
-    Object.assign(finalConfig.ai, newConfig.ai);
-}
+// ELIMINADO: El bloque que causaba ReferenceError (líneas 34-37) se ha movido dentro de updateConfig.
 
 /**
  * GESTIÓN DE CONFIGURACIÓN
@@ -44,6 +41,7 @@ async function updateConfig(userId, newConfig) {
     const currentBot = await Autobot.findOne({ userId }).lean();
     if (!currentBot) return null;
 
+    // Clonación profunda para evitar mutaciones accidentales
     const finalConfig = JSON.parse(JSON.stringify(currentBot.config || {}));
 
     const mergeSide = (side) => {
@@ -51,6 +49,7 @@ async function updateConfig(userId, newConfig) {
             if (!finalConfig[side]) finalConfig[side] = {};
             for (const key in newConfig[side]) {
                 const val = newConfig[side][key];
+                // Solo actualizamos si el valor es válido
                 if (val !== undefined && val !== null && val !== "") {
                     finalConfig[side][key] = val;
                 }
@@ -60,10 +59,14 @@ async function updateConfig(userId, newConfig) {
 
     mergeSide('long');
     mergeSide('short');
+
+    // Integración de IA dentro del scope correcto
     if (newConfig.ai) {
         if (!finalConfig.ai) finalConfig.ai = {};
+        // Usamos Object.assign para mezclar los nuevos parámetros de IA
         Object.assign(finalConfig.ai, newConfig.ai);
     }
+    
     if (newConfig.symbol) finalConfig.symbol = newConfig.symbol;
 
     const bot = await Autobot.findOneAndUpdate({ userId }, { 
@@ -71,7 +74,15 @@ async function updateConfig(userId, newConfig) {
     }, { new: true }).lean();
 
     orchestrator.log('✅ Configuración guardada correctamente.', 'success', userId);
-    if (bot) await orchestrator.syncFrontendState(currentPrice, bot, userId);
+    
+    // Sincronización con el Frontend
+    if (bot) {
+        try {
+            await orchestrator.syncFrontendState(currentPrice, bot, userId);
+        } catch (e) {
+            console.error("Error en syncFrontendState:", e.message);
+        }
+    }
     return bot;
 }
 
@@ -189,38 +200,29 @@ async function botCycle(priceFromWebSocket) {
             const userId = botState.userId;
             const changeSet = {};
 
-            // 1. Obtención de Credenciales en Tiempo Real
             const user = await User.findById(userId).lean();
             if (!user || !user.bitmartApiKey) {
                 orchestrator.log(`⚠️ Salto: Usuario ${userId} sin llaves API.`, 'error', userId);
                 continue;
             }
 
-            // --- LÓGICA DE DESENCRIPTACIÓN Y AUDITORÍA REPARADA ---
+            // Desencriptación segura de credenciales
+            const decryptedApiKey = decrypt(user.bitmartApiKey).trim();
+            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
+            let decryptedMemo = "";
+            try {
+                decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
+            } catch (e) {
+                decryptedMemo = (user.bitmartApiMemo || "").trim();
+            }
 
-// 1. DESENCRIPTAR API KEY (Aquí estaba el fallo, faltaba el decrypt)
-const decryptedApiKey = decrypt(user.bitmartApiKey).trim();
+            console.log(`[AUTH_CHECK] User: ${userId} | Memo: "${decryptedMemo}" | Key: ${decryptedApiKey.substring(0,6)}...`);
 
-// 2. DESENCRIPTAR SECRET
-const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
-
-// 3. DESENCRIPTAR MEMO
-let decryptedMemo = "";
-try {
-    decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
-} catch (e) {
-    decryptedMemo = (user.bitmartApiMemo || "").trim();
-}
-
-// LOG DE SEGURIDAD REVISADO
-// Ahora verás que la Key es mucho más corta que el hash de 96 caracteres
-console.log(`[AUTH_CHECK] User: ${userId} | Memo: "${decryptedMemo}" | Key Limpia: ${decryptedApiKey.substring(0,6)}...`);
-
-const userCreds = {
-    apiKey: decryptedApiKey, // <--- AHORA PASAMOS LA KEY DESENCRIPTADA
-    apiMemo: decryptedMemo,
-    secretKey: decryptedSecret
-};
+            const userCreds = {
+                apiKey: decryptedApiKey,
+                apiMemo: decryptedMemo,
+                secretKey: decryptedSecret
+            };
 
             if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
@@ -277,25 +279,24 @@ const userCreds = {
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-            // --- Monitoreo de Órdenes (Lógica de Consolidación) ---
+            // Monitoreo de Órdenes
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-    if (botState.llastOrder.side === 'buy') {
-        // Agregamos 'userCreds' como último argumento
-        await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    } else {
-        await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    }
-}
+                if (botState.llastOrder.side === 'buy') {
+                    await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                } else {
+                    await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                }
+            }
 
-if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-    if (botState.slastOrder.side === 'sell') { 
-        await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    } else {
-        await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    }
-}
+            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+                if (botState.slastOrder.side === 'sell') { 
+                    await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                } else {
+                    await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                }
+            }
 
-            // --- Cálculos Matemáticos de Cobertura y PNL ---
+            // Cálculos Matemáticos
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
@@ -318,7 +319,7 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
                 changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
             }
 
-            // --- Ejecución de Estrategias ---
+            // Ejecución de Estrategias
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
             if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies); 
