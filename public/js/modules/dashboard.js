@@ -143,17 +143,31 @@ function setupActionButtons() {
     ];
 
     quickInputs.forEach(input => {
-        const el = document.getElementById(input.id);
-        if (el) {
-            el.onchange = async () => {
-                const res = await sendConfigToBackend();
-                if (res && res.success) {
-                    addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
-                }
-            };
-        }
-    });
-}
+    const el = document.getElementById(input.id);
+    if (el) {
+        el.onchange = async () => {
+            const val = parseFloat(el.value);
+            // Validación mínima antes de siquiera molestar al servidor
+            if (isNaN(val) || val < 0) {
+                addTerminalLog(`${input.label}: MONTO INVÁLIDO`, 'error');
+                return;
+            }
+
+            // Llamamos al envío (apiService.js se encargará de leer todos los inputs)
+            const res = await sendConfigToBackend(); 
+            
+            if (res && res.success) {
+                addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO A $${val}`, 'success');
+                // Efecto visual de éxito
+                el.classList.add('border-emerald-500');
+                setTimeout(() => el.classList.remove('border-emerald-500'), 2000);
+            } else {
+                addTerminalLog(`ERROR AL ACTUALIZAR ${input.label}`, 'error');
+            }
+        };
+    }
+});
+
 
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');

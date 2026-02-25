@@ -1,5 +1,6 @@
 const Autobot = require('../models/Autobot'); 
 const autobotLogic = require('../autobotLogic'); 
+const { processUserInputs } = require('../services/inputs');
 
 async function getBotConfig(req, res) {
     try {
@@ -23,69 +24,73 @@ async function updateBotConfig(req, res) {
 
         const lastPrice = autobotLogic.getLastPrice() || 0;
 
-        // --- 1. PRE-CÁLCULO DE VALIDACIÓN (SOLO PARA INFO) ---
-        const availUSDT = botState.lastAvailableUSDT || 0;
-        const availBTC = botState.lastAvailableBTC || 0;
-        
-        const newLongTotal = parseFloat(newConfig.long?.amountUsdt || botState.config.long.amountUsdt);
-        const newAiTotal = parseFloat(newConfig.ai?.amountUsdt || botState.config.ai?.amountUsdt || 0);
-        const neededUSDT = (newLongTotal - botState.lbalance) + (newAiTotal - botState.aibalance);
+        // --- 1. PROCESAMIENTO DE BLINDAJE AUTOMÁTICO ---
+        // Tomamos los montos nuevos o los actuales si no vienen en el request
+        const amtL = newConfig.long?.amountUsdt || botState.config.long.amountUsdt;
+        const amtS = newConfig.short?.amountUsdt || botState.config.short.amountUsdt;
+        const amtAI = newConfig.ai?.amountUsdt || botState.config.ai?.amountUsdt || 0;
 
-        // Ya no hacemos "return" si falta saldo. Solo calculamos para el log o respuesta.
-        const hasEnoughUSDT = (neededUSDT <= (availUSDT + 5));
+        // El motor genera la configuración técnica para cubrir el 40%
+        const shield = processUserInputs(amtL, amtS, amtAI);
 
         // --- 2. SISTEMA DE MEZCLA SEGURA ---
-        const secureMerge = (newVal, oldVal, minLimit = 0.1) => {
+        const secureMerge = (newVal, oldVal) => {
             const parsed = parseFloat(newVal);
-            // Si el campo está vacío o es inválido, mantenemos el valor anterior de la DB
-            if (newVal === undefined || newVal === null || newVal === "" || isNaN(parsed)) {
-                return oldVal;
-            }
-            return parsed;
+            return (newVal === undefined || newVal === null || newVal === "" || isNaN(parsed)) ? oldVal : parsed;
         };
 
         const update = {
-            'config.long.amountUsdt': newLongTotal,
-            'config.long.purchaseUsdt': secureMerge(newConfig.long?.purchaseUsdt, botState.config.long.purchaseUsdt, 1),
-            'config.long.price_var': secureMerge(newConfig.long?.price_var, botState.config.long.price_var, 0.01),
-            'config.long.size_var': secureMerge(newConfig.long?.size_var, botState.config.long.size_var, 0.01),
-            'config.long.profit_percent': secureMerge(newConfig.long?.profit_percent, botState.config.long.profit_percent, 0.01),
-            'config.long.price_step_inc': secureMerge(newConfig.long?.price_step_inc, botState.config.long.price_step_inc, 0),
+            // LONG BLINDADO
+            'config.long.amountUsdt': parseFloat(amtL),
+            'config.long.purchaseUsdt': shield.long.purchaseUsdt,
+            'config.long.price_var': shield.long.price_var,
+            'config.long.size_var': shield.long.size_var,
+            'config.long.price_step_inc': shield.long.price_step_inc,
+            'config.long.profit_percent': secureMerge(newConfig.long?.profit_percent, botState.config.long.profit_percent),
             'config.long.stopAtCycle': typeof newConfig.long?.stopAtCycle === 'boolean' ? newConfig.long.stopAtCycle : botState.config.long.stopAtCycle,
 
-            'config.short.amountUsdt': secureMerge(newConfig.short?.amountUsdt, botState.config.short.amountUsdt, 1),
-            'config.short.purchaseUsdt': secureMerge(newConfig.short?.purchaseUsdt, botState.config.short.purchaseUsdt, 1),
-            'config.short.price_var': secureMerge(newConfig.short?.price_var, botState.config.short.price_var, 0.01),
-            'config.short.size_var': secureMerge(newConfig.short?.size_var, botState.config.short.size_var, 0.01),
-            'config.short.profit_percent': secureMerge(newConfig.short?.profit_percent, botState.config.short.profit_percent, 0.01),
-            'config.short.price_step_inc': secureMerge(newConfig.short?.price_step_inc, botState.config.short.price_step_inc, 0),
+            // SHORT BLINDADO
+            'config.short.amountUsdt': parseFloat(amtS),
+            'config.short.purchaseUsdt': shield.short.purchaseUsdt,
+            'config.short.price_var': shield.short.price_var,
+            'config.short.size_var': shield.short.size_var,
+            'config.short.price_step_inc': shield.short.price_step_inc,
+            'config.short.profit_percent': secureMerge(newConfig.short?.profit_percent, botState.config.short.profit_percent),
             'config.short.stopAtCycle': typeof newConfig.short?.stopAtCycle === 'boolean' ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle,
 
-            'config.ai.amountUsdt': newAiTotal,
+            // AI BLINDADA (Ahora también usa DCA de seguridad)
+            'config.ai.amountUsdt': parseFloat(amtAI),
+            'config.ai.purchaseUsdt': shield.ai.purchaseUsdt,
+            'config.ai.price_var': shield.ai.price_var,
+            'config.ai.size_var': shield.ai.size_var,
+            'config.ai.price_step_inc': shield.ai.price_step_inc,
             'config.ai.stopAtCycle': typeof newConfig.ai?.stopAtCycle === 'boolean' ? newConfig.ai.stopAtCycle : botState.config.ai?.stopAtCycle
         };
 
-        // --- 3. GUARDADO INCONDICIONAL ---
+        // --- 3. GUARDADO Y SINCRONIZACIÓN ---
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
             { $set: update }, 
             { new: true, runValidators: true }
         ).lean();
 
-        // Sincronizar con el motor de trading
         if (updatedBot) {
             await autobotLogic.syncFrontendState(lastPrice, updatedBot, userId);
         }
 
+        // Validación de saldo para respuesta
+        const neededUSDT = (update['config.long.amountUsdt'] - botState.lbalance) + (update['config.ai.amountUsdt'] - botState.aibalance);
+        const hasEnoughUSDT = (neededUSDT <= (botState.lastAvailableUSDT + 5));
+
         return res.json({ 
             success: true, 
-            message: hasEnoughUSDT ? "Configuración guardada." : "Guardado, pero saldo insuficiente para operar.",
+            message: hasEnoughUSDT ? "Estrategia blindada (40%) activa." : "Configuración aplicada, verifique su saldo.",
             data: updatedBot.config 
         });
 
     } catch (error) {
         console.error("❌ Error en updateBotConfig:", error);
-        return res.status(500).json({ success: false, message: "Error interno." });
+        return res.status(500).json({ success: false, message: "Error interno en el blindaje." });
     }
 }
 
