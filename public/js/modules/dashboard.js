@@ -1,7 +1,5 @@
 /**
- * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Sincronizado con validaciones de AI y Autobot.
- * Actualización: Filtros vinculados a MetricsManager.
+ * dashboard.js - Controlador de Interfaz (Versión Funcional Restaurada)
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -40,7 +38,7 @@ export function initializeDashboardView(initialState) {
 
     // 3. Configurar Eventos y Botones Locales
     setupActionButtons();
-    setupAnalyticsFilters(); // <--- Aquí se vinculan los selectores
+    setupAnalyticsFilters(); 
     
     // 4. Gestión de eventos de Metrics (Evita duplicados)
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
@@ -60,17 +58,11 @@ function handleMetricsUpdate(e) {
     }
 }
 
-/**
- * Refresca analítica con protección contra borrado accidental
- */
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
-        
         if (response && response.success && Array.isArray(response.data)) {
-            // 1. Enviamos los TradeCycles al manager
             Metrics.setAnalyticsData(response.data);
-            
             addTerminalLog("ANALYTICS: CURVA DE EQUIDAD ACTUALIZADA", 'success');
         } else {
             addTerminalLog("ANALYTICS: SIN DATOS HISTÓRICOS", 'warning');
@@ -81,32 +73,23 @@ async function refreshAnalytics() {
     }
 }
 
-/**
- * CONFIGURACIÓN DE FILTROS DE ANALÍTICA (Long, Short, AI)
- * Esta función conecta los selectores HTML con el MetricsManager
- */
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
     const pSel = document.getElementById('chart-param-selector');
 
     if (bSel) {
         bSel.onchange = () => {
-            // SOLO cambia el filtro, NO carga datos de nuevo
             Metrics.setBotFilter(bSel.value); 
         };
     }
 
     if (pSel) {
         pSel.onchange = () => {
-            // Esto actualiza el eje Y (Profit vs %) y dispara el evento
             Metrics.setChartParameter(pSel.value); 
         };
     }
 }
 
-/**
- * CONFIGURACIÓN DE BOTONES (Long, Short, AI) Y INPUTS RÁPIDOS
- */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
@@ -143,32 +126,21 @@ function setupActionButtons() {
     ];
 
     quickInputs.forEach(input => {
-    const el = document.getElementById(input.id);
-    if (el) {
-        el.onchange = async () => {
-            const val = parseFloat(el.value);
-            // Validación mínima antes de siquiera molestar al servidor
-            if (isNaN(val) || val < 0) {
-                addTerminalLog(`${input.label}: MONTO INVÁLIDO`, 'error');
-                return;
-            }
+        const el = document.getElementById(input.id);
+        if (el) {
+            el.onchange = async () => {
+                const res = await sendConfigToBackend();
+                if (res && res.success) {
+                    addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
+                }
+            };
+        }
+    });
+}
 
-            // Llamamos al envío (apiService.js se encargará de leer todos los inputs)
-            const res = await sendConfigToBackend(); 
-            
-            if (res && res.success) {
-                addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO A $${val}`, 'success');
-                // Efecto visual de éxito
-                el.classList.add('border-emerald-500');
-                setTimeout(() => el.classList.remove('border-emerald-500'), 2000);
-            } else {
-                addTerminalLog(`ERROR AL ACTUALIZAR ${input.label}`, 'error');
-            }
-        };
-    }
-});
-
-
+/**
+ * Función de Logs de Terminal (Asegurada sin export si da error)
+ */
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
     if (!logContainer) return;
@@ -201,14 +173,9 @@ export function addTerminalLog(msg, type = 'info') {
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
-
-    if (balanceChart) {
-        balanceChart.destroy();
-        balanceChart = null; 
-    }
+    if (balanceChart) { balanceChart.destroy(); balanceChart = null; }
 
     const ctx = canvas.getContext('2d');
-    
     balanceChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
