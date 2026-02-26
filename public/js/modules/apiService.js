@@ -138,14 +138,17 @@ export function getBotConfiguration() {
     };
 }
 
-export async function sendConfigToBackend() {
-    const configData = getBotConfiguration();
+export async function sendConfigToBackend(manualPayload = null) {
+    // Si manualPayload existe (viene del Dashboard con applyShield), lo usamos.
+    // Si no, usamos getBotConfiguration() como siempre.
+    const payload = manualPayload || { config: getBotConfiguration() };
+    
     isSavingConfig = true; 
     
     try {
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
-            body: JSON.stringify({ config: configData }) 
+            body: JSON.stringify(payload) // Enviamos el payload completo (con o sin applyShield)
         });
 
         if (data && data.success) {
@@ -153,6 +156,7 @@ export async function sendConfigToBackend() {
         }
         return data;
     } catch (err) {
+        console.error("❌ Error al sincronizar configuración:", err);
         return { success: false };
     } finally {
         // Reducimos el tiempo de bloqueo para que la UI sea más responsiva

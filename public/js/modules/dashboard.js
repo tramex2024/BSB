@@ -136,19 +136,36 @@ function setupActionButtons() {
         }
     });
 
-    const quickInputs = [
-        { id: 'auamountl-usdt', label: 'LONG' },
-        { id: 'auamounts-usdt', label: 'SHORT' },
-        { id: 'auamountai-usdt', label: 'AI' }
+   const quickInputs = [
+        { id: 'auamountl-usdt', label: 'LONG', strategy: 'long' },
+        { id: 'auamounts-usdt', label: 'SHORT', strategy: 'short' },
+        { id: 'auamountai-usdt', label: 'AI', strategy: 'ai' }
     ];
 
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
             el.onchange = async () => {
-                const res = await sendConfigToBackend();
+                // Obtenemos el nuevo valor escrito por el usuario
+                const newVal = parseFloat(el.value);
+                
+                // Preparamos el paquete de datos con el PLAN B
+                const configPayload = {
+                    config: {
+                        [input.strategy]: { amountUsdt: newVal }
+                    },
+                    applyShield: true,   // <--- Avisamos que queremos blindaje
+                    strategy: input.strategy // <--- Decimos qué estrategia blindar
+                };
+
+                // Enviamos al backend. Nota: asegúrate que apiService acepte argumentos si es necesario, 
+                // o que lea el estado actual de los inputs.
+                const res = await sendConfigToBackend(configPayload); 
+                
                 if (res && res.success) {
-                    addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
+                    addTerminalLog(`CONFIG: ${input.label} BLINDAJE APLICADO ($${newVal})`, 'success');
+                } else {
+                    addTerminalLog(`ERROR AL APLICAR BLINDAJE EN ${input.label}`, 'error');
                 }
             };
         }
