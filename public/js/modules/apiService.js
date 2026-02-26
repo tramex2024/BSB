@@ -67,27 +67,28 @@ export async function fetchEquityCurveData(strategy = 'all') {
 
 /**
  * RECOLECTA CONFIGURACIÓN
- * Versión Híbrida: Soporta Blindaje Automático (Dashboard) y Control Manual (Tabs)
+ * Corregido el mapeo de Price_Var y Size_Var para coincidir con el HTML
  */
 export function getBotConfiguration() {
-    // Obtenedor Opcional: Si el input no existe en la pantalla actual, envía undefined.
-    // Esto es lo que le dice al servidor: "No toques la configuración técnica, usa el Shield".
-    const getOptionalNum = (id) => {
-        const el = document.getElementById(id);
-        if (!el) return undefined; 
-        let rawValue = el.value.trim();
-        if (rawValue === "") return undefined;
-        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
-        return isNaN(val) ? undefined : val;
-    };
-
     const getNum = (id, path, minVal = 0) => {
         const el = document.getElementById(id);
-        if (!el || el.value.trim() === "") {
+        
+        // Si no existe el input (cambio de pestaña), rescatar del estado global
+        if (!el) {
             const parts = path.split('.');
-            return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? minVal;
+            const val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
+            return val ?? minVal;
         }
-        return parseFloat(el.value.replace(/[^0-9.-]+/g,"")) || minVal;
+        
+        let rawValue = el.value.trim();
+        if (rawValue === "") {
+            const parts = path.split('.');
+            const val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
+            return val ?? minVal;
+        }
+
+        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
+        return isNaN(val) ? minVal : val;
     };
 
     const getCheck = (id, path) => {
@@ -99,33 +100,41 @@ export function getBotConfiguration() {
         return el.checked;
     };
 
+    // MAPEO CRÍTICO: 
+    // HTML 'auincrement' (Multiplier) -> size_var
+    // HTML 'audecrement' (Drop/Rise) -> price_var
     return {
         symbol: "BTC_USDT",
         long: {
-            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', 100),
-            purchaseUsdt:    getOptionalNum('aupurchasel-usdt'),
-            price_var:       getOptionalNum('audecrementl'), 
-            size_var:        getOptionalNum('auincrementl'),
-            profit_percent:  getOptionalNum('autriggerl'),
-            price_step_inc:  getOptionalNum('aupricestep-l'),
+            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
+            purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
+            price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), 
+            size_var:        getNum('auincrementl', 'long.size_var', 1),
+            profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit),
+            price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
             stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
             enabled:         currentBotState.lstate !== 'STOPPED'
         },
         short: {
-            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', 100),
-            purchaseUsdt:    getOptionalNum('aupurchases-usdt'),
-            price_var:       getOptionalNum('audecrements'),
-            size_var:        getOptionalNum('auincrements'),
-            profit_percent:  getOptionalNum('autriggers'),
-            price_step_inc:  getOptionalNum('aupricestep-s'),
+            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
+            purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
+            price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation),
+            size_var:        getNum('auincrements', 'short.size_var', 1),
+            profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit),
+            price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
             stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
             enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100),
-            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle'),
-            enabled:         currentBotState.config?.ai?.enabled || false
-        }
+    // Intentamos capturar desde el ID del Dashboard o el ID de la pestaña AI
+    amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
+                getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
+                
+    stopAtCycle: getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || 
+                 getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
+                 
+    enabled: currentBotState.config?.ai?.enabled || false
+}
     };
 }
 

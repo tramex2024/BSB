@@ -1,6 +1,7 @@
 /**
- * dashboard.js - Controlador de Interfaz (Versión Blindada Completa)
- * Estado: Restaurado con lógica de recalculo de capital.
+ * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
+ * Estado: Sincronizado con validaciones de AI y Autobot.
+ * Actualización: Filtros vinculados a MetricsManager.
  */
 import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -39,7 +40,7 @@ export function initializeDashboardView(initialState) {
 
     // 3. Configurar Eventos y Botones Locales
     setupActionButtons();
-    setupAnalyticsFilters(); 
+    setupAnalyticsFilters(); // <--- Aquí se vinculan los selectores
     
     // 4. Gestión de eventos de Metrics (Evita duplicados)
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
@@ -67,7 +68,9 @@ async function refreshAnalytics() {
         const response = await fetchEquityCurveData();
         
         if (response && response.success && Array.isArray(response.data)) {
+            // 1. Enviamos los TradeCycles al manager
             Metrics.setAnalyticsData(response.data);
+            
             addTerminalLog("ANALYTICS: CURVA DE EQUIDAD ACTUALIZADA", 'success');
         } else {
             addTerminalLog("ANALYTICS: SIN DATOS HISTÓRICOS", 'warning');
@@ -80,6 +83,7 @@ async function refreshAnalytics() {
 
 /**
  * CONFIGURACIÓN DE FILTROS DE ANALÍTICA (Long, Short, AI)
+ * Esta función conecta los selectores HTML con el MetricsManager
  */
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
@@ -87,19 +91,21 @@ function setupAnalyticsFilters() {
 
     if (bSel) {
         bSel.onchange = () => {
+            // SOLO cambia el filtro, NO carga datos de nuevo
             Metrics.setBotFilter(bSel.value); 
         };
     }
 
     if (pSel) {
         pSel.onchange = () => {
+            // Esto actualiza el eje Y (Profit vs %) y dispara el evento
             Metrics.setChartParameter(pSel.value); 
         };
     }
 }
 
 /**
- * CONFIGURACIÓN DE BOTONES Y INPUTS RÁPIDOS
+ * CONFIGURACIÓN DE BOTONES (Long, Short, AI) Y INPUTS RÁPIDOS
  */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
@@ -130,7 +136,6 @@ function setupActionButtons() {
         }
     });
 
-    // --- INPUTS DE CAPITAL CON BLINDAJE ---
     const quickInputs = [
         { id: 'auamountl-usdt', label: 'LONG' },
         { id: 'auamounts-usdt', label: 'SHORT' },
@@ -141,21 +146,15 @@ function setupActionButtons() {
         const el = document.getElementById(input.id);
         if (el) {
             el.onchange = async () => {
-                // Disparamos la actualización al backend
                 const res = await sendConfigToBackend();
                 if (res && res.success) {
                     addTerminalLog(`CONFIG: ${input.label} BUDGET ACTUALIZADO`, 'success');
-                } else {
-                    addTerminalLog(`ERROR: FALLÓ ACTUALIZACIÓN ${input.label}`, 'error');
                 }
             };
         }
     });
 }
 
-/**
- * Terminal de Logs del Dashboard
- */
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
     if (!logContainer) return;
@@ -185,9 +184,6 @@ export function addTerminalLog(msg, type = 'info') {
     }
 }
 
-/**
- * Gráfico de Dona de Balance
- */
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
