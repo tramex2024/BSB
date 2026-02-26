@@ -208,9 +208,6 @@ try {
 }
 
 // LOG DE SEGURIDAD REVISADO
-// Ahora verás que la Key es mucho más corta que el hash de 96 caracteres
-console.log(`[AUTH_CHECK] User: ${userId} | Memo: "${decryptedMemo}" | Key Limpia: ${decryptedApiKey.substring(0,6)}...`);
-
 const userCreds = {
     apiKey: decryptedApiKey, // <--- AHORA PASAMOS LA KEY DESENCRIPTADA
     apiMemo: decryptedMemo,

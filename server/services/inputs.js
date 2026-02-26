@@ -19,7 +19,7 @@ function processUserInputs(amtL, amtS, amtAI) {
                 price_var: 0.8,      // Distancia más amplia entre órdenes
                 price_step_inc: 0.2, // Incremento suave para cubrir el 15% rápido
                 size_var: 1.1,       // Multiplicador bajo para estirar los pocos USD
-                profit_percent: 1.0  // Profit más corto para asegurar ganancias
+                profit_percent: 1.3  // Profit más corto para asegurar ganancias
             };
         }
 
@@ -38,7 +38,7 @@ function processUserInputs(amtL, amtS, amtAI) {
             price_var: 0.6,
             price_step_inc: 0.32, // Garantiza el ~40% de profundidad en 15 niveles
             size_var: sVar,
-            profit_percent: 1.2
+            profit_percent: 1.3
         };
     };
 
