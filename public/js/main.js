@@ -13,6 +13,7 @@ import { fetchOrders } from './modules/orders.js';
 import { initializeSupport } from './modules/support.js';
 import { updateSystemHealth } from './modules/health.js';
 import { initializeSettings } from './modules/settings.js';
+import { initializeProfile } from './modules/profile.js';
 
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
@@ -269,6 +270,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Reemplaza el bloque anterior del settings-icon por este:
     initializeSettings();
+    
+    // Initialize Profile
+    initializeProfile();
 
     // [NUEVO] Listener para Notificaciones (Solo Log por ahora)
     const bell = document.querySelector('.fa-bell')?.parentElement;
