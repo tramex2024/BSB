@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <link rel="icon" href="/images/bsb-logo.png" type="image/png">
     <meta charset="UTF-8">
@@ -26,17 +26,23 @@
         </nav>
         
         <div class="flex items-center space-x-3 md:space-x-5 text-gray-400">
+            <div class="hidden md:flex items-center space-x-2 px-3 py-1 bg-gray-900/50 rounded-full border border-gray-700">
+                <div id="system-health-dot" class="h-2 w-2 rounded-full bg-red-500 transition-all duration-500"></div>
+                <span id="system-health-text" class="text-[10px] uppercase tracking-tighter font-bold">Connecting...</span>
+            </div>
+
             <div class="status-ball-container">
-                <span id="status-dot" class="status-dot-base status-red" title="Estado de Conexión"></span>
+                <span id="status-dot" class="status-dot-base status-red" title="Connection Status"></span>
             </div>
             
+            <i class="fas fa-headset cursor-pointer hover:text-blue-400 transition" id="btn-support" title="Technical Support"></i>
             <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
             <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
         </div>
     </header>
 
     <div id="log-bar" class="log-bar shrink-0">
-        <p id="log-message">Sincronizando con Bitmart API...</p>
+        <p id="log-message">Syncing with Bitmart API...</p>
     </div>
 
     <main id="main-content" class="relative flex-1 flex flex-col items-stretch p-4 md:p-6 min-h-[calc(100vh-4rem)] overflow-x-hidden">
@@ -44,6 +50,43 @@
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
         </div>
     </main>
+
+    <div id="support-modal" class="modal">
+        <div class="modal-content border border-blue-900/30">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold flex items-center">
+                    <i class="fas fa-headset mr-3 text-blue-500"></i> BSB Support
+                </h2>
+                <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-support"></i>
+            </div>
+            
+            <p class="text-gray-400 text-sm mb-6">Need help with your bots or Bitmart connection? Select an option:</p>
+            
+            <div class="grid grid-cols-1 gap-4">
+                <button id="whatsapp-support" class="flex items-center justify-between p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-xl hover:bg-emerald-900/40 transition group">
+                    <div class="flex items-center">
+                        <i class="fab fa-whatsapp text-2xl text-emerald-500 mr-4"></i>
+                        <div class="text-left">
+                            <span class="block font-bold text-white">Live WhatsApp</span>
+                            <span class="text-xs text-gray-400">Immediate assistance</span>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-gray-600 group-hover:text-emerald-500 transition"></i>
+                </button>
+
+                <a href="mailto:support@bsb.com" class="flex items-center justify-between p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl hover:bg-blue-900/40 transition group">
+                    <div class="flex items-center">
+                        <i class="fas fa-envelope text-2xl text-blue-500 mr-4"></i>
+                        <div class="text-left">
+                            <span class="block font-bold text-white">Open Ticket</span>
+                            <span class="text-xs text-gray-400">Response within 24h</span>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-gray-600 group-hover:text-blue-500 transition"></i>
+                </a>
+            </div>
+        </div>
+    </div>
 
     <div id="api-modal" class="modal">
         <div class="modal-content">
@@ -72,21 +115,21 @@
     <div id="auth-modal" class="modal">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold">Acceso de Usuario</h2>
+                <h2 class="text-xl font-bold">User Access</h2>
                 <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-auth-modal"></i>
             </div>
             <form id="auth-form" class="space-y-4">
                 <div id="email-section">
-                    <label class="text-xs text-gray-400 block mb-1">Correo Electrónico</label>
-                    <input type="email" id="email" placeholder="tu@email.com" required
+                    <label class="text-xs text-gray-400 block mb-1">Email Address</label>
+                    <input type="email" id="email" placeholder="your@email.com" required
                         class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
                 </div>
                 <div id="token-section" style="display: none;">
-                    <label class="text-xs text-gray-400 block mb-1">Código de Verificación</label>
-                    <input type="text" id="token" placeholder="Ingresa el código" 
+                    <label class="text-xs text-gray-400 block mb-1">Verification Code</label>
+                    <input type="text" id="token" placeholder="Enter code" 
                         class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none font-mono text-center text-lg tracking-widest">
                 </div>
-                <button type="submit" id="auth-button" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">CONTINUAR</button>
+                <button type="submit" id="auth-button" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">CONTINUE</button>
                 <p id="auth-message" class="text-xs text-center"></p>
             </form>
         </div>
@@ -95,9 +138,9 @@
     <div id="logout-modal" class="modal">
         <div class="modal-content border border-red-900/30">
             <h2 class="text-xl font-bold text-white mb-2">Sign Out?</h2>
-            <p class="text-gray-400 text-sm mb-6">Necesitarás un nuevo código para volver a entrar.</p>
+            <p class="text-gray-400 text-sm mb-6">You will need a new code to sign back in.</p>
             <div class="flex space-x-3">
-                <button id="cancel-logout" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold transition">CANCELAR</button>
+                <button id="cancel-logout" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold transition">CANCEL</button>
                 <button id="confirm-logout" class="flex-1 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold transition">LOG OUT</button>
             </div>
         </div>

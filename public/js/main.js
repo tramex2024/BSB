@@ -8,6 +8,10 @@ import { updateBotUI } from './modules/uiManager.js';
 import aiBotUI from './modules/aiBotUI.js';
 import { initSocket } from './modules/socket.js'; 
 import { fetchOrders } from './modules/orders.js'; 
+
+import { initializeSupport } from './modules/support.js';
+import { updateSystemHealth } from './modules/health.js';
+
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
 
