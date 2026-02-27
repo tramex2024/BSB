@@ -141,7 +141,7 @@ const aiBotUI = {
         if (isRunning) {
             const isSyncing = (historyCount < 200);
             if (btn) {
-                const targetText = isSyncing ? "INITIALIZING NEURAL CORE..." : "STOP AI CORE";
+                const targetText = isSyncing ? "NEURAL CORE..." : "STOP AI CORE";
                 if (btn.innerText !== targetText) {
                     btn.innerText = targetText;
                     btn.className = isSyncing 
