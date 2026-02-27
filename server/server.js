@@ -21,6 +21,7 @@ const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine'));
 const candleBuilder = require('./src/ai/CandleBuilder'); 
 const orderPersistenceService = require('./services/orderPersistenceService');
 const orderSyncService = require('./services/orderSyncService');
+const { sendSupportTicketEmail } = require('./utils/email');
 
 // Modelos
 const User = require('./models/User'); // <--- AÑADIDO PARA INICIALIZACIÓN
@@ -80,6 +81,33 @@ app.use('/api/v1/config', require('./routes/configRoutes'));
 app.use('/api/v1/balance', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
+
+// --- RUTA DE SOPORTE (AÑADIDA PARA TICKETS INTERNOS) ---
+app.post('/api/support/ticket', async (req, res) => {
+    try {
+        const { userId, email, category, message } = req.body;
+        const ticketId = `BSB-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        // Llamamos al servicio de Brevo que ya tienes probado
+        await sendSupportTicketEmail({
+            userId,
+            email,
+            category,
+            message,
+            ticketId
+        });
+
+        res.status(200).json({ 
+            success: true, 
+            message: "Ticket sent via Brevo successfully",
+            ticketId 
+        });
+
+    } catch (error) {
+        console.error("❌ Error processing Brevo ticket:", error);
+        res.status(500).json({ success: false, message: "Email delivery failed" });
+    }
+});
 
 // --- 5. CONEXIÓN BASE DE DATOS Y ARRANQUE DE SERVICIOS ---
 mongoose.connect(process.env.MONGO_URI)

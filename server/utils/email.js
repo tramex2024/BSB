@@ -72,4 +72,55 @@ async function sendTokenEmail(email, token) {
     }
 }
 
-module.exports = { sendTokenEmail };
+/**
+ * Envía el ticket de soporte al administrador usando la API de Brevo
+ */
+async function sendSupportTicketEmail(ticketData) {
+    const API_KEY = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.SENDER_EMAIL || "info.nexuslabs@gmail.com"; 
+    const adminEmail = "tu-correo-admin@gmail.com"; // <-- Pon aquí donde quieres recibir los tickets
+
+    if (!API_KEY) throw new Error("Brevo API Key missing");
+
+    const { userId, email, category, message, ticketId } = ticketData;
+
+    try {
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: "BSB Support System", email: senderEmail },
+                to: [{ email: adminEmail }], 
+                subject: `[${category.toUpperCase()}] Ticket: ${ticketId}`,
+                htmlContent: `
+                    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px; color: #374151;">
+                        <h2 style="color: #2563eb; border-bottom: 2px solid #f3f4f6; padding-bottom: 10px;">New Support Ticket</h2>
+                        <div style="margin: 20px 0; background: #f9fafb; padding: 15px; border-radius: 8px;">
+                            <p><strong>Ticket ID:</strong> <span style="font-family: monospace;">${ticketId}</span></p>
+                            <p><strong>Category:</strong> ${category}</p>
+                            <p><strong>From:</strong> ${email}</p>
+                            <p><strong>User ID:</strong> ${userId}</p>
+                        </div>
+                        <div style="padding: 15px; border-left: 4px solid #2563eb; background: #ffffff;">
+                            <p style="font-weight: bold; margin-bottom: 5px;">User Message:</p>
+                            <p style="line-height: 1.6;">${message}</p>
+                        </div>
+                        <p style="font-size: 11px; color: #9ca3af; margin-top: 30px; text-align: center;">
+                            Nexus Labs Support System &copy; 2026
+                        </p>
+                    </div>`
+            })
+        });
+
+        return await response.json();
+    } catch (error) {
+        console.error("❌ [BREVO-SUPPORT-ERROR]:", error.message);
+        throw error;
+    }
+}
+
+module.exports = { sendTokenEmail, sendSupportTicketEmail };
