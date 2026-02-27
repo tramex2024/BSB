@@ -78,7 +78,7 @@ async function sendTokenEmail(email, token) {
 async function sendSupportTicketEmail(ticketData) {
     const API_KEY = process.env.BREVO_API_KEY;
     const senderEmail = process.env.SENDER_EMAIL || "info.nexuslabs@gmail.com"; 
-    const adminEmail = "tu-correo-admin@gmail.com"; // <-- Pon aquí donde quieres recibir los tickets
+    const adminEmail = "info.nexuslabs@gmail.com"; // <-- Pon aquí donde quieres recibir los tickets
 
     if (!API_KEY) throw new Error("Brevo API Key missing");
 
