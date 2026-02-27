@@ -1,6 +1,6 @@
 /**
  * BSB/server/models/User.js
- * MODELO DE USUARIO - Gestión de Sesiones y Credenciales Cifradas
+ * MODELO DE USUARIO - Gestión de Sesiones, Credenciales y Roles
  */
 
 const mongoose = require('mongoose');
@@ -13,7 +13,16 @@ const userSchema = new mongoose.Schema({
         lowercase: true,
         trim: true,
         match: [/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/, 'Please fill a valid email address'],
-        index: true // Optimiza la búsqueda durante el login
+        index: true 
+    },
+    
+    // --- ROL DE USUARIO ---
+    // Define qué partes de la aplicación puede ver y usar
+    role: {
+        type: String,
+        enum: ['current', 'advanced', 'admin'],
+        default: 'current',
+        required: true
     },
     
     autobotId: {
@@ -27,7 +36,6 @@ const userSchema = new mongoose.Schema({
         default: null,
     },
     
-    // AUTH OTP: No son requeridos para permitir limpieza tras validación
     token: { 
         type: String,
         default: null
@@ -37,9 +45,8 @@ const userSchema = new mongoose.Schema({
         default: null
     },
 
-    // CREDENCIALES BITMART (Cifradas con AES-256 via encryption.js)
     bitmartApiKey: {
-        type: String, // Guardaremos el valor cifrado aquí
+        type: String, 
         default: null
     },
     bitmartSecretKeyEncrypted: { 
@@ -47,7 +54,7 @@ const userSchema = new mongoose.Schema({
         default: null
     },
     bitmartApiMemo: {
-        type: String, // El memo también se recomienda cifrarlo
+        type: String, 
         default: null
     },
     
@@ -57,10 +64,9 @@ const userSchema = new mongoose.Schema({
     }
 
 }, { 
-    timestamps: true // Gestiona automáticamente createdAt y updatedAt
+    timestamps: true 
 });
 
-// Middleware opcional para debug (puedes borrarlo después)
 userSchema.pre('save', function(next) {
     if (this.isModified('bitmartSecretKeyEncrypted')) {
         console.log(`[USER-MODEL] Credentials updated for: ${this.email}`);

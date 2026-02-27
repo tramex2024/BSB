@@ -65,34 +65,33 @@ exports.verifyToken = async (req, res) => {
         }
 
         // 2. Lógica Multiusuario: Asegurar documento Autobot
-        // Si el usuario no tiene una instancia de bot configurada, la creamos ahora
         let bot = await Autobot.findOne({ userId: user._id });
         
         if (!bot) {
             console.log(`[AUTH] 🤖 Creando instancia de bot inicial para ${email}`);
             bot = new Autobot({ 
                 userId: user._id,
-                // Aquí podrías definir valores default para config si tu modelo no los tiene
                 lstate: 'STOPPED'
             });
             await bot.save();
         }
 
-        // 3. Generar JWT (Expiración de 365 días para evitar deslogueos constantes)
+        // 3. Generar JWT (Incluimos el ROLE dentro del token)
         const jwtToken = jwt.sign(
-            { id: user._id, email: user.email },
+            { id: user._id, email: user.email, role: user.role }, // <-- Agregamos role aquí
             process.env.JWT_SECRET,
             { expiresIn: '365d' }
         );
 
         // 4. Limpieza y Persistencia de Sesión
-        user.jwtToken = jwtToken; // Opcional: para control de sesiones activas
-        user.token = null;        // Quemamos el OTP
+        user.jwtToken = jwtToken; 
+        user.token = null;        
         user.tokenExpires = null;
         await user.save();
 
-        console.log(`[AUTH] 🚀 Login exitoso: ${email}`);
+        console.log(`[AUTH] 🚀 Login exitoso: ${email} (Role: ${user.role})`);
 
+        // 5. Respuesta al Frontend
         return res.status(200).json({ 
             success: true,
             message: 'Login successful!',
@@ -100,7 +99,8 @@ exports.verifyToken = async (req, res) => {
             user: { 
                 id: user._id, 
                 email: user.email,
-                hasApiKeys: !!user.bitmartApiKey // Para que el frontend sepa si redirigir a config
+                role: user.role, // <-- Enviamos el role al frontend
+                hasApiKeys: !!user.bitmartApiKey 
             }
         });
 

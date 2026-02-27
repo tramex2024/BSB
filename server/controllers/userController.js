@@ -18,7 +18,7 @@ const Order = require('../models/Order');
 // ==========================================
 
 /**
- * 1. Verifica que el JWT sea válido.
+ * 1. Verifica que el JWT sea válido e inyecta el ROL del usuario.
  */
 exports.authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -28,13 +28,30 @@ exports.authenticateToken = (req, res, next) => {
         return res.status(401).json({ message: 'Authentication token required.' });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
         if (err) {
             console.error("[AUTH] JWT Error:", err.message);
             return res.status(403).json({ message: 'Invalid or expired token.' });
         }
-        req.user = decoded; 
-        next();
+
+        try {
+            // Buscamos el usuario para obtener su ROL actualizado
+            const user = await User.findById(decoded.id).select('role email');
+            if (!user) {
+                return res.status(404).json({ message: 'User not found.' });
+            }
+
+            // Guardamos ID y ROLE en req.user para que esté disponible en todo el backend
+            req.user = {
+                id: user._id,
+                role: user.role,
+                email: user.email
+            };
+
+            next();
+        } catch (dbError) {
+            res.status(500).json({ message: 'Error verifying user role.' });
+        }
     });
 };
 

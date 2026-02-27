@@ -8,6 +8,8 @@ import { updateBotUI } from './modules/uiManager.js';
 import aiBotUI from './modules/aiBotUI.js';
 import { initSocket } from './modules/socket.js'; 
 import { fetchOrders } from './modules/orders.js'; 
+// [NUEVO] Importamos la lógica de roles
+import { applyRolePermissions } from './modules/role.js';
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -78,6 +80,8 @@ export function initializeFullApp() {
 
     if (token && userId) {
         console.log("🚀 Initializing Authenticated App Flow...");
+        // [NUEVO] Ejecutamos la limpieza de pestañas según rol al iniciar sesión
+        applyRolePermissions();
         initSocket();
     } else {
         console.warn("⚠️ Partial session detected. Waiting for full login.");
@@ -236,6 +240,10 @@ async function saveAIConfigGlobal(payload) {
 document.addEventListener('DOMContentLoaded', () => {
     const hasToken = localStorage.getItem('token');
     const hasUserId = localStorage.getItem('userId');
+
+    // [NUEVO] Aplicamos permisos inmediatamente al cargar el DOM 
+    // por si el usuario ya estaba logueado anteriormente.
+    applyRolePermissions();
 
     if (hasToken && hasUserId) { 
         initializeFullApp(); 
