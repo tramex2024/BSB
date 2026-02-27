@@ -57,14 +57,18 @@ export async function handleAuthSubmit(onSuccess) {
             const data = await verifyToken(email, token);
             
             if (data && data.token) {
-                // 1. SAVE CREDENTIALS
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('userEmail', email);
-                
-                const uid = data.userId || (data.user && data.user.id);
-                if (uid) {
-                    localStorage.setItem('userId', uid);
-                }
+               // 1. SAVE CREDENTIALS
+localStorage.setItem('token', data.token);
+localStorage.setItem('userEmail', email);
+
+// [REFACTORIZADO] Guardamos el objeto user completo para el sistema de roles
+if (data.user) {
+    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('userId', data.user.id || data.user._id);
+} else if (data.userId) {
+    // Caso de respaldo por si el backend envía userId fuera del objeto user
+    localStorage.setItem('userId', data.userId);
+}
                 
                 // 2. IMMEDIATE UI CLEANUP
                 // This overwrites the "⚠️ Session not found" warning in the log bar
