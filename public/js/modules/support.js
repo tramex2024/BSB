@@ -9,31 +9,29 @@ export function initializeSupport() {
     const btnClose = document.getElementById('close-support');
     const btnWhatsApp = document.getElementById('whatsapp-support');
 
-    // 1. Open Modal
     if (btnSupport && modalSupport) {
         btnSupport.addEventListener('click', () => {
-            modalSupport.style.display = 'flex';
+            modalSupport.style.display = 'flex'; // Esto lo hace visible
         });
     }
 
-    // 2. Close Modal (X Button)
     if (btnClose && modalSupport) {
         btnClose.addEventListener('click', () => {
             modalSupport.style.display = 'none';
         });
     }
 
-    // 3. Close if clicking outside the modal content
     window.addEventListener('click', (e) => {
         if (e.target === modalSupport) {
             modalSupport.style.display = 'none';
         }
     });
 
-    // 4. WhatsApp Logic
     if (btnWhatsApp) {
         btnWhatsApp.addEventListener('click', () => {
-            openWhatsApp();
+            const phone = "529625198814"; 
+            const message = encodeURIComponent("Hello! 👋 I need technical support with my Bitmart Spot Bots platform.");
+            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
         });
     }
 }

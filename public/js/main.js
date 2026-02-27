@@ -261,4 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Iniciar siempre en dashboard
     initializeTab('dashboard'); 
+    
+    initializeSupport();
 });
