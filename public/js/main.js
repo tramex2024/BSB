@@ -1,6 +1,7 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
  * Estado: Corregida persistencia de balance y gestión de estados de IA
+ * Integración: Soporte, Notificaciones y Ajustes activados.
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -11,6 +12,7 @@ import { fetchOrders } from './modules/orders.js';
 
 import { initializeSupport } from './modules/support.js';
 import { updateSystemHealth } from './modules/health.js';
+import { initializeSettings } from './modules/settings.js';
 
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
@@ -262,5 +264,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Iniciar siempre en dashboard
     initializeTab('dashboard'); 
     
+    // [IMPORTANTE] Activamos el Soporte Técnico (Audífonos)
     initializeSupport();
+    
+    // Reemplaza el bloque anterior del settings-icon por este:
+    initializeSettings();
+
+    // [NUEVO] Listener para Notificaciones (Solo Log por ahora)
+    const bell = document.querySelector('.fa-bell')?.parentElement;
+    if (bell) bell.addEventListener('click', () => logStatus("No new notifications.", "info"));
+
+    // [NUEVO] Listener para Configuración General
+    const cog = document.getElementById('settings-icon');
+    if (cog) cog.addEventListener('click', () => logStatus("Settings panel coming soon.", "info"));
+
+    // [NUEVO] Listener para Perfil de Usuario
+    const profile = document.getElementById('user-profile-icon');
+    if (profile) profile.addEventListener('click', () => {
+        const uId = localStorage.getItem('userId') || 'Guest';
+        logStatus(`User Profile ID: ${uId}`, "info");
+    });
 });

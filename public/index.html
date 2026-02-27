@@ -34,10 +34,25 @@
             <div class="status-ball-container">
                 <span id="status-dot" class="status-dot-base status-red" title="Connection Status"></span>
             </div>
+
+            <div class="relative cursor-pointer hover:text-white transition" title="Notifications">
+                <i class="fas fa-bell"></i>
+                <span class="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+            </div>
             
             <i class="fas fa-headset cursor-pointer hover:text-blue-400 transition" id="btn-support" title="Technical Support"></i>
-            <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login"></i>
+            
             <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
+
+            <i class="fas fa-cog cursor-pointer hover:text-white transition" id="settings-icon" title="General Settings"></i>
+
+            <div class="flex items-center border-l border-gray-700 pl-3 md:pl-5 space-x-3">
+                <i class="fas fa-user-circle text-xl cursor-pointer hover:text-emerald-500 transition" id="user-profile-icon" title="Profile"></i>
+                <i class="fas fa-sign-in-alt cursor-pointer hover:text-white transition" id="login-logout-icon" title="Login/Logout"></i>
+            </div>
         </div>
     </header>
 
