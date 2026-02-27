@@ -1,13 +1,15 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Blindaje contra rebote de datos durante edición activa
+ * Actualización: Integración con Health Monitor (System Health Dot)
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { updateBotUI } from './uiManager.js'; 
 import { formatCurrency } from './ui/formatters.js';
-import { activeEdits } from './ui/controls.js'; // Importamos el registro de ediciones
+import { activeEdits } from './ui/controls.js'; 
+// [NUEVO] Importamos el controlador de salud del sistema
+import { updateSystemHealth } from './health.js';
 
 export let socket = null;
 let connectionWatchdog = null;
@@ -50,12 +52,18 @@ export function initSocket() {
         socket.emit('get-bot-state'); 
         console.log(`✅ Socket: Connected as User ${userId}`);
         sendToDashboardTerminal("Sistema Conectado: Ready", "success");
+        
+        // [NUEVO] Actualizamos el punto de salud a ONLINE (Verde)
+        updateSystemHealth('online');
     });
 
     socket.on('disconnect', () => {
         console.warn("❌ Socket: Disconnected from Backend");
         updateConnectionStatus('DISCONNECTED');
         sendToDashboardTerminal("Conexión Perdida con Servidor", "error");
+        
+        // [NUEVO] Actualizamos el punto de salud a OFFLINE (Rojo)
+        updateSystemHealth('offline');
     });
 
     socket.on('connect_error', (err) => {
@@ -63,6 +71,8 @@ export function initSocket() {
         if (err.message === "Authentication error") {
             logStatus("Sesión expirada o inválida", "error");
         }
+        // También marcamos como offline en caso de error de conexión
+        updateSystemHealth('offline');
     });
 
     // --- RECEPCIÓN DE PRECIO ---
@@ -89,22 +99,17 @@ export function initSocket() {
     socket.on('bot-state-update', async (state) => {
         if (!state) return;
 
-        // 🛡️ ESCUDO TÉRMICO: Verificamos si hay alguna edición activa en los últimos 2 segundos
         const now = Date.now();
         const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
         if (isEditing) {
-            // Si el usuario está editando, solo actualizamos datos de balance y estados, pero NO la config
             console.log("🛡️ Socket: Edición activa detectada. Protegiendo inputs...");
-            
-            // Actualizamos balances sin tocar 'config' para evitar el "salto a cero"
             currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
             currentBotState.lstate = state.lstate || currentBotState.lstate;
             currentBotState.sstate = state.sstate || currentBotState.sstate;
             currentBotState.aistate = state.aistate || currentBotState.aistate;
         } else {
-            // Si NO está editando, sincronizamos todo normalmente
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
             }
@@ -112,7 +117,6 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // Sincronización con MetricsManager
         if (state.history || state.cycleHistory) {
             try {
                 const Metrics = await import('./metricsManager.js');
@@ -125,7 +129,6 @@ export function initSocket() {
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
 
-        // Forzar actualización de Dona y Rayitas con nuevos balances (Siempre se hace)
         if (document.getElementById('balanceDonutChart')) {
             const { updateDistributionWidget } = await import('./dashboard.js');
             updateDistributionWidget(currentBotState);
@@ -206,6 +209,8 @@ function resetWatchdog() {
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
     connectionWatchdog = setTimeout(() => {
         updateConnectionStatus('DISCONNECTED');
+        // Si el watchdog salta, también marcamos salud como offline
+        updateSystemHealth('offline');
     }, 15000);
 }
 
