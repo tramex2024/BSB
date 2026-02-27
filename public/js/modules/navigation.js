@@ -15,34 +15,58 @@ export function setupNavTabs(callback) {
      */
     async function loadContent(tabName) {
         const token = localStorage.getItem('token');
-        
-        // --- 1. CONTROL DE SEGURIDAD ---
-        // Si el usuario intenta entrar a secciones privadas (autobot/aibot) sin estar logueado
-        if (tabName !== 'dashboard' && !token) {
-            // Revertimos el estilo visual a la pestaña dashboard
-            navTabs.forEach(t => t.classList.remove('active'));
-            const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
-            if (dashTab) dashTab.classList.add('active');
-            
-            // Abrimos el modal de login automáticamente
-            toggleAuthModal(true);
-            
-            if (logMessageEl) {
-                logMessageEl.textContent = 'Acceso restringido: Inicia sesión para usar los Bots.';
-                logMessageEl.className = 'text-red-400';
+        const userStr = localStorage.getItem('user');
+        let userRole = 'current';
+
+        if (userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                userRole = user.role || 'current';
+            } catch (e) {
+                console.error("Error parsing user role in navigation", e);
             }
+        }
+        
+        // --- 1. CONTROL DE SEGURIDAD (TOKEN) ---
+        if (tabName !== 'dashboard' && !token) {
+            revertToDashboard();
+            toggleAuthModal(true);
+            showErrorLog('Acceso restringido: Inicia sesión para usar los Bots.');
             return; 
         }
 
-        // --- 2. NOTIFICAR AL MOTOR PRINCIPAL (main.js) ---
-        // Delegamos la carga del HTML y el JS al callback para evitar doble carga
+        // --- 2. CONTROL DE SEGURIDAD (ROLES) [NUEVO] ---
+        // Si el usuario es 'current' e intenta entrar a pestañas avanzadas
+        const restrictedTabs = ['autobot', 'aibot'];
+        if (userRole === 'current' && restrictedTabs.includes(tabName)) {
+            console.warn(`[SECURITY] Bloqueado intento de acceso a ${tabName} por rol insuficiente.`);
+            revertToDashboard();
+            showErrorLog('Tu plan actual no permite acceso a esta función.');
+            return;
+        }
+
+        // --- 3. NOTIFICAR AL MOTOR PRINCIPAL (main.js) ---
         if (callback) {
             await callback(tabName);
         }
 
-        // --- 3. ACTUALIZAR URL ---
-        // Esto permite que si refrescas la página, se quede en la misma pestaña
+        // --- 4. ACTUALIZAR URL ---
         window.location.hash = tabName;
+    }
+
+    // Funciones auxiliares para no repetir código
+    function revertToDashboard() {
+        navTabs.forEach(t => t.classList.remove('active'));
+        const dashTab = document.querySelector('.nav-tab[data-tab="dashboard"]');
+        if (dashTab) dashTab.classList.add('active');
+        window.location.hash = 'dashboard';
+    }
+
+    function showErrorLog(msg) {
+        if (logMessageEl) {
+            logMessageEl.textContent = msg;
+            logMessageEl.className = 'text-red-400 font-bold';
+        }
     }
 
     // Configurar el evento click para cada pestaña del menú
@@ -51,7 +75,6 @@ export function setupNavTabs(callback) {
             e.preventDefault();
             const tabName = tab.dataset.tab;
             
-            // Cambiar visualmente la pestaña activa en el menú
             navTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             
@@ -60,16 +83,13 @@ export function setupNavTabs(callback) {
     });
 
     // --- MANEJO DE CARGA INICIAL (Refresh) ---
-    // Detectar si venimos de un #hash específico (ej: #autobot)
     const currentHash = window.location.hash.replace('#', '');
     const initialTab = currentHash || 'dashboard';
     
-    // Sincronizar estilos del menú al arrancar
     navTabs.forEach(t => {
         if (t.dataset.tab === initialTab) t.classList.add('active');
         else t.classList.remove('active');
     });
 
-    // Cargar la pestaña correspondiente al iniciar
     loadContent(initialTab);
 }
