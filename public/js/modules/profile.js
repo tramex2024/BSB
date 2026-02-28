@@ -24,7 +24,6 @@ export function initializeProfile() {
 }
 
 function updateProfileData() {
-    // 1. Intentamos obtener el objeto completo del usuario
     const userStr = localStorage.getItem('user');
     let userData = {};
     
@@ -34,35 +33,58 @@ function updateProfileData() {
         console.error("Error parsing user data");
     }
 
-    // 2. Extraer datos (priorizando lo que viene del objeto 'user')
     const email = userData.email || localStorage.getItem('userEmail') || 'User@BSB.com';
     const uid = userData.id || userData._id || localStorage.getItem('userId') || 'Not Set';
     const role = (userData.role || localStorage.getItem('userRole') || 'current').toLowerCase();
-    const daysLeft = userData.subscriptionDays || localStorage.getItem('subscriptionDays') || '0';
+
+    // --- CÁLCULO DE DÍAS CORREGIDO ---
+    let daysLeft = 0;
+    // Buscamos la fecha en el objeto o en el storage directamente
+    const expiryDateStr = userData.roleExpiresAt || localStorage.getItem('roleExpiresAt');
+
+    if (expiryDateStr) {
+        const expiryDate = new Date(expiryDateStr);
+        const today = new Date();
+        
+        // Validamos que la fecha sea válida antes de calcular
+        if (!isNaN(expiryDate.getTime())) {
+            // Diferencia en milisegundos
+            const diffInMs = expiryDate - today;
+            // Convertimos a días (86400000 ms = 1 día)
+            daysLeft = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+        }
+    }
     
+    // Si el cálculo da negativo o el rol es "current", forzamos a 0
+    if (daysLeft < 0 || role === 'current') daysLeft = 0;
+
+    // --- ACTUALIZACIÓN DE UI ---
     document.getElementById('prof-email').textContent = email;
     document.getElementById('prof-id').textContent = uid;
     
     const roleBadge = document.getElementById('prof-role-badge');
+    const daysCount = document.getElementById('prof-days-count');
+    const daysContainer = document.getElementById('prof-days-container');
     const upgradeSection = document.getElementById('upgrade-section');
 
-    // 3. Lógica visual según el ROL real
     if (role === 'admin') {
         roleBadge.textContent = 'ADMINISTRATOR';
         roleBadge.className = 'text-[10px] bg-amber-500 px-2 py-0.5 rounded text-black font-bold uppercase shadow-[0_0_10px_rgba(251,191,36,0.5)]';
-        if(upgradeSection) upgradeSection.style.display = 'none'; // El admin no necesita "Upgrade"
+        if(daysContainer) daysContainer.style.display = 'none';
+        if(upgradeSection) upgradeSection.style.display = 'none';
     } 
     else if (role === 'advanced') {
         roleBadge.textContent = 'ADVANCED';
         roleBadge.className = 'text-[10px] bg-emerald-500 px-2 py-0.5 rounded text-black font-bold uppercase';
-        document.getElementById('prof-days-container').style.display = 'block';
-        document.getElementById('prof-days-count').textContent = `${daysLeft} Days left`;
+        
+        if(daysContainer) daysContainer.style.display = 'block';
+        if(daysCount) daysCount.textContent = `${daysLeft} Days left`;
         if(upgradeSection) upgradeSection.style.display = 'none';
     } 
     else {
         roleBadge.textContent = 'CURRENT (FREE)';
         roleBadge.className = 'text-[10px] bg-gray-600 px-2 py-0.5 rounded text-white font-bold uppercase';
-        document.getElementById('prof-days-container').style.display = 'none';
+        if(daysContainer) daysContainer.style.display = 'none';
         if(upgradeSection) upgradeSection.style.display = 'block';
     }
 }
