@@ -10,7 +10,6 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require("socket.io");
 const path = require('path');
-const cron = require('node-cron');
 
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const autobotLogic = require('./autobotLogic.js');
@@ -18,10 +17,7 @@ const centralAnalyzer = require('./services/CentralAnalyzer');
 const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
 const orderPersistenceService = require('./services/orderPersistenceService');
 const marketService = require('./services/marketService');
-const cronService = require('./services/cronService');
-
-// Modelos (Solo los necesarios para tareas globales en server.js)
-const User = require('./models/User');
+const cronService = require('./services/cronService'); // <--- El "Jefe" de los tiempos
 
 dotenv.config();
 const app = express();
@@ -78,53 +74,32 @@ app.use('/api', require('./routes/serviceRoutes'));
 const adminRoutes = require('./routes/adminRoutes')(io);
 app.use('/api/admin', adminRoutes);
 
-// --- 5. TAREAS PROGRAMADAS GLOBALES (CRON) ---
-// REVISIÓN DE EXPIRACIÓN DE PLANES (Cada hora)
-cron.schedule('0 * * * *', async () => {
-    try {
-        const now = new Date();
-        const result = await User.updateMany(
-            { 
-                role: 'advanced', 
-                roleExpiresAt: { $lt: now } 
-            },
-            { 
-                $set: { role: 'current', roleExpiresAt: null } 
-            }
-        );
-        if (result.modifiedCount > 0) {
-            console.log(`[AUTO-CLEANUP] ${result.modifiedCount} usuarios regresaron a 'current' por expiración.`);
-        }
-    } catch (error) {
-        console.error("[CRON-ERROR] Error en limpieza de roles:", error);
-    }
-});
-
-// --- 6. CONEXIÓN BASE DE DATOS Y ARRANQUE DE SERVICIOS ---
+// --- 5. CONEXIÓN BASE DE DATOS Y ARRANQUE DE SERVICIOS ---
 mongoose.connect(process.env.MONGO_URI)
     .then(async () => {
         console.log('✅ MongoDB Connected...');
         
-        // A. Cargar Gestor de Sockets (Salas, Historial, Notificaciones)
+        // A. Gestor de Sockets (Salas, Historial de Notificaciones)
         require('./services/socketManager')(io);
         
-        // B. Arrancar el ticker público (Precio BTC en tiempo real)
+        // B. Ticker Público (BTC Price)
         marketService.setupPublicTicker(io);
         
-        // C. Arrancar los sockets privados (Monitoreo de órdenes BitMart)
+        // C. Sockets Privados (BitMart)
         await marketService.initializePrivateWebSockets(io, orderPersistenceService);
        
-        // D. Iniciar tareas programadas de fondo (Balances y Sincronización)
+        // D. Tareas Programadas (Balances, Sync Órdenes, Limpieza de Notificaciones y Roles)
+        // Ya no necesitamos llamar a maintenance.js por separado
         cronService.startCronJobs(io);
+
     })
     .catch(err => {
         console.error('❌ Error Crítico de Conexión MongoDB:', err.message);
     });
 
-// --- 7. ARRANQUE DEL SERVIDOR ---
+// --- 6. ARRANQUE DEL SERVIDOR ---
 server.listen(PORT, async () => {
     try {
-        // Inicializar el analizador central con el objeto IO
         centralAnalyzer.init(io); 
         console.log("🧠 [IA-CORE] Motor de análisis sincronizado.");
     } catch (e) { 

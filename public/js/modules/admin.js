@@ -7,10 +7,7 @@ export async function initializeAdminView() {
     console.log("🛠️ Admin View Loaded");
     
     // --- 1. REFERENCIAS DE ELEMENTOS ---
-    // Formulario de Activación
     const activationForm = document.getElementById('admin-activation-form');
-    
-    // Formulario de Notificaciones
     const notifyForm = document.getElementById('admin-notify-form');
     const targetSelect = document.getElementById('notify-target');
     const specificUserContainer = document.getElementById('specific-user-container');
@@ -20,10 +17,11 @@ export async function initializeAdminView() {
         activationForm.onsubmit = async (e) => {
             e.preventDefault();
             
-            const email = document.getElementById('admin-user-email').value;
+            const email = document.getElementById('admin-user-email').value.trim();
             const days = document.getElementById('admin-plan-days').value;
             const btn = activationForm.querySelector('button');
 
+            if (!email) return logStatus("❌ Email is required", "error");
             if (!confirm(`Activate ${email} for ${days} days?`)) return;
 
             try {
@@ -51,7 +49,7 @@ export async function initializeAdminView() {
                 logStatus(`❌ Error: ${error.message}`, 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = 'ACTIVATE NOW';
+                btn.innerHTML = '<i class="fas fa-check-circle mr-2"></i> ACTIVATE NOW';
             }
         };
     }
@@ -69,13 +67,16 @@ export async function initializeAdminView() {
             e.preventDefault();
             
             const target = targetSelect.value;
-            const message = document.getElementById('notify-message').value;
-            const specificEmail = document.getElementById('notify-email')?.value;
+            const message = document.getElementById('notify-message').value.trim();
+            const specificEmail = document.getElementById('notify-email')?.value.trim();
             const btn = notifyForm.querySelector('button');
 
-            if (!message.trim()) {
-                alert("Please enter a message content");
-                return;
+            // Validaciones previas al envío
+            if (!message) {
+                return logStatus("❌ Message content cannot be empty", "error");
+            }
+            if (target === 'one' && (!specificEmail || !specificEmail.includes('@'))) {
+                return logStatus("❌ Please enter a valid target email", "error");
             }
 
             try {
@@ -108,7 +109,7 @@ export async function initializeAdminView() {
                 logStatus(`❌ Broadcast Error: ${error.message}`, 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = 'SEND NOTIFICATION';
+                btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> SEND NOTIFICATION';
             }
         };
     }

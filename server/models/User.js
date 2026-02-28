@@ -22,13 +22,14 @@ const userSchema = new mongoose.Schema({
         index: true 
     },
     
-    // --- ROL DE USUARIO ---    Define qué partes de la aplicación puede ver y usar
+    // --- ROL DE USUARIO --- Define qué partes de la aplicación puede ver y usar
     
     role: {   
         type: String,
         enum: ['current', 'advanced', 'admin'],
         default: 'current',
-        required: true
+        required: true,
+        index: true // Optimiza búsquedas para el sistema de notificaciones por rol
     },
     
     roleUpdatedAt: { 
@@ -38,7 +39,8 @@ const userSchema = new mongoose.Schema({
 
     roleExpiresAt: { 
         type: Date, 
-        default: null // null significa acceso de por vida o cuenta gratuita 'current'
+        default: null, // null significa acceso de por vida o cuenta gratuita 'current'
+        index: true // Optimiza el mantenimiento diario del Cron Service
     },
 
     lastPaymentHash: {
@@ -52,7 +54,7 @@ const userSchema = new mongoose.Schema({
     },
     
     token: { 
-        type: String,
+        type: String, 
         default: null
     },
     tokenExpires: { 

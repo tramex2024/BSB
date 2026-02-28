@@ -4,6 +4,7 @@
 const User = require('../models/User');
 const Autobot = require('../models/Autobot');
 const Order = require('../models/Order');
+const Notification = require('../models/Notification'); // Importamos el modelo de notificaciones
 
 module.exports = function(io) {
     io.on('connection', async (socket) => {
@@ -17,23 +18,43 @@ module.exports = function(io) {
 
         const userIdStr = userId.toString();
         
-        // 1. UNIÓN A SALAS (ID, Email, Rol)
-        socket.join(userIdStr);
-        console.log(`👤 Socket Conectado: ${socket.id} -> Sala: ${userIdStr}`);
-
+        // 1. UNIÓN A SALAS Y VALIDACIÓN DE USUARIO
         try {
             const user = await User.findById(userIdStr).select('email role');
+            
             if (user) {
                 const userEmail = user.email.toLowerCase().trim();
                 const userRole = user.role || 'current';
                 
-                socket.join(userEmail); // Para target: 'one'
-                socket.join(userRole);  // Para target: 'advanced' o 'current'
+                // Unirse a salas para segmentación
+                socket.join(userIdStr);  // Sala por ID único
+                socket.join(userEmail);  // Sala para mensajes personales ('one')
+                socket.join(userRole);   // Sala para mensajes por rol ('advanced'/'current')
                 
-                console.log(`📢 Salas de Notificación listas: [${userEmail}] [${userRole}]`);
+                console.log(`👤 Socket Conectado: ${socket.id} -> [${userEmail}] [${userRole}]`);
+
+                // --- HIDRATAR HISTORIAL DE NOTIFICACIONES ---
+                const notifHistory = await Notification.find({
+                    $or: [
+                        { category: 'all' },
+                        { category: userRole },
+                        { category: 'personal', recipient: userEmail }
+                    ]
+                })
+                .sort({ date: -1 }) // Las más recientes primero
+                .limit(15);
+
+                socket.emit('notification-history', notifHistory);
+                console.log(`[SOCKET] 🔔 Historial de notificaciones enviado a ${userEmail}`);
+
+            } else {
+                // SEGURIDAD: Si el token existe pero el usuario no está en la DB
+                console.warn(`⚠️ Intento de conexión con userId inexistente: ${userIdStr}`);
+                return socket.disconnect();
             }
         } catch (err) {
-            console.error("❌ Error uniendo a salas de notificación:", err.message);
+            console.error("❌ Error en validación de socket:", err.message);
+            return socket.disconnect();
         }
 
         // 2. ENVIAR ESTADO INICIAL DEL AUTOBOT
@@ -43,7 +64,7 @@ module.exports = function(io) {
                 socket.emit('bot-state-update', state);
             }
         } catch (err) {
-            console.error("❌ Error enviando estado inicial:", err);
+            console.error("❌ Error enviando estado inicial del bot:", err);
         }
 
         // 3. HIDRATAR HISTORIAL DE ÓRDENES
@@ -53,9 +74,9 @@ module.exports = function(io) {
                 .limit(20);
             
             socket.emit('ai-history-update', history);
-            console.log(`[SOCKET] 🔄 Historial enviado a ${userIdStr}`);
+            console.log(`[SOCKET] 🔄 Historial de órdenes enviado a ${userIdStr}`);
         } catch (err) {
-            console.error("❌ Error hidratando historial:", err.message);
+            console.error("❌ Error hidratando historial de órdenes:", err.message);
         }
 
         // 4. DESCONEXIÓN
