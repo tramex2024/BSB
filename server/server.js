@@ -33,7 +33,6 @@ const MarketSignal = require('./models/MarketSignal');
 const { decrypt } = require('./utils/encryption'); // <--- PARA DESENCRIPTAR LLAVES AL INICIO
 const authMiddleware = require('./middleware/authMiddleware');
 const roleMiddleware = require('./middleware/roleMiddleware');
-const User = require('./models/User');
 
 const aiRoutes = require('./routes/aiRoutes');
 const cron = require('node-cron');
