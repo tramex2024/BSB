@@ -1,6 +1,6 @@
 /**
  * ui/controls.js - Gestión de Botones e Inputs
- * Ajuste: Eliminación de parpadeo y unificación de estados.
+ * ETAPA 1 FINAL: Eliminación total de parpadeo mediante persistencia de estado.
  */
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
@@ -15,7 +15,6 @@ const STATUS_COLORS = {
 
 export const activeEdits = {};
 
-// Registrar cuando el usuario está escribiendo para no sobrescribir sus datos
 document.addEventListener('input', (e) => {
     if (e.target.tagName === 'INPUT') {
         activeEdits[e.target.id] = Date.now();
@@ -24,7 +23,7 @@ document.addEventListener('input', (e) => {
 
 /**
  * Actualiza el estado visual de los botones (Start/Stop)
- * Evita el parpadeo comparando el estado antes de cambiar clases.
+ * BLOQUEO DE PARPADEO: Solo actúa si el estado cambia.
  */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const btn = document.getElementById(btnId);
@@ -33,29 +32,33 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // 1. Actualizar etiqueta de texto de estado (ej: "RUNNING" en color verde)
+    // --- 1. Sincronización de Label (Texto de estado arriba del botón) ---
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    if (label) {
-        if (label.textContent !== currentStatus) {
-            label.textContent = currentStatus;
-            label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
-        }
+    if (label && label.textContent !== currentStatus) {
+        label.textContent = currentStatus;
+        label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
     }
 
-    // 2. Lógica del Botón (Texto y Color)
+    // --- 2. Lógica de Persistencia del Botón (EVITA EL FLASH) ---
+    // Usamos el dataset del botón para saber qué estado tiene actualmente dibujado
+    if (btn.dataset.lastAppliedStatus === currentStatus) {
+        return; // SI EL ESTADO NO CAMBIÓ, ABORTAMOS TODO. NO TOCAMOS EL DOM.
+    }
+
     const suffix = (type === 'AI') ? 'AI CORE' : type.toUpperCase();
     const newText = isBusy ? `STOP ${suffix}` : `START ${suffix}`;
     
-    // Solo cambiar el texto si es diferente (evita parpadeo)
+    // Actualización Atómica de Texto
     if (btn.textContent !== newText) {
         btn.textContent = newText;
     }
 
-    // Cambiar colores usando clases de Tailwind
+    // Actualización Atómica de Clases (Sin parpadeo)
     if (isBusy) {
+        // En lugar de remover todo, reemplazamos específicamente
         btn.classList.remove('bg-emerald-600', 'bg-blue-600', 'hover:bg-blue-500', 'hover:bg-emerald-500');
         btn.classList.add('bg-red-600', 'hover:bg-red-500');
     } else {
@@ -67,22 +70,27 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         }
     }
 
-    // 3. Bloqueo de Seguridad para Inputs
+    // Guardamos el nuevo estado para la próxima comparación
+    btn.dataset.lastAppliedStatus = currentStatus;
+
+    // --- 3. Bloqueo de Seguridad para Inputs ---
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            // No bloquear si el usuario tiene el foco puesto en ese input
             if (document.activeElement !== el) {
-                el.disabled = isBusy;
-                el.style.opacity = isBusy ? "0.6" : "1";
-                el.style.cursor = isBusy ? "not-allowed" : "text";
+                // Solo cambiar si es estrictamente necesario
+                if (el.disabled !== isBusy) {
+                    el.disabled = isBusy;
+                    el.style.opacity = isBusy ? "0.6" : "1";
+                    el.style.cursor = isBusy ? "not-allowed" : "text";
+                }
             }
         }
     });
 }
 
 /**
- * Sincroniza los valores de los inputs con la configuración de la BD
+ * Sincroniza los valores de los inputs (Sin cambios drásticos, solo optimización)
  */
 export function syncInputsFromConfig(conf) {
     if (!conf) return;
@@ -101,7 +109,7 @@ export function syncInputsFromConfig(conf) {
         'aupricestep-s': conf.short?.price_step_inc,
         'autriggers': conf.short?.profit_percent,
         'auamountai-usdt': conf.ai?.amountUsdt,
-        'ai-amount-usdt': conf.ai?.amountUsdt // Sincroniza ambos inputs de AI si existen
+        'ai-amount-usdt': conf.ai?.amountUsdt
     };
 
     const now = Date.now();
@@ -111,33 +119,25 @@ export function syncInputsFromConfig(conf) {
         if (!input || value === undefined || value === null) continue;
 
         const lastEdit = activeEdits[id] || 0;
-        const isFreshlyEdited = (now - lastEdit < 3000); // Protección de 3 segundos
+        const isFreshlyEdited = (now - lastEdit < 3000);
 
-        // Si el usuario está escribiendo o editó hace poco, saltamos este input
-        if (document.activeElement === input || isFreshlyEdited) {
-            continue; 
-        }
+        if (document.activeElement === input || isFreshlyEdited) continue; 
 
         const currentVal = parseFloat(input.value) || 0;
         const newVal = parseFloat(value) || 0;
 
-        // Solo actualizar si hay una diferencia real (evita mover el cursor del usuario)
         if (Math.abs(currentVal - newVal) > 0.000001) {
             input.value = value;
         }
     }
     
-    // Sincronización de Checkboxes de "Stop at Cycle"
     ['long', 'short', 'ai'].forEach(side => {
         const ids = [`au-stop-${side}-at-cycle`, `ai-stop-at-cycle`].filter(i => side === 'ai' || i.includes(side));
-        
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
-            
             const val = !!conf[side]?.stopAtCycle;
             const lastEdit = activeEdits[id] || 0;
-
             if (document.activeElement !== el && (now - lastEdit >= 3000)) {
                 if (el.checked !== val) el.checked = val;
             }
