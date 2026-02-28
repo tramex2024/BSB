@@ -1,21 +1,25 @@
 /**
  * metricsManager.js - Motor de Análisis de Rentabilidad (TradeCycles Only)
- * Versión Restaurada - Solo Lógica de Métricas
+ * ETAPA 2: Persistencia de datos y protección contra vaciado de gráfica.
+ * Esta versión evita que mensajes parciales del socket (ej. solo Short) 
+ * borren los datos globales (All) de la memoria del navegador.
  */
 
-let cycleHistoryData = [];
+// --- Estado Persistente ---
+const globalCyclesMap = new Map(); 
 let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * setAnalyticsData - LA FUNCIÓN QUE FALTABA
- * Recibe los datos del servidor, evita duplicados y prepara los cálculos.
+ * setAnalyticsData
+ * Recibe datos del socket, los limpia de duplicados y los fusiona con la memoria existente.
  */
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     
-    // Usamos un Map para que si los datos se cargan varias veces, no se dupliquen los puntos
-    const uniqueMap = new Map();
+    if (rawData.length === 0) return;
+
+    let addedNew = false;
 
     rawData.forEach(c => {
         const profitValue = c.netProfit !== undefined ? c.netProfit : (c.profit || 0);
@@ -28,31 +32,32 @@ export function setAnalyticsData(data) {
 
         const strategy = (c.strategy || 'unknown').toLowerCase();
         
-        // Creamos una "huella" única para cada ciclo
-        const fingerPrint = finalDate.getTime() + strategy + profitValue;
+        // Huella única para evitar duplicados exactos: Tiempo-Estrategia-Ganancia
+        const fingerPrint = `${finalDate.getTime()}-${strategy}-${profitValue}`;
         
-        if (!uniqueMap.has(fingerPrint)) {
-            uniqueMap.set(fingerPrint, {
+        if (!globalCyclesMap.has(fingerPrint)) {
+            globalCyclesMap.set(fingerPrint, {
                 ...c,
                 netProfit: parseFloat(profitValue),
                 profitPercentage: parseFloat(c.profitPercentage || 0),
                 processedDate: finalDate,
                 strategy: strategy
             });
+            addedNew = true;
         }
     });
 
-    cycleHistoryData = Array.from(uniqueMap.values());
+    // Log para depuración en consola
+    console.log(`📊 Metrics: ${globalCyclesMap.size} ciclos en memoria total (Vista: ${currentBotFilter}).`);
     
-    // Ordenamos por fecha para que la gráfica no salte hacia atrás
-    cycleHistoryData.sort((a, b) => a.processedDate - b.processedDate);
-    
-    console.log(`📊 Metrics: ${cycleHistoryData.length} ciclos cargados.`);
+    // Siempre actualizamos el display para reflejar posibles cambios, 
+    // pero la data base ya está protegida de borrados accidentales.
     updateMetricsDisplay();
 }
 
 /**
- * Cambia el parámetro de la gráfica (Beneficio acumulado o Porcentaje)
+ * setChartParameter
+ * Cambia entre 'accumulatedProfit' (USD) o 'profitPercentage' (%)
  */
 export function setChartParameter(param) {
     currentChartParameter = param;
@@ -60,7 +65,8 @@ export function setChartParameter(param) {
 }
 
 /**
- * Filtra los resultados por Long, Short o AI
+ * setBotFilter
+ * Filtra la vista del Dashboard: 'all', 'long', 'short', o 'ai'
  */
 export function setBotFilter(filter) {
     console.log(`🎯 Filtrando Dashboard por: ${filter}`);
@@ -69,10 +75,15 @@ export function setBotFilter(filter) {
 }
 
 /**
- * Calcula los KPIs (Win Rate, Profit/h, etc) y actualiza la pantalla
+ * updateMetricsDisplay
+ * Calcula los KPIs y dispara el evento para que Chart.js redibuje.
  */
 function updateMetricsDisplay() {
-    const filtered = cycleHistoryData.filter(c => {
+    // Convertimos el Map a Array para procesarlo
+    const allData = Array.from(globalCyclesMap.values());
+    
+    // Aplicamos el filtro de la UI
+    const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
         return c.strategy === currentBotFilter;
     });
@@ -82,6 +93,9 @@ function updateMetricsDisplay() {
     if (totalCycles === 0) {
         return resetKPIs();
     }
+
+    // Ordenar cronológicamente para cálculos correctos
+    filtered.sort((a, b) => a.processedDate - b.processedDate);
 
     let totalProfitPct = 0;
     let totalNetProfitUsdt = 0;
@@ -108,29 +122,35 @@ function updateMetricsDisplay() {
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Renderizamos los textos en el HTML
+    // --- Renderizado de KPIs en el DOM ---
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`);
 
-    // Avisamos al Dashboard para que dibuje la gráfica
+    // --- Notificar a la Gráfica ---
     try {
         const chartData = getFilteredData();
         window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
     } catch (e) {
-        console.error("❌ Metrics Error:", e);
+        console.error("❌ Metrics Dispatch Error:", e);
     }
 }
 
 /**
- * Prepara los puntos (X, Y) para la gráfica de Chart.js
+ * getFilteredData
+ * Prepara los puntos (X, Y) para el componente de Chart.js
  */
 export function getFilteredData() {
-    const filtered = cycleHistoryData.filter(c => {
+    const allData = Array.from(globalCyclesMap.values());
+    
+    const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
         return c.strategy === currentBotFilter;
     });
+
+    // Ordenar para que la línea del gráfico sea continua
+    filtered.sort((a, b) => a.processedDate - b.processedDate);
 
     let accumulated = 0;
     const points = [{ time: 'Start', value: 0 }];
@@ -149,6 +169,10 @@ export function getFilteredData() {
     return { points };
 }
 
+/**
+ * resetKPIs
+ * Limpia la UI si no hay datos disponibles para el filtro actual
+ */
 function resetKPIs() {
     renderText('total-cycles-closed', '0');
     renderText('cycle-avg-profit', '0.00%', 'text-sm font-bold text-gray-500');
@@ -157,6 +181,10 @@ function resetKPIs() {
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: { points: [] } }));
 }
 
+/**
+ * renderText
+ * Utilidad para actualizar el contenido y clases de un elemento de forma segura
+ */
 function renderText(id, text, className = null) {
     const el = document.getElementById(id);
     if (el) {
