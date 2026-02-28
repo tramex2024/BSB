@@ -323,3 +323,53 @@ main#main-content { margin-top: 0; }
         grid-template-columns: 1fr !important;
     }
 }
+
+/* --- SISTEMA DE NOTIFICACIONES (DROPDOWN) --- */
+#notif-dropdown {
+    position: absolute;
+    top: 50px; /* Ajuste para que caiga justo debajo de la campana */
+    right: 0;
+    width: 320px;
+    background-color: #1a1c24; /* Color coherente con tu var(--dark-header-bg) */
+    border: 1px solid var(--dark-border);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    z-index: 10001; /* Superior al header (1000) y modales (2000) si es necesario */
+    overflow: hidden;
+}
+
+#notif-dropdown .custom-scrollbar {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+/* Animación de entrada suave */
+.animate-fade-in {
+    animation: fade-in 0.25s ease-out forwards;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Estilo de los items de notificación */
+#notif-dropdown div.border-b {
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+#notif-dropdown div.hover\:bg-white\/5:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Ajuste para el punto (dot) de la campana si lo tienes en el HTML */
+.notification-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--danger);
+    border-radius: 50%;
+    border: 2px solid #1f2937;
+}
