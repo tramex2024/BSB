@@ -109,7 +109,7 @@ export function initializeFullApp() {
         // 4. [CONEXIÓN CRUCIAL] Inicializar sistema de notificaciones
         // Esto activa la campana, el punto verde y el historial
         if (socket) {
-            import('./notifications.js').then(module => {
+            import('./modules/notifications.js').then(module => {
                 module.initializeNotifications(socket);
                 console.log("🔔 Notifications Module Linked to Socket");
             }).catch(err => console.error("❌ Error loading notifications module:", err));
