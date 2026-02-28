@@ -24,25 +24,46 @@ export function initializeProfile() {
 }
 
 function updateProfileData() {
-    const email = localStorage.getItem('userEmail') || 'User@BSB.com';
-    const uid = localStorage.getItem('userId') || 'Not Set';
-    const role = localStorage.getItem('userRole') || 'CURRENT'; // CURRENT o ADVANCED
-    const daysLeft = localStorage.getItem('subscriptionDays') || '0';
+    // 1. Intentamos obtener el objeto completo del usuario
+    const userStr = localStorage.getItem('user');
+    let userData = {};
+    
+    try {
+        userData = userStr ? JSON.parse(userStr) : {};
+    } catch (e) {
+        console.error("Error parsing user data");
+    }
+
+    // 2. Extraer datos (priorizando lo que viene del objeto 'user')
+    const email = userData.email || localStorage.getItem('userEmail') || 'User@BSB.com';
+    const uid = userData.id || userData._id || localStorage.getItem('userId') || 'Not Set';
+    const role = (userData.role || localStorage.getItem('userRole') || 'current').toLowerCase();
+    const daysLeft = userData.subscriptionDays || localStorage.getItem('subscriptionDays') || '0';
     
     document.getElementById('prof-email').textContent = email;
     document.getElementById('prof-id').textContent = uid;
     
-    // Actualizar etiqueta de rol visualmente
     const roleBadge = document.getElementById('prof-role-badge');
-    if (role === 'ADVANCED' || role === 'admin') {
-        roleBadge.textContent = role.toUpperCase();
-        roleBadge.className = 'text-[10px] bg-amber-500 px-2 py-0.5 rounded text-black font-bold uppercase';
+    const upgradeSection = document.getElementById('upgrade-section');
+
+    // 3. Lógica visual según el ROL real
+    if (role === 'admin') {
+        roleBadge.textContent = 'ADMINISTRATOR';
+        roleBadge.className = 'text-[10px] bg-amber-500 px-2 py-0.5 rounded text-black font-bold uppercase shadow-[0_0_10px_rgba(251,191,36,0.5)]';
+        if(upgradeSection) upgradeSection.style.display = 'none'; // El admin no necesita "Upgrade"
+    } 
+    else if (role === 'advanced') {
+        roleBadge.textContent = 'ADVANCED';
+        roleBadge.className = 'text-[10px] bg-emerald-500 px-2 py-0.5 rounded text-black font-bold uppercase';
         document.getElementById('prof-days-container').style.display = 'block';
         document.getElementById('prof-days-count').textContent = `${daysLeft} Days left`;
-    } else {
+        if(upgradeSection) upgradeSection.style.display = 'none';
+    } 
+    else {
         roleBadge.textContent = 'CURRENT (FREE)';
         roleBadge.className = 'text-[10px] bg-gray-600 px-2 py-0.5 rounded text-white font-bold uppercase';
         document.getElementById('prof-days-container').style.display = 'none';
+        if(upgradeSection) upgradeSection.style.display = 'block';
     }
 }
 
