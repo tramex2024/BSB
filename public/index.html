@@ -123,7 +123,6 @@
                     <select id="payment-type" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm outline-none focus:border-emerald-500 text-white cursor-pointer">
                         <option value="Subscription">Subscription Plan</option>
                         <option value="Donation">Donation</option>
-                        <option value="Refund">Refund Request</option>
                     </select>
                 </div>
 
@@ -131,8 +130,9 @@
                     <div>
                         <label class="text-[10px] text-gray-400 mb-1 block font-bold uppercase">Amount (USDT)</label>
                         <select id="payment-amount" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm outline-none focus:border-emerald-500 text-white cursor-pointer">
-                            <option value="50">50 USDT (1 Month)</option>
-                            <option value="500">500 USDT (1 Year)</option>
+                            <option value="15">15 USDT (1 Month)</option>
+                            <option value="40">40 USDT (3 Months)</option>
+                            <option value="150">150 USDT (1 Year)</option>
                             <option value="Other">Other Amount</option>
                         </select>
                     </div>
@@ -144,10 +144,15 @@
                     </div>
                 </div>
 
-                <div class="bg-emerald-900/10 border border-emerald-500/20 rounded-xl p-4">
-                    <label class="text-[9px] text-emerald-500 font-bold uppercase block mb-2 text-center tracking-widest">Deposit Wallet Address</label>
+                <div class="bg-emerald-900/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+                    <label class="text-[9px] text-emerald-500 font-bold uppercase block mb-2 tracking-widest">Scan to Pay (USDT TRC-20)</label>
+                    <div class="flex justify-center mb-4">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=TQ5TgbEXwJLKaS8aMVPnuL1jBjFLXWPd4J" 
+                             alt="QR Code Pay" 
+                             class="border-4 border-white rounded-lg shadow-lg">
+                    </div>
                     <div class="flex items-center space-x-2">
-                        <input type="text" readonly value="TU_BILLETERA_AQUI" id="wallet-address-input" 
+                        <input type="text" readonly value="TQ5TgbEXwJLKaS8aMVPnuL1jBjFLXWPd4J" id="wallet-address-input" 
                             class="flex-1 bg-black/40 border-none text-[10px] font-mono p-2.5 rounded text-gray-300 outline-none">
                         <button type="button" id="btn-copy-wallet" class="p-2.5 bg-emerald-600 rounded-lg hover:bg-emerald-700 transition">
                             <i class="fas fa-copy"></i>
@@ -159,7 +164,7 @@
                     <label class="text-[10px] text-gray-400 mb-1 block font-bold uppercase">Transaction Hash (TXID)</label>
                     <input type="text" id="tx-hash" required placeholder="Paste your transaction hash here..."
                         class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm outline-none focus:border-emerald-500 font-mono">
-                    <p class="text-[9px] text-gray-500 mt-2 italic text-center">Verify all data before submitting. Activation is not instant.</p>
+                    <p class="text-[9px] text-gray-500 mt-2 italic text-center">Activation is not instant. Admin will verify TXID.</p>
                 </div>
 
                 <button type="submit" id="btn-submit-payment" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg flex items-center justify-center">
@@ -176,18 +181,10 @@
                 <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-api-modal"></i>
             </div>
             <form id="api-form" class="space-y-4">
-                <input type="text" id="api-key" placeholder="API Key" 
-                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                
-                <input type="password" id="secret-key" placeholder="Secret Key" 
-                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-                
-                <input type="password" id="api-memo" placeholder="API Memo (Passphrase)" 
-                    class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
-
-                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">
-                    SAVE & VALIDATE
-                </button>
+                <input type="text" id="api-key" placeholder="API Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+                <input type="password" id="secret-key" placeholder="Secret Key" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+                <input type="password" id="api-memo" placeholder="API Memo (Passphrase)" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 outline-none focus:border-emerald-500 font-mono text-sm">
+                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">SAVE & VALIDATE</button>
                 <p id="api-status-message" class="text-xs text-center text-gray-500"></p>
             </form>
         </div>
@@ -202,13 +199,11 @@
             <form id="auth-form" class="space-y-4">
                 <div id="email-section">
                     <label class="text-xs text-gray-400 block mb-1">Email Address</label>
-                    <input type="email" id="email" placeholder="your@email.com" required
-                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
+                    <input type="email" id="email" placeholder="your@email.com" required class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none">
                 </div>
                 <div id="token-section" style="display: none;">
                     <label class="text-xs text-gray-400 block mb-1">Verification Code</label>
-                    <input type="text" id="token" placeholder="Enter code" 
-                        class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none font-mono text-center text-lg tracking-widest">
+                    <input type="text" id="token" placeholder="Enter code" class="w-full p-3 bg-gray-900 rounded-xl border border-gray-700 focus:border-emerald-500 outline-none font-mono text-center text-lg tracking-widest">
                 </div>
                 <button type="submit" id="auth-button" class="w-full bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors">CONTINUE</button>
                 <p id="auth-message" class="text-xs text-center"></p>
@@ -230,7 +225,6 @@
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

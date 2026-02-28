@@ -188,7 +188,9 @@ app.post('/api/payments/verify', async (req, res) => {
 
         // Determinamos los días según el monto seleccionado en el select del modal
         let daysToAssign = 30; // Por defecto 1 mes
-        if (amount === "500") {
+        if (amount === "40") {
+            daysToAssign = 90; // 3 meses
+        } else if (amount === "150") {
             daysToAssign = 365; // 1 año
         } else if (amount === "Other") {
             daysToAssign = 7; // Por ejemplo, una prueba de 7 días

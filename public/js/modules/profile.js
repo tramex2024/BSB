@@ -34,8 +34,8 @@ function updateProfileData() {
     
     // Actualizar etiqueta de rol visualmente
     const roleBadge = document.getElementById('prof-role-badge');
-    if (role === 'ADVANCED') {
-        roleBadge.textContent = 'ADVANCED';
+    if (role === 'ADVANCED' || role === 'admin') {
+        roleBadge.textContent = role.toUpperCase();
         roleBadge.className = 'text-[10px] bg-amber-500 px-2 py-0.5 rounded text-black font-bold uppercase';
         document.getElementById('prof-days-container').style.display = 'block';
         document.getElementById('prof-days-count').textContent = `${daysLeft} Days left`;
@@ -95,16 +95,18 @@ function createProfileModal() {
     
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-    // Eventos
+    // Evento para abrir el sistema de pagos desde el perfil
     document.getElementById('btn-upgrade-info')?.addEventListener('click', () => {
-        // Aquí conectamos con el soporte para el pago semi-automático
-        const modal = document.getElementById('profile-modal');
-        modal.style.display = 'none';
+        const profileModal = document.getElementById('profile-modal');
+        if (profileModal) profileModal.style.display = 'none';
         
-        // Simula click en soporte o abre WhatsApp directamente
-        const phone = "529625198814";
-        const msg = encodeURIComponent("I want to upgrade my BSB account to ADVANCED. My UID is: " + localStorage.getItem('userId'));
-        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+        const paymentBtn = document.getElementById('btn-upgrade');
+        if (paymentBtn) {
+            paymentBtn.click();
+        } else {
+            const paymentModal = document.getElementById('payment-modal');
+            if (paymentModal) paymentModal.style.display = 'flex';
+        }
     });
 
     document.getElementById('btn-profile-logout')?.addEventListener('click', () => {
