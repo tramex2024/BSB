@@ -15,6 +15,7 @@ import { updateSystemHealth } from './modules/health.js';
 import { initializeSettings } from './modules/settings.js';
 import { initializeProfile } from './modules/profile.js';
 import { initPayments } from './modules/payments.js';
+import { initializeNotifications } from './modules/notifications.js'; // Asegúrate de que la ruta sea correcta
 
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
@@ -86,20 +87,34 @@ function processNextLog() {
 export function initializeFullApp() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
-    const userRole = localStorage.getItem('userRole'); // Asegúrate de guardar esto al loguear
+    const userRole = localStorage.getItem('userRole'); 
 
     if (token && userId) {
         console.log("🚀 Initializing Authenticated App Flow...");
         
-        // [NUEVO] Mostrar pestaña Admin solo si el rol es 'admin'
+        // 1. Manejo de visibilidad de la pestaña Admin
         const adminTab = document.getElementById('tab-admin');
         if (adminTab && userRole === 'admin') {
             adminTab.style.display = 'block';
             adminTab.classList.remove('hidden');
         }
 
+        // 2. Aplicar permisos según el rol (Advanced/Current)
         applyRolePermissions();
-        initSocket();
+
+        // 3. Inicializar Socket y capturar la instancia
+        // Importante: initSocket() debe retornar la instancia 'socket'
+        const socket = initSocket();
+
+        // 4. [CONEXIÓN CRUCIAL] Inicializar sistema de notificaciones
+        // Esto activa la campana, el punto verde y el historial
+        if (socket) {
+            import('./notifications.js').then(module => {
+                module.initializeNotifications(socket);
+                console.log("🔔 Notifications Module Linked to Socket");
+            }).catch(err => console.error("❌ Error loading notifications module:", err));
+        }
+
     } else {
         console.warn("⚠️ Partial session detected. Waiting for full login.");
     }
@@ -285,11 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeProfile();
     
     // Initialize Payments
-    initPayments();
-
-    // [NUEVO] Listener para Notificaciones (Solo Log por ahora)
-    const bell = document.querySelector('.fa-bell')?.parentElement;
-    if (bell) bell.addEventListener('click', () => logStatus("No new notifications.", "info"));
+    initPayments();   
 
     // [NUEVO] Listener para Configuración General
     const cog = document.getElementById('settings-icon');

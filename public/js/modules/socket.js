@@ -33,11 +33,18 @@ export function initSocket() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
 
-    if (socket?.connected || !token || !userId) {
-        if (!token || !userId) console.warn("⚠️ Socket: No hay sesión activa.");
-        return;
+    // 1. Validation: If no session, we cannot connect
+    if (!token || !userId) {
+        console.warn("⚠️ Socket: No active session detected.");
+        return null;
     }
 
+    // 2. Optimization: If socket already exists and is connected, return it immediately
+    if (socket && socket.connected) {
+        return socket;
+    }
+
+    // 3. Connection: Initialize new Socket.io instance
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
         reconnection: true,
@@ -47,35 +54,35 @@ export function initSocket() {
         query: { userId }     
     });
 
+    // --- CONNECTION LISTENERS ---
     socket.on('connect', () => {
         resetWatchdog();
         socket.emit('get-bot-state'); 
         console.log(`✅ Socket: Connected as User ${userId}`);
-        sendToDashboardTerminal("Sistema Conectado: Ready", "success");
+        sendToDashboardTerminal("System Connected: Ready", "success");
         
-        // [NUEVO] Actualizamos el punto de salud a ONLINE (Verde)
-        updateSystemHealth('online');
+        // Update System Health Dot to ONLINE
+        if (typeof updateSystemHealth === 'function') updateSystemHealth('online');
     });
 
     socket.on('disconnect', () => {
         console.warn("❌ Socket: Disconnected from Backend");
         updateConnectionStatus('DISCONNECTED');
-        sendToDashboardTerminal("Conexión Perdida con Servidor", "error");
+        sendToDashboardTerminal("Connection Lost with Server", "error");
         
-        // [NUEVO] Actualizamos el punto de salud a OFFLINE (Rojo)
-        updateSystemHealth('offline');
+        // Update System Health Dot to OFFLINE
+        if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
     socket.on('connect_error', (err) => {
         console.error("❌ Socket Connection Error:", err.message);
         if (err.message === "Authentication error") {
-            logStatus("Sesión expirada o inválida", "error");
+            logStatus("Session expired or invalid", "error");
         }
-        // También marcamos como offline en caso de error de conexión
-        updateSystemHealth('offline');
+        if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- RECEPCIÓN DE PRECIO ---
+    // --- MARKET DATA (PRICE) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         if (data?.price) {
@@ -95,7 +102,7 @@ export function initSocket() {
         }
     });
 
-    // --- ESTADO GLOBAL DEL BOT (CORREGIDO CON ESCUDO) ---
+    // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (state) => {
         if (!state) return;
 
@@ -103,7 +110,7 @@ export function initSocket() {
         const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
         if (isEditing) {
-            console.log("🛡️ Socket: Edición activa detectada. Protegiendo inputs...");
+            console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
             currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
             currentBotState.lstate = state.lstate || currentBotState.lstate;
@@ -122,7 +129,7 @@ export function initSocket() {
                 const Metrics = await import('./metricsManager.js');
                 Metrics.setAnalyticsData(state.history || state.cycleHistory);
             } catch (err) {
-                console.error("Error al inyectar métricas:", err);
+                console.error("Error injecting metrics:", err);
             }
         }
 
@@ -143,7 +150,7 @@ export function initSocket() {
         }
     });
 
-    // --- LOGS PRIVADOS Y DEBUG STREAM ---
+    // --- PRIVATE LOGS & DEBUG STREAM ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
         const msg = data.message;
@@ -154,13 +161,13 @@ export function initSocket() {
 
         const aiLogContainer = document.getElementById('ai-log-container');
         if (aiLogContainer) {
-            if (aiLogContainer.innerText.includes("Estableciendo enlace")) aiLogContainer.innerHTML = '';
+            if (aiLogContainer.innerText.includes("Establishing link")) aiLogContainer.innerHTML = '';
             const visualConf = isDebug ? 0.5 : (data.type === 'success' ? 0.9 : 0.5);
             aiBotUI.addLogEntry(msg, visualConf);
         }
     });
 
-    // --- ACTUALIZACIONES DE IA Y ÓRDENES ---
+    // --- AI DECISIONS & ORDERS ---
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
@@ -201,6 +208,7 @@ export function initSocket() {
         }
     });
 
+    // 4. Return the socket instance to be used by other modules (like notifications)
     return socket;
 }
 
