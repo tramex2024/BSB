@@ -14,6 +14,7 @@ import { initializeSupport } from './modules/support.js';
 import { updateSystemHealth } from './modules/health.js';
 import { initializeSettings } from './modules/settings.js';
 import { initializeProfile } from './modules/profile.js';
+import { initPayments } from './modules/payments.js';
 
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
@@ -52,7 +53,8 @@ let isProcessingLog = false;
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
     autobot: () => import('./modules/autobot.js'),    
-    aibot: () => import('./modules/aibot.js')
+    aibot: () => import('./modules/aibot.js'),
+    admin: () => import('./modules/admin.js')
 };
 
 // --- LOG SYSTEM (Global) ---
@@ -84,10 +86,18 @@ function processNextLog() {
 export function initializeFullApp() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
+    const userRole = localStorage.getItem('userRole'); // Asegúrate de guardar esto al loguear
 
     if (token && userId) {
         console.log("🚀 Initializing Authenticated App Flow...");
-        // [NUEVO] Ejecutamos la limpieza de pestañas según rol al iniciar sesión
+        
+        // [NUEVO] Mostrar pestaña Admin solo si el rol es 'admin'
+        const adminTab = document.getElementById('tab-admin');
+        if (adminTab && userRole === 'admin') {
+            adminTab.style.display = 'block';
+            adminTab.classList.remove('hidden');
+        }
+
         applyRolePermissions();
         initSocket();
     } else {
@@ -273,6 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize Profile
     initializeProfile();
+    
+    // Initialize Payments
+    initPayments();
 
     // [NUEVO] Listener para Notificaciones (Solo Log por ahora)
     const bell = document.querySelector('.fa-bell')?.parentElement;

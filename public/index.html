@@ -23,6 +23,7 @@
             <a class="nav-tab active" data-tab="dashboard">DASHBOARD</a>
             <a class="nav-tab" data-tab="autobot" id="tab-autobot">AUTOBOT</a>            
             <a class="nav-tab" data-tab="aibot" id="tab-aibot">AIBOT</a>
+            <a class="nav-tab hidden" data-tab="admin" id="tab-admin" style="display: none; color: #fbbf24;">ADMIN</a>
         </nav>
         
         <div class="flex items-center space-x-3 md:space-x-5 text-gray-400">
@@ -43,6 +44,8 @@
                 </span>
             </div>
             
+            <i class="fas fa-gem cursor-pointer hover:text-emerald-400 transition" id="btn-upgrade" title="Upgrade to Advanced"></i>
+
             <i class="fas fa-headset cursor-pointer hover:text-blue-400 transition" id="btn-support" title="Technical Support"></i>
             
             <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
@@ -102,6 +105,67 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="payment-modal" class="modal">
+        <div class="modal-content border border-emerald-900/30">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold flex items-center">
+                    <i class="fas fa-rocket mr-3 text-emerald-500"></i> Upgrade to Advanced
+                </h2>
+                <i class="fas fa-times cursor-pointer hover:text-red-400" id="close-payment"></i>
+            </div>
+
+            <form id="payment-form" class="space-y-4">
+                <div>
+                    <label class="text-[10px] text-gray-400 mb-1 block font-bold uppercase">Transaction Type</label>
+                    <select id="payment-type" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm outline-none focus:border-emerald-500 text-white cursor-pointer">
+                        <option value="Subscription">Subscription Plan</option>
+                        <option value="Donation">Donation</option>
+                        <option value="Refund">Refund Request</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] text-gray-400 mb-1 block font-bold uppercase">Amount (USDT)</label>
+                        <select id="payment-amount" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm outline-none focus:border-emerald-500 text-white cursor-pointer">
+                            <option value="50">50 USDT (1 Month)</option>
+                            <option value="500">500 USDT (1 Year)</option>
+                            <option value="Other">Other Amount</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-400 mb-1 block font-bold uppercase">Network</label>
+                        <div class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-emerald-400 font-bold text-center">
+                            TRC-20 (TRON)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-emerald-900/10 border border-emerald-500/20 rounded-xl p-4">
+                    <label class="text-[9px] text-emerald-500 font-bold uppercase block mb-2 text-center tracking-widest">Deposit Wallet Address</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" readonly value="TU_BILLETERA_AQUI" id="wallet-address-input" 
+                            class="flex-1 bg-black/40 border-none text-[10px] font-mono p-2.5 rounded text-gray-300 outline-none">
+                        <button type="button" id="btn-copy-wallet" class="p-2.5 bg-emerald-600 rounded-lg hover:bg-emerald-700 transition">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-400 mb-1 block font-bold uppercase">Transaction Hash (TXID)</label>
+                    <input type="text" id="tx-hash" required placeholder="Paste your transaction hash here..."
+                        class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm outline-none focus:border-emerald-500 font-mono">
+                    <p class="text-[9px] text-gray-500 mt-2 italic text-center">Verify all data before submitting. Activation is not instant.</p>
+                </div>
+
+                <button type="submit" id="btn-submit-payment" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg flex items-center justify-center">
+                    <i class="fas fa-paper-plane mr-2"></i> SUBMIT PAYMENT
+                </button>
+            </form>
         </div>
     </div>
 

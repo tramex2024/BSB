@@ -1,0 +1,54 @@
+<div class="p-6 space-y-6 animate-fade-in">
+    <div class="flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-amber-400 flex items-center">
+            <i class="fas fa-user-shield mr-3"></i> Admin Control Panel
+        </h2>
+        <div class="bg-gray-800 px-4 py-2 rounded-lg border border-gray-700">
+            <span class="text-xs text-gray-400 uppercase tracking-widest">Server Status:</span>
+            <span class="text-emerald-500 font-bold ml-2">ONLINE</span>
+        </div>
+    </div>
+
+    <div class="bg-gray-800/50 border border-gray-700 rounded-2xl p-6">
+        <h3 class="text-lg font-bold mb-4 flex items-center">
+            <i class="fas fa-bolt mr-2 text-amber-500"></i> Quick Activation
+        </h3>
+        <form id="admin-activation-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <input type="email" id="admin-user-email" placeholder="User Email" required
+                class="bg-gray-900 border border-gray-600 rounded-xl p-3 outline-none focus:border-amber-500">
+            <select id="admin-plan-days" class="bg-gray-900 border border-gray-600 rounded-xl p-3 outline-none">
+                <option value="30">30 Days (Standard)</option>
+                <option value="365">365 Days (Annual)</option>
+                <option value="7">7 Days (Trial)</option>
+            </select>
+            <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition shadow-lg">
+                ACTIVATE NOW
+            </button>
+        </form>
+    </div>
+
+    <div class="bg-gray-800/30 border border-gray-700 rounded-2xl overflow-hidden">
+        <div class="p-4 bg-gray-800/50 border-b border-gray-700">
+            <h3 class="font-bold">Recent Payment Activity</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-gray-900/50 text-gray-400 uppercase text-[10px]">
+                    <tr>
+                        <th class="p-4">User</th>
+                        <th class="p-4">Amount</th>
+                        <th class="p-4">TXID / Hash</th>
+                        <th class="p-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-payments-list">
+                    <tr>
+                        <td colspan="4" class="p-8 text-center text-gray-500 italic">
+                            Check your email for TXID verification. Direct integration coming soon.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

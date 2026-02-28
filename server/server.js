@@ -21,7 +21,7 @@ const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine'));
 const candleBuilder = require('./src/ai/CandleBuilder'); 
 const orderPersistenceService = require('./services/orderPersistenceService');
 const orderSyncService = require('./services/orderSyncService');
-const { sendSupportTicketEmail } = require('./utils/email');
+const { sendSupportTicketEmail, sendPaymentNotificationEmail } = require('./utils/email');
 
 // Modelos
 const User = require('./models/User'); // <--- AÑADIDO PARA INICIALIZACIÓN
@@ -31,8 +31,12 @@ const MarketSignal = require('./models/MarketSignal');
 
 // Utilidades
 const { decrypt } = require('./utils/encryption'); // <--- PARA DESENCRIPTAR LLAVES AL INICIO
+const authMiddleware = require('./middleware/authMiddleware');
+const roleMiddleware = require('./middleware/roleMiddleware');
+const User = require('./models/User');
 
 const aiRoutes = require('./routes/aiRoutes');
+const cron = require('node-cron');
 
 dotenv.config();
 const app = express();
@@ -81,6 +85,137 @@ app.use('/api/v1/config', require('./routes/configRoutes'));
 app.use('/api/v1/balance', require('./routes/balanceRoutes'));
 app.use('/api/v1/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
+
+// SE EJECUTA CADA HORA: Revisa quién ha expirado
+cron.schedule('0 * * * *', async () => {
+    try {
+        const now = new Date();
+        const result = await User.updateMany(
+            { 
+                role: 'advanced', 
+                roleExpiresAt: { $lt: now } 
+            },
+            { 
+                $set: { role: 'current', roleExpiresAt: null } 
+            }
+        );
+        if (result.modifiedCount > 0) {
+            console.log(`[AUTO-CLEANUP] ${result.modifiedCount} users reverted to 'current' due to expiration.`);
+        }
+    } catch (error) {
+        console.error("[CRON-ERROR]", error);
+    }
+});
+
+// RUTA DE ACTIVACIÓN (Solo accesible para el rol 'admin')
+app.post('/api/admin/activate-user', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+    try {
+        const { email, days = 30 } = req.body;
+
+        const expirationDate = new Date();
+        expirationDate.setDate(expirationDate.getDate() + parseInt(days));
+
+        const user = await User.findOneAndUpdate(
+            { email: email.toLowerCase().trim() },
+            { 
+                role: 'advanced',
+                roleUpdatedAt: new Date(),
+                roleExpiresAt: expirationDate
+            },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.status(200).json({ 
+            success: true, 
+            message: `User ${email} activated for ${days} days.`,
+            expiresAt: expirationDate
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// RUTA SECRETA PARA ACTIVAR USUARIOS (ADMIN SOLO)
+app.post('/api/admin/activate-user', async (req, res) => {
+    try {
+        const { email, days = 30, secretKey } = req.body;
+
+        // Seguridad básica: Una clave que tú elijas en tu .env
+        if (secretKey !== process.env.ADMIN_SECRET_KEY) {
+            return res.status(403).json({ success: false, message: "No autorizado" });
+        }
+
+        const expirationDate = new Date();
+        expirationDate.setDate(expirationDate.getDate() + parseInt(days));
+
+        const user = await User.findOneAndUpdate(
+            { email: email.toLowerCase().trim() },
+            { 
+                role: 'advanced',
+                roleUpdatedAt: new Date(),
+                roleExpiresAt: expirationDate
+            },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+        }
+
+        console.log(`✅ [ADMIN] Usuario ${email} activado hasta ${expirationDate}`);
+        
+        res.status(200).json({ 
+            success: true, 
+            message: `Usuario ${email} activado por ${days} días`,
+            expiresAt: expirationDate
+        });
+
+    } catch (error) {
+        console.error("❌ Error en activación:", error);
+        res.status(500).json({ success: false, message: "Error interno" });
+    }
+});
+
+// Rutas para pagos.
+app.post('/api/payments/verify', async (req, res) => {
+    try {
+        const { userId, email, type, amount, hash, timestamp } = req.body;
+
+        // Determinamos los días según el monto seleccionado en el select del modal
+        let daysToAssign = 30; // Por defecto 1 mes
+        if (amount === "500") {
+            daysToAssign = 365; // 1 año
+        } else if (amount === "Other") {
+            daysToAssign = 7; // Por ejemplo, una prueba de 7 días
+        }
+
+        // Enviamos el correo con la información completa
+        // Ahora el correo te dirá exactamente cuántos días le corresponden
+        await sendPaymentNotificationEmail({
+            userId,
+            email,
+            type,
+            amount,
+            hash,
+            timestamp,
+            suggestedDays: daysToAssign // Añadimos esto para que lo veas en el mail
+        });
+
+        res.status(200).json({ 
+            success: true, 
+            message: "Payment submitted! Activation pending manual hash verification." 
+        });
+
+    } catch (error) {
+        console.error("❌ Payment Route Error:", error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+});
 
 // --- RUTA DE SOPORTE (AÑADIDA PARA TICKETS INTERNOS) ---
 app.post('/api/support/ticket', async (req, res) => {

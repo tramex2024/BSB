@@ -6,6 +6,12 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
+    autobotId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Autobot',
+        default: null 
+    },
+
     email: {
         type: String,
         required: true,
@@ -16,20 +22,29 @@ const userSchema = new mongoose.Schema({
         index: true 
     },
     
-    // --- ROL DE USUARIO ---
-    // Define qué partes de la aplicación puede ver y usar
-    role: {
+    // --- ROL DE USUARIO ---    Define qué partes de la aplicación puede ver y usar
+    
+    role: {   
         type: String,
         enum: ['current', 'advanced', 'admin'],
         default: 'current',
         required: true
     },
     
-    autobotId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Autobot',
-        default: null 
+    roleUpdatedAt: { 
+        type: Date, 
+        default: Date.now 
     },
+
+    roleExpiresAt: { 
+        type: Date, 
+        default: null // null significa acceso de por vida o cuenta gratuita 'current'
+    },
+
+    lastPaymentHash: {
+        type: String,
+        default: null
+    },    
 
     jwtToken: {
         type: String,

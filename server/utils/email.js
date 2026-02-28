@@ -123,4 +123,62 @@ async function sendSupportTicketEmail(ticketData) {
     }
 }
 
-module.exports = { sendTokenEmail, sendSupportTicketEmail };
+/**
+ * Notifica al administrador sobre un nuevo envío de pago (TXID)
+ */
+async function sendPaymentNotificationEmail(paymentData) {
+    const API_KEY = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.SENDER_EMAIL || "info.nexuslabs@gmail.com"; 
+    const adminEmail = "info.nexuslabs@gmail.com"; 
+
+    if (!API_KEY) throw new Error("Brevo API Key missing");
+
+    const { userId, email, type, amount, hash, timestamp } = paymentData;
+
+    try {
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: "BSB Payments", email: senderEmail },
+                to: [{ email: adminEmail }], 
+                subject: `💰 [PAYMENT: ${type}] from ${email}`,
+                htmlContent: `
+                    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 2px solid #10b981; border-radius: 15px;">
+                        <h2 style="color: #059669; text-align: center; margin-top: 0;">New Payment Submitted</h2>
+                        <div style="background: #f0fdf4; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                            <p style="margin: 5px 0;"><strong>User Email:</strong> ${email}</p>
+                            <p style="margin: 5px 0;"><strong>User ID:</strong> ${userId}</p>
+                            <p style="margin: 5px 0;"><strong>Plan/Type:</strong> ${type}</p>
+                            <p style="margin: 5px 0;"><strong>Amount:</strong> <span style="font-size: 18px; font-weight: bold; color: #059669;">${amount} USDT</span></p>
+                        </div>
+                        
+                        <div style="padding: 15px; background: #fafafa; border: 1px dashed #ccc; border-radius: 8px;">
+                            <p style="margin-bottom: 5px; font-weight: bold; color: #374151;">Transaction Hash (TXID):</p>
+                            <p style="font-family: monospace; word-break: break-all; color: #2563eb; background: #fff; padding: 10px; border-radius: 5px;">
+                                ${hash}
+                            </p>
+                        </div>
+                        
+                        <p style="font-size: 12px; color: #9ca3af; margin-top: 20px;">Submitted at: ${timestamp}</p>
+                        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+                        <p style="font-size: 11px; text-align: center; color: #6b7280;">
+                            Please verify this hash on the TronGrid / Blockchain explorer before upgrading user role.
+                        </p>
+                    </div>`
+            })
+        });
+
+        return await response.json();
+    } catch (error) {
+        console.error("❌ [BREVO-PAYMENT-ERROR]:", error.message);
+        throw error;
+    }
+}
+
+// Actualiza las exportaciones
+module.exports = { sendTokenEmail, sendSupportTicketEmail, sendPaymentNotificationEmail };
