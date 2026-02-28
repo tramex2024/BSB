@@ -92,17 +92,18 @@ exports.verifyToken = async (req, res) => {
         console.log(`[AUTH] 🚀 Login exitoso: ${email} (Role: ${user.role})`);
 
         // 5. Respuesta al Frontend
-        return res.status(200).json({ 
-            success: true,
-            message: 'Login successful!',
-            token: jwtToken,
-            user: { 
-                id: user._id, 
-                email: user.email,
-                role: user.role, // <-- Enviamos el role al frontend
-                hasApiKeys: !!user.bitmartApiKey 
-            }
-        });
+return res.status(200).json({ 
+    success: true,
+    message: 'Login successful!',
+    token: jwtToken,
+    user: { 
+        id: user._id, 
+        email: user.email,
+        role: user.role,
+        roleExpiresAt: user.roleExpiresAt, // <--- AGREGA ESTA LÍNEA
+        hasApiKeys: !!user.bitmartApiKey 
+    }
+});
 
     } catch (error) {
         console.error('❌ [AUTH ERROR] VerifyToken:', error);

@@ -37,26 +37,34 @@ function updateProfileData() {
     const uid = userData.id || userData._id || localStorage.getItem('userId') || 'Not Set';
     const role = (userData.role || localStorage.getItem('userRole') || 'current').toLowerCase();
 
-    // --- CÁLCULO DE DÍAS CORREGIDO ---
+    // --- CÁLCULO DE DÍAS CORREGIDO (BSB 2026) ---
     let daysLeft = 0;
-    // Buscamos la fecha en el objeto o en el storage directamente
+    
+    // 1. Buscamos la fecha en el objeto parseado o en el storage directamente como respaldo
     const expiryDateStr = userData.roleExpiresAt || localStorage.getItem('roleExpiresAt');
 
     if (expiryDateStr) {
         const expiryDate = new Date(expiryDateStr);
         const today = new Date();
         
-        // Validamos que la fecha sea válida antes de calcular
+        // 2. Validamos que la fecha sea válida (evita NaN)
         if (!isNaN(expiryDate.getTime())) {
-            // Diferencia en milisegundos
+            // Calculamos la diferencia en milisegundos
             const diffInMs = expiryDate - today;
-            // Convertimos a días (86400000 ms = 1 día)
+            
+            // 3. Convertimos a días (86,400,000 ms = 1 día)
+            // Usamos Math.ceil para que si queda medio día, cuente como 1
             daysLeft = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+            
+            // 4. Escudo de seguridad: si la suscripción expiró, no mostrar negativos
+            if (daysLeft < 0) daysLeft = 0;
         }
     }
-    
-    // Si el cálculo da negativo o el rol es "current", forzamos a 0
-    if (daysLeft < 0 || role === 'current') daysLeft = 0;
+
+    // 5. Verificación de Rol: Si el usuario es 'current' (Free), forzamos a 0 por coherencia
+    if (role === 'current') {
+        daysLeft = 0;
+    }    
 
     // --- ACTUALIZACIÓN DE UI ---
     document.getElementById('prof-email').textContent = email;
@@ -88,7 +96,6 @@ function updateProfileData() {
         if(upgradeSection) upgradeSection.style.display = 'block';
     }
 }
-
 function createProfileModal() {
     const modalHtml = `
     <div id="profile-modal" class="modal">
