@@ -18,33 +18,35 @@ export function initializeChart(containerId, symbol) {
 
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
-    new TradingView.widget({
-        "autosize": true, 
-        "symbol": `BITMART:${symbol}`,
-        "interval": savedInterval,
-        "timezone": "Etc/UTC",
-        "theme": "dark",
-        "style": "1",
-        "locale": "es",
-        "toolbar_bg": "#111827",
-        "enable_publishing": false,
-        "withdateranges": true,
-        "hide_side_toolbar": false,
-        "allow_symbol_change": true,
-        "container_id": containerId,
-        "support_host": "https://www.tradingview.com",
-        "studies": [
-            "RSI@tv-basicstudies",      
-            "BB@tv-basicstudies",           
-            "MACD@tv-basicstudies"      
-        ],
-        "overrides": {
-            "mainSeriesProperties.style": 1,
-            "paneProperties.background": "#111827",
-            "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)",
-            "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.08)",
-        }
-    });
+    if (window.TradingView) {
+        new TradingView.widget({
+            "autosize": true, 
+            "symbol": `BITMART:${symbol}`,
+            "interval": savedInterval,
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "es",
+            "toolbar_bg": "#111827",
+            "enable_publishing": false,
+            "withdateranges": true,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "container_id": containerId,
+            "support_host": "https://www.tradingview.com",
+            "studies": [
+                "RSI@tv-basicstudies",      
+                "BB@tv-basicstudies",           
+                "MACD@tv-basicstudies"      
+            ],
+            "overrides": {
+                "mainSeriesProperties.style": 1,
+                "paneProperties.background": "#111827",
+                "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)",
+                "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.08)",
+            }
+        });
+    }
 }
 
 /**
@@ -54,23 +56,30 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) return;
 
+    // Asegurar que el contenedor tenga dimensiones antes de procesar
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
 
+    // FIX: Si el canvas no tiene ancho (pestaña oculta), forzamos layout
+    if (canvas.clientWidth === 0) {
+        canvas.style.width = "100%";
+    }
+
     const ctx = canvas.getContext('2d');
 
-    // 1. LIMPIEZA TOTAL
+    // 1. LIMPIEZA TOTAL PARA EVITAR "OVERLAPPING"
     if (equityChartInstance) {
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const hasData = rawPoints.length > 0;
     
-    // Si no hay datos, mostramos una línea base vacía
+    // Si no hay datos, mostramos una línea base vacía elegante
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
@@ -78,19 +87,19 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     let labelText = 'Capital Acumulado (USDT)';
     let color = '#10b981'; 
 
-    // 2. EXTRACCIÓN DE DATOS (Normalizada para MetricsManager)
+    // Extracción normalizada para MetricsManager
     dataPoints = points.map(p => {
         const val = (typeof p.value === 'number') ? p.value : (p.netProfit || 0);
         return parseFloat(val.toFixed(4));
     });
 
-    // 3. GRADIENTE DINÁMICO
-    const chartHeight = canvas.clientHeight || 450;
+    // 3. GRADIENTE DINÁMICO (Basado en altura real)
+    const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
     gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
-    // 4. RENDERIZADO
+    // 4. CREACIÓN DE INSTANCIA
     equityChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -113,8 +122,14 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 400 },
-            interaction: { intersect: false, mode: 'index' },
+            animation: { 
+                duration: 400,
+                easing: 'easeInOutQuad'
+            },
+            interaction: { 
+                intersect: false, 
+                mode: 'index' 
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -125,18 +140,22 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     borderColor: color,
                     borderWidth: 1,
                     padding: 10,
+                    displayColors: false,
                     callbacks: {
-                        label: (ctx) => ` $${ctx.parsed.y.toFixed(2)} USDT`
+                        label: (ctx) => ` Profit: $${ctx.parsed.y.toFixed(2)} USDT`
                     }
                 }
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { 
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        drawBorder: false 
+                    },
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 10, family: 'monospace' },
-                        callback: (v) => `$${v}` 
+                        callback: (v) => `$${v.toFixed(2)}` 
                     }
                 },
                 x: {
@@ -144,7 +163,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     ticks: { 
                         color: '#9ca3af', 
                         font: { size: 9 },
-                        maxTicksLimit: 7 
+                        maxTicksLimit: 7,
+                        maxRotation: 0
                     }
                 }
             }

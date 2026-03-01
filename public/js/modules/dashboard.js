@@ -1,14 +1,18 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Sincronizado con validaciones de AI y Autobot.
- * Actualización: Filtros vinculados a MetricsManager.
+ * Estado: Sincronizado con MetricsManager y Chart.js.
  */
-import { fetchEquityCurveData, triggerPanicStop, toggleBotSideState, sendConfigToBackend } from './apiService.js'; 
+import { 
+    fetchEquityCurveData, 
+    triggerPanicStop, 
+    toggleBotSideState, 
+    sendConfigToBackend 
+} from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
 import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
-import { renderEquityCurve } from './chart.js';
+import { renderEquityCurve, initializeChart } from './chart.js';
 
 // Instancias globales de gráficos
 let balanceChart = null; 
@@ -27,53 +31,64 @@ export function initializeDashboardView(initialState) {
 
     const stateToUse = initialState || currentBotState;
 
-    // 1. Inicializar Gráfico de Balance (Dona) 
-    initBalanceChart();
-
-    // 2. Sincronización inmediata con el estado global
-    if (stateToUse) {
-        updateBotUI(stateToUse);
-        requestAnimationFrame(() => {
-            updateDistributionWidget(stateToUse);
-        });
-    }
-
-    // 3. Configurar Eventos y Botones Locales
-    setupActionButtons();
-    setupAnalyticsFilters(); // <--- Aquí se vinculan los selectores
-    
-    // 4. Gestión de eventos de Metrics (Evita duplicados)
+    // 1. CONFIGURAR ESCUCHADORES (Antes de cualquier carga de datos)
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
-    // 5. Carga de analítica (Equity)
+    // 2. INICIALIZAR COMPONENTES VISUALES
+    initBalanceChart();
+    
+    // Inicializar TradingView (Precios en vivo)
+    if (stateToUse?.symbol) {
+        initializeChart('tv-chart-container', stateToUse.symbol);
+    }
+
+    // 3. ACTUALIZACIÓN DE UI INICIAL
+    if (stateToUse) {
+        updateBotUI(stateToUse);
+        // Pequeño delay para asegurar que el DOM del donut esté listo
+        setTimeout(() => updateDistributionWidget(stateToUse), 150);
+    }
+
+    // 4. CONFIGURAR INTERACTIVIDAD
+    setupActionButtons();
+    setupAnalyticsFilters();
+    
+    // 5. CARGA DE DATOS HISTÓRICOS (Esto disparará el evento metricsUpdated)
     refreshAnalytics();
 
-    // 6. Estado de conexión
+    // 6. ESTADO DE CONEXIÓN
     updateHealthStatus('health-market-ws-text', socket?.connected);
     updateHealthStatus('health-user-ws-text', socket?.connected);
 }
 
+/**
+ * Manejador del evento de métricas: Recibe datos procesados y renderiza
+ */
 function handleMetricsUpdate(e) {
     if (e.detail) {
-        renderEquityCurve(e.detail);
+        console.log("📈 Dashboard: Renderizando Curva de Equidad...", e.detail);
+        // requestAnimationFrame asegura que el canvas tenga dimensiones antes de dibujar
+        requestAnimationFrame(() => {
+            renderEquityCurve(e.detail);
+        });
     }
 }
 
 /**
- * Refresca analítica con protección contra borrado accidental
+ * Refresca analítica desde el servidor y sincroniza el MetricsManager
  */
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
         
         if (response && response.success && Array.isArray(response.data)) {
-            // 1. Enviamos los TradeCycles al manager
+            // Enviamos los datos al manager para filtrado y acumulación
             Metrics.setAnalyticsData(response.data);
-            
-            addTerminalLog("ANALYTICS: CURVA DE EQUIDAD ACTUALIZADA", 'success');
+            addTerminalLog("ANALYTICS: HISTORIAL SINCRONIZADO", 'success');
         } else {
-            addTerminalLog("ANALYTICS: SIN DATOS HISTÓRICOS", 'warning');
+            addTerminalLog("ANALYTICS: SIN DATOS PREVIOS", 'warning');
+            renderEquityCurve([]); // Renderiza estado vacío elegante
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -82,8 +97,7 @@ async function refreshAnalytics() {
 }
 
 /**
- * CONFIGURACIÓN DE FILTROS DE ANALÍTICA (Long, Short, AI)
- * Esta función conecta los selectores HTML con el MetricsManager
+ * Vinculación de filtros de la gráfica (Long, Short, AI, Profit, %)
  */
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
@@ -91,35 +105,36 @@ function setupAnalyticsFilters() {
 
     if (bSel) {
         bSel.onchange = () => {
-            // SOLO cambia el filtro, NO carga datos de nuevo
-            Metrics.setBotFilter(bSel.value); 
+            Metrics.setBotFilter(bSel.value);
+            addTerminalLog(`VISTA FILTRADA: ${bSel.value.toUpperCase()}`, 'info');
         };
     }
 
     if (pSel) {
         pSel.onchange = () => {
-            // Esto actualiza el eje Y (Profit vs %) y dispara el evento
-            Metrics.setChartParameter(pSel.value); 
+            Metrics.setChartParameter(pSel.value);
         };
     }
 }
 
 /**
- * CONFIGURACIÓN DE BOTONES (Long, Short, AI) Y INPUTS RÁPIDOS
+ * Configuración de botones de acción y inputs de configuración rápida
  */
 function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.onclick = async () => {
-            const confirmPanic = confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y cerrarán posiciones.");
-            if (confirmPanic) await triggerPanicStop();
+            if (confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y cerrarán posiciones.")) {
+                await triggerPanicStop();
+            }
         };
     }
 
     const btnConfigs = [
         { id: 'austartl-btn', side: 'long' },
         { id: 'austarts-btn', side: 'short' },
-        { id: 'btn-start-ai', side: 'ai' }
+        { id: 'btn-start-ai', side: 'ai' },
+        { id: 'austartai-btn', side: 'ai' }
     ];
 
     btnConfigs.forEach(btn => {
@@ -136,49 +151,41 @@ function setupActionButtons() {
         }
     });
 
-   const quickInputs = [
-        { id: 'auamountl-usdt', label: 'LONG', strategy: 'long' },
-        { id: 'auamounts-usdt', label: 'SHORT', strategy: 'short' },
-        { id: 'auamountai-usdt', label: 'AI', strategy: 'ai' }
+    // Inputs Rápidos (Amount USDT)
+    const quickInputs = [
+        { id: 'auamountl-usdt', strategy: 'long' },
+        { id: 'auamounts-usdt', strategy: 'short' },
+        { id: 'auamountai-usdt', strategy: 'ai' }
     ];
 
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
             el.onchange = async () => {
-                // Obtenemos el nuevo valor escrito por el usuario
                 const newVal = parseFloat(el.value);
-                
-                // Preparamos el paquete de datos con el PLAN B
                 const configPayload = {
-                    config: {
-                        [input.strategy]: { amountUsdt: newVal }
-                    },
-                    applyShield: true,   // <--- Avisamos que queremos blindaje
-                    strategy: input.strategy // <--- Decimos qué estrategia blindar
+                    config: { [input.strategy]: { amountUsdt: newVal } },
+                    applyShield: true,
+                    strategy: input.strategy
                 };
 
-                // Enviamos al backend. Nota: asegúrate que apiService acepte argumentos si es necesario, 
-                // o que lea el estado actual de los inputs.
-                const res = await sendConfigToBackend(configPayload); 
-                
-                if (res && res.success) {
-                    addTerminalLog(`CONFIG: ${input.label} BLINDAJE APLICADO ($${newVal})`, 'success');
-                } else {
-                    addTerminalLog(`ERROR AL APLICAR BLINDAJE EN ${input.label}`, 'error');
+                const res = await sendConfigToBackend(configPayload);
+                if (res?.success) {
+                    addTerminalLog(`CONFIG: ${input.strategy.toUpperCase()} ACTUALIZADO A $${newVal}`, 'success');
                 }
             };
         }
     });
 }
 
+/**
+ * Terminal de Logs del Dashboard
+ */
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
     if (!logContainer) return;
 
-    const now = new Date();
-    const timestamp = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
+    const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const colors = {
         info: 'text-gray-400 border-gray-700',
         success: 'text-emerald-400 border-emerald-500/50',
@@ -188,31 +195,26 @@ export function addTerminalLog(msg, type = 'info') {
 
     const logEntry = document.createElement('div');
     logEntry.className = `flex gap-2 py-1 px-2 border-l-2 bg-white/5 mb-1 text-[10px] font-mono rounded-r animate-fadeIn ${colors[type] || colors.info}`;
-    
     logEntry.innerHTML = `
         <span class="opacity-30 font-bold">[${timestamp}]</span>
         <span class="flex-grow tracking-tighter uppercase">${msg}</span>
-        <i class="fas fa-circle text-[6px] self-center animate-pulse ${type === 'success' ? 'text-emerald-500' : 'text-gray-600'}"></i>
+        <i class="fas fa-circle text-[6px] self-center ${type === 'success' ? 'text-emerald-500' : 'text-gray-600'}"></i>
     `;
 
     logContainer.prepend(logEntry);
-    while (logContainer.childNodes.length > 40) {
-        logContainer.lastChild.remove();
-    }
+    if (logContainer.childNodes.length > 40) logContainer.lastChild.remove();
 }
 
+/**
+ * Gráfico de Distribución (Donut)
+ */
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
 
-    if (balanceChart) {
-        balanceChart.destroy();
-        balanceChart = null; 
-    }
+    if (balanceChart) balanceChart.destroy();
 
-    const ctx = canvas.getContext('2d');
-    
-    balanceChart = new Chart(ctx, {
+    balanceChart = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: ['USDT', 'BTC'],
@@ -226,28 +228,18 @@ function initBalanceChart() {
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
-            plugins: { legend: { display: false } },
-            animation: { duration: 400 }
+            plugins: { legend: { display: false } }
         }
     });
-
-    if (currentBotState.lastAvailableUSDT || currentBotState.lastAvailableBTC) {
-        updateDistributionWidget(currentBotState);
-    }
 }
 
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
     
-    const usdt = Math.max(0, parseFloat(state.lastAvailableUSDT || 0));
-    const btcAmount = Math.max(0, parseFloat(state.lastAvailableBTC || 0));
-    const price = Math.max(0, parseFloat(state.price || 0));
+    const usdt = parseFloat(state.lastAvailableUSDT || 0);
+    const btcAmount = parseFloat(state.lastAvailableBTC || 0);
+    const price = parseFloat(state.price || 0);
     
-    const uText = document.getElementById('aubalance-usdt');
-    const bText = document.getElementById('aubalance-btc');
-    if(uText) uText.innerText = usdt.toLocaleString('en-US', { minimumFractionDigits: 2 });
-    if(bText) bText.innerText = btcAmount.toFixed(6);
-
     if (price > 0) {
         const btcInUsdt = btcAmount * price;
         const total = usdt + btcInUsdt;
@@ -256,14 +248,10 @@ export function updateDistributionWidget(state) {
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
             balanceChart.update('none'); 
 
-            const usdtBar = document.getElementById('usdt-bar');
-            const btcBar = document.getElementById('btc-bar');
-            
-            const usdtPct = (usdt / total) * 100;
-            const btcPct = (btcInUsdt / total) * 100;
-
-            if (usdtBar) usdtBar.style.width = `${usdtPct}%`;
-            if (btcBar) btcBar.style.width = `${btcPct}%`;
+            const uBar = document.getElementById('usdt-bar');
+            const bBar = document.getElementById('btc-bar');
+            if (uBar) uBar.style.width = `${(usdt / total) * 100}%`;
+            if (bBar) bBar.style.width = `${(btcInUsdt / total) * 100}%`;
         }
     }
 }
