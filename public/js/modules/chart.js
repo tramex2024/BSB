@@ -81,7 +81,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 2. PROCESAMIENTO DE PUNTOS
+// 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     console.log(`📊 LOG 3: Cantidad de puntos raw: ${rawPoints.length}`);
 
@@ -90,14 +90,19 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
     
-    // Extracción normalizada (Recuperada lógica de profit)
+    // --- CAMBIO AQUÍ: Extracción ultra-directa ---
     const dataPoints = points.map(p => {
-        const val = (typeof p.value === 'number') ? p.value : (p.netProfit || 0);
+        // Priorizamos p.value que es lo que manda MetricsManager
+        let val = 0;
+        if (typeof p.value === 'number') {
+            val = p.value;
+        } else if (typeof p.netProfit === 'number') {
+            val = p.netProfit;
+        }
         return parseFloat(val.toFixed(4));
     });
 
-    console.log("📈 LOG 4: dataPoints calculados:", dataPoints);
-
+    console.log("📈 LOG 4 (CORREGIDO): dataPoints calculados:", dataPoints);
     // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
