@@ -102,29 +102,37 @@ function updateMetricsDisplay() {
 }
 
 /**
- * Versión optimizada de prepareChartData
+ * prepareChartData - Versión Auditada
+ * Asegura que 'accumulated' nunca sea NaN y que las propiedades existan.
  */
 function prepareChartData(filteredArray) {
-    if (filteredArray.length === 0) return { points: [] };
-    
     let accumulated = 0;
-    const points = [];
+    const points = []; // Eliminamos el punto "Start" para evitar el salto a cero inicial
 
-    filteredArray.forEach((cycle, index) => {
-        accumulated += cycle.netProfit;
+    filteredArray.forEach(cycle => {
+        // 1. Aseguramos que netProfit sea un número real
+        const net = parseFloat(cycle.netProfit) || 0;
+        accumulated += net;
+
         const d = cycle.processedDate;
-        
-        // Formato de etiqueta: DD/MM HH:mm
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
+
+        // 2. Verificación estricta del parámetro
+        let finalValue = 0;
+        if (currentChartParameter === 'accumulatedProfit') {
+            finalValue = accumulated;
+        } else {
+            // Si no es acumulado, buscamos el porcentaje individual
+            finalValue = parseFloat(cycle.profitPercentage) || 0;
+        }
 
         points.push({
             time: label,
-            value: currentChartParameter === 'accumulatedProfit' 
-                ? parseFloat(accumulated.toFixed(4)) 
-                : parseFloat(cycle.profitPercentage.toFixed(2))
+            value: parseFloat(finalValue.toFixed(4))
         });
     });
 
+    console.log("🧪 DEBUG METRICS: Puntos generados:", points); // LOG CLAVE
     return { points };
 }
 
