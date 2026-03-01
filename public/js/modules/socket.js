@@ -1,14 +1,13 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Integración con Health Monitor (System Health Dot)
+ * Actualización: Integración Blindada con MetricsManager
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { updateBotUI } from './uiManager.js'; 
 import { formatCurrency } from './ui/formatters.js';
 import { activeEdits } from './ui/controls.js'; 
-// [NUEVO] Importamos el controlador de salud del sistema
 import { updateSystemHealth } from './health.js';
 
 export let socket = null;
@@ -33,18 +32,15 @@ export function initSocket() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
 
-    // 1. Validation: If no session, we cannot connect
     if (!token || !userId) {
         console.warn("⚠️ Socket: No active session detected.");
         return null;
     }
 
-    // 2. Optimization: If socket already exists and is connected, return it immediately
     if (socket && socket.connected) {
         return socket;
     }
 
-    // 3. Connection: Initialize new Socket.io instance
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
         reconnection: true,
@@ -60,8 +56,6 @@ export function initSocket() {
         socket.emit('get-bot-state'); 
         console.log(`✅ Socket: Connected as User ${userId}`);
         sendToDashboardTerminal("System Connected: Ready", "success");
-        
-        // Update System Health Dot to ONLINE
         if (typeof updateSystemHealth === 'function') updateSystemHealth('online');
     });
 
@@ -69,8 +63,6 @@ export function initSocket() {
         console.warn("❌ Socket: Disconnected from Backend");
         updateConnectionStatus('DISCONNECTED');
         sendToDashboardTerminal("Connection Lost with Server", "error");
-        
-        // Update System Health Dot to OFFLINE
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
@@ -124,10 +116,13 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        if (state.history || state.cycleHistory) {
+        // SINCRONIZACIÓN DE MÉTRICAS (All Strategies)
+        const historyData = state.history || state.cycleHistory;
+        if (historyData) {
             try {
                 const Metrics = await import('./metricsManager.js');
-                Metrics.setAnalyticsData(state.history || state.cycleHistory);
+                // setAnalyticsData ya se encarga de ignorar duplicados
+                Metrics.setAnalyticsData(historyData);
             } catch (err) {
                 console.error("Error injecting metrics:", err);
             }
@@ -196,6 +191,7 @@ export function initSocket() {
         }
     });
 
+    // --- ACTUALIZACIÓN DE HISTORIAL ESPECÍFICO (AI) ---
     socket.on('ai-history-update', async (trades) => {
         const aiOrderList = document.getElementById('ai-order-list');
         if (aiOrderList) {
@@ -204,11 +200,11 @@ export function initSocket() {
         }
         if (trades) {
             const Metrics = await import('./metricsManager.js');
+            // Aquí inyectamos los nuevos trades de IA. El Manager los unirá a los 15 existentes.
             Metrics.setAnalyticsData(trades);
         }
     });
 
-    // 4. Return the socket instance to be used by other modules (like notifications)
     return socket;
 }
 
@@ -217,7 +213,6 @@ function resetWatchdog() {
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
     connectionWatchdog = setTimeout(() => {
         updateConnectionStatus('DISCONNECTED');
-        // Si el watchdog salta, también marcamos salud como offline
         updateSystemHealth('offline');
     }, 15000);
 }

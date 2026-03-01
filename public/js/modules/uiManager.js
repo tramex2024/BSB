@@ -24,14 +24,14 @@ const STATUS_COLORS = {
 export function updateBotUI(state) {
     if (!state) return;
     
-    // 1. Actualización de Precio
+    // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 2. MAPEO MAESTRO
+    // 2. MAPEO MAESTRO (Sincronizado con IDs de HTML)
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -40,8 +40,8 @@ export function updateBotUI(state) {
         // ESTRATEGIA LONG
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
-        'aulcycle': 'lcycle',         
-        'aulsprice': 'lpc',           
+        'aulcycle': 'lcycle',          
+        'aulsprice': 'lpc',            
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
@@ -50,8 +50,8 @@ export function updateBotUI(state) {
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
-        'auscycle': 'scycle',         
-        'ausbprice': 'spc',           
+        'auscycle': 'scycle',          
+        'ausbprice': 'spc',            
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
@@ -73,15 +73,16 @@ export function updateBotUI(state) {
         const el = document.getElementById(id);
         if (!el) return;
         
-        let val = state[key] ?? state.stats?.[key];
+        // Buscamos el valor en el nivel raíz o dentro de .stats
+        let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
 
-        if (val === undefined) return;
+        // BLOQUE DE PROTECCIÓN: Si el valor es undefined, no tocamos el DOM.
+        // Esto evita que los "15 ciclos" desaparezcan si el socket envía un mensaje parcial.
+        if (val === undefined || val === null) return;
 
-        // --- Renderizado de Estados (ETAPA 1: DIRTY CHECKING) ---
+        // --- Renderizado de Estados (Dirty Checking) ---
         if (id.includes('state') || id.includes('status')) {
-            const currentStatus = (val || 'STOPPED').toString().toUpperCase().trim();
-            
-            // Solo actualizamos el DOM si el estado visual cambió realmente
+            const currentStatus = val.toString().toUpperCase().trim();
             if (el.textContent !== currentStatus) {
                 el.textContent = currentStatus;
                 el.style.color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
@@ -93,9 +94,12 @@ export function updateBotUI(state) {
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc') || id === 'aubalance-btc') {
-            el.textContent = parseFloat(val).toFixed(6);
+            const btcVal = parseFloat(val).toFixed(6);
+            if (el.textContent !== btcVal) el.textContent = btcVal;
         } else if (id.includes('cycle') || id.includes('norder')) {
-            el.textContent = Math.floor(val); 
+            const cycleVal = Math.floor(val).toString();
+            // Evitamos parpadeo: Solo actualizamos si el número cambió
+            if (el.textContent !== cycleVal) el.textContent = cycleVal;
         } else if (id.includes('adx') || id.includes('stoch')) {
             el.textContent = parseFloat(val).toFixed(1);
             updatePulseBars(id, val); 
@@ -106,16 +110,18 @@ export function updateBotUI(state) {
         }
     });
 
+    // 3. Barras de Confianza AI
     if (state.aiConfidence !== undefined) {
         const bar = document.getElementById('ai-confidence-fill');
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
+    // 4. Sincronización de Inputs (Solo si no estamos guardando)
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
 
-    // 5. ETAPA 1: Verificación estricta para evitar el reseteo de botones
+    // 5. Control de Botones
     const hasStateData = state.lstate !== undefined || 
                          state.sstate !== undefined || 
                          state.aistate !== undefined || 
