@@ -90,19 +90,15 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
     
-    // --- CAMBIO AQUÍ: Extracción ultra-directa ---
+    // --- BLINDAJE DE EXTRACCIÓN ---
     const dataPoints = points.map(p => {
-        // Priorizamos p.value que es lo que manda MetricsManager
-        let val = 0;
-        if (typeof p.value === 'number') {
-            val = p.value;
-        } else if (typeof p.netProfit === 'number') {
-            val = p.netProfit;
-        }
-        return parseFloat(val.toFixed(4));
+        // Si p.value existe, lo usamos; si no, buscamos netProfit; si no, 0.
+        let val = p.value !== undefined ? p.value : (p.netProfit || 0);
+        return parseFloat(parseFloat(val).toFixed(4)); // Doble parse para asegurar número
     });
 
     console.log("📈 LOG 4 (CORREGIDO): dataPoints calculados:", dataPoints);
+
     // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
