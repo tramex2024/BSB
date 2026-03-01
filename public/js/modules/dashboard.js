@@ -27,7 +27,7 @@ Object.values(sounds).forEach(s => s.volume = 0.4);
  * Inicializa la vista del Dashboard
  */
 export function initializeDashboardView(initialState) {
-    console.log("📊 Dashboard: Sincronizando sistema...");
+    console.log("📊 Dashboard: Synchronizing system...");
 
     const stateToUse = initialState || currentBotState;
 
@@ -67,7 +67,6 @@ export function initializeDashboardView(initialState) {
  */
 function handleMetricsUpdate(e) {
     if (e.detail) {
-        console.log("📈 Dashboard: Renderizando Curva de Equidad...", e.detail);
         // requestAnimationFrame asegura que el canvas tenga dimensiones antes de dibujar
         requestAnimationFrame(() => {
             renderEquityCurve(e.detail);
@@ -85,14 +84,14 @@ async function refreshAnalytics() {
         if (response && response.success && Array.isArray(response.data)) {
             // Enviamos los datos al manager para filtrado y acumulación
             Metrics.setAnalyticsData(response.data);
-            addTerminalLog("ANALYTICS: HISTORIAL SINCRONIZADO", 'success');
+            addTerminalLog("ANALYTICS: SYNCHRONIZED HISTORY", 'success');
         } else {
-            addTerminalLog("ANALYTICS: SIN DATOS PREVIOS", 'warning');
+            addTerminalLog("ANALYTICS: NO PREVIOUS DATA", 'warning');
             renderEquityCurve([]); // Renderiza estado vacío elegante
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
-        addTerminalLog("ERROR AL CARGAR ANALÍTICA", 'error');
+        addTerminalLog("ERROR LOADING ANALYTICS", 'error');
     }
 }
 
@@ -106,7 +105,7 @@ function setupAnalyticsFilters() {
     if (bSel) {
         bSel.onchange = () => {
             Metrics.setBotFilter(bSel.value);
-            addTerminalLog(`VISTA FILTRADA: ${bSel.value.toUpperCase()}`, 'info');
+            addTerminalLog(`FILTERED VIEW: ${bSel.value.toUpperCase()}`, 'info');
         };
     }
 
@@ -171,7 +170,7 @@ function setupActionButtons() {
 
                 const res = await sendConfigToBackend(configPayload);
                 if (res?.success) {
-                    addTerminalLog(`CONFIG: ${input.strategy.toUpperCase()} ACTUALIZADO A $${newVal}`, 'success');
+                    addTerminalLog(`CONFIG: ${input.strategy.toUpperCase()} UPDATED TO $${newVal}`, 'success');
                 }
             };
         }

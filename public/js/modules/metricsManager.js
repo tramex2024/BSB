@@ -16,10 +16,7 @@ export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     if (rawData.length === 0) return;
 
-    // Log de auditoría para verificar la estructura del objeto real
-    console.log("🧐 AUDITORÍA DE CICLO (Estructura detectada):", rawData[0]);
-
-    rawData.forEach(c => {
+        rawData.forEach(c => {
         // 1. NORMALIZACIÓN DE ESTRATEGIA
         const strategy = (c.strategy || 'unknown').toLowerCase();
         
@@ -48,7 +45,6 @@ export function setAnalyticsData(data) {
         });
     });
 
-    console.log(`📊 Metrics Sync: ${globalCyclesMap.size} ciclos únicos en memoria.`);
     updateMetricsDisplay();
 }
 
@@ -131,7 +127,6 @@ function prepareChartData(filteredArray) {
         });
     });
 
-    console.log("🧪 DEBUG METRICS: Puntos generados con valores:", points.map(p => p.value));
     return { points };
 }
 
