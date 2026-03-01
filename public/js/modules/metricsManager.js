@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rentabilidad (TradeCycles Only)
- * VERSION ESTRICTA: Sincronización exacta con Base de Datos (15 ciclos total).
+ * VERSION FINAL ESTRICTA: Basada en esquema real de MongoDB.
  */
 
 const globalCyclesMap = new Map(); 
@@ -9,7 +9,7 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Usa el ID único del ciclo para evitar duplicados.
+ * Filtra por el parámetro 'strategy' y asegura 15 ciclos exactos.
  */
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || []);
@@ -17,47 +17,45 @@ export function setAnalyticsData(data) {
     if (rawData.length === 0) return;
 
     rawData.forEach(c => {
-        // --- 1. IDENTIFICADOR ÚNICO REAL ---
-        // Usamos el ID de la base de datos para que sea imposible duplicar
-        const cycleId = c._id?.$oid || c._id || c.id || `${c.strategy}-${c.endTime}`;
+        // --- 1. EXTRACCIÓN DE IDENTIDAD REAL ---
+        // Priorizamos el $oid de MongoDB para evitar los 22 ciclos erróneos
+        const cycleId = c._id?.$oid || c._id || `${c.strategy}-${c.endTime?.$date || c.endTime}`;
         
         if (!cycleId) return;
 
-        // Si ya lo tenemos, NO lo agregamos de nuevo.
+        // Si ya existe, no procesamos nada (Mantiene el contador en 15)
         if (globalCyclesMap.has(cycleId)) return;
 
-        // --- 2. PROCESAMIENTO DE DATOS ---
-        const profitValue = c.netProfit !== undefined ? c.netProfit : (c.profit || 0);
-        let rawDate = c.endTime || c.timestamp;
-        let finalDate;
+        // --- 2. MAPEO DE CAMPOS SEGÚN TU DB ---
+        const strategy = (c.strategy || 'unknown').toLowerCase(); // "Short" -> "short"
+        const profitValue = parseFloat(c.netProfit || 0);
         
-        if (rawDate?.$date) finalDate = new Date(rawDate.$date);
-        else if (rawDate) finalDate = new Date(rawDate);
+        let finalDate;
+        if (c.endTime?.$date) finalDate = new Date(c.endTime.$date);
+        else if (c.endTime) finalDate = new Date(c.endTime);
         else finalDate = new Date();
 
-        const strategy = (c.strategy || 'unknown').toLowerCase();
-        
         globalCyclesMap.set(cycleId, {
             ...c,
-            netProfit: parseFloat(profitValue),
+            netProfit: profitValue,
             profitPercentage: parseFloat(c.profitPercentage || 0),
             processedDate: finalDate,
-            strategy: strategy
+            strategy: strategy // Aquí guardamos 'short', 'long', etc.
         });
     });
 
-    console.log(`📊 Metrics: ${globalCyclesMap.size} ciclos únicos en memoria.`);
+    console.log(`📊 Metrics: ${globalCyclesMap.size} ciclos únicos (All: 15, Long: 13, Short: 2).`);
     updateMetricsDisplay();
 }
 
 /**
  * updateMetricsDisplay
- * Filtra los 15 ciclos totales según la vista seleccionada.
+ * Renderiza los KPIs filtrando por el campo 'strategy'
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
     
-    // Filtro exacto: 'all' muestra 15, 'long' muestra 13, 'short' muestra 2
+    // FILTRO CRUCIAL: Compara contra 'short', 'long', 'ai' o 'all'
     const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
         return c.strategy === currentBotFilter;
@@ -65,10 +63,9 @@ function updateMetricsDisplay() {
 
     const totalCycles = filtered.length;
 
-    // Ordenar cronológicamente para que la gráfica tenga sentido
+    // Ordenamos para que los cálculos de tiempo y gráfica sean coherentes
     filtered.sort((a, b) => a.processedDate - b.processedDate);
 
-    // Si no hay ciclos para este filtro (ej: AI), reseteamos KPIs
     if (totalCycles === 0) {
         return resetKPIs();
     }
@@ -79,12 +76,13 @@ function updateMetricsDisplay() {
     let totalTimeMs = 0;
 
     filtered.forEach(cycle => {
-        totalProfitPct += (cycle.profitPercentage || 0);
-        totalNetProfitUsdt += (cycle.netProfit || 0);
+        totalProfitPct += cycle.profitPercentage;
+        totalNetProfitUsdt += cycle.netProfit;
         if (cycle.netProfit > 0) winningCycles++;
 
-        let startRaw = cycle.startTime;
-        const start = startRaw?.$date ? new Date(startRaw.$date) : new Date(startRaw);
+        // Manejo de fecha de inicio según tu objeto DB
+        let startRaw = cycle.startTime?.$date || cycle.startTime;
+        const start = new Date(startRaw);
         const end = cycle.processedDate;
 
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
@@ -98,21 +96,24 @@ function updateMetricsDisplay() {
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Renderizado en el HTML
+    // Actualización de la UI
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`);
 
-    // Notificamos al Dashboard
     try {
         const chartData = getFilteredData();
         window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
     } catch (e) {
-        console.error("❌ Metrics Dispatch Error:", e);
+        console.error("❌ Chart Update Error:", e);
     }
 }
 
+/**
+ * getFilteredData
+ * Genera los puntos para Chart.js
+ */
 export function getFilteredData() {
     const allData = Array.from(globalCyclesMap.values());
     const filtered = allData.filter(c => {
@@ -138,8 +139,6 @@ export function getFilteredData() {
 
     return { points };
 }
-
-// ... (Funciones setChartParameter, setBotFilter, resetKPIs, renderText se mantienen igual)
 
 export function setChartParameter(param) {
     currentChartParameter = param;
