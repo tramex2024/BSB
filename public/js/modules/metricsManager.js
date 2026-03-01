@@ -102,21 +102,26 @@ function updateMetricsDisplay() {
 }
 
 /**
- * prepareChartData
- * Crea los puntos X (tiempo) e Y (valor) para la gráfica.
+ * Versión optimizada de prepareChartData
  */
 function prepareChartData(filteredArray) {
+    if (filteredArray.length === 0) return { points: [] };
+    
     let accumulated = 0;
-    const points = [{ time: 'Start', value: 0 }];
+    const points = [];
 
-    filteredArray.forEach(cycle => {
+    filteredArray.forEach((cycle, index) => {
         accumulated += cycle.netProfit;
         const d = cycle.processedDate;
+        
+        // Formato de etiqueta: DD/MM HH:mm
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 
         points.push({
             time: label,
-            value: currentChartParameter === 'accumulatedProfit' ? parseFloat(accumulated.toFixed(4)) : cycle.profitPercentage
+            value: currentChartParameter === 'accumulatedProfit' 
+                ? parseFloat(accumulated.toFixed(4)) 
+                : parseFloat(cycle.profitPercentage.toFixed(2))
         });
     });
 
