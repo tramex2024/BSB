@@ -15,7 +15,7 @@ let currentBotFilter = 'all';
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     if (rawData.length === 0) return;
-
+console.log("🧐 AUDITORÍA DE CICLO (Primer objeto):", rawData[0]);
     rawData.forEach(c => {
         // 1. NORMALIZACIÓN DE ESTRATEGIA (Evita el error Short vs short)
         const strategy = (c.strategy || 'unknown').toLowerCase();
