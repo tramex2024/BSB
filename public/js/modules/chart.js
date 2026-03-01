@@ -52,10 +52,7 @@ export function initializeChart(containerId, symbol) {
 /**
  * Gráfico de Curva de Capital (Chart.js)
  */
-export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
-    // --- LOGS DE AUDITORÍA ---
-    console.log("🔍 LOG 1: Entrada de datos:", data);
-    
+export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) {
         console.error("❌ ERROR: No existe #equityCurveChart");
@@ -74,8 +71,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const ctx = canvas.getContext('2d');
 
     // 1. LIMPIEZA TOTAL
-    if (equityChartInstance) {
-        console.log("🧹 LOG 2: Destruyendo instancia previa");
+    if (equityChartInstance) {        
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
@@ -83,8 +79,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
 // 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
-    console.log(`📊 LOG 3: Cantidad de puntos raw: ${rawPoints.length}`);
-
     const hasData = rawPoints.length > 0;
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
 
@@ -96,8 +90,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
         return parseFloat(parseFloat(val).toFixed(4)); // Doble parse para asegurar número
     });
-
-    console.log("📈 LOG 4 (CORREGIDO): dataPoints calculados:", dataPoints);
 
     // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
@@ -178,7 +170,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 }
             }
         });
-        console.log("✅ LOG 5: Render finalizado con éxito.");
     } catch (err) {
         console.error("💥 CRASH en Chart.js:", err);
     }
