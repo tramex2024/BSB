@@ -1,6 +1,6 @@
 /**
- * chart.js - Visualización de Rendimiento (Ultra-Blindada 2026)
- * Sincronizada para manejar flujos aditivos de MetricsManager.
+ * chart.js - Visualización de Rendimiento (Versión Completa + Auditoría)
+ * Restauradas >20 líneas de configuración de escalas y diseño.
  */
 
 let equityChartInstance = null;
@@ -53,23 +53,29 @@ export function initializeChart(containerId, symbol) {
  * Gráfico de Curva de Capital (Chart.js)
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
+    // --- LOGS DE AUDITORÍA ---
+    console.log("🔍 LOG 1: Entrada de datos:", data);
+    
     const canvas = document.getElementById('equityCurveChart');
-    if (!canvas) return;
+    if (!canvas) {
+        console.error("❌ ERROR: No existe #equityCurveChart");
+        return;
+    }
 
-    // Asegurar que el contenedor tenga dimensiones antes de procesar
+    // Asegurar que el contenedor tenga dimensiones
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
 
-    // FIX: Si el canvas no tiene ancho (pestaña oculta), forzamos layout
     if (canvas.clientWidth === 0) {
         canvas.style.width = "100%";
     }
 
     const ctx = canvas.getContext('2d');
 
-    // 1. LIMPIEZA TOTAL PARA EVITAR "OVERLAPPING"
+    // 1. LIMPIEZA TOTAL
     if (equityChartInstance) {
+        console.log("🧹 LOG 2: Destruyendo instancia previa");
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
@@ -77,97 +83,102 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     // 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
+    console.log(`📊 LOG 3: Cantidad de puntos raw: ${rawPoints.length}`);
+
     const hasData = rawPoints.length > 0;
-    
-    // Si no hay datos, mostramos una línea base vacía elegante
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
-    let dataPoints = [];
-    let labelText = 'Capital Acumulado (USDT)';
-    let color = '#10b981'; 
-
-    // Extracción normalizada para MetricsManager
-    dataPoints = points.map(p => {
+    
+    // Extracción normalizada (Recuperada lógica de profit)
+    const dataPoints = points.map(p => {
         const val = (typeof p.value === 'number') ? p.value : (p.netProfit || 0);
         return parseFloat(val.toFixed(4));
     });
 
-    // 3. GRADIENTE DINÁMICO (Basado en altura real)
+    console.log("📈 LOG 4: dataPoints calculados:", dataPoints);
+
+    // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
+    const color = '#10b981'; 
     gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
-    // 4. CREACIÓN DE INSTANCIA
-    equityChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: labelText,
-                data: dataPoints,
-                borderColor: hasData ? color : 'rgba(255, 255, 255, 0.2)',
-                backgroundColor: gradient,
-                borderWidth: 2,
-                pointBackgroundColor: color,
-                pointBorderColor: '#111827',
-                pointBorderWidth: 1,
-                pointHoverRadius: 6,
-                tension: 0.35, 
-                fill: true,
-                pointRadius: (hasData && points.length < 50) ? 3 : 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: { 
-                duration: 400,
-                easing: 'easeInOutQuad'
+    // 4. CREACIÓN DE INSTANCIA (RESTAURADO COMPLETO)
+    try {
+        equityChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Capital Acumulado (USDT)',
+                    data: dataPoints,
+                    borderColor: hasData ? color : 'rgba(255, 255, 255, 0.2)',
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#111827',
+                    pointBorderWidth: 1,
+                    pointHoverRadius: 6,
+                    tension: 0.35, 
+                    fill: true,
+                    pointRadius: (hasData && points.length < 50) ? 3 : 0
+                }]
             },
-            interaction: { 
-                intersect: false, 
-                mode: 'index' 
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    enabled: hasData,
-                    backgroundColor: '#1f2937',
-                    titleColor: '#9ca3af',
-                    bodyColor: '#ffffff',
-                    borderColor: color,
-                    borderWidth: 1,
-                    padding: 10,
-                    displayColors: false,
-                    callbacks: {
-                        label: (ctx) => ` Profit: $${ctx.parsed.y.toFixed(2)} USDT`
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    grid: { 
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        drawBorder: false 
-                    },
-                    ticks: { 
-                        color: '#9ca3af', 
-                        font: { size: 10, family: 'monospace' },
-                        callback: (v) => `$${v.toFixed(2)}` 
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { 
+                    duration: 400,
+                    easing: 'easeInOutQuad'
+                },
+                interaction: { 
+                    intersect: false, 
+                    mode: 'index' 
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: hasData,
+                        backgroundColor: '#1f2937',
+                        titleColor: '#9ca3af',
+                        bodyColor: '#ffffff',
+                        borderColor: color,
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: (ctx) => ` Profit: $${ctx.parsed.y.toFixed(2)} USDT`
+                        }
                     }
                 },
-                x: {
-                    grid: { display: false },
-                    ticks: { 
-                        color: '#9ca3af', 
-                        font: { size: 9 },
-                        maxTicksLimit: 7,
-                        maxRotation: 0
+                scales: {
+                    y: {
+                        grid: { 
+                            color: 'rgba(255, 255, 255, 0.05)',
+                            drawBorder: false 
+                        },
+                        ticks: { 
+                            color: '#9ca3af', 
+                            font: { size: 10, family: 'monospace' },
+                            callback: (v) => `$${v.toFixed(2)}` 
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { 
+                            color: '#9ca3af', 
+                            font: { size: 9 },
+                            maxTicksLimit: 7,
+                            maxRotation: 0
+                        }
                     }
                 }
             }
-        }
-    });
+        });
+        console.log("✅ LOG 5: Render finalizado con éxito.");
+    } catch (err) {
+        console.error("💥 CRASH en Chart.js:", err);
+    }
 }
