@@ -1,6 +1,6 @@
 /**
- * metricsManager.js - Motor de Análisis de Rentabilidad (TradeCycles Only)
- * AUDITORÍA 2026: Sincronización Estricta (15 Ciclos Reales)
+ * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
+ * AUDITORÍA 2026: Sincronización Estricta (Corrección de campo 'profit')
  */
 
 // Estado persistente en la sesión del navegador
@@ -10,33 +10,38 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Procesa datos de API (15 ciclos) o Socket (2 ciclos) y los fusiona sin duplicados.
+ * Procesa datos de API (15 ciclos) o Socket y los fusiona sin duplicados.
  */
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     if (rawData.length === 0) return;
-console.log("🧐 AUDITORÍA DE CICLO (Primer objeto):", rawData[0]);
+
+    // Log de auditoría para verificar la estructura del objeto real
+    console.log("🧐 AUDITORÍA DE CICLO (Estructura detectada):", rawData[0]);
+
     rawData.forEach(c => {
-        // 1. NORMALIZACIÓN DE ESTRATEGIA (Evita el error Short vs short)
+        // 1. NORMALIZACIÓN DE ESTRATEGIA
         const strategy = (c.strategy || 'unknown').toLowerCase();
         
-        // 2. EXTRACCIÓN DE FECHA (Soporte para formato MongoDB $date)
+        // 2. EXTRACCIÓN DE FECHA
         let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
-        if (isNaN(dateObj.getTime())) return; // Ignorar si la fecha es corrupta
+        if (isNaN(dateObj.getTime())) return; 
 
-        // 3. GENERACIÓN DE ID ÚNICO (Blindaje contra los 22/47 ciclos erróneos)
-        // Usamos el ID real de Mongo o una huella dactilar inmutable del trade
-        const profit = parseFloat(c.netProfit || 0);
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profit}-${dateObj.getTime()}`;
+        // 3. NORMALIZACIÓN DE PROFIT (El punto crítico corregido)
+        // Usamos 'profit' que es lo que envía tu backend, con fallback a 'netProfit'
+        const profitValue = parseFloat(c.profit || c.netProfit || 0);
+        
+        // 4. GENERACIÓN DE ID ÚNICO
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        // Si el ciclo ya existe en memoria, NO lo volvemos a sumar
+        // Evitar duplicados
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 4. GUARDADO EN MEMORIA
+        // 5. GUARDADO EN MEMORIA (MAPEADO ESTRICTO)
         globalCyclesMap.set(fingerPrint, {
             ...c,
-            netProfit: profit,
+            netProfit: profitValue, // Guardamos estandarizado como netProfit para el resto del sistema
             profitPercentage: parseFloat(c.profitPercentage || 0),
             processedDate: dateObj,
             strategy: strategy
@@ -49,18 +54,17 @@ console.log("🧐 AUDITORÍA DE CICLO (Primer objeto):", rawData[0]);
 
 /**
  * updateMetricsDisplay
- * Filtra y calcula KPIs basados en los 15 ciclos reales.
+ * Filtra y calcula KPIs basados en los datos normalizados.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
     
-    // Filtro por estrategia (Viene de los botones del Dashboard)
     const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
         return c.strategy === currentBotFilter;
     });
 
-    // Ordenamiento cronológico para que la gráfica no "salte"
+    // Ordenamiento cronológico
     filtered.sort((a, b) => a.processedDate - b.processedDate);
 
     const totalCycles = filtered.length;
@@ -76,7 +80,6 @@ function updateMetricsDisplay() {
         totalNetProfitUsdt += cycle.netProfit;
         if (cycle.netProfit > 0) winningCycles++;
 
-        // Cálculo de eficiencia temporal
         let startRaw = cycle.startTime?.$date || cycle.startTime;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
@@ -90,39 +93,35 @@ function updateMetricsDisplay() {
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Actualizar UI (Dashboard)
+    // Actualizar UI
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`);
 
-    // Disparar evento para Chart.js
     const chartData = prepareChartData(filtered);
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
 }
 
 /**
- * prepareChartData - Versión Auditada
- * Asegura que 'accumulated' nunca sea NaN y que las propiedades existan.
+ * prepareChartData
+ * Crea los puntos para la gráfica asegurando valores numéricos reales.
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
-    const points = []; // Eliminamos el punto "Start" para evitar el salto a cero inicial
+    const points = [];
 
     filteredArray.forEach(cycle => {
-        // 1. Aseguramos que netProfit sea un número real
         const net = parseFloat(cycle.netProfit) || 0;
         accumulated += net;
 
         const d = cycle.processedDate;
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 
-        // 2. Verificación estricta del parámetro
         let finalValue = 0;
         if (currentChartParameter === 'accumulatedProfit') {
             finalValue = accumulated;
         } else {
-            // Si no es acumulado, buscamos el porcentaje individual
             finalValue = parseFloat(cycle.profitPercentage) || 0;
         }
 
@@ -132,7 +131,7 @@ function prepareChartData(filteredArray) {
         });
     });
 
-    console.log("🧪 DEBUG METRICS: Puntos generados:", points); // LOG CLAVE
+    console.log("🧪 DEBUG METRICS: Puntos generados con valores:", points.map(p => p.value));
     return { points };
 }
 
@@ -154,8 +153,6 @@ export function setBotFilter(filter) {
     currentBotFilter = filter.toLowerCase();
     updateMetricsDisplay();
 }
-
-// --- UTILIDADES ---
 
 function resetKPIs() {
     renderText('total-cycles-closed', '0');
