@@ -217,22 +217,26 @@ export function initSocket() {
 function updatePriceVariationUI(percent) {
     const percentEl = document.getElementById('price-percent');
     const iconEl = document.getElementById('price-icon');
+    const container = document.getElementById('price-change-container'); // Añadimos el contenedor
     
     if (!percentEl || !iconEl) return;
 
     const val = parseFloat(percent);
     percentEl.textContent = `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
 
-    // Actualizamos colores e iconos
+    // Limpiamos clases de color previas
+    const textClasses = ['text-emerald-500', 'text-red-500', 'text-gray-400'];
+    [percentEl, iconEl, container].forEach(el => el?.classList.remove(...textClasses));
+
     if (val > 0) {
         iconEl.className = 'fas fa-caret-up mr-0.5 text-emerald-500';
-        percentEl.className = 'text-emerald-500';
+        percentEl.classList.add('text-emerald-500');
     } else if (val < 0) {
         iconEl.className = 'fas fa-caret-down mr-0.5 text-red-500';
-        percentEl.className = 'text-red-500';
+        percentEl.classList.add('text-red-500');
     } else {
         iconEl.className = 'fas fa-minus mr-0.5 text-gray-400';
-        percentEl.className = 'text-gray-400';
+        percentEl.classList.add('text-gray-400');
     }
 }
 
