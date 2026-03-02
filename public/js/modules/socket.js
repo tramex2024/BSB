@@ -74,32 +74,43 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
- // --- MARKET DATA (PRICE & VARIATION) ---
-    socket.on('marketData', async (data) => {
-        resetWatchdog();
+    // --- MARKET DATA (PRICE & VARIATION) ---
+socket.on('marketData', async (data) => {
+    resetWatchdog();
+    
+    // 1. Actualización de Precio
+    if (data?.price) {
+        const newPrice = parseFloat(data.price);
+        currentBotState.price = newPrice;
         
-        // 1. Actualización de Precio
-        if (data?.price) {
-            const newPrice = parseFloat(data.price);
-            currentBotState.price = newPrice;
-            
-            const priceEl = document.getElementById('auprice');
-            if (priceEl) {
-                formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
-                currentBotState.lastPrice = newPrice;
-            }
-
-            if (document.getElementById('balanceDonutChart')) {
-                const { updateDistributionWidget } = await import('./dashboard.js');
-                updateDistributionWidget(currentBotState);
-            }
+        const priceEl = document.getElementById('auprice');
+        if (priceEl) {
+            formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
+            currentBotState.lastPrice = newPrice;
         }
 
-        // 2. Actualización de Variación (Detectado: priceChangePercent)
-        if (data?.priceChangePercent !== undefined) {
-            updatePriceVariationUI(parseFloat(data.priceChangePercent));
+        // --- NUEVO: Actualización de las Barras de PnL Estratégicas ---
+        // Estas funciones moverán las barritas que pusimos en el HTML
+        if (typeof updatePnLBar === 'function') {
+            // Actualiza Long (Verde si sube, Rojo si baja)
+            updatePnLBar('long', currentBotState.longEntryPrice, newPrice, 'long');
+            // Actualiza Short (Rojo si sube, Verde si baja)
+            updatePnLBar('short', currentBotState.shortEntryPrice, newPrice, 'short');
+            // Actualiza AI (Detecta automáticamente si es Long o Short)
+            updatePnLBar('ai', currentBotState.aiEntryPrice, newPrice, currentBotState.aiSide || 'long');
         }
-    });
+
+        if (document.getElementById('balanceDonutChart')) {
+            const { updateDistributionWidget } = await import('./dashboard.js');
+            updateDistributionWidget(currentBotState);
+        }
+    }
+
+    // 2. Actualización de Variación (Detectado: priceChangePercent)
+    if (data?.priceChangePercent !== undefined) {
+        updatePriceVariationUI(parseFloat(data.priceChangePercent));
+    }
+});
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (state) => {
@@ -247,6 +258,40 @@ function resetWatchdog() {
         updateConnectionStatus('DISCONNECTED');
         updateSystemHealth('offline');
     }, 15000);
+}
+
+/**
+ * Actualiza visualmente la barra de PnL de una estrategia
+ * @param {string} id - El ID del elemento (long, short, ai)
+ * @param {number} entryPrice - Precio al que entró el bot
+ * @param {number} currentPrice - Precio actual de mercado
+ * @param {string} type - 'long' o 'short'
+ */
+function updatePnLBar(id, entryPrice, currentPrice, type = 'long') {
+    const bar = document.getElementById(`pnl-bar-${id}`);
+    if (!bar || !entryPrice || entryPrice <= 0) return;
+
+    // Calcular el porcentaje de ganancia/pérdida
+    let pnl = ((currentPrice - entryPrice) / entryPrice) * 100;
+    
+    // Si es SHORT, el profit es inverso (si baja el precio, gano)
+    if (type === 'short') pnl = -pnl;
+
+    // Limitemos el movimiento visual a +/- 3% para que la barra no desaparezca
+    const limit = 3; 
+    const percentageForBar = Math.min(Math.abs(pnl) / limit * 50, 50); // Máximo 50% hacia cada lado
+
+    if (pnl >= 0) {
+        // PROFIT: Se llena hacia la derecha (verde)
+        bar.style.left = '50%';
+        bar.style.width = `${percentageForBar}%`;
+        bar.className = 'absolute h-full transition-all duration-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+    } else {
+        // LOSS: Se llena hacia la izquierda (rojo)
+        bar.style.left = `${50 - percentageForBar}%`;
+        bar.style.width = `${percentageForBar}%`;
+        bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+    }
 }
 
 function updateConnectionStatus(status) {
