@@ -267,29 +267,27 @@ function resetWatchdog() {
  */
 function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
-    if (!bar) return;
-
-    // Convertimos a número por si acaso viene como texto (ej: "-56")
-    const pnl = parseFloat(pnlValue) || 0;
-
-    // Si el PnL es 0 y no hay nada activo, la dejamos en el centro
-    if (pnl === 0) {
-        bar.style.width = '0%';
-        bar.style.left = '50%';
+    if (!bar) {
+        // console.warn(`Barra ${id} no encontrada en el HTML`);
         return;
     }
 
-    // Ajuste visual: 3% de PnL real llena el 50% de la barra visual
-    const limit = 3; 
+    const pnl = parseFloat(pnlValue) || 0;
+    
+    // ESTO ES PARA TI: Si abres la consola (F12), verás si llega el -56
+    if (pnl !== 0) {
+        console.log(`Actualizando barra ${id} con PnL: ${pnl}`);
+    }
+
+    // Aumentamos el límite a 100 para que tu -56 no sature la barra
+    const limit = 100; 
     const size = Math.min(Math.abs(pnl) / limit * 50, 50);
 
     if (pnl >= 0) {
-        // GANANCIA (Verde)
         bar.style.left = '50%';
         bar.style.width = `${size}%`;
         bar.className = 'absolute h-full transition-all duration-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
     } else {
-        // PÉRDIDA (Rojo)
         bar.style.left = `${50 - size}%`;
         bar.style.width = `${size}%`;
         bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
