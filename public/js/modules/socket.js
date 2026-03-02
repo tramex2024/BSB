@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Integración Blindada con MetricsManager
+ * Actualización: Integración de Variación de Precio 24h
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -74,9 +74,11 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE) ---
+    // --- MARKET DATA (PRICE & VARIATION) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
+        console.log("🔍 Datos recibidos del mercado:", data); // AÑADE ESTA LÍNEA
+        // 1. Actualización de Precio
         if (data?.price) {
             const newPrice = parseFloat(data.price);
             currentBotState.price = newPrice;
@@ -91,6 +93,13 @@ export function initSocket() {
                 const { updateDistributionWidget } = await import('./dashboard.js');
                 updateDistributionWidget(currentBotState);
             }
+        }
+
+        // 2. Actualización de Variación 24h (NUEVO)
+        // Intentamos capturar el porcentaje desde data.change o data.fluctuation
+        const variation = data?.change || data?.fluctuation || data?.percent;
+        if (variation !== undefined) {
+            updatePriceVariationUI(parseFloat(variation));
         }
     });
 
@@ -116,12 +125,10 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // SINCRONIZACIÓN DE MÉTRICAS (All Strategies)
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
             try {
                 const Metrics = await import('./metricsManager.js');
-                // setAnalyticsData ya se encarga de ignorar duplicados
                 Metrics.setAnalyticsData(historyData);
             } catch (err) {
                 console.error("Error injecting metrics:", err);
@@ -191,7 +198,6 @@ export function initSocket() {
         }
     });
 
-    // --- ACTUALIZACIÓN DE HISTORIAL ESPECÍFICO (AI) ---
     socket.on('ai-history-update', async (trades) => {
         const aiOrderList = document.getElementById('ai-order-list');
         if (aiOrderList) {
@@ -200,12 +206,36 @@ export function initSocket() {
         }
         if (trades) {
             const Metrics = await import('./metricsManager.js');
-            // Aquí inyectamos los nuevos trades de IA. El Manager los unirá a los 15 existentes.
             Metrics.setAnalyticsData(trades);
         }
     });
 
     return socket;
+}
+
+/**
+ * Actualiza visualmente el porcentaje de cambio 24h
+ */
+function updatePriceVariationUI(percent) {
+    const percentEl = document.getElementById('price-percent');
+    const iconEl = document.getElementById('price-icon');
+    
+    if (!percentEl || !iconEl) return;
+
+    const val = parseFloat(percent);
+    percentEl.textContent = `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
+
+    // Actualizamos colores e iconos
+    if (val > 0) {
+        iconEl.className = 'fas fa-caret-up mr-0.5 text-emerald-500';
+        percentEl.className = 'text-emerald-500';
+    } else if (val < 0) {
+        iconEl.className = 'fas fa-caret-down mr-0.5 text-red-500';
+        percentEl.className = 'text-red-500';
+    } else {
+        iconEl.className = 'fas fa-minus mr-0.5 text-gray-400';
+        percentEl.className = 'text-gray-400';
+    }
 }
 
 function resetWatchdog() {
