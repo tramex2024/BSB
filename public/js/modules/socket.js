@@ -74,10 +74,10 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE & VARIATION) ---
+ // --- MARKET DATA (PRICE & VARIATION) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
-        console.log("🔍 Datos recibidos del mercado:", data); // AÑADE ESTA LÍNEA
+        
         // 1. Actualización de Precio
         if (data?.price) {
             const newPrice = parseFloat(data.price);
@@ -95,11 +95,9 @@ export function initSocket() {
             }
         }
 
-        // 2. Actualización de Variación 24h (NUEVO)
-        // Intentamos capturar el porcentaje desde data.change o data.fluctuation
-        const variation = data?.change || data?.fluctuation || data?.percent;
-        if (variation !== undefined) {
-            updatePriceVariationUI(parseFloat(variation));
+        // 2. Actualización de Variación (Detectado: priceChangePercent)
+        if (data?.priceChangePercent !== undefined) {
+            updatePriceVariationUI(parseFloat(data.priceChangePercent));
         }
     });
 
