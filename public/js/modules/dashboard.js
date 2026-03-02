@@ -46,6 +46,12 @@ export function initializeDashboardView(initialState) {
     // 3. ACTUALIZACIÓN DE UI INICIAL
     if (stateToUse) {
         updateBotUI(stateToUse);
+        
+        // Sincronizar barras de PnL inmediatamente con el estado persistente
+        updatePnLBar('long', stateToUse.lprofit || 0);
+        updatePnLBar('short', stateToUse.sprofit || 0);
+        updatePnLBar('ai', stateToUse.aiprofit || 0);
+
         // Pequeño delay para asegurar que el DOM del donut esté listo
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
     }
@@ -230,6 +236,32 @@ function initBalanceChart() {
             plugins: { legend: { display: false } }
         }
     });
+}
+
+/**
+ * Actualiza visualmente las barras de PnL dinámicas en el Dashboard
+ */
+export function updatePnLBar(id, pnlValue) {
+    const bar = document.getElementById(`pnl-bar-${id}`);
+    if (!bar) return;
+
+    const pnl = parseFloat(pnlValue) || 0;
+    
+    // Sensibilidad: 5% de profit llena la mitad de la barra (25% del total)
+    const maxRange = 5; 
+    const visualSize = Math.min(Math.abs(pnl) / maxRange * 50, 50);
+
+    if (pnl >= 0) {
+        // GANANCIA: Se expande hacia la DERECHA desde el centro (50%)
+        bar.style.left = '50%';
+        bar.style.width = `${visualSize}%`;
+        bar.className = 'absolute h-full transition-all duration-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+    } else {
+        // PÉRDIDA: Se expande hacia la IZQUIERDA desde el centro
+        bar.style.left = `${50 - visualSize}%`;
+        bar.style.width = `${visualSize}%`;
+        bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+    }
 }
 
 export function updateDistributionWidget(state) {

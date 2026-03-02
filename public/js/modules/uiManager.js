@@ -62,6 +62,8 @@ export function updateBotUI(state) {
         'ai-adx-val': 'lai',                
         'ai-stoch-val': 'lac',              
         'aubot-aistate': 'aistate', 
+        'ai-trend-label': 'trend',     // El badge que dice NEUTRAL/BULLISH
+        'ai-engine-msg': 'aiMessage',  // El mensaje de "Neural Core Analyzing..."
 
         // ESTADOS DE TEXTO
         'aubot-lstate': 'lstate',
@@ -80,12 +82,18 @@ export function updateBotUI(state) {
         // Esto evita que los "15 ciclos" desaparezcan si el socket envía un mensaje parcial.
         if (val === undefined || val === null) return;
 
-        // --- Renderizado de Estados (Dirty Checking) ---
+       // --- Renderizado de Estados (Dirty Checking) ---
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = val.toString().toUpperCase().trim();
             if (el.textContent !== currentStatus) {
                 el.textContent = currentStatus;
-                el.style.color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
+                
+                // Si es el bot de AI, usamos índigo, si no, usamos el mapa normal
+                if (id.includes('aistate')) {
+                    el.style.color = currentStatus === 'RUNNING' ? '#818cf8' : '#ef4444';
+                } else {
+                    el.style.color = STATUS_COLORS[currentStatus] || '#9ca3af'; 
+                }
             }
             return;
         }
@@ -130,7 +138,20 @@ export function updateBotUI(state) {
     if (hasStateData) {
         updateControlsState(state);
     }
-}
+
+    // 6. Actualización de Barras de PnL (Integración con Dashboard)
+    // Usamos un bloque try/catch y carga dinámica para evitar errores si el Dashboard no está listo
+    try {
+        const dashboard = await import('./dashboard.js');
+        if (dashboard && typeof dashboard.updatePnLBar === 'function') {
+            if (state.lprofit !== undefined) dashboard.updatePnLBar('long', state.lprofit);
+            if (state.sprofit !== undefined) dashboard.updatePnLBar('short', state.sprofit);
+            if (state.aiprofit !== undefined) dashboard.updatePnLBar('ai', state.aiprofit);
+        }
+    } catch (err) {
+        // Silenciamos el error si dashboard.js aún no carga, es normal al inicio
+    }
+} 
 
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');

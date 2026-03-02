@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Integración de Variación de Precio 24h
+ * Actualización: Integración de Variación de Precio 24h + PnL Bars Sync
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -75,40 +75,41 @@ export function initSocket() {
     });
 
     // --- MARKET DATA (PRICE & VARIATION) ---
-// --- MARKET DATA (PRICE & VARIATION) ---
-socket.on('marketData', async (data) => {
-    resetWatchdog();
-    
-    // 1. Actualización de Precio
-    if (data?.price) {
-        const newPrice = parseFloat(data.price);
-        currentBotState.price = newPrice;
+    socket.on('marketData', async (data) => {
+        resetWatchdog();
         
-        const priceEl = document.getElementById('auprice');
-        if (priceEl) {
-            formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
-            currentBotState.lastPrice = newPrice;
+        // 1. Actualización de Precio
+        if (data?.price) {
+            const newPrice = parseFloat(data.price);
+            currentBotState.price = newPrice;
+            
+            const priceEl = document.getElementById('auprice');
+            if (priceEl) {
+                formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
+                currentBotState.lastPrice = newPrice;
+            }
+
+            // --- ACTUALIZACIÓN DE BARRAS DE PNL ---
+            // CORRECCIÓN AUDITORÍA: Usamos lprofit y sprofit que son las llaves del servidor
+           // --- ACTUALIZACIÓN DE BARRAS DE PNL ---
+if (typeof updatePnLBar === 'function') {
+    // Usamos los valores guardados en el estado global
+    updatePnLBar('long', currentBotState.lprofit || 0);
+    updatePnLBar('short', currentBotState.sprofit || 0);
+    updatePnLBar('ai', currentBotState.aiprofit || 0);
+}
+
+            if (document.getElementById('balanceDonutChart')) {
+                const { updateDistributionWidget } = await import('./dashboard.js');
+                updateDistributionWidget(currentBotState);
+            }
         }
 
-        // --- ACTUALIZACIÓN DE BARRAS DE PNL ---
-        // Ahora usamos los valores directos de PnL que ya tiene el bot
-        if (typeof updatePnLBar === 'function') {
-            updatePnLBar('long', currentBotState.longPnL || 0);
-            updatePnLBar('short', currentBotState.shortPnL || 0);
-            updatePnLBar('ai', currentBotState.aiPnL || 0);
+        // 2. Actualización de Variación
+        if (data?.priceChangePercent !== undefined) {
+            updatePriceVariationUI(parseFloat(data.priceChangePercent));
         }
-
-        if (document.getElementById('balanceDonutChart')) {
-            const { updateDistributionWidget } = await import('./dashboard.js');
-            updateDistributionWidget(currentBotState);
-        }
-    }
-
-    // 2. Actualización de Variación
-    if (data?.priceChangePercent !== undefined) {
-        updatePriceVariationUI(parseFloat(data.priceChangePercent));
-    }
-});
+    });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (state) => {
@@ -128,8 +129,20 @@ socket.on('marketData', async (data) => {
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
             }
+            // Sincronizamos el estado global (Esto copiará lprofit, sprofit, etc. si vienen en el state)
             Object.assign(currentBotState, state);
+            
+            // [NUEVO] Forzamos la persistencia manual por si el servidor usa nombres distintos
+            if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
+            if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
+            if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
             updateBotUI(currentBotState);
+        }
+
+        // Sincronización inmediata de barras al recibir estado completo
+        if (typeof updatePnLBar === 'function') {
+            updatePnLBar('long', state.lprofit || 0);
+            updatePnLBar('short', state.sprofit || 0);
         }
 
         const historyData = state.history || state.cycleHistory;
@@ -226,14 +239,13 @@ socket.on('marketData', async (data) => {
 function updatePriceVariationUI(percent) {
     const percentEl = document.getElementById('price-percent');
     const iconEl = document.getElementById('price-icon');
-    const container = document.getElementById('price-change-container'); // Añadimos el contenedor
+    const container = document.getElementById('price-change-container');
     
     if (!percentEl || !iconEl) return;
 
     const val = parseFloat(percent);
     percentEl.textContent = `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
 
-    // Limpiamos clases de color previas
     const textClasses = ['text-emerald-500', 'text-red-500', 'text-gray-400'];
     [percentEl, iconEl, container].forEach(el => el?.classList.remove(...textClasses));
 
@@ -259,28 +271,16 @@ function resetWatchdog() {
 }
 
 /**
- * Actualiza la barra de PnL usando el porcentaje directo del estado del bot
- * @param {string} id - El ID del elemento (long, short, ai)
- * @param {number} entryPrice - Precio al que entró el bot
- * @param {number} currentPrice - Precio actual de mercado
- * @param {string} type - 'long' o 'short'
+ * Actualiza la barra de PnL dinámica
  */
 function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
-    if (!bar) {
-        // console.warn(`Barra ${id} no encontrada en el HTML`);
-        return;
-    }
+    if (!bar) return;
 
     const pnl = parseFloat(pnlValue) || 0;
     
-    // ESTO ES PARA TI: Si abres la consola (F12), verás si llega el -56
-    if (pnl !== 0) {
-        console.log(`Actualizando barra ${id} con PnL: ${pnl}`);
-    }
-
-    // Aumentamos el límite a 100 para que tu -56 no sature la barra
-    const limit = 100; 
+    // Rango de visualización (hasta 10% de PnL para el 50% de la barra)
+    const limit = 10; 
     const size = Math.min(Math.abs(pnl) / limit * 50, 50);
 
     if (pnl >= 0) {
