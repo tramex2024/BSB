@@ -4,19 +4,22 @@
         
         <div class="bg-gray-700/50 p-3 rounded-xl border-2 border-emerald-500/30 shadow-lg space-y-3">
             
-<div class="flex justify-between items-end"> <div class="flex flex-col justify-end">
-        <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Market Price</span>
-        <div class="flex items-baseline gap-1.5 h-[26px]"> <span id="auprice" class="text-lg font-mono font-bold text-white leading-none">$0.00</span>
-            <span id="price-change-container" class="text-[9px] flex items-center font-bold">
-                <i id="price-icon" class="fas fa-caret-up mr-0.5"></i>
+<div class="flex justify-between items-center bg-black/20 p-2 rounded-xl border border-gray-600/30"> 
+    <div class="flex flex-col">
+        <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider leading-none mb-1.5">Market Price</span>
+        <div class="flex items-center gap-1.5 h-5">
+            <span id="auprice" class="text-base font-mono font-bold text-white leading-none">$0.00</span>
+            <span id="price-change-container" class="text-[9px] flex items-center font-bold bg-gray-900/50 px-1 rounded-sm">
+                <i id="price-icon" class="fas fa-caret-up mr-0.5 text-emerald-500"></i>
                 <span id="price-percent">0.00%</span>
             </span>
         </div>
     </div>
 
-    <div class="flex flex-col items-end justify-end">
-        <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Total Profit</span>
-        <div class="flex items-baseline h-[26px]"> <span id="auprofit" class="text-lg font-mono font-bold text-emerald-400 leading-none">+$0.00</span>
+    <div class="flex flex-col items-end">
+        <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider leading-none mb-1.5">Total Profit</span>
+        <div class="flex items-center h-5">
+            <span id="auprofit" class="text-base font-mono font-bold text-emerald-400 leading-none">+$0.00</span>
         </div>
     </div>
 </div>
