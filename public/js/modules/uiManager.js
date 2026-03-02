@@ -21,7 +21,7 @@ const STATUS_COLORS = {
 /**
  * Función Principal: Actualiza todos los elementos visuales
  */
-export function updateBotUI(state) {
+export async function updateBotUI(state) {
     if (!state) return;
     
     // 1. Actualización de Precio (Con suavizado)
