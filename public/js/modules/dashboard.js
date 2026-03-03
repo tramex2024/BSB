@@ -247,8 +247,8 @@ export function updatePnLBar(id, pnlValue) {
 
     const pnl = parseFloat(pnlValue) || 0;
     
-    // Sensibilidad: 5% de profit llena la mitad de la barra (25% del total)
-    const maxRange = 5; 
+    // Sensibilidad: 1% de profit llena la mitad de la barra (25% del total)
+    const maxRange = 1; 
     const visualSize = Math.min(Math.abs(pnl) / maxRange * 50, 50);
 
     if (pnl >= 0) {

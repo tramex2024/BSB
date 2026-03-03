@@ -38,6 +38,9 @@ export const currentBotState = {
     // [MEJORA] Añadidos campos de balance para persistencia entre pestañas
     lastAvailableUSDT: 0,
     lastAvailableBTC: 0,
+    lprofit: 0,
+    sprofit: 0,
+    aiprofit: 0,
     config: {
         symbol: 'BTC_USDT', 
         long: { amountUsdt: 0, enabled: false },
@@ -168,7 +171,7 @@ export async function initializeTab(tabName) {
         }
 
         // Actualizar UI general con el estado actual
-        updateBotUI(currentBotState);
+        await updateBotUI(currentBotState);
         syncAIElementsInDOM();
 
     } catch (error) { 

@@ -74,38 +74,31 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE & VARIATION) ---
+// --- MARKET DATA (PRICE & VARIATION) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
-        // 1. Actualización de Precio
         if (data?.price) {
             const newPrice = parseFloat(data.price);
             currentBotState.price = newPrice;
             
+            // Solo actualizamos el precio visualmente aquí
             const priceEl = document.getElementById('auprice');
             if (priceEl) {
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
                 currentBotState.lastPrice = newPrice;
             }
 
-            // --- ACTUALIZACIÓN DE BARRAS DE PNL ---
-            // CORRECCIÓN AUDITORÍA: Usamos lprofit y sprofit que son las llaves del servidor
-           // --- ACTUALIZACIÓN DE BARRAS DE PNL ---
-if (typeof updatePnLBar === 'function') {
-    // Usamos los valores guardados en el estado global
-    updatePnLBar('long', currentBotState.lprofit || 0);
-    updatePnLBar('short', currentBotState.sprofit || 0);
-    updatePnLBar('ai', currentBotState.aiprofit || 0);
-}
+            // LANZAMOS EL MANAGER: Él se encarga de las barras de PnL y todo lo demás
+            updateBotUI(currentBotState); 
 
+            // Widget de Donut (Si existe)
             if (document.getElementById('balanceDonutChart')) {
                 const { updateDistributionWidget } = await import('./dashboard.js');
                 updateDistributionWidget(currentBotState);
             }
         }
 
-        // 2. Actualización de Variación
         if (data?.priceChangePercent !== undefined) {
             updatePriceVariationUI(parseFloat(data.priceChangePercent));
         }
@@ -137,13 +130,7 @@ if (typeof updatePnLBar === 'function') {
             if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
             if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
             updateBotUI(currentBotState);
-        }
-
-        // Sincronización inmediata de barras al recibir estado completo
-        if (typeof updatePnLBar === 'function') {
-            updatePnLBar('long', state.lprofit || 0);
-            updatePnLBar('short', state.sprofit || 0);
-        }
+        }       
 
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
