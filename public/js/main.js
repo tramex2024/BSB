@@ -316,3 +316,27 @@ document.addEventListener('DOMContentLoaded', () => {
         logStatus(`User Profile ID: ${uId}`, "info");
     });
 });
+
+// --- AUTO-REACTIVADOR AL REGRESAR ---
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        console.log("♻️ App enfocada: Verificando conexión...");
+        
+        // 1. Re-inicializamos el Socket si se perdió
+        const { initSocket, socket } = import('./modules/socket.js').then(m => {
+            if (!m.socket || !m.socket.connected) {
+                console.log("🔌 Forzando reconexión de Socket...");
+                m.initSocket();
+            } else {
+                // Si el socket parece vivo, pedimos el estado actual por si acaso
+                m.socket.emit('get-bot-state');
+            }
+        });
+
+        // 2. Refrescar datos de órdenes (opcional pero recomendado)
+        const activeTab = document.querySelector('.nav-link.active')?.dataset.tab;
+        if (activeTab) {
+            initializeTab(activeTab); 
+        }
+    }
+});

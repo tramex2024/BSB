@@ -139,19 +139,30 @@ export async function updateBotUI(state) {
         updateControlsState(state);
     }
 
-    // 6. Actualización de Barras de PnL (Integración con Dashboard)
-    // Usamos un bloque try/catch y carga dinámica para evitar errores si el Dashboard no está listo
+// 6. Actualización de Barras de PnL (Sincronización con Dashboard)
     try {
         const dashboard = await import('./dashboard.js');
         if (dashboard && typeof dashboard.updatePnLBar === 'function') {
-            if (state.lprofit !== undefined) dashboard.updatePnLBar('long', state.lprofit);
-            if (state.sprofit !== undefined) dashboard.updatePnLBar('short', state.sprofit);
-            if (state.aiprofit !== undefined) dashboard.updatePnLBar('ai', state.aiprofit);
+            // Extraemos los valores asegurando que sean numéricos (fallback a 0)
+            const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
+            const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
+            const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
+
+            // Actualizamos solo si el valor es un número válido
+            if (!isNaN(lProfit)) dashboard.updatePnLBar('long', lProfit);
+            if (!isNaN(sProfit)) dashboard.updatePnLBar('short', sProfit);
+            if (!isNaN(aiProfit)) dashboard.updatePnLBar('ai', aiProfit);
+            
+            // Si el dashboard tiene el display de profit total, lo sincronizamos también
+            const totalProfit = state.total_profit ?? (lProfit + sProfit + aiProfit);
+            const totalEl = document.getElementById('auprofit');
+            if (totalEl && totalProfit !== undefined) {
+                formatProfit(totalEl, totalProfit);
+            }
         }
     } catch (err) {
-        // Silenciamos el error si dashboard.js aún no carga, es normal al inicio
+        // Silencioso: El dashboard se cargará en el siguiente tic de socket
     }
-} 
 
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');

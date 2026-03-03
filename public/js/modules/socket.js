@@ -122,15 +122,17 @@ export function initSocket() {
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
             }
-            // Sincronizamos el estado global (Esto copiará lprofit, sprofit, etc. si vienen en el state)
+            // Sincronizamos el estado global
             Object.assign(currentBotState, state);
             
-            // [NUEVO] Forzamos la persistencia manual por si el servidor usa nombres distintos
+            // Forzamos la persistencia manual de PnL
             if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
             if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
             if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
+            
+            // El manager actualiza la UI y las barras de PnL automáticamente
             updateBotUI(currentBotState);
-        }       
+        }
 
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
