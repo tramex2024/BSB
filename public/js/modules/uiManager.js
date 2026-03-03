@@ -79,7 +79,6 @@ export async function updateBotUI(state) {
         let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
 
         // BLOQUE DE PROTECCIÓN: Si el valor es undefined, no tocamos el DOM.
-        // Esto evita que los "15 ciclos" desaparezcan si el socket envía un mensaje parcial.
         if (val === undefined || val === null) return;
 
        // --- Renderizado de Estados (Dirty Checking) ---
@@ -106,7 +105,6 @@ export async function updateBotUI(state) {
             if (el.textContent !== btcVal) el.textContent = btcVal;
         } else if (id.includes('cycle') || id.includes('norder')) {
             const cycleVal = Math.floor(val).toString();
-            // Evitamos parpadeo: Solo actualizamos si el número cambió
             if (el.textContent !== cycleVal) el.textContent = cycleVal;
         } else if (id.includes('adx') || id.includes('stoch')) {
             el.textContent = parseFloat(val).toFixed(1);
@@ -139,21 +137,18 @@ export async function updateBotUI(state) {
         updateControlsState(state);
     }
 
-// 6. Actualización de Barras de PnL (Sincronización con Dashboard)
+    // 6. Actualización de Barras de PnL (Sincronización con Dashboard)
     try {
         const dashboard = await import('./dashboard.js');
         if (dashboard && typeof dashboard.updatePnLBar === 'function') {
-            // Extraemos los valores asegurando que sean numéricos (fallback a 0)
             const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
             const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
             const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
 
-            // Actualizamos solo si el valor es un número válido
             if (!isNaN(lProfit)) dashboard.updatePnLBar('long', lProfit);
             if (!isNaN(sProfit)) dashboard.updatePnLBar('short', sProfit);
             if (!isNaN(aiProfit)) dashboard.updatePnLBar('ai', aiProfit);
             
-            // Si el dashboard tiene el display de profit total, lo sincronizamos también
             const totalProfit = state.total_profit ?? (lProfit + sProfit + aiProfit);
             const totalEl = document.getElementById('auprofit');
             if (totalEl && totalProfit !== undefined) {
@@ -161,9 +156,13 @@ export async function updateBotUI(state) {
             }
         }
     } catch (err) {
-        // Silencioso: El dashboard se cargará en el siguiente tic de socket
+        // Silencioso: El dashboard se cargará en el siguiente tic
     }
+} // <--- CIERRE CORRECTO DE updateBotUI
 
+/**
+ * Funciones de Apoyo (Fuera de la función principal)
+ */
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');
     const bar = document.getElementById(barId);
@@ -178,7 +177,6 @@ function updatePulseBars(id, value) {
 export function updateControlsState(state) {
     if (!state) return;
     
-    // Capturamos estados. Si no vienen en este mensaje, NO los declaramos como undefined para evitar el flash
     const lState = state.lstate;
     const sState = state.sstate;
     const aiState = state.aistate;
@@ -187,8 +185,6 @@ export function updateControlsState(state) {
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
 
-    // Solo llamamos a updateButtonState si el dato específico está presente
-    // Esto evita que el botón vuelva a su estado original del HTML por falta de datos
     if (lState !== undefined) {
         updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     }
@@ -202,7 +198,6 @@ export function updateControlsState(state) {
         updateButtonState('btn-start-ai', actualAiStatus, 'AI', aiInputs); 
         updateButtonState('austartai-btn', actualAiStatus, 'AI', aiInputs); 
         
-        // Mensajería del motor AI blindada
         const engineMsg = document.getElementById('ai-engine-msg');
         if (engineMsg) {
             if (actualAiStatus === 'RUNNING') {
