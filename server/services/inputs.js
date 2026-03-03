@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/inputs.js
- * Lógica Dual: Scalping (<100) y Blindaje 40/15 (>=100)
+ * Orquestador de Estrategias - PCC IMÁN (Multiplicador 1.5 Garantizado)
  */
 
 function processUserInputs(amtL, amtS, amtAI) {
@@ -10,35 +10,46 @@ function processUserInputs(amtL, amtS, amtAI) {
     const calculateShield = (totalAmount) => {
         const minOrder = 6;
 
-        // --- ESTRATEGIA A: CAPITAL BAJO (< 100 USDT) ---
-        // Objetivo: Cobertura del 15%, menos órdenes, salida rápida.
-        if (totalAmount < 100) {
+        // --- ESTRATEGIA C (CAPITAL LIMITADO): < 193 USDT ---
+        // Mantenemos el multiplicador 1.5 para no alejar el PCC,
+        // pero reducimos niveles para ajustar al balance.
+        if (totalAmount < 193) {
             return {
                 amountUsdt: totalAmount,
                 purchaseUsdt: minOrder,
-                price_var: 0.8,      // Distancia más amplia entre órdenes
-                price_step_inc: 0.2, // Incremento suave para cubrir el 15% rápido
-                size_var: 1.1,       // Multiplicador bajo para estirar los pocos USD
-                profit_percent: 1.3  // Profit más corto para asegurar ganancias
+                price_var: 0.8,
+                price_step_inc: 0.15, 
+                size_var: 1.5,         // PROTEGIDO: No baja de 1.5
+                profit_percent: 1.1,
+                levels: 5              // Menos niveles porque hay menos capital
             };
         }
 
-        // --- ESTRATEGIA B: BLINDAJE PROFESIONAL (>= 100 USDT) ---
-        // Objetivo: Cobertura del 40%, 15 órdenes, promediado dinámico.
-        const n = 15; 
-        
-        // Fórmula del "Acordeón": Ajusta el multiplicador según el capital
-        // Para 100 USD será ~1.03 | Para 350 USD ~1.18 | Para 1000 USD ~1.33
-        let sVar = Math.pow((totalAmount / minOrder), 1 / (n - 1.5));
-        sVar = parseFloat(Math.min(1.8, Math.max(1.02, sVar)).toFixed(2));
+        // --- ESTRATEGIA A (POWER-SCALPER): 193 USDT - 500 USDT ---
+        // Objetivo: Cobertura 10%, 7 niveles, PCC pegado al precio.
+        if (totalAmount >= 193 && totalAmount < 500) {
+            return {
+                amountUsdt: totalAmount,
+                purchaseUsdt: minOrder,
+                price_var: 0.8,        
+                price_step_inc: 0.15,   // Step Grow 1.15
+                size_var: 1.5,         // PROTEGIDO: Garantiza atracción del PCC
+                profit_percent: 1.1,
+                levels: 7              
+            };
+        }
 
+        // --- ESTRATEGIA B (ANÁLISIS PENDIENTE): >= 500 USDT ---
+        // Por ahora lo dejamos como reserva, pero siguiendo tu regla,
+        // cualquier evolución aquí deberá respetar el size_var >= 1.5.
         return {
             amountUsdt: totalAmount,
             purchaseUsdt: minOrder,
             price_var: 0.6,
-            price_step_inc: 0.32, // Garantiza el ~40% de profundidad en 15 niveles
-            size_var: sVar,
-            profit_percent: 1.3
+            price_step_inc: 0.32,
+            size_var: 1.5,             // Ajustado a 1.5 para mantener coherencia
+            profit_percent: 1.3,
+            levels: 10
         };
     };
 
