@@ -55,7 +55,7 @@ function processUserInputs(amtL, amtS, amtAI) {
             price_var: START_PRICE_VAR,
             price_step_inc: parseFloat(stepInc.toFixed(2)),
             size_var: SIZE_VAR,
-            profit_percent: 1.1,
+            profit_percent: 1.3,
             levels: n
         };
     };
