@@ -1,61 +1,68 @@
 /**
  * BSB/server/services/inputs.js
- * Orquestador de Estrategias - PCC IMÁN (Multiplicador 1.5 Garantizado)
+ * Lógica de Malla Infinita con Amortiguación de Purchase
+ * Prioridad: Máxima densidad de órdenes para 20% Abrange.
  */
 
 function processUserInputs(amtL, amtS, amtAI) {
     const l = parseFloat(amtL) || 0;
     const s = parseFloat(amtS) || 0;
 
-    const calculateShield = (totalAmount) => {
-        const minOrder = 6;
+    const calculateScalpingGrid = (totalAmount) => {
+        const ABRANGE = 20; 
+        const SIZE_VAR = 1.5; 
+        const START_PRICE_VAR = 0.5;
+        const MIN_PURCHASE = 6;
+        const MAX_PURCHASE = 20; // Límite de seguridad para el calibre
 
-        // --- ESTRATEGIA C (CAPITAL LIMITADO): < 193 USDT ---
-        // Mantenemos el multiplicador 1.5 para no alejar el PCC,
-        // pero reducimos niveles para ajustar al balance.
-        if (totalAmount < 193) {
-            return {
-                amountUsdt: totalAmount,
-                purchaseUsdt: minOrder,
-                price_var: 0.8,
-                price_step_inc: 0.15, 
-                size_var: 1.5,         // PROTEGIDO: No baja de 1.5
-                profit_percent: 1.1,
-                levels: 5              // Menos niveles porque hay menos capital
-            };
+        // 1. DETERMINAR MÁXIMO DE NIVELES (con purchase base de 6)
+        let n = 0;
+        let cumulativeBase = 0;
+        let orderBase = MIN_PURCHASE;
+        
+        // Calculamos cuántos niveles caben con el mínimo purchase
+        while (cumulativeBase + orderBase <= totalAmount) {
+            cumulativeBase += orderBase;
+            n++;
+            orderBase *= SIZE_VAR;
         }
 
-        // --- ESTRATEGIA A (POWER-SCALPER): 193 USDT - 500 USDT ---
-        // Objetivo: Cobertura 10%, 7 niveles, PCC pegado al precio.
-        if (totalAmount >= 193 && totalAmount < 500) {
-            return {
-                amountUsdt: totalAmount,
-                purchaseUsdt: minOrder,
-                price_var: 0.8,        
-                price_step_inc: 0.15,   // Step Grow 1.15
-                size_var: 1.5,         // PROTEGIDO: Garantiza atracción del PCC
-                profit_percent: 1.1,
-                levels: 7              
-            };
+        // 2. AJUSTAR PURCHASE (Amortiguar el capital sobrante)
+        // Intentamos subir el purchase (6, 7, 8...) para que las 'n' órdenes 
+        // aprovechen el capital disponible sin excederlo.
+        let purchase = MIN_PURCHASE;
+        for (let p = MIN_PURCHASE + 1; p <= MAX_PURCHASE; p++) {
+            let testCumulative = 0;
+            let testOrder = p;
+            for (let i = 0; i < n; i++) {
+                testCumulative += testOrder;
+                testOrder *= SIZE_VAR;
+            }
+            
+            if (testCumulative <= totalAmount) {
+                purchase = p; // Si cabe con purchase P, lo aceptamos
+            } else {
+                break; // Si ya no cabe, nos quedamos con el anterior
+            }
         }
 
-        // --- ESTRATEGIA B (ANÁLISIS PENDIENTE): >= 500 USDT ---
-        // Por ahora lo dejamos como reserva, pero siguiendo tu regla,
-        // cualquier evolución aquí deberá respetar el size_var >= 1.5.
+        // 3. CALCULAR EL PRICE STEP (Reparto dinámico del 20%)
+        let stepInc = n > 1 ? (ABRANGE - START_PRICE_VAR) / (n - 1) : ABRANGE;
+
         return {
             amountUsdt: totalAmount,
-            purchaseUsdt: minOrder,
-            price_var: 0.6,
-            price_step_inc: 0.32,
-            size_var: 1.5,             // Ajustado a 1.5 para mantener coherencia
-            profit_percent: 1.3,
-            levels: 10
+            purchaseUsdt: purchase,
+            price_var: START_PRICE_VAR,
+            price_step_inc: parseFloat(stepInc.toFixed(2)),
+            size_var: SIZE_VAR,
+            profit_percent: 1.1,
+            levels: n
         };
     };
 
     return {
-        long: calculateShield(l),
-        short: calculateShield(s),
+        long: calculateScalpingGrid(l),
+        short: calculateScalpingGrid(s),
         ai: { amountUsdt: amtAI }
     };
 }
