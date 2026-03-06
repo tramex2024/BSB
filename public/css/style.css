@@ -427,7 +427,37 @@ main#main-content {
     overflow-y: auto;
 }
 
+/* Aseguramos que el Header sea el contenedor maestro de capas */
+header {
+    position: sticky;
+    top: 0;
+    z-index: 50; /* Suficiente para estar sobre el contenido */
+}
 
+/* El contenedor de la campana debe ser relativo para que el hijo se alinee con él */
+#bell-container {
+    position: relative;
+}
+
+/* El Dropdown: La clave es usar z-[9999] y NADA de márgenes que empujen otros elementos */
+#notif-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%; /* Se pega justo debajo del header */
+    margin-top: 0.5rem;
+    z-index: 9999 !important; /* Esto lo pone por encima de la log-bar sí o sí */
+    pointer-events: auto; /* Asegura que se pueda hacer clic */
+}
+
+/* Animación simple que no afecta el layout */
+.animate-fadeIn {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */
 @media (max-width: 640px) {
