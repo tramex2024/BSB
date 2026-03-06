@@ -392,6 +392,20 @@ main#main-content {
     }
 }
 
+/* Forzar igualdad de condiciones para ambas secciones */
+#dashboard-section, #autobot-section {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    /* Ajustamos el padding para que sea minimalista pero elegante */
+    padding: 8px !important; 
+}
+
+/* Si el gráfico del Autobot se ve muy pegado arriba */
+#au-tvchart {
+    margin-top: 0px !important;
+}
+
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */
 @media (max-width: 640px) {
     /* 1. El header se queda arriba para utilidades (Logo/Ajustes) */
