@@ -373,3 +373,58 @@ main#main-content { margin-top: 0; }
     border-radius: 50%;
     border: 2px solid #1f2937;
 }
+
+/* --- AJUSTE PARA MÓVIL: MENÚ ABAJO E ICONOS ARRIBA --- */
+@media (max-width: 640px) {
+    /* 1. Movemos el header al fondo */
+    header, .fixed-header {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        height: 70px; /* Un poco más alto para el pulgar */
+        justify-content: space-around;
+        padding-bottom: env(safe-area-inset-bottom); /* Soporte para iPhone notch inferior */
+        border-bottom: none;
+        border-top: 1px solid #374151;
+        background-color: #111827; /* Un tono más oscuro para que resalte */
+    }
+
+    /* 2. Ajustamos los tabs para que parezcan botones de App */
+    .nav-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px; /* Texto más pequeño */
+        padding: 5px;
+        flex: 1;
+    }
+
+    .nav-tab.active {
+        border-bottom: none !important;
+        border-top: 3px solid var(--success) !important; /* La línea indicadora ahora va arriba */
+        background-color: transparent;
+    }
+
+    /* 3. Re-ubicamos la LOG BAR para que se quede arriba del todo */
+    .log-bar, #log-bar {
+        position: fixed;
+        top: 0 !important;
+        height: 40px;
+        z-index: 1001; /* Por encima de todo */
+        background-color: var(--dark-header-bg);
+    }
+
+    /* 4. El contenido principal debe tener espacio arriba y abajo */
+   main#main-content {
+        margin-top: 40px !important; /* Empuja el contenido hacia abajo de la log-bar */
+        padding-bottom: 90px !important; /* Evita que la última orden quede tapada por las pestañas */
+        display: block;
+        height: auto;
+    }
+
+    /* 5. Si tienes iconos de estado (la bolita) muévelos a la log-bar en móvil */
+    .status-ball-container {
+        margin-right: 10px;
+    }
+}
