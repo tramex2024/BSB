@@ -48,13 +48,16 @@
     		<span id="status-dot" class="status-dot-base status-red" title="Connection Status"></span>
 	    </div>
 
-            <div id="bell-container" class="relative cursor-pointer hover:text-white transition p-2" title="Notifications">
-                <i class="fas fa-bell"></i>
-                <span id="notif-dot" class="absolute top-1 right-1 flex h-2 w-2 hidden">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-            </div>
+            <div id="bell-container" class="relative z-50 cursor-pointer hover:text-white transition p-2" title="Notifications">
+    <i class="fas fa-bell"></i>
+    <span id="notif-dot" class="absolute top-1 right-1 flex h-2 w-2 hidden">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+    </span>
+
+    <div id="notifications-dropdown" class="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl hidden">
+        </div>
+</div>
             
             <i class="fas fa-gem cursor-pointer hover:text-emerald-400 transition" id="btn-upgrade" title="Upgrade to Advanced"></i>
 

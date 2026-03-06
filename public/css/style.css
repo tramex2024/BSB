@@ -406,6 +406,58 @@ main#main-content {
     margin-top: 0px !important;
 }
 
+/* La Log-bar suele tener z-index bajo para no estorbar menús */
+.log-bar {
+    z-index: 10; 
+    position: relative;
+}
+
+/* El contenedor de notificaciones debe ser el rey del header */
+#bell-container {
+    position: relative;
+    z-index: 100; /* Mucho más alto que la log-bar (10) */
+}
+
+/* Ajuste para la "cortina" */
+#notifications-dropdown {
+    top: 100%;    /* Justo debajo del icono */
+    right: 0;     /* Alineado a la derecha del icono */
+    transform: translateX(10px); /* Un pequeño ajuste si quieres que respire */
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Asegura que el header siempre esté por encima de la log-bar */
+header {
+    z-index: 100 !important;
+}
+
+/* La log-bar debe estar por debajo de cualquier menú desplegable */
+#log-bar {
+    z-index: 10 !important;
+    position: relative;
+}
+
+/* Animación para que la cortina no aparezca de golpe */
+#notif-dropdown {
+    animation: slideInDown 0.2s ease-out;
+    transform-origin: top right;
+}
+
+@keyframes slideInDown {
+    from { opacity: 0; transform: translateY(-10px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Scrollbar personalizado para las notificaciones */
+#notif-dropdown .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+#notif-dropdown .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 10px;
+}
+
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */
 @media (max-width: 640px) {
     /* 1. El header se queda arriba para utilidades (Logo/Ajustes) */
