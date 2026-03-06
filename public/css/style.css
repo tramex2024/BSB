@@ -374,6 +374,24 @@ main#main-content { margin-top: 0; }
     border: 2px solid #1f2937;
 }
 
+/* ELIMINAR MÁRGENES SOBRANTES EN PC */
+main#main-content {
+    padding: 0px !important; /* Elimina el margen de 1rem (16px) que viene por defecto */
+}
+
+#dashboard-section {
+    padding: 10px !important; /* Un pequeño respiro interno para que no toque el borde físico */
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+/* OPCIONAL: Si quieres que el panel izquierdo sea un poco más ancho en PC */
+@media (min-width: 1024px) {
+    .lg\:w-\[350px\] {
+        width: 380px !important; /* Ajusta este valor si sientes que los inputs están muy apretados */
+    }
+}
+
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */
 @media (max-width: 640px) {
     /* 1. El header se queda arriba para utilidades (Logo/Ajustes) */
