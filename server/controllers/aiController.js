@@ -7,6 +7,7 @@ const aiEngine = require('../src/ai/AIEngine'); // Ruta corregida a la arquitect
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 const MarketSignal = require('../models/MarketSignal');
+const { processAIInputs } = require('../services/inputs');
 
 /**
  * Obtiene el estado actual de la IA para el Dashboard
@@ -140,15 +141,18 @@ const updateAIConfig = async (req, res) => {
     const updateFields = {};
 
     try {
-        const currentBot = await Autobot.findOne({ userId }).select('ailastEntryPrice aibalance aistate').lean();
+        const currentBot = await Autobot.findOne({ userId }).select('aistate aibalance').lean();
         
         if (amountUsdt !== undefined) {
-            const val = parseFloat(amountUsdt);
+            // 1. Procesamos el input a través de nuestra nueva función estandarizada
+            const processed = processAIInputs(amountUsdt);
+            const val = processed.amountUsdt;
+            
             updateFields['config.ai.amountUsdt'] = val;
             
-            // 🟢 PROTECCIÓN: Solo actualizamos el balance si NO hay operación abierta.
-            // Esto evita que el usuario inyecte o retire dinero "mágicamente" durante un trade.
-            if (!currentBot?.ailastEntryPrice || currentBot.ailastEntryPrice === 0) {
+            // 2. Aplicamos el criterio de "STOPPED" (Paso 2: Consistencia)
+            // Solo actualizamos el balance operativo si el motor está detenido
+            if (currentBot?.aistate === 'STOPPED') {
                 updateFields.aibalance = val;
             }
         }
@@ -168,7 +172,9 @@ const updateAIConfig = async (req, res) => {
             isRunning: updatedBot.aistate === 'RUNNING',
             virtualBalance: updatedBot.aibalance,
             stopAtCycle: updatedBot.config?.ai?.stopAtCycle,
-            message: "Configuración Neural Sincronizada"
+            message: currentBot?.aistate === 'STOPPED' 
+                ? "Configuración y Balance Neural Sincronizados" 
+                : "Configuración actualizada (Balance se ajustará al detener el bot)"
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

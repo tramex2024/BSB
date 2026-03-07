@@ -20,7 +20,6 @@ function processUserInputs(amtL, amtS, amtAI) {
         if (totalAmount < 50) return null;
 
         // 1. DETERMINAR NÚMERO DE NIVELES (N)
-        // Calculamos cuántas órdenes de tamaño exponencial caben en el balance
         let n = 0;
         let cumulativeBase = 0;
         let orderBase = MIN_PURCHASE;
@@ -34,7 +33,6 @@ function processUserInputs(amtL, amtS, amtAI) {
         if (n < 3) return null; // Mínimo de seguridad para operar
 
         // 2. AJUSTAR EL PURCHASE (CALIBRE DINÁMICO)
-        // Si sobra dinero entre niveles, engrosamos el First Buy
         let purchase = MIN_PURCHASE;
         for (let p = MIN_PURCHASE; p <= 100; p += 0.1) {
             let testSum = 0; 
@@ -51,30 +49,26 @@ function processUserInputs(amtL, amtS, amtAI) {
         }
 
         // 3. CALCULAR EL INCREMENTO EXPONENCIAL (Price Step Inc)
-        // Resolvemos para que la suma de saltos exponenciales toque el 20%.
-        // El bot usa: Step_i = Start * (1 + Inc/100)^i
         let stepInc = 0;
         if (n > 1) {
-            // Fórmula de ajuste fino para la curva Math.pow del bot
-            // Buscamos el incremento que estire la malla hasta el Abrange
             let targetRatio = ABRANGE_TARGET / (START_PRICE_VAR * n);
-            // El factor 0.65 compensa la aceleración de la potencia en el bot
             stepInc = (Math.pow(targetRatio, 1 / (n * 0.65)) - 1) * 100;
         }
 
         // 4. RETORNO DE CONFIGURACIÓN ESTÁNDAR
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
-    	    purchaseUsdt: parseFloat(purchase.toFixed(2)),
-    	    price_var: START_PRICE_VAR,
-	    price_step_inc: parseFloat(stepInc.toFixed(1)),
-	    size_var: SIZE_VAR_BOT,
-	    profit_percent: 1.3,
-	    trailing_percent: 0.3,
-	    levels: n
+            purchaseUsdt: parseFloat(purchase.toFixed(2)),
+            price_var: START_PRICE_VAR,
+            price_step_inc: parseFloat(stepInc.toFixed(1)),
+            size_var: SIZE_VAR_BOT,
+            profit_percent: 1.3,
+            trailing_percent: 0.3,
+            levels: n
         };
     };
 
+    // Mantenemos el retorno original para no romper el Dashboard
     return {
         long: calculateScalpingGrid(l),
         short: calculateScalpingGrid(s),
@@ -82,4 +76,18 @@ function processUserInputs(amtL, amtS, amtAI) {
     };
 }
 
-module.exports = { processUserInputs };
+// PASO 2: Función independiente para el AI Bot
+function processAIInputs(amtAI) {
+    const amount = parseFloat(amtAI) || 0;
+    const minAI = 10.0; 
+    const finalAmount = amount < minAI ? minAI : amount;
+
+    return {
+        amountUsdt: parseFloat(finalAmount.toFixed(2))
+    };
+}
+
+module.exports = { 
+    processUserInputs, 
+    processAIInputs 
+};
