@@ -18,6 +18,9 @@ import { initPayments } from './modules/payments.js';
 import { initializeNotifications } from './modules/notifications.js'; // Asegúrate de que la ruta sea correcta
 import { askConfirmation } from './modules/confirmModal.js';
 
+// [RESTAURADO] Importación para mensajes flotantes (Toasts)
+import { displayMessage } from './modules/ui/notifications.js';
+
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
 
@@ -245,7 +248,12 @@ if (btnAi) {
 
                 // [RESTAURADO] Mensaje de notificación en el Log Bar
                 const msg = action === 'start' ? "AI Strategy Successfully Started" : "AI Strategy Stopped";
-                logStatus(msg, "success"); // <--- Esta es la línea que faltaba
+                logStatus(msg, "success");
+
+                // [RESTAURADO] Mensaje Toast inferior derecha
+                const toastMsg = action === 'start' ? "AI Core: Strategy Active" : "AI Core: Strategy Paused";
+                const toastType = action === 'start' ? 'success' : 'warning';
+                displayMessage(toastMsg, toastType);
 
                 aiBotUI.setRunningStatus(
                     result.isRunning, 
