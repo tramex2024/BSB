@@ -65,13 +65,13 @@ function processUserInputs(amtL, amtS, amtAI) {
         // 4. RETORNO DE CONFIGURACIÓN ESTÁNDAR
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
-            purchaseUsdt: parseFloat(purchase.toFixed(2)),
-            price_var: START_PRICE_VAR,
-            price_step_inc: parseFloat(stepInc.toFixed(1)), // El "estirador" de la malla
-            size_var: SIZE_VAR_BOT,                          // El "multiplicador" (150% real)
-            profit_percent: 1.3,                             // Salida con Trailing 0.3 (Neto 1%)
-            trailing_percent: 0.3,
-            levels: n
+    	    purchaseUsdt: parseFloat(purchase.toFixed(2)),
+    	    price_var: START_PRICE_VAR,
+	    price_step_inc: parseFloat(stepInc.toFixed(1)),
+	    size_var: SIZE_VAR_BOT,
+	    profit_percent: 1.3,
+	    trailing_percent: 0.3,
+	    levels: n
         };
     };
 

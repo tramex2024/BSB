@@ -56,11 +56,16 @@ async function updateBotConfig(req, res) {
 
                 update[`config.${s}.amountUsdt`] = d.amountUsdt;
 
-                // 🟢 SINCRONIZACIÓN DE BALANCE (MODO BLINDAJE)
-                // Si la estrategia no tiene posición abierta, actualizamos el balance operativo
-                if (s === 'long' && botState.lppc === 0) update.lbalance = d.amountUsdt;
-                if (s === 'short' && botState.sppc === 0) update.sbalance = d.amountUsdt;
-                if (s === 'ai' && botState.ailastEntryPrice === 0) update.aibalance = d.amountUsdt;
+                // 🟢 SINCRONIZACIÓN DE BALANCE (MODO BLINDAJE) POR ESTADO "STOPPED"
+	        if (s === 'long' && botState.lstate === 'STOPPED') {
+            update.lbalance = d.amountUsdt;
+	        }
+	        if (s === 'short' && botState.sstate === 'STOPPED') {
+            update.sbalance = d.amountUsdt;
+        	}
+	        if (s === 'ai' && botState.aistate === 'STOPPED') {
+            update.aibalance = d.amountUsdt;
+        	}
 
                 if (s !== 'ai') {
                     update[`config.${s}.purchaseUsdt`] = d.purchaseUsdt;
