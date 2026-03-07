@@ -92,8 +92,10 @@ function processAIInputs(amtAI) {
  * No recalcula, solo valida tipos y redondeos.
  */
 function processAdvancedInputs(data) {
-    if (!data) return null;
-
+    if (!data) {
+        console.error("❌ processAdvancedInputs: No se recibieron datos");
+        return null;
+    }
     return {
         amountUsdt: parseFloat(parseFloat(data.amountUsdt || 0).toFixed(2)),
         purchaseUsdt: parseFloat(parseFloat(data.purchaseUsdt || 6.0).toFixed(2)),

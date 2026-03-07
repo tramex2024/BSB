@@ -78,7 +78,19 @@ async function updateBotConfig(req, res) {
             
             // 1. Procesar LONG
             if (newConfig.long) {
-                const cleanLong = processAdvancedInputs(newConfig.long);
+                // Fusionamos: Si el campo no viene en newConfig, mantenemos el de botState
+                const dataLong = {
+                    amountUsdt: newConfig.long.amountUsdt !== undefined ? newConfig.long.amountUsdt : botState.config.long.amountUsdt,
+                    purchaseUsdt: newConfig.long.purchaseUsdt !== undefined ? newConfig.long.purchaseUsdt : botState.config.long.purchaseUsdt,
+                    price_var: newConfig.long.price_var !== undefined ? newConfig.long.price_var : botState.config.long.price_var,
+                    size_var: newConfig.long.size_var !== undefined ? newConfig.long.size_var : botState.config.long.size_var,
+                    profit_percent: newConfig.long.profit_percent !== undefined ? newConfig.long.profit_percent : botState.config.long.profit_percent,
+                    price_step_inc: newConfig.long.price_step_inc !== undefined ? newConfig.long.price_step_inc : botState.config.long.price_step_inc,
+                    stopAtCycle: newConfig.long.stopAtCycle !== undefined ? newConfig.long.stopAtCycle : botState.config.long.stopAtCycle
+                };
+
+                const cleanLong = processAdvancedInputs(dataLong);
+                
                 update['config.long.amountUsdt'] = cleanLong.amountUsdt;
                 update['config.long.purchaseUsdt'] = cleanLong.purchaseUsdt;
                 update['config.long.price_var'] = cleanLong.price_var;
@@ -87,15 +99,28 @@ async function updateBotConfig(req, res) {
                 update['config.long.price_step_inc'] = cleanLong.price_step_inc;
                 update['config.long.stopAtCycle'] = cleanLong.stopAtCycle;
 
-                // Sincronizar solo si este es el lado que se está editando (strategy) o si viene solo
+                // Sincronizar balance solo si el lado coincide y está STOPPED
                 if (botState.lstate === 'STOPPED' && (!strategy || strategy === 'long')) {
                     update.lbalance = cleanLong.amountUsdt;
+                    console.log(`✅ Balance Long sincronizado: ${cleanLong.amountUsdt}`);
                 }
             }
 
             // 2. Procesar SHORT
             if (newConfig.short) {
-                const cleanShort = processAdvancedInputs(newConfig.short);
+                // Fusionamos para no perder parámetros existentes
+                const dataShort = {
+                    amountUsdt: newConfig.short.amountUsdt !== undefined ? newConfig.short.amountUsdt : botState.config.short.amountUsdt,
+                    purchaseUsdt: newConfig.short.purchaseUsdt !== undefined ? newConfig.short.purchaseUsdt : botState.config.short.purchaseUsdt,
+                    price_var: newConfig.short.price_var !== undefined ? newConfig.short.price_var : botState.config.short.price_var,
+                    size_var: newConfig.short.size_var !== undefined ? newConfig.short.size_var : botState.config.short.size_var,
+                    profit_percent: newConfig.short.profit_percent !== undefined ? newConfig.short.profit_percent : botState.config.short.profit_percent,
+                    price_step_inc: newConfig.short.price_step_inc !== undefined ? newConfig.short.price_step_inc : botState.config.short.price_step_inc,
+                    stopAtCycle: newConfig.short.stopAtCycle !== undefined ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle
+                };
+
+                const cleanShort = processAdvancedInputs(dataShort);
+                
                 update['config.short.amountUsdt'] = cleanShort.amountUsdt;
                 update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
                 update['config.short.price_var'] = cleanShort.price_var;
@@ -106,6 +131,7 @@ async function updateBotConfig(req, res) {
 
                 if (botState.sstate === 'STOPPED' && (!strategy || strategy === 'short')) {
                     update.sbalance = cleanShort.amountUsdt;
+                    console.log(`✅ Balance Short sincronizado: ${cleanShort.amountUsdt}`);
                 }
             }
 
@@ -113,13 +139,17 @@ async function updateBotConfig(req, res) {
             if (newConfig.ai) {
                 const newAmt = secureMerge(newConfig.ai.amountUsdt, botState.config.ai?.amountUsdt || 0);
                 update['config.ai.amountUsdt'] = newAmt;
+                
                 if (botState.aistate === 'STOPPED' && (!strategy || strategy === 'ai')) {
                     update.aibalance = newAmt;
                 }
-                if (typeof newConfig.ai.stopAtCycle === 'boolean') update['config.ai.stopAtCycle'] = newConfig.ai.stopAtCycle;
+                if (typeof newConfig.ai.stopAtCycle === 'boolean') {
+                    update['config.ai.stopAtCycle'] = newConfig.ai.stopAtCycle;
+                }
             }
         }
 
+        // Ejecución de la actualización en DB
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
             { $set: update }, 
