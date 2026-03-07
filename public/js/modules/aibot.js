@@ -80,12 +80,9 @@ function setupAIControls() {
     if (aiInput) {
         aiInput.onchange = async () => {
             const val = parseFloat(aiInput.value);
-            // Validación de mínimo de exchange 6.0 USDT
-            if (isNaN(val) || val < 6.0) {
-                displayMessage("Mínimo requerido: 6.0 USDT", "error");
-                aiInput.value = 6.0;
-                return;
-            }
+            if (isNaN(val)) return; // Solo ignorar si no es un número
+            
+            // Enviamos al backend. Él decidirá si aplica el mínimo de 10.0 o lo que definimos en inputs.js
             await saveAIConfig({ amountUsdt: val });
         };
     }
@@ -95,7 +92,6 @@ function setupAIControls() {
             await saveAIConfig({ stopAtCycle: stopCycleCheck.checked });
         };
     }
-
     if (btnStartAi) {
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
@@ -144,41 +140,38 @@ function setupAIControls() {
  */
 async function saveAIConfig(aiPayload) {
     try {
-        // Blindaje: Combinamos la config actual para no borrar Long/Short en el servidor
-        const mergedConfig = {
-            ...currentBotState.config,
-            ai: {
-                ...currentBotState.config.ai,
-                ...aiPayload
-            }
-        };
-
         const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({ config: mergedConfig }) 
+            // Enviamos solo lo que cambió, el controlador ya sabe manejarlo
+            body: JSON.stringify(aiPayload) 
         });
         
         const data = await response.json();
+        
         if (data.success) {
-            // Sincronizamos el estado global con la respuesta validada del server
-            if (data.config) {
-                currentBotState.config.ai = data.config.ai || data.config;
+            // 🟢 CRÍTICO: El servidor nos devuelve el valor REAL procesado (ej. si mandamos 5 y el min era 10)
+            if (data.amountUsdt !== undefined) {
+                currentBotState.config.ai.amountUsdt = data.amountUsdt;
+                const aiInput = document.getElementById('ai-amount-usdt');
+                if (aiInput) aiInput.value = data.amountUsdt; // Sincronizamos el input visualmente
             }
+            
             if (data.virtualBalance !== undefined) {
                 currentBotState.aibalance = data.virtualBalance;
+                // Aquí podrías disparar una actualización de la UI del balance si tienes la función
             }
 
-            if (aiBotUI.addLogEntry) {
-                aiBotUI.addLogEntry(data.message || "AI Config Sincronizada", 0.5);
-            }
+            displayMessage(data.message || "IA Sincronizada", "success");
+        } else {
+            displayMessage(data.message || "Error al actualizar", "error");
         }
     } catch (error) {
         console.error("❌ Error saving AI config:", error);
-        displayMessage("Error al sincronizar configuración AI", "error");
+        displayMessage("Error de conexión", "error");
     }
 }
 
