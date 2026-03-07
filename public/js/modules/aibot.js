@@ -78,12 +78,11 @@ function setupAIControls() {
     const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
     const btnStartAi = document.getElementById('btn-start-ai');
 
+    // Manejo de Inputs (Esto se queda igual)
     if (aiInput) {
         aiInput.onchange = async () => {
             const val = parseFloat(aiInput.value);
-            if (isNaN(val)) return; // Solo ignorar si no es un número
-            
-            // Enviamos al backend. Él decidirá si aplica el mínimo de 10.0 o lo que definimos en inputs.js
+            if (isNaN(val)) return;
             await saveAIConfig({ amountUsdt: val });
         };
     }
@@ -93,52 +92,15 @@ function setupAIControls() {
             await saveAIConfig({ stopAtCycle: stopCycleCheck.checked });
         };
     }
+
+    // --- LIMPIEZA DEL BOTÓN ---
+    // Solo clonamos para asegurar que el botón esté "fresco" visualmente,
+    // pero NO le agregamos un addEventListener aquí. 
+    // La lógica de clic la manejará el main.js de forma global.
     if (btnStartAi) {
         const newBtn = btnStartAi.cloneNode(true);
         btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
-        
-        newBtn.addEventListener('click', async () => {
-            const isCurrentlyRunning = currentBotState.aistate === 'RUNNING';
-            const action = isCurrentlyRunning ? 'stop' : 'start';            
-
-            // --- EL FRENO DE SEGURIDAD ---
-	    // Llamamos a la confirmación antes de tocar el botón o la red
-	    const confirmado = await askConfirmation('AI', action);
-	    if (!confirmado) return; // Si cancela, salimos y el botón sigue activo
- 	   // -----------------------------
-
-            newBtn.disabled = true;
-            newBtn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
-
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ action })
-                });
-
-                const result = await response.json();
-                if (result.success) {
-                    currentBotState.aistate = result.aistate; 
-                    aiBotUI.setRunningStatus(
-                        result.aistate === 'RUNNING', 
-                        currentBotState.config.ai.stopAtCycle,
-                        result.historyCount || 0
-                    );
-                    displayMessage(`AI Core: ${action.toUpperCase()} exitoso`, "success");
-                } else {
-                    displayMessage(result.message || "Error en el motor AI", "error");
-                }
-            } catch (error) {
-                console.error("❌ AI Toggle Error:", error);
-                displayMessage("Error de conexión con el motor AI", "error");
-            } finally {
-                newBtn.disabled = false;
-            }
-        });
+        // NO agregamos el listener aquí.
     }
 }
 

@@ -16,6 +16,7 @@ import { initializeSettings } from './modules/settings.js';
 import { initializeProfile } from './modules/profile.js';
 import { initPayments } from './modules/payments.js';
 import { initializeNotifications } from './modules/notifications.js'; // Asegúrate de que la ruta sea correcta
+import { askConfirmation } from './modules/confirmModal.js';
 
 // [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
@@ -206,6 +207,10 @@ document.addEventListener('click', async (e) => {
         const isCurrentlyEnabled = currentBotState.aistate === 'RUNNING';
         const action = isCurrentlyEnabled ? 'stop' : 'start';
         
+        // 🛡️ EL FRENO GLOBAL AQUÍ:
+        const confirmado = await askConfirmation('AI', action);
+        if (!confirmado) return; 
+
         btnAi.disabled = true;
         const originalHTML = btnAi.innerHTML;
         btnAi.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
