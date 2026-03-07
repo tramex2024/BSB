@@ -22,7 +22,10 @@ async function updateBotConfig(req, res) {
     try {
         const userId = req.user.id;
         const { config: newConfig, applyShield, strategy } = req.body; 
-        
+
+        // --- AÑADE ESTA LÍNEA DE DEBUG AQUÍ ---
+        console.log("DEBUG PAYLOAD RECIBIDO:", JSON.stringify({ strategy, applyShield, newConfig }, null, 2));
+
         if (!newConfig) return res.status(400).json({ success: false, message: "No se proporcionaron datos." });
 
         let botState = await Autobot.findOne({ userId });
