@@ -22,10 +22,7 @@ async function updateBotConfig(req, res) {
     try {
         const userId = req.user.id;
         const { config: newConfig, applyShield, strategy } = req.body; 
-
-        // --- AÑADE ESTA LÍNEA DE DEBUG AQUÍ ---
-        console.log("DEBUG PAYLOAD RECIBIDO:", JSON.stringify({ strategy, applyShield, newConfig }, null, 2));
-
+        
         if (!newConfig) return res.status(400).json({ success: false, message: "No se proporcionaron datos." });
 
         let botState = await Autobot.findOne({ userId });
@@ -33,8 +30,6 @@ async function updateBotConfig(req, res) {
 
         const lastPrice = autobotLogic.getLastPrice() || 0;
 
-        // Mantenemos secureMerge por compatibilidad si fuera necesario, 
-        // aunque ahora processAdvancedInputs hará el trabajo pesado.
         const secureMerge = (newVal, oldVal) => {
             const parsed = parseFloat(newVal);
             if (newVal === undefined || newVal === null || newVal === "" || isNaN(parsed)) {
@@ -81,7 +76,7 @@ async function updateBotConfig(req, res) {
         } else {
             // --- MODO MANUAL (Pestañas Autobot/Aibot - Paso 3) ---
             
-            // Procesar LONG
+            // 1. Procesar LONG
             if (newConfig.long) {
                 const cleanLong = processAdvancedInputs(newConfig.long);
                 update['config.long.amountUsdt'] = cleanLong.amountUsdt;
@@ -92,10 +87,13 @@ async function updateBotConfig(req, res) {
                 update['config.long.price_step_inc'] = cleanLong.price_step_inc;
                 update['config.long.stopAtCycle'] = cleanLong.stopAtCycle;
 
-                if (botState.lstate === 'STOPPED') update.lbalance = cleanLong.amountUsdt;
+                // Sincronizar solo si este es el lado que se está editando (strategy) o si viene solo
+                if (botState.lstate === 'STOPPED' && (!strategy || strategy === 'long')) {
+                    update.lbalance = cleanLong.amountUsdt;
+                }
             }
 
-            // Procesar SHORT
+            // 2. Procesar SHORT
             if (newConfig.short) {
                 const cleanShort = processAdvancedInputs(newConfig.short);
                 update['config.short.amountUsdt'] = cleanShort.amountUsdt;
@@ -106,14 +104,18 @@ async function updateBotConfig(req, res) {
                 update['config.short.price_step_inc'] = cleanShort.price_step_inc;
                 update['config.short.stopAtCycle'] = cleanShort.stopAtCycle;
 
-                if (botState.sstate === 'STOPPED') update.sbalance = cleanShort.amountUsdt;
+                if (botState.sstate === 'STOPPED' && (!strategy || strategy === 'short')) {
+                    update.sbalance = cleanShort.amountUsdt;
+                }
             }
 
-            // Procesar AI (Mantenemos coherencia con el Paso 2)
+            // 3. Procesar AI
             if (newConfig.ai) {
                 const newAmt = secureMerge(newConfig.ai.amountUsdt, botState.config.ai?.amountUsdt || 0);
                 update['config.ai.amountUsdt'] = newAmt;
-                if (botState.aistate === 'STOPPED') update.aibalance = newAmt;
+                if (botState.aistate === 'STOPPED' && (!strategy || strategy === 'ai')) {
+                    update.aibalance = newAmt;
+                }
                 if (typeof newConfig.ai.stopAtCycle === 'boolean') update['config.ai.stopAtCycle'] = newConfig.ai.stopAtCycle;
             }
         }
