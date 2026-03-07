@@ -3,7 +3,7 @@
  * CONTROLADOR MAESTRO - VERSIÓN BLINDADA (Sincronización Total)
  */
 
-const aiEngine = require('../src/au/engines/AIEngine'); // Ruta corregida a la arquitectura AU
+const aiEngine = require('../src/ai/AIEngine'); // Ruta corregida a la arquitectura AU
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 const MarketSignal = require('../models/MarketSignal');
