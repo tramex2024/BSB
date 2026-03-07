@@ -56,33 +56,45 @@ function setupConfigListeners() {
         const eventType = el.type === 'checkbox' ? 'change' : 'input';
         
         el.addEventListener(eventType, () => {
-            // Marcamos edición activa para que el socket no interrumpa
             activeEdits[id] = Date.now();
 
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             
             configDebounceTimeout = setTimeout(async () => {
-                // Si el campo está vacío y no es checkbox, no enviamos basura a la DB
                 if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
 
-                // 🟢 PASO 3: DETECCIÓN DE ESTRATEGIA PARA EL BACKEND
-                // Esto permite que el controlador sepa a qué lado aplicarle la regla de balance
-                let side = null;
-                if (id.includes('l')) side = 'long';
-                if (id.includes('s')) side = 'short';
+                let side = id.includes('l') ? 'long' : 'short';
+                const s = side === 'long' ? 'l' : 's';
+
+                // 🟢 REPARACIÓN: Capturamos los valores REALES de la pantalla
+                const manualConfig = {
+                    [side]: {
+                        amountUsdt: parseFloat(document.getElementById(`auamount${s}-usdt`)?.value),
+                        purchaseUsdt: parseFloat(document.getElementById(`aupurchase${s}-usdt`)?.value),
+                        price_var: parseFloat(document.getElementById(`autrigger${s}`)?.value),
+                        size_var: parseFloat(document.getElementById(`auincrement${s}`)?.value),
+                        profit_percent: parseFloat(document.getElementById(`audecrement${s}`)?.value),
+                        price_step_inc: parseFloat(document.getElementById(`aupricestep-${s}`)?.value),
+                        stopAtCycle: document.getElementById(`au-stop-${side}-at-cycle`)?.checked
+                    }
+                };
 
                 try {
-                    // Sincronización inmediata con DB enviando el payload manual
-                    // Usamos la estructura que el apiService original acepta
-                    await sendConfigToBackend({
-                        config: currentBotState.config, // Enviamos el estado actual
-                        strategy: side,                // Identificamos el lado
-                        applyShield: false             // Es modo manual (Advanced)
+                    // Ahora enviamos 'manualConfig', que contiene el valor NUEVO del input
+                    const result = await sendConfigToBackend({
+                        config: manualConfig, 
+                        strategy: side,
+                        applyShield: false
                     });
+
+                    // Si el servidor responde éxito, actualizamos el estado global para que el socket no rebote
+                    if (result && result.success && result.data) {
+                        currentBotState.config = result.data;
+                    }
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
                 }
-            }, 800); 
+            }, 1000); // 1 segundo de calma para dejar de escribir
         });
     });
 }
