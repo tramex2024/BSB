@@ -62,14 +62,23 @@ function setupConfigListeners() {
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             
             configDebounceTimeout = setTimeout(async () => {
-                const val = el.type === 'checkbox' ? el.checked : el.value;
-
                 // Si el campo está vacío y no es checkbox, no enviamos basura a la DB
                 if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
 
+                // 🟢 PASO 3: DETECCIÓN DE ESTRATEGIA PARA EL BACKEND
+                // Esto permite que el controlador sepa a qué lado aplicarle la regla de balance
+                let side = null;
+                if (id.includes('l')) side = 'long';
+                if (id.includes('s')) side = 'short';
+
                 try {
-                    // Sincronización inmediata con DB
-                    await sendConfigToBackend();
+                    // Sincronización inmediata con DB enviando el payload manual
+                    // Usamos la estructura que el apiService original acepta
+                    await sendConfigToBackend({
+                        config: currentBotState.config, // Enviamos el estado actual
+                        strategy: side,                // Identificamos el lado
+                        applyShield: false             // Es modo manual (Advanced)
+                    });
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
                 }
@@ -79,7 +88,7 @@ function setupConfigListeners() {
 }
 
 /**
- * Inicializa la vista del Autobot
+ * Inicializa la vista del Autobot (Resto del código sin cambios para seguridad)
  */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
@@ -87,9 +96,6 @@ export async function initializeAutobotView() {
 
     setupConfigListeners();
 
-    /**
-     * Lógica de botones Start/Stop (Long & Short únicamente)
-     */
     const setupSideBtn = (id, sideName) => {
         const btn = document.getElementById(id);
         if (!btn) return;
@@ -107,7 +113,6 @@ export async function initializeAutobotView() {
                 const confirmed = await askConfirmation(sideName);
                 if (!confirmed) return;
             } else {
-                // Validamos montos mínimos SOLO al intentar iniciar
                 if (!validateSideInputs(sideName)) {
                     displayMessage(`Min $${MIN_USDT_AMOUNT} USDT required for ${sideName.toUpperCase()}`, 'error');
                     return;
