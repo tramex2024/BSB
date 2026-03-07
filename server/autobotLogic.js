@@ -1,21 +1,18 @@
 /**
  * BSB/server/autobotLogic.js
  * Motor de Ciclos Unificado - Versión Integra 2026 (Long, Short & IA)
- * FIX: Desencriptación de Memo y Logs de Auditoría
  */
 
 const Autobot = require('./models/Autobot');
 const User = require('./models/User'); 
 const bitmartService = require('./services/bitmartService');
 const orchestrator = require('./src/au/utils/cycleOrchestrator');
-
-// REPARACIÓN DE RUTA: Importamos 'decrypt' desde tu archivo encryption.js
 const { decrypt } = require('./utils/encryption'); 
 
 const { runLongStrategy } = require('./src/longStrategy');
 const { runShortStrategy } = require('./src/shortStrategy');
 const { runAIStrategy } = require('./src/aiStrategy'); 
-const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT, CLEAN_AI_ROOT } = require('./src/au/utils/cleanState');
 
 const { 
     calculateLongCoverage, 
@@ -31,9 +28,6 @@ const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/sta
 
 let isProcessing = false;
 
-/**
- * GESTIÓN DE CONFIGURACIÓN
- */
 async function updateConfig(userId, newConfig) {
     const currentPrice = orchestrator.getLastPrice();
     const currentBot = await Autobot.findOne({ userId }).lean();
@@ -70,9 +64,6 @@ async function updateConfig(userId, newConfig) {
     return bot;
 }
 
-/**
- * ENCENDIDO DE ESTRATEGIA
- */
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
     if (!botState) throw new Error("Bot no encontrado");
@@ -119,6 +110,8 @@ async function startSide(userId, side, config) {
         cleanData = CLEAN_SHORT_ROOT;
         stateField = 'sstate';
     } else if (side === 'ai') {
+        // CORRECCIÓN: Aseguramos limpieza de campos IA al arrancar
+        cleanData = CLEAN_AI_ROOT || {}; 
         stateField = 'aistate';
     }
     
@@ -136,15 +129,14 @@ async function startSide(userId, side, config) {
     return bot;
 }
 
-/**
- * APAGADO DE ESTRATEGIA
- */
 async function stopSide(userId, side) {
     const botState = await Autobot.findOne({ userId }).lean();
     if (!botState) throw new Error("Bot no encontrado");
 
     const stateField = side === 'long' ? 'lstate' : (side === 'short' ? 'sstate' : 'aistate'); 
     const newConfig = JSON.parse(JSON.stringify(botState.config));
+    
+    // CORRECCIÓN: Asegurar que el flag enabled cambie a false para la IA también
     if (newConfig[side]) newConfig[side].enabled = false;
 
     const update = {
@@ -159,9 +151,6 @@ async function stopSide(userId, side) {
     return bot;
 }
 
-/**
- * MOTOR PRINCIPAL (botCycle)
- */
 async function botCycle(priceFromWebSocket) {
     if (isProcessing) return;
 
@@ -184,110 +173,88 @@ async function botCycle(priceFromWebSocket) {
             const userId = botState.userId;
             const changeSet = {};
 
-            // 1. Obtención de Credenciales en Tiempo Real
             const user = await User.findById(userId).lean();
-            if (!user || !user.bitmartApiKey) {
-                orchestrator.log(`⚠️ Salto: Usuario ${userId} sin llaves API.`, 'error', userId);
-                continue;
+            if (!user || !user.bitmartApiKey) continue;
+
+            // Desencriptación
+            const decryptedApiKey = decrypt(user.bitmartApiKey).trim();
+            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
+            let decryptedMemo = "";
+            try {
+                decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
+            } catch (e) {
+                decryptedMemo = (user.bitmartApiMemo || "").trim();
             }
 
-            // --- LÓGICA DE DESENCRIPTACIÓN Y AUDITORÍA REPARADA ---
-
-// 1. DESENCRIPTAR API KEY (Aquí estaba el fallo, faltaba el decrypt)
-const decryptedApiKey = decrypt(user.bitmartApiKey).trim();
-
-// 2. DESENCRIPTAR SECRET
-const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
-
-// 3. DESENCRIPTAR MEMO
-let decryptedMemo = "";
-try {
-    decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
-} catch (e) {
-    decryptedMemo = (user.bitmartApiMemo || "").trim();
-}
-
-// LOG DE SEGURIDAD REVISADO
-const userCreds = {
-    apiKey: decryptedApiKey, // <--- AHORA PASAMOS LA KEY DESENCRIPTADA
-    apiMemo: decryptedMemo,
-    secretKey: decryptedSecret
-};
+            const userCreds = {
+                apiKey: decryptedApiKey,
+                apiMemo: decryptedMemo,
+                secretKey: decryptedSecret
+            };
 
             if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
             }
 
-            const dependencies = {
-                userId,
-                log: (msg, type) => orchestrator.log(msg, type, userId),
-                io: orchestrator.io || null,
-                bitmartService, Autobot, currentPrice,
-                availableUSDT: botState.lastAvailableUSDT, 
-                availableBTC: botState.lastAvailableBTC,
-                botState, config: botState.config,
-                lcycle: botState.lcycle || 0,
-                scycle: botState.scycle || 0,
-                aicycle: botState.aicycle || 0,
+const dependencies = {
+    userId,
+    log: (msg, type) => orchestrator.log(msg, type, userId),
+    io: orchestrator.io || null,
+    bitmartService, Autobot, currentPrice,
+    availableUSDT: botState.lastAvailableUSDT, 
+    availableBTC: botState.lastAvailableBTC,
+    botState, config: botState.config,
+    lcycle: botState.lcycle || 0,
+    scycle: botState.scycle || 0,
+    aicycle: botState.aicycle || 0,
+    
+    // CORRECCIÓN: Inyectamos el changeSet para que la IA sea persistente
+    changeSet, 
 
-                placeLongOrder: async (params) => {
-                    const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
-                    return await bitmartService.placeOrder(
-                        params.symbol, params.side, params.type, 
-                        params.notional || params.size, params.price || null, 
-                        userCreds, clientOrderId
-                    );
-                },
-                placeShortOrder: async (params) => {
-                    const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
-                    return await bitmartService.placeOrder(
-                        params.symbol, params.side, params.type, 
-                        params.notional || params.size, params.price || null, 
-                        userCreds, clientOrderId
-                    );
-                },
-                placeAIOrder: async (params) => {
-                    const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
-                    return await bitmartService.placeOrder(
-                        params.symbol, params.side, params.type, 
-                        params.notional || params.size, params.price || null, 
-                        userCreds, clientOrderId
-                    );
-                },
-                placeMarketOrder: async (params) => {
-                    return await bitmartService.placeMarketOrder(params, userCreds);
-                },
+    placeLongOrder: async (params) => {
+        const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
+        return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
+    },
+    placeShortOrder: async (params) => {
+        const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
+        return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
+    },
+    placeAIOrder: async (params) => {
+        const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
+        return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
+    },
+    placeMarketOrder: async (params) => {
+        return await bitmartService.placeMarketOrder(params, userCreds);
+    },
+    updateBotState: async (val, strat) => { 
+        const field = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
+        changeSet[field] = val; 
+    },
+    updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
+    updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
+    updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
+    updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
+    syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
+};
 
-                updateBotState: async (val, strat) => { 
-                    const field = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
-                    changeSet[field] = val; 
-                },
-                updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
-                updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
-                updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
-                updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
-                syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
-            };
-
-            // --- Monitoreo de Órdenes (Lógica de Consolidación) ---
+            // Monitoreo Long/Short (Sin cambios)
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-    if (botState.llastOrder.side === 'buy') {
-        // Agregamos 'userCreds' como último argumento
-        await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    } else {
-        await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    }
-}
+                if (botState.llastOrder.side === 'buy') {
+                    await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                } else {
+                    await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                }
+            }
 
-if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-    if (botState.slastOrder.side === 'sell') { 
-        await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    } else {
-        await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-    }
-}
+            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+                if (botState.slastOrder.side === 'sell') { 
+                    await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                } else {
+                    await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
+                }
+            }
 
-            // --- Cálculos Matemáticos de Cobertura y PNL ---
+            // Cálculos Long/Short (Sin cambios)
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
@@ -310,7 +277,7 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
                 changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
             }
 
-            // --- Ejecución de Estrategias ---
+            // Ejecución
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
             if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies); 
@@ -326,9 +293,6 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
     }
 }
 
-/**
- * MOTOR DE SINCRONIZACIÓN LENTA
- */
 function startGlobalSync() {
     setInterval(async () => {
         try {

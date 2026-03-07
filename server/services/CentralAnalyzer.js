@@ -90,7 +90,7 @@ class CentralAnalyzer {
                 ? stochArr[stochArr.length - 1] 
                 : { k: 0, d: 0 }; 
 
-            const signal = this._getSignal(curRSI21, prevRSI21);
+            const signal = this._getSignal(curRSI21, prevRSI21, curADX, curStoch, price);
 
            // --- 3. PERSISTENCIA EN MONGODB (Optimizado: Solo lo funcional) ---
 const updatedSignal = await MarketSignal.findOneAndUpdate(
@@ -140,22 +140,47 @@ if (this.io) {
     /**
      * Lógica de Señal Unificada (Basada en RSI 21 para mayor estabilidad)
      */
-    _getSignal(current, prev) {
-        if (!current || !prev) return { action: "HOLD", reason: "Initializing Data" };
+ _getSignal(current, prev, adx, stoch, price) {
+    // 1. REGLA DE ORO: Si no hay datos, esperamos.
+    if (!current || !prev || !stoch) return { action: "HOLD", reason: "Initializing" };
 
-        const diff = current - prev;
+    const diff = current - prev;
+    const isTrending = adx > 18; // Umbral bajo para no ser tan exigentes
+    const stochCrossBullish = stoch.k > stoch.d && stoch.k < 40;
+    const stochCrossBearish = stoch.k < stoch.d && stoch.k > 60;
 
-        // Lógica de Compra (Bullish)
-        if (prev <= 30 && current > 30) return { action: "BUY", reason: "RSI Oversold Breakout" };
-        if (prev < 35 && diff >= this.config.MOMENTUM_THRESHOLD) return { action: "BUY", reason: "High Bullish Momentum" };
-        
-        // Lógica de Venta (Bearish)
-        if (prev >= 70 && current < 70) return { action: "SELL", reason: "RSI Overbought Rejection" };
-        if (prev > 65 && diff <= -this.config.MOMENTUM_THRESHOLD) return { action: "SELL", reason: "High Bearish Momentum" };
-        
-        // Estado por defecto (Neutral)
-        return { action: "HOLD", reason: "Stable Flow" }; 
+    // --- ESTRATEGIA DE COMPRA (AGRESIVA PERO SEGURA) ---
+    
+    // A. Rebote en Sobreventa (Clásico)
+    if (prev <= 35 && current > 35) {
+        return { action: "BUY", reason: "RSI Recovery" };
     }
+
+    // B. Impulso de Continuación (Para no esperar 3 días)
+    // Si el RSI está subiendo con fuerza y el Estocástico cruza al alza
+    if (diff >= this.config.MOMENTUM_THRESHOLD && stochCrossBullish) {
+        return { action: "BUY", reason: "Combined Momentum (RSI+Stoch)" };
+    }
+
+    // C. Entrada por Volatilidad (Filtro ADX)
+    // Si el mercado empieza a despertar y el RSI no está en techo
+    if (isTrending && current < 55 && diff > 0.4) {
+        return { action: "BUY", reason: "Trend Starter (ADX)" };
+    }
+
+    // --- ESTRATEGIA DE VENTA (PROTECCIÓN DE MALLA) ---
+
+    // A. Rechazo en Sobrecompra
+    if (prev >= 68 && current < 68) {
+        return { action: "SELL", reason: "RSI Overbought Rejection" };
+    }
+
+    // B. Debilidad Extrema
+    if (diff <= -this.config.MOMENTUM_THRESHOLD && stochCrossBearish) {
+        return { action: "SELL", reason: "Momentum Loss" };
+    }
+
+    return { action: "HOLD", reason: "Market Flow" };
 }
 
 module.exports = new CentralAnalyzer();

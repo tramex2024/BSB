@@ -1,24 +1,24 @@
 /**
  * BSB/server/controllers/aiController.js
  * CONTROLADOR MAESTRO - VERSIÓN BLINDADA (Sincronización Total)
- * Gestión de Motor Neural en entorno simulado/independiente.
  */
 
-const aiEngine = require('../src/ai/AIEngine'); // Ruta corregida a la nueva estructura
+const aiEngine = require('../src/au/engines/AIEngine'); // Ruta corregida a la arquitectura AU
 const Order = require('../models/Order'); 
 const Autobot = require('../models/Autobot');
 const MarketSignal = require('../models/MarketSignal');
 
 /**
- * Obtiene el estado actual de la IA
+ * Obtiene el estado actual de la IA para el Dashboard
  */
 const getAIStatus = async (req, res) => {
     const userId = req.user.id;
     try {
         const bot = await Autobot.findOne({ userId }).lean();
-        
-        // Obtenemos el símbolo configurado para buscar sus velas específicas
-        const symbol = bot?.config?.symbol || 'BTC_USDT';
+        if (!bot) return res.status(404).json({ success: false, message: "Bot no encontrado" });
+
+        const symbol = bot.config?.symbol || 'BTC_USDT';
+        // Buscamos cuántas velas tenemos para informar al usuario sobre la precisión del análisis
         const marketData = await MarketSignal.findOne({ symbol }).select('history').lean();
         const candleCount = marketData?.history?.length || 0;
 
@@ -29,14 +29,15 @@ const getAIStatus = async (req, res) => {
 
         res.json({
             success: true,
-            isRunning: bot?.aistate === 'RUNNING',
-            aistate: bot?.aistate || 'STOPPED', 
-            virtualBalance: bot?.aibalance || 0,
+            isRunning: bot.aistate === 'RUNNING',
+            aistate: bot.aistate || 'STOPPED', 
+            virtualBalance: bot.aibalance || 0,
+            ailastEntryPrice: bot.ailastEntryPrice || 0,
             historyCount: candleCount, 
             recentHistory: recentTrades, 
             config: {
-                amountUsdt: bot?.config?.ai?.amountUsdt || 0,
-                stopAtCycle: bot?.config?.ai?.stopAtCycle || false
+                amountUsdt: bot.config?.ai?.amountUsdt || 0,
+                stopAtCycle: bot.config?.ai?.stopAtCycle || false
             }
         });
     } catch (error) {
@@ -45,7 +46,7 @@ const getAIStatus = async (req, res) => {
 };
 
 /**
- * Activa o desactiva el motor de IA con notificación inmediata al motor
+ * Activa o desactiva el motor de IA
  */
 const toggleAI = async (req, res) => {
     const userId = req.user.id;
@@ -58,37 +59,37 @@ const toggleAI = async (req, res) => {
         const newState = isStarting ? 'RUNNING' : 'STOPPED';
 
         // 1. Actualización en Base de Datos
-        // Al apagar, limpiamos precios de tracking (entry y highest) para resetear métricas visuales
+        // Al apagar, limpiamos precios de tracking (entry y highest)
+        const updateQuery = { 
+            aistate: newState,
+            'config.ai.enabled': isStarting
+        };
+
+        if (!isStarting) {
+            updateQuery.ailastEntryPrice = 0;
+            updateQuery.aihighestPrice = 0;
+        }
+
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId },
-            { 
-                $set: { 
-                    aistate: newState,
-                    'config.ai.enabled': isStarting,
-                    ...(!isStarting && { ailastEntryPrice: 0, aihighestPrice: 0 })
-                } 
-            },
+            { $set: updateQuery },
             { new: true, lean: true }
         );
 
         if (!updatedBot) return res.status(404).json({ success: false, message: "Bot no encontrado" });
 
-        // 2. SINCRONIZACIÓN MANUAL: 
-        // Forzamos un log inmediato a través del motor para que el WebSocket 
-        // emita el estado de "Analizando" antes de que el frontend dude.
+        // 2. Notificación Inmediata vía WebSocket
         if (isStarting && aiEngine && typeof aiEngine._log === 'function') {
-            aiEngine._log(userId, "Iniciando Motor Neural...", 0.01, true);
+            aiEngine._log(userId, "🚀 Iniciando Motor Neural...", 0.01, true);
+        } else {
+            aiEngine._broadcastStatus(userId, { aistate: 'STOPPED', virtualBalance: updatedBot.aibalance });
         }
-
-        const symbol = updatedBot.config?.symbol || 'BTC_USDT';
-        const marketData = await MarketSignal.findOne({ symbol }).select('history').lean();
 
         res.json({ 
             success: true, 
             isRunning: isStarting,
             aistate: newState,
             virtualBalance: updatedBot.aibalance,
-            historyCount: marketData?.history?.length || 0,
             message: isStarting ? "Motor Neural Activado" : "Motor Neural Detenido" 
         });
     } catch (error) {
@@ -97,12 +98,12 @@ const toggleAI = async (req, res) => {
 };
 
 /**
- * Cierre de Emergencia
+ * Cierre de Emergencia (Panic Sell Virtual)
  */
 const panicSell = async (req, res) => {
     const userId = req.user.id;
     try {
-        await Autobot.updateOne(
+        const bot = await Autobot.findOneAndUpdate(
             { userId }, 
             { 
                 $set: { 
@@ -111,12 +112,13 @@ const panicSell = async (req, res) => {
                     ailastEntryPrice: 0,
                     aihighestPrice: 0
                 } 
-            }
+            },
+            { new: true }
         );
         
-        // Notificamos al motor que se detenga inmediatamente si hay procesos pendientes
         if (aiEngine && typeof aiEngine._broadcastStatus === 'function') {
-            aiEngine._broadcastStatus(userId, { aistate: 'STOPPED' });
+            aiEngine._broadcastStatus(userId, { aistate: 'STOPPED', virtualBalance: bot.aibalance });
+            aiEngine._log(userId, "🚨 CIERRE DE EMERGENCIA EJECUTADO", 0, false);
         }
 
         res.json({
@@ -130,24 +132,7 @@ const panicSell = async (req, res) => {
 };
 
 /**
- * Historial completo
- */
-const getVirtualHistory = async (req, res) => {
-    const userId = req.user.id;
-    try {
-        const history = await Order.find({ userId, strategy: 'ai' })
-            .sort({ orderTime: -1 })
-            .limit(50)
-            .lean();
-            
-        res.json({ success: true, data: history });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-/**
- * Actualiza la configuración IA
+ * Actualiza la configuración de capital de la IA
  */
 const updateAIConfig = async (req, res) => {
     const userId = req.user.id;
@@ -155,16 +140,14 @@ const updateAIConfig = async (req, res) => {
     const updateFields = {};
 
     try {
+        const currentBot = await Autobot.findOne({ userId }).select('ailastEntryPrice aibalance aistate').lean();
+        
         if (amountUsdt !== undefined) {
             const val = parseFloat(amountUsdt);
             updateFields['config.ai.amountUsdt'] = val;
             
-            // Sincronizamos el balance virtual con la nueva inversión configurada
-            // solo si no hay una operación en curso (Sandbox safety)
-            const currentBot = await Autobot.findOne({ userId }).select('ailastEntryPrice aibalance').lean();
-            
-            // Lógica de Interés Compuesto: Si el balance es 0 o no existe, inicializamos.
-            // Si el balance ya existe pero no hay posición abierta, actualizamos al nuevo input.
+            // 🟢 PROTECCIÓN: Solo actualizamos el balance si NO hay operación abierta.
+            // Esto evita que el usuario inyecte o retire dinero "mágicamente" durante un trade.
             if (!currentBot?.ailastEntryPrice || currentBot.ailastEntryPrice === 0) {
                 updateFields.aibalance = val;
             }
@@ -196,6 +179,12 @@ module.exports = {
     getAIStatus, 
     toggleAI, 
     panicSell, 
-    getVirtualHistory, 
+    getVirtualHistory: async (req, res) => {
+        try {
+            const history = await Order.find({ userId: req.user.id, strategy: 'ai' })
+                .sort({ orderTime: -1 }).limit(50).lean();
+            res.json({ success: true, data: history });
+        } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+    }, 
     updateAIConfig 
 };

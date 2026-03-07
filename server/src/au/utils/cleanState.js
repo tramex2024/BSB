@@ -50,7 +50,24 @@ const CLEAN_SHORT_ROOT = {
     slep: 0           // Last Execution Price (Prevents duplicate order loops)
 };
 
+/**
+ * Reset values for AI strategy (Acronyms starting with 'ai')
+ * 🟢 AUDITORÍA: Asegura que la IA comience cada ciclo con el historial de precios limpio.
+ */
+const CLEAN_AI_ROOT = {
+    aippc: 0,            // AI Price Per Coin
+    aiac: 0,             // AI Accumulated Coins
+    ailastEntryPrice: 0, // Fundamental para el cálculo de PNL
+    aihighestPrice: 0,   // Resetea el pico del Trailing Stop
+    ailastOrder: null,   // Limpia registro de orden virtual/real previa
+    aistartTime: null,   // Reinicia reloj de duración de ciclo
+    aitprice: 0,         // Target price visual
+    aiprofit: 0,         // PNL del ciclo actual
+    ainorder: 0          // Contador de órdenes (usualmente 1 en IA)
+};
+
 module.exports = {
     CLEAN_LONG_ROOT,
-    CLEAN_SHORT_ROOT
+    CLEAN_SHORT_ROOT,
+    CLEAN_AI_ROOT // Exportación necesaria para autobotLogic.js
 };
