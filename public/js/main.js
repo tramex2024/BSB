@@ -242,15 +242,22 @@ if (btnAi) {
             if (result.success) {
                 currentBotState.aistate = result.aistate;
                 currentBotState.isRunning = result.isRunning;
-                
+
+                // [RESTAURADO] Mensaje de notificación en el Log Bar
+                const msg = action === 'start' ? "AI Strategy Successfully Started" : "AI Strategy Stopped";
+                logStatus(msg, "success"); // <--- Esta es la línea que faltaba
+
                 aiBotUI.setRunningStatus(
                     result.isRunning, 
                     currentBotState.config.ai.stopAtCycle,
                     result.historyCount || 0
                 );
+            } else {
+                logStatus(result.message || "Error toggling AI", "error");
             }
         } catch (error) {
             console.error("❌ Global AI Toggle Error:", error);
+            logStatus("Connection error with AI Engine", "error");
             btnAi.innerHTML = originalHTML;
         } finally {
             btnAi.disabled = false;
