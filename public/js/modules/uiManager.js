@@ -174,6 +174,10 @@ function updatePulseBars(id, value) {
 /**
  * Gestiona el estado de los botones (ETAPA 1: PROTECCIÓN DE RESETEO)
  */
+/**
+ * Gestiona el estado de los botones (ETAPA 1: PROTECCIÓN DE RESETEO)
+ * Actualizado con guardas para el flujo de confirmación.
+ */
 export function updateControlsState(state) {
     if (!state) return;
     
@@ -185,19 +189,30 @@ export function updateControlsState(state) {
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
 
+    // --- ESTRATEGIA LONG ---
     if (lState !== undefined) {
         updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     }
     
+    // --- ESTRATEGIA SHORT ---
     if (sState !== undefined) {
         updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     }
     
+    // --- AI ENGINE CORE ---
     if (aiState !== undefined || state.isRunning !== undefined) {
+        const btnAi = document.getElementById('btn-start-ai');
         const actualAiStatus = aiState || (state.isRunning ? 'RUNNING' : 'STOPPED');
-        updateButtonState('btn-start-ai', actualAiStatus, 'AI', aiInputs); 
-        updateButtonState('austartai-btn', actualAiStatus, 'AI', aiInputs); 
+
+        // [GUARDIA DE CONFIRMACIÓN] 
+        // Si el botón está deshabilitado, significa que main.js está esperando el modal o la API.
+        // No permitimos que las actualizaciones de fondo (Socket) cambien el texto/estado aún.
+        if (!btnAi || !btnAi.disabled) {
+            updateButtonState('btn-start-ai', actualAiStatus, 'AI', aiInputs); 
+            // updateButtonState('austartai-btn', actualAiStatus, 'AI', aiInputs); 
+        }
         
+        // Gestión del mensaje del motor (Neural Core)
         const engineMsg = document.getElementById('ai-engine-msg');
         if (engineMsg) {
             if (actualAiStatus === 'RUNNING') {

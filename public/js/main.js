@@ -203,23 +203,27 @@ document.addEventListener('click', async (e) => {
     // Esto busca el botón aunque hagas clic en el icono de adentro
     const btnAi = e.target.closest('#btn-start-ai'); 
     
-    if (btnAi) {
-        e.preventDefault(); // Evitamos cualquier acción por defecto
-        e.stopPropagation(); // Evitamos que otros scripts interfieran
-        
-        if (btnAi.disabled) return;
+if (btnAi) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (btnAi.disabled) return;
 
-        const isRunning = currentBotState.aistate === 'RUNNING';
-        const action = isRunning ? 'stop' : 'start';
+    const isRunning = currentBotState.aistate === 'RUNNING';
+    const action = isRunning ? 'stop' : 'start';
 
-        console.log("🛠️ Intentando abrir modal para:", action); // DEBUG
+    // [MEJORA] Feedback visual instantáneo antes del modal
+    btnAi.classList.add('opacity-50', 'cursor-wait');
 
-        const confirmado = await askConfirmation('AI', action);
-        if (!confirmado) {
-             console.log("❌ Acción cancelada por usuario");
-             return;
-        }
+    const confirmado = await askConfirmation('AI', action);
+    
+    // [MEJORA] Restauramos el estado si cancela o tras confirmar
+    btnAi.classList.remove('opacity-50', 'cursor-wait');
 
+    if (!confirmado) {
+         console.log("❌ Acción cancelada por usuario");
+         return;
+    }
         btnAi.disabled = true;
         const originalHTML = btnAi.innerHTML;
         btnAi.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
