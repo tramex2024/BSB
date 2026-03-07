@@ -182,5 +182,6 @@ if (this.io) {
 
     return { action: "HOLD", reason: "Market Flow" };
 }
+}
 
 module.exports = new CentralAnalyzer();
