@@ -4,6 +4,7 @@ import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { fetchOrders } from './orders.js';
 import { displayMessage } from './uiManager.js';
+import { askConfirmation } from './confirmModal.js'
 
 /**
  * Gestiona los clics en las pestañas de filtros dentro de AIBOT
@@ -98,8 +99,14 @@ function setupAIControls() {
         
         newBtn.addEventListener('click', async () => {
             const isCurrentlyRunning = currentBotState.aistate === 'RUNNING';
-            const action = isCurrentlyRunning ? 'stop' : 'start';
-            
+            const action = isCurrentlyRunning ? 'stop' : 'start';            
+
+            // --- EL FRENO DE SEGURIDAD ---
+	    // Llamamos a la confirmación antes de tocar el botón o la red
+	    const confirmado = await askConfirmation('AI', action);
+	    if (!confirmado) return; // Si cancela, salimos y el botón sigue activo
+ 	   // -----------------------------
+
             newBtn.disabled = true;
             newBtn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
 
