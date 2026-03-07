@@ -143,48 +143,27 @@ export function getBotConfiguration() {
  * Sincroniza la configuración del Autobot (Dashboard o Advanced)
  */
 export async function sendConfigToBackend(manualPayload = null) {
-    let payload = manualPayload;
-
-    // Si no hay manualPayload, es un cambio manual en la pestaña Advanced (Autobot)
-    if (!payload) {
-        const config = getBotConfiguration();
-        payload = { config };
-
-        // 🟢 DETECCIÓN DE ESTRATEGIA (Para sincronización de balance)
-        // Buscamos qué elemento tiene el foco o cuál fue el último modificado
-        const activeEl = document.activeElement;
-        if (activeEl && activeEl.id) {
-            if (activeEl.id.startsWith('l')) {
-                payload.strategy = 'long';
-            } else if (activeEl.id.startsWith('s')) {
-                payload.strategy = 'short';
-            }
-        }
-    }
+    // Si manualPayload existe (viene del Dashboard con applyShield), lo usamos.
+    // Si no, usamos getBotConfiguration() como siempre.
+    const payload = manualPayload || { config: getBotConfiguration() };
     
     isSavingConfig = true; 
     
     try {
         const data = await privateFetch('/api/autobot/update-config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload) 
+            body: JSON.stringify(payload) // Enviamos el payload completo (con o sin applyShield)
         });
 
         if (data && data.success) {
-            console.log(`💾 Configuración ${payload.strategy || ''} sincronizada en DB`);
-            
-            // Si el servidor nos devuelve la config procesada, actualizamos el estado global
-            if (data.data) {
-                currentBotState.config = data.data;
-            }
+            console.log("💾 Configuración sincronizada en DB");
         }
         return data;
     } catch (err) {
         console.error("❌ Error al sincronizar configuración:", err);
         return { success: false };
     } finally {
-        // Bloqueo de seguridad para evitar spam de peticiones
+        // Reducimos el tiempo de bloqueo para que la UI sea más responsiva
         setTimeout(() => { isSavingConfig = false; }, 500);
     }
 }
