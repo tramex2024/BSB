@@ -200,16 +200,25 @@ function syncAIElementsInDOM() {
 
 // --- GLOBAL EVENT DELEGATION (Lógica de Botones AI) ---
 document.addEventListener('click', async (e) => {
-    const btnAi = e.target.closest('#btn-start-ai');
+    // Esto busca el botón aunque hagas clic en el icono de adentro
+    const btnAi = e.target.closest('#btn-start-ai'); 
+    
     if (btnAi) {
+        e.preventDefault(); // Evitamos cualquier acción por defecto
+        e.stopPropagation(); // Evitamos que otros scripts interfieran
+        
         if (btnAi.disabled) return;
 
-        const isCurrentlyEnabled = currentBotState.aistate === 'RUNNING';
-        const action = isCurrentlyEnabled ? 'stop' : 'start';
-        
-        // 🛡️ EL FRENO GLOBAL AQUÍ:
+        const isRunning = currentBotState.aistate === 'RUNNING';
+        const action = isRunning ? 'stop' : 'start';
+
+        console.log("🛠️ Intentando abrir modal para:", action); // DEBUG
+
         const confirmado = await askConfirmation('AI', action);
-        if (!confirmado) return; 
+        if (!confirmado) {
+             console.log("❌ Acción cancelada por usuario");
+             return;
+        }
 
         btnAi.disabled = true;
         const originalHTML = btnAi.innerHTML;

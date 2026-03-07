@@ -52,9 +52,15 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const newText = isBusy ? `STOP ${suffix}` : `START ${suffix}`;
     
     // Actualización Atómica de Texto
-    if (btn.textContent !== newText) {
-        btn.textContent = newText;
-    }
+    const spanText = btn.querySelector('.btn-text') || btn; 
+if (spanText.innerText !== newText) {
+    // Si el botón tiene un icono, no queremos borrarlo con textContent
+    const icon = btn.querySelector('i');
+    btn.innerHTML = ''; // Limpiamos
+    if (icon) btn.appendChild(icon); // Mantenemos el icono
+    const textNode = document.createTextNode(` ${newText}`);
+    btn.appendChild(textNode);
+}
 
     // Actualización Atómica de Clases (Sin parpadeo)
     if (isBusy) {
