@@ -5,7 +5,7 @@
 
 const Autobot = require('../models/Autobot'); 
 const autobotLogic = require('../autobotLogic'); 
-const { processUserInputs } = require('../services/inputs');
+const { processUserInputs, processAdvancedInputs } = require('../services/inputs');
 
 async function getBotConfig(req, res) {
     try {
@@ -30,6 +30,8 @@ async function updateBotConfig(req, res) {
 
         const lastPrice = autobotLogic.getLastPrice() || 0;
 
+        // Mantenemos secureMerge por compatibilidad si fuera necesario, 
+        // aunque ahora processAdvancedInputs hará el trabajo pesado.
         const secureMerge = (newVal, oldVal) => {
             const parsed = parseFloat(newVal);
             if (newVal === undefined || newVal === null || newVal === "" || isNaN(parsed)) {
@@ -40,7 +42,7 @@ async function updateBotConfig(req, res) {
 
         let update = {};
 
-        // --- LÓGICA DE BLINDAJE (PLAN B / AUTO-CONFIG) ---
+        // --- LÓGICA DE BLINDAJE (Dashboard / Paso 1) ---
         if (applyShield && strategy) {
             const amt = parseFloat(newConfig[strategy]?.amountUsdt);
             
@@ -56,16 +58,10 @@ async function updateBotConfig(req, res) {
 
                 update[`config.${s}.amountUsdt`] = d.amountUsdt;
 
-                // 🟢 SINCRONIZACIÓN DE BALANCE (MODO BLINDAJE) POR ESTADO "STOPPED"
-	        if (s === 'long' && botState.lstate === 'STOPPED') {
-            update.lbalance = d.amountUsdt;
-	        }
-	        if (s === 'short' && botState.sstate === 'STOPPED') {
-            update.sbalance = d.amountUsdt;
-        	}
-	        if (s === 'ai' && botState.aistate === 'STOPPED') {
-            update.aibalance = d.amountUsdt;
-        	}
+                // 🟢 SINCRONIZACIÓN DE BALANCE POR ESTADO "STOPPED"
+                if (s === 'long' && botState.lstate === 'STOPPED') update.lbalance = d.amountUsdt;
+                if (s === 'short' && botState.sstate === 'STOPPED') update.sbalance = d.amountUsdt;
+                if (s === 'ai' && botState.aistate === 'STOPPED') update.aibalance = d.amountUsdt;
 
                 if (s !== 'ai') {
                     update[`config.${s}.purchaseUsdt`] = d.purchaseUsdt;
@@ -80,41 +76,41 @@ async function updateBotConfig(req, res) {
                     : botState.config[s].stopAtCycle;
             }
         } else {
-            // --- MODO MANUAL (Pestañas Autobot/Aibot) ---
+            // --- MODO MANUAL (Pestañas Autobot/Aibot - Paso 3) ---
+            
+            // Procesar LONG
             if (newConfig.long) {
-                const newAmt = secureMerge(newConfig.long.amountUsdt, botState.config.long.amountUsdt);
-                update['config.long.amountUsdt'] = newAmt;
-                // 🟢 Sincronizar lbalance si no hay trade activo
-                if (botState.lppc === 0) update.lbalance = newAmt;
+                const cleanLong = processAdvancedInputs(newConfig.long);
+                update['config.long.amountUsdt'] = cleanLong.amountUsdt;
+                update['config.long.purchaseUsdt'] = cleanLong.purchaseUsdt;
+                update['config.long.price_var'] = cleanLong.price_var;
+                update['config.long.size_var'] = cleanLong.size_var;
+                update['config.long.profit_percent'] = cleanLong.profit_percent;
+                update['config.long.price_step_inc'] = cleanLong.price_step_inc;
+                update['config.long.stopAtCycle'] = cleanLong.stopAtCycle;
 
-                update['config.long.purchaseUsdt'] = secureMerge(newConfig.long.purchaseUsdt, botState.config.long.purchaseUsdt);
-                update['config.long.price_var'] = secureMerge(newConfig.long.price_var, botState.config.long.price_var);
-                update['config.long.size_var'] = secureMerge(newConfig.long.size_var, botState.config.long.size_var);
-                update['config.long.profit_percent'] = secureMerge(newConfig.long.profit_percent, botState.config.long.profit_percent);
-                update['config.long.price_step_inc'] = secureMerge(newConfig.long.price_step_inc, botState.config.long.price_step_inc);
-                if (typeof newConfig.long.stopAtCycle === 'boolean') update['config.long.stopAtCycle'] = newConfig.long.stopAtCycle;
+                if (botState.lstate === 'STOPPED') update.lbalance = cleanLong.amountUsdt;
             }
 
+            // Procesar SHORT
             if (newConfig.short) {
-                const newAmt = secureMerge(newConfig.short.amountUsdt, botState.config.short.amountUsdt);
-                update['config.short.amountUsdt'] = newAmt;
-                // 🟢 Sincronizar sbalance si no hay trade activo
-                if (botState.sppc === 0) update.sbalance = newAmt;
+                const cleanShort = processAdvancedInputs(newConfig.short);
+                update['config.short.amountUsdt'] = cleanShort.amountUsdt;
+                update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
+                update['config.short.price_var'] = cleanShort.price_var;
+                update['config.short.size_var'] = cleanShort.size_var;
+                update['config.short.profit_percent'] = cleanShort.profit_percent;
+                update['config.short.price_step_inc'] = cleanShort.price_step_inc;
+                update['config.short.stopAtCycle'] = cleanShort.stopAtCycle;
 
-                update['config.short.purchaseUsdt'] = secureMerge(newConfig.short.purchaseUsdt, botState.config.short.purchaseUsdt);
-                update['config.short.price_var'] = secureMerge(newConfig.short.price_var, botState.config.short.price_var);
-                update['config.short.size_var'] = secureMerge(newConfig.short.size_var, botState.config.short.size_var);
-                update['config.short.profit_percent'] = secureMerge(newConfig.short.profit_percent, botState.config.short.profit_percent);
-                update['config.short.price_step_inc'] = secureMerge(newConfig.short.price_step_inc, botState.config.short.price_step_inc);
-                if (typeof newConfig.short.stopAtCycle === 'boolean') update['config.short.stopAtCycle'] = newConfig.short.stopAtCycle;
+                if (botState.sstate === 'STOPPED') update.sbalance = cleanShort.amountUsdt;
             }
 
+            // Procesar AI (Mantenemos coherencia con el Paso 2)
             if (newConfig.ai) {
                 const newAmt = secureMerge(newConfig.ai.amountUsdt, botState.config.ai?.amountUsdt || 0);
                 update['config.ai.amountUsdt'] = newAmt;
-                // 🟢 Sincronizar aibalance si no hay trade activo
-                if (botState.ailastEntryPrice === 0) update.aibalance = newAmt;
-
+                if (botState.aistate === 'STOPPED') update.aibalance = newAmt;
                 if (typeof newConfig.ai.stopAtCycle === 'boolean') update['config.ai.stopAtCycle'] = newConfig.ai.stopAtCycle;
             }
         }

@@ -79,7 +79,7 @@ function processUserInputs(amtL, amtS, amtAI) {
 // PASO 2: Función independiente para el AI Bot
 function processAIInputs(amtAI) {
     const amount = parseFloat(amtAI) || 0;
-    const minAI = 10.0; 
+    const minAI = 20.0; 
     const finalAmount = amount < minAI ? minAI : amount;
 
     return {
@@ -87,7 +87,26 @@ function processAIInputs(amtAI) {
     };
 }
 
+/**
+ * Procesa y limpia los inputs manuales del modo Advanced (Autobot)
+ * No recalcula, solo valida tipos y redondeos.
+ */
+function processAdvancedInputs(data) {
+    if (!data) return null;
+
+    return {
+        amountUsdt: parseFloat(parseFloat(data.amountUsdt || 0).toFixed(2)),
+        purchaseUsdt: parseFloat(parseFloat(data.purchaseUsdt || 6.0).toFixed(2)),
+        price_var: parseFloat(parseFloat(data.price_var || 0.1).toFixed(2)),
+        size_var: parseFloat(parseFloat(data.size_var || 1.0).toFixed(2)),
+        profit_percent: parseFloat(parseFloat(data.profit_percent || 0.1).toFixed(2)),
+        price_step_inc: parseFloat(parseFloat(data.price_step_inc || 0).toFixed(2)),
+        stopAtCycle: !!data.stopAtCycle
+    };
+}
+
 module.exports = { 
-    processUserInputs, 
+    processUserInputs,
+    processAdvancedInputs, 
     processAIInputs 
 };
