@@ -1,3 +1,8 @@
+/**
+ * BSB/server/controllers/configController.js
+ * CONTROLADOR MAESTRO - VERSIÓN BLINDADA (Sincronización de Balance y Configuración)
+ */
+
 const Autobot = require('../models/Autobot'); 
 const autobotLogic = require('../autobotLogic'); 
 const { processUserInputs } = require('../services/inputs');
@@ -35,12 +40,11 @@ async function updateBotConfig(req, res) {
 
         let update = {};
 
-        // --- LÓGICA DE BLINDAJE (PLAN B) ---
+        // --- LÓGICA DE BLINDAJE (PLAN B / AUTO-CONFIG) ---
         if (applyShield && strategy) {
             const amt = parseFloat(newConfig[strategy]?.amountUsdt);
             
             if (!isNaN(amt)) {
-                // Obtenemos el cálculo de los 6 parámetros desde el servicio
                 const fullShield = processUserInputs(
                     strategy === 'long' ? amt : botState.config.long.amountUsdt,
                     strategy === 'short' ? amt : botState.config.short.amountUsdt,
@@ -48,20 +52,24 @@ async function updateBotConfig(req, res) {
                 );
 
                 const s = strategy; 
-                const d = fullShield[s]; // Datos calculados (blindaje)
+                const d = fullShield[s]; 
 
                 update[`config.${s}.amountUsdt`] = d.amountUsdt;
 
-                // Solo aplicamos los 6 parámetros si es Long o Short
+                // 🟢 SINCRONIZACIÓN DE BALANCE (MODO BLINDAJE)
+                // Si la estrategia no tiene posición abierta, actualizamos el balance operativo
+                if (s === 'long' && botState.lppc === 0) update.lbalance = d.amountUsdt;
+                if (s === 'short' && botState.sppc === 0) update.sbalance = d.amountUsdt;
+                if (s === 'ai' && botState.ailastEntryPrice === 0) update.aibalance = d.amountUsdt;
+
                 if (s !== 'ai') {
                     update[`config.${s}.purchaseUsdt`] = d.purchaseUsdt;
                     update[`config.${s}.price_var`] = d.price_var;
                     update[`config.${s}.size_var`] = d.size_var;
                     update[`config.${s}.price_step_inc`] = d.price_step_inc;
-                    update[`config.${s}.profit_percent`] = d.profit_percent; // El 6to parámetro
+                    update[`config.${s}.profit_percent`] = d.profit_percent;
                 }
 
-                // Mantener estados booleanos que no se calculan por blindaje
                 update[`config.${s}.stopAtCycle`] = typeof newConfig[s]?.stopAtCycle === 'boolean' 
                     ? newConfig[s].stopAtCycle 
                     : botState.config[s].stopAtCycle;
@@ -69,7 +77,11 @@ async function updateBotConfig(req, res) {
         } else {
             // --- MODO MANUAL (Pestañas Autobot/Aibot) ---
             if (newConfig.long) {
-                update['config.long.amountUsdt'] = secureMerge(newConfig.long.amountUsdt, botState.config.long.amountUsdt);
+                const newAmt = secureMerge(newConfig.long.amountUsdt, botState.config.long.amountUsdt);
+                update['config.long.amountUsdt'] = newAmt;
+                // 🟢 Sincronizar lbalance si no hay trade activo
+                if (botState.lppc === 0) update.lbalance = newAmt;
+
                 update['config.long.purchaseUsdt'] = secureMerge(newConfig.long.purchaseUsdt, botState.config.long.purchaseUsdt);
                 update['config.long.price_var'] = secureMerge(newConfig.long.price_var, botState.config.long.price_var);
                 update['config.long.size_var'] = secureMerge(newConfig.long.size_var, botState.config.long.size_var);
@@ -77,8 +89,13 @@ async function updateBotConfig(req, res) {
                 update['config.long.price_step_inc'] = secureMerge(newConfig.long.price_step_inc, botState.config.long.price_step_inc);
                 if (typeof newConfig.long.stopAtCycle === 'boolean') update['config.long.stopAtCycle'] = newConfig.long.stopAtCycle;
             }
+
             if (newConfig.short) {
-                update['config.short.amountUsdt'] = secureMerge(newConfig.short.amountUsdt, botState.config.short.amountUsdt);
+                const newAmt = secureMerge(newConfig.short.amountUsdt, botState.config.short.amountUsdt);
+                update['config.short.amountUsdt'] = newAmt;
+                // 🟢 Sincronizar sbalance si no hay trade activo
+                if (botState.sppc === 0) update.sbalance = newAmt;
+
                 update['config.short.purchaseUsdt'] = secureMerge(newConfig.short.purchaseUsdt, botState.config.short.purchaseUsdt);
                 update['config.short.price_var'] = secureMerge(newConfig.short.price_var, botState.config.short.price_var);
                 update['config.short.size_var'] = secureMerge(newConfig.short.size_var, botState.config.short.size_var);
@@ -86,8 +103,13 @@ async function updateBotConfig(req, res) {
                 update['config.short.price_step_inc'] = secureMerge(newConfig.short.price_step_inc, botState.config.short.price_step_inc);
                 if (typeof newConfig.short.stopAtCycle === 'boolean') update['config.short.stopAtCycle'] = newConfig.short.stopAtCycle;
             }
+
             if (newConfig.ai) {
-                update['config.ai.amountUsdt'] = secureMerge(newConfig.ai.amountUsdt, botState.config.ai?.amountUsdt || 0);
+                const newAmt = secureMerge(newConfig.ai.amountUsdt, botState.config.ai?.amountUsdt || 0);
+                update['config.ai.amountUsdt'] = newAmt;
+                // 🟢 Sincronizar aibalance si no hay trade activo
+                if (botState.ailastEntryPrice === 0) update.aibalance = newAmt;
+
                 if (typeof newConfig.ai.stopAtCycle === 'boolean') update['config.ai.stopAtCycle'] = newConfig.ai.stopAtCycle;
             }
         }
@@ -104,7 +126,7 @@ async function updateBotConfig(req, res) {
 
         return res.json({ 
             success: true, 
-            message: applyShield ? "Blindaje automático aplicado." : "Configuración manual guardada.",
+            message: applyShield ? "Blindaje aplicado y balances sincronizados." : "Configuración y balances actualizados.",
             data: updatedBot.config 
         });
 
