@@ -13,7 +13,7 @@ let lastPrice = 0;
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
     'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',        
+    'BUYING': '#60a5fa',         
     'SELLING': '#fbbf24',      
     'PAUSED': '#fb923c',    
 };
@@ -40,32 +40,30 @@ export async function updateBotUI(state) {
         // ESTRATEGIA LONG
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
-        'aulcycle': 'lcycle',          
-        'aulsprice': 'lpc',            
+        'aulcycle': 'lcycle',           
+        'aulsprice': 'lpc',             
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        //'lnorder-val': 'lnorder',
-        'aulnorder': 'lnorder'     
+        'aulnorder': 'lnorder', // <--- Coma agregada aquí para evitar el SyntaxError
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
-        'auscycle': 'scycle',          
-        'ausbprice': 'spc',            
+        'auscycle': 'scycle',           
+        'ausbprice': 'spc',             
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        //'snorder-val': 'snorder',
-        'ausnorder': 'snorder'
+        'ausnorder': 'snorder', // <--- Coma agregada aquí por seguridad
 
         // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
-        'ai-adx-val': 'lai',                
-        'ai-stoch-val': 'lac',              
+        'ai-adx-val': 'lai',                 
+        'ai-stoch-val': 'lac',               
         'aubot-aistate': 'aistate', 
-        'ai-trend-label': 'trend',     // El badge que dice NEUTRAL/BULLISH
-        'ai-engine-msg': 'aiMessage',  // El mensaje de "Neural Core Analyzing..."
+        'ai-trend-label': 'trend',     
+        'ai-engine-msg': 'aiMessage',  
 
         // ESTADOS DE TEXTO
         'aubot-lstate': 'lstate',
@@ -171,7 +169,7 @@ export function updateControlsState(state) {
 
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['ai-amount-usdt']; // Simplificado para coincidir con tu HTML
+    const aiInputs = ['ai-amount-usdt']; 
 
     if (lState !== undefined) {
         updateButtonState('austartl-btn', lState, 'LONG', longInputs);
@@ -182,7 +180,6 @@ export function updateControlsState(state) {
     }
     
     if (aiState !== undefined || state.isRunning !== undefined) {
-        // Buscamos ambos posibles IDs por seguridad
         const btnAi = document.getElementById('btn-start-ai') || document.getElementById('austartai-btn');
         const actualAiStatus = aiState || (state.isRunning ? 'RUNNING' : 'STOPPED');
 
