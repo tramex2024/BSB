@@ -188,9 +188,10 @@ function syncAIElementsInDOM() {
 
 // --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) ---
 document.addEventListener('click', async (e) => {
+    // Capturamos el botón sin importar si es el de Start o Stop (usando selector parcial)
     const btnAi = e.target.closest('#btn-start-ai');
-    const btnLong = e.target.closest('#austartl-btn');
-    const btnShort = e.target.closest('#austarts-btn');
+    const btnLong = e.target.closest('[id*="austartl-btn"]'); 
+    const btnShort = e.target.closest('[id*="austarts-btn"]');
 
     if (!btnAi && !btnLong && !btnShort) return;
 
@@ -199,13 +200,12 @@ document.addEventListener('click', async (e) => {
 
     let btn, side, stateKey, endpoint;
 
-    // Ajustamos los endpoints exactos que tu servidor reconoce
     if (btnAi) {
         btn = btnAi; side = 'AI'; stateKey = 'aistate'; endpoint = '/api/ai/toggle';
     } else if (btnLong) {
-        btn = btnLong; side = 'LONG'; stateKey = 'lstate'; endpoint = '/api/bot/long/toggle'; // Ruta corregida
+        btn = btnLong; side = 'LONG'; stateKey = 'lstate'; endpoint = '/api/bot/toggle';
     } else if (btnShort) {
-        btn = btnShort; side = 'SHORT'; stateKey = 'sstate'; endpoint = '/api/bot/short/toggle'; // Ruta corregida
+        btn = btnShort; side = 'SHORT'; stateKey = 'sstate'; endpoint = '/api/bot/toggle';
     }
 
     if (btn.disabled) return;
@@ -230,12 +230,11 @@ document.addEventListener('click', async (e) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            // El backend de Long/Short a veces no necesita el body 'side' porque ya va en la URL
-            body: JSON.stringify({ action }) 
+            // Enviamos el side y la acción. Para AI el backend ya sabe qué hacer.
+            body: JSON.stringify({ action, side: side.toLowerCase() }) 
         });
 
-        // Verificamos si la respuesta es OK antes de intentar leer JSON
-        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
 
         const result = await response.json();
         
@@ -245,8 +244,8 @@ document.addEventListener('click', async (e) => {
                 currentBotState.isRunning = result.isRunning;
                 aiBotUI.setRunningStatus(result.isRunning, currentBotState.config.ai.stopAtCycle, result.historyCount || 0);
             } else {
-                // Para Long/Short, el servidor suele devolver 'state' o 'lstate'/'sstate'
-                currentBotState[stateKey] = result.state || result.lstate || result.sstate || (action === 'start' ? 'RUNNING' : 'STOPPED');
+                // Actualizamos el estado específico lstate o sstate
+                currentBotState[stateKey] = result.state || (action === 'start' ? 'RUNNING' : 'STOPPED');
             }
 
             logStatus(`${side} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`, "success");
@@ -259,7 +258,7 @@ document.addEventListener('click', async (e) => {
         }
     } catch (error) {
         console.error(`❌ ${side} Toggle Error:`, error);
-        logStatus("Connection error: Route not found", "error");
+        logStatus("Backend connection failed", "error");
         btn.innerHTML = originalHTML;
     } finally {
         btn.disabled = false;

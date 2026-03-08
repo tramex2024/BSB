@@ -2,43 +2,16 @@
  * autobot.js - Core Logic for Trading Tabs
  * Versión Purificada 2026: Solo Autobot (Long & Short)
  */
-
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
-import { updateBotUI, updateControlsState, displayMessage } from './uiManager.js';
-import { sendConfigToBackend, toggleBotSideState } from './apiService.js'; 
+import { updateBotUI, updateControlsState } from './uiManager.js';
+import { sendConfigToBackend } from './apiService.js'; 
 import { TRADE_SYMBOL_TV, currentBotState } from '../main.js';
-import { socket } from './socket.js'; 
-import { askConfirmation } from './confirmModal.js';
 import { activeEdits } from './ui/controls.js';
 
 const MIN_USDT_AMOUNT = 6.00;
-
 let currentStrategyTab = 'all'; 
 let configDebounceTimeout = null;
-
-/**
- * Valida que los montos cumplan con el mínimo del exchange antes de iniciar
- */
-function validateSideInputs(side) {
-    const suffix = side === 'long' ? 'l' : 's';
-    const fields = [`auamount${suffix}-usdt`, `aupurchase${suffix}-usdt`];
-    let isValid = true;
-    
-    fields.forEach(id => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        const val = parseFloat(input.value);
-        if (isNaN(val) || val < MIN_USDT_AMOUNT) {
-            input.classList.add('border-red-500', 'animate-shake');
-            setTimeout(() => input.classList.remove('animate-shake'), 500);
-            isValid = false;
-        } else {
-            input.classList.remove('border-red-500', 'animate-shake');
-        }
-    });
-    return isValid;
-}
 
 /**
  * Escucha cambios en los inputs exclusivamente del Autobot
@@ -66,7 +39,6 @@ function setupConfigListeners() {
                 let side = id.includes('l') ? 'long' : 'short';
                 const s = side === 'long' ? 'l' : 's';
 
-                // 🟢 REPARACIÓN: Capturamos los valores REALES de la pantalla
                 const manualConfig = {
                     [side]: {
                         amountUsdt: parseFloat(document.getElementById(`auamount${s}-usdt`)?.value),
@@ -80,76 +52,38 @@ function setupConfigListeners() {
                 };
 
                 try {
-                    // Ahora enviamos 'manualConfig', que contiene el valor NUEVO del input
                     const result = await sendConfigToBackend({
                         config: manualConfig, 
                         strategy: side,
                         applyShield: false
                     });
 
-                    // Si el servidor responde éxito, actualizamos el estado global para que el socket no rebote
                     if (result && result.success && result.data) {
                         currentBotState.config = result.data;
                     }
                 } catch (err) {
                     console.error("❌ Error guardando config:", err);
                 }
-            }, 1000); // 1 segundo de calma para dejar de escribir
+            }, 1000);
         });
     });
 }
 
 /**
- * Inicializa la vista del Autobot (Resto del código sin cambios para seguridad)
+ * Inicializa la vista del Autobot
  */
 export async function initializeAutobotView() {
     const auOrderList = document.getElementById('au-order-list');
     if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
 
+    // Activamos los escuchadores de cambios en inputs
     setupConfigListeners();
 
-    const setupSideBtn = (id, sideName) => {
-        const btn = document.getElementById(id);
-        if (!btn) return;
-
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-
-        newBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            
-            const isRunning = (sideName === 'long' ? currentBotState.lstate !== 'STOPPED' : 
-                             currentBotState.sstate !== 'STOPPED');
-            
-            if (isRunning) {
-                const confirmed = await askConfirmation(sideName);
-                if (!confirmed) return;
-            } else {
-                if (!validateSideInputs(sideName)) {
-                    displayMessage(`Min $${MIN_USDT_AMOUNT} USDT required for ${sideName.toUpperCase()}`, 'error');
-                    return;
-                }
-            }
-
-            try {
-                newBtn.disabled = true;
-                newBtn.textContent = isRunning ? "STOPPING..." : "STARTING...";
-                await toggleBotSideState(isRunning, sideName);
-            } catch (err) {
-                displayMessage(`Error in ${sideName} engine`, 'error');
-                updateControlsState(currentBotState); 
-            } finally {
-                newBtn.disabled = false;
-            }
-        });
-    };
-
-    setupSideBtn('austartl-btn', 'long');
-    setupSideBtn('austarts-btn', 'short');
-
+    // Sincronizamos la UI con el estado global
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
+    // Inicializamos el gráfico
     const chartContainer = document.getElementById('au-tvchart');
     if (chartContainer) {
         setTimeout(() => {
