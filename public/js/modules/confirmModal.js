@@ -1,8 +1,5 @@
-// public/js/modules/confirmModal.js
-
 /**
- * confirmModal.js - Safety dialog management for critical operations
- * Shielded against CSS conflicts and synchronized in English.
+ * confirmModal.js - Safety dialog management (Panic-Aware Version)
  */
 
 export function askConfirmation(sideName, action = 'STOP') { 
@@ -11,67 +8,76 @@ export function askConfirmation(sideName, action = 'STOP') {
     const btnDeny = document.getElementById('modal-deny');
     const msgEl = document.getElementById('modal-message');
 
-    // If modal element is missing, we bypass for safety but log a warning.
     if (!modal) {
-        console.warn("⚠️ Confirm Modal element not found in DOM. Proceeding without confirmation.");
+        console.warn("⚠️ Confirm Modal element not found.");
         return Promise.resolve(true);
     }
 
     return new Promise((resolve) => {
-        // 1. Adaptive color logic
-        const strategyColor = sideName.toLowerCase() === 'long' ? 'text-emerald-400' : 
-                              sideName.toLowerCase() === 'short' ? 'text-orange-400' : 'text-blue-400';
-        
-        const isStop = action.toUpperCase() === 'STOP';
-        const actionColor = isStop ? 'text-rose-500' : 'text-emerald-500';
+        // 1. DETECTAR SI ES PANIC STOP
+        const isPanic = sideName.includes('PANIC') || action.includes('PANIC');
 
-        // 2. English Message Definitions
-        const warningText = isStop 
+        // 2. LÓGICA DE COLORES ADAPTATIVA
+        let strategyColor = 'text-blue-400';
+        if (sideName.toLowerCase() === 'long') strategyColor = 'text-emerald-400';
+        if (sideName.toLowerCase() === 'short') strategyColor = 'text-orange-400';
+        if (isPanic) strategyColor = 'text-red-500 font-black animate-pulse'; // Rojo pulsante para Pánico
+
+        const isStop = action.toUpperCase().includes('STOP');
+        const actionColor = isPanic ? 'text-red-600' : (isStop ? 'text-rose-500' : 'text-emerald-500');
+
+        // 3. DEFINICIÓN DE MENSAJES
+        let warningText = isStop 
             ? "This action may leave orphan orders on the exchange and require manual cleanup."
             : "The system will begin automated trading based on your current configuration.";
 
-        // Dynamic content injection
+        let mainMessage = `Are you sure you want to <span class="${actionColor} font-black">${action.toUpperCase()}</span> the <span class="${strategyColor}">${sideName.toUpperCase()}</span> strategy?`;
+
+        // Sobreescribir si es Pánico
+        if (isPanic) {
+            mainMessage = `
+                <div class="text-center">
+                    <i class="fas fa-radiation-alt text-4xl text-red-500 mb-3 block animate-spin-slow"></i>
+                    <span class="text-red-500 text-xl font-black uppercase">CRITICAL SYSTEM HALT</span><br>
+                    <span class="text-white">Are you sure you want to execute a <span class="bg-red-600 px-1 rounded">PANIC STOP</span>?</span>
+                </div>
+            `;
+            warningText = "EMERGENCY: This will immediately stop ALL active bots and attempt to cancel all pending orders. This is a total system shutdown.";
+        }
+
+        // Inyección de contenido
         msgEl.innerHTML = `
-            Are you sure you want to <span class="${actionColor} font-black">${action.toUpperCase()}</span> the 
-            <span class="${strategyColor} font-bold">${sideName.toUpperCase()}</span> strategy? 
+            ${mainMessage}
             <br><br>
-            <p class="text-[10px] opacity-70 leading-tight">
+            <p class="text-[10px] opacity-70 leading-tight bg-black/30 p-2 rounded border border-white/10">
                 ${warningText}
             </p>
         `;
         
-        // 3. FORCE VISIBILITY (CSS Specificity Bypass)
-        // Using setProperty to override any 'display: none' in static CSS files
+        // Estilo especial para el botón de aceptar si es pánico
+        if (isPanic) {
+            btnAccept.classList.replace('bg-emerald-600', 'bg-red-600');
+            btnAccept.textContent = "YES, STOP EVERYTHING";
+        } else {
+            btnAccept.classList.replace('bg-red-600', 'bg-emerald-600');
+            btnAccept.textContent = "CONFIRM";
+        }
+
+        // 4. MOSTRAR MODAL
         modal.style.setProperty('display', 'flex', 'important');
         modal.classList.remove('hidden');
 
-        // Cleanup and close function
         const cleanup = (value) => {
             modal.style.setProperty('display', 'none', 'important');
             modal.classList.add('hidden');
-            
-            // Clear events to prevent duplicate executions on next click
             btnAccept.onclick = null;
             btnDeny.onclick = null;
             modal.onclick = null;
-            
             resolve(value);
         };
 
-        // Event Assignment
-        btnAccept.onclick = (e) => {
-            e.stopPropagation();
-            cleanup(true);
-        };
-
-        btnDeny.onclick = (e) => {
-            e.stopPropagation();
-            cleanup(false);
-        };
-
-        // Close if user clicks on the dark backdrop
-        modal.onclick = (e) => {
-            if (e.target === modal) cleanup(false);
-        };
+        btnAccept.onclick = (e) => { e.stopPropagation(); cleanup(true); };
+        btnDeny.onclick = (e) => { e.stopPropagation(); cleanup(false); };
+        modal.onclick = (e) => { if (e.target === modal) cleanup(false); };
     });
 }
