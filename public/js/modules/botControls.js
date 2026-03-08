@@ -8,24 +8,78 @@ import { currentBotState, BACKEND_URL, logStatus } from '../main.js';
 
 export function initializeGlobalButtonListeners() {
     document.addEventListener('click', async (e) => {
-        const target = e.target.closest('#btn-start-ai, #btn-stop-ai, #austartai-btn, #austopai-btn, #austartl-btn, #austopl-btn, #austarts-btn, #austops-btn, #panic-btn');
+        // Buscamos si el clic fue en algún botón de control, incluyendo el de pánico de IA
+        const target = e.target.closest('#btn-start-ai, #btn-stop-ai, #btn-panic-ai, #panic-btn, #austartl-btn, #austopl-btn, #austarts-btn, #austops-btn');
 
         if (!target) return;
-
         e.preventDefault();
-        e.stopPropagation();
 
-        if (target.disabled) return;
-
-        // --- CASO ESPECIAL: PANIC STOP ---
+        // Lógica para Pánico General
         if (target.id === 'panic-btn') {
             await handlePanicStop(target);
             return;
         }
 
-        // --- CASO NORMAL: START/STOP INDIVIDUAL ---
+        // Lógica para Pánico de IA (Usando tu ID exacto)
+        if (target.id === 'btn-panic-ai') {
+            await handleAIPanicStop(target);
+            return;
+        }
+
+        // Para el resto de botones Start/Stop normales
         await handleToggleBot(target);
     });
+}
+
+// Función específica para el Pánico de la IA
+async function handleAIPanicStop(btn) {
+    // El modal mostrará el estilo rojo gracias a la palabra 'PANIC' o 'AI BOT'
+    const confirmado = await askConfirmation('AI BOT', 'PANIC STOP');
+    if (!confirmado) return;
+
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    
+    // Feedback visual inmediato en el botón
+    btn.classList.add('bg-red-600', 'text-white');
+    btn.innerHTML = `<i class="fas fa-biohazard fa-spin mr-2"></i> HALTING CORE...`;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/ai/panic-stop`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+            // Actualizamos el estado local
+            currentBotState.aistate = 'STOPPED';
+            
+            // Log en la terminal neural del AI Bot
+            const logCont = document.getElementById('ai-log-container');
+            if (logCont) {
+                const p = document.createElement('p');
+                p.className = "text-red-500 font-bold";
+                p.textContent = `>> [CRITICAL] EMERGENCY SHUTDOWN EXECUTED`;
+                logCont.prepend(p);
+            }
+
+            displayMessage("AI CORE HALTED", "error");
+            
+            // Sincronizar toda la interfaz
+            import('./uiManager.js').then(m => m.updateBotUI(currentBotState));
+        }
+    } catch (error) {
+        console.error("Panic Error:", error);
+        btn.innerHTML = originalHTML;
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('bg-red-600');
+    }
 }
 
 /**
