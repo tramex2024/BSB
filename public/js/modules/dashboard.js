@@ -14,6 +14,9 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
+// [NUEVO] Importamos el modal de confirmación
+import { askConfirmation } from './confirmModal.js';
+
 // Instancias globales de gráficos
 let balanceChart = null; 
 
@@ -73,7 +76,6 @@ export function initializeDashboardView(initialState) {
  */
 function handleMetricsUpdate(e) {
     if (e.detail) {
-        // requestAnimationFrame asegura que el canvas tenga dimensiones antes de dibujar
         requestAnimationFrame(() => {
             renderEquityCurve(e.detail);
         });
@@ -88,12 +90,11 @@ async function refreshAnalytics() {
         const response = await fetchEquityCurveData();
         
         if (response && response.success && Array.isArray(response.data)) {
-            // Enviamos los datos al manager para filtrado y acumulación
             Metrics.setAnalyticsData(response.data);
             addTerminalLog("ANALYTICS: SYNCHRONIZED HISTORY", 'success');
         } else {
             addTerminalLog("ANALYTICS: NO PREVIOUS DATA", 'warning');
-            renderEquityCurve([]); // Renderiza estado vacío elegante
+            renderEquityCurve([]); 
         }
     } catch (e) { 
         console.error("❌ Error en Dashboard Metrics:", e.message); 
@@ -129,8 +130,11 @@ function setupActionButtons() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.onclick = async () => {
-            if (confirm("🚨 ¿ESTÁS SEGURO? Se detendrán todos los bots y cerrarán posiciones.")) {
+            // Usamos el modal de confirmación aquí también para consistencia
+            const confirmado = await askConfirmation('PANIC', 'stop');
+            if (confirmado) {
                 await triggerPanicStop();
+                addTerminalLog("PANIC STOP EXECUTED", 'error');
             }
         };
     }
@@ -142,16 +146,37 @@ function setupActionButtons() {
         { id: 'austartai-btn', side: 'ai' }
     ];
 
-    btnConfigs.forEach(btn => {
-        const el = document.getElementById(btn.id);
+    btnConfigs.forEach(btnConfig => {
+        const el = document.getElementById(btnConfig.id);
         if (el) {
-            el.onclick = async () => {
+            el.onclick = async (e) => {
+                e.preventDefault();
+                
                 let isRunning = false;
-                if (btn.side === 'long') isRunning = currentBotState.lstate !== 'STOPPED';
-                else if (btn.side === 'short') isRunning = currentBotState.sstate !== 'STOPPED';
-                else if (btn.side === 'ai') isRunning = currentBotState.aistate === 'RUNNING';
+                if (btnConfig.side === 'long') isRunning = currentBotState.lstate === 'RUNNING';
+                else if (btnConfig.side === 'short') isRunning = currentBotState.sstate === 'RUNNING';
+                else if (btnConfig.side === 'ai') isRunning = currentBotState.aistate === 'RUNNING';
 
-                await toggleBotSideState(isRunning, btn.side);
+                const action = isRunning ? 'stop' : 'start';
+
+                // [NUEVO] Solicitamos confirmación antes de proceder
+                const confirmado = await askConfirmation(btnConfig.side, action);
+                if (!confirmado) return;
+
+                // Animación de carga en el botón
+                const originalHTML = el.innerHTML;
+                el.disabled = true;
+                el.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i>`;
+
+                try {
+                    await toggleBotSideState(isRunning, btnConfig.side);
+                    addTerminalLog(`${btnConfig.side.toUpperCase()}: ${action.toUpperCase()} SENT`, 'info');
+                } catch (error) {
+                    addTerminalLog(`ERROR: ${error.message}`, 'error');
+                } finally {
+                    el.disabled = false;
+                    el.innerHTML = originalHTML;
+                }
             };
         }
     });
@@ -246,18 +271,14 @@ export function updatePnLBar(id, pnlValue) {
     if (!bar) return;
 
     const pnl = parseFloat(pnlValue) || 0;
-    
-    // Sensibilidad: 1% de profit llena la mitad de la barra (25% del total)
     const maxRange = 1; 
     const visualSize = Math.min(Math.abs(pnl) / maxRange * 50, 50);
 
     if (pnl >= 0) {
-        // GANANCIA: Se expande hacia la DERECHA desde el centro (50%)
         bar.style.left = '50%';
         bar.style.width = `${visualSize}%`;
         bar.className = 'absolute h-full transition-all duration-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
     } else {
-        // PÉRDIDA: Se expande hacia la IZQUIERDA desde el centro
         bar.style.left = `${50 - visualSize}%`;
         bar.style.width = `${visualSize}%`;
         bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
