@@ -186,7 +186,7 @@ function syncAIElementsInDOM() {
     }
 }
 
-// --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) - CORREGIDO PARA CAPTURAR STOP IDs ---
+// --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) - AUDITADO Y CORREGIDO ---
 document.addEventListener('click', async (e) => {
     // 1. Capturamos los botones por sus dos posibles estados (Start y Stop)
     const btnAi = e.target.closest('#btn-start-ai') || e.target.closest('#btn-stop-ai') || e.target.closest('#austartai-btn') || e.target.closest('#austopai-btn');
@@ -222,7 +222,7 @@ document.addEventListener('click', async (e) => {
 
     btn.classList.add('opacity-50', 'cursor-wait');
     
-    // El modal se disparará siempre porque el ID fue capturado correctamente
+    // AHORA SÍ: El modal se disparará siempre porque el ID fue capturado
     const confirmado = await askConfirmation(side, action);
     
     btn.classList.remove('opacity-50', 'cursor-wait');
@@ -275,6 +275,7 @@ document.addEventListener('click', async (e) => {
                 currentBotState.isRunning = result.isRunning;
             } else {
                 currentBotState[stateKey] = (action === 'start' ? 'RUNNING' : 'STOPPED');
+                
                 if (result.data) {
                     currentBotState.config[side.toLowerCase()] = {
                         ...currentBotState.config[side.toLowerCase()],
