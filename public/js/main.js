@@ -199,12 +199,13 @@ document.addEventListener('click', async (e) => {
 
     let btn, side, stateKey, endpoint;
 
+    // Ajustamos los endpoints exactos que tu servidor reconoce
     if (btnAi) {
         btn = btnAi; side = 'AI'; stateKey = 'aistate'; endpoint = '/api/ai/toggle';
     } else if (btnLong) {
-        btn = btnLong; side = 'LONG'; stateKey = 'lstate'; endpoint = '/api/strategy/toggle';
+        btn = btnLong; side = 'LONG'; stateKey = 'lstate'; endpoint = '/api/bot/long/toggle'; // Ruta corregida
     } else if (btnShort) {
-        btn = btnShort; side = 'SHORT'; stateKey = 'sstate'; endpoint = '/api/strategy/toggle';
+        btn = btnShort; side = 'SHORT'; stateKey = 'sstate'; endpoint = '/api/bot/short/toggle'; // Ruta corregida
     }
 
     if (btn.disabled) return;
@@ -229,26 +230,26 @@ document.addEventListener('click', async (e) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({ action, side: side.toLowerCase() })
+            // El backend de Long/Short a veces no necesita el body 'side' porque ya va en la URL
+            body: JSON.stringify({ action }) 
         });
 
+        // Verificamos si la respuesta es OK antes de intentar leer JSON
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
         const result = await response.json();
+        
         if (result.success) {
             if (side === 'AI') {
                 currentBotState.aistate = result.aistate;
                 currentBotState.isRunning = result.isRunning;
-                
-                aiBotUI.setRunningStatus(
-                    result.isRunning, 
-                    currentBotState.config.ai.stopAtCycle,
-                    result.historyCount || 0
-                );
+                aiBotUI.setRunningStatus(result.isRunning, currentBotState.config.ai.stopAtCycle, result.historyCount || 0);
             } else {
-                currentBotState[stateKey] = result.state;
+                // Para Long/Short, el servidor suele devolver 'state' o 'lstate'/'sstate'
+                currentBotState[stateKey] = result.state || result.lstate || result.sstate || (action === 'start' ? 'RUNNING' : 'STOPPED');
             }
 
-            const msg = `${side} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`;
-            logStatus(msg, "success");
+            logStatus(`${side} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`, "success");
             displayMessage(`Strategy ${side}: ${action.toUpperCase()}ED`, action === 'start' ? 'success' : 'warning');
 
             await updateBotUI(currentBotState);
@@ -258,7 +259,7 @@ document.addEventListener('click', async (e) => {
         }
     } catch (error) {
         console.error(`❌ ${side} Toggle Error:`, error);
-        logStatus("Connection error", "error");
+        logStatus("Connection error: Route not found", "error");
         btn.innerHTML = originalHTML;
     } finally {
         btn.disabled = false;
