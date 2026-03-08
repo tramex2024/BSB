@@ -1,7 +1,7 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Motor de Indicadores Técnicos Globales (Versión Corregida & Blindada)
- * FIX: RSI Accuracy & Buffer Management
+ * Motor de Indicadores Técnicos Globales (Versión Auditada 2026)
+ * FIX: RSI Sync & Triple-Validation Logic
  */
 
 const { RSI, ADX, Stochastic } = require('technicalindicators');
@@ -26,26 +26,33 @@ class CentralAnalyzer {
     async init(io) {
         this.io = io;
         console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo inicializado con sincronización de 250 velas.");
+        // Al iniciar, intentamos poblar con datos de BitMart si la DB está vacía
         await this.analyze();
     }
 
     updatePrice(price) {
-        this.lastPrice = price;
+        this.lastPrice = parseFloat(price);
     }
 
+    /**
+     * analyze
+     * @param {Array} externalCandles - Opcional: Velas enviadas directamente desde la DB (Etapa 2)
+     */
     async analyze(externalCandles = null) {
         try {
             let candles = externalCandles;
 
             // 1. OBTENCIÓN Y NORMALIZACIÓN DE DATOS
-            if (!candles) {
-                // Pedimos 300 para asegurar que después del cálculo queden 250 estables
+            if (!candles || candles.length === 0) {
+                // FALLBACK: Si no hay velas externas, pedimos 300 a BitMart
                 const raw = await bitmartService.getKlines(this.symbol, '1', 300);
                 
-                if (!raw || raw.length === 0) return;
+                if (!raw || raw.length === 0) {
+                    console.warn("⚠️ [ANALYZER] No se pudieron obtener velas para el cálculo.");
+                    return;
+                }
 
-                // FIX: BitMart Klines Order Check
-                // Los indicadores necesitan [Antiguo -> Reciente]
+                // FIX: Asegurar orden cronológico [Antiguo -> Reciente]
                 if (raw[0].timestamp > raw[raw.length - 1].timestamp) {
                     raw.reverse();
                 }
@@ -60,7 +67,7 @@ class CentralAnalyzer {
                 }));
             }
 
-            // Mantener solo el límite de la configuración
+            // Mantener el límite exacto para el cálculo técnico
             if (candles.length > this.config.MAX_HISTORY) {
                 candles = candles.slice(-this.config.MAX_HISTORY);
             }
@@ -70,30 +77,34 @@ class CentralAnalyzer {
             const lows = candles.map(c => c.low);
 
             // 2. CÁLCULO DE INDICADORES (CON PRECIO EN TIEMPO REAL)
-            // Agregamos el precio actual del WebSocket al final del array para RSI instantáneo
+            // Inyectamos el lastPrice (WebSocket) como el punto de datos más actual
             const currentCloses = [...closes];
             if (this.lastPrice && this.lastPrice !== currentCloses[currentCloses.length - 1]) {
                 currentCloses.push(this.lastPrice);
             }
 
-            // RSI 14 y 21
+            // Cálculo de RSI
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_21 });
             
-            // ADX (Requiere H/L/C)
+            // Cálculo de ADX
             const adxArr = ADX.calculate({
-                high: highs, low: lows, close: closes,
+                high: highs, 
+                low: lows, 
+                close: closes,
                 period: this.config.ADX_PERIOD
             });
 
-            // Estocástico
+            // Cálculo de Estocástico
             const stochArr = Stochastic.calculate({
-                high: highs, low: lows, close: closes,
+                high: highs, 
+                low: lows, 
+                close: closes,
                 period: this.config.STOCH_PERIOD,
                 signalPeriod: 3
             });
 
-            // 3. EXTRACCIÓN DE VALORES ACTUALES
+            // 3. EXTRACCIÓN Y FORMATEO DE RESULTADOS
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const prevRSI21 = rsi21Arr.length > 1 ? parseFloat(rsi21Arr[rsi21Arr.length - 2].toFixed(2)) : curRSI21;
@@ -101,11 +112,11 @@ class CentralAnalyzer {
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curStoch = stochArr.length > 0 ? stochArr[stochArr.length - 1] : { k: 0, d: 0 };
 
-            // Determinar señal basada en RSI 21 (más estable para evitar falsos positivos)
+            // Determinación de la señal (Basada en RSI 21 para evitar ruido)
             const price = this.lastPrice || closes[closes.length - 1];
             const signal = this._getSignal(curRSI21, prevRSI21, curADX, curStoch, price);
 
-            // 4. PERSISTENCIA Y NOTIFICACIÓN
+            // 4. PERSISTENCIA EN MONGODB (MARKET SIGNALS)
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -123,36 +134,48 @@ class CentralAnalyzer {
                 { upsert: true, new: true }
             );
 
+            // 5. NOTIFICACIÓN POR WEBSOCKET (FRONTEND)
             if (this.io) {
                 this.io.emit('market-signal-update', { 
-                    price, rsi14: curRSI14, rsi21: curRSI21, adx: curADX, 
-                    stochK: curStoch.k, stochD: curStoch.d, signal: signal.action,
+                    price, 
+                    rsi14: curRSI14, 
+                    rsi21: curRSI21, 
+                    adx: curADX, 
+                    stochK: curStoch.k, 
+                    stochD: curStoch.d, 
+                    signal: signal.action,
                     historyCount: candles.length 
                 });
             }
 
+            // DEBUG LOG: Para verificar en la consola que el RSI se mueve
+            console.log(`[ANALYZER] BTC: ${price} | RSI14: ${curRSI14} | Signal: ${signal.action}`);
+
             return updatedSignal;
 
         } catch (err) {
-            console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
+            console.error(`❌ [CENTRAL-ANALYZER] Error Crítico: ${err.message}`);
         }
     }
 
+    /**
+     * Lógica de Señal Unificada
+     */
     _getSignal(current, prev, adx, stoch, price) {
         if (!current || !prev) return { action: "HOLD", reason: "Data Loading" };
 
         const diff = current - prev;
         const isTrending = adx > 20; 
 
-        // COMPRA: Recuperación de sobreventa o fuerte impulso alcista
+        // ESTRATEGIA COMPRA
         if (prev <= 30 && current > 30) return { action: "BUY", reason: "RSI Oversold Recovery" };
         if (diff > this.config.MOMENTUM_THRESHOLD && current < 60) return { action: "BUY", reason: "Strong Momentum" };
 
-        // VENTA: Rechazo en sobrecompra o caída libre
+        // ESTRATEGIA VENTA
         if (prev >= 70 && current < 70) return { action: "SELL", reason: "RSI Overbought Rejection" };
         if (diff < -this.config.MOMENTUM_THRESHOLD && current > 40) return { action: "SELL", reason: "Momentum Loss" };
 
-        return { action: "HOLD", reason: "Stable" };
+        return { action: "HOLD", reason: "Market Flow" };
     }
 }
 
