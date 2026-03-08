@@ -123,6 +123,7 @@ class CentralAnalyzer {
                     currentPrice: price,
                     rsi14: curRSI14,
                     rsi21: curRSI21,
+                    currentRSI: curRSI14,
                     adx: curADX,
                     stochK: curStoch.k,
                     stochD: curStoch.d,
