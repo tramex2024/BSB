@@ -1,6 +1,7 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Refactorizado con BotControls Centralizado
+ * Estado: Corregida persistencia de balance y gestión de estados de IA
+ * Integración: Soporte, Notificaciones y Ajustes activados.
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -15,9 +16,7 @@ import { initializeSettings } from './modules/settings.js';
 import { initializeProfile } from './modules/profile.js';
 import { initPayments } from './modules/payments.js';
 import { initializeNotifications } from './modules/notifications.js';
-
-// [NUEVO] Importamos el gestor central de botones
-import { initializeGlobalButtonListeners } from './modules/botControls.js';
+import { askConfirmation } from './modules/confirmModal.js';
 
 // [RESTAURADO] Importación para mensajes flotantes (Toasts)
 import { displayMessage } from './modules/ui/notifications.js';
@@ -187,7 +186,133 @@ function syncAIElementsInDOM() {
     }
 }
 
-// --- CONFIGURATION DELEGATION ---
+// --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) - AUDITADO Y CORREGIDO ---
+document.addEventListener('click', async (e) => {
+    // 1. Capturamos los botones por sus dos posibles estados (Start y Stop)
+    const btnAi = e.target.closest('#btn-start-ai') || e.target.closest('#btn-stop-ai') || e.target.closest('#austartai-btn') || e.target.closest('#austopai-btn');
+    
+    // Captura Long (Inicia con 'austartl' o 'austopl')
+    const btnLong = e.target.closest('#austartl-btn') || e.target.closest('#austopl-btn');
+    
+    // Captura Short (Inicia con 'austarts' o 'austops')
+    const btnShort = e.target.closest('#austarts-btn') || e.target.closest('#austops-btn');
+
+    // 2. Si el clic no fue en un botón de control, abortamos
+    if (!btnAi && !btnLong && !btnShort) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    let btn, side, stateKey, endpoint;
+
+    // 3. Asignación de variables según el botón detectado
+    if (btnAi) {
+        btn = btnAi; side = 'AI'; stateKey = 'aistate'; endpoint = '/api/ai/toggle';
+    } else if (btnLong) {
+        btn = btnLong; side = 'long'; stateKey = 'lstate'; endpoint = '/api/v1/config/update-config';
+    } else if (btnShort) {
+        btn = btnShort; side = 'short'; stateKey = 'sstate'; endpoint = '/api/v1/config/update-config';
+    }
+
+    if (btn.disabled) return;
+
+    // Detectamos si está RUNNING o STOPPED según el estado global
+    const isRunning = currentBotState[stateKey] === 'RUNNING';
+    const action = isRunning ? 'stop' : 'start';
+
+    btn.classList.add('opacity-50', 'cursor-wait');
+    
+    // AHORA SÍ: El modal se disparará siempre porque el ID fue capturado
+    const confirmado = await askConfirmation(side, action);
+    
+    btn.classList.remove('opacity-50', 'cursor-wait');
+
+    if (!confirmado) return;
+
+    btn.disabled = true;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
+
+    try {
+        let bodyPayload;
+        let finalEndpoint = endpoint; 
+
+        if (side === 'AI') {
+            bodyPayload = { action, side: side.toLowerCase() };
+        } else {
+            const sideLow = side.toLowerCase();
+            finalEndpoint = `/api/autobot/${action}/${sideLow}`;
+
+            bodyPayload = {
+                strategy: sideLow,
+                config: {
+                    [sideLow]: {
+                        enabled: action === 'start'
+                    }
+                }
+            };
+        }
+
+        const response = await fetch(`${BACKEND_URL}${finalEndpoint}`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(bodyPayload) 
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Error del Servidor: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.success) {
+            if (side === 'AI') {
+                currentBotState.aistate = result.aistate;
+                currentBotState.isRunning = result.isRunning;
+            } else {
+                currentBotState[stateKey] = (action === 'start' ? 'RUNNING' : 'STOPPED');
+                
+                if (result.data) {
+                    currentBotState.config[side.toLowerCase()] = {
+                        ...currentBotState.config[side.toLowerCase()],
+                        ...result.data[side.toLowerCase()]
+                    };
+                }
+            }
+
+            logStatus(`${side.toUpperCase()} ${action.toUpperCase()} exitoso`, "success");
+            displayMessage(`Estrategia ${side.toUpperCase()}: ${action.toUpperCase()}`, action === 'start' ? 'success' : 'warning');
+
+            // FUERZA LA ACTUALIZACIÓN VISUAL PARA QUITAR EL SPINNER
+            await updateBotUI(currentBotState); 
+        } else {
+            logStatus(result.message || "Error en la operación", "error");
+            // SI FALLA EL SERVER, RESTAURAMOS EL BOTÓN
+            btn.innerHTML = originalHTML; 
+        }
+    } catch (error) {
+        console.error(`❌ Error en Toggle ${side}:`, error);
+        logStatus(error.message, "error");
+        // SI HAY ERROR DE RED, RESTAURAMOS EL BOTÓN
+        btn.innerHTML = originalHTML; 
+    } finally {
+        // ESTO ES VITAL: Pase lo que pase, habilitamos el botón y quitamos clases de espera
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-wait');
+        
+        // Si después de updateBotUI el botón sigue con el spinner (porque el ID cambió de start a stop)
+        // esta línea de seguridad lo limpia:
+        if (btn.querySelector('.fa-spin')) {
+             btn.innerHTML = originalHTML;
+        }
+    }
+});
+
+// Delegación global para configuración de IA e Inputs de Autobot
 document.addEventListener('change', async (e) => {
     if (e.target && e.target.id === 'ai-amount-usdt') {
         const val = parseFloat(e.target.value);
@@ -226,10 +351,6 @@ async function saveAIConfigGlobal(payload) {
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
     applyRolePermissions();
-    
-    // [NUEVO] Inicializar los escuchadores globales de botones Start/Stop
-    initializeGlobalButtonListeners();
-
     if (localStorage.getItem('token') && localStorage.getItem('userId')) { 
         initializeFullApp(); 
     } else {
