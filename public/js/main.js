@@ -188,10 +188,10 @@ function syncAIElementsInDOM() {
 
 // --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) ---
 document.addEventListener('click', async (e) => {
-    // Capturamos el botón sin importar si es el de Start o Stop (usando selector parcial)
+    // Selectores precisos para evitar disparos accidentales
     const btnAi = e.target.closest('#btn-start-ai');
-    const btnLong = e.target.closest('[id*="austartl-btn"]'); 
-    const btnShort = e.target.closest('[id*="austarts-btn"]');
+    const btnLong = e.target.closest('#austartl-btn'); 
+    const btnShort = e.target.closest('#austarts-btn');
 
     if (!btnAi && !btnLong && !btnShort) return;
 
@@ -213,8 +213,12 @@ document.addEventListener('click', async (e) => {
     const isRunning = currentBotState[stateKey] === 'RUNNING';
     const action = isRunning ? 'stop' : 'start';
 
+    // UI Feedback inmediato
     btn.classList.add('opacity-50', 'cursor-wait');
+    
+    // El modal de confirmación debe estar definido globalmente para que esto funcione
     const confirmado = await askConfirmation(side, action);
+    
     btn.classList.remove('opacity-50', 'cursor-wait');
 
     if (!confirmado) return;
@@ -230,7 +234,6 @@ document.addEventListener('click', async (e) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            // Enviamos el side y la acción. Para AI el backend ya sabe qué hacer.
             body: JSON.stringify({ action, side: side.toLowerCase() }) 
         });
 
@@ -244,7 +247,6 @@ document.addEventListener('click', async (e) => {
                 currentBotState.isRunning = result.isRunning;
                 aiBotUI.setRunningStatus(result.isRunning, currentBotState.config.ai.stopAtCycle, result.historyCount || 0);
             } else {
-                // Actualizamos el estado específico lstate o sstate
                 currentBotState[stateKey] = result.state || (action === 'start' ? 'RUNNING' : 'STOPPED');
             }
 
@@ -265,8 +267,9 @@ document.addEventListener('click', async (e) => {
     }
 });
 
-// Delegación global para configuración de IA (Inputs)
+// Delegación global para configuración de IA e Inputs de Autobot
 document.addEventListener('change', async (e) => {
+    // Configuración AI
     if (e.target && e.target.id === 'ai-amount-usdt') {
         const val = parseFloat(e.target.value);
         if (isNaN(val) || val <= 0) return;
@@ -275,6 +278,13 @@ document.addEventListener('change', async (e) => {
     
     if (e.target && e.target.id === 'ai-stop-at-cycle') {
         await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
+    }
+
+    // Configuración Autobot (Checks de Stop at Cycle)
+    if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
+        const side = e.target.id.includes('long') ? 'long' : 'short';
+        logStatus(`Updating ${side.toUpperCase()} stop condition...`, "info");
+        // Aquí podrías añadir una función saveBotConfig similar a saveAIConfigGlobal
     }
 });
 

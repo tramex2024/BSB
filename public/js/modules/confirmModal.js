@@ -1,8 +1,8 @@
 // public/js/modules/confirmModal.js
 
 /**
- * confirmModal.js - Gestión de diálogos de seguridad para operaciones críticas
- * Blindado contra conflictos de CSS y sincronizado en Inglés.
+ * confirmModal.js - Safety dialog management for critical operations
+ * Shielded against CSS conflicts and synchronized in English.
  */
 
 export function askConfirmation(sideName, action = 'STOP') { 
@@ -11,26 +11,26 @@ export function askConfirmation(sideName, action = 'STOP') {
     const btnDeny = document.getElementById('modal-deny');
     const msgEl = document.getElementById('modal-message');
 
-    // Si el modal no existe, dejamos pasar la acción por seguridad, pero avisamos.
+    // If modal element is missing, we bypass for safety but log a warning.
     if (!modal) {
         console.warn("⚠️ Confirm Modal element not found in DOM. Proceeding without confirmation.");
         return Promise.resolve(true);
     }
 
     return new Promise((resolve) => {
-        // 1. Lógica de colores adaptativa
+        // 1. Adaptive color logic
         const strategyColor = sideName.toLowerCase() === 'long' ? 'text-emerald-400' : 
                               sideName.toLowerCase() === 'short' ? 'text-orange-400' : 'text-blue-400';
         
         const isStop = action.toUpperCase() === 'STOP';
         const actionColor = isStop ? 'text-rose-500' : 'text-emerald-500';
 
-        // 2. Definición de mensajes en Inglés
+        // 2. English Message Definitions
         const warningText = isStop 
             ? "This action may leave orphan orders on the exchange and require manual cleanup."
             : "The system will begin automated trading based on your current configuration.";
 
-        // Inyección dinámica del contenido
+        // Dynamic content injection
         msgEl.innerHTML = `
             Are you sure you want to <span class="${actionColor} font-black">${action.toUpperCase()}</span> the 
             <span class="${strategyColor} font-bold">${sideName.toUpperCase()}</span> strategy? 
@@ -40,17 +40,17 @@ export function askConfirmation(sideName, action = 'STOP') {
             </p>
         `;
         
-        // 3. FORZAR VISIBILIDAD (Bypass de especificidad CSS)
-        // Usamos setProperty para sobreescribir cualquier 'display: none' en style.css
+        // 3. FORCE VISIBILITY (CSS Specificity Bypass)
+        // Using setProperty to override any 'display: none' in static CSS files
         modal.style.setProperty('display', 'flex', 'important');
         modal.classList.remove('hidden');
 
-        // Función de cierre y limpieza
+        // Cleanup and close function
         const cleanup = (value) => {
             modal.style.setProperty('display', 'none', 'important');
             modal.classList.add('hidden');
             
-            // Limpiamos eventos para evitar ejecuciones duplicadas en el próximo clic
+            // Clear events to prevent duplicate executions on next click
             btnAccept.onclick = null;
             btnDeny.onclick = null;
             modal.onclick = null;
@@ -58,7 +58,7 @@ export function askConfirmation(sideName, action = 'STOP') {
             resolve(value);
         };
 
-        // Asignación de eventos
+        // Event Assignment
         btnAccept.onclick = (e) => {
             e.stopPropagation();
             cleanup(true);
@@ -69,7 +69,7 @@ export function askConfirmation(sideName, action = 'STOP') {
             cleanup(false);
         };
 
-        // Cerrar si el usuario hace clic en el fondo oscuro (fuera del cuadro)
+        // Close if user clicks on the dark backdrop
         modal.onclick = (e) => {
             if (e.target === modal) cleanup(false);
         };

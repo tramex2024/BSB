@@ -4,26 +4,26 @@
         
         <div class="bg-gray-700/50 p-3 rounded-xl border-2 border-emerald-500/30 shadow-lg space-y-2">            
             <div class="flex justify-between items-center bg-black/20 p-2 rounded-xl border border-gray-600/30"> 
-    <div class="flex flex-col w-1/2">
-        <div class="flex items-center justify-between mb-1.5 pr-2">
-            <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider leading-none">BTC/USDT</span>
-            <span id="price-change-container" class="text-[8px] flex items-center font-bold px-1 rounded-sm bg-gray-900/50">
-                <i id="price-icon" class="fas fa-caret-up mr-0.5 text-emerald-500"></i>
-                <span id="price-percent">0.00%</span>
-            </span>
-        </div>
-        <div class="flex items-center h-5">
-            <span id="auprice" class="text-base font-mono font-bold text-white leading-none">$0.00</span>
-        </div>
-    </div>
+                <div class="flex flex-col w-1/2">
+                    <div class="flex items-center justify-between mb-1.5 pr-2">
+                        <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider leading-none">BTC/USDT</span>
+                        <span id="price-change-container" class="text-[8px] flex items-center font-bold px-1 rounded-sm bg-gray-900/50">
+                            <i id="price-icon" class="fas fa-caret-up mr-0.5 text-emerald-500"></i>
+                            <span id="price-percent">0.00%</span>
+                        </span>
+                    </div>
+                    <div class="flex items-center h-5">
+                        <span id="auprice" class="text-base font-mono font-bold text-white leading-none">$0.00</span>
+                    </div>
+                </div>
 
-    <div class="flex flex-col items-end w-1/2">
-        <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider leading-none mb-1.5">Total Profit</span>
-        <div class="flex items-center h-5">
-            <span id="auprofit" class="text-base font-mono font-bold text-emerald-400 leading-none">+$0.00</span>
-        </div>
-    </div>
-</div>
+                <div class="flex flex-col items-end w-1/2">
+                    <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider leading-none mb-1.5">Total Profit</span>
+                    <div class="flex items-center h-5">
+                        <span id="auprofit" class="text-base font-mono font-bold text-emerald-400 leading-none">+$0.00</span>
+                    </div>
+                </div>
+            </div>
 
             <div class="grid grid-cols-2 gap-2 border-t border-gray-600 pt-2">
                 <div class="bg-black/20 p-2 rounded-lg border border-gray-600">
@@ -185,59 +185,35 @@
                 <h3 class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-gray-700 pb-1">Order History</h3>
                 
                 <div class="flex bg-gray-900 p-1 rounded-lg autobot-tabs border border-gray-700">
-    <button id="tab-ex" 
-            data-strategy="ex" 
-            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">
-        Open
-    </button>
-    
-    <button id="tab-long" 
-            data-strategy="long" 
-            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
-        Long
-    </button>
-    
-    <button id="tab-short" 
-            data-strategy="short" 
-            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
-        Short
-    </button>
-    
-    <button id="tab-all-strategies" 
-            data-strategy="all" 
-            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
-        All
-    </button>
-</div>
+                    <button id="tab-ex" 
+                            data-strategy="ex" 
+                            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-emerald-500 bg-gray-800">
+                        Open
+                    </button>
+                    
+                    <button id="tab-long" 
+                            data-strategy="long" 
+                            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
+                        Long
+                    </button>
+                    
+                    <button id="tab-short" 
+                            data-strategy="short" 
+                            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
+                        Short
+                    </button>
+                    
+                    <button id="tab-all-strategies" 
+                            data-strategy="all" 
+                            class="px-2 py-1 text-[9px] font-bold rounded-md transition-all text-gray-500 hover:text-white">
+                        All
+                    </button>
+                </div>
             </div>
 
             <div id="au-order-list" class="overflow-y-auto pr-2 space-y-2 flex-grow custom-scrollbar font-mono text-[9px]">
-                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Sincronizando órdenes...</p>
+                <p class="text-gray-500 text-[10px] italic text-center py-5 tracking-widest uppercase">Syncing orders...</p>
             </div>
         </div>
     </div>
-
-    <div id="confirm-modal" class="fixed inset-0 z-[9999] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-        <div class="bg-gray-900 border border-emerald-500/30 w-full max-w-xs rounded-2xl p-6 shadow-2xl shadow-black ring-1 ring-white/10">
-            <div class="text-center">
-                <div class="inline-flex items-center justify-center w-12 h-12 bg-rose-500/20 rounded-full mb-3">
-                    <i class="fas fa-exclamation-triangle text-rose-500 text-xl"></i>
-                </div>
-                <h3 class="text-white text-base font-black uppercase tracking-tight mb-1">Confirmar Acción</h3>
-                <p id="modal-message" class="text-gray-400 text-[10px] leading-relaxed mb-6 px-2">
-                    ¿Estás seguro de que deseas detener esta estrategia? Esto podría consolidar pérdidas o dejar órdenes huérfanas en el exchange.
-                </p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-                <button id="modal-deny" class="py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold text-[10px] uppercase transition-all active:scale-95 border border-gray-700">
-                    Deny
-                </button>
-                <button id="modal-accept" class="py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-rose-900/40 transition-all active:scale-95">
-                    Accept
-                </button>
-            </div>
-        </div>
-    </div>
-
 </div>
