@@ -224,17 +224,34 @@ document.addEventListener('click', async (e) => {
 
     try {
         let bodyPayload;
+        let finalEndpoint = endpoint; // Mantenemos el endpoint original por defecto
+
         if (side === 'AI') {
+            // El controlador de AI suele ser más simple
             bodyPayload = { action, side: side.toLowerCase() };
         } else {
-            // Sincronizado con configController.js
+            /**
+             * ESTRATEGIA PARA AUTOBOT (LONG/SHORT)
+             * Construimos el payload que configController.js espera para no dar 400
+             */
+            const sideLow = side.toLowerCase();
+            
+            // Si el endpoint es de ejecución (start/stop), cambiamos la ruta
+            // asumiendo la estructura de autobotRoutes.js: /api/autobot/start/long
+            finalEndpoint = `/api/autobot/${action}/${sideLow}`;
+
             bodyPayload = {
-                side: side,
-                enabled: action === 'start'
+                strategy: sideLow,
+                config: {
+                    [sideLow]: {
+                        // Enviamos el estado deseado dentro del objeto config
+                        enabled: action === 'start'
+                    }
+                }
             };
         }
 
-        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+        const response = await fetch(`${BACKEND_URL}${finalEndpoint}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -243,7 +260,11 @@ document.addEventListener('click', async (e) => {
             body: JSON.stringify(bodyPayload) 
         });
 
-        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+        // 400 Bad Request se captura aquí
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Error del Servidor: ${response.status}`);
+        }
 
         const result = await response.json();
         
@@ -251,23 +272,30 @@ document.addEventListener('click', async (e) => {
             if (side === 'AI') {
                 currentBotState.aistate = result.aistate;
                 currentBotState.isRunning = result.isRunning;
-                aiBotUI.setRunningStatus(result.isRunning, currentBotState.config.ai.stopAtCycle, result.historyCount || 0);
             } else {
-                currentBotState[stateKey] = action === 'start' ? 'RUNNING' : 'STOPPED';
-                if (result.config) currentBotState.config = result.config;
+                // Actualización de estado local para feedback inmediato
+                currentBotState[stateKey] = (action === 'start' ? 'RUNNING' : 'STOPPED');
+                
+                // Sincronizamos con result.data (como dicta tu configController)
+                if (result.data) {
+                    currentBotState.config[side.toLowerCase()] = {
+                        ...currentBotState.config[side.toLowerCase()],
+                        ...result.data[side.toLowerCase()]
+                    };
+                }
             }
 
-            logStatus(`${side.toUpperCase()} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`, "success");
-            displayMessage(`Strategy ${side.toUpperCase()}: ${action.toUpperCase()}ED`, action === 'start' ? 'success' : 'warning');
+            logStatus(`${side.toUpperCase()} ${action.toUpperCase()} exitoso`, "success");
+            displayMessage(`Estrategia ${side.toUpperCase()}: ${action.toUpperCase()}`, action === 'start' ? 'success' : 'warning');
 
             await updateBotUI(currentBotState);
         } else {
-            logStatus(result.message || "Error updating strategy", "error");
+            logStatus(result.message || "Error en la operación", "error");
             btn.innerHTML = originalHTML;
         }
     } catch (error) {
-        console.error(`❌ ${side} Toggle Error:`, error);
-        logStatus("Backend connection failed", "error");
+        console.error(`❌ Error en Toggle ${side}:`, error);
+        logStatus(error.message, "error");
         btn.innerHTML = originalHTML;
     } finally {
         btn.disabled = false;
