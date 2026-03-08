@@ -15,7 +15,7 @@ async function run(dependencies) {
         userId, 
         botState, currentPrice, config, log, 
         updateBotState, updateGeneralBotState,
-        // 🟢 AUDITORÍA: placeShortOrder lleva el contexto atómico del usuario.
+        availableUSDT, // 🟢 AUDITORÍA: Validamos contra USDT disponible para la recompra
         placeShortOrder 
     } = dependencies;
     
@@ -27,7 +27,6 @@ async function run(dependencies) {
     const pc = parseFloat(botState.spc || 0);       // Stop de recompra (precio gatillo)
 
     // 1. BLOQUEO DE SEGURIDAD
-    // 🟢 AUDITORÍA: Evita duplicar órdenes si ya hay una "en vuelo".
     if (slastOrder) {
         log(`[S-BUYING] ⏳ Orden activa detectada. Esperando consolidación...`, 'debug');
         return;
@@ -41,7 +40,6 @@ async function run(dependencies) {
     const newPm = Math.min(currentMin, currentPrice);
     const newPc = newPm * (1 + trailingStopPercent);
 
-    // Actualizamos si hay un nuevo suelo
     if (newPm < pm || pm === 0) {
         log(`📉 [S-TRAILING] Nuevo Suelo: ${newPm.toFixed(2)} | Stop Recompra: ${newPc.toFixed(2)} (+${configPercent}%)`, 'info');
 
@@ -56,23 +54,26 @@ async function run(dependencies) {
         
         const triggerPrice = pc > 0 ? pc : newPc;
 
-        // Si el precio sube y toca el stop (rebote)
         if (currentPrice >= triggerPrice) {
+            // 🟢 AUDITORÍA: Validación preventiva de saldo USDT
+            const costUsdt = acBuying * currentPrice;
+            if (availableUSDT < costUsdt) {
+                log(`⚠️ [S-BUYING] Saldo USDT insuficiente para recompra (${availableUSDT.toFixed(2)} / ${costUsdt.toFixed(2)}). Pausando.`, 'error');
+                await updateBotState('PAUSED', SSTATE);
+                return;
+            }
+
             log(`💰 [S-CLOSE] Rebote detectado: ${currentPrice.toFixed(2)} >= ${triggerPrice.toFixed(2)}. Ejecutando recompra...`, 'success');
             
             try {
-                // 🟢 AUDITORÍA: El manager utiliza la función firmada por usuario para cerrar el ciclo.
                 await placeShortBuyOrder(config, botState, acBuying, log, updateGeneralBotState, currentPrice, placeShortOrder); 
             } catch (error) {
                 log(`❌ Error crítico en recompra Short: ${error.message}`, 'error');
-                
                 if (error.message.includes('Balance not enough')) {
-                    log('⚠️ Saldo USDT insuficiente para cerrar el Short.', 'error');
                     await updateBotState('PAUSED', SSTATE); 
                 }
             }
         } else {
-            // Heartbeat de seguimiento
             const distToClose = ((triggerPrice / currentPrice - 1) * 100).toFixed(2);
             log(`[S-BUYING] 👁️ BTC: ${currentPrice.toFixed(2)} | Suelo: ${newPm.toFixed(2)} | Recompra en: ${triggerPrice.toFixed(2)} (+${distToClose}%)`, 'info');
         }

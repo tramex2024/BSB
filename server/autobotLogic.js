@@ -110,7 +110,6 @@ async function startSide(userId, side, config) {
         cleanData = CLEAN_SHORT_ROOT;
         stateField = 'sstate';
     } else if (side === 'ai') {
-        // CORRECCIÓN: Aseguramos limpieza de campos IA al arrancar
         cleanData = CLEAN_AI_ROOT || {}; 
         stateField = 'aistate';
     }
@@ -136,7 +135,6 @@ async function stopSide(userId, side) {
     const stateField = side === 'long' ? 'lstate' : (side === 'short' ? 'sstate' : 'aistate'); 
     const newConfig = JSON.parse(JSON.stringify(botState.config));
     
-    // CORRECCIÓN: Asegurar que el flag enabled cambie a false para la IA también
     if (newConfig[side]) newConfig[side].enabled = false;
 
     const update = {
@@ -169,7 +167,7 @@ async function botCycle(priceFromWebSocket) {
             ]
         }).lean();
 
-        for (const botState of activeBots) {
+        for (let botState of activeBots) {
             const userId = botState.userId;
             const changeSet = {};
 
@@ -192,52 +190,56 @@ async function botCycle(priceFromWebSocket) {
                 secretKey: decryptedSecret
             };
 
-            if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
+            // FIX: Refrescar balance si falta USDT o BTC estando cualquier estrategia activa
+            const needsRefresh = !botState.lastAvailableUSDT || !botState.lastAvailableBTC;
+            const isAnyRunning = botState.lstate === 'RUNNING' || botState.sstate === 'RUNNING' || botState.aistate === 'RUNNING';
+
+            if (needsRefresh && isAnyRunning) {
                 await orchestrator.slowBalanceCacheUpdate(userId);
+                // Volver a cargar el botState para tener los valores actualizados
+                const refreshed = await Autobot.findOne({ userId }).lean();
+                if (refreshed) botState = refreshed;
             }
 
-const dependencies = {
-    userId,
-    log: (msg, type) => orchestrator.log(msg, type, userId),
-    io: orchestrator.io || null,
-    bitmartService, Autobot, currentPrice,
-    availableUSDT: botState.lastAvailableUSDT, 
-    availableBTC: botState.lastAvailableBTC,
-    botState, config: botState.config,
-    lcycle: botState.lcycle || 0,
-    scycle: botState.scycle || 0,
-    aicycle: botState.aicycle || 0,
-    
-    // CORRECCIÓN: Inyectamos el changeSet para que la IA sea persistente
-    changeSet, 
+            const dependencies = {
+                userId,
+                log: (msg, type) => orchestrator.log(msg, type, userId),
+                io: orchestrator.io || null,
+                bitmartService, Autobot, currentPrice,
+                availableUSDT: botState.lastAvailableUSDT || 0, 
+                availableBTC: botState.lastAvailableBTC || 0,
+                botState, config: botState.config,
+                lcycle: botState.lcycle || 0,
+                scycle: botState.scycle || 0,
+                aicycle: botState.aicycle || 0,
+                changeSet, 
 
-    placeLongOrder: async (params) => {
-        const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
-        return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
-    },
-    placeShortOrder: async (params) => {
-        const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
-        return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
-    },
-    placeAIOrder: async (params) => {
-        const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
-        return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
-    },
-    placeMarketOrder: async (params) => {
-        return await bitmartService.placeMarketOrder(params, userCreds);
-    },
-    updateBotState: async (val, strat) => { 
-        const field = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
-        changeSet[field] = val; 
-    },
-    updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
-    updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
-    updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
-    updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
-    syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
-};
+                placeLongOrder: async (params) => {
+                    const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
+                    return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
+                },
+                placeShortOrder: async (params) => {
+                    const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
+                    return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
+                },
+                placeAIOrder: async (params) => {
+                    const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
+                    return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
+                },
+                placeMarketOrder: async (params) => {
+                    return await bitmartService.placeMarketOrder(params, userCreds);
+                },
+                updateBotState: async (val, strat) => { 
+                    const field = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
+                    changeSet[field] = val; 
+                },
+                updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
+                updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
+                updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
+                updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
+                syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
+            };
 
-            // Monitoreo Long/Short (Sin cambios)
             if (botState.llastOrder && botState.lstate !== 'STOPPED') {
                 if (botState.llastOrder.side === 'buy') {
                     await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
@@ -254,7 +256,6 @@ const dependencies = {
                 }
             }
 
-            // Cálculos Long/Short (Sin cambios)
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
@@ -277,7 +278,6 @@ const dependencies = {
                 changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
             }
 
-            // Ejecución
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
             if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
             if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies); 
