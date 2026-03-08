@@ -45,6 +45,30 @@ router.post('/config', aiController.updateAIConfig);
  * @route   POST /api/ai/panic
  * @desc    CIERRE DE EMERGENCIA: Detención inmediata y limpieza de buffers.
  */
-router.post('/panic', bitmartAuthMiddleware, aiController.panicSell);
+
+router.post('/panic-stop', authMiddleware, async (req, res) => {
+    try {
+        console.log("🚨 AI PANIC SIGNAL RECEIVED");
+        
+        // Ejecutar parada
+        const report = await aiEngine.stopAndClosePositions(); 
+        
+        res.json({ 
+            success: true, 
+            message: "AI Strategy halted successfully",
+            data: {
+                state: 'STOPPED',
+                action: 'MARKET_SELL_EXECUTED',
+                timestamp: new Date().toISOString()
+            }
+        });
+    } catch (error) {
+        console.error("❌ AI Panic Failure:", error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: "Panic partially failed: " + error.message 
+        });
+    }
+});
 
 module.exports = router;
