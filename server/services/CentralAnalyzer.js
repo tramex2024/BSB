@@ -1,10 +1,9 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Motor de Indicadores Técnicos Globales (Versión Auditada 2026)
- * FIX: RSI Sync & Triple-Validation Logic
+ * Motor de Indicadores Técnicos Globales (Versión MACD + RSI Fix)
  */
 
-const { RSI, ADX, Stochastic } = require('technicalindicators');
+const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
 const bitmartService = require('./bitmartService'); 
 const MarketSignal = require('../models/MarketSignal');
 
@@ -17,16 +16,18 @@ class CentralAnalyzer {
             RSI_21: 21, 
             ADX_PERIOD: 14, 
             STOCH_PERIOD: 14,
+            MACD_FAST: 12,
+            MACD_SLOW: 26,
+            MACD_SIGNAL: 9,
             MOMENTUM_THRESHOLD: 0.8,
-            MAX_HISTORY: 250 // Buffer optimizado para estabilidad
+            MAX_HISTORY: 250
         };
         this.lastPrice = 0;
     }
 
     async init(io) {
         this.io = io;
-        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo inicializado con sincronización de 250 velas.");
-        // Al iniciar, intentamos poblar con datos de BitMart si la DB está vacía
+        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con MACD y RSI sincronizado.");
         await this.analyze();
     }
 
@@ -34,25 +35,15 @@ class CentralAnalyzer {
         this.lastPrice = parseFloat(price);
     }
 
-    /**
-     * analyze
-     * @param {Array} externalCandles - Opcional: Velas enviadas directamente desde la DB (Etapa 2)
-     */
     async analyze(externalCandles = null) {
         try {
             let candles = externalCandles;
 
-            // 1. OBTENCIÓN Y NORMALIZACIÓN DE DATOS
+            // 1. OBTENCIÓN DE DATOS
             if (!candles || candles.length === 0) {
-                // FALLBACK: Si no hay velas externas, pedimos 300 a BitMart
                 const raw = await bitmartService.getKlines(this.symbol, '1', 300);
-                
-                if (!raw || raw.length === 0) {
-                    console.warn("⚠️ [ANALYZER] No se pudieron obtener velas para el cálculo.");
-                    return;
-                }
+                if (!raw || raw.length === 0) return;
 
-                // FIX: Asegurar orden cronológico [Antiguo -> Reciente]
                 if (raw[0].timestamp > raw[raw.length - 1].timestamp) {
                     raw.reverse();
                 }
@@ -67,7 +58,6 @@ class CentralAnalyzer {
                 }));
             }
 
-            // Mantener el límite exacto para el cálculo técnico
             if (candles.length > this.config.MAX_HISTORY) {
                 candles = candles.slice(-this.config.MAX_HISTORY);
             }
@@ -76,35 +66,38 @@ class CentralAnalyzer {
             const highs = candles.map(c => c.high);
             const lows = candles.map(c => c.low);
 
-            // 2. CÁLCULO DE INDICADORES (CON PRECIO EN TIEMPO REAL)
-            // Inyectamos el lastPrice (WebSocket) como el punto de datos más actual
+            // Inyección de precio en tiempo real para el cálculo actual
             const currentCloses = [...closes];
             if (this.lastPrice && this.lastPrice !== currentCloses[currentCloses.length - 1]) {
                 currentCloses.push(this.lastPrice);
             }
 
-            // Cálculo de RSI
+            // 2. CÁLCULO DE INDICADORES
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_21 });
             
-            // Cálculo de ADX
             const adxArr = ADX.calculate({
-                high: highs, 
-                low: lows, 
-                close: closes,
+                high: highs, low: lows, close: closes,
                 period: this.config.ADX_PERIOD
             });
 
-            // Cálculo de Estocástico
             const stochArr = Stochastic.calculate({
-                high: highs, 
-                low: lows, 
-                close: closes,
+                high: highs, low: lows, close: closes,
                 period: this.config.STOCH_PERIOD,
                 signalPeriod: 3
             });
 
-            // 3. EXTRACCIÓN Y FORMATEO DE RESULTADOS
+            // NUEVO: Cálculo de MACD
+            const macdArr = MACD.calculate({
+                values: currentCloses,
+                fastPeriod: this.config.MACD_FAST,
+                slowPeriod: this.config.MACD_SLOW,
+                signalPeriod: this.config.MACD_SIGNAL,
+                SimpleMAOscillator: false,
+                SimpleMASignal: false
+            });
+
+            // 3. EXTRACCIÓN DE VALORES ACTUALES
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const prevRSI21 = rsi21Arr.length > 1 ? parseFloat(rsi21Arr[rsi21Arr.length - 2].toFixed(2)) : curRSI21;
@@ -112,71 +105,76 @@ class CentralAnalyzer {
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curStoch = stochArr.length > 0 ? stochArr[stochArr.length - 1] : { k: 0, d: 0 };
 
-            // Determinación de la señal (Basada en RSI 21 para evitar ruido)
-            const price = this.lastPrice || closes[closes.length - 1];
-            const signal = this._getSignal(curRSI21, prevRSI21, curADX, curStoch, price);
+            // Valores MACD
+            const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
-            // 4. PERSISTENCIA EN MONGODB (MARKET SIGNALS)
+            // 4. LÓGICA DE SEÑAL (RSI + Confirmación MACD)
+            const price = this.lastPrice || closes[closes.length - 1];
+            const signal = this._getSignal(curRSI21, prevRSI21, curADX, curMACD, price);
+
+            // 5. PERSISTENCIA EN DB (Sincronización de campos RSI)
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
                     currentPrice: price,
                     rsi14: curRSI14,
                     rsi21: curRSI21,
-                    currentRSI: curRSI14,
+                    currentRSI: curRSI14, // FIX: Actualiza el campo legado de 39.03
+                    prevRSI: prevRSI21,
                     adx: curADX,
                     stochK: curStoch.k,
                     stochD: curStoch.d,
+                    // Persistencia MACD
+                    macdValue: parseFloat(curMACD.MACD.toFixed(2)),
+                    macdSignal: parseFloat(curMACD.signal.toFixed(2)),
+                    macdHist: parseFloat(curMACD.histogram.toFixed(2)),
                     signal: signal.action, 
                     reason: signal.reason,
-                    prevRSI: prevRSI21,
                     lastUpdate: new Date()
                 },
                 { upsert: true, new: true }
             );
 
-            // 5. NOTIFICACIÓN POR WEBSOCKET (FRONTEND)
+            // 6. BROADCAST
             if (this.io) {
                 this.io.emit('market-signal-update', { 
                     price, 
                     rsi14: curRSI14, 
-                    rsi21: curRSI21, 
-                    adx: curADX, 
-                    stochK: curStoch.k, 
-                    stochD: curStoch.d, 
-                    signal: signal.action,
-                    historyCount: candles.length 
+                    macd: curMACD.histogram,
+                    signal: signal.action 
                 });
             }
-
-            // DEBUG LOG: Para verificar en la consola que el RSI se mueve
-            console.log(`[ANALYZER] BTC: ${price} | RSI14: ${curRSI14} | Signal: ${signal.action}`);
 
             return updatedSignal;
 
         } catch (err) {
-            console.error(`❌ [CENTRAL-ANALYZER] Error Crítico: ${err.message}`);
+            console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
         }
     }
 
-    /**
-     * Lógica de Señal Unificada
-     */
-    _getSignal(current, prev, adx, stoch, price) {
-        if (!current || !prev) return { action: "HOLD", reason: "Data Loading" };
+    _getSignal(rsi, prevRsi, adx, macd, price) {
+        if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
 
-        const diff = current - prev;
-        const isTrending = adx > 20; 
+        const rsiDiff = rsi - prevRsi;
+        const macdBullish = macd.MACD > macd.signal; // Cruce alcista
+        const macdBearish = macd.MACD < macd.signal; // Cruce bajista
 
-        // ESTRATEGIA COMPRA
-        if (prev <= 30 && current > 30) return { action: "BUY", reason: "RSI Oversold Recovery" };
-        if (diff > this.config.MOMENTUM_THRESHOLD && current < 60) return { action: "BUY", reason: "Strong Momentum" };
+        // SEÑAL DE COMPRA: RSI saliendo de sobreventa + Histograma MACD mejorando
+        if (rsi <= 35 && rsiDiff > 0 && !macdBearish) {
+            return { action: "BUY", reason: "RSI Oversold + MACD Neutral/Bullish" };
+        }
 
-        // ESTRATEGIA VENTA
-        if (prev >= 70 && current < 70) return { action: "SELL", reason: "RSI Overbought Rejection" };
-        if (diff < -this.config.MOMENTUM_THRESHOLD && current > 40) return { action: "SELL", reason: "Momentum Loss" };
+        // SEÑAL DE VENTA: RSI en sobrecompra o perdiendo fuerza + Cruce MACD bajista
+        if (rsi >= 65 && (rsiDiff < 0 || macdBearish)) {
+            return { action: "SELL", reason: "RSI Overbought + MACD Bearish Cross" };
+        }
 
-        return { action: "HOLD", reason: "Market Flow" };
+        // MOMENTUM FUERTE
+        if (rsiDiff > this.config.MOMENTUM_THRESHOLD && macdBullish) {
+            return { action: "BUY", reason: "Strong Momentum Bullish" };
+        }
+
+        return { action: "HOLD", reason: "Market Stable" };
     }
 }
 
