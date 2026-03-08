@@ -186,12 +186,18 @@ function syncAIElementsInDOM() {
     }
 }
 
-// --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) ---
+// --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) - CORREGIDO PARA CAPTURAR STOP IDs ---
 document.addEventListener('click', async (e) => {
-    const btnAi = e.target.closest('#btn-start-ai');
-    const btnLong = e.target.closest('#austartl-btn'); 
-    const btnShort = e.target.closest('#austarts-btn');
+    // 1. Capturamos los botones por sus dos posibles estados (Start y Stop)
+    const btnAi = e.target.closest('#btn-start-ai') || e.target.closest('#btn-stop-ai') || e.target.closest('#austartai-btn') || e.target.closest('#austopai-btn');
+    
+    // Captura Long (Inicia con 'austartl' o 'austopl')
+    const btnLong = e.target.closest('#austartl-btn') || e.target.closest('#austopl-btn');
+    
+    // Captura Short (Inicia con 'austarts' o 'austops')
+    const btnShort = e.target.closest('#austarts-btn') || e.target.closest('#austops-btn');
 
+    // 2. Si el clic no fue en un botón de control, abortamos
     if (!btnAi && !btnLong && !btnShort) return;
 
     e.preventDefault();
@@ -199,6 +205,7 @@ document.addEventListener('click', async (e) => {
 
     let btn, side, stateKey, endpoint;
 
+    // 3. Asignación de variables según el botón detectado
     if (btnAi) {
         btn = btnAi; side = 'AI'; stateKey = 'aistate'; endpoint = '/api/ai/toggle';
     } else if (btnLong) {
@@ -209,11 +216,15 @@ document.addEventListener('click', async (e) => {
 
     if (btn.disabled) return;
 
+    // Detectamos si está RUNNING o STOPPED según el estado global
     const isRunning = currentBotState[stateKey] === 'RUNNING';
     const action = isRunning ? 'stop' : 'start';
 
     btn.classList.add('opacity-50', 'cursor-wait');
+    
+    // El modal se disparará siempre porque el ID fue capturado correctamente
     const confirmado = await askConfirmation(side, action);
+    
     btn.classList.remove('opacity-50', 'cursor-wait');
 
     if (!confirmado) return;
@@ -224,27 +235,18 @@ document.addEventListener('click', async (e) => {
 
     try {
         let bodyPayload;
-        let finalEndpoint = endpoint; // Mantenemos el endpoint original por defecto
+        let finalEndpoint = endpoint; 
 
         if (side === 'AI') {
-            // El controlador de AI suele ser más simple
             bodyPayload = { action, side: side.toLowerCase() };
         } else {
-            /**
-             * ESTRATEGIA PARA AUTOBOT (LONG/SHORT)
-             * Construimos el payload que configController.js espera para no dar 400
-             */
             const sideLow = side.toLowerCase();
-            
-            // Si el endpoint es de ejecución (start/stop), cambiamos la ruta
-            // asumiendo la estructura de autobotRoutes.js: /api/autobot/start/long
             finalEndpoint = `/api/autobot/${action}/${sideLow}`;
 
             bodyPayload = {
                 strategy: sideLow,
                 config: {
                     [sideLow]: {
-                        // Enviamos el estado deseado dentro del objeto config
                         enabled: action === 'start'
                     }
                 }
@@ -260,7 +262,6 @@ document.addEventListener('click', async (e) => {
             body: JSON.stringify(bodyPayload) 
         });
 
-        // 400 Bad Request se captura aquí
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.message || `Error del Servidor: ${response.status}`);
@@ -273,10 +274,7 @@ document.addEventListener('click', async (e) => {
                 currentBotState.aistate = result.aistate;
                 currentBotState.isRunning = result.isRunning;
             } else {
-                // Actualización de estado local para feedback inmediato
                 currentBotState[stateKey] = (action === 'start' ? 'RUNNING' : 'STOPPED');
-                
-                // Sincronizamos con result.data (como dicta tu configController)
                 if (result.data) {
                     currentBotState.config[side.toLowerCase()] = {
                         ...currentBotState.config[side.toLowerCase()],

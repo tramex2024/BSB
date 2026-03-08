@@ -45,7 +45,8 @@ export async function updateBotUI(state) {
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        'lnorder-val': 'lnorder',     
+        //'lnorder-val': 'lnorder',
+        'aulnorder': 'lnorder'     
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
@@ -55,7 +56,8 @@ export async function updateBotUI(state) {
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        'snorder-val': 'snorder',
+        //'snorder-val': 'snorder',
+        'ausnorder': 'snorder'
 
         // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
