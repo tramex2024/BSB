@@ -15,7 +15,7 @@ import { updateSystemHealth } from './modules/health.js';
 import { initializeSettings } from './modules/settings.js';
 import { initializeProfile } from './modules/profile.js';
 import { initPayments } from './modules/payments.js';
-import { initializeNotifications } from './modules/notifications.js'; // Asegúrate de que la ruta sea correcta
+import { initializeNotifications } from './modules/notifications.js';
 import { askConfirmation } from './modules/confirmModal.js';
 
 // [RESTAURADO] Importación para mensajes flotantes (Toasts)
@@ -39,7 +39,6 @@ export const currentBotState = {
     isRunning: false,
     stopAtCycle: false,
     historyCount: 0,
-    // [MEJORA] Añadidos campos de balance para persistencia entre pestañas
     lastAvailableUSDT: 0,
     lastAvailableBTC: 0,
     lprofit: 0,
@@ -69,7 +68,7 @@ const views = {
 export function logStatus(message, type = 'info') {
     if (type === 'error') logQueue = [{ message, type }]; 
     else {
-        if (logQueue.length >= 3) logQueue.shift(); // Aumentado a 3 para mejor flujo
+        if (logQueue.length >= 3) logQueue.shift();
         logQueue.push({ message, type });
     }
     if (!isProcessingLog) processNextLog();
@@ -99,22 +98,15 @@ export function initializeFullApp() {
     if (token && userId) {
         console.log("🚀 Initializing Authenticated App Flow...");
         
-        // 1. Manejo de visibilidad de la pestaña Admin
         const adminTab = document.getElementById('tab-admin');
         if (adminTab && userRole === 'admin') {
             adminTab.style.display = 'block';
             adminTab.classList.remove('hidden');
         }
 
-        // 2. Aplicar permisos según el rol (Advanced/Current)
         applyRolePermissions();
-
-        // 3. Inicializar Socket y capturar la instancia
-        // Importante: initSocket() debe retornar la instancia 'socket'
         const socket = initSocket();
 
-        // 4. [CONEXIÓN CRUCIAL] Inicializar sistema de notificaciones
-        // Esto activa la campana, el punto verde y el historial
         if (socket) {
             import('./modules/notifications.js').then(module => {
                 module.initializeNotifications(socket);
@@ -129,7 +121,6 @@ export function initializeFullApp() {
 
 // --- TAB MANAGEMENT ---
 export async function initializeTab(tabName) {
-    // Limpieza de intervalos previos
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
 
@@ -140,7 +131,6 @@ export async function initializeTab(tabName) {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         
-        // Inyectamos HTML si es diferente
         if (mainContent.innerHTML !== html) {
             mainContent.innerHTML = html;
         }
@@ -151,16 +141,12 @@ export async function initializeTab(tabName) {
             const initFn = module[initFnName];
             
             if (initFn) {
-                // [NUEVO] Pasamos el estado global para que la vista nazca con datos
                 await initFn(currentBotState);
-                
-                // Asegurar sincronización inmediata de elementos de balance
                 if (tabName === 'dashboard' && module.updateDistributionWidget) {
                     module.updateDistributionWidget(currentBotState);
                 }
             }
 
-            // Gestión de Órdenes por Pestaña
             if (tabName === 'aibot') {
                 const aiOrderList = document.getElementById('ai-order-list');
                 const aiHistoryCont = document.getElementById('ai-history-table-body');
@@ -174,7 +160,6 @@ export async function initializeTab(tabName) {
             }
         }
 
-        // Actualizar UI general con el estado actual
         await updateBotUI(currentBotState);
         syncAIElementsInDOM();
 
@@ -201,75 +186,82 @@ function syncAIElementsInDOM() {
     }
 }
 
-// --- GLOBAL EVENT DELEGATION (Lógica de Botones AI) ---
+// --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) ---
 document.addEventListener('click', async (e) => {
-    // Esto busca el botón aunque hagas clic en el icono de adentro
-    const btnAi = e.target.closest('#btn-start-ai'); 
-    
-if (btnAi) {
+    const btnAi = e.target.closest('#btn-start-ai');
+    const btnLong = e.target.closest('#austartl-btn');
+    const btnShort = e.target.closest('#austarts-btn');
+
+    if (!btnAi && !btnLong && !btnShort) return;
+
     e.preventDefault();
     e.stopPropagation();
-    
-    if (btnAi.disabled) return;
 
-    const isRunning = currentBotState.aistate === 'RUNNING';
+    let btn, side, stateKey, endpoint;
+
+    if (btnAi) {
+        btn = btnAi; side = 'AI'; stateKey = 'aistate'; endpoint = '/api/ai/toggle';
+    } else if (btnLong) {
+        btn = btnLong; side = 'LONG'; stateKey = 'lstate'; endpoint = '/api/strategy/toggle';
+    } else if (btnShort) {
+        btn = btnShort; side = 'SHORT'; stateKey = 'sstate'; endpoint = '/api/strategy/toggle';
+    }
+
+    if (btn.disabled) return;
+
+    const isRunning = currentBotState[stateKey] === 'RUNNING';
     const action = isRunning ? 'stop' : 'start';
 
-    // [MEJORA] Feedback visual instantáneo antes del modal
-    btnAi.classList.add('opacity-50', 'cursor-wait');
+    btn.classList.add('opacity-50', 'cursor-wait');
+    const confirmado = await askConfirmation(side, action);
+    btn.classList.remove('opacity-50', 'cursor-wait');
 
-    const confirmado = await askConfirmation('AI', action);
-    
-    // [MEJORA] Restauramos el estado si cancela o tras confirmar
-    btnAi.classList.remove('opacity-50', 'cursor-wait');
+    if (!confirmado) return;
 
-    if (!confirmado) {
-         console.log("❌ Acción cancelada por usuario");
-         return;
-    }
-        btnAi.disabled = true;
-        const originalHTML = btnAi.innerHTML;
-        btnAi.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
+    btn.disabled = true;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
 
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/ai/toggle`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ action })
-            });
+    try {
+        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({ action, side: side.toLowerCase() })
+        });
 
-            const result = await response.json();
-            if (result.success) {
+        const result = await response.json();
+        if (result.success) {
+            if (side === 'AI') {
                 currentBotState.aistate = result.aistate;
                 currentBotState.isRunning = result.isRunning;
-
-                // [RESTAURADO] Mensaje de notificación en el Log Bar
-                const msg = action === 'start' ? "AI Strategy Successfully Started" : "AI Strategy Stopped";
-                logStatus(msg, "success");
-
-                // [RESTAURADO] Mensaje Toast inferior derecha
-                const toastMsg = action === 'start' ? "AI Core: Strategy Active" : "AI Core: Strategy Paused";
-                const toastType = action === 'start' ? 'success' : 'warning';
-                displayMessage(toastMsg, toastType);
-
+                
                 aiBotUI.setRunningStatus(
                     result.isRunning, 
                     currentBotState.config.ai.stopAtCycle,
                     result.historyCount || 0
                 );
             } else {
-                logStatus(result.message || "Error toggling AI", "error");
+                currentBotState[stateKey] = result.state;
             }
-        } catch (error) {
-            console.error("❌ Global AI Toggle Error:", error);
-            logStatus("Connection error with AI Engine", "error");
-            btnAi.innerHTML = originalHTML;
-        } finally {
-            btnAi.disabled = false;
+
+            const msg = `${side} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`;
+            logStatus(msg, "success");
+            displayMessage(`Strategy ${side}: ${action.toUpperCase()}ED`, action === 'start' ? 'success' : 'warning');
+
+            await updateBotUI(currentBotState);
+        } else {
+            logStatus(result.message || "Error updating strategy", "error");
+            btn.innerHTML = originalHTML;
         }
+    } catch (error) {
+        console.error(`❌ ${side} Toggle Error:`, error);
+        logStatus("Connection error", "error");
+        btn.innerHTML = originalHTML;
+    } finally {
+        btn.disabled = false;
     }
 });
 
@@ -306,14 +298,8 @@ async function saveAIConfigGlobal(payload) {
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
-    const hasToken = localStorage.getItem('token');
-    const hasUserId = localStorage.getItem('userId');
-
-    // [NUEVO] Aplicamos permisos inmediatamente al cargar el DOM 
-    // por si el usuario ya estaba logueado anteriormente.
     applyRolePermissions();
-
-    if (hasToken && hasUserId) { 
+    if (localStorage.getItem('token') && localStorage.getItem('userId')) { 
         initializeFullApp(); 
     } else {
         logStatus("Please sign in to access bot controls.", "warning");
@@ -322,27 +308,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-    
-    // Iniciar siempre en dashboard
     initializeTab('dashboard'); 
-    
-    // [IMPORTANTE] Activamos el Soporte Técnico (Audífonos)
     initializeSupport();
-    
-    // Reemplaza el bloque anterior del settings-icon por este:
     initializeSettings();
-    
-    // Initialize Profile
     initializeProfile();
-    
-    // Initialize Payments
     initPayments();   
 
-    // [NUEVO] Listener para Configuración General
     const cog = document.getElementById('settings-icon');
     if (cog) cog.addEventListener('click', () => logStatus("Settings panel coming soon.", "info"));
 
-    // [NUEVO] Listener para Perfil de Usuario
     const profile = document.getElementById('user-profile-icon');
     if (profile) profile.addEventListener('click', () => {
         const uId = localStorage.getItem('userId') || 'Guest';
@@ -353,23 +327,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- AUTO-REACTIVADOR AL REGRESAR ---
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-        console.log("♻️ App enfocada: Verificando conexión...");
-        
-        // 1. Re-inicializamos el Socket si se perdió
-        const { initSocket, socket } = import('./modules/socket.js').then(m => {
+        import('./modules/socket.js').then(m => {
             if (!m.socket || !m.socket.connected) {
-                console.log("🔌 Forzando reconexión de Socket...");
                 m.initSocket();
             } else {
-                // Si el socket parece vivo, pedimos el estado actual por si acaso
                 m.socket.emit('get-bot-state');
             }
         });
-
-        // 2. Refrescar datos de órdenes (opcional pero recomendado)
         const activeTab = document.querySelector('.nav-link.active')?.dataset.tab;
-        if (activeTab) {
-            initializeTab(activeTab); 
-        }
+        if (activeTab) initializeTab(activeTab); 
     }
 });
