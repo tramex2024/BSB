@@ -75,19 +75,15 @@ export async function updateBotUI(state) {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // Buscamos el valor en el nivel raíz o dentro de .stats
         let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
 
-        // BLOQUE DE PROTECCIÓN: Si el valor es undefined, no tocamos el DOM.
         if (val === undefined || val === null) return;
 
-       // --- Renderizado de Estados (Dirty Checking) ---
+        // --- Renderizado de Estados ---
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = val.toString().toUpperCase().trim();
             if (el.textContent !== currentStatus) {
                 el.textContent = currentStatus;
-                
-                // Si es el bot de AI, usamos índigo, si no, usamos el mapa normal
                 if (id.includes('aistate')) {
                     el.style.color = currentStatus === 'RUNNING' ? '#818cf8' : '#ef4444';
                 } else {
@@ -122,7 +118,7 @@ export async function updateBotUI(state) {
         if (bar) bar.style.width = `${state.aiConfidence}%`;
     }
 
-    // 4. Sincronización de Inputs (Solo si no estamos guardando)
+    // 4. Sincronización de Inputs
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
@@ -137,7 +133,7 @@ export async function updateBotUI(state) {
         updateControlsState(state);
     }
 
-    // 6. Actualización de Barras de PnL (Sincronización con Dashboard)
+    // 6. Actualización de Dashboard (Optimizado)
     try {
         const dashboard = await import('./dashboard.js');
         if (dashboard && typeof dashboard.updatePnLBar === 'function') {
@@ -145,24 +141,17 @@ export async function updateBotUI(state) {
             const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
             const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
 
-            if (!isNaN(lProfit)) dashboard.updatePnLBar('long', lProfit);
-            if (!isNaN(sProfit)) dashboard.updatePnLBar('short', sProfit);
-            if (!isNaN(aiProfit)) dashboard.updatePnLBar('ai', aiProfit);
+            dashboard.updatePnLBar('long', lProfit);
+            dashboard.updatePnLBar('short', sProfit);
+            dashboard.updatePnLBar('ai', aiProfit);
             
             const totalProfit = state.total_profit ?? (lProfit + sProfit + aiProfit);
             const totalEl = document.getElementById('auprofit');
-            if (totalEl && totalProfit !== undefined) {
-                formatProfit(totalEl, totalProfit);
-            }
+            if (totalEl) formatProfit(totalEl, totalProfit);
         }
-    } catch (err) {
-        // Silencioso: El dashboard se cargará en el siguiente tic
-    }
-} // <--- CIERRE CORRECTO DE updateBotUI
+    } catch (err) { /* Silencioso */ }
+}
 
-/**
- * Funciones de Apoyo (Fuera de la función principal)
- */
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');
     const bar = document.getElementById(barId);
@@ -171,13 +160,6 @@ function updatePulseBars(id, value) {
     bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
 }
 
-/**
- * Gestiona el estado de los botones (ETAPA 1: PROTECCIÓN DE RESETEO)
- */
-/**
- * Gestiona el estado de los botones (ETAPA 1: PROTECCIÓN DE RESETEO)
- * Actualizado con guardas para el flujo de confirmación.
- */
 export function updateControlsState(state) {
     if (!state) return;
     
@@ -187,32 +169,25 @@ export function updateControlsState(state) {
 
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['auamountai-usdt', 'ai-amount-usdt'];
+    const aiInputs = ['ai-amount-usdt']; // Simplificado para coincidir con tu HTML
 
-    // --- ESTRATEGIA LONG ---
     if (lState !== undefined) {
         updateButtonState('austartl-btn', lState, 'LONG', longInputs);
     }
     
-    // --- ESTRATEGIA SHORT ---
     if (sState !== undefined) {
         updateButtonState('austarts-btn', sState, 'SHORT', shortInputs);
     }
     
-    // --- AI ENGINE CORE ---
     if (aiState !== undefined || state.isRunning !== undefined) {
-        const btnAi = document.getElementById('btn-start-ai');
+        // Buscamos ambos posibles IDs por seguridad
+        const btnAi = document.getElementById('btn-start-ai') || document.getElementById('austartai-btn');
         const actualAiStatus = aiState || (state.isRunning ? 'RUNNING' : 'STOPPED');
 
-        // [GUARDIA DE CONFIRMACIÓN] 
-        // Si el botón está deshabilitado, significa que main.js está esperando el modal o la API.
-        // No permitimos que las actualizaciones de fondo (Socket) cambien el texto/estado aún.
-        if (!btnAi || !btnAi.disabled) {
-            updateButtonState('btn-start-ai', actualAiStatus, 'AI', aiInputs); 
-            // updateButtonState('austartai-btn', actualAiStatus, 'AI', aiInputs); 
+        if (btnAi && !btnAi.disabled) {
+            updateButtonState(btnAi.id, actualAiStatus, 'AI', aiInputs); 
         }
         
-        // Gestión del mensaje del motor (Neural Core)
         const engineMsg = document.getElementById('ai-engine-msg');
         if (engineMsg) {
             if (actualAiStatus === 'RUNNING') {

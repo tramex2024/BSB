@@ -188,7 +188,6 @@ function syncAIElementsInDOM() {
 
 // --- GLOBAL EVENT DELEGATION (AI, LONG & SHORT) ---
 document.addEventListener('click', async (e) => {
-    // Selectores precisos para evitar disparos accidentales
     const btnAi = e.target.closest('#btn-start-ai');
     const btnLong = e.target.closest('#austartl-btn'); 
     const btnShort = e.target.closest('#austarts-btn');
@@ -203,9 +202,9 @@ document.addEventListener('click', async (e) => {
     if (btnAi) {
         btn = btnAi; side = 'AI'; stateKey = 'aistate'; endpoint = '/api/ai/toggle';
     } else if (btnLong) {
-        btn = btnLong; side = 'LONG'; stateKey = 'lstate'; endpoint = '/api/bot/toggle';
+        btn = btnLong; side = 'long'; stateKey = 'lstate'; endpoint = '/api/v1/config/update-config';
     } else if (btnShort) {
-        btn = btnShort; side = 'SHORT'; stateKey = 'sstate'; endpoint = '/api/bot/toggle';
+        btn = btnShort; side = 'short'; stateKey = 'sstate'; endpoint = '/api/v1/config/update-config';
     }
 
     if (btn.disabled) return;
@@ -213,12 +212,8 @@ document.addEventListener('click', async (e) => {
     const isRunning = currentBotState[stateKey] === 'RUNNING';
     const action = isRunning ? 'stop' : 'start';
 
-    // UI Feedback inmediato
     btn.classList.add('opacity-50', 'cursor-wait');
-    
-    // El modal de confirmación debe estar definido globalmente para que esto funcione
     const confirmado = await askConfirmation(side, action);
-    
     btn.classList.remove('opacity-50', 'cursor-wait');
 
     if (!confirmado) return;
@@ -228,13 +223,24 @@ document.addEventListener('click', async (e) => {
     btn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
 
     try {
+        let bodyPayload;
+        if (side === 'AI') {
+            bodyPayload = { action, side: side.toLowerCase() };
+        } else {
+            // Sincronizado con configController.js
+            bodyPayload = {
+                side: side,
+                enabled: action === 'start'
+            };
+        }
+
         const response = await fetch(`${BACKEND_URL}${endpoint}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            body: JSON.stringify({ action, side: side.toLowerCase() }) 
+            body: JSON.stringify(bodyPayload) 
         });
 
         if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -247,11 +253,12 @@ document.addEventListener('click', async (e) => {
                 currentBotState.isRunning = result.isRunning;
                 aiBotUI.setRunningStatus(result.isRunning, currentBotState.config.ai.stopAtCycle, result.historyCount || 0);
             } else {
-                currentBotState[stateKey] = result.state || (action === 'start' ? 'RUNNING' : 'STOPPED');
+                currentBotState[stateKey] = action === 'start' ? 'RUNNING' : 'STOPPED';
+                if (result.config) currentBotState.config = result.config;
             }
 
-            logStatus(`${side} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`, "success");
-            displayMessage(`Strategy ${side}: ${action.toUpperCase()}ED`, action === 'start' ? 'success' : 'warning');
+            logStatus(`${side.toUpperCase()} Strategy ${action === 'start' ? 'Started' : 'Stopped'}`, "success");
+            displayMessage(`Strategy ${side.toUpperCase()}: ${action.toUpperCase()}ED`, action === 'start' ? 'success' : 'warning');
 
             await updateBotUI(currentBotState);
         } else {
@@ -269,7 +276,6 @@ document.addEventListener('click', async (e) => {
 
 // Delegación global para configuración de IA e Inputs de Autobot
 document.addEventListener('change', async (e) => {
-    // Configuración AI
     if (e.target && e.target.id === 'ai-amount-usdt') {
         const val = parseFloat(e.target.value);
         if (isNaN(val) || val <= 0) return;
@@ -280,11 +286,9 @@ document.addEventListener('change', async (e) => {
         await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
     }
 
-    // Configuración Autobot (Checks de Stop at Cycle)
     if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         logStatus(`Updating ${side.toUpperCase()} stop condition...`, "info");
-        // Aquí podrías añadir una función saveBotConfig similar a saveAIConfigGlobal
     }
 });
 
