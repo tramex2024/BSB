@@ -287,17 +287,28 @@ document.addEventListener('click', async (e) => {
             logStatus(`${side.toUpperCase()} ${action.toUpperCase()} exitoso`, "success");
             displayMessage(`Estrategia ${side.toUpperCase()}: ${action.toUpperCase()}`, action === 'start' ? 'success' : 'warning');
 
-            await updateBotUI(currentBotState);
+            // FUERZA LA ACTUALIZACIÓN VISUAL PARA QUITAR EL SPINNER
+            await updateBotUI(currentBotState); 
         } else {
             logStatus(result.message || "Error en la operación", "error");
-            btn.innerHTML = originalHTML;
+            // SI FALLA EL SERVER, RESTAURAMOS EL BOTÓN
+            btn.innerHTML = originalHTML; 
         }
     } catch (error) {
         console.error(`❌ Error en Toggle ${side}:`, error);
         logStatus(error.message, "error");
-        btn.innerHTML = originalHTML;
+        // SI HAY ERROR DE RED, RESTAURAMOS EL BOTÓN
+        btn.innerHTML = originalHTML; 
     } finally {
+        // ESTO ES VITAL: Pase lo que pase, habilitamos el botón y quitamos clases de espera
         btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-wait');
+        
+        // Si después de updateBotUI el botón sigue con el spinner (porque el ID cambió de start a stop)
+        // esta línea de seguridad lo limpia:
+        if (btn.querySelector('.fa-spin')) {
+             btn.innerHTML = originalHTML;
+        }
     }
 });
 
