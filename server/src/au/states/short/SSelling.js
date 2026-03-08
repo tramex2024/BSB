@@ -55,7 +55,7 @@ async function run(dependencies) {
                 await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
             } else {
                 log(`⚠️ [S-SELL] Fondos insuficientes para abrir posición Short.`, 'warning');
-                await updateBotState('STOPPED', SSTATE);
+                await updateBotState('PAUSED', SSTATE);
             }
             return;
         }
