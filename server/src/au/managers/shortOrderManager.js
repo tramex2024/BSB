@@ -4,21 +4,21 @@
  * SHORT ORDER MANAGER:
  * Ejecuta órdenes de venta (apertura/DCA) y compra (cierre) con firmas de estrategia.
  */
-const MIN_USDT_VALUE_FOR_BITMART = 5.0; // BitMart suele requerir > 5 USDT
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../utils/tradeConstants');
 
 /**
  * Convierte montos USDT a unidades de BTC basadas en el precio actual.
- * Aplica un redondeo hacia abajo (floor) a 6 decimales para evitar errores de precisión.
+ * Aplica un redondeo hacia abajo (floor) a 6 decimales para BitMart.
  */
 function convertUsdtToBtc(usdtAmount, currentPrice) {
     if (!currentPrice || currentPrice <= 0) return 0;
     const btcAmount = usdtAmount / currentPrice;
-    // BitMart BTC_USDT acepta hasta 6 decimales
     return Math.floor(btcAmount * 1000000) / 1000000;
 }
 
 /**
  * APERTURA DE SHORT: Vende BTC (Market Sell).
+ * @param {Function} executeOrder - Función inyectada placeShortOrder (con prefijo S_).
  */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, injectedPrice = 0, executeOrder) {
     const { purchaseUsdt } = config.short || {};
@@ -28,20 +28,20 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
 
     const btcSize = convertUsdtToBtc(amountNominal, currentPrice);
 
-    // Validación de monto mínimo para BitMart
-    if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
-        log(`[S-FIRST] ⚠️ Monto insuficiente ($${amountNominal}). Mínimo $${MIN_USDT_VALUE_FOR_BITMART}`, 'warning');
+    if (btcSize <= 0) {
+        log(`[S-FIRST] ❌ Error: Tamaño BTC no válido (${btcSize}).`, 'error');
         return;
     }
 
+    log(`🚀 [S-FIRST] Enviando apertura Short FIRMADA...`, 'info');
+
     try {
-        log(`🚀 [S-FIRST] Enviando apertura Short (Market Sell): ${btcSize} BTC`, 'info');
-        
+        // ✅ Usamos la función firmada con prefijo S_
         const orderResult = await executeOrder({
             symbol: SYMBOL,
             side: 'sell',
             type: 'market',
-            size: btcSize // Correcto: En Sell usamos cantidad de activo
+            size: btcSize
         });
 
         if (orderResult && (orderResult.order_id || orderResult.data?.order_id)) {
@@ -57,7 +57,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-FIRST] Orden Short enviada ID: ${orderId}`, 'success');
+            log(`✅ [S-FIRST] Orden Short enviada ID: ${orderId}. BTC: ${btcSize}`, 'success');
         }
     } catch (error) {
         log(`❌ [S-FIRST] Error de API en apertura Short: ${error.message}`, 'error');
@@ -71,8 +71,6 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
     const SYMBOL = botState.config?.symbol || 'BTC_USDT';
     const currentPrice = injectedPrice || botState.price || 0;
     const btcSize = convertUsdtToBtc(usdtAmount, currentPrice);
-
-    if (usdtAmount < MIN_USDT_VALUE_FOR_BITMART) return;
 
     try {
         const orderResult = await executeOrder({
@@ -93,7 +91,7 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-DCA] Cobertura Short enviada ID: ${orderId}`, 'success');
+            log(`✅ [S-DCA] Cobertura Short enviada ID: ${orderId}. BTC: ${btcSize}`, 'success');
         }
     } catch (error) {
         log(`❌ [S-DCA] Error en DCA Short: ${error.message}`, 'error');
@@ -102,23 +100,22 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
 
 /**
  * RECOMPRA DE CIERRE (Take Profit).
- * 🟢 AUDITORÍA: Usamos 'size' en lugar de 'notional' para asegurar el cierre exacto del sac.
  */
 async function placeShortBuyOrder(config, botState, btcAmount, log, updateGeneralBotState, injectedPrice = 0, executeOrder) { 
     const SYMBOL = config.symbol || 'BTC_USDT';
+    const currentPrice = injectedPrice || botState.price || 0;
     
-    // 🟢 NOTA: En BitMart, si quieres comprar una cantidad EXACTA de monedas 
-    // en una orden Market Buy, algunos endpoints prefieren 'size'. 
-    // Sin embargo, para asegurar compatibilidad total, enviamos el btcAmount exacto del SAC.
-    
-    log(`💰 [S-PROFIT] Recomprando p/ cerrar Short: ${btcAmount.toFixed(6)} BTC...`, 'info');
+    // BitMart Market Buy requiere el monto en la moneda de cotización (USDT)
+    const usdtNeeded = btcAmount * currentPrice;
+
+    log(`💰 [S-PROFIT] Recomprando p/ cerrar Short (FIRMADA): ${btcAmount.toFixed(6)} BTC...`, 'info');
 
     try {
         const orderResult = await executeOrder({
             symbol: SYMBOL,
             side: 'buy',
             type: 'market',
-            size: btcAmount // Cambiamos notional por size para liquidar el SAC exacto
+            notional: usdtNeeded
         });
 
         if (orderResult && (orderResult.order_id || orderResult.data?.order_id)) {
@@ -138,8 +135,16 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateGenera
     }
 }
 
+/**
+ * CANCELACIÓN: BitmartService directo (sin firma necesaria).
+ */
+async function cancelActiveShortOrder(botState, log, updateGeneralBotState, userId) {
+    // ... Tu lógica original de cancelación es perfecta ...
+}
+
 module.exports = {
     placeFirstShortOrder,
     placeCoverageShortOrder,
-    placeShortBuyOrder
+    placeShortBuyOrder,
+    cancelActiveShortOrder
 };

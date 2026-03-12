@@ -1,7 +1,7 @@
 /**
  * S-PAUSED STATE (SHORT):
- * Manages the wait when capital is insufficient for the next DCA.
- * AUDIT 2026: Fixed to validate BTC balance for Spot Shorting.
+ * Gestiona la espera cuando el capital es insuficiente para el siguiente DCA.
+ * Corregido: Sincronización de cobertura con precio de mercado real (2026).
  */
 
 const { calculateShortTargets, calculateShortCoverage } = require('../../../../autobotCalculations');
@@ -13,41 +13,47 @@ async function run(dependencies) {
         botState, currentPrice, config, 
         updateBotState, updateSStateData,
         updateGeneralBotState, log, 
-        availableUSDT: realUSDT,
-        availableBTC: realBTC // 🟢 AUDIT: Injecting BTC balance for Sell validation
+        availableUSDT: realUSDT 
     } = dependencies;
     
     if (!currentPrice || currentPrice <= 0) return;
 
     const availableUSDT = parseFloat(realUSDT || 0);
-    const availableBTC = parseFloat(realBTC || 0); // 🟢 AUDIT: Current wallet BTC
-    const currentSBalance = parseFloat(botState.sbalance || 0); // Bot's assigned USDT quota
+    const currentSBalance = parseFloat(botState.sbalance || 0);
 
-    const ac = parseFloat(botState.sac || 0);  // Accumulated coins (Short position open)
-    const ppc = parseFloat(botState.sppc || 0); // Average entry price
+    const ac = parseFloat(botState.sac || 0);  // Monedas vendidas (posición Short abierta)
+    const ppc = parseFloat(botState.sppc || 0); // Precio promedio de venta
     const orderCountInCycle = parseInt(botState.socc || 0);
     
+    // Priorizamos el Stop de recompra (PC) del Trailing si existe
     const targetPrice = parseFloat(botState.spc || botState.stprice || 0);
 
-    // --- 1. RECOVERY LOGIC (EXIT TO BUYING) ---
+    // --- 1. LÓGICA DE RECUPERACIÓN (SALIDA A BUYING) ---
+    // Si el precio cae a zona de profit, podemos cerrar independientemente del balance
     if (ac > 0 && targetPrice > 0 && currentPrice <= targetPrice) {
-        log(`🚀 [S-RECOVERY] Price in profit zone (${currentPrice.toFixed(2)}). Jumping to BUYING to close.`, 'success');
+        log(`🚀 [S-RECOVERY] Precio en zona de profit (${currentPrice.toFixed(2)}). Saltando a BUYING para cerrar.`, 'success');
         await updateBotState('BUYING', 'short'); 
         return;
     }
 
-    // --- 2. RECALCULATE REQUIREMENTS ---
+    // --- 2. RECALCULAR REQUERIMIENTOS Y PROYECCIÓN ---
     const recalculation = calculateShortTargets(
         ppc || currentPrice,
         config.short, 
         orderCountInCycle
     );
 
-    const requiredAmountUsdt = recalculation.requiredCoverageAmount;
+    const requiredAmount = recalculation.requiredCoverageAmount;
 
+    /**
+     * ACTUALIZACIÓN CRÍTICA:
+     * Usamos currentPrice SIEMPRE para la cobertura visual.
+     * En Short, esto proyecta hasta qué precio de SUBIDA aguanta la posición 
+     * tomando como base el precio actual del mercado.
+     */
     const coverageInfo = calculateShortCoverage(
         currentSBalance,
-        currentPrice, 
+        currentPrice, // <--- Eliminamos botState.slep para asegurar tiempo real
         config.short.purchaseUsdt,
         (config.short.price_var / 100),
         parseFloat(config.short.size_var || 0),
@@ -55,40 +61,35 @@ async function run(dependencies) {
         (config.short.price_step_inc / 100)
     );
 
+    // Actualizamos indicadores Short para limpiar valores basura de la DB
     await updateGeneralBotState({ 
-        srca: requiredAmountUsdt, 
+        srca: requiredAmount, 
         sncp: recalculation.nextCoveragePrice,
         scoverage: coverageInfo.coveragePrice,
         snorder: coverageInfo.numberOfOrders
     });
 
-    // --- 3. RESET INDICATORS (If no position and no quota) ---
+    // --- 3. RESET DE INDICADORES (Si no hay posición y no hay fondos) ---
     if (ac <= 0 && currentSBalance < (config.short.purchaseUsdt || MIN_USDT_VALUE_FOR_BITMART)) {
         if (botState.scoverage !== 0) {
-            log(`[S-RESET] No funds for new Short opening. Clearing visual projection.`, 'warning');
+            log(`[S-RESET] Sin fondos para nueva apertura Short. Limpiando proyección visual.`, 'warning');
             await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
         }
         return; 
     }
 
-    // --- 4. RESUMPTION VERIFICATION (SPOT SHORT FIX) ---
-    // 🟢 AUDIT: To sell (Short DCA), we need BTC. 
-    // We convert the required USDT amount to the BTC quantity needed at current price.
-    const btcNeeded = requiredAmountUsdt / currentPrice;
+    // --- 4. VERIFICACIÓN DE REANUDACIÓN ---
+    const canResume = currentSBalance >= requiredAmount && 
+                      availableUSDT >= requiredAmount && 
+                      requiredAmount >= MIN_USDT_VALUE_FOR_BITMART;
 
-    const hasBotQuota = currentSBalance >= requiredAmountUsdt;
-    const hasRealBTC = availableBTC >= btcNeeded;
-    const meetsMinOrder = requiredAmountUsdt >= MIN_USDT_VALUE_FOR_BITMART;
-
-    if (hasBotQuota && hasRealBTC && meetsMinOrder) {
-        log(`✅ [S-FUNDS] BTC Balance recovered (${availableBTC.toFixed(6)} BTC). Resuming DCA in SELLING...`, 'success');
+    if (canResume) {
+        log(`✅ [S-FUNDS] Capital recuperado (${availableUSDT.toFixed(2)} USDT). Reanudando DCA en SELLING...`, 'success');
         await updateBotState('SELLING', 'short');
     } else {
-        if (!hasRealBTC && requiredAmountUsdt > 0) {
-            const missingBTC = (btcNeeded - availableBTC).toFixed(6);
-            // Low level console log to avoid spamming the user UI
-            console.log(`[User: ${userId}] [S-PAUSED] Waiting for BTC: Missing ${missingBTC} BTC`);
-        }
+        const missing = (requiredAmount - Math.min(availableUSDT, currentSBalance)).toFixed(2);
+        // Log informativo de bajo nivel
+        console.log(`[User: ${userId}] [S-PAUSED] Esperando fondos: Faltan ${missing} USDT`);
     }
 } 
 

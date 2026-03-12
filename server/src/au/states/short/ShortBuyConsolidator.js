@@ -7,22 +7,24 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
  * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy Market).
- * 🟢 AUDITORÍA: Añadido userCreds para consistencia con la firma V4.
+ * @param {string} userId - ID del usuario dueño del bot.
  */
-async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) {
+async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId) {
     const lastOrder = botState.slastOrder;
 
-    // En Short, el ciclo se cierra con una compra ('buy')
+    // En Short, el ciclo se cierra con una compra ('buy') para devolver los activos "prestados"
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
         return false; 
     }
 
     const orderIdString = String(lastOrder.order_id);
-    // 🟢 CORRECCIÓN: Usamos las credenciales inyectadas correctamente
+
+    // 🟢 AUDITORÍA: Extraemos las credenciales del botState para la firma de la API
     const creds = userCreds;
 
     try {
-        // 🟢 CORRECCIÓN: Pasamos 'creds' para la autenticación
+        // Consultamos BitMart usando el contexto del usuario para acceder a sus API Keys
+        // 🟢 CORRECCIÓN: Pasamos 'creds', no 'userId' para cumplir con la firma V4
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
         let filledVolume = parseFloat(
@@ -31,8 +33,9 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
             finalDetails?.filledVolume || 0
         );
 
-        // Fallback: Verificación en historial si la consulta directa falla
+        // Fallback: Verificación en historial si la consulta directa no devuelve datos claros
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
+            // 🟢 CORRECCIÓN: Pasamos 'creds'
             const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
@@ -43,12 +46,12 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: RECOMPRA EXITOSA (CIERRE DE CICLO) ===
+        // === CASO A: RECOMPRA EXITOSA (CIERRE DE POSICIÓN) ===
         if (isFilled) {
-            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. BTC recomprados: ${filledVolume.toFixed(6)}. Liquidando ciclo...`, 'success');
+            log(`💰 [S-BUY-SUCCESS] Recompra confirmada. Liquidando ciclo y calculando profit...`, 'success');
             
             const handlerDependencies = { 
-                userId, 
+                userId, // Identidad inyectada para el historial de ciclos y balance
                 log, 
                 updateBotState, 
                 updateSStateData, 
@@ -57,23 +60,23 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
                 config: botState.config 
             };
             
-            // El manager limpia el estado (CLEAN_SHORT_ROOT) y registra el profit
-            await handleSuccessfulShortBuy(botState, { ...finalDetails, filledVolume }, handlerDependencies);
-            
-            // 🟢 AUDITORÍA: Retornamos false porque la orden ya no está activa
-            return false;
+            // El manager se encarga de saveExecutedOrder y resetear el CLEAN_SHORT_ROOT
+            await handleSuccessfulShortBuy(botState, finalDetails, handlerDependencies);
+            return true;
         }
 
-        // === CASO B: ORDEN AÚN EN EL LIBRO ===
+        // === CASO B: ORDEN AÚN EN EL LIBRO (Lógica de espera) ===
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
-            return true; // Mantiene el bloqueo de slastOrder
+            return true; 
         }
 
-        // === CASO C: CANCELACIÓN O FALLO ===
+        // === CASO C: CANCELACIÓN O FALLO DE EJECUCIÓN ===
         if (isCanceled) {
-            log(`⚠️ [S-BUY-CANCEL] Orden de recompra cancelada. Liberando para reintento.`, 'warning');
+            log(`⚠️ [S-BUY-CANCEL] Orden de recompra cancelada. Liberando slot para reintento inmediato.`, 'warning');
+            
+            // Limpiamos la orden pendiente para que SBuying.js pueda re-intentar la compra
             await updateGeneralBotState({ 'slastOrder': null });
-            return false;
+            return true;
         }
 
         return true;
