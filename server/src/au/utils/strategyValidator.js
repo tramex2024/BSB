@@ -1,12 +1,12 @@
 /**
  * STRATEGY VALIDATOR (Security Middleware)
  * Determines if a strategy has enough capital in the DB to operate.
- * This prevents API errors (400) by checking balance before execution.
  */
 
 function canExecuteStrategy(strategy, dependencies) {
     const { botState, config, availableUSDT, availableBTC, log, currentPrice } = dependencies;
     const now = Date.now();
+    const logInterval = 300000; // 5 minutes in milliseconds
 
     // --- 1. AI STRATEGY CASE ---
     if (strategy === 'ai') {
@@ -16,12 +16,11 @@ function canExecuteStrategy(strategy, dependencies) {
         const aiRequired = parseFloat(aiConfig.amountUsdt || 0);
         const hasAIPosition = parseFloat(botState.aiposition || 0) > 0;
 
-        // If a position is already open, ALWAYS allow execution to manage Sell/Exit.
         if (hasAIPosition) return true;
 
-        // Validation for new opening
         if (availableUSDT < aiRequired) {
-            if (now % 60000 < 2000) { // Log approx every 60 seconds
+            // Log every 5 minutes
+            if (now % logInterval < 2000) { 
                 log(`[AI-VAL] Waiting for USDT balance ($${availableUSDT.toFixed(2)} / $${aiRequired.toFixed(2)})`, 'warning');
             }
             return false;
@@ -34,7 +33,7 @@ function canExecuteStrategy(strategy, dependencies) {
         const shortConfig = config?.short;
         if (!shortConfig || !shortConfig.enabled) return false;
 
-        const ac = parseFloat(botState.sac || 0); // Accumulated BTC debt
+        const ac = parseFloat(botState.sac || 0); 
         const isOpening = ac <= 0;
 
         if (isOpening) {
@@ -42,13 +41,13 @@ function canExecuteStrategy(strategy, dependencies) {
             const btcNeeded = firstSellUsdt / currentPrice;
 
             if (availableBTC < btcNeeded) {
-                if (now % 60000 < 2000) {
-                    log(`[S-VAL] Waiting for BTC balance (${availableBTC.toFixed(6)} / ${btcNeeded.toFixed(6)})`, 'warning');
+                // Log every 5 minutes
+                if (now % logInterval < 2000) {
+                    log(`[S-VAL] Waiting for BTC balance (${availableBTC.toFixed(6)} / ${btcNeeded.toFixed(6)}) to open Short`, 'warning');
                 }
                 return false;
             }
         }
-        // If debt exists (ac > 0), allow execution to manage DCA or Buyback.
         return true;
     }
 
@@ -62,7 +61,7 @@ function canExecuteStrategy(strategy, dependencies) {
 
         const longRequired = parseFloat(longConfig.purchaseUsdt || 5.0);
         if (availableUSDT < longRequired) {
-            if (now % 60000 < 2000) {
+            if (now % logInterval < 2000) {
                 log(`[L-VAL] Waiting for USDT balance ($${availableUSDT.toFixed(2)} / $${longRequired.toFixed(2)})`, 'warning');
             }
             return false;
