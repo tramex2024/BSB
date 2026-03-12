@@ -16,6 +16,7 @@ const { runLongStrategy } = require('./src/longStrategy');
 const { runShortStrategy } = require('./src/shortStrategy');
 const { runAIStrategy } = require('./src/aiStrategy'); 
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
+const { canExecuteStrategy } = require('./src/au/utils/strategyValidator');
 
 const { 
     calculateLongCoverage, 
@@ -312,8 +313,18 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
 
             // --- Ejecución de Estrategias ---
             if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
-            if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
-            if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies); 
+
+//            if (botState.lstate !== 'STOPPED' && canExecuteStrategy('long', dependencies)) {
+    await runLongStrategy(dependencies);
+}
+
+if (botState.sstate !== 'STOPPED' && canExecuteStrategy('short', dependencies)) {
+    await runShortStrategy(dependencies);
+}
+
+if (botState.aistate !== 'STOPPED' && canExecuteStrategy('ai', dependencies)) {
+    await runAIStrategy(dependencies);
+}
 
             changeSet.lastUpdate = new Date();
             await orchestrator.commitChanges(userId, changeSet, currentPrice);
