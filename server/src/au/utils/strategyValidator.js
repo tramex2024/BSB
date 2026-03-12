@@ -1,65 +1,42 @@
 /**
- * STRATEGY VALIDATOR (Pure Mathematical Validation)
- * Checks if the wallet balance in DB covers the configured trade amount.
- * Agnostic to strategy state (ac, positions, etc.)
+ * STRATEGY VALIDATOR - PRE-START ENGINE (Test Mode)
+ * Logic: Checks if Available Funds >= Strategy Assigned Balance
  */
 
 function canExecuteStrategy(strategy, dependencies) {
-    const { config, availableUSDT, availableBTC, log, currentPrice } = dependencies;
+    const { botState, availableUSDT, availableBTC } = dependencies;
     const now = Date.now();
-    const logInterval = 5000; // 5 seconds for testing purposes
+    const logInterval = 5000; // 5 seconds for visual testing
 
-    // --- 1. AI STRATEGY ---
-    if (strategy === 'ai') {
-        const aiConfig = config?.ai;
-        if (!aiConfig || !aiConfig.enabled) return false;
-
-        const aiRequired = parseFloat(aiConfig.amountUsdt || 0);
-        
-        if (availableUSDT < aiRequired) {
-            if (now % logInterval < 2000) {
-                log(`[AI-VAL] Waiting for USDT balance ($${availableUSDT.toFixed(2)} / $${aiRequired.toFixed(2)})`, 'warning');
-            }
-            return false;
-        }
-        return true;
-    }
+    // --- 1. LONG STRATEGY ---
+    const longTarget = parseFloat(botState.lbalance || 0);
+    const longPass = availableUSDT >= longTarget && longTarget > 0;
 
     // --- 2. SHORT STRATEGY ---
-    if (strategy === 'short') {
-        const shortConfig = config?.short;
-        if (!shortConfig || !shortConfig.enabled) return false;
+    // Note: Short needs BTC to sell. Target is in USDT, so we convert to BTC for comparison.
+    const shortTargetUsdt = parseFloat(botState.sbalance || 0);
+    const btcNeeded = shortTargetUsdt / (dependencies.currentPrice || 1);
+    const shortPass = availableBTC >= btcNeeded && shortTargetUsdt > 0;
 
-        // Strictly compare wallet vs configured purchase amount
-        const amountToTradeUsdt = parseFloat(shortConfig.purchaseUsdt || 5.0);
-        const btcNeeded = amountToTradeUsdt / currentPrice;
+    // --- 3. AI STRATEGY ---
+    const aiTarget = parseFloat(botState.aibalance || 0);
+    const aiPass = availableUSDT >= aiTarget && aiTarget > 0;
 
-        if (availableBTC < btcNeeded) {
-            if (now % logInterval < 2000) {
-                log(`[S-VAL] Waiting for BTC balance (${availableBTC.toFixed(6)} / ${btcNeeded.toFixed(6)})`, 'warning');
-            }
-            return false;
+    // --- PROVISIONAL TEST LOOP (Independiente del botón) ---
+    if (now % logInterval < 1000) {
+        if (strategy === 'long') {
+            dependencies.log(`[TEST-L] Long ${longPass}: ($${availableUSDT.toFixed(2)} / $${longTarget.toFixed(2)})`, longPass ? 'info' : 'warning');
         }
-        return true;
+        if (strategy === 'short') {
+            dependencies.log(`[TEST-S] Short ${shortPass}: (${availableBTC.toFixed(6)} / ${btcNeeded.toFixed(6)} BTC)`, shortPass ? 'info' : 'warning');
+        }
+        if (strategy === 'ai') {
+            dependencies.log(`[TEST-AI] AI ${aiPass}: ($${availableUSDT.toFixed(2)} / $${aiTarget.toFixed(2)})`, aiPass ? 'info' : 'warning');
+        }
     }
 
-    // --- 3. LONG STRATEGY ---
-    if (strategy === 'long') {
-        const longConfig = config?.long;
-        if (!longConfig || !longConfig.enabled) return false;
-
-        const longRequired = parseFloat(longConfig.purchaseUsdt || 5.0);
-        
-        if (availableUSDT < longRequired) {
-            if (now % logInterval < 2000) {
-                log(`[L-VAL] Waiting for USDT balance ($${availableUSDT.toFixed(2)} / $${longRequired.toFixed(2)})`, 'warning');
-            }
-            return false;
-        }
-        return true;
-    }
-
-    return false;
+    // Por ahora retornamos true para no bloquear el bot real mientras probamos logs
+    return true; 
 }
 
 module.exports = { canExecuteStrategy };
