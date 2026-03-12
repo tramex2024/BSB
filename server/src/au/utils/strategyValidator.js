@@ -6,7 +6,7 @@
 function canExecuteStrategy(strategy, dependencies) {
     const { botState, config, availableUSDT, availableBTC, log, currentPrice } = dependencies;
     const now = Date.now();
-    const logInterval = 60000; // 1 minute in milliseconds
+    const logInterval = 10000; // 10 seconds in milliseconds
 
     // --- 1. AI STRATEGY CASE ---
     if (strategy === 'ai') {
