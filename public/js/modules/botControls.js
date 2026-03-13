@@ -1,6 +1,6 @@
 /**
  * botControls.js - Gestor Centralizado de Comandos (Validación-Aware)
- * Versión 2026: Incluye Pre-visualización de Estrategia y PnL
+ * Versión 2026: Incluye Pre-visualización de Estrategia, PnL e IA Core
  */
 import { askConfirmation } from './confirmModal.js';
 import { updateBotUI } from './uiManager.js';
@@ -27,7 +27,7 @@ export function initializeGlobalButtonListeners() {
             return;
         }
 
-        // Para el resto de botones Start/Stop normales
+        // Para el resto de botones Start/Stop normales e IA Toggle
         await handleToggleBot(target);
     });
 }
@@ -139,22 +139,23 @@ async function handleToggleBot(btn) {
     const action = isRunning ? 'stop' : 'start';
     const originalHTML = btn.innerHTML;
 
-    // --- NUEVO: FASE DE ANÁLISIS (AUDITORÍA) ---
+    // --- FASE DE ANÁLISIS (AUDITORÍA) ---
     btn.disabled = true;
     btn.innerHTML = `<i class="fas fa-search-dollar fa-spin mr-2"></i> ANALYZING...`;
 
     let extraData = null;
     try {
         const sideLow = side.toLowerCase();
-        // Si es START: Consultamos variación de precio y balance
-        if (action === 'start' && side !== 'AI') {
+        
+        // Si es START: Consultamos el preview (Ahora incluye 'ai')
+        if (action === 'start') {
             const prevRes = await fetch(`${BACKEND_URL}/api/autobot/start-preview/${sideLow}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
             const prevResult = await prevRes.json();
             if (prevResult.success) extraData = prevResult.data;
         } 
-        // Si es STOP: Consultamos reporte de liquidación y PnL
+        // Si es STOP: Consultamos reporte de liquidación y PnL (Solo para estrategias de trading)
         else if (action === 'stop' && side !== 'AI') {
             const prevRes = await fetch(`${BACKEND_URL}/api/autobot/stop-preview/${sideLow}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -204,8 +205,7 @@ async function handleToggleBot(btn) {
         
         if (result.success) {
             if (side === 'AI') {
-                currentBotState.aistate = result.aistate;
-                currentBotState.isRunning = result.isRunning;
+                currentBotState.aistate = (action === 'start' ? 'RUNNING' : 'STOPPED');
             } else {
                 currentBotState[stateKey] = (action === 'start' ? 'RUNNING' : 'STOPPED');
             }
