@@ -1,10 +1,12 @@
-// BSB/server/routes/autobotRoutes.js
-
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController'); // Usamos el auth que ya tenemos
 const autobotLogic = require('../autobotLogic');
 const configController = require('../controllers/configController');
+
+// Importamos el validador para la nueva ruta de preview
+const strategyValidator = require('../src/au/utils/strategyValidator');
+const Autobot = require('../models/Autobot'); // Asumiendo que este es tu modelo
 
 // Usamos el middleware consistente de los otros archivos
 router.use(userController.authenticateToken);
@@ -30,6 +32,36 @@ const emitBotState = (autobot, req) => {
 // --- CONFIGURACIÓN ---
 router.post('/update-config', configController.updateBotConfig);
 router.get('/config-and-state', configController.getBotConfig);
+
+// --- NUEVA RUTA: PREVIEW ANTES DE INICIAR ---
+// Esta ruta es consultada por el frontend para llenar el modal con info técnica
+router.get('/start-preview/:side', async (req, res) => {
+    const { side } = req.params;
+    const userId = req.user.id;
+    
+    try {
+        // Obtenemos el estado actual y balances
+        const botState = await Autobot.findOne({ userId }).lean();
+        const currentPrice = autobotLogic.getLastPrice();
+        
+        // Ejecutamos el análisis sin encender el bot
+        const analysis = strategyValidator.getStartAnalysis(side, {
+            botState,
+            availableUSDT: botState.lastAvailableUSDT || 0,
+            availableBTC: botState.lastAvailableBTC || 0,
+            currentPrice,
+            log: console.log // Opcional
+        });
+
+        return res.json({
+            success: true,
+            data: analysis.report,
+            canPass: analysis.canPass
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 // --- RUTAS DE EJECUCIÓN (START / STOP POR LADO) ---
 

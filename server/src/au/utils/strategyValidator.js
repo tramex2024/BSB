@@ -4,6 +4,56 @@
  * from active strategies to prevent over-allocation.
  */
 
+/**
+ * Generates a report for the UI Modal before starting the strategy.
+ * This is the "Preview" logic.
+ */
+function getStartAnalysis(strategy, dependencies) {
+    const { botState, availableUSDT, availableBTC, currentPrice } = dependencies;
+    
+    // 1. Calculate committed funds (Same logic as validator)
+    let committedUSDT = 0;
+    if (botState.lstate !== 'STOPPED') committedUSDT += parseFloat(botState.lbalance || 0);
+    if (botState.aistate !== 'STOPPED') committedUSDT += parseFloat(botState.aibalance || 0);
+    
+    const netAvailableUSDT = availableUSDT - committedUSDT;
+    const config = botState.config[strategy] || {};
+
+    // 2. Coverage Calculation (Price Variation)
+    // Formula: (Price Var % * Max Orders) = Total Coverage
+    const priceVar = parseFloat(config.price_var || 0);
+    const amountUsdt = parseFloat(config.amountUsdt || 0);
+    const purchaseUsdt = parseFloat(config.purchaseUsdt || 0);
+    
+    // Estimate max orders based on budget
+    const maxOrders = purchaseUsdt > 0 ? Math.floor(amountUsdt / purchaseUsdt) : 0;
+    const estimatedCoverage = (priceVar * maxOrders).toFixed(2);
+
+    // 3. Financial Requirements
+    let canPass = false;
+    let requirementMsg = "";
+
+    if (strategy === 'short') {
+        const btcNeeded = amountUsdt / currentPrice;
+        canPass = (availableBTC >= btcNeeded) || (netAvailableUSDT >= amountUsdt);
+        requirementMsg = `Required: ${btcNeeded.toFixed(6)} BTC (or $${amountUsdt} USDT backing)`;
+    } else {
+        canPass = netAvailableUSDT >= amountUsdt;
+        requirementMsg = `Required: $${amountUsdt} USDT`;
+    }
+
+    return {
+        canPass,
+        report: {
+            title: `${strategy.toUpperCase()} STRATEGY PREVIEW`,
+            coverage: `This setup covers approx. ${estimatedCoverage}% price variation.`,
+            liquidity: requirementMsg,
+            netAvailable: `Net Balance: $${netAvailableUSDT.toFixed(2)} USDT`,
+            disclaimer: "Confirm to allocate these funds and start the cycle."
+        }
+    };
+}
+
 function canExecuteStrategy(strategy, dependencies) {
     const { botState, availableUSDT, availableBTC, currentPrice, log } = dependencies;
     const now = Date.now();
@@ -69,4 +119,4 @@ function canExecuteStrategy(strategy, dependencies) {
     return false;
 }
 
-module.exports = { canExecuteStrategy };
+module.exports = { canExecuteStrategy, getStartAnalysis };

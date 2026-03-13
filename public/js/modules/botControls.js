@@ -1,5 +1,6 @@
 /**
- * botControls.js - Gestor Centralizado de Comandos
+ * botControls.js - Gestor Centralizado de Comandos (Validación-Aware)
+ * Versión 2026: Incluye Pre-visualización de Estrategia y PnL
  */
 import { askConfirmation } from './confirmModal.js';
 import { updateBotUI } from './uiManager.js';
@@ -20,7 +21,7 @@ export function initializeGlobalButtonListeners() {
             return;
         }
 
-        // Lógica para Pánico de IA (Usando tu ID exacto)
+        // Lógica para Pánico de IA
         if (target.id === 'btn-panic-ai') {
             await handleAIPanicStop(target);
             return;
@@ -33,14 +34,12 @@ export function initializeGlobalButtonListeners() {
 
 // Función específica para el Pánico de la IA
 async function handleAIPanicStop(btn) {
-    // El modal mostrará el estilo rojo gracias a la palabra 'PANIC' o 'AI BOT'
     const confirmado = await askConfirmation('AI BOT', 'PANIC STOP');
     if (!confirmado) return;
 
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
     
-    // Feedback visual inmediato en el botón
     btn.classList.add('bg-red-600', 'text-white');
     btn.innerHTML = `<i class="fas fa-biohazard fa-spin mr-2"></i> HALTING CORE...`;
 
@@ -56,10 +55,7 @@ async function handleAIPanicStop(btn) {
         const result = await response.json();
         
         if (result.success) {
-            // Actualizamos el estado local
             currentBotState.aistate = 'STOPPED';
-            
-            // Log en la terminal neural del AI Bot
             const logCont = document.getElementById('ai-log-container');
             if (logCont) {
                 const p = document.createElement('p');
@@ -67,10 +63,7 @@ async function handleAIPanicStop(btn) {
                 p.textContent = `>> [CRITICAL] EMERGENCY SHUTDOWN EXECUTED`;
                 logCont.prepend(p);
             }
-
             displayMessage("AI CORE HALTED", "error");
-            
-            // Sincronizar toda la interfaz
             import('./uiManager.js').then(m => m.updateBotUI(currentBotState));
         }
     } catch (error) {
@@ -83,21 +76,14 @@ async function handleAIPanicStop(btn) {
 }
 
 /**
- * Lógica de Panic Stop dentro de botControls.js
+ * Lógica de Panic Stop
  */
 async function handlePanicStop(btn) {
-    // 1. MODAL DE CONFIRMACIÓN CRÍTICA
-    // Enviamos 'ALL BOTS' como side y 'STOP (PANIC)' como acción
     const confirmado = await askConfirmation('ALL BOTS', 'STOP (PANIC)');
-    
-    // Si el usuario cancela o cierra el modal, salimos sin hacer nada
     if (!confirmado) return;
 
-    // 2. EJECUCIÓN (Si confirmó)
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
-    
-    // Cambio visual agresivo para indicar que el sistema está respondiendo
     btn.classList.add('bg-red-700', 'scale-95');
     btn.innerHTML = `<i class="fas fa-radiation fa-spin mr-2"></i> EXECUTING EMERGENCY STOP...`;
 
@@ -113,7 +99,6 @@ async function handlePanicStop(btn) {
         const result = await response.json();
         
         if (result.success) {
-            // Sincronización forzada del estado global
             currentBotState.lstate = 'STOPPED';
             currentBotState.sstate = 'STOPPED';
             currentBotState.aistate = 'STOPPED';
@@ -121,8 +106,6 @@ async function handlePanicStop(btn) {
 
             logStatus("🚨 SYSTEM HALTED: All bots and positions stopped.", "error");
             displayMessage("EMERGENCY STOP EXECUTED", "error");
-            
-            // Refrescar toda la UI para mostrar los botones en rojo/stop
             await updateBotUI(currentBotState);
         } else {
             throw new Error(result.message || "Panic command failed");
@@ -137,9 +120,10 @@ async function handlePanicStop(btn) {
     }
 }
 
+/**
+ * Lógica mejorada para alternar estados con Preview de Datos
+ */
 async function handleToggleBot(btn) {
-    // ... (Aquí va la lógica que ya teníamos para Start/Stop individual) ...
-    // Asegúrate de mantener el bloque try/catch/finally que hicimos antes
     let side, stateKey, endpoint;
     const id = btn.id;
 
@@ -153,11 +137,45 @@ async function handleToggleBot(btn) {
 
     const isRunning = currentBotState[stateKey] === 'RUNNING';
     const action = isRunning ? 'stop' : 'start';
-
-    const confirmado = await askConfirmation(side, action);
-    if (!confirmado) return;
-
     const originalHTML = btn.innerHTML;
+
+    // --- NUEVO: FASE DE ANÁLISIS (AUDITORÍA) ---
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-search-dollar fa-spin mr-2"></i> ANALYZING...`;
+
+    let extraData = null;
+    try {
+        const sideLow = side.toLowerCase();
+        // Si es START: Consultamos variación de precio y balance
+        if (action === 'start' && side !== 'AI') {
+            const prevRes = await fetch(`${BACKEND_URL}/api/autobot/start-preview/${sideLow}`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const prevResult = await prevRes.json();
+            if (prevResult.success) extraData = prevResult.data;
+        } 
+        // Si es STOP: Consultamos reporte de liquidación y PnL
+        else if (action === 'stop' && side !== 'AI') {
+            const prevRes = await fetch(`${BACKEND_URL}/api/autobot/stop-preview/${sideLow}`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const prevResult = await prevRes.json();
+            if (prevResult.status === 'success') extraData = prevResult.data;
+        }
+    } catch (e) {
+        console.warn("⚠️ Preview data fetch failed, falling back to basic modal.", e);
+    }
+
+    // --- LLAMADA AL MODAL CON DATA EXTRA ---
+    const confirmado = await askConfirmation(side, action, extraData);
+    
+    if (!confirmado) {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        return;
+    }
+
+    // --- EJECUCIÓN REAL ---
     btn.disabled = true;
     btn.innerHTML = `<i class="fas fa-circle-notch fa-spin mr-2"></i> ${action.toUpperCase()}ING...`;
 
@@ -199,6 +217,7 @@ async function handleToggleBot(btn) {
         }
     } catch (error) {
         logStatus(error.message, "error");
+        displayMessage(error.message, "error");
         btn.innerHTML = originalHTML;
     } finally {
         btn.disabled = false;
