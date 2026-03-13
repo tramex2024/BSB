@@ -1,8 +1,8 @@
-// BSB/server/src/services/exitLiquidationService.js
-
- /**
-  * Genera un reporte de liquidación mapeado a los campos de la DB.
-  */     
+/**
+ * ExitLiquidationService.js
+ * Genera un reporte de liquidación mapeado a los campos de la DB.
+ * Versión: Operativa a Mercado (Sin Open Orders) y soporte IA Core.
+ */
 const ExitLiquidationService = {   
     async getExitReport(strategyType, botState, currentPrice) {
         const report = {
@@ -10,34 +10,32 @@ const ExitLiquidationService = {
             hasPendingAssets: false,
             assetToLiquidate: 'BTC',
             amount: 0,
-            avgPrice: 0,      // Nuevo: Necesario para el Modal
-            openOrders: 0,    // Nuevo: Necesario para el Modal
+            avgPrice: 0,
             initialValueUsdt: 0,
             currentValueUsdt: 0,
             pnlUsdt: 0,
             pnlPercentage: 0
         };
 
-        const prefix = strategyType === 'long' ? 'l' : (strategyType === 'short' ? 's' : 'ai');
+        // Normalizamos el prefijo para la DB (l, s, ai)
+        const prefix = strategyType.toLowerCase() === 'ai' ? 'ai' : (strategyType.toLowerCase() === 'long' ? 'l' : 's');
 
-        // 1. Extraer datos según la estrategia
-        if (strategyType === 'short') {
+        // 1. Extracción de Datos de la Base de Datos
+        if (strategyType.toLowerCase() === 'short') {
+            // El Short utiliza sus campos específicos de balance acumulado (sac)
             const sac = parseFloat(botState.sac || 0);
-            const initialBtc = parseFloat(botState.sInitialPurchaseQty || 0);
-            const sppc = parseFloat(botState.sppc || 0); // Precio promedio de la DB
+            const sppc = parseFloat(botState.sppc || 0); 
             
-            report.amount = sac > 0 ? sac : initialBtc;
+            report.amount = sac;
             report.avgPrice = sppc > 0 ? sppc : parseFloat(botState.sInitialPurchasePrice || 0);
-            report.openOrders = parseInt(botState.socc || 0);
         } 
         else {
-            // Caso: Long o AI
-            const ac = parseFloat(botState[`${prefix}ac`] || 0);  // Accumulated Coins
-            const ppc = parseFloat(botState[`${prefix}ppc`] || 0); // Price Average (DB)
+            // Caso: Long o AI (utilizan prefijos dinámicos: lac/aiac y lppc/aippc)
+            const ac = parseFloat(botState[`${prefix}ac`] || 0);  
+            const ppc = parseFloat(botState[`${prefix}ppc`] || 0); 
             
             report.amount = ac;
             report.avgPrice = ppc;
-            report.openOrders = parseInt(botState[`${prefix}occ`] || 0);
         }
 
         // 2. Cálculos Financieros
@@ -48,11 +46,9 @@ const ExitLiquidationService = {
             report.currentValueUsdt = report.amount * currentPrice;
             report.pnlUsdt = report.currentValueUsdt - report.initialValueUsdt;
 
-            // Cálculo seguro del porcentaje de PnL
             if (report.avgPrice > 0) {
-                // Para LONG/AI: (Precio Actual / Precio Compra) - 1
-                // Para SHORT: (Precio Venta / Precio Actual) - 1 (Invertido)
-                if (strategyType === 'short') {
+                // Lógica de PnL: Inversa para Short, estándar para Long/AI
+                if (strategyType.toLowerCase() === 'short') {
                     report.pnlPercentage = ((report.avgPrice / currentPrice) - 1) * 100;
                 } else {
                     report.pnlPercentage = ((currentPrice / report.avgPrice) - 1) * 100;
@@ -60,17 +56,17 @@ const ExitLiquidationService = {
             }
         }
 
-        // 3. Formateo Final para el Modal (Data Mapper)
-        // Agregamos una propiedad 'data' para que coincida con lo que el frontend espera recibir
+        // 3. Formateo Final para el Frontend
+        // Se envía dentro de 'data' para compatibilidad con el controlador y botControls.js
         return {
-            ...report,
+            status: 'success',
             data: {
                 pnlUsdt: report.pnlUsdt.toFixed(2),
                 pnlPercentage: report.pnlPercentage.toFixed(2),
                 liquidationAmount: report.amount.toFixed(6),
                 liquidationAsset: report.assetToLiquidate,
-                avgPrice: report.avgPrice.toFixed(2),
-                openOrders: report.openOrders
+                avgPrice: report.avgPrice.toFixed(2)
+                // Se elimina openOrders ya que la operativa es a mercado
             }
         };
     }

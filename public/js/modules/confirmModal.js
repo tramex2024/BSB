@@ -1,6 +1,6 @@
 /**
  * confirmModal.js - Safety dialog management (Data-Aware Version)
- * Versión 2026: Reporte detallado de liquidación basado en DB MongoDB.
+ * Versión 2026: Reporte de liquidación optimizado para ejecución a mercado.
  */
 
 export function askConfirmation(sideName, action = 'STOP', extraData = null) { 
@@ -22,6 +22,7 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
         let strategyColor = 'text-blue-400';
         if (sideName.toLowerCase() === 'long') strategyColor = 'text-emerald-400';
         if (sideName.toLowerCase() === 'short') strategyColor = 'text-orange-400';
+        if (sideName.toLowerCase() === 'ai') strategyColor = 'text-cyan-400 font-bold';
         if (isPanic) strategyColor = 'text-red-500 font-black animate-pulse';
 
         const isStop = action.toUpperCase().includes('STOP');
@@ -29,7 +30,7 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
 
         // 3. DEFINICIÓN DE MENSAJES (DINÁMICOS)
         let warningText = isStop 
-            ? "This action will attempt to market-sell accumulated assets and cancel pending orders."
+            ? "This action will attempt to market-sell accumulated assets. Position will be closed immediately."
             : "The system will begin automated trading based on your current configuration.";
 
         // --- INYECCIÓN DE DATOS DEL VALIDADOR / PREVIEW ---
@@ -45,15 +46,16 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
                     </div>
                 `;
             } 
-            // B. REPORTE DE LIQUIDACIÓN (STOP) - Mapeado a parámetros de tu DB
-            else if (extraData.pnlUsdt !== undefined) {
-                const pnlColor = parseFloat(extraData.pnlUsdt) >= 0 ? 'text-emerald-400' : 'text-red-400';
-                const pnlIcon = parseFloat(extraData.pnlUsdt) >= 0 ? 'fa-chart-line' : 'fa-chart-area';
+            // B. REPORTE DE LIQUIDACIÓN (STOP) - Soporte para LONG, SHORT e IA
+            else if (extraData && extraData.pnlUsdt !== undefined) {
+                const pnlValue = parseFloat(extraData.pnlUsdt);
+                const pnlColor = pnlValue >= 0 ? 'text-emerald-400' : 'text-red-400';
+                const pnlIcon = pnlValue >= 0 ? 'fa-chart-line' : 'fa-chart-area';
 
                 extraInfoHtml = `
                     <div class="mt-3 p-3 bg-black/40 border border-white/10 rounded-lg shadow-inner">
                         <div class="flex justify-between items-center mb-2 border-b border-white/5 pb-2">
-                            <span class="text-[10px] uppercase tracking-widest opacity-60">Neural Position Report</span>
+                            <span class="text-[10px] uppercase tracking-widest opacity-60">${sideName.toUpperCase()} Position Report</span>
                             <span class="${pnlColor} text-xs font-bold">
                                 <i class="fas ${pnlIcon} mr-1"></i> ${extraData.pnlPercentage}%
                             </span>
@@ -68,12 +70,9 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
                             
                             <div class="text-white/60">Avg. Entry Price:</div>
                             <div class="text-right font-mono text-white">$${extraData.avgPrice || '0.00'}</div>
-                            
-                            <div class="text-white/60">Open Orders:</div>
-                            <div class="text-right text-orange-400 font-bold">${extraData.openOrders || '0'}</div>
                         </div>
 
-                        ${parseFloat(extraData.pnlUsdt) < 0 ? `
+                        ${pnlValue < 0 ? `
                             <div class="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-[9px] text-red-400 text-center animate-pulse italic">
                                 <i class="fas fa-exclamation-triangle mr-1"></i> Warning: Closing position with negative PnL
                             </div>
@@ -94,7 +93,7 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
                     <span class="text-white">Are you sure you want to execute a <span class="bg-red-600 px-1 rounded">PANIC STOP</span>?</span>
                 </div>
             `;
-            warningText = "EMERGENCY: This will immediately stop ALL active bots and attempt to cancel all pending orders. This is a total system shutdown.";
+            warningText = "EMERGENCY: This will immediately stop ALL active bots and attempt to liquidate positions at market price. This is a total system shutdown.";
         }
 
         // Inyección de contenido final
