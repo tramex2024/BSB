@@ -1,6 +1,6 @@
 /**
  * confirmModal.js - Safety dialog management (Data-Aware Version)
- * Ahora permite mostrar información técnica del validador o reportes de PnL.
+ * Versión 2026: Reporte detallado de liquidación basado en DB MongoDB.
  */
 
 export function askConfirmation(sideName, action = 'STOP', extraData = null) { 
@@ -29,36 +29,55 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
 
         // 3. DEFINICIÓN DE MENSAJES (DINÁMICOS)
         let warningText = isStop 
-            ? "This action may leave orphan orders on the exchange and require manual cleanup."
+            ? "This action will attempt to market-sell accumulated assets and cancel pending orders."
             : "The system will begin automated trading based on your current configuration.";
 
         // --- INYECCIÓN DE DATOS DEL VALIDADOR / PREVIEW ---
         let extraInfoHtml = '';
         if (extraData) {
-            // Si es un START (viene del strategyValidator)
+            // A. REPORTE DE INICIO (START)
             if (extraData.coverage) {
                 extraInfoHtml = `
-                    <div class="mt-3 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[11px] text-emerald-200">
-                        <p><i class="fas fa-shield-alt mr-1"></i> ${extraData.coverage}</p>
-                        <p><i class="fas fa-wallet mr-1"></i> ${extraData.netAvailable}</p>
-                        <p class="font-bold mt-1 text-white">${extraData.liquidity}</p>
+                    <div class="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[11px] text-emerald-200">
+                        <div class="flex items-center mb-1"><i class="fas fa-shield-alt mr-2"></i> ${extraData.coverage}</div>
+                        <div class="flex items-center mb-1"><i class="fas fa-wallet mr-2"></i> ${extraData.netAvailable}</div>
+                        <div class="font-bold mt-2 text-white border-t border-white/10 pt-1">${extraData.liquidity}</div>
                     </div>
                 `;
             } 
-            // Si es un STOP (viene del exitReport/PnL)
+            // B. REPORTE DE LIQUIDACIÓN (STOP) - Mapeado a parámetros de tu DB
             else if (extraData.pnlUsdt !== undefined) {
-                const pnlColor = extraData.pnlUsdt >= 0 ? 'text-emerald-400' : 'text-red-400';
+                const pnlColor = parseFloat(extraData.pnlUsdt) >= 0 ? 'text-emerald-400' : 'text-red-400';
+                const pnlIcon = parseFloat(extraData.pnlUsdt) >= 0 ? 'fa-chart-line' : 'fa-chart-area';
+
                 extraInfoHtml = `
-                    <div class="mt-3 p-2 bg-black/40 border border-white/10 rounded text-[11px]">
-                        <p class="uppercase font-bold mb-1">Current Position Report:</p>
-                        <div class="flex justify-between">
-                            <span>Current PnL:</span>
-                            <span class="${pnlColor} font-bold">${extraData.pnlPercentage}% ($${extraData.pnlUsdt})</span>
+                    <div class="mt-3 p-3 bg-black/40 border border-white/10 rounded-lg shadow-inner">
+                        <div class="flex justify-between items-center mb-2 border-b border-white/5 pb-2">
+                            <span class="text-[10px] uppercase tracking-widest opacity-60">Neural Position Report</span>
+                            <span class="${pnlColor} text-xs font-bold">
+                                <i class="fas ${pnlIcon} mr-1"></i> ${extraData.pnlPercentage}%
+                            </span>
                         </div>
-                        <div class="flex justify-between opacity-70">
-                            <span>Assets to Liquidate:</span>
-                            <span>${extraData.liquidationAmount} ${extraData.liquidationAsset || 'BTC'}</span>
+                        
+                        <div class="grid grid-cols-2 gap-y-2 text-[11px]">
+                            <div class="text-white/60">Profit/Loss (USDT):</div>
+                            <div class="text-right ${pnlColor} font-mono font-bold">$${extraData.pnlUsdt}</div>
+                            
+                            <div class="text-white/60">Assets to Sell:</div>
+                            <div class="text-right font-mono text-white">${extraData.liquidationAmount} ${extraData.liquidationAsset || 'BTC'}</div>
+                            
+                            <div class="text-white/60">Avg. Entry Price:</div>
+                            <div class="text-right font-mono text-white">$${extraData.avgPrice || '0.00'}</div>
+                            
+                            <div class="text-white/60">Open Orders:</div>
+                            <div class="text-right text-orange-400 font-bold">${extraData.openOrders || '0'}</div>
                         </div>
+
+                        ${parseFloat(extraData.pnlUsdt) < 0 ? `
+                            <div class="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-[9px] text-red-400 text-center animate-pulse italic">
+                                <i class="fas fa-exclamation-triangle mr-1"></i> Warning: Closing position with negative PnL
+                            </div>
+                        ` : ''}
                     </div>
                 `;
             }
@@ -88,12 +107,13 @@ export function askConfirmation(sideName, action = 'STOP', extraData = null) {
             </p>
         `;
         
-        // Estilo del botón
+        // Estilo del botón dinámico
         if (isPanic) {
-            btnAccept.classList.replace('bg-emerald-600', 'bg-red-600');
+            btnAccept.className = "flex-1 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-bold transition-all";
             btnAccept.textContent = "YES, STOP EVERYTHING";
         } else {
-            btnAccept.classList.replace('bg-red-600', 'bg-emerald-600');
+            const acceptColor = isStop ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700';
+            btnAccept.className = `flex-1 py-2 rounded ${acceptColor} text-white font-bold transition-all`;
             btnAccept.textContent = "CONFIRM";
         }
 

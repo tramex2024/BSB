@@ -4,9 +4,10 @@ const userController = require('../controllers/userController'); // Usamos el au
 const autobotLogic = require('../autobotLogic');
 const configController = require('../controllers/configController');
 
-// Importamos el validador para la nueva ruta de preview
+// Importamos los validadores y servicios acordados
 const strategyValidator = require('../src/au/utils/strategyValidator');
-const Autobot = require('../models/Autobot'); // Asumiendo que este es tu modelo
+const ExitLiquidationService = require('../services/exitLiquidationService'); // Para el preview de STOP
+const Autobot = require('../models/Autobot'); // Tu modelo de Mongoose
 
 // Usamos el middleware consistente de los otros archivos
 router.use(userController.authenticateToken);
@@ -33,24 +34,21 @@ const emitBotState = (autobot, req) => {
 router.post('/update-config', configController.updateBotConfig);
 router.get('/config-and-state', configController.getBotConfig);
 
-// --- NUEVA RUTA: PREVIEW ANTES DE INICIAR ---
-// Esta ruta es consultada por el frontend para llenar el modal con info técnica
+// --- NUEVA RUTA: PREVIEW ANTES DE INICIAR (START) ---
 router.get('/start-preview/:side', async (req, res) => {
     const { side } = req.params;
     const userId = req.user.id;
     
     try {
-        // Obtenemos el estado actual y balances
         const botState = await Autobot.findOne({ userId }).lean();
         const currentPrice = autobotLogic.getLastPrice();
         
-        // Ejecutamos el análisis sin encender el bot
         const analysis = strategyValidator.getStartAnalysis(side, {
             botState,
             availableUSDT: botState.lastAvailableUSDT || 0,
             availableBTC: botState.lastAvailableBTC || 0,
             currentPrice,
-            log: console.log // Opcional
+            log: console.log 
         });
 
         return res.json({
@@ -63,15 +61,38 @@ router.get('/start-preview/:side', async (req, res) => {
     }
 });
 
+/**
+ * --- NUEVA RUTA: PREVIEW ANTES DE DETENER (STOP) ---
+ * Proporciona PnL, activos a liquidar y órdenes abiertas para el modal.
+ */
+router.get('/stop-preview/:strategy', async (req, res) => {
+    const { strategy } = req.params;
+    const userId = req.user.id;
+    
+    try {
+        const botState = await Autobot.findOne({ userId }).lean();
+        const currentPrice = autobotLogic.getLastPrice();
+        
+        // Obtenemos el reporte detallado desde el servicio de liquidación
+        const report = await ExitLiquidationService.getExitReport(strategy, botState, currentPrice);
+        
+        return res.json({
+            status: 'success', // Mantenemos el formato esperado por botControls.js
+            data: report.data
+        });
+    } catch (error) {
+        return res.status(500).json({ status: 'error', message: error.message });
+    }
+});
+
 // --- RUTAS DE EJECUCIÓN (START / STOP POR LADO) ---
 
 router.post('/start/:side', async (req, res) => {
     const { side } = req.params;
-    const userId = req.user.id; // Obtenido del token JWT
+    const userId = req.user.id; 
     try {
         const { config } = req.body;
         
-        // Pasamos el userId para que el motor sepa de quién es el bot
         const updatedBot = await autobotLogic.startSide(userId, side, config);
         emitBotState(updatedBot, req);
 
