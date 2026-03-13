@@ -314,7 +314,7 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
             // --- Ejecución de Estrategias ---
 //            if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
 
-            if (botState.lstate !== 'STOPPED' && canExecuteStrategy('long', dependencies)) //{
+            if (botState.lstate !== 'STOPPED' && canExecuteStrategy('long', dependencies)) {
     await runLongStrategy(dependencies);
 }
 
