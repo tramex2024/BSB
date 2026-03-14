@@ -7,7 +7,7 @@ const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
 const bitmartService = require('./bitmartService'); 
 const MarketSignal = require('../models/MarketSignal');
 const AIEngine = require('../src/ai/AIEngine');
-const AutoBot = require('../models/AutoBot');
+const AutoBot = require('../models/Autobot');
 
 class CentralAnalyzer {
     constructor() {
