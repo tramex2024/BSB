@@ -148,25 +148,29 @@ class CentralAnalyzer {
             }
 
 	    // 7. DISPARAR IA PARA USUARIOS ACTIVOS
-            try {
-                // Buscamos todos los bots que tengan la IA en estado RUNNING
-                const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
-                
-                for (const bot of activeAiBots) {
-                    // Llamamos al motor para procesar la decisión de este usuario específico
-                    // Pasamos el precio actual, el ID de usuario y el objeto bot
-                    await AIEngine.analyze(price, bot.userId, bot);
-                }
-            } catch (aiErr) {
-                console.error(`❌ [CENTRAL-ANALYZER] Error disparando IA: ${aiErr.message}`);
-            }
+           try {
+    const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
+    
+    for (const bot of activeAiBots) {
+        // Ejecutamos el análisis
+        const result = await AIEngine.analyze(price, bot.userId, bot);
+        
+        // --- LOG DE EMERGENCIA ---
+        const conf = result ? result.confidence : 0;
+        console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Precio: ${price} | Confianza: ${conf}`);
 
-            return updatedSignal;
-
-        } catch (err) {
-            console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
+        // Forzamos un mensaje al terminal del usuario para confirmar que está viva
+        if (this.io) {
+            this.io.to(bot.userId).emit('bot-log', { 
+                message: `👁️ Neural Flow: Confianza calculada en ${(conf * 100).toFixed(2)}%`, 
+                type: 'info' 
+            });
         }
     }
+} catch (aiErr) {
+    console.error(`❌ [CENTRAL-ANALYZER] Error disparando IA: ${aiErr.message}`);
+}
+
 
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
