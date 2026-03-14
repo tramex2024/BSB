@@ -1,99 +1,86 @@
 /**
- * BSB/server/src/au/engines/StrategyManager.js
- * Motor Analítico: Sistema de Confluencia Multivariable.
- * Versión Blindada: Manejo de errores de longitud y normalización de indicadores.
+ * StrategyManager.js - Versión Híbrida Neural-Scoring
  */
-const { ADX, StochasticRSI, EMA } = require('technicalindicators');
+const { ADX, StochasticRSI, EMA, BollingerBands } = require('technicalindicators');
 
 class StrategyManager {
     static calculate(history) {
-        // 🟢 AUDITORÍA: Requisito de 250 velas para garantizar que la EMA 200 sea precisa.
-        if (!history || history.length < 250) return null;
+        // Reducimos el requisito a 100 velas para mayor agilidad, 
+        // pero validamos las necesarias para cada indicador.
+        if (!history || history.length < 100) return null;
 
         const closeValues = history.map(c => parseFloat(c.close));
         const highValues = history.map(c => parseFloat(c.high));
         const lowValues = history.map(c => parseFloat(c.low));
+        const currentPrice = closeValues[closeValues.length - 1];
         
         try {
-            // 1. CÁLCULO DE INDICADORES
-            const adxResult = ADX.calculate({ high: highValues, low: lowValues, close: closeValues, period: 14 });
-            const latestADX = adxResult.length > 0 ? adxResult[adxResult.length - 1].adx : 0;
+            let score = 0;
+            let triggers = [];
 
-            const stochResult = StochasticRSI.calculate({
+            // --- 1. DETECCIÓN DE SOBREVENTA EXTREMA (COMPRAR LA CAÍDA) ---
+            const bb = BollingerBands.calculate({ period: 20, values: closeValues, stdDev: 2 });
+            if (bb.length > 0) {
+                const lastBB = bb[bb.length - 1];
+                // Si el precio perfora la banda inferior (Panic Sell detectado)
+                if (currentPrice <= lastBB.lower) {
+                    score += 45; 
+                    triggers.push("Volatility Dip");
+                }
+            }
+
+            // --- 2. OSCILADOR (MOMENTO) ---
+            const stoch = StochasticRSI.calculate({
                 values: closeValues, rsiPeriod: 14, stochasticPeriod: 14, kPeriod: 3, dPeriod: 3
             });
+            if (stoch.length >= 2) {
+                const lastK = stoch[stoch.length - 1].k;
+                const prevK = stoch[stoch.length - 2].k;
+                
+                if (lastK < 20) {
+                    score += 25; // Punto por estar en zona de compra
+                    if (lastK > prevK) {
+                        score += 15; // Extra por giro alcista
+                        triggers.push("Stoch Recovery");
+                    }
+                } else if (lastK > 85) {
+                    score -= 50; // Bloqueo total por sobrecompra
+                }
+            }
+
+            // --- 3. TENDENCIA INSTITUCIONAL (FILTRO DINÁMICO) ---
+            const ema200Arr = EMA.calculate({ period: 100, values: closeValues }); // Bajamos a 100 para más reactividad
+            const lastEma = ema200Arr.length > 0 ? ema200Arr[ema200Arr.length - 1] : currentPrice;
             
-            if (stochResult.length < 2) return null; 
-            const latestStoch = stochResult[stochResult.length - 1];
-            const prevStoch = stochResult[stochResult.length - 2];
-
-            // 🟢 AUDITORÍA: Verificación de longitud para EMAs antes de acceder al último índice
-            const ema9 = EMA.calculate({ period: 9, values: closeValues });
-            const ema21 = EMA.calculate({ period: 21, values: closeValues });
-            const ema200 = EMA.calculate({ period: 200, values: closeValues });
-            
-            if (ema9.length === 0 || ema21.length === 0 || ema200.length === 0) return null;
-
-            const lastEma9 = ema9[ema9.length - 1];
-            const lastEma21 = ema21[ema21.length - 1];
-            const lastEma200 = ema200[ema200.length - 1];
-            const currentPrice = closeValues[closeValues.length - 1];
-
-            // 2. SISTEMA DE SCORING (Puntuación de Confianza)
-            const isBullishCross = lastEma9 > lastEma21;
-            const isAboveInstitutional = currentPrice > lastEma200;
-
-            let score = 0;
-            
-            // Filtro Macro (Tendencia Principal)
-            if (isAboveInstitutional) {
-                score += 30; 
-                if (isBullishCross) score += 10;
+            if (currentPrice > lastEma) {
+                score += 20; // Bonus por tendencia a favor
+                triggers.push("Trend Support");
             } else {
-                score -= 30; // Penalización por tendencia bajista
+                // En lugar de castigar con -30, solo sumamos 5 si hay señales de rebote
+                if (score > 40) score += 5; 
             }
 
-            // Oscilador (Momento de entrada)
-            if (latestStoch && prevStoch) {
-                const kDiff = latestStoch.k - prevStoch.k;
-                // Sobrevendido con giro alcista (Gatillo principal)
-                if (latestStoch.k < 25 && kDiff > 3) score += 40;
-                // Sobrecomprado (Zona de no-entrada)
-                else if (latestStoch.k > 80) score -= 50;
-                // Momentum alcista general
-                else if (kDiff > 5) score += 15;
-            }
+            // --- 4. FUERZA DEL MOVIMIENTO (ADX) ---
+            const adxRes = ADX.calculate({ high: highValues, low: lowValues, close: closeValues, period: 14 });
+            const lastADX = adxRes.length > 0 ? adxRes[adxRes.length - 1].adx : 0;
+            
+            if (lastADX > 20) score += 10; // Hay fuerza
 
-            // Volatilidad y Fuerza (ADX)
-            if (latestADX > 25) score += 20; 
-            else if (latestADX < 18) score -= 40; // Evitar mercados laterales "picahielo"
-
-            // 3. NORMALIZACIÓN DE RESULTADOS (0.0 a 1.0)
+            // Normalización final (0.0 a 1.0)
             const confidence = Math.max(0, Math.min(1, score / 100));
 
             return {
-                rsiK: latestStoch?.k || 50,
-                adx: latestADX,
-                trend: isAboveInstitutional ? 'bullish' : 'bearish',
-                confidence: confidence,
+                confidence,
                 price: currentPrice,
-                message: this._generateMessage(isAboveInstitutional, latestADX, latestStoch, confidence)
+                trend: currentPrice > lastEma ? 'Bullish' : 'Bearish/Rebound',
+                adx: lastADX,
+                message: triggers.length > 0 ? `Signal: ${triggers.join(' + ')}` : "Scanning Market..."
             };
+
         } catch (e) {
-            console.error("❌ AI Math Error:", e);
+            console.error("❌ Strategy Error:", e);
             return null;
         }
-    }
-
-    /**
-     * Traduce los datos técnicos a lenguaje humano para el Dashboard.
-     */
-    static _generateMessage(bullish, adx, stoch, conf) {
-        if (conf >= 0.75) return "🚀 ALTA CONFIANZA: Alineación técnica detectada.";
-        if (stoch && stoch.k > 80) return "⚠️ AGOTAMIENTO: Sobrecompra detectada.";
-        if (adx < 18) return "😴 BAJO VOLUMEN: Mercado sin dirección clara.";
-        if (!bullish) return "📉 FILTRO MACRO: Tendencia bajista dominante.";
-        return "🔍 ESCANEANDO: Buscando punto de entrada óptimo...";
     }
 }
 
