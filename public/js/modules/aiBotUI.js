@@ -11,35 +11,37 @@ const aiBotUI = {
     /**
      * Actualiza el círculo de confianza y el texto descriptivo del motor neural
      */
-    updateConfidence: function(confidence, serverMessage = null, isAnalyzing = false) {
+updateConfidence: function(confidence, serverMessage = null, isAnalyzing = false) {
         const circle = document.getElementById('ai-confidence-circle');
         const valueText = document.getElementById('ai-confidence-value');
         const predictionText = document.getElementById('ai-prediction-text');
         
         if (!circle || !valueText || !predictionText) return;
 
-        // 1. Normalización Robusta
+        // 1. Normalización Robusta (0.60 -> 60%)
         let percent = confidence <= 1 ? confidence * 100 : confidence;
-        percent = Math.max(0, Math.min(100, percent)); // Clamp entre 0 y 100
-        if (isNaN(percent)) percent = 0;
+        percent = Math.max(0, Math.min(100, percent)); 
 
-        // 2. Filtro de Estabilidad
-        if (Math.abs(this.lastPercent - percent) < 0.5 && !isAnalyzing && this.lastPercent !== -1) {
-            // No hacemos nada si el cambio es insignificante
-        } else {
-            this.lastPercent = percent;
-            const offset = 364.4 - (percent / 100) * 364.4;
-            
-            circle.style.transition = "stroke-dashoffset 0.8s ease-out, stroke 0.5s ease";
-            circle.style.strokeDashoffset = offset;
-            valueText.innerText = `${Math.round(percent)}%`;
-
-            // Colores dinámicos
-            const color = percent >= 85 ? "#10b981" : (percent >= 50 ? "#3b82f6" : "#6366f1");
-            if (circle.style.stroke !== color) circle.style.stroke = color;
+        // 2. Filtro de Estabilidad (Reducido a 0.1 para ver movimiento real)
+        if (Math.abs(this.lastPercent - percent) < 0.1 && !isAnalyzing && this.lastPercent !== -1) {
+            return; 
         }
 
-        // 3. Gestión de Mensajes
+        this.lastPercent = percent;
+        const offset = 364.4 - (percent / 100) * 364.4;
+        
+        circle.style.transition = "stroke-dashoffset 0.5s ease-out, stroke 0.5s ease";
+        circle.style.strokeDashoffset = offset;
+        valueText.innerText = `${Math.round(percent)}%`;
+
+        // 3. Colores dinámicos Sincronizados con el Engine (60% es el umbral de compra)
+        let color = "#6366f1"; // Indigo (Neutral)
+        if (percent >= 60) color = "#10b981"; // Esmeralda (Compra)
+        else if (percent >= 40) color = "#3b82f6"; // Azul (Interés)
+
+        if (circle.style.stroke !== color) circle.style.stroke = color;
+
+        // 4. Gestión de Mensajes
         let msg = "";
         let msgClass = "font-mono text-[10px] mt-2 transition-all duration-300 ";
 
@@ -47,12 +49,11 @@ const aiBotUI = {
             msg = ">> ANALYZING NEURAL FLOW...";
             msgClass += "text-blue-300 animate-pulse";
         } else if (serverMessage) {
-            const displayMsg = serverMessage === 'HOLD' ? 'STABLE: SCANNING TREND' : serverMessage;
-            msg = `>> ${displayMsg.toUpperCase()}`;
-            msgClass += (percent >= 75 ? 'text-emerald-400' : 'text-blue-300');
+            msg = `>> ${serverMessage.toUpperCase()}`;
+            msgClass += (percent >= 60 ? 'text-emerald-400' : 'text-blue-300');
         } else {
-            msg = percent >= 75 ? ">> STRONG MOMENTUM: ENTRY SIGNAL" : ">> NEUTRAL: SCANNING MARKET";
-            msgClass += percent >= 75 ? "text-emerald-400" : "text-gray-500";
+            msg = percent >= 60 ? ">> HIGH CONFIDENCE: ENTRY SIGNAL" : ">> SCANNING MARKET...";
+            msgClass += percent >= 60 ? "text-emerald-400" : "text-gray-500";
         }
 
         if (this.lastMsg !== msg) {
