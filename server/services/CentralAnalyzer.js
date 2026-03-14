@@ -6,6 +6,8 @@
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
 const bitmartService = require('./bitmartService'); 
 const MarketSignal = require('../models/MarketSignal');
+const AIEngine = require('../src/ai/AIEngine');
+const AutoBot = require('../models/AutoBot');
 
 class CentralAnalyzer {
     constructor() {
@@ -143,6 +145,20 @@ class CentralAnalyzer {
                     macd: curMACD.histogram,
                     signal: signal.action 
                 });
+            }
+
+	    // 7. DISPARAR IA PARA USUARIOS ACTIVOS
+            try {
+                // Buscamos todos los bots que tengan la IA en estado RUNNING
+                const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
+                
+                for (const bot of activeAiBots) {
+                    // Llamamos al motor para procesar la decisión de este usuario específico
+                    // Pasamos el precio actual, el ID de usuario y el objeto bot
+                    await AIEngine.analyze(price, bot.userId, bot);
+                }
+            } catch (aiErr) {
+                console.error(`❌ [CENTRAL-ANALYZER] Error disparando IA: ${aiErr.message}`);
             }
 
             return updatedSignal;
