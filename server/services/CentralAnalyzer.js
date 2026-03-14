@@ -68,7 +68,6 @@ class CentralAnalyzer {
             const highs = candles.map(c => c.high);
             const lows = candles.map(c => c.low);
 
-            // Inyección de precio en tiempo real para el cálculo actual
             const currentCloses = [...closes];
             if (this.lastPrice && this.lastPrice !== currentCloses[currentCloses.length - 1]) {
                 currentCloses.push(this.lastPrice);
@@ -89,7 +88,6 @@ class CentralAnalyzer {
                 signalPeriod: 3
             });
 
-            // NUEVO: Cálculo de MACD
             const macdArr = MACD.calculate({
                 values: currentCloses,
                 fastPeriod: this.config.MACD_FAST,
@@ -99,34 +97,30 @@ class CentralAnalyzer {
                 SimpleMASignal: false
             });
 
-            // 3. EXTRACCIÓN DE VALORES ACTUALES
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const prevRSI21 = rsi21Arr.length > 1 ? parseFloat(rsi21Arr[rsi21Arr.length - 2].toFixed(2)) : curRSI21;
             
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curStoch = stochArr.length > 0 ? stochArr[stochArr.length - 1] : { k: 0, d: 0 };
-
-            // Valores MACD
             const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
-            // 4. LÓGICA DE SEÑAL (RSI + Confirmación MACD)
+            // 4. LÓGICA DE SEÑAL
             const price = this.lastPrice || closes[closes.length - 1];
             const signal = this._getSignal(curRSI21, prevRSI21, curADX, curMACD, price);
 
-            // 5. PERSISTENCIA EN DB (Sincronización de campos RSI)
+            // 5. PERSISTENCIA EN DB
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
                     currentPrice: price,
                     rsi14: curRSI14,
                     rsi21: curRSI21,
-                    currentRSI: curRSI14, // FIX: Actualiza el campo legado de 39.03
+                    currentRSI: curRSI14,
                     prevRSI: prevRSI21,
                     adx: curADX,
                     stochK: curStoch.k,
                     stochD: curStoch.d,
-                    // Persistencia MACD
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
                     macdHist: parseFloat(curMACD.histogram.toFixed(2)),
@@ -137,7 +131,7 @@ class CentralAnalyzer {
                 { upsert: true, new: true }
             );
 
-            // 6. BROADCAST
+            // 6. BROADCAST GLOBAL
             if (this.io) {
                 this.io.emit('market-signal-update', { 
                     price, 
@@ -147,49 +141,49 @@ class CentralAnalyzer {
                 });
             }
 
-	    // 7. DISPARAR IA PARA USUARIOS ACTIVOS
-           try {
-    const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
-    
-    for (const bot of activeAiBots) {
-        // Ejecutamos el análisis
-        const result = await AIEngine.analyze(price, bot.userId, bot);
-        
-        // --- LOG DE EMERGENCIA ---
-        const conf = result ? result.confidence : 0;
-        console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Precio: ${price} | Confianza: ${conf}`);
+            // 7. DISPARAR IA PARA USUARIOS ACTIVOS (Fixing Syntax here)
+            try {
+                const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
+                
+                for (const bot of activeAiBots) {
+                    const result = await AIEngine.analyze(price, bot.userId, bot);
+                    const conf = result ? result.confidence : 0;
+                    
+                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza: ${conf}`);
 
-        // Forzamos un mensaje al terminal del usuario para confirmar que está viva
-        if (this.io) {
-            this.io.to(bot.userId).emit('bot-log', { 
-                message: `👁️ Neural Flow: Confianza calculada en ${(conf * 100).toFixed(2)}%`, 
-                type: 'info' 
-            });
+                    if (this.io) {
+                        this.io.to(bot.userId).emit('bot-log', { 
+                            message: `👁️ Neural Flow: Confianza calculada en ${(conf * 100).toFixed(2)}%`, 
+                            type: 'info' 
+                        });
+                    }
+                }
+            } catch (aiErr) {
+                console.error(`❌ [CENTRAL-ANALYZER] Error disparando IA: ${aiErr.message}`);
+            }
+
+            return updatedSignal;
+
+        } catch (err) {
+            console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
         }
-    }
-} catch (aiErr) {
-    console.error(`❌ [CENTRAL-ANALYZER] Error disparando IA: ${aiErr.message}`);
-}
-
+    } // <--- Esta es la llave que faltaba cerrando analyze()
 
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
 
         const rsiDiff = rsi - prevRsi;
-        const macdBullish = macd.MACD > macd.signal; // Cruce alcista
-        const macdBearish = macd.MACD < macd.signal; // Cruce bajista
+        const macdBullish = macd.MACD > macd.signal;
+        const macdBearish = macd.MACD < macd.signal;
 
-        // SEÑAL DE COMPRA: RSI saliendo de sobreventa + Histograma MACD mejorando
         if (rsi <= 35 && rsiDiff > 0 && !macdBearish) {
             return { action: "BUY", reason: "RSI Oversold + MACD Neutral/Bullish" };
         }
 
-        // SEÑAL DE VENTA: RSI en sobrecompra o perdiendo fuerza + Cruce MACD bajista
         if (rsi >= 65 && (rsiDiff < 0 || macdBearish)) {
             return { action: "SELL", reason: "RSI Overbought + MACD Bearish Cross" };
         }
 
-        // MOMENTUM FUERTE
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && macdBullish) {
             return { action: "BUY", reason: "Strong Momentum Bullish" };
         }
