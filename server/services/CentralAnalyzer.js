@@ -167,7 +167,7 @@ class CentralAnalyzer {
         } catch (err) {
             console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
         }
-    } // <--- Esta es la llave que faltaba cerrando analyze()
+    }
 
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
