@@ -59,14 +59,15 @@ class AIEngine {
 
             // 3. ANÁLISIS PARA NUEVA ENTRADA (HÍBRIDO)
             if (lastEntryPrice === 0) {
-                const SYMBOL = (bot.config?.symbol || 'BTC_USDT').replace('USDT', '_USDT');
+                // FIX: Evitamos el doble guion bajo (BTC__USDT)
+                const rawSymbol = bot.config?.symbol || 'BTC_USDT';
+                const SYMBOL = rawSymbol.includes('_') ? rawSymbol : rawSymbol.replace('USDT', '_USDT');
                 
-                // --- LOG DE INSPECCIÓN ---
                 console.log(`🔍 [AIEngine-INSPECT] Buscando señales para ${SYMBOL} | Usuario: ${userId}`);
                 
                 const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
                 
-                // Resiliencia: Si no hay historial suficiente, avisamos en el log
+                // Resiliencia: Verificamos si hay velas suficientes
                 if (!marketData || !marketData.history || marketData.history.length < 100) {
                     const count = marketData?.history?.length || 0;
                     console.log(`⚠️ [AIEngine] Datos insuficientes para ${SYMBOL}: ${count}/100 velas.`);
@@ -75,7 +76,6 @@ class AIEngine {
 
                 const analysis = StrategyManager.calculate(marketData.history);
                 
-                // --- LOG DE RESULTADOS ---
                 if (analysis) {
                     console.log(`📊 [AIEngine-RESULTS] Confianza: ${analysis.confidence} | Tendencia: ${analysis.trend}`);
                 }
@@ -114,7 +114,6 @@ class AIEngine {
                     ainorder: 1
                 });
             } else {
-                // LÓGICA DE VENTA Y CIERRE DE CICLO
                 const profitFactor = (price / bot.ailastEntryPrice);
                 const grossRecovery = investmentAmount * profitFactor;
                 const sellFee = grossRecovery * this.EXCHANGE_FEE;
@@ -122,10 +121,8 @@ class AIEngine {
                 netProfit = (grossRecovery - investmentAmount) - sellFee;
                 const totalRecovery = grossRecovery - sellFee;
                 
-                // Calculamos el nuevo balance sumando el retorno neto
                 newBalance = parseFloat((newBalance + totalRecovery - investmentAmount).toFixed(2));
 
-                // Registro de estadísticas del ciclo
                 if (typeof context.logSuccessfulCycle === 'function' && bot.aistartTime) {
                     await context.logSuccessfulCycle({
                         userId,
@@ -158,13 +155,11 @@ class AIEngine {
                     aistate: nextState
                 });
 
-                // Actualizar profit acumulado global
                 await context.updateGeneralBotState({ 
                     $inc: { total_profit: parseFloat(netProfit.toFixed(4)) } 
                 });
             }
 
-            // Crear registro de orden en DB
             await Order.create({
                 userId,
                 strategy: 'ai',
