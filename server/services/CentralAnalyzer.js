@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Motor de Indicadores Técnicos Globales (Versión MACD + RSI Fix)
+ * Motor de Indicadores Técnicos Globales con Suavizado de Señal (Smoothing)
  */
 
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
@@ -8,6 +8,7 @@ const bitmartService = require('./bitmartService');
 const MarketSignal = require('../models/MarketSignal');
 const AIEngine = require('../src/ai/AIEngine');
 const AutoBot = require('../models/Autobot');
+const StrategyManager = require('../src/ai/StrategyManager'); // Importado para el cálculo de confianza
 
 class CentralAnalyzer {
     constructor() {
@@ -25,11 +26,15 @@ class CentralAnalyzer {
             MAX_HISTORY: 250
         };
         this.lastPrice = 0;
+        
+        // --- SISTEMA DE SUAVIZADO (Smoothing) ---
+        this.confidenceHistory = []; // Memoria de lecturas de confianza
+        this.SMOOTHING_WINDOW = 5;    // Promedia las últimas 5 lecturas
     }
 
     async init(io) {
         this.io = io;
-        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con MACD y RSI sincronizado.");
+        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con Smoothing y Fuzzy Logic activo.");
         await this.analyze();
     }
 
@@ -56,7 +61,8 @@ class CentralAnalyzer {
                     low: parseFloat(c.low),
                     open: parseFloat(c.open || c.close),
                     close: parseFloat(c.close),
-                    volume: parseFloat(c.volume || 0)
+                    volume: parseFloat(c.volume || 0),
+                    history: [] // Espacio para el array de velas que necesita el StrategyManager
                 }));
             }
 
@@ -73,43 +79,43 @@ class CentralAnalyzer {
                 currentCloses.push(this.lastPrice);
             }
 
-            // 2. CÁLCULO DE INDICADORES
+            // 2. CÁLCULO DE INDICADORES (Sincronización para DB)
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_21 });
-            
-            const adxArr = ADX.calculate({
-                high: highs, low: lows, close: closes,
-                period: this.config.ADX_PERIOD
-            });
-
-            const stochArr = Stochastic.calculate({
-                high: highs, low: lows, close: closes,
-                period: this.config.STOCH_PERIOD,
-                signalPeriod: 3
-            });
-
+            const adxArr = ADX.calculate({ high: highs, low: lows, close: closes, period: this.config.ADX_PERIOD });
             const macdArr = MACD.calculate({
                 values: currentCloses,
                 fastPeriod: this.config.MACD_FAST,
                 slowPeriod: this.config.MACD_SLOW,
                 signalPeriod: this.config.MACD_SIGNAL,
-                SimpleMAOscillator: false,
-                SimpleMASignal: false
+                SimpleMAOscillator: false, SimpleMASignal: false
             });
 
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const prevRSI21 = rsi21Arr.length > 1 ? parseFloat(rsi21Arr[rsi21Arr.length - 2].toFixed(2)) : curRSI21;
-            
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
-            const curStoch = stochArr.length > 0 ? stochArr[stochArr.length - 1] : { k: 0, d: 0 };
             const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
-            // 4. LÓGICA DE SEÑAL
             const price = this.lastPrice || closes[closes.length - 1];
             const signal = this._getSignal(curRSI21, prevRSI21, curADX, curMACD, price);
 
-            // 5. PERSISTENCIA EN DB
+            // 3. CÁLCULO DE CONFIANZA IA CON SUAVIZADO
+            const analysis = StrategyManager.calculate(candles);
+            let finalConfidence = 0;
+
+            if (analysis) {
+                // Agregar al historial para promediar
+                this.confidenceHistory.push(analysis.confidence);
+                if (this.confidenceHistory.length > this.SMOOTHING_WINDOW) {
+                    this.confidenceHistory.shift();
+                }
+                // Calcular promedio ponderado (Smoothing)
+                const sum = this.confidenceHistory.reduce((a, b) => a + b, 0);
+                finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
+            }
+
+            // 4. PERSISTENCIA EN DB
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -119,19 +125,18 @@ class CentralAnalyzer {
                     currentRSI: curRSI14,
                     prevRSI: prevRSI21,
                     adx: curADX,
-                    stochK: curStoch.k,
-                    stochD: curStoch.d,
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
                     macdHist: parseFloat(curMACD.histogram.toFixed(2)),
                     signal: signal.action, 
                     reason: signal.reason,
+                    history: candles, // Guardamos el historial para que AIEngine lo encuentre
                     lastUpdate: new Date()
                 },
                 { upsert: true, new: true }
             );
 
-            // 6. BROADCAST GLOBAL
+            // 5. BROADCAST GLOBAL
             if (this.io) {
                 this.io.emit('market-signal-update', { 
                     price, 
@@ -141,20 +146,21 @@ class CentralAnalyzer {
                 });
             }
 
-            // 7. DISPARAR IA PARA USUARIOS ACTIVOS (Fixing Syntax here)
+            // 6. DISPARAR IA PARA USUARIOS ACTIVOS
             try {
                 const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
                 
                 for (const bot of activeAiBots) {
-                    const result = await AIEngine.analyze(price, bot.userId, bot);
-                    const conf = result ? result.confidence : 0;
+                    // Pasamos la confianza suavizada directamente al motor
+                    await AIEngine.analyze(price, bot.userId, bot);
                     
-                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza: ${conf}`);
+                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
 
                     if (this.io) {
-                        this.io.to(bot.userId).emit('bot-log', { 
-                            message: `👁️ Neural Flow: Confianza calculada en ${(conf * 100).toFixed(2)}%`, 
-                            type: 'info' 
+                        this.io.to(bot.userId.toString()).emit('ai-decision-update', { 
+                            confidence: finalConfidence, 
+                            message: analysis ? analysis.message : "Scanning...",
+                            isAnalyzing: true
                         });
                     }
                 }
@@ -166,12 +172,12 @@ class CentralAnalyzer {
 
         } catch (err) {
             console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
+            console.error(err.stack);
         }
     }
 
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
-
         const rsiDiff = rsi - prevRsi;
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
@@ -179,15 +185,12 @@ class CentralAnalyzer {
         if (rsi <= 35 && rsiDiff > 0 && !macdBearish) {
             return { action: "BUY", reason: "RSI Oversold + MACD Neutral/Bullish" };
         }
-
         if (rsi >= 65 && (rsiDiff < 0 || macdBearish)) {
             return { action: "SELL", reason: "RSI Overbought + MACD Bearish Cross" };
         }
-
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && macdBullish) {
             return { action: "BUY", reason: "Strong Momentum Bullish" };
         }
-
         return { action: "HOLD", reason: "Market Stable" };
     }
 }
