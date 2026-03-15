@@ -8,7 +8,7 @@ const { handleSuccessfulBuy } = require('../../managers/longDataManager');
  * El "vigilante" que espera a que BitMart confirme la ejecución.
  * @param {userId} - Añadido para soporte multi-usuario.
  */
-async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) { // <--- Añadido userCreds
+async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) { 
     
     // 1. Verificación de existencia de orden
     const lastOrder = botState.llastOrder;
@@ -20,11 +20,10 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
     const orderIdString = String(lastOrder.order_id);
 
     // 🟢 AUDITORÍA: Usamos las credenciales inyectadas, no las de botState.config
-    const creds = userCreds; // <--- CAMBIO CLAVE
+    const creds = userCreds; 
 
     try {
         // 2. CONSULTA AISLADA POR USUARIO
-        // Pasamos creds para la API de BitMart
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
         let filledVolume = parseFloat(
@@ -33,7 +32,7 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
             finalDetails?.filledVolume || 0
         );
 
-        // --- LÓGICA DE RESPALDO POR USUARIO ---
+        // --- LÓGICA DE RESPALDO POR USUARIO (Mantenida íntegra) ---
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
             const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
@@ -51,17 +50,12 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         if (isFilled) {
             log(`[CONSOLIDATOR] ✅ Compra confirmada: ${orderIdString}. Actualizando balances...`, 'success');
             
-            // Inyectamos userId y los estados para el guardado en DB
             const dependencies = { 
                 updateGeneralBotState, 
                 updateLStateData,
-                userId // <--- CRUCIAL PARA EL HISTORIAL
+                userId 
             };
             
-            /**
-             * Delegamos a handleSuccessfulBuy para procesar el ciclo exponencial.
-             * Aquí es donde se llamará a orderPersistenceService.
-             */
             await handleSuccessfulBuy(botState, finalDetails, log, dependencies);
             
             return true; 
@@ -71,7 +65,6 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         // CASO 2: ORDEN ACTIVA (Aún esperando)
         // =================================================================
         if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
-            // Retornamos true para que LBuying sepa que hay una orden en curso
             return true; 
         } 
 
@@ -81,14 +74,15 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         if (isCanceled && filledVolume === 0) {
             log(`[CONSOLIDATOR] ❌ Orden ${orderIdString} cancelada. Liberando slot.`, 'error');
             await updateGeneralBotState({ llastOrder: null });
-            return true;
+            return false; // <--- CAMBIO ACORDADO
         }
 
-        return true;
+        // Si llegó aquí y no hay un estado claro de 'new' o 'filled'
+        return false; // <--- CAMBIO ACORDADO
 
     } catch (error) {
         log(`[CONSOLIDATOR] ⚠️ Error en monitoreo (User: ${userId}): ${error.message}`, 'warning');
-        return true; 
+        return false; // <--- CAMBIO ACORDADO
     }
 }
 
