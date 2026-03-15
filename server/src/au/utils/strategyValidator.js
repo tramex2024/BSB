@@ -89,7 +89,7 @@ function canExecuteStrategy(strategy, dependencies) {
         const required = parseFloat(botState.lbalance || 0);
         const hasFunds = netAvailableUSDT >= required;
         if (now % logInterval < 1500) {
-            log(`[VAL-L] Net USDT: $${netAvailableUSDT.toFixed(2)} | Required: $${required.toFixed(2)} | Status: ${hasFunds}`, hasFunds ? 'info' : 'warning');
+//            log(`[VAL-L] Net USDT: $${netAvailableUSDT.toFixed(2)} | Required: $${required.toFixed(2)} | Status: ${hasFunds}`, hasFunds ? 'info' : 'warning');
         }
         return hasFunds;
     }
@@ -98,7 +98,7 @@ function canExecuteStrategy(strategy, dependencies) {
         const required = parseFloat(botState.aibalance || 0);
         const hasFunds = netAvailableUSDT >= required;
         if (now % logInterval < 1500) {
-            log(`[VAL-AI] Net USDT: $${netAvailableUSDT.toFixed(2)} | Required: $${required.toFixed(2)} | Status: ${hasFunds}`, hasFunds ? 'info' : 'warning');
+//            log(`[VAL-AI] Net USDT: $${netAvailableUSDT.toFixed(2)} | Required: $${required.toFixed(2)} | Status: ${hasFunds}`, hasFunds ? 'info' : 'warning');
         }
         return hasFunds;
     }
@@ -111,7 +111,7 @@ function canExecuteStrategy(strategy, dependencies) {
         const canPass = hasBtc || hasUsdtBacking;
 
         if (now % logInterval < 1500) {
-            log(`[VAL-S] BTC Avail: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)} | USDT Backing: ${hasUsdtBacking} | Status: ${canPass}`, canPass ? 'info' : 'warning');
+//            log(`[VAL-S] BTC Avail: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)} | USDT Backing: ${hasUsdtBacking} | Status: ${canPass}`, canPass ? 'info' : 'warning');
         }
         return canPass;
     }

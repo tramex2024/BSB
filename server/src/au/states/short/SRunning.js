@@ -30,7 +30,7 @@ async function run(dependencies) {
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
-        log("[S-RUNNING] 🛡️ Posición Short activa detectada (sac > 0). Corrigiendo estado a SELLING...", 'warning');
+//        log("[S-RUNNING] 🛡️ Posición Short activa detectada (sac > 0). Corrigiendo estado a SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
@@ -69,7 +69,7 @@ async function run(dependencies) {
         // 🟢 AUDITORÍA: Vital para evitar entradas en falso si el servicio de señales (MarketSignal) se congela.
         const signalAgeMinutes = (Date.now() - new Date(globalSignal.lastUpdate || globalSignal.updatedAt).getTime()) / 60000;
         if (signalAgeMinutes > 5) {
-            log(`[S-RUNNING] ⚠️ Señal Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
+//            log(`[S-RUNNING] ⚠️ Señal Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
             return;
         }
 
