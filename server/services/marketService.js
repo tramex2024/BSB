@@ -57,7 +57,7 @@ function setupPublicTicker(io) {
                 const closedCandle = candleBuilder.processTick(price, volume);
                 
                 if (closedCandle) {
-                    console.log(`🕯️ [CANDLE-CLOSE] Nueva vela generada: ${closedCandle.close} | Vol: ${closedCandle.volume}`);
+//                    console.log(`🕯️ [CANDLE-CLOSE] Nueva vela generada: ${closedCandle.close} | Vol: ${closedCandle.volume}`);
                     
                     // 3. Persistencia en DB (ETAPA 2: PERSISTENCIA)
                     // Usamos findOneAndUpdate para obtener el historial actualizado de 250 velas

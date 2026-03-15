@@ -45,7 +45,7 @@ module.exports = function(io) {
                 .limit(15);
 
                 socket.emit('notification-history', notifHistory);
-                console.log(`[SOCKET] 🔔 Historial de notificaciones enviado a ${userEmail}`);
+//                console.log(`[SOCKET] 🔔 Historial de notificaciones enviado a ${userEmail}`);
 
             } else {
                 // SEGURIDAD: Si el token existe pero el usuario no está en la DB
@@ -74,7 +74,7 @@ module.exports = function(io) {
                 .limit(20);
             
             socket.emit('ai-history-update', history);
-            console.log(`[SOCKET] 🔄 Historial de órdenes enviado a ${userIdStr}`);
+//            console.log(`[SOCKET] 🔄 Historial de órdenes enviado a ${userIdStr}`);
         } catch (err) {
             console.error("❌ Error hidratando historial de órdenes:", err.message);
         }
