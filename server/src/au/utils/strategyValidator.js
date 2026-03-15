@@ -1,122 +1,95 @@
 /**
  * STRATEGY VALIDATOR - BUDGET & LIQUIDITY ENGINE
- * Logic: Calculates "Net Available" by subtracting committed funds 
- * from active strategies to prevent over-allocation.
+ * Auditado: Control de sobre-asignación y aislamiento de ciclos.
  */
 
-/**
- * Generates a report for the UI Modal before starting the strategy.
- * This is the "Preview" logic.
- */
-function getStartAnalysis(strategy, dependencies) {
-    const { botState, availableUSDT, availableBTC, currentPrice } = dependencies;
-    
-    // 1. Calculate committed funds (Same logic as validator)
+// Función interna auxiliar para no repetir lógica
+function _getNetAvailable(dependencies) {
+    const { botState, availableUSDT } = dependencies;
     let committedUSDT = 0;
+
+    // Sumamos lo que CADA estrategia tiene asignado actualmente si no están STOPPED
     if (botState.lstate !== 'STOPPED') committedUSDT += parseFloat(botState.lbalance || 0);
     if (botState.aistate !== 'STOPPED') committedUSDT += parseFloat(botState.aibalance || 0);
+    if (botState.sstate !== 'STOPPED') committedUSDT += parseFloat(botState.sbalance || 0);
+
+    return availableUSDT - committedUSDT;
+}
+
+/**
+ * PREVIEW (Click en botón Start): 
+ * Aquí SÍ descontamos todo para ver si queda espacio para una nueva estrategia.
+ */
+function getStartAnalysis(strategy, dependencies) {
+    const { botState, availableBTC, currentPrice } = dependencies;
     
-    const netAvailableUSDT = availableUSDT - committedUSDT;
+    const netAvailableUSDT = _getNetAvailable(dependencies);
     const config = botState.config[strategy] || {};
-
-    // 2. Coverage Calculation (Price Variation)
-    const priceVar = parseFloat(config.price_var || 0);
-    const amountUsdt = parseFloat(config.amountUsdt || 0);
-    const purchaseUsdt = parseFloat(config.purchaseUsdt || 0);
     
-    const maxOrders = purchaseUsdt > 0 ? Math.floor(amountUsdt / purchaseUsdt) : 0;
-    const estimatedCoverage = (priceVar * maxOrders).toFixed(2);
-
-    // 3. Financial Requirements & Report Generation
+    const amountUsdt = parseFloat(config.amountUsdt || 0);
     let canPass = false;
     let requirementMsg = "";
 
-    // --- CASE: AI ---
     if (strategy === 'ai') {
-        const required = parseFloat(botState.aibalance || 0);
+        const required = parseFloat(botState.aibalance || 20); 
         canPass = netAvailableUSDT >= required;
-        requirementMsg = `Dedicated AI Fund: $${required} USDT`;
-        
-        return {
-            canPass,
-            report: {
-                title: `AI CORE NEURAL START`,
-                coverage: `Dynamic Adaptive Coverage (AI Managed).`,
-                liquidity: requirementMsg,
-                netAvailable: `Net Balance: $${netAvailableUSDT.toFixed(2)} USDT`,
-                disclaimer: "Confirm to engage the Neural Core for automated market analysis."
-            }
-        };
-    }
-
-    // --- CASE: SHORT ---
-    if (strategy === 'short') {
-        const btcNeeded = amountUsdt / currentPrice;
-        canPass = (availableBTC >= btcNeeded) || (netAvailableUSDT >= amountUsdt);
-        requirementMsg = `Required: ${btcNeeded.toFixed(6)} BTC (or $${amountUsdt} USDT backing)`;
+        requirementMsg = `Required: $${required} USDT`;
     } 
-    // --- CASE: LONG (Ahora explícito) ---
-    else if (strategy === 'long') {
+    else if (strategy === 'short') {
+        const btcNeeded = amountUsdt / currentPrice;
+        // Puede pasar si tiene el BTC físico o si tiene USDT libre para respaldar
+        canPass = (availableBTC >= btcNeeded) || (netAvailableUSDT >= amountUsdt);
+        requirementMsg = `Needs: ${btcNeeded.toFixed(6)} BTC or $${amountUsdt} USDT free`;
+    } 
+    else { // LONG
         canPass = netAvailableUSDT >= amountUsdt;
         requirementMsg = `Required: $${amountUsdt} USDT`;
     }
 
-    // Return estándar para Long y Short
     return {
         canPass,
         report: {
-            title: `${strategy.toUpperCase()} STRATEGY PREVIEW`,
-            coverage: `This setup covers approx. ${estimatedCoverage}% price variation.`,
+            title: `${strategy.toUpperCase()} PREVIEW`,
+            netAvailable: `Free Funds: $${netAvailableUSDT.toFixed(2)} USDT`,
             liquidity: requirementMsg,
-            netAvailable: `Net Balance: $${netAvailableUSDT.toFixed(2)} USDT`,
-            disclaimer: "Confirm to allocate these funds and start the cycle."
+            disclaimer: canPass ? "Funds available." : "Insufficient free funds (already allocated to other strategies)."
         }
     };
 }
 
+/**
+ * EXECUTION (Loop constante):
+ * Corregido: Si la estrategia ya tiene su balance, no se auto-bloquea.
+ */
 function canExecuteStrategy(strategy, dependencies) {
-    const { botState, availableUSDT, availableBTC, currentPrice, log } = dependencies;
-    const now = Date.now();
-    const logInterval = 5000; 
-
-    let committedUSDT = 0;
-    if (botState.lstate !== 'STOPPED') committedUSDT += parseFloat(botState.lbalance || 0);
-    if (botState.aistate !== 'STOPPED') committedUSDT += parseFloat(botState.aibalance || 0);
-
-    const netAvailableUSDT = availableUSDT - committedUSDT;
+    const { botState, availableBTC, currentPrice } = dependencies;
     
-    if (strategy === 'long') {
-        const required = parseFloat(botState.lbalance || 0);
-        const hasFunds = netAvailableUSDT >= required;
-        if (now % logInterval < 1500) {
-//            log(`[VAL-L] Net USDT: $${netAvailableUSDT.toFixed(2)} | Required: $${required.toFixed(2)} | Status: ${hasFunds}`, hasFunds ? 'info' : 'warning');
-        }
-        return hasFunds;
+    // 1. Verificamos cuánto tiene ESTA estrategia en su bolsillo
+    const myBalances = {
+        long: parseFloat(botState.lbalance || 0),
+        ai: parseFloat(botState.aibalance || 0),
+        short: parseFloat(botState.sbalance || 0)
+    };
+
+    const myCurrentFund = myBalances[strategy] || 0;
+
+    // 2. Si ya tiene fondos asignados (mayor a $5), la dejamos trabajar.
+    // Esto evita que el balance negativo global detenga un bot que ya tiene su dinero.
+    if (myCurrentFund >= 5) {
+        // Caso especial Short: si ya vendió (sac > 0), debe poder seguir siempre para comprar.
+        if (strategy === 'short' && parseFloat(botState.sac || 0) > 0) return true;
+        return true;
     }
 
-    if (strategy === 'ai') {
-        const required = parseFloat(botState.aibalance || 0);
-        const hasFunds = netAvailableUSDT >= required;
-        if (now % logInterval < 1500) {
-//            log(`[VAL-AI] Net USDT: $${netAvailableUSDT.toFixed(2)} | Required: $${required.toFixed(2)} | Status: ${hasFunds}`, hasFunds ? 'info' : 'warning');
-        }
-        return hasFunds;
-    }
-
+    // 3. Si NO tiene fondos asignados (está en $0), intentamos ver si hay saldo libre en la cuenta
+    const netAvailable = _getNetAvailable(dependencies);
+    
     if (strategy === 'short') {
-        const requiredUsdt = parseFloat(botState.sbalance || 0);
-        const btcNeeded = requiredUsdt / currentPrice;
-        const hasBtc = availableBTC >= btcNeeded;
-        const hasUsdtBacking = netAvailableUSDT >= requiredUsdt;
-        const canPass = hasBtc || hasUsdtBacking;
-
-        if (now % logInterval < 1500) {
-//            log(`[VAL-S] BTC Avail: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)} | USDT Backing: ${hasUsdtBacking} | Status: ${canPass}`, canPass ? 'info' : 'warning');
-        }
-        return canPass;
+        const btcNeeded = 10 / currentPrice; // Mínimo estimado
+        return (availableBTC >= btcNeeded) || (netAvailable >= 10);
     }
 
-    return false;
+    return netAvailable >= 10;
 }
 
 module.exports = { canExecuteStrategy, getStartAnalysis };
