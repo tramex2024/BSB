@@ -70,7 +70,7 @@ const getOrders = async (req, res) => {
 
         // Log de depuración para Render
         const logContext = queryStrategy ? `QueryStrategy: ${queryStrategy}` : `${paramStrategy}/${paramStatus}`;
-        console.log(`[ORDER-CONTROLLER] ✅ Enviando ${orders.length} órdenes para [${logContext}] - User: ${userId}`);
+//        console.log(`[ORDER-CONTROLLER] ✅ Enviando ${orders.length} órdenes para [${logContext}] - User: ${userId}`);
 
         return res.status(200).json(orders);
         
