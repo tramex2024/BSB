@@ -60,14 +60,25 @@ class AIEngine {
             // 3. ANÁLISIS PARA NUEVA ENTRADA (HÍBRIDO)
             if (lastEntryPrice === 0) {
                 const SYMBOL = (bot.config?.symbol || 'BTC_USDT').replace('USDT', '_USDT');
+                
+                // --- LOG DE INSPECCIÓN ---
+                console.log(`🔍 [AIEngine-INSPECT] Buscando señales para ${SYMBOL} | Usuario: ${userId}`);
+                
                 const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
                 
-                // Resiliencia: Si no hay 100 velas, no operamos para evitar cálculos erróneos
+                // Resiliencia: Si no hay historial suficiente, avisamos en el log
                 if (!marketData || !marketData.history || marketData.history.length < 100) {
+                    const count = marketData?.history?.length || 0;
+                    console.log(`⚠️ [AIEngine] Datos insuficientes para ${SYMBOL}: ${count}/100 velas.`);
                     return;
                 }
 
                 const analysis = StrategyManager.calculate(marketData.history);
+                
+                // --- LOG DE RESULTADOS ---
+                if (analysis) {
+                    console.log(`📊 [AIEngine-RESULTS] Confianza: ${analysis.confidence} | Tendencia: ${analysis.trend}`);
+                }
                 
                 if (analysis && analysis.confidence >= this.CONFIDENCE_THRESHOLD) {
                     this._log(userId, `🚀 AI Signal: ${analysis.message}`, analysis.confidence);
