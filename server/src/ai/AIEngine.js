@@ -83,7 +83,7 @@ class AIEngine {
                 const analysis = StrategyManager.calculate(marketData.history);
                 
                 if (analysis) {
-                    console.log(`📊 [AIEngine-RESULTS] Confianza: ${analysis.confidence} | Tendencia: ${analysis.trend}`);
+//                    console.log(`📊 [AIEngine-RESULTS] Confianza: ${analysis.confidence} | Tendencia: ${analysis.trend}`);
                     
                     if (analysis.confidence >= this.CONFIDENCE_THRESHOLD) {
                         this._log(userId, `🚀 AI Signal: ${analysis.message}`, analysis.confidence);
@@ -183,7 +183,7 @@ class AIEngine {
             });
 
             this._broadcastStatus(userId, { aistate: side === 'BUY' ? 'RUNNING' : 'STOPPED/PAUSED', virtualBalance: newBalance });
-            safeLog(`✅ AI ${side} Executed @ $${price.toFixed(2)}`, 'success');
+//            safeLog(`✅ AI ${side} Executed @ $${price.toFixed(2)}`, 'success');
 
         } catch (error) {
             safeLog(`❌ AI Trade Error: ${error.message}`, 'error');

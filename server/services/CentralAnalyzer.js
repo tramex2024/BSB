@@ -34,7 +34,7 @@ class CentralAnalyzer {
 
     async init(io) {
         this.io = io;
-        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con Smoothing y Fuzzy Logic activo.");
+//        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con Smoothing y Fuzzy Logic activo.");
         await this.analyze();
     }
 
@@ -154,7 +154,7 @@ class CentralAnalyzer {
                     // Pasamos la confianza suavizada directamente al motor
                     await AIEngine.analyze(price, bot.userId, bot);
                     
-                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
+//                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
 
                     if (this.io) {
                         this.io.to(bot.userId.toString()).emit('ai-decision-update', { 
