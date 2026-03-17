@@ -176,15 +176,17 @@ async function botCycle(priceFromWebSocket) {
             }
 
             // --- Ejecución de Estrategias con Validador ---
-            if (botState.lstate !== 'STOPPED' && canExecuteStrategy('long', dependencies)) {
-                await runLongStrategy(dependencies);
-            }
-            if (botState.sstate !== 'STOPPED' && canExecuteStrategy('short', dependencies)) {
-                await runShortStrategy(dependencies);
-            }
-            if (botState.aistate !== 'STOPPED' && canExecuteStrategy('ai', dependencies)) {
-                await runAIStrategy(dependencies);
-            }
+            if (botState.lstate !== 'STOPPED') {
+    await runLongStrategy(dependencies);
+}
+
+if (botState.sstate !== 'STOPPED') {
+    await runShortStrategy(dependencies);
+}
+
+if (botState.aistate !== 'STOPPED') {
+    await runAIStrategy(dependencies);
+}
 
             changeSet.lastUpdate = new Date();
             await orchestrator.commitChanges(userId, changeSet, currentPrice);
