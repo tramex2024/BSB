@@ -1,11 +1,11 @@
-/**
- * BSB/server/startStop.js
- * Gestión de estados y configuración (Start/Stop/Update)
- */
+// BSB/server/startStop.js
+// Management of states and configuration (Start/Stop/Update) - English Version
+
 const Autobot = require('./models/Autobot');
 const orchestrator = require('./src/au/utils/cycleOrchestrator');
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
-const { canExecuteStrategy } = require('./src/au/utils/strategyValidator');
+// Using getStartAnalysis for detailed budget reporting on click
+const { getStartAnalysis } = require('./src/au/utils/strategyValidator');
 
 async function updateConfig(userId, newConfig) {
     const currentPrice = orchestrator.getLastPrice();
@@ -37,14 +37,14 @@ async function updateConfig(userId, newConfig) {
         $set: { config: finalConfig, lastUpdate: new Date() } 
     }, { new: true }).lean();
 
-    orchestrator.log('✅ Configuración guardada correctamente.', 'success', userId);
+    orchestrator.log('✅ Configuration saved successfully.', 'success', userId);
     if (bot) await orchestrator.syncFrontendState(currentPrice, bot, userId);
     return bot;
 }
 
 async function startSide(userId, side, config) {
     const botState = await Autobot.findOne({ userId }).lean();
-    if (!botState) throw new Error("Bot no encontrado");
+    if (!botState) throw new Error("Bot not found");
 
     const currentPrice = orchestrator.getLastPrice();
     const finalConfig = JSON.parse(JSON.stringify(botState.config));
@@ -53,19 +53,21 @@ async function startSide(userId, side, config) {
         Object.assign(finalConfig[side], config[side]);
     }
 
-    // --- INTEGRACIÓN DEL VALIDADOR (GATEKEEPER) ---
+    // --- START VALIDATOR INTEGRATION (GATEKEEPER) ---
     const dependencies = {
         botState,
-        config: finalConfig,
         availableUSDT: botState.lastAvailableUSDT || 0,
         availableBTC: botState.lastAvailableBTC || 0,
-        currentPrice,
-        log: (msg, type) => orchestrator.log(msg, type, userId)
+        currentPrice
     };
 
-    // Si el validador retorna false, bloqueamos el arranque
-    if (!canExecuteStrategy(side, dependencies)) {
-        throw new Error(`Validación de saldo fallida para ${side.toUpperCase()}. Revisa tus fondos disponibles.`);
+    // Perform analysis only during the Start click event
+    const analysis = getStartAnalysis(side, dependencies);
+
+    if (!analysis.canPass) {
+        const errorMsg = `🚫 ${analysis.report.title}: ${analysis.report.disclaimer} (${analysis.report.liquidity})`;
+        orchestrator.log(errorMsg, 'error', userId);
+        throw new Error(errorMsg);
     }
 
     let cleanData = {};
@@ -86,18 +88,20 @@ async function startSide(userId, side, config) {
     const update = {
         ...cleanData, 
         [stateField]: 'RUNNING',
-        config: finalConfig
+        config: finalConfig,
+        lastUpdate: new Date()
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
-    orchestrator.log(`🚀 Estrategia ${side.toUpperCase()} validada y encendida.`, 'success', userId);
+    orchestrator.log(`🚀 ${side.toUpperCase()} strategy validated and started. ${analysis.report.netAvailable}`, 'success', userId);
+    
     await orchestrator.slowBalanceCacheUpdate(userId); 
     return bot;
 }
 
 async function stopSide(userId, side) {
     const botState = await Autobot.findOne({ userId }).lean();
-    if (!botState) throw new Error("Bot no encontrado");
+    if (!botState) throw new Error("Bot not found");
 
     const stateField = side === 'long' ? 'lstate' : (side === 'short' ? 'sstate' : 'aistate'); 
     const newConfig = JSON.parse(JSON.stringify(botState.config));
@@ -111,7 +115,7 @@ async function stopSide(userId, side) {
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
     if (bot) await orchestrator.syncFrontendState(orchestrator.getLastPrice(), bot, userId);
-    orchestrator.log(`🛑 Estrategia ${side.toUpperCase()} apagada.`, 'warning', userId);
+    orchestrator.log(`🛑 ${side.toUpperCase()} strategy stopped.`, 'warning', userId);
     return bot;
 }
 
