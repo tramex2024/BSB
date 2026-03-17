@@ -1,12 +1,11 @@
 // BSB/server/src/au/states/short/SSelling.js
 
 const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
-// Nota: El monitorShortSell debe actualizarse para reconocer el prefijo S_
 const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
 
 /**
  * SELLING STATE (SHORT):
- * Gestiona la apertura de cortos y las coberturas exponenciales (DCA hacia arriba).
+ * Manages Short openings and exponential coverage (DCA upwards).
  */
 async function run(dependencies) {
     const {
@@ -14,7 +13,6 @@ async function run(dependencies) {
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
         availableUSDT,
-        // 🟢 AUDITORÍA: Inyección de la función firmada. Crucial para multiusuario.
         placeShortOrder 
     } = dependencies;
 
@@ -22,48 +20,51 @@ async function run(dependencies) {
     const SSTATE = 'short';
 
     try {
-        // 1. MONITOR DE ÓRDENES ACTIVAS
-        // 🟢 AUDITORÍA: Se pasa el userId para trazabilidad y limpieza de slots pendientes.
+        // 1. ACTIVE ORDER MONITOR
+        // If the consolidator returns true, it means there is a pending order being processed.
         const orderIsActive = await monitorShortSell(
             botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId
         );
+        
+        // --- THE BLOCK: We only return if there's an actual active order ---
         if (orderIsActive) return; 
 
-        // 2. MONITORING LOG (Dashboard)
-        if (botState.sppc > 0) {
-            const nextPrice = botState.sncp || 0; 
-            const targetActivation = botState.stprice || 0; 
+        // 2. MONITORING LOG (The "Eye" 👁️)
+        // Adjusted for Flat DB: botState.sppc, botState.sncp, etc.
+        if (parseFloat(botState.sppc || 0) > 0) {
+            const nextPrice = parseFloat(botState.sncp || 0); 
+            const targetActivation = parseFloat(botState.stprice || 0); 
             
             const distToDCA = nextPrice > 0 ? ((nextPrice / currentPrice - 1) * 100).toFixed(2) : "0.00";
             const distToTP = targetActivation > 0 ? ((1 - currentPrice / targetActivation) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.sprofit || 0;
             
-            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA en: ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
+            log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA at: ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }
 
-        // 3. LÓGICA DE APERTURA (Primera orden del ciclo)
+        // 3. OPENING LOGIC (First order of the cycle)
         const currentPPC = parseFloat(botState.sppc || 0);
         const pendingOrder = botState.slastOrder; 
 
-        if ((!currentPPC || currentPPC === 0) && !pendingOrder) {
+        if (currentPPC === 0 && !pendingOrder) {
             const purchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
             const currentSBalance = parseFloat(botState.sbalance || 0);
 
             if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
-                log(`🚀 [S-SELL] Iniciando ciclo Short FIRMADO.`, 'info');
-                // 🟢 AUDITORÍA: Pasamos placeShortOrder (contexto atómico del usuario).
+                log(`🚀 [S-SELL] Starting SIGNED Short cycle.`, 'info');
                 await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
             } else {
-                log(`⚠️ [S-SELL] Fondos insuficientes para abrir posición Short.`, 'warning');
-                await updateBotState('STOPPED', SSTATE);
+                log(`⚠️ [S-SELL] Insufficient funds to open Short position.`, 'warning');
+                // We keep it in SELLING or move to PAUSED instead of STOPPED to avoid killing the process
+                await updateBotState('PAUSED', SSTATE);
             }
             return;
         }
 
-        // 4. EVALUACIÓN DE TAKE PROFIT (Hacia S-BUYING)
-        const targetActivation = botState.stprice || 0; 
+        // 4. TAKE PROFIT EVALUATION (Move to S-BUYING)
+        const targetActivation = parseFloat(botState.stprice || 0); 
         if (targetActivation > 0 && currentPrice <= targetActivation) {
-            log(`💰 [S-SELL] Target alcanzado (${targetActivation.toFixed(2)}). Pasando a BUYING para recompra...`, 'success');
+            log(`💰 [S-SELL] Target reached (${targetActivation.toFixed(2)}). Moving to BUYING for repurchase...`, 'success');
             
             await updateGeneralBotState({
                 spm: 0, 
@@ -74,7 +75,7 @@ async function run(dependencies) {
             return;
         }
 
-        // 5. DCA EXPONENCIAL (Si el precio sube)
+        // 5. EXPONENTIAL DCA (If price goes up)
         const requiredAmount = parseFloat(botState.srca || 0); 
         const nextCoveragePrice = parseFloat(botState.sncp || 0); 
         const lastExecutionPrice = parseFloat(botState.slep || 0);
@@ -83,29 +84,29 @@ async function run(dependencies) {
 
         if (!pendingOrder && isPriceHighEnough) {
             
-            if (currentPrice <= lastExecutionPrice) {
+            if (lastExecutionPrice > 0 && currentPrice <= lastExecutionPrice) {
                 return; 
             }
 
-            const hasBalance = botState.sbalance >= requiredAmount && availableUSDT >= requiredAmount;
+            const currentSBalance = parseFloat(botState.sbalance || 0);
+            const hasBalance = currentSBalance >= requiredAmount && availableUSDT >= requiredAmount;
 
             if (hasBalance && requiredAmount > 0) {
-                log(`📈 [S-SELL] Precio en zona de DCA. Incrementando cobertura FIRMADA...`, 'warning');
+                log(`📈 [S-SELL] Price in DCA zone. Increasing SIGNED coverage...`, 'warning');
                 try {
-                    // 🟢 AUDITORÍA: Pasamos placeShortOrder para firmar con prefijo S_
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice, placeShortOrder);
                 } catch (error) {
-                    log(`❌ [S-SELL] Error al colocar cobertura: ${error.message}`, 'error');
+                    log(`❌ [S-SELL] Error placing coverage: ${error.message}`, 'error');
                 }
             } else {
-                log(`🚫 [S-SELL] DCA fallido por falta de saldo. Pausando bot.`, 'error');
+                log(`🚫 [S-SELL] DCA failed due to insufficient balance. Pausing bot.`, 'error');
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
         }
 
     } catch (criticalError) {
-        log(`🔥 [CRITICAL] Error en SSelling: ${criticalError.message}`, 'error');
+        log(`🔥 [CRITICAL] Error in SSelling: ${criticalError.message}`, 'error');
     }
 }
 
