@@ -4,7 +4,6 @@
 const Autobot = require('./models/Autobot');
 const orchestrator = require('./src/au/utils/cycleOrchestrator');
 const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
-// Using getStartAnalysis for detailed budget reporting on click
 const { getStartAnalysis } = require('./src/au/utils/strategyValidator');
 
 async function updateConfig(userId, newConfig) {
@@ -54,6 +53,7 @@ async function startSide(userId, side, config) {
     }
 
     // --- START VALIDATOR INTEGRATION (GATEKEEPER) ---
+    // Now AI is also validated against REAL funds (availableUSDT/BTC)
     const dependencies = {
         botState,
         availableUSDT: botState.lastAvailableUSDT || 0,
@@ -61,7 +61,7 @@ async function startSide(userId, side, config) {
         currentPrice
     };
 
-    // Perform analysis only during the Start click event
+    // This performs the real budget check for Long, Short, and now AI
     const analysis = getStartAnalysis(side, dependencies);
 
     if (!analysis.canPass) {
@@ -81,6 +81,13 @@ async function startSide(userId, side, config) {
         stateField = 'sstate';
     } else if (side === 'ai') {
         stateField = 'aistate';
+        // AI specific cleanup to ensure a fresh cycle
+        cleanData = {
+            ailastEntryPrice: 0,
+            aihighestPrice: 0,
+            ainorder: 0,
+            aistartTime: null
+        };
     }
     
     if (finalConfig[side]) finalConfig[side].enabled = true;
@@ -93,7 +100,9 @@ async function startSide(userId, side, config) {
     };
     
     const bot = await Autobot.findOneAndUpdate({ userId }, { $set: update }, { new: true }).lean();
-    orchestrator.log(`🚀 ${side.toUpperCase()} strategy validated and started. ${analysis.report.netAvailable}`, 'success', userId);
+    
+    // Log showing that real funds were verified even for AI
+    orchestrator.log(`🚀 ${side.toUpperCase()} strategy validated (Real Funds) and started. ${analysis.report.netAvailable}`, 'success', userId);
     
     await orchestrator.slowBalanceCacheUpdate(userId); 
     return bot;

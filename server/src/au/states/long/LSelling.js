@@ -2,12 +2,12 @@
 
 const { placeLongSellOrder } = require('../../managers/longOrderManager');
 
-const MIN_SELL_AMOUNT_BTC = 0.00005; // Mínimo de BitMart para BTC
+const MIN_SELL_AMOUNT_BTC = 0.00005; // BitMart BTC minimum
 const LSTATE = 'long';
 
 /**
  * SELLING STATE (LONG):
- * Gestiona el Trailing Stop Loss y ejecuta la venta final del ciclo.
+ * Manages Trailing Stop Loss and executes the final sale of the cycle.
  */
 async function run(dependencies) {
     const { 
@@ -18,8 +18,7 @@ async function run(dependencies) {
         log, 
         updateBotState, 
         updateGeneralBotState,
-        // --- INYECCIÓN DE LA FUNCIÓN FIRMADA ---
-        // 🟢 AUDITORÍA: Clave para el entorno multiusuario 2026.
+        // --- SIGNED FUNCTION INJECTION ---
         placeLongOrder 
     } = dependencies;
     
@@ -28,14 +27,14 @@ async function run(dependencies) {
     const pm = parseFloat(botState.lpm || 0);        
     const pc = parseFloat(botState.lpc || 0);        
 
-    // 1. Bloqueo de seguridad: Evitar duplicidad
+    // 1. Safety Lock: Avoid double execution
     if (lastOrder) {
-        log(`[L-SELLING] ⏳ Orden de venta ${lastOrder.order_id} pendiente de confirmación...`, 'debug');
+        log(`[L-SELLING] ⏳ Sell order ${lastOrder.order_id} pending confirmation...`, 'debug');
         return;
     }
 
-    // 2. LÓGICA DE TRAILING STOP
-    const trailingStopPercent = (config.long?.trailing_percent || 0.3) / 100;
+    // 2. TRAILING STOP LOGIC
+    const trailingStopPercent = (parseFloat(config.long?.trailing_percent || 0.3)) / 100;
 
     let newPm = pm;
     if (pm === 0 || currentPrice > pm) {
@@ -44,9 +43,9 @@ async function run(dependencies) {
     
     const newPc = newPm * (1 - trailingStopPercent);
 
-    // Si el precio sube, actualizamos el Stop Loss en la DB
+    // If price goes up, we update the Stop Loss in DB
     if (newPm > pm) {
-        log(`📈 [L-TRAILING] Subida detectada: ${newPm.toFixed(2)} | Nuevo Stop: ${newPc.toFixed(2)}`, 'info');
+        log(`📈 [L-TRAILING] Price rise detected: ${newPm.toFixed(2)} | New Stop: ${newPc.toFixed(2)}`, 'info');
 
         await updateGeneralBotState({ 
             lpm: newPm, 
@@ -54,37 +53,38 @@ async function run(dependencies) {
         });
     }
 
-    // 3. CONDICIÓN DE DISPARO (Trigger)
+    // 3. TRIGGER CONDITION
     if (acSelling >= MIN_SELL_AMOUNT_BTC) {
         
         const currentStop = pc > 0 ? pc : newPc;
         
-        // Si el precio toca el Stop Loss, vendemos todo
+        // If price hits the Stop Loss, sell everything
         if (currentPrice <= currentStop) {
-            log(`💰 [L-SELL] TRIGGER ACTIVADO | Liquidando posición firmada...`, 'success');
+            log(`💰 [L-SELL] TRIGGER ACTIVATED | Liquidating signed position...`, 'success');
             
             try {
-                // --- CAMBIO: Pasamos placeLongOrder para que la venta lleve el prefijo L_ ---
-                // 🟢 AUDITORÍA: El manager utiliza la función inyectada con las creds del usuario.
+                // --- SIGNED EXECUTION: Using the injected placeLongOrder with L_ prefix ---
                 await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, placeLongOrder); 
             } catch (error) {
-                log(`❌ Error crítico en ejecución de venta: ${error.message}`, 'error');
+                log(`❌ Critical error in sell execution: ${error.message}`, 'error');
                 
                 if (error.message.includes('Balance not enough') || error.message.includes('volume too small')) {
-                    log('⚠️ Desfase de inventario detectado. Estado: PAUSED.', 'error');
+                    log('⚠️ Inventory mismatch detected. State set to PAUSED.', 'error');
                     await updateBotState('PAUSED', LSTATE); 
                 }
             }
         } else {
-            // Log de seguimiento (Dashboard)
-            const profitActual = botState.lppc > 0 ? (((currentPrice / botState.lppc) - 1) * 100).toFixed(2) : "0.00";
+            // Monitoring log (The Eye 👁️)
+            const entryPrice = parseFloat(botState.lppc || 0);
+            const profitActual = entryPrice > 0 ? (((currentPrice / entryPrice) - 1) * 100).toFixed(2) : "0.00";
             const distToStop = Math.abs(((currentPrice / currentStop) - 1) * 100).toFixed(2);
             const signStop = currentStop > currentPrice ? '+' : '-';
 
             log(`[L-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | Profit: +${profitActual}% | Stop: ${currentStop.toFixed(2)} (${signStop}${distToStop}%)`, 'info');
         }
     } else {
-        log(`[L-SELLING] ⚠️ Cantidad insuficiente (lac: ${acSelling}) para vender. Reajustando...`, 'warning');
+        log(`[L-SELLING] ⚠️ Insufficient amount (lac: ${acSelling}) to sell. Readjusting...`, 'warning');
+        // If there's literally nothing to sell, we go back to BUYING or STOPPED
         if (acSelling <= 0) await updateBotState('BUYING', LSTATE);
     }
 }

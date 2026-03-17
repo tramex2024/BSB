@@ -4,37 +4,34 @@ const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmar
 const { handleSuccessfulShortSell } = require('../../managers/shortDataManager'); 
 
 /**
- * Monitorea órdenes de VENTA (apertura o DCA de Short).
- * Asegura que los activos vendidos se registren correctamente en el 'sac' del usuario.
+ * SHORT SELL CONSOLIDATOR:
+ * Monitors SELL orders (Opening or Short DCA).
+ * Ensures sold assets are correctly registered in the user's 'sac'.
  */
-async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) { // <--- Añadido userCreds
+async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) {
     
     const lastOrder = botState.slastOrder;
 
+    // If there's no order to track, or it's not a sell order, we release the lock (false)
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false;
     }
 
     const orderIdString = String(lastOrder.order_id);
-
-    // 🟢 AUDITORÍA: Usamos las credenciales inyectadas desde el orquestador
-    const creds = userCreds; // <--- CAMBIO CLAVE
+    const creds = userCreds; 
 
     try {
-        // Consultamos BitMart usando el contexto del usuario específico (API Keys aisladas)
-        // 🟢 CORRECCIÓN: Se utiliza 'creds' para la firma V4 de la API
+        // Consult BitMart using the specific user's context
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
-        // Normalización de tamaño ejecutado (BTC vendidos para el Short)
         let filledSize = parseFloat(
             finalDetails?.filledSize || 
             finalDetails?.filled_volume || 
             finalDetails?.size || 0
         );
 
-        // 1. Back-up: Si la consulta directa es ambigua, revisamos el historial reciente del usuario
+        // 1. Back-up: If direct query is ambiguous, check user's recent history
         if (!finalDetails || (isNaN(filledSize) && finalDetails.state !== 'new')) {
-            // 🟢 CORRECCIÓN: Se utiliza 'creds'
             const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
@@ -45,42 +42,43 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
         const isFilled = finalDetails?.state === 'filled' || finalDetails?.state === 'completed' || filledSize > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // --- CASO 1: VENTA CONFIRMADA (Apertura o DCA Short) ---
+        // --- CASE 1: CONFIRMED SELL (Short Opening or DCA) ---
         if (isFilled) {
             const currentOrderCount = (botState.socc || 0) + 1;
-            log(`[S-CONSOLIDATOR] ✅ Venta confirmada (#${currentOrderCount}). Actualizando posición Short...`, 'success');
+            log(`[S-CONSOLIDATOR] ✅ Sell confirmed (#${currentOrderCount}). Updating Short position...`, 'success');
             
-            // Limpieza inmediata del slot para evitar bucles de consolidación
+            // Immediate slot cleanup to prevent consolidation loops
             await updateGeneralBotState({ slastOrder: null });
 
-            // El manager se encargará de saveExecutedOrder y recalcular el PPC de venta (sppc)
             await handleSuccessfulShortSell(botState, { ...finalDetails, filledSize: filledSize || lastOrder.btc_size }, log, { 
                 updateGeneralBotState, 
                 updateSStateData,
                 userId 
             }); 
             
-            return false; // Indica que la orden ya no está activa
+            return false; // Lock released: order processed
         }
 
-        // --- CASO 2: ORDEN EN LIBRO (Esperando ejecución) ---
-        // Se mantiene el retorno en true para bloquear nuevas órdenes mientras esta exista
+        // --- CASE 2: ORDER IN BOOK (Waiting for execution) ---
+        // We keep returning TRUE to block new orders while this one is pending
         if (finalDetails && ['new', 'partially_filled', '8'].includes(String(finalDetails.state))) {
             return true; 
         } 
 
-        // --- CASO 3: ORDEN CANCELADA O FALLIDA ---
+        // --- CASE 3: CANCELED OR FAILED ORDER ---
         if (isCanceled) {
-            log(`[S-CONSOLIDATOR] ❌ Orden Short ${orderIdString} cancelada. Liberando para reintento manual o automático.`, 'error');
-            await updateGeneralBotState({ 'slastOrder': null });
-            return false;
+            log(`[S-CONSOLIDATOR] ❌ Short order ${orderIdString} canceled. Releasing for retry.`, 'error');
+            await updateGeneralBotState({ slastOrder: null });
+            return false; // Lock released: order no longer exists
         }
 
+        // If it reaches here and it's not a known state, we assume it's safer to block (true) 
+        // until the next cycle confirms the status.
         return true;
 
     } catch (error) {
-        log(`[S-CONSOLIDATOR] ⚠️ Error crítico de monitoreo: ${error.message}`, 'error');
-        // No limpiamos el lastOrder aquí para permitir reintento de consulta en el siguiente tick
+        log(`[S-CONSOLIDATOR] ⚠️ Critical monitoring error: ${error.message}`, 'error');
+        // We return TRUE to maintain the lock and prevent placing duplicate orders during API downtime
         return true; 
     }
 }

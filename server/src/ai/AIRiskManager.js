@@ -1,30 +1,31 @@
 /**
  * BSB/server/src/au/engines/AIRiskManager.js
- * Gestor de Riesgo y Capital: Motor de Interés Compuesto.
- * Versión Blindada: Prevención de errores de punto flotante y normalización.
+ * Risk and Capital Manager: Compound Interest Engine.
+ * Armored Version: Floating point error prevention and normalization.
  */
 
 class AIRiskManager {
     constructor() {
-        // 🟢 AUDITORÍA: Límite mínimo para evitar operaciones con montos despreciables (Polvo/Dust).
-        this.MIN_TRADE_AMOUNT = 5; 
-        this.SAFETY_MARGIN = 0.01; // Margen para asegurar que el balance nunca sea negativo por redondeo.
+        // 🟢 AUDIT: Minimum limit to avoid dust operations.
+        this.MIN_TRADE_AMOUNT = 5.0; 
+        this.SAFETY_MARGIN = 0.02; // Increased slightly for safer JS rounding
     }
 
     /**
-     * Determina si el bot tiene el combustible (balance) necesario para operar.
+     * Determines if the bot has enough "fuel" (balance) to operate.
      */
     checkOperatingState(bot) {
         if (!bot) return { action: 'NONE' };
 
         const currentBalance = parseFloat(bot.aibalance || 0);
         
-        // Auto-Reactivación: Si estaba pausado y detectamos capital suficiente.
-        if (bot.aistate === 'PAUSED' && currentBalance >= this.MIN_TRADE_AMOUNT) {
+        // Auto-Resume: If it was paused but we now detect sufficient capital.
+        // We use a small buffer (+0.5) to avoid rapid Pause/Resume flip-flopping.
+        if (bot.aistate === 'PAUSED' && currentBalance >= (this.MIN_TRADE_AMOUNT + 0.5)) {
             return { action: 'RESUME' };
         }
         
-        // Auto-Pausa: Si el capital cae por debajo del mínimo operativo.
+        // Auto-Pause: If capital falls below the operational minimum.
         if (bot.aistate === 'RUNNING' && currentBalance < this.MIN_TRADE_AMOUNT) {
             return { action: 'PAUSE' };
         }
@@ -33,20 +34,21 @@ class AIRiskManager {
     }
 
     /**
-     * Estrategia de Gestión de Capital.
-     * 🟢 AUDITORÍA: Implementa interés compuesto total.
-     * Se asegura de retornar un número limpio y restringe el monto al balance disponible.
+     * Capital Management Strategy.
+     * 🟢 AUDIT: Implements full compound interest.
+     * Ensures a clean number is returned and restricts the amount to available balance.
      */
     calculateInvestment(bot) {
         const balance = parseFloat(bot.aibalance || 0);
         
         if (balance < this.MIN_TRADE_AMOUNT) return 0;
 
-        // Retornamos el balance con un pequeño margen de seguridad para evitar
-        // errores de "Insufficient Balance" debido al redondeo de decimales en JS.
+        // We return the balance minus a safety margin to prevent 
+        // "Insufficient Balance" errors due to JS decimal precision.
         const safeInvestment = balance - this.SAFETY_MARGIN;
         
-        return parseFloat(safeInvestment.toFixed(2));
+        // Return a clean 2-decimal number
+        return parseFloat(Math.max(0, safeInvestment).toFixed(2));
     }
 }
 
