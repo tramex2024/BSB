@@ -81,6 +81,7 @@ async function botCycle(priceFromWebSocket) {
 
             const dependencies = {
                 userId,
+                userCreds, // <--- CLAVE: Ahora LBuying recibirá las credenciales
                 log: (msg, type) => orchestrator.log(msg, type, userId),
                 io: orchestrator.io || null,
                 bitmartService, Autobot, currentPrice,
