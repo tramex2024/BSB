@@ -1,7 +1,6 @@
 /**
  * BSB/server/services/inputs.js
- * ESTRATEGIA: BALA DE PLATA (REMANENTE AL FINAL)
- * COBERTURA: 20% | NIVELES: 8 MÁXIMO | MULTIPLICADOR: 2.0x
+ * ESTRATEGIA: MALLA ELÁSTICA EXPONENCIAL 2026
  * Sincronizado con: autobotCalculations.js
  */
 
@@ -10,22 +9,20 @@ function processUserInputs(amtL, amtS, amtAI) {
     const s = parseFloat(amtS) || 0;
 
     const calculateScalpingGrid = (totalAmount) => {
-        // --- PARÁMETROS DE ORO (Fijos para consistencia y recuperación) ---
+        // --- PARÁMETROS DE ORO (Fijos para consistencia) ---
         const ABRANGE_TARGET = 20;     // Cobertura total deseada (20%)
-        const SIZE_VAR_BOT = 100;      // 100% de incremento = Multiplicador 2.0x (Martingala)
-        const START_PRICE_VAR = 1.5;   // Primer salto de seguridad al 1.5%
-        const PURCHASE_FIXED = 6.0;    // Calibre fijo para maximizar potencia al final
-        const MAX_LEVELS = 8;          // Límite de 8 niveles (Máximo ~$1,530 por lado)
-        const MATH_MULTIPLIER = 2.0;   // Multiplicador interno para proyecciones
-        
-        // Validación de capital mínimo para operar
+        const SIZE_VAR_BOT = 50;       // Enviamos 50 para que el bot haga 1 + (50/100) = 1.5x
+        const START_PRICE_VAR = 0.5;   // Primer salto al 0.5%
+        const MIN_PURCHASE = 6;        // Calibre mínimo base
+        const MAX_LEVELS = 13;         // Límite de seguridad
+        const MATH_MULTIPLIER = 1.5;   // Multiplicador interno para proyecciones de capital
+
         if (totalAmount < 50) return null;
 
         // 1. DETERMINAR NÚMERO DE NIVELES (N)
-        // Calculamos cuántas duplicaciones reales de 6.0 caben en el totalAmount
         let n = 0;
         let cumulativeBase = 0;
-        let orderBase = PURCHASE_FIXED;
+        let orderBase = MIN_PURCHASE;
         
         while (cumulativeBase + orderBase <= totalAmount && n < MAX_LEVELS) {
             cumulativeBase += orderBase;
@@ -33,25 +30,35 @@ function processUserInputs(amtL, amtS, amtAI) {
             orderBase *= MATH_MULTIPLIER;
         }
 
-        // Si el capital no alcanza para al menos 3 niveles, no es seguro operar
-        if (n < 3) return null; 
+        if (n < 3) return null; // Mínimo de seguridad para operar
 
-        // 2. CÁLCULO DEL STEP (EL ACORDEÓN)
-        // El step_inc se ajusta para que con 'n' niveles cubramos el 20% exacto
-        let stepInc = 0;
-        if (n > 1) {
-            // targetRatio define cuánto debe estirarse la malla basado en la cobertura objetivo
-            let targetRatio = ABRANGE_TARGET / (START_PRICE_VAR * n);
-            // El factor 0.75 ajusta la curvatura para que la última orden sea la protección final al -20%
-            stepInc = (Math.pow(targetRatio, 1 / (n * 0.75)) - 1) * 100;
+        // 2. AJUSTAR EL PURCHASE (CALIBRE DINÁMICO)
+        let purchase = MIN_PURCHASE;
+        for (let p = MIN_PURCHASE; p <= 100; p += 0.1) {
+            let testSum = 0; 
+            let testOrd = p;
+            for (let i = 0; i < n; i++) {
+                testSum += testOrd;
+                testOrd *= MATH_MULTIPLIER;
+            }
+            if (testSum <= totalAmount) {
+                purchase = p;
+            } else {
+                break;
+            }
         }
 
-        // 3. RETORNO DE CONFIGURACIÓN PARA EL DASHBOARD
-        // Nota: Al mantener purchaseUsdt en 6.0, el motor del bot usará el capital 
-        // sobrante automáticamente en la última orden ejecutada (Bala de Plata).
+        // 3. CALCULAR EL INCREMENTO EXPONENCIAL (Price Step Inc)
+        let stepInc = 0;
+        if (n > 1) {
+            let targetRatio = ABRANGE_TARGET / (START_PRICE_VAR * n);
+            stepInc = (Math.pow(targetRatio, 1 / (n * 0.65)) - 1) * 100;
+        }
+
+        // 4. RETORNO DE CONFIGURACIÓN ESTÁNDAR
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
-            purchaseUsdt: PURCHASE_FIXED, 
+            purchaseUsdt: parseFloat(purchase.toFixed(2)),
             price_var: START_PRICE_VAR,
             price_step_inc: parseFloat(stepInc.toFixed(1)),
             size_var: SIZE_VAR_BOT,
@@ -61,7 +68,7 @@ function processUserInputs(amtL, amtS, amtAI) {
         };
     };
 
-    // Retornamos las configuraciones para LONG, SHORT y el capital para AI
+    // Mantenemos el retorno original para no romper el Dashboard
     return {
         long: calculateScalpingGrid(l),
         short: calculateScalpingGrid(s),
@@ -69,9 +76,7 @@ function processUserInputs(amtL, amtS, amtAI) {
     };
 }
 
-/**
- * Procesa la configuración específica para el bot de Inteligencia Artificial
- */
+// PASO 2: Función independiente para el AI Bot
 function processAIInputs(amtAI) {
     const amount = parseFloat(amtAI) || 0;
     const minAI = 20.0; 
@@ -84,6 +89,7 @@ function processAIInputs(amtAI) {
 
 /**
  * Procesa y limpia los inputs manuales del modo Advanced (Autobot)
+ * No recalcula, solo valida tipos y redondeos.
  */
 function processAdvancedInputs(data) {
     if (!data) {
