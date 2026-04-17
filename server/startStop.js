@@ -74,10 +74,20 @@ async function startSide(userId, side, config) {
     let stateField = '';
 
     if (side === 'long') {
-        cleanData = CLEAN_LONG_ROOT;
+        cleanData = {
+            ...CLEAN_LONG_ROOT,
+            lstate: 'RUNNING', // Forzamos RUNNING aquí
+            llastOrder: null,  // <--- CRÍTICO: Limpia la orden fantasma
+            locc: 0            // <--- CRÍTICO: Asegura que no crea que tiene órdenes ocupadas
+        };
         stateField = 'lstate';
     } else if (side === 'short') {
-        cleanData = CLEAN_SHORT_ROOT;
+        cleanData = {
+            ...CLEAN_SHORT_ROOT,
+            sstate: 'RUNNING',
+            slastOrder: null,  // <--- CRÍTICO: Limpia la orden fantasma
+            socc: 0
+        };
         stateField = 'sstate';
     } else if (side === 'ai') {
         stateField = 'aistate';

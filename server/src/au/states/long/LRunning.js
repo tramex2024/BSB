@@ -20,7 +20,7 @@ async function run(dependencies) {
     
     // 1. SECURITY CHECK (Flat Architecture)
     // 🟢 AUDITORÍA: Previene estados inconsistentes si el usuario ya tiene activos (lac > 0)
-    if (parseFloat(botState.lac || 0) > 0) {
+    if (parseFloat(botState.lac || 0) > 0.00001) {
         log("[L-RUNNING] 🛡️ Open position detected (lac > 0). Correcting state to BUYING...", 'warning');
         await updateBotState('BUYING', 'long'); 
         return; 

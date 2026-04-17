@@ -135,7 +135,9 @@ async function handleToggleBot(btn) {
         side = 'short'; stateKey = 'sstate'; endpoint = '/api/v1/config/update-config';
     }
 
-    const isRunning = currentBotState[stateKey] === 'RUNNING';
+    // --- CORRECCIÓN DE AUDITORÍA: Reconocer estados activos ---
+    const activeStates = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED'];
+    const isRunning = activeStates.includes(currentBotState[stateKey]);
     const action = isRunning ? 'stop' : 'start';
     const originalHTML = btn.innerHTML;
 
