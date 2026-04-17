@@ -3,16 +3,20 @@
  * ESTRATEGIA: BALA DE PLATA (REMANENTE AL FINAL)
  * COBERTURA: 20% | NIVELES: 8 MÁXIMO | MULTIPLICADOR: 2.0x
  * MAX_CAPITAL_STRATEGY: 2500.00 USDT
- * Sincronizado con: autobotCalculations.js
+ * ACTUALIZADO: Soporte para persistencia de stopAtCycle
  */
 
-function processUserInputs(amtL, amtS, amtAI) {
+/**
+ * Procesa los inputs del Dashboard (Blindaje)
+ * Ahora recibe 'existingConfig' para no perder el estado de stopAtCycle
+ */
+function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
     // Aplicamos el techo de 2500 USD por estrategia antes de procesar
     const MAX_CAP = 2500.0;
     const l = Math.min(parseFloat(amtL) || 0, MAX_CAP);
     const s = Math.min(parseFloat(amtS) || 0, MAX_CAP);
 
-    const calculateScalpingGrid = (totalAmount) => {
+    const calculateScalpingGrid = (totalAmount, side) => {
         // --- PARÁMETROS DE ORO ---
         const ABRANGE_TARGET = 20;     
         const SIZE_VAR_BOT = 100;      
@@ -43,6 +47,10 @@ function processUserInputs(amtL, amtS, amtAI) {
             stepInc = (Math.pow(targetRatio, 1 / (n * 0.75)) - 1) * 100;
         }
 
+        // Recuperamos el estado previo de stopAtCycle para ese lado (long/short)
+        // Si no existe, por defecto es false.
+        const prevStopAtCycle = existingConfig[side]?.stopAtCycle || false;
+
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
             purchaseUsdt: PURCHASE_FIXED, 
@@ -51,27 +59,32 @@ function processUserInputs(amtL, amtS, amtAI) {
             size_var: SIZE_VAR_BOT,
             profit_percent: 1.3,
             trailing_percent: 0.3,
-            levels: n
+            levels: n,
+            stopAtCycle: prevStopAtCycle // <-- Aquí es donde el bot "recuerda"
         };
     };
 
     return {
-        long: calculateScalpingGrid(l),
-        short: calculateScalpingGrid(s),
-        ai: { amountUsdt: amtAI }
+        long: calculateScalpingGrid(l, 'long'),
+        short: calculateScalpingGrid(s, 'short'),
+        ai: { 
+            amountUsdt: amtAI,
+            stopAtCycle: existingConfig.ai?.stopAtCycle || false 
+        }
     };
 }
 
 /**
  * Procesa la configuración específica para el bot de Inteligencia Artificial
  */
-function processAIInputs(amtAI) {
+function processAIInputs(amtAI, existingAIConfig = {}) {
     const amount = parseFloat(amtAI) || 0;
     const minAI = 20.0; 
     const finalAmount = amount < minAI ? minAI : amount;
 
     return {
-        amountUsdt: parseFloat(finalAmount.toFixed(2))
+        amountUsdt: parseFloat(finalAmount.toFixed(2)),
+        stopAtCycle: !!existingAIConfig.stopAtCycle // Mantener estado
     };
 }
 
@@ -90,7 +103,7 @@ function processAdvancedInputs(data) {
         size_var: parseFloat(parseFloat(data.size_var || 1.0).toFixed(2)),
         profit_percent: parseFloat(parseFloat(data.profit_percent || 0.1).toFixed(2)),
         price_step_inc: parseFloat(parseFloat(data.price_step_inc || 0).toFixed(2)),
-        stopAtCycle: !!data.stopAtCycle
+        stopAtCycle: data.stopAtCycle === true || data.stopAtCycle === 'true'
     };
 }
 

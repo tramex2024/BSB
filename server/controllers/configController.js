@@ -45,10 +45,12 @@ async function updateBotConfig(req, res) {
             const amt = parseFloat(newConfig[strategy]?.amountUsdt);
             
             if (!isNaN(amt)) {
+                // CORRECCIÓN: Pasamos 'botState.config' para que processUserInputs mantenga el stopAtCycle
                 const fullShield = processUserInputs(
                     strategy === 'long' ? amt : botState.config.long.amountUsdt,
                     strategy === 'short' ? amt : botState.config.short.amountUsdt,
-                    strategy === 'ai' ? amt : (botState.config.ai?.amountUsdt || 0)
+                    strategy === 'ai' ? amt : (botState.config.ai?.amountUsdt || 0),
+                    botState.config // <-- Pasamos la configuración actual como referencia
                 );
 
                 const s = strategy; 
@@ -69,6 +71,7 @@ async function updateBotConfig(req, res) {
                     update[`config.${s}.profit_percent`] = d.profit_percent;
                 }
 
+                // Aseguramos que el stopAtCycle no cambie a menos que se envíe explícitamente en el Dashboard
                 update[`config.${s}.stopAtCycle`] = typeof newConfig[s]?.stopAtCycle === 'boolean' 
                     ? newConfig[s].stopAtCycle 
                     : botState.config[s].stopAtCycle;
@@ -78,7 +81,6 @@ async function updateBotConfig(req, res) {
             
             // 1. Procesar LONG
             if (newConfig.long) {
-                // Fusionamos: Si el campo no viene en newConfig, mantenemos el de botState
                 const dataLong = {
                     amountUsdt: newConfig.long.amountUsdt !== undefined ? newConfig.long.amountUsdt : botState.config.long.amountUsdt,
                     purchaseUsdt: newConfig.long.purchaseUsdt !== undefined ? newConfig.long.purchaseUsdt : botState.config.long.purchaseUsdt,
@@ -99,40 +101,37 @@ async function updateBotConfig(req, res) {
                 update['config.long.price_step_inc'] = cleanLong.price_step_inc;
                 update['config.long.stopAtCycle'] = cleanLong.stopAtCycle;
 
-                // Sincronizar balance solo si el lado coincide y está STOPPED
                 if (botState.lstate === 'STOPPED' && (!strategy || strategy === 'long')) {
                     update.lbalance = cleanLong.amountUsdt;
-                    console.log(`✅ Balance Long sincronizado: ${cleanLong.amountUsdt}`);
                 }
             }
 
             // 2. Procesar SHORT
-if (newConfig.short) {
-    // CORRECCIÓN: Aseguramos que el fallback sea al campo correcto (.stopAtCycle)
-    const dataShort = {
-        amountUsdt: newConfig.short.amountUsdt !== undefined ? newConfig.short.amountUsdt : botState.config.short.amountUsdt,
-        purchaseUsdt: newConfig.short.purchaseUsdt !== undefined ? newConfig.short.purchaseUsdt : botState.config.short.purchaseUsdt,
-        price_var: newConfig.short.price_var !== undefined ? newConfig.short.price_var : botState.config.short.price_var,
-        size_var: newConfig.short.size_var !== undefined ? newConfig.short.size_var : botState.config.short.size_var,
-        profit_percent: newConfig.short.profit_percent !== undefined ? newConfig.short.profit_percent : botState.config.short.profit_percent,
-        price_step_inc: newConfig.short.price_step_inc !== undefined ? newConfig.short.price_step_inc : botState.config.short.price_step_inc,
-        stopAtCycle: newConfig.short.stopAtCycle !== undefined ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle
-    };
+            if (newConfig.short) {
+                const dataShort = {
+                    amountUsdt: newConfig.short.amountUsdt !== undefined ? newConfig.short.amountUsdt : botState.config.short.amountUsdt,
+                    purchaseUsdt: newConfig.short.purchaseUsdt !== undefined ? newConfig.short.purchaseUsdt : botState.config.short.purchaseUsdt,
+                    price_var: newConfig.short.price_var !== undefined ? newConfig.short.price_var : botState.config.short.price_var,
+                    size_var: newConfig.short.size_var !== undefined ? newConfig.short.size_var : botState.config.short.size_var,
+                    profit_percent: newConfig.short.profit_percent !== undefined ? newConfig.short.profit_percent : botState.config.short.profit_percent,
+                    price_step_inc: newConfig.short.price_step_inc !== undefined ? newConfig.short.price_step_inc : botState.config.short.price_step_inc,
+                    stopAtCycle: newConfig.short.stopAtCycle !== undefined ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle
+                };
 
-    const cleanShort = processAdvancedInputs(dataShort);
-    
-    update['config.short.amountUsdt'] = cleanShort.amountUsdt;
-    update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
-    update['config.short.price_var'] = cleanShort.price_var;
-    update['config.short.size_var'] = cleanShort.size_var;
-    update['config.short.profit_percent'] = cleanShort.profit_percent;
-    update['config.short.price_step_inc'] = cleanShort.price_step_inc;
-    update['config.short.stopAtCycle'] = cleanShort.stopAtCycle;
+                const cleanShort = processAdvancedInputs(dataShort);
+                
+                update['config.short.amountUsdt'] = cleanShort.amountUsdt;
+                update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
+                update['config.short.price_var'] = cleanShort.price_var;
+                update['config.short.size_var'] = cleanShort.size_var;
+                update['config.short.profit_percent'] = cleanShort.profit_percent;
+                update['config.short.price_step_inc'] = cleanShort.price_step_inc;
+                update['config.short.stopAtCycle'] = cleanShort.stopAtCycle;
 
-    if (botState.sstate === 'STOPPED' && (!strategy || strategy === 'short')) {
-        update.sbalance = cleanShort.amountUsdt;
-    }
-}
+                if (botState.sstate === 'STOPPED' && (!strategy || strategy === 'short')) {
+                    update.sbalance = cleanShort.amountUsdt;
+                }
+            }
 
             // 3. Procesar AI
             if (newConfig.ai) {
@@ -148,7 +147,6 @@ if (newConfig.short) {
             }
         }
 
-        // Ejecución de la actualización en DB
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
             { $set: update }, 

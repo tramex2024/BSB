@@ -1,6 +1,6 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Refactorizado con BotControls Centralizado
+ * Estado: Corregido - Sincronización real de checkboxes Long/Short
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -16,20 +16,17 @@ import { initializeProfile } from './modules/profile.js';
 import { initPayments } from './modules/payments.js';
 import { initializeNotifications } from './modules/notifications.js';
 
-// [NUEVO] Importamos el gestor central de botones
 import { initializeGlobalButtonListeners } from './modules/botControls.js';
-
-// [RESTAURADO] Importación para mensajes flotantes (Toasts)
 import { displayMessage } from './modules/ui/notifications.js';
-
-// [NUEVO] Importamos la lógica de roles
 import { applyRolePermissions } from './modules/role.js';
+
+// Importamos el servicio de API para poder guardar los cambios de los checkboxes
+import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 
-// Fuente única de verdad (Single Source of Truth)
 export const currentBotState = {
     price: 0,
     lastPrice: 0,
@@ -47,8 +44,8 @@ export const currentBotState = {
     aiprofit: 0,
     config: {
         symbol: 'BTC_USDT', 
-        long: { amountUsdt: 0, enabled: false },
-        short: { amountUsdt: 0, enabled: false },
+        long: { amountUsdt: 0, enabled: false, stopAtCycle: false },
+        short: { amountUsdt: 0, enabled: false, stopAtCycle: false },
         ai: { amountUsdt: 0, enabled: false, stopAtCycle: false }
     }
 };
@@ -65,7 +62,7 @@ const views = {
     admin: () => import('./modules/admin.js')
 };
 
-// --- LOG SYSTEM (Global) ---
+// --- LOG SYSTEM ---
 export function logStatus(message, type = 'info') {
     if (type === 'error') logQueue = [{ message, type }]; 
     else {
@@ -79,14 +76,11 @@ function processNextLog() {
     if (logQueue.length === 0) { isProcessingLog = false; return; }
     const logEl = document.getElementById('log-message');
     if (!logEl) return;
-
     isProcessingLog = true;
     const log = logQueue.shift();
     logEl.textContent = log.message;
-    
     const colors = { success: 'text-emerald-400', error: 'text-red-400', warning: 'text-yellow-400', info: 'text-blue-400' };
     logEl.className = `transition-opacity duration-300 font-medium ${colors[log.type] || 'text-gray-400'}`;
-    
     setTimeout(() => processNextLog(), 1500);
 }
 
@@ -97,26 +91,18 @@ export function initializeFullApp() {
     const userRole = localStorage.getItem('userRole'); 
 
     if (token && userId) {
-        console.log("🚀 Initializing Authenticated App Flow...");
-        
         const adminTab = document.getElementById('tab-admin');
         if (adminTab && userRole === 'admin') {
             adminTab.style.display = 'block';
             adminTab.classList.remove('hidden');
         }
-
         applyRolePermissions();
         const socket = initSocket();
-
         if (socket) {
             import('./modules/notifications.js').then(module => {
                 module.initializeNotifications(socket);
-                console.log("🔔 Notifications Module Linked to Socket");
-            }).catch(err => console.error("❌ Error loading notifications module:", err));
+            }).catch(err => console.error("❌ Error notifications:", err));
         }
-
-    } else {
-        console.warn("⚠️ Partial session detected. Waiting for full login.");
     }
 }
 
@@ -124,17 +110,13 @@ export function initializeFullApp() {
 export async function initializeTab(tabName) {
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
-
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
     try {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
-        
-        if (mainContent.innerHTML !== html) {
-            mainContent.innerHTML = html;
-        }
+        if (mainContent.innerHTML !== html) mainContent.innerHTML = html;
         
         if (views[tabName]) {
             const module = await views[tabName]();
@@ -147,61 +129,57 @@ export async function initializeTab(tabName) {
                     module.updateDistributionWidget(currentBotState);
                 }
             }
-
             if (tabName === 'aibot') {
                 const aiOrderList = document.getElementById('ai-order-list');
-                const aiHistoryCont = document.getElementById('ai-history-table-body');
                 if (aiOrderList) fetchOrders('ai', aiOrderList);
-                if (aiHistoryCont) fetchOrders('ai', aiHistoryCont);
             }
-            
             if (tabName === 'autobot') {
                 const auOrderList = document.getElementById('au-order-list');
                 if (auOrderList) fetchOrders('all', auOrderList);
             }
         }
-
         await updateBotUI(currentBotState);
         syncAIElementsInDOM();
-
-    } catch (error) { 
-        console.error("❌ View Loading Error:", error); 
-    }
+    } catch (error) { console.error("❌ View Loading Error:", error); }
 }
 
 function syncAIElementsInDOM() {
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
-
     if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
     if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
-    
-    const isAiRunning = currentBotState.aistate === 'RUNNING';
-
     if (aiBotUI) {
-        aiBotUI.setRunningStatus(
-            isAiRunning, 
-            currentBotState.config.ai.stopAtCycle,
-            currentBotState.historyCount || 0
-        );
+        aiBotUI.setRunningStatus(currentBotState.aistate === 'RUNNING', currentBotState.config.ai.stopAtCycle, currentBotState.historyCount || 0);
     }
 }
 
-// --- CONFIGURATION DELEGATION ---
+// --- CONFIGURATION DELEGATION (CHECKBOXES FIX) ---
 document.addEventListener('change', async (e) => {
+    // 1. Manejo de Input de cantidad AI
     if (e.target && e.target.id === 'ai-amount-usdt') {
         const val = parseFloat(e.target.value);
         if (isNaN(val) || val <= 0) return;
         await saveAIConfigGlobal({ amountUsdt: val });
     }
     
+    // 2. Manejo de Checkbox AI
     if (e.target && e.target.id === 'ai-stop-at-cycle') {
         await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
     }
 
+    // 3. [FIX] Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot)
     if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
         const side = e.target.id.includes('long') ? 'long' : 'short';
-        logStatus(`Updating ${side.toUpperCase()} stop condition...`, "info");
+        const isChecked = e.target.checked;
+        
+        logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
+        
+        // Actualizamos el estado local inmediatamente
+        currentBotState.config[side].stopAtCycle = isChecked;
+
+        // Enviamos la configuración completa al servidor
+        const fullConfig = getBotConfiguration();
+        await sendConfigToBackend({ config: fullConfig });
     }
 });
 
@@ -216,18 +194,16 @@ async function saveAIConfigGlobal(payload) {
             body: JSON.stringify(payload)
         });
         const data = await response.json();
-        if (data.success) {
-            if (data.config) currentBotState.config.ai = { ...currentBotState.config.ai, ...data.config };
+        if (data.success && data.config) {
+            currentBotState.config.ai = { ...currentBotState.config.ai, ...data.config };
             logStatus(data.message || "AI Config Updated", "success");
         }
-    } catch (e) { console.error("Error saving global config", e); }
+    } catch (e) { console.error("Error saving AI config", e); }
 }
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
     applyRolePermissions();
-    
-    // [NUEVO] Inicializar los escuchadores globales de botones Start/Stop
     initializeGlobalButtonListeners();
 
     if (localStorage.getItem('token') && localStorage.getItem('userId')) { 
@@ -243,27 +219,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSupport();
     initializeSettings();
     initializeProfile();
-    initPayments();   
-
-    const cog = document.getElementById('settings-icon');
-    if (cog) cog.addEventListener('click', () => logStatus("Settings panel coming soon.", "info"));
-
-    const profile = document.getElementById('user-profile-icon');
-    if (profile) profile.addEventListener('click', () => {
-        const uId = localStorage.getItem('userId') || 'Guest';
-        logStatus(`User Profile ID: ${uId}`, "info");
-    });
+    initPayments();
 });
 
-// --- AUTO-REACTIVADOR AL REGRESAR ---
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         import('./modules/socket.js').then(m => {
-            if (!m.socket || !m.socket.connected) {
-                m.initSocket();
-            } else {
-                m.socket.emit('get-bot-state');
-            }
+            if (!m.socket || !m.socket.connected) m.initSocket();
+            else m.socket.emit('get-bot-state');
         });
         const activeTab = document.querySelector('.nav-link.active')?.dataset.tab;
         if (activeTab) initializeTab(activeTab); 

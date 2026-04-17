@@ -1,8 +1,6 @@
-// public/js/modules/apiService.js
-
 /**
  * apiService.js - Comunicaciones REST Sincronizadas (2026)
- * Versión: Recuperación de Estabilidad + Corrección de Cruce de Variables
+ * Versión: Corregida para apuntar a la ruta V1 y evitar cruce de variables
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
@@ -67,13 +65,12 @@ export async function fetchEquityCurveData(strategy = 'all') {
 
 /**
  * RECOLECTA CONFIGURACIÓN
- * Corregido el mapeo de Price_Var y Size_Var para coincidir con el HTML
+ * Asegura que los IDs del HTML mapeen correctamente a las variables del servidor
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
         const el = document.getElementById(id);
         
-        // Si no existe el input (cambio de pestaña), rescatar del estado global
         if (!el) {
             const parts = path.split('.');
             const val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
@@ -100,9 +97,6 @@ export function getBotConfiguration() {
         return el.checked;
     };
 
-    // MAPEO CRÍTICO: 
-    // HTML 'auincrement' (Multiplier) -> size_var
-    // HTML 'audecrement' (Drop/Rise) -> price_var
     return {
         symbol: "BTC_USDT",
         long: {
@@ -126,33 +120,29 @@ export function getBotConfiguration() {
             enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-    // Intentamos capturar desde el ID del Dashboard o el ID de la pestaña AI
-    amountUsdt: getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
-                getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
-                
-    stopAtCycle: getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || 
-                 getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
-                 
-    enabled: currentBotState.config?.ai?.enabled || false
-}
+            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
+                             getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
+            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || 
+                             getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
+            enabled:         currentBotState.config?.ai?.enabled || false
+        }
     };
 }
 
 /**
- * BSB/public/js/services/apiService.js
  * Sincroniza la configuración del Autobot (Dashboard o Advanced)
+ * CORRECCIÓN: Ruta actualizada a /api/v1/config/update-config
  */
 export async function sendConfigToBackend(manualPayload = null) {
-    // Si manualPayload existe (viene del Dashboard con applyShield), lo usamos.
-    // Si no, usamos getBotConfiguration() como siempre.
     const payload = manualPayload || { config: getBotConfiguration() };
     
     isSavingConfig = true; 
     
     try {
-        const data = await privateFetch('/api/autobot/update-config', {
+        // RUTA CORREGIDA: Apuntando a V1 para que el servidor responda
+        const data = await privateFetch('/api/v1/config/update-config', {
             method: 'POST',
-            body: JSON.stringify(payload) // Enviamos el payload completo (con o sin applyShield)
+            body: JSON.stringify(payload)
         });
 
         if (data && data.success) {
@@ -163,7 +153,6 @@ export async function sendConfigToBackend(manualPayload = null) {
         console.error("❌ Error al sincronizar configuración:", err);
         return { success: false };
     } finally {
-        // Reducimos el tiempo de bloqueo para que la UI sea más responsiva
         setTimeout(() => { isSavingConfig = false; }, 500);
     }
 }
