@@ -107,33 +107,32 @@ async function updateBotConfig(req, res) {
             }
 
             // 2. Procesar SHORT
-            if (newConfig.short) {
-                // Fusionamos para no perder parámetros existentes
-                const dataShort = {
-                    amountUsdt: newConfig.short.amountUsdt !== undefined ? newConfig.short.amountUsdt : botState.config.short.amountUsdt,
-                    purchaseUsdt: newConfig.short.purchaseUsdt !== undefined ? newConfig.short.purchaseUsdt : botState.config.short.purchaseUsdt,
-                    price_var: newConfig.short.price_var !== undefined ? newConfig.short.price_var : botState.config.short.price_var,
-                    size_var: newConfig.short.size_var !== undefined ? newConfig.short.size_var : botState.config.short.size_var,
-                    profit_percent: newConfig.short.profit_percent !== undefined ? newConfig.short.profit_percent : botState.config.short.profit_percent,
-                    price_step_inc: newConfig.short.price_step_inc !== undefined ? newConfig.short.price_step_inc : botState.config.short.price_step_inc,
-                    stopAtCycle: newConfig.short.stopAtCycle !== undefined ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle
-                };
+if (newConfig.short) {
+    // CORRECCIÓN: Aseguramos que el fallback sea al campo correcto (.stopAtCycle)
+    const dataShort = {
+        amountUsdt: newConfig.short.amountUsdt !== undefined ? newConfig.short.amountUsdt : botState.config.short.amountUsdt,
+        purchaseUsdt: newConfig.short.purchaseUsdt !== undefined ? newConfig.short.purchaseUsdt : botState.config.short.purchaseUsdt,
+        price_var: newConfig.short.price_var !== undefined ? newConfig.short.price_var : botState.config.short.price_var,
+        size_var: newConfig.short.size_var !== undefined ? newConfig.short.size_var : botState.config.short.size_var,
+        profit_percent: newConfig.short.profit_percent !== undefined ? newConfig.short.profit_percent : botState.config.short.profit_percent,
+        price_step_inc: newConfig.short.price_step_inc !== undefined ? newConfig.short.price_step_inc : botState.config.short.price_step_inc,
+        stopAtCycle: newConfig.short.stopAtCycle !== undefined ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle
+    };
 
-                const cleanShort = processAdvancedInputs(dataShort);
-                
-                update['config.short.amountUsdt'] = cleanShort.amountUsdt;
-                update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
-                update['config.short.price_var'] = cleanShort.price_var;
-                update['config.short.size_var'] = cleanShort.size_var;
-                update['config.short.profit_percent'] = cleanShort.profit_percent;
-                update['config.short.price_step_inc'] = cleanShort.price_step_inc;
-                update['config.short.stopAtCycle'] = cleanShort.stopAtCycle;
+    const cleanShort = processAdvancedInputs(dataShort);
+    
+    update['config.short.amountUsdt'] = cleanShort.amountUsdt;
+    update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
+    update['config.short.price_var'] = cleanShort.price_var;
+    update['config.short.size_var'] = cleanShort.size_var;
+    update['config.short.profit_percent'] = cleanShort.profit_percent;
+    update['config.short.price_step_inc'] = cleanShort.price_step_inc;
+    update['config.short.stopAtCycle'] = cleanShort.stopAtCycle;
 
-                if (botState.sstate === 'STOPPED' && (!strategy || strategy === 'short')) {
-                    update.sbalance = cleanShort.amountUsdt;
-                    console.log(`✅ Balance Short sincronizado: ${cleanShort.amountUsdt}`);
-                }
-            }
+    if (botState.sstate === 'STOPPED' && (!strategy || strategy === 'short')) {
+        update.sbalance = cleanShort.amountUsdt;
+    }
+}
 
             // 3. Procesar AI
             if (newConfig.ai) {
