@@ -58,11 +58,13 @@ class AIEngine {
 
             if (confidence >= userThreshold && signal === 'BUY') {
                 const currentBalance = parseFloat(bot.aibalance || 0);
-
+                
+                console.log(`[DEBUG] Intentando compra: Balance=${currentBalance}, Risk=${riskStatus.canOperate}`);
+                
                 if (riskStatus.canOperate && currentBalance >= 5.0) {
-                    this._log(userId, `🚀 AI Entry Signal: ${reason}`, confidence);
-                    await this._trade(userId, 'BUY', price, context, safeLog);
-                } else if (currentBalance < 5.0) {
+        console.log(`[DEBUG] Criterios cumplidos, llamando a _trade...`);
+        await this._trade(userId, 'BUY', price, context, safeLog);
+    } else if (currentBalance < 5.0) {
                     safeLog(`⚠️ AI quiso COMPRAR pero saldo insuficiente ($${currentBalance})`, 'warning');
                 }
             } else {
