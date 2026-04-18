@@ -1,104 +1,95 @@
 const Order = require('../../models/Order'); 
-const MarketSignal = require('../../models/MarketSignal'); 
-const StrategyManager = require('./StrategyManager');
 const RiskManager = require('./AIRiskManager');
 
 class AIEngine {
     constructor() {
         this.io = null;
-        this.TRAILING_PERCENT = 0.006; 
-        this.EXCHANGE_FEE = 0.001;     
-        this.CONFIDENCE_THRESHOLD = 0.60; 
+        this.TRAILING_PERCENT = 0.006; // 0.6%
+        this.EXCHANGE_FEE = 0.001;     // 0.1%
     }
 
     setIo(io) { this.io = io; }
 
-async analyze(price, userId, context) {
-    if (!userId || !price || !context) return;
+    /**
+     * ANALYZE (Versión Light)
+     * Recibe la decisión ya tomada por el CentralAnalyzer para ahorrar CPU.
+     */
+    async analyze(price, userId, context, brain) {
+        if (!userId || !price || !context || !brain) return;
 
-    try {
-        const bot = context;
-        const safeLog = (msg, type) => {
-            if (typeof context.log === 'function') context.log(msg, type);
-            else console.log(`[BOT-LOG][${type}] ${msg}`);
-        };
+        try {
+            const bot = context;
+            const { confidence, signal, reason } = brain;
+            const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
 
-        const riskStatus = RiskManager.checkOperatingState(bot);
-        
-        // 1. RECOVERY FROM PAUSE
-        if (riskStatus.action === 'RESUME') {
-            if (typeof context.updateAIStateData === 'function') {
-                await context.updateAIStateData({ aistate: 'RUNNING' });
-            }
-            return;
-        }
-        
-        // 2. PAUSE LOGIC
-        if (bot.aistate !== 'RUNNING') {
-            if (riskStatus.action === 'PAUSE' && bot.aistate !== 'PAUSED') {
+            const safeLog = (msg, type) => {
+                if (typeof context.log === 'function') context.log(msg, type);
+                else console.log(`[AI-LOG][${type}] ${msg}`);
+            };
+
+            // 1. GESTIÓN DE RIESGO OPERATIVO
+            const riskStatus = RiskManager.checkOperatingState(bot);
+            
+            if (riskStatus.action === 'RESUME') {
                 if (typeof context.updateAIStateData === 'function') {
-                    await context.updateAIStateData({ aistate: 'PAUSED' });
+                    await context.updateAIStateData({ aistate: 'RUNNING' });
                 }
-            }
-            return;
-        }
-
-        const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
-
-        // --- 3. ACTIVE POSITION MONITORING (TRAILING STOP) ---
-        // This part MUST run regardless of balance because the money is already in the trade
-        if (lastEntryPrice > 0) {
-            let highestPrice = parseFloat(bot.aihighestPrice || 0);
-            if (price > highestPrice) {
-                highestPrice = price;
-                if (typeof context.updateAIStateData === 'function') {
-                    await context.updateAIStateData({ aihighestPrice: highestPrice });
-                }
+                return;
             }
 
-            const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
-            
-            // Heartbeat log
-            if (Math.random() > 0.9) {
-                safeLog(`[AI] Trailing Stop: $${stopPrice.toFixed(2)} | Actual: $${price.toFixed(2)}`, 'debug');
+            if (bot.aistate !== 'RUNNING' && riskStatus.action !== 'RESUME') return;
+
+            // 2. MONITOREO DE POSICIÓN ACTIVA (TRAILING STOP)
+            if (lastEntryPrice > 0) {
+                return await this._manageTrailingStop(price, userId, bot, context, safeLog);
             }
 
-            if (price <= stopPrice) {
-                this._log(userId, `🎯 AI: Trailing Stop triggered @ $${price.toFixed(2)}`, 0.95);
-                await this._trade(userId, 'SELL', price, context, safeLog);
-                return; 
-            }
-        }
+            // 3. LÓGICA DE ENTRADA (Basada en el 'brain' inyectado)
+            const userThreshold = bot.config?.ai?.minConfidence || 0.30;
 
-        // --- 4. NEW ENTRY SIGNAL ---
-        if (lastEntryPrice === 0) {
-            const rawSymbol = bot.config?.symbol || 'BTC_USDT';
-            const SYMBOL = rawSymbol.includes('_') ? rawSymbol : rawSymbol.replace('USDT', '_USDT');
-            const marketData = await MarketSignal.findOne({ symbol: SYMBOL }).lean();
-            
-            if (!marketData || !marketData.history || marketData.history.length < 100) return;
-
-            const analysis = StrategyManager.calculate(marketData.history);
-            
-            if (analysis && analysis.confidence >= this.CONFIDENCE_THRESHOLD) {
-                this._log(userId, `🚀 AI Signal: ${analysis.message}`, analysis.confidence);
-                
-                // UNBLOCKED: If risk allows it OR we have minimum balance
+            if (confidence >= userThreshold && signal === 'BUY') {
                 const currentBalance = parseFloat(bot.aibalance || 0);
-                if (riskStatus.canOperate && currentBalance >= 5.0) { 
+
+                if (riskStatus.canOperate && currentBalance >= 5.0) {
+                    this._log(userId, `🚀 AI Entry Signal: ${reason}`, confidence);
                     await this._trade(userId, 'BUY', price, context, safeLog);
-                } else {
-                    safeLog(`⚠️ AI wanted to BUY but funds are low or risk is HIGH (Balance: $${currentBalance})`, 'warning');
+                } else if (currentBalance < 5.0) {
+                    safeLog(`⚠️ AI quiso COMPRAR pero saldo insuficiente ($${currentBalance})`, 'warning');
                 }
-            } else if (analysis) {
-                this._log(userId, `AI Watching: ${analysis.trend} (${(analysis.confidence * 100).toFixed(0)}%)`, analysis.confidence, true);
+            } else {
+                // Heartbeat de análisis para el frontend del usuario
+                this._log(userId, `AI Scanning: ${signal} (${(confidence * 100).toFixed(1)}%)`, confidence, true);
+            }
+
+        } catch (error) {
+            console.error(`❌ AI Engine Error [User: ${userId}]:`, error);
+        }
+    }
+
+    /**
+     * Gestión interna de Trailing Stop
+     */
+    async _manageTrailingStop(price, userId, bot, context, safeLog) {
+        let highestPrice = parseFloat(bot.aihighestPrice || 0);
+        
+        if (price > highestPrice) {
+            highestPrice = price;
+            if (typeof context.updateAIStateData === 'function') {
+                await context.updateAIStateData({ aihighestPrice: highestPrice });
             }
         }
-    } catch (error) {
-        console.error(`❌ AI Engine Error [User: ${userId}]:`, error);
-    }
-}
 
+        const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
+
+        if (price <= stopPrice) {
+            this._log(userId, `🎯 AI: Trailing Stop activado @ $${price.toFixed(2)}`, 0.95);
+            await this._trade(userId, 'SELL', price, context, safeLog);
+        }
+    }
+
+    /**
+     * Ejecución de Trade (Simulado o Real según tu configuración)
+     */
     async _trade(userId, side, price, context, safeLog) {
         try {
             const bot = context;
@@ -108,7 +99,6 @@ async analyze(price, userId, context) {
             
             let newBalance = parseFloat(bot.aibalance || 0);
             let netProfit = 0;
-
             const updateData = {};
 
             if (side === 'BUY') {
@@ -147,8 +137,7 @@ async analyze(price, userId, context) {
                     });
                 }
 
-                const shouldStop = bot.config?.ai?.stopAtCycle === true;
-                const nextState = shouldStop ? 'STOPPED' : (newBalance < 10 ? 'PAUSED' : 'RUNNING');
+                const nextState = newBalance < 10 ? 'PAUSED' : 'RUNNING';
 
                 Object.assign(updateData, {
                     aibalance: newBalance,
@@ -177,12 +166,11 @@ async analyze(price, userId, context) {
                 notional: investmentAmount, status: 'FILLED', orderTime: new Date()
             });
 
-            this._broadcastStatus(userId, { aistate: side === 'BUY' ? 'RUNNING' : 'STOPPED/PAUSED', virtualBalance: newBalance });
-//            safeLog(`✅ AI ${side} Executed @ $${price.toFixed(2)}`, 'success');
+            this._broadcastStatus(userId, { aistate: side === 'BUY' ? 'RUNNING' : 'IDLE', virtualBalance: newBalance });
+            safeLog(`✅ AI ${side} Ejecutada @ $${price.toFixed(2)}`, 'success');
 
         } catch (error) {
             safeLog(`❌ AI Trade Error: ${error.message}`, 'error');
-            console.error(error);
         }
     }
 

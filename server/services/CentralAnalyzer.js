@@ -131,6 +131,7 @@ class CentralAnalyzer {
                     signal: signal.action, 
                     reason: signal.reason,
                     history: candles, // Guardamos el historial para que AIEngine lo encuentre
+                    aiConfidence: finalConfidence, // <--- GUARDAMOS LA IA AQUÍ
                     lastUpdate: new Date()
                 },
                 { upsert: true, new: true }
@@ -151,8 +152,14 @@ class CentralAnalyzer {
                 const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
                 
                 for (const bot of activeAiBots) {
-                    // Pasamos la confianza suavizada directamente al motor
-                    await AIEngine.analyze(price, bot.userId, bot);
+                    // 🟢 CAMBIO CLAVE: Enviamos un objeto 'brain' con la confianza ya calculada
+                    const brain = {
+                        confidence: finalConfidence,
+                        signal: signal.action,
+                        reason: signal.reason
+                    };
+                    // Ahora AIEngine recibirá la decisión ya tomada
+                    await AIEngine.analyze(price, bot.userId, bot, brain);
                     
 //                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
 
