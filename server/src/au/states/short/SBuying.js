@@ -1,6 +1,11 @@
-// BSB/server/src/au/states/short/SBuying.js
+/**
+ * BSB/server/src/au/states/short/SBuying.js
+ * Gestión de Trailing Stop Inverso y Monitoreo de Recompra
+ */
 
 const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
+// 1. IMPORTACIÓN DEL MONITOR (Para desbloquear slastOrder)
+const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./ShortBuyConsolidator');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
 const SSTATE = 'short';
@@ -13,24 +18,43 @@ const TRAILING_STOP_PERCENTAGE = 0.3; // Por defecto 0.3%
 async function run(dependencies) {
     const { 
         userId, 
-        botState, currentPrice, config, log, 
-        updateBotState, updateGeneralBotState,
-        // 🟢 AUDITORÍA: placeShortOrder lleva el contexto atómico del usuario.
-        placeShortOrder 
+        botState, 
+        currentPrice, 
+        config, 
+        log, 
+        updateBotState, 
+        updateGeneralBotState,
+        updateSStateData, // <--- Inyectado para actualizar balances al consolidar
+        placeShortOrder,
+        userCreds // <--- Inyectado para BitMart
     } = dependencies;
     
     if (!currentPrice || currentPrice <= 0) return;
 
+    const SYMBOL = String(config.symbol || 'BTC_USDT');
     const slastOrder = botState.slastOrder;  
     const acBuying = parseFloat(botState.sac || 0); 
     const pm = parseFloat(botState.spm || 0);       // Suelo (mínimo)
     const pc = parseFloat(botState.spc || 0);       // Stop de recompra (precio gatillo)
 
-    // 1. BLOQUEO DE SEGURIDAD
-    // 🟢 AUDITORÍA: Evita duplicar órdenes si ya hay una "en vuelo".
+    // 1. BLOQUEO DE SEGURIDAD CON MONITOREO ACTIVO
+    // Si hay una orden, el monitor intentará cerrarla. Si sigue activa, retorna true y pausamos.
     if (slastOrder) {
-        log(`[S-BUYING] ⏳ Orden activa detectada. Esperando consolidación...`, 'debug');
-        return;
+        const orderIsActive = await monitorShortBuy(
+            botState, 
+            SYMBOL, 
+            log, 
+            updateSStateData, 
+            updateBotState, 
+            updateGeneralBotState, 
+            userId,
+            userCreds // <--- Pasamos las credenciales inyectadas
+        );
+
+        if (orderIsActive) {
+            log(`[S-BUYING] ⏳ Orden activa detectada. Esperando consolidación...`, 'debug');
+            return;
+        }
     }
 
     // 2. LÓGICA DE TRAILING STOP INVERSO
@@ -61,7 +85,7 @@ async function run(dependencies) {
             log(`💰 [S-CLOSE] Rebote detectado: ${currentPrice.toFixed(2)} >= ${triggerPrice.toFixed(2)}. Ejecutando recompra...`, 'success');
             
             try {
-                // 🟢 AUDITORÍA: El manager utiliza la función firmada por usuario para cerrar el ciclo.
+                // El manager utiliza la función firmada por usuario para cerrar el ciclo.
                 await placeShortBuyOrder(config, botState, acBuying, log, updateGeneralBotState, currentPrice, placeShortOrder); 
             } catch (error) {
                 log(`❌ Error crítico en recompra Short: ${error.message}`, 'error');
@@ -78,7 +102,7 @@ async function run(dependencies) {
         }
     } else {
         log(`[S-BUYING] ⚠️ No hay sac para cerrar. Reajustando a SELLING...`, 'warning');
-        if (acBuying <= 0 && !slastOrder) await updateBotState('SELLING', SSTATE);
+        if (acBuying <= 0 && !botState.slastOrder) await updateBotState('SELLING', SSTATE);
     }
 }
 

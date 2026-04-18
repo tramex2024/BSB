@@ -132,25 +132,35 @@ async function botCycle(priceFromWebSocket) {
             };
 
             // --- Monitoreo de Órdenes ---
-            if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-                try {
-                    if (botState.llastOrder.side === 'buy') {
-                        await monitorLongBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-                    } else {
-                        await monitorLongSell(botState, botState.config.symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-                    }
-                } catch (e) { orchestrator.log(`Error Long Monitor: ${e.message}`, 'error', userId); }
-            }
+            // --- Monitoreo de Órdenes (Optimizado) ---
+// LONG
+if (botState.llastOrder && botState.lstate !== 'STOPPED') {
+    try {
+        const symbol = botState.config.symbol || 'BTC_USDT';
+        if (botState.llastOrder.side === 'buy') {
+            await monitorLongBuy(botState, symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+        } else {
+            await monitorLongSell(botState, symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+        }
+    } catch (e) { 
+        orchestrator.log(`Error Long Monitor: ${e.message}`, 'error', userId); 
+    }
+}
 
-            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-                try {
-                    if (botState.slastOrder.side === 'sell') { 
-                        await monitorShortSell(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-                    } else {
-                        await monitorShortBuy(botState, botState.config.symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, userCreds);
-                    }
-                } catch (e) { orchestrator.log(`Error Short Monitor: ${e.message}`, 'error', userId); }
-            }
+// SHORT
+if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+    try {
+        const symbol = botState.config.symbol || 'BTC_USDT';
+        // Usamos dependencies.userCreds para garantizar que la variable esté disponible
+        if (botState.slastOrder.side === 'sell') { 
+            await monitorShortSell(botState, symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+        } else {
+            await monitorShortBuy(botState, symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+        }
+    } catch (e) { 
+        orchestrator.log(`Error Short Monitor: ${e.message}`, 'error', userId); 
+    }
+}
 
             // --- Cálculos Matemáticos ---
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
