@@ -7,9 +7,9 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
  * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy Market).
- * @param {string} userId - ID del usuario dueño del bot.
+ * 🟢 CORRECCIÓN: Ahora recibe 'userCreds' como último parámetro.
  */
-async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId) {
+async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) {
     const lastOrder = botState.slastOrder;
 
     // En Short, el ciclo se cierra con una compra ('buy') para devolver los activos "prestados"
@@ -19,12 +19,11 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Extraemos las credenciales del botState para la firma de la API
+    // 🟢 AUDITORÍA: Ahora 'userCreds' viene correctamente inyectado desde el orquestador/SBuying
     const creds = userCreds;
 
     try {
         // Consultamos BitMart usando el contexto del usuario para acceder a sus API Keys
-        // 🟢 CORRECCIÓN: Pasamos 'creds', no 'userId' para cumplir con la firma V4
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
         let filledVolume = parseFloat(
@@ -35,7 +34,6 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
 
         // Fallback: Verificación en historial si la consulta directa no devuelve datos claros
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
-            // 🟢 CORRECCIÓN: Pasamos 'creds'
             const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {

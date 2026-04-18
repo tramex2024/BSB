@@ -13,7 +13,8 @@ async function run(dependencies) {
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
         availableUSDT,
-        placeShortOrder 
+        placeShortOrder,
+        userCreds 
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
@@ -29,7 +30,7 @@ const orderIsActive = await monitorShortSell(
     updateBotState, 
     updateGeneralBotState, 
     userId,
-    dependencies.userCreds // <--- CORRECCIÓN: Inyección de credenciales
+    userCreds // <--- CORRECCIÓN: Inyección de credenciales
 );        
         // --- THE BLOCK: We only return if there's an actual active order ---
         if (orderIsActive) return; 

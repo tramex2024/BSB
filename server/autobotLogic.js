@@ -60,13 +60,19 @@ async function botCycle(priceFromWebSocket) {
             }
 
             // --- Lógica de Desencriptación ---
-            const decryptedApiKey = decrypt(user.bitmartApiKey).trim();
-            const decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
-            let decryptedMemo = "";
+            let decryptedApiKey, decryptedSecret, decryptedMemo;
             try {
-                decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
-            } catch (e) {
-                decryptedMemo = (user.bitmartApiMemo || "").trim();
+                decryptedApiKey = decrypt(user.bitmartApiKey).trim();
+                decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
+                decryptedMemo = "";
+                try {
+                    decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
+                } catch (e) {
+                    decryptedMemo = (user.bitmartApiMemo || "").trim();
+                }
+            } catch (err) {
+                orchestrator.log(`❌ Error al desencriptar llaves de usuario ${userId}`, 'error', userId);
+                continue;
             }
 
             const userCreds = {
@@ -81,7 +87,7 @@ async function botCycle(priceFromWebSocket) {
 
             const dependencies = {
                 userId,
-                userCreds, // <--- CLAVE: Ahora LBuying recibirá las credenciales
+                userCreds, 
                 log: (msg, type) => orchestrator.log(msg, type, userId),
                 io: orchestrator.io || null,
                 bitmartService, Autobot, currentPrice,
@@ -131,36 +137,34 @@ async function botCycle(priceFromWebSocket) {
                 syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
             };
 
-            // --- Monitoreo de Órdenes ---
-            // --- Monitoreo de Órdenes (Optimizado) ---
-// LONG
-if (botState.llastOrder && botState.lstate !== 'STOPPED') {
-    try {
-        const symbol = botState.config.symbol || 'BTC_USDT';
-        if (botState.llastOrder.side === 'buy') {
-            await monitorLongBuy(botState, symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-        } else {
-            await monitorLongSell(botState, symbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-        }
-    } catch (e) { 
-        orchestrator.log(`Error Long Monitor: ${e.message}`, 'error', userId); 
-    }
-}
+            // --- Monitoreo de Órdenes (Optimizado con Dependencias) ---
+            const currentSymbol = botState.config.symbol || 'BTC_USDT';
 
-// SHORT
-if (botState.slastOrder && botState.sstate !== 'STOPPED') {
-    try {
-        const symbol = botState.config.symbol || 'BTC_USDT';
-        // Usamos dependencies.userCreds para garantizar que la variable esté disponible
-        if (botState.slastOrder.side === 'sell') { 
-            await monitorShortSell(botState, symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-        } else {
-            await monitorShortBuy(botState, symbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-        }
-    } catch (e) { 
-        orchestrator.log(`Error Short Monitor: ${e.message}`, 'error', userId); 
-    }
-}
+            // LONG MONITOR
+            if (botState.llastOrder && botState.lstate !== 'STOPPED') {
+                try {
+                    if (botState.llastOrder.side === 'buy') {
+                        await monitorLongBuy(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                    } else {
+                        await monitorLongSell(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                    }
+                } catch (e) { 
+                    orchestrator.log(`Error Long Monitor: ${e.message}`, 'error', userId); 
+                }
+            }
+
+            // SHORT MONITOR
+            if (botState.slastOrder && botState.sstate !== 'STOPPED') {
+                try {
+                    if (botState.slastOrder.side === 'sell') { 
+                        await monitorShortSell(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                    } else {
+                        await monitorShortBuy(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                    }
+                } catch (e) { 
+                    orchestrator.log(`Error Short Monitor: ${e.message}`, 'error', userId); 
+                }
+            }
 
             // --- Cálculos Matemáticos ---
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
@@ -185,18 +189,18 @@ if (botState.slastOrder && botState.sstate !== 'STOPPED') {
                 changeSet.sprofit = activeSPPC > 0 ? calculatePotentialProfit(activeSPPC, activeSAC, currentPrice, 'short') : 0;
             }
 
-            // --- Ejecución de Estrategias con Validador ---
+            // --- Ejecución de Estrategias ---
             if (botState.lstate !== 'STOPPED') {
-    await runLongStrategy(dependencies);
-}
+                await runLongStrategy(dependencies);
+            }
 
-if (botState.sstate !== 'STOPPED') {
-    await runShortStrategy(dependencies);
-}
+            if (botState.sstate !== 'STOPPED') {
+                await runShortStrategy(dependencies);
+            }
 
-if (botState.aistate !== 'STOPPED') {
-    await runAIStrategy(dependencies);
-}
+            if (botState.aistate !== 'STOPPED') {
+                await runAIStrategy(dependencies);
+            }
 
             changeSet.lastUpdate = new Date();
             await orchestrator.commitChanges(userId, changeSet, currentPrice);
