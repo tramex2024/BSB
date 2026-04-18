@@ -53,9 +53,10 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
+    // ELIMINAMOS || config?.trigger para alinearnos al modelo de Mongoose
     const priceVarDec = parseNumber(config?.price_var || 0) / 100;
     const priceVarInc = parseNumber(config?.price_step_inc || 0);
-    const profitPercent = parseNumber(config?.profit_percent || config?.trigger || 0);
+    const profitPercent = parseNumber(config?.profit_percent || 0); 
     const sizeVar = parseNumber(config?.size_var || 0);
     const purchaseUsdt = parseNumber(config?.purchaseUsdt || 0);
     
@@ -112,9 +113,10 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
     const conf = config || {}; 
     
+    // ELIMINAMOS || conf.trigger
     const priceVarDec = parseNumber(conf.price_var) / 100;
     const priceVarInc = parseNumber(conf.price_step_inc || 0);
-    const profitPercent = parseNumber(conf.profit_percent || conf.trigger || 0);
+    const profitPercent = parseNumber(conf.profit_percent || 0);
     const sizeVar = parseNumber(conf.size_var || 0);
     const purchaseUsdt = parseNumber(conf.purchaseUsdt || 0);
 
