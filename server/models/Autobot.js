@@ -106,10 +106,14 @@ const autobotSchema = new mongoose.Schema({
             stopAtCycle: { type: Boolean, default: false }
         },
         ai: {
-            enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number, default: 10, min: 6 },
-            stopAtCycle: { type: Boolean, default: false }
-        }
+    	    enabled: { type: Boolean, default: false },
+    	    amountUsdt: { type: Number, default: 100 }, // Capital Total del ciclo
+    	    minConfidence: { type: Number, default: 0.60 }, // Umbral de entrada
+    	    profitPercent: { type: Number, default: 1.2 }, // Objetivo base de salida
+    	    trailingPercent: { type: Number, default: 0.6 }, // Retroceso para vender
+    	    maxOrders: { type: Number, default: 3 }, // Máximo de particiones
+    	    stopAtCycle: { type: Boolean, default: false }
+	}
     },
 
     lastUpdate: { type: Date, default: Date.now },

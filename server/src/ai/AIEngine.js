@@ -1,19 +1,15 @@
 const Order = require('../../models/Order'); 
 const RiskManager = require('./AIRiskManager');
+const AutoBot = require('../../models/Autobot');
 
 class AIEngine {
     constructor() {
         this.io = null;
-        this.TRAILING_PERCENT = 0.006; // 0.6%
-        this.EXCHANGE_FEE = 0.001;     // 0.1%
+        this.EXCHANGE_FEE = 0.001; // 0.1%
     }
 
     setIo(io) { this.io = io; }
 
-    /**
-     * ANALYZE (Versión Light)
-     * Recibe la decisión ya tomada por el CentralAnalyzer para ahorrar CPU.
-     */
     async analyze(price, userId, context, brain) {
         if (!userId || !price || !context || !brain) return;
 
@@ -21,55 +17,46 @@ class AIEngine {
             const bot = context;
             const { confidence, signal, reason } = brain;
             const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
+            
+            // Parámetros dinámicos desde la config del usuario
+            const config = bot.config?.ai || {};
+            const userThreshold = config.minConfidence || 0.20;
+            const maxOrders = config.maxOrders || 3; // Límite de particiones DCA
 
-	    // --- NUEVO: LOG DE ESTATUS PARA RENDER ---
-            const aiStateTag = lastEntryPrice > 0 ? '[AI-POSITION]' : '[AI-SCANNING]';
-            const pnlInfo = lastEntryPrice > 0 
-                ? ` | PNL: ${(((price / lastEntryPrice) - 1) * 100).toFixed(2)}%` 
-            : '';
-        
-            console.log(`[${new Date().toLocaleTimeString()}] [INFO] [User: ${userId}] ${aiStateTag} 🧠 Conf: ${(confidence * 100).toFixed(1)}% | Signal: ${signal} | BTC: ${price}${pnlInfo}`);
-        // -----------------------------------------
- 
+            // --- LOG DE STATUS (RENDER) ---
+            const aiStateTag = bot.ainorder > 0 ? `[AI-POS:${bot.ainorder}]` : '[AI-SCANNING]';
+            const pnl = bot.ainorder > 0 ? ` | PNL: ${(((price / bot.aippc) - 1) * 100).toFixed(2)}%` : '';
+            console.log(`[${new Date().toLocaleTimeString()}] [INFO] [User: ${userId}] ${aiStateTag} 🧠 Conf: ${(confidence * 100).toFixed(1)}% | BTC: ${price}${pnl}`);
+
             const safeLog = (msg, type) => {
-                if (typeof context.log === 'function') context.log(msg, type);
-                else console.log(`[AI-LOG][${type}] ${msg}`);
+                if (this.io) this.io.to(userId.toString()).emit('ai-decision-update', { confidence, message: msg, isAnalyzing: true });
             };
 
-            // 1. GESTIÓN DE RIESGO OPERATIVO
             const riskStatus = RiskManager.checkOperatingState(bot);
-            
-            if (riskStatus.action === 'RESUME') {
-                if (typeof context.updateAIStateData === 'function') {
-                    await context.updateAIStateData({ aistate: 'RUNNING' });
-                }
-                return;
-            }
-
             if (bot.aistate !== 'RUNNING' && riskStatus.action !== 'RESUME') return;
 
-            // 2. MONITOREO DE POSICIÓN ACTIVA (TRAILING STOP)
-            if (lastEntryPrice > 0) {
-                return await this._manageTrailingStop(price, userId, bot, context, safeLog);
+            // 1. GESTIÓN DE SALIDA (Trailing Stop basado en Config)
+            if (bot.ainorder > 0) {
+                // Solo intentamos vender si estamos en profit mínimo (ej: 0.5%) o por trailing
+                const minProfitTarget = config.profitPercent || 1.2;
+                const currentProfit = ((price / bot.aippc) - 1) * 100;
+
+                if (currentProfit >= minProfitTarget || price < (bot.aihighestPrice * (1 - (config.trailingPercent || 0.006)))) {
+                    return await this._manageTrailingStop(price, userId, bot, safeLog, config);
+                }
             }
 
-            // 3. LÓGICA DE ENTRADA (Basada en el 'brain' inyectado)
-            const userThreshold = bot.config?.ai?.minConfidence || 0.10;
+            // 2. LÓGICA DE ENTRADA / DCA (Particionamiento de Capital)
+            // Entra si hay confianza Y no hemos superado el máximo de órdenes
+            if (confidence >= userThreshold && bot.ainorder < maxOrders) {
+                
+                // Si es una re-compra (DCA), pedimos que el precio sea menor al último o que la confianza sea mucho mayor
+                const isDCA = bot.ainorder > 0;
+                const shouldBuy = !isDCA || (price < bot.ailastEntryPrice * 0.99); // 1% caída para DCA
 
-            if (confidence >= userThreshold) {
-                const currentBalance = parseFloat(bot.aibalance || 0);
-                
-                console.log(`[DEBUG] Intentando compra: Balance=${currentBalance}, Risk=${riskStatus.canOperate}`);
-                
-                if (riskStatus.canOperate && currentBalance >= 5.0) {
-        console.log(`[DEBUG] Criterios cumplidos, llamando a _trade...`);
-        await this._trade(userId, 'BUY', price, context, safeLog);
-    } else if (currentBalance < 5.0) {
-                    safeLog(`⚠️ AI quiso COMPRAR pero saldo insuficiente ($${currentBalance})`, 'warning');
+                if (shouldBuy && riskStatus.canOperate) {
+                    await this._trade(userId, 'BUY', price, bot, safeLog, reason, maxOrders);
                 }
-            } else {
-                // Heartbeat de análisis para el frontend del usuario
-                this._log(userId, `AI Scanning: ${signal} (${(confidence * 100).toFixed(1)}%)`, confidence, true);
             }
 
         } catch (error) {
@@ -77,123 +64,82 @@ class AIEngine {
         }
     }
 
-    /**
-     * Gestión interna de Trailing Stop
-     */
-    async _manageTrailingStop(price, userId, bot, context, safeLog) {
-        let highestPrice = parseFloat(bot.aihighestPrice || 0);
-        
-        if (price > highestPrice) {
-            highestPrice = price;
-            if (typeof context.updateAIStateData === 'function') {
-                await context.updateAIStateData({ aihighestPrice: highestPrice });
-            }
+    async _manageTrailingStop(price, userId, bot, safeLog, config) {
+        let highest = Math.max(price, bot.aihighestPrice || 0);
+        const trailingPct = config.trailingPercent || 0.006;
+
+        if (price > bot.aihighestPrice) {
+            await AutoBot.updateOne({ userId }, { aihighestPrice: price });
         }
 
-        const stopPrice = highestPrice * (1 - this.TRAILING_PERCENT);
+        const stopPrice = highest * (1 - trailingPct);
 
-        if (price <= stopPrice) {
-            this._log(userId, `🎯 AI: Trailing Stop activado @ $${price.toFixed(2)}`, 0.95);
-            await this._trade(userId, 'SELL', price, context, safeLog);
+        // Vender si el precio cae del pico alcanzado
+        if (price <= stopPrice && ((price / bot.aippc) - 1) * 100 > 0.3) { 
+            await this._trade(userId, 'SELL', price, bot, safeLog, "Trailing Stop Loss/Profit");
         }
     }
 
-    /**
-     * Ejecución de Trade (Simulado o Real según tu configuración)
-     */
-    async _trade(userId, side, price, context, safeLog) {
+    async _trade(userId, side, price, bot, safeLog, reason, maxOrders = 1) {
         try {
-            const bot = context;
-            const investmentAmount = RiskManager.calculateInvestment(bot);
-            const fee = investmentAmount * this.EXCHANGE_FEE;
-            const currentCycleIndex = Number(bot.aicycle || 0);
-            
-            let newBalance = parseFloat(bot.aibalance || 0);
-            let netProfit = 0;
-            const updateData = {};
+            let updateData = {};
+            let investmentAmount = 0;
 
             if (side === 'BUY') {
-                newBalance = parseFloat((newBalance - fee).toFixed(2));
-                Object.assign(updateData, {
-                    aibalance: newBalance,
+                // Dividimos el capital total entre el máximo de órdenes permitidas
+                const totalAllowed = parseFloat(bot.config?.ai?.amountUsdt || 10);
+                investmentAmount = totalAllowed / maxOrders;
+
+                if (bot.aibalance < investmentAmount) return;
+
+                const newQty = bot.aiac + (investmentAmount / price);
+                const newPPC = ((bot.aippc * bot.aiac) + investmentAmount) / newQty;
+
+                updateData = {
+                    aibalance: parseFloat((bot.aibalance - investmentAmount).toFixed(2)),
                     ailastEntryPrice: price,
+                    aippc: newPPC,
+                    aiac: newQty,
                     aihighestPrice: price,
-                    aistartTime: new Date(),
-                    ainorder: 1
-                });
+                    aistartTime: bot.aistartTime || new Date(),
+                    ainorder: bot.ainorder + 1
+                };
             } else {
-                const profitFactor = (price / bot.ailastEntryPrice);
-                const grossRecovery = investmentAmount * profitFactor;
-                const sellFee = grossRecovery * this.EXCHANGE_FEE;
-                netProfit = (grossRecovery - investmentAmount) - sellFee;
-                const totalRecovery = grossRecovery - sellFee;
-                newBalance = parseFloat((newBalance + totalRecovery - investmentAmount).toFixed(2));
+                // LÓGICA DE CIERRE DE CICLO
+                const totalValue = bot.aiac * price;
+                const totalCost = bot.aiac * bot.aippc;
+                const netProfit = (totalValue - totalCost) - (totalValue * this.EXCHANGE_FEE);
+                
+                investmentAmount = totalCost; // Para el registro de la orden
 
-                if (typeof context.logSuccessfulCycle === 'function' && bot.aistartTime) {
-                    await context.logSuccessfulCycle({
-                        userId,
-                        autobotId: bot._id,
-                        symbol: bot.config.symbol || 'BTC_USDT',
-                        strategy: 'AI',
-                        cycleIndex: currentCycleIndex + 1,
-                        startTime: bot.aistartTime,
-                        endTime: new Date(),
-                        averagePPC: bot.ailastEntryPrice,
-                        finalSellPrice: price,
-                        orderCount: 1,
-                        initialInvestment: investmentAmount,
-                        finalRecovery: totalRecovery,
-                        netProfit: netProfit,
-                        profitPercentage: (netProfit / investmentAmount) * 100
-                    });
-                }
-
-                const nextState = newBalance < 10 ? 'PAUSED' : 'RUNNING';
-
-                Object.assign(updateData, {
-                    aibalance: newBalance,
+                updateData = {
+                    aibalance: parseFloat((bot.aibalance + totalValue - (totalValue * this.EXCHANGE_FEE)).toFixed(2)),
                     ailastEntryPrice: 0,
+                    aippc: 0,
+                    aiac: 0,
                     aihighestPrice: 0,
                     aistartTime: null,
-                    aicycle: currentCycleIndex + 1,
                     ainorder: 0,
-                    aistate: nextState
-                });
+                    $inc: { aicycle: 1, total_profit: parseFloat(netProfit.toFixed(4)) }
+                };
 
-                if (typeof context.updateGeneralBotState === 'function') {
-                    await context.updateGeneralBotState({ 
-                        $inc: { total_profit: parseFloat(netProfit.toFixed(4)) } 
-                    });
-                }
+                // Emitir estadísticas del ciclo para el front
+                if (this.io) this.io.to(userId.toString()).emit('ai-cycle-complete', { netProfit, price });
             }
 
-            if (typeof context.updateAIStateData === 'function') {
-                await context.updateAIStateData(updateData);
-            }
+            const updatedBot = await AutoBot.findOneAndUpdate({ userId }, updateData, { new: true });
 
             await Order.create({
-                userId, strategy: 'ai', executionMode: 'SIMULATED', orderId: `v_ai_${Date.now()}`,
-                side, price, size: parseFloat((investmentAmount / price).toFixed(8)),
-                notional: investmentAmount, status: 'FILLED', orderTime: new Date()
+                userId, strategy: 'ai', executionMode: 'SIMULATED',
+                orderId: `v_ai_${Date.now()}`, side, price,
+                notional: investmentAmount, status: 'FILLED', 
+                reason: reason || (side === 'BUY' ? 'AI Strategy Entry' : 'AI Strategy Exit')
             });
 
-            this._broadcastStatus(userId, { aistate: side === 'BUY' ? 'RUNNING' : 'IDLE', virtualBalance: newBalance });
-            safeLog(`✅ AI ${side} Ejecutada @ $${price.toFixed(2)}`, 'success');
+            safeLog(`✅ AI ${side} @ $${price} | Pos: ${updatedBot.ainorder}`, 'success');
 
         } catch (error) {
-            safeLog(`❌ AI Trade Error: ${error.message}`, 'error');
-        }
-    }
-
-    _broadcastStatus(userId, data) {
-        if (this.io) this.io.to(userId.toString()).emit('ai-status-update', data);
-    }
-
-    _log(userId, msg, conf, isAnalyzing = false) {
-        if (this.io) {
-            this.io.to(userId.toString()).emit('ai-decision-update', { 
-                confidence: conf, message: msg, isAnalyzing 
-            });
+            console.error("❌ Error en _trade AI:", error);
         }
     }
 }
