@@ -28,9 +28,16 @@ async function run(dependencies) {
 
     try {
         // 1. MONITOREO DE ÓRDENES PENDIENTES
-        const orderIsActive = await monitorAndConsolidate(
-            botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId
-        );
+const orderIsActive = await monitorAndConsolidate(
+    botState, 
+    SYMBOL, 
+    log, 
+    updateLStateData, 
+    updateBotState, 
+    updateGeneralBotState, 
+    userId,
+    dependencies.userCreds // <--- AGREGAR ESTO
+);
         
         if (orderIsActive) return; 
         

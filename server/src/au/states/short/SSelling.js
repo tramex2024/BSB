@@ -20,12 +20,17 @@ async function run(dependencies) {
     const SSTATE = 'short';
 
     try {
-        // 1. ACTIVE ORDER MONITOR
-        // If the consolidator returns true, it means there is a pending order being processed.
-        const orderIsActive = await monitorShortSell(
-            botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId
-        );
-        
+// 1. ACTIVE ORDER MONITOR
+const orderIsActive = await monitorShortSell(
+    botState, 
+    SYMBOL, 
+    log, 
+    updateSStateData, 
+    updateBotState, 
+    updateGeneralBotState, 
+    userId,
+    dependencies.userCreds // <--- CORRECCIÓN: Inyección de credenciales
+);        
         // --- THE BLOCK: We only return if there's an actual active order ---
         if (orderIsActive) return; 
 
