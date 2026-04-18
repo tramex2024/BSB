@@ -22,6 +22,15 @@ class AIEngine {
             const { confidence, signal, reason } = brain;
             const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
 
+	    // --- NUEVO: LOG DE ESTATUS PARA RENDER ---
+            const aiStateTag = lastEntryPrice > 0 ? '[AI-POSITION]' : '[AI-SCANNING]';
+            const pnlInfo = lastEntryPrice > 0 
+                ? ` | PNL: ${(((price / lastEntryPrice) - 1) * 100).toFixed(2)}%` 
+            : '';
+        
+            console.log(`[${new Date().toLocaleTimeString()}] [INFO] [User: ${userId}] ${aiStateTag} 🧠 Conf: ${(confidence * 100).toFixed(1)}% | Signal: ${signal} | BTC: ${price}${pnlInfo}`);
+        // -----------------------------------------
+ 
             const safeLog = (msg, type) => {
                 if (typeof context.log === 'function') context.log(msg, type);
                 else console.log(`[AI-LOG][${type}] ${msg}`);
