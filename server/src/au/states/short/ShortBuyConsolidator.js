@@ -7,7 +7,7 @@ const { logSuccessfulCycle } = require('../../../../services/cycleLogService');
 /**
  * CONSOLIDADOR DE RECOMPRA (SHORT): 
  * Confirma el cierre del ciclo cuando se ejecuta el Take Profit (Buy Market).
- * 🟢 CORRECCIÓN: Ahora recibe 'userCreds' como último parámetro.
+ * 🟢 CORRECCIÓN: Ahora recibe 'userCreds' como último parámetro para evitar ReferenceError.
  */
 async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) {
     const lastOrder = botState.slastOrder;
@@ -19,7 +19,7 @@ async function monitorAndConsolidateShortBuy(botState, SYMBOL, log, updateSState
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Ahora 'userCreds' viene correctamente inyectado desde el orquestador/SBuying
+    // 🟢 AUDITORÍA: Asignamos el parámetro recibido a la constante utilizada en las consultas
     const creds = userCreds;
 
     try {
