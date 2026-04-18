@@ -45,12 +45,12 @@ async function updateBotConfig(req, res) {
             const amt = parseFloat(newConfig[strategy]?.amountUsdt);
             
             if (!isNaN(amt)) {
-                // CORRECCIÓN: Pasamos 'botState.config' para que processUserInputs mantenga el stopAtCycle
+                // Sincronizamos montos actuales para el recalculo de blindaje
                 const fullShield = processUserInputs(
                     strategy === 'long' ? amt : botState.config.long.amountUsdt,
                     strategy === 'short' ? amt : botState.config.short.amountUsdt,
                     strategy === 'ai' ? amt : (botState.config.ai?.amountUsdt || 0),
-                    botState.config // <-- Pasamos la configuración actual como referencia
+                    botState.config 
                 );
 
                 const s = strategy; 
@@ -65,13 +65,14 @@ async function updateBotConfig(req, res) {
 
                 if (s !== 'ai') {
                     update[`config.${s}.purchaseUsdt`] = d.purchaseUsdt;
-                    update[`config.${s}.price_var`] = d.price_var;
                     update[`config.${s}.size_var`] = d.size_var;
                     update[`config.${s}.price_step_inc`] = d.price_step_inc;
-                    update[`config.${s}.profit_percent`] = d.profit_percent;
+                    
+                    // ASIGNACIÓN SEMÁNTICA EXPLÍCITA (Evita inversión de valores)
+                    update[`config.${s}.price_var`] = d.price_var;       // Caída
+                    update[`config.${s}.profit_percent`] = d.profit_percent; // Profit
                 }
 
-                // Aseguramos que el stopAtCycle no cambie a menos que se envíe explícitamente en el Dashboard
                 update[`config.${s}.stopAtCycle`] = typeof newConfig[s]?.stopAtCycle === 'boolean' 
                     ? newConfig[s].stopAtCycle 
                     : botState.config[s].stopAtCycle;
@@ -82,13 +83,13 @@ async function updateBotConfig(req, res) {
             // 1. Procesar LONG
             if (newConfig.long) {
                 const dataLong = {
-                    amountUsdt: newConfig.long.amountUsdt !== undefined ? newConfig.long.amountUsdt : botState.config.long.amountUsdt,
-                    purchaseUsdt: newConfig.long.purchaseUsdt !== undefined ? newConfig.long.purchaseUsdt : botState.config.long.purchaseUsdt,
-                    price_var: newConfig.long.price_var !== undefined ? newConfig.long.price_var : botState.config.long.price_var,
-                    size_var: newConfig.long.size_var !== undefined ? newConfig.long.size_var : botState.config.long.size_var,
-                    profit_percent: newConfig.long.profit_percent !== undefined ? newConfig.long.profit_percent : botState.config.long.profit_percent,
-                    price_step_inc: newConfig.long.price_step_inc !== undefined ? newConfig.long.price_step_inc : botState.config.long.price_step_inc,
-                    stopAtCycle: newConfig.long.stopAtCycle !== undefined ? newConfig.long.stopAtCycle : botState.config.long.stopAtCycle
+                    amountUsdt: newConfig.long.amountUsdt ?? botState.config.long.amountUsdt,
+                    purchaseUsdt: newConfig.long.purchaseUsdt ?? botState.config.long.purchaseUsdt,
+                    price_var: newConfig.long.price_var ?? botState.config.long.price_var,
+                    size_var: newConfig.long.size_var ?? botState.config.long.size_var,
+                    profit_percent: newConfig.long.profit_percent ?? botState.config.long.profit_percent,
+                    price_step_inc: newConfig.long.price_step_inc ?? botState.config.long.price_step_inc,
+                    stopAtCycle: newConfig.long.stopAtCycle ?? botState.config.long.stopAtCycle
                 };
 
                 const cleanLong = processAdvancedInputs(dataLong);
@@ -109,13 +110,13 @@ async function updateBotConfig(req, res) {
             // 2. Procesar SHORT
             if (newConfig.short) {
                 const dataShort = {
-                    amountUsdt: newConfig.short.amountUsdt !== undefined ? newConfig.short.amountUsdt : botState.config.short.amountUsdt,
-                    purchaseUsdt: newConfig.short.purchaseUsdt !== undefined ? newConfig.short.purchaseUsdt : botState.config.short.purchaseUsdt,
-                    price_var: newConfig.short.price_var !== undefined ? newConfig.short.price_var : botState.config.short.price_var,
-                    size_var: newConfig.short.size_var !== undefined ? newConfig.short.size_var : botState.config.short.size_var,
-                    profit_percent: newConfig.short.profit_percent !== undefined ? newConfig.short.profit_percent : botState.config.short.profit_percent,
-                    price_step_inc: newConfig.short.price_step_inc !== undefined ? newConfig.short.price_step_inc : botState.config.short.price_step_inc,
-                    stopAtCycle: newConfig.short.stopAtCycle !== undefined ? newConfig.short.stopAtCycle : botState.config.short.stopAtCycle
+                    amountUsdt: newConfig.short.amountUsdt ?? botState.config.short.amountUsdt,
+                    purchaseUsdt: newConfig.short.purchaseUsdt ?? botState.config.short.purchaseUsdt,
+                    price_var: newConfig.short.price_var ?? botState.config.short.price_var,
+                    size_var: newConfig.short.size_var ?? botState.config.short.size_var,
+                    profit_percent: newConfig.short.profit_percent ?? botState.config.short.profit_percent,
+                    price_step_inc: newConfig.short.price_step_inc ?? botState.config.short.price_step_inc,
+                    stopAtCycle: newConfig.short.stopAtCycle ?? botState.config.short.stopAtCycle
                 };
 
                 const cleanShort = processAdvancedInputs(dataShort);

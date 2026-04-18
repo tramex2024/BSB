@@ -98,27 +98,33 @@ export function getBotConfiguration() {
     };
 
     return {
-        symbol: "BTC_USDT",
-        long: {
-            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
-            purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
-            price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), 
-            size_var:        getNum('auincrementl', 'long.size_var', 1),
-            profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit),
-            price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
-            stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
-            enabled:         currentBotState.lstate !== 'STOPPED'
-        },
-        short: {
-            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
-            purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
-            price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation),
-            size_var:        getNum('auincrements', 'short.size_var', 1),
-            profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit),
-            price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
-            stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
-            enabled:         currentBotState.sstate !== 'STOPPED' 
-        },
+    symbol: "BTC_USDT",
+    long: {
+        amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
+        purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
+        
+        // ESTA ES LA CORRECCIÓN CRÍTICA:
+        price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), // Safety Drop
+        profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit), // Take Profit
+        
+        size_var:        getNum('auincrementl', 'long.size_var', 1),
+        price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
+        stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
+        enabled:         currentBotState.lstate !== 'STOPPED'
+    },
+    short: {
+        amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
+        purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
+        
+        // ESTA ES LA CORRECCIÓN CRÍTICA:
+        price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation), // Safety Rise
+        profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit), // Take Profit
+        
+        size_var:        getNum('auincrements', 'short.size_var', 1),
+        price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
+        stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
+        enabled:         currentBotState.sstate !== 'STOPPED' 
+    },
         ai: {
             amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
                              getNum('ai-amount-usdt', 'ai.amountUsdt', 100),

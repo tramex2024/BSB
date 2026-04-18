@@ -105,15 +105,21 @@ export function syncInputsFromConfig(conf) {
         'auamountl-usdt': conf.long?.amountUsdt,
         'aupurchasel-usdt': conf.long?.purchaseUsdt,
         'auincrementl': conf.long?.size_var,
-        'audecrementl': conf.long?.price_var,
+        
+        // MAPEOS CORRECTOS (Sin cruces artificiales)
+        'audecrementl': conf.long?.price_var,       // Safety Drop -> price_var
+        'autriggerl': conf.long?.profit_percent,   // Take Profit -> profit_percent
+        
         'aupricestep-l': conf.long?.price_step_inc,
-        'autriggerl': conf.long?.profit_percent,
+        
         'auamounts-usdt': conf.short?.amountUsdt,
         'aupurchases-usdt': conf.short?.purchaseUsdt,
         'auincrements': conf.short?.size_var,
+        
         'audecrements': conf.short?.price_var,
-        'aupricestep-s': conf.short?.price_step_inc,
         'autriggers': conf.short?.profit_percent,
+        
+        'aupricestep-s': conf.short?.price_step_inc,
         'auamountai-usdt': conf.ai?.amountUsdt,
         'ai-amount-usdt': conf.ai?.amountUsdt
     };
