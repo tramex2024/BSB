@@ -15,23 +15,24 @@ class AIRiskManager {
      * Determines if the bot has enough "fuel" (balance) to operate.
      */
     checkOperatingState(bot) {
-        if (!bot) return { action: 'NONE' };
+    if (!bot) return { action: 'NONE', canOperate: false };
 
-        const currentBalance = parseFloat(bot.aibalance || 0);
-        
-        // Auto-Resume: If it was paused but we now detect sufficient capital.
-        // We use a small buffer (+0.5) to avoid rapid Pause/Resume flip-flopping.
-        if (bot.aistate === 'PAUSED' && currentBalance >= (this.MIN_TRADE_AMOUNT + 0.5)) {
-            return { action: 'RESUME' };
-        }
-        
-        // Auto-Pause: If capital falls below the operational minimum.
-        if (bot.aistate === 'RUNNING' && currentBalance < this.MIN_TRADE_AMOUNT) {
-            return { action: 'PAUSE' };
-        }
-        
-        return { action: 'CONTINUE' };
+    const currentBalance = parseFloat(bot.aibalance || 0);
+    
+    if (bot.aistate === 'PAUSED' && currentBalance >= (this.MIN_TRADE_AMOUNT + 0.5)) {
+        return { action: 'RESUME', canOperate: true };
     }
+    
+    if (bot.aistate === 'RUNNING' && currentBalance < this.MIN_TRADE_AMOUNT) {
+        return { action: 'PAUSE', canOperate: false };
+    }
+    
+    // Si está RUNNING y tiene saldo, puede operar
+    return { 
+        action: 'CONTINUE', 
+        canOperate: bot.aistate === 'RUNNING' && currentBalance >= this.MIN_TRADE_AMOUNT 
+    };
+}
 
     /**
      * Capital Management Strategy.
