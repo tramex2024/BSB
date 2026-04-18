@@ -87,7 +87,7 @@ class AIEngine {
 
             if (side === 'BUY') {
                 // Dividimos el capital total entre el máximo de órdenes permitidas
-                const totalAllowed = parseFloat(bot.config?.ai?.amountUsdt || 10);
+                const totalAllowed = parseFloat(bot.config?.ai?.amountUsdt || 60);
                 investmentAmount = totalAllowed / maxOrders;
 
                 if (bot.aibalance < investmentAmount) return;
