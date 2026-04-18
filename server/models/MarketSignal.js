@@ -1,6 +1,6 @@
 /**
  * BSB/server/models/MarketSignal.js
- * CENTRAL DE INTELIGENCIA DE MERCADO
+ * CENTRAL DE INTELIGENCIA DE MERCADO - Modelo con IA
  */
 
 const mongoose = require('mongoose');
@@ -16,7 +16,7 @@ const MarketSignalSchema = new mongoose.Schema({
     // --- DATOS DE PRECIO EN TIEMPO REAL ---
     currentPrice: { type: Number, required: true },
     prevPrice: { type: Number },
-    priceChange24h: { type: Number }, // Útil para filtros de volatilidad
+    priceChange24h: { type: Number },
 
     // --- BLOQUE DE INDICADORES TÉCNICOS ---
     rsi14: { type: Number },
@@ -27,10 +27,23 @@ const MarketSignalSchema = new mongoose.Schema({
     stochK: { type: Number },
     stochD: { type: Number },
 
-    // MACD (Añadido: Fundamental para confirmar cruces de tendencia)
+    // MACD
     macdValue: { type: Number },
     macdSignal: { type: Number },
     macdHist: { type: Number },
+
+    // --- NUEVO BLOQUE DE INTELIGENCIA ARTIFICIAL ---
+    aiConfidence: { 
+        type: Number, 
+        default: 0,
+        min: 0,
+        max: 1 // Guardamos de 0 a 1 (ej: 0.85 para 85%)
+    },
+    marketPhase: { 
+        type: String, 
+        enum: ['ACCUMULATION', 'TREND', 'DISTRIBUTION', 'DORMANT', 'UNKNOWN'],
+        default: 'UNKNOWN'
+    },
 
     // --- LEGADO Y COMPATIBILIDAD ---
     currentRSI: { type: Number, required: true }, 
@@ -38,13 +51,11 @@ const MarketSignalSchema = new mongoose.Schema({
     signal: { 
         type: String, 
         required: true,
-        // En MarketSignal.js
-enum: ['BUY', 'SELL', 'HOLD', 'STRONG_BUY', 'STRONG_SELL'] 
+        enum: ['BUY', 'SELL', 'HOLD', 'STRONG_BUY', 'STRONG_SELL'] 
     }, 
     reason: { type: String },
 
     // --- DATOS ESTRUCTURALES ---
-    // Guardamos solo las últimas X velas para no saturar la DB
     history: { type: Array, default: [] }, 
     trend: { 
         type: String, 
@@ -54,7 +65,7 @@ enum: ['BUY', 'SELL', 'HOLD', 'STRONG_BUY', 'STRONG_SELL']
     
     lastUpdate: { type: Date, default: Date.now }
 }, {
-    timestamps: true // Para tener createdAt y updatedAt nativos
+    timestamps: true 
 });
 
 // Middleware de actualización
