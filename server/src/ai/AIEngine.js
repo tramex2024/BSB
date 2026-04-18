@@ -45,7 +45,7 @@ class AIEngine {
             }
 
             // 3. LÓGICA DE ENTRADA (Basada en el 'brain' inyectado)
-            const userThreshold = bot.config?.ai?.minConfidence || 0.30;
+            const userThreshold = bot.config?.ai?.minConfidence || 0.20;
 
             if (confidence >= userThreshold && signal === 'BUY') {
                 const currentBalance = parseFloat(bot.aibalance || 0);
