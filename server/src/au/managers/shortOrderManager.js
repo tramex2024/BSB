@@ -2,13 +2,13 @@
 
 /**
  * SHORT ORDER MANAGER:
- * Ejecuta órdenes de venta (apertura/DCA) y compra (cierre) con firmas de estrategia.
+ * Executes sell orders (opening/DCA) and buy orders (closing) with strategy signatures.
  */
 const { MIN_USDT_VALUE_FOR_BITMART } = require('../utils/tradeConstants');
 
 /**
- * Convierte montos USDT a unidades de BTC basadas en el precio actual.
- * Aplica un redondeo hacia abajo (floor) a 6 decimales para BitMart.
+ * Converts USDT amounts to BTC units based on current price.
+ * Applies a floor rounding to 6 decimals for BitMart compatibility.
  */
 function convertUsdtToBtc(usdtAmount, currentPrice) {
     if (!currentPrice || currentPrice <= 0) return 0;
@@ -17,8 +17,8 @@ function convertUsdtToBtc(usdtAmount, currentPrice) {
 }
 
 /**
- * APERTURA DE SHORT: Vende BTC (Market Sell).
- * @param {Function} executeOrder - Función inyectada placeShortOrder (con prefijo S_).
+ * SHORT OPENING: Sells BTC (Market Sell).
+ * @param {Function} executeOrder - Injected function placeShortOrder (with S_ prefix).
  */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, injectedPrice = 0, executeOrder) {
     const { purchaseUsdt } = config.short || {};
@@ -29,14 +29,14 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
     const btcSize = convertUsdtToBtc(amountNominal, currentPrice);
 
     if (btcSize <= 0) {
-        log(`[S-FIRST] ❌ Error: Tamaño BTC no válido (${btcSize}).`, 'error');
+        log(`[S-FIRST] ❌ Error: Invalid BTC size (${btcSize}).`, 'error');
         return;
     }
 
-    log(`🚀 [S-FIRST] Enviando apertura Short FIRMADA...`, 'info');
+    log(`🚀 [S-FIRST] Sending SIGNED Short opening...`, 'info');
 
     try {
-        // ✅ Usamos la función firmada con prefijo S_
+        // ✅ Using signed function with S_ prefix
         const orderResult = await executeOrder({
             symbol: SYMBOL,
             side: 'sell',
@@ -57,15 +57,15 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-FIRST] Orden Short enviada ID: ${orderId}. BTC: ${btcSize}`, 'success');
+            log(`✅ [S-FIRST] Short order sent ID: ${orderId}. BTC: ${btcSize}`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-FIRST] Error de API en apertura Short: ${error.message}`, 'error');
+        log(`❌ [S-FIRST] API Error in Short opening: ${error.message}`, 'error');
     }
 }
 
 /**
- * DCA SHORT: Vende más BTC (Promedio hacia arriba).
+ * SHORT DCA: Sells more BTC (Average up).
  */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState, injectedPrice = 0, executeOrder) { 
     const SYMBOL = botState.config?.symbol || 'BTC_USDT';
@@ -91,24 +91,24 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-DCA] Cobertura Short enviada ID: ${orderId}. BTC: ${btcSize}`, 'success');
+            log(`✅ [S-DCA] Short coverage sent ID: ${orderId}. BTC: ${btcSize}`, 'success');
         }
     } catch (error) {
-        log(`❌ [S-DCA] Error en DCA Short: ${error.message}`, 'error');
+        log(`❌ [S-DCA] Error in Short DCA: ${error.message}`, 'error');
     }
 }
 
 /**
- * RECOMPRA DE CIERRE (Take Profit).
+ * CLOSING REPURCHASE (Take Profit).
  */
 async function placeShortBuyOrder(config, botState, btcAmount, log, updateGeneralBotState, injectedPrice = 0, executeOrder) { 
     const SYMBOL = config.symbol || 'BTC_USDT';
     const currentPrice = injectedPrice || botState.price || 0;
     
-    // BitMart Market Buy requiere el monto en la moneda de cotización (USDT)
+    // BitMart Market Buy requires the amount in the quote currency (USDT)
     const usdtNeeded = btcAmount * currentPrice;
 
-    log(`💰 [S-PROFIT] Recomprando p/ cerrar Short (FIRMADA): ${btcAmount.toFixed(6)} BTC...`, 'info');
+    log(`💰 [S-PROFIT] Rebuying to close Short (SIGNED): ${btcAmount.toFixed(6)} BTC...`, 'info');
 
     try {
         const orderResult = await executeOrder({
@@ -128,18 +128,18 @@ async function placeShortBuyOrder(config, botState, btcAmount, log, updateGenera
                     timestamp: new Date()
                 }
             });
-            log(`✅ [S-PROFIT] Recompra enviada ID: ${orderId}.`, 'success');
+            log(`✅ [S-PROFIT] Repurchase sent ID: ${orderId}.`, 'success');
         }
     } catch (error) { 
-        log(`❌ [S-PROFIT] Error en cierre Short: ${error.message}`, 'error');
+        log(`❌ [S-PROFIT] Error in Short closing: ${error.message}`, 'error');
     }
 }
 
 /**
- * CANCELACIÓN: BitmartService directo (sin firma necesaria).
+ * CANCELLATION: Direct BitmartService (No signature required).
  */
 async function cancelActiveShortOrder(botState, log, updateGeneralBotState, userId) {
-    // ... Tu lógica original de cancelación es perfecta ...
+    // Keeping your original logic as requested
 }
 
 module.exports = {

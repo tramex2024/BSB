@@ -8,7 +8,7 @@ const SSTATE = 'short';
 const BUY_FEE_PERCENT = 0.001; 
 
 /**
- * Maneja el éxito de una VENTA (Apertura o DCA Short).
+ * Handles the success of a SELL (Short Opening or DCA).
  */
 async function handleSuccessfulShortSell(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState, userId } = dependencies;
@@ -18,15 +18,15 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const baseExecutedValue = executedQty * executedPrice;
     const currentCycleIndex = Number(botState.scycle || 0);
 
-    // 🛑 CORRECCIÓN DE SEGURIDAD: 
-    // Si los datos son 0, NO limpiamos slastOrder. 
-    // Esto evita que el bot ignore una orden que sí ocurrió pero que la API no reportó bien.
+    // SECURITY CORRECTION: 
+    // If data is 0, we do NOT clear slastOrder. 
+    // This prevents the bot from ignoring an order that did happen but API reported incorrectly.
     if (executedQty <= 0 || executedPrice <= 0) {
-        log('[S-DATA] ⚠️ Datos de ejecución Short incompletos. Reintentando auditoría en el próximo tick...', 'warning');
-        return; // Salimos sin limpiar slastOrder
+        log('[S-DATA] ⚠️ Incomplete Short execution data. Retrying audit in the next tick...', 'warning');
+        return; 
     }
 
-    // 1. Cálculos de posición
+    // 1. Position Calculations
     const currentSBalance = parseFloat(botState.sbalance || 0);
     const finalizedSBalance = parseFloat((currentSBalance - baseExecutedValue).toFixed(8));
 
@@ -41,7 +41,7 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const newPPC = newAI / newAC; 
     const newOCC = currentOCC + 1;
 
-    // 2. Targets y Cobertura
+    // 2. Targets and Coverage
     const profitTrigger = parseNumber(botState.config.short?.profit_percent || 0) / 100;
     const newSTPrice = newPPC * (1 - profitTrigger); 
 
@@ -63,7 +63,7 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         parseNumber(price_step_inc || 0)
     );
 
-    // 3. PERSISTENCIA CON CICLO
+    // 3. PERSISTENCE WITH CYCLE
     await saveExecutedOrder(
         { ...orderDetails, side: 'sell' }, 
         SSTATE, 
@@ -71,7 +71,7 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         currentCycleIndex
     );
 
-    // ACTUALIZACIÓN FINAL: Solo llegamos aquí con datos validados > 0
+    // FINAL UPDATE: We only reach here with validated data > 0
     await updateGeneralBotState({
         sac: newAC,
         sai: newAI,
@@ -90,11 +90,11 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         slastOrder: null     
     });
     
-    log(`✅ [S-DATA] #${newOCC} Short. PPC Venta: ${newPPC.toFixed(2)}. Target Recompra: $${newSTPrice.toFixed(2)}.`, 'success');
+    log(`✅ [S-DATA] #${newOCC} Short. Sell PPC: ${newPPC.toFixed(2)}. Buy Target: $${newSTPrice.toFixed(2)}.`, 'success');
 }
 
 /**
- * Maneja el éxito de una COMPRA (Cierre de Ciclo).
+ * Handles the success of a BUY (Cycle Closing).
  */
 async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies) {
     const { userId, config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
@@ -104,9 +104,8 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
         const filledSize = parseFloat(orderDetails.filledSize || orderDetails.filled_volume || 0); 
         const currentCycleIndex = Number(botStateObj.scycle || 0);
         
-        // Blindaje para el cierre
         if (filledSize <= 0) {
-            log('[S-DATA] ⚠️ Esperando confirmación de volumen para cerrar ciclo Short...', 'warning');
+            log('[S-DATA] ⚠️ Waiting for volume confirmation to close Short cycle...', 'warning');
             return;
         }
 
@@ -143,7 +142,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
                     netProfit: profitNeto,
                     profitPercentage: (profitNeto / totalUsdtReceivedFromSales) * 100
                 });
-            } catch (e) { log(`⚠️ Error log ciclo short: ${e.message}`, 'error'); }
+            } catch (e) { log(`⚠️ Error logging short cycle: ${e.message}`, 'error'); }
         }
 
         const shouldStopShort = config.short?.stopAtCycle === true;
@@ -156,11 +155,13 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
             'config.short.enabled': !shouldStopShort
         });
 
-        log(`💰 [S-DATA] Ciclo Short Cerrado: +${profitNeto.toFixed(2)} USDT.`, 'success');
-        await updateBotState(shouldStopShort ? 'STOPPED' : 'RUNNING', SSTATE);
+        log(`💰 [S-DATA] Short Cycle Closed: +${profitNeto.toFixed(2)} USDT.`, 'success');
+        
+        // REPAIR: Transition to SELLING instead of RUNNING for cycle continuity
+        await updateBotState(shouldStopShort ? 'STOPPED' : 'SELLING', SSTATE);
 
     } catch (error) {
-        log(`❌ [S-DATA] Error en liquidación Short: ${error.message}`, 'error');
+        log(`❌ [S-DATA] Error in Short liquidation: ${error.message}`, 'error');
         throw error;
     }
 }

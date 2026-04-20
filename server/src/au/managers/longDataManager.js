@@ -8,7 +8,7 @@ const LSTATE = 'long';
 const SELL_FEE_PERCENT = 0.001; // 0.1% BitMart Fee
 
 /**
- * Procesa el éxito de una compra Long (Apertura o DCA).
+ * Processes the success of a Long Buy (Opening or DCA).
  */
 async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {}) {
     const { updateGeneralBotState, userId } = dependencies; 
@@ -17,14 +17,14 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     const executedPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
     const baseExecutedValue = executedQty * executedPrice;
 
-    // 🛑 SEGURIDAD REFORZADA: Si el volumen es 0, lanzamos error y NO limpiamos llastOrder.
-    // Esto obliga al bot a reintentar la consolidación en el próximo tick.
+    // ENFORCED SECURITY: If volume is 0, we throw an error and DO NOT clear llastOrder.
+    // This forces the bot to retry consolidation in the next tick.
     if (executedQty <= 0 || executedPrice <= 0) {
-        log('[L-DATA] ⚠️ Ejecución inválida o incompleta. Manteniendo orden para reintento de auditoría.', 'warning');
-        return; // Salimos sin ejecutar updateGeneralBotState({ llastOrder: null })
+        log('[L-DATA] ⚠️ Invalid or incomplete execution. Keeping order for audit retry.', 'warning');
+        return; // Exit without executing updateGeneralBotState({ llastOrder: null })
     }
 
-    // --- 1. CÁLCULOS DE ACUMULADOS ---
+    // --- 1. ACCUMULATED CALCULATIONS ---
     const currentBalance = parseFloat(botState.lbalance || 0);
     const finalizedLBalance = parseFloat((currentBalance - baseExecutedValue).toFixed(8));
 
@@ -35,7 +35,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     const newPPC = newAI / newTotalQty; 
     const newOrderCount = (botState.locc || 0) + 1;
 
-    // --- 2. PROYECCIÓN EXPONENCIAL Y TARGETS ---
+    // --- 2. EXPONENTIAL PROJECTION AND TARGETS ---
     const profitPercent = parseNumber(botState.config.long?.profit_percent || 0) / 100;
     const newLTPrice = newPPC * (1 + profitPercent); 
 
@@ -47,7 +47,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     
     const nextRequiredAmount = getExponentialAmount(purchaseUsdt, newOrderCount, size_var);
     
-    // --- 3. COBERTURA / RESISTENCIA REAL ---
+    // --- 3. COVERAGE / REAL RESISTANCE ---
     const { coveragePrice, numberOfOrders } = calculateLongCoverage(
         finalizedLBalance, 
         executedPrice, 
@@ -66,7 +66,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
         currentCycleIndex
     );
 
-    // ACTUALIZACIÓN EN DB: Solo llegamos aquí si hay datos reales (>0)
+    // DB UPDATE: Only reached if there is real data (>0)
     await updateGeneralBotState({
         lbalance: finalizedLBalance,
         lac: newTotalQty,        
@@ -89,7 +89,7 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
 }
 
 /**
- * Procesa el cierre de ciclo (Take Profit) del Long.
+ * Processes the Long cycle closing (Take Profit).
  */
 async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     const { userId, config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
@@ -113,7 +113,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
                 timestamp: Date.now()
             }, LSTATE, userId, currentCycleIndex);
         } catch (saveError) {
-            log(`⚠️ Error al persistir venta: ${saveError.message}`, 'error');
+            log(`⚠️ Error persisting sale: ${saveError.message}`, 'error');
         }
 
         if (logSuccessfulCycle && botStateObj.lstartTime) {
@@ -135,7 +135,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
                     profitPercentage: totalInvestment > 0 ? (profitNeto / totalInvestment) * 100 : 0
                 });
             } catch (dbError) {
-                log(`⚠️ Error al guardar historial de Ciclo Long.`, 'error');
+                log(`⚠️ Error saving Long Cycle history.`, 'error');
             }
         }
 
@@ -150,12 +150,13 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
             'config.long.enabled': !shouldStopLong 
         });
         
-        log(`💰 [L-DATA] Ciclo Long Cerrado: +${profitNeto.toFixed(2)} USDT.`, 'success');
+        log(`💰 [L-DATA] Long Cycle Closed: +${profitNeto.toFixed(2)} USDT.`, 'success');
         
+        // REPAIR: Transition to BUYING for cycle continuity, instead of RUNNING
         await updateBotState(shouldStopLong ? 'STOPPED' : 'BUYING', LSTATE);
 
     } catch (error) {
-        log(`🔥 [CRITICAL] Fallo en cierre Long: ${error.message}`, 'error');
+        log(`🔥 [CRITICAL] Long closing failed: ${error.message}`, 'error');
         throw error;
     }
 }
