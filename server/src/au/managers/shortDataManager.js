@@ -18,15 +18,11 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const baseExecutedValue = executedQty * executedPrice;
     const currentCycleIndex = Number(botState.scycle || 0);
 
-    // SECURITY CORRECTION: 
-    // If data is 0, we do NOT clear slastOrder. 
-    // This prevents the bot from ignoring an order that did happen but API reported incorrectly.
     if (executedQty <= 0 || executedPrice <= 0) {
         log('[S-DATA] ⚠️ Incomplete Short execution data. Retrying audit in the next tick...', 'warning');
         return; 
     }
 
-    // 1. Position Calculations
     const currentSBalance = parseFloat(botState.sbalance || 0);
     const finalizedSBalance = parseFloat((currentSBalance - baseExecutedValue).toFixed(8));
 
@@ -41,7 +37,6 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
     const newPPC = newAI / newAC; 
     const newOCC = currentOCC + 1;
 
-    // 2. Targets and Coverage
     const profitTrigger = parseNumber(botState.config.short?.profit_percent || 0) / 100;
     const newSTPrice = newPPC * (1 - profitTrigger); 
 
@@ -63,7 +58,6 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         parseNumber(price_step_inc || 0)
     );
 
-    // 3. PERSISTENCE WITH CYCLE
     await saveExecutedOrder(
         { ...orderDetails, side: 'sell' }, 
         SSTATE, 
@@ -71,7 +65,6 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
         currentCycleIndex
     );
 
-    // FINAL UPDATE: We only reach here with validated data > 0
     await updateGeneralBotState({
         sac: newAC,
         sai: newAI,
@@ -95,34 +88,38 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
 
 /**
  * Handles the success of a BUY (Cycle Closing).
+ * Replicated structure from Long handleSuccessfulSell to prevent duplicate logs.
  */
 async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies) {
     const { userId, config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
     
     try {
-        const buyPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
-        const filledSize = parseFloat(orderDetails.filledSize || orderDetails.filled_volume || 0); 
-        const currentCycleIndex = Number(botStateObj.scycle || 0);
-        
-        if (filledSize <= 0) {
-            log('[S-DATA] ⚠️ Waiting for volume confirmation to close Short cycle...', 'warning');
-            return;
+        // --- SECURITY VALIDATION (AS IN LONG) ---
+        // If sac is 0 or missing, the cycle is already closed.
+        const totalBtcToCover = parseFloat(botStateObj.sac || 0);
+        if (totalBtcToCover <= 0) {
+            return; // Exit silently to avoid duplicate processing
         }
 
+        const buyPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
+        const currentCycleIndex = Number(botStateObj.scycle || 0);
+        
         const totalUsdtReceivedFromSales = parseFloat(botStateObj.sai || 0); 
-        const totalSpentToCover = (filledSize * buyPrice) * (1 + BUY_FEE_PERCENT);
+        const totalSpentToCover = (totalBtcToCover * buyPrice) * (1 + BUY_FEE_PERCENT);
         const profitNeto = totalUsdtReceivedFromSales - totalSpentToCover;
 
-        const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
-
-        await saveExecutedOrder({ 
-            ...orderDetails, 
-            side: 'buy',
-            status: 'filled',
-            filledSize: filledSize,
-            priceAvg: buyPrice,
-            timestamp: Date.now()
-        }, SSTATE, userId, currentCycleIndex);
+        try {
+            await saveExecutedOrder({ 
+                ...orderDetails, 
+                side: 'buy',
+                status: 'filled',
+                filledSize: totalBtcToCover,
+                priceAvg: buyPrice,
+                timestamp: Date.now()
+            }, SSTATE, userId, currentCycleIndex);
+        } catch (saveError) {
+            log(`⚠️ Error persisting Short buy: ${saveError.message}`, 'error');
+        }
 
         if (logSuccessfulCycle && botStateObj.sstartTime) {
             try {
@@ -140,11 +137,12 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
                     initialInvestment: totalUsdtReceivedFromSales,
                     finalRecovery: totalSpentToCover,
                     netProfit: profitNeto,
-                    profitPercentage: (profitNeto / totalUsdtReceivedFromSales) * 100
+                    profitPercentage: totalUsdtReceivedFromSales > 0 ? (profitNeto / totalUsdtReceivedFromSales) * 100 : 0
                 });
-            } catch (e) { log(`⚠️ Error logging short cycle: ${e.message}`, 'error'); }
+            } catch (e) { log(`⚠️ Error logging short cycle history.`, 'error'); }
         }
 
+        const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
         const shouldStopShort = config.short?.stopAtCycle === true;
 
         await updateGeneralBotState({
@@ -157,11 +155,10 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
 
         log(`💰 [S-DATA] Short Cycle Closed: +${profitNeto.toFixed(2)} USDT.`, 'success');
         
-        // REPAIR: Transition to SELLING instead of RUNNING for cycle continuity
         await updateBotState(shouldStopShort ? 'STOPPED' : 'SELLING', SSTATE);
 
     } catch (error) {
-        log(`❌ [S-DATA] Error in Short liquidation: ${error.message}`, 'error');
+        log(`❌ [S-DATA] Short closing failed: ${error.message}`, 'error');
         throw error;
     }
 }
