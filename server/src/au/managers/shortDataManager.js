@@ -88,17 +88,17 @@ async function handleSuccessfulShortSell(botState, orderDetails, log, dependenci
 
 /**
  * Handles the success of a BUY (Cycle Closing).
- * Replicated structure from Long handleSuccessfulSell to prevent duplicate logs.
+ * IMPLEMENTED LOCK: Uses 'sac' validation (like Long strategy) to prevent duplicate cycle logs.
  */
 async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies) {
     const { userId, config, log, updateBotState, updateGeneralBotState, logSuccessfulCycle } = dependencies;
     
     try {
-        // --- SECURITY VALIDATION (AS IN LONG) ---
-        // If sac is 0 or missing, the cycle is already closed.
+        // --- 🛡️ ANTI-DUPLICATE SHIELD (REPLICATING LONG LOGIC) ---
         const totalBtcToCover = parseFloat(botStateObj.sac || 0);
         if (totalBtcToCover <= 0) {
-            return; // Exit silently to avoid duplicate processing
+            // If sac is 0, another process already cleared this cycle. Exit immediately.
+            return; 
         }
 
         const buyPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
@@ -108,6 +108,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
         const totalSpentToCover = (totalBtcToCover * buyPrice) * (1 + BUY_FEE_PERCENT);
         const profitNeto = totalUsdtReceivedFromSales - totalSpentToCover;
 
+        // Persist the order
         try {
             await saveExecutedOrder({ 
                 ...orderDetails, 
@@ -121,6 +122,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
             log(`⚠️ Error persisting Short buy: ${saveError.message}`, 'error');
         }
 
+        // Log the successful cycle only if sstartTime exists
         if (logSuccessfulCycle && botStateObj.sstartTime) {
             try {
                 await logSuccessfulCycle({
@@ -145,6 +147,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
         const finalizedSBalance = parseFloat(((parseFloat(botStateObj.sbalance) || 0) + totalUsdtReceivedFromSales + profitNeto).toFixed(8));
         const shouldStopShort = config.short?.stopAtCycle === true;
 
+        // Final database update: Reset state using CLEAN_SHORT_ROOT
         await updateGeneralBotState({
             ...CLEAN_SHORT_ROOT,
             sbalance: finalizedSBalance,

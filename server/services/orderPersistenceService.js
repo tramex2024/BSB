@@ -1,11 +1,11 @@
 /**
  * BSB/server/services/orderPersistenceService.js
- * PERSISTENCIA Y NOTIFICACIÓN DE ÓRDENES (Multi-usuario)
+ * ORDER PERSISTENCE AND NOTIFICATION (Multi-user)
  */
 
 const Order = require('../models/Order');
 
-// Variable para guardar la instancia de Socket.io
+// Variable to store the Socket.io instance
 let ioInstance = null;
 
 function setIo(io) {
@@ -13,11 +13,11 @@ function setIo(io) {
 }
 
 /**
- * Guarda la orden vinculándola a un usuario y notifica en tiempo real.
- * @param {Object} orderDetails - Datos de BitMart
- * @param {String} strategy - 'long', 'short' o 'ai'
- * @param {String} userId - ID del usuario dueño
- * @param {Number} currentCycle - El ciclo actual del bot (AÑADIDO)
+ * Saves the order linked to a user and notifies in real-time.
+ * @param {Object} orderDetails - Data from BitMart
+ * @param {String} strategy - 'long', 'short', or 'ai'
+ * @param {String} userId - ID of the owner user
+ * @param {Number} currentCycle - The current cycle of the bot
  */
 async function saveExecutedOrder(orderDetails, strategy, userId, currentCycle = 0) {
     try {
@@ -29,23 +29,31 @@ async function saveExecutedOrder(orderDetails, strategy, userId, currentCycle = 
         const rawTime = orderDetails.orderTime || orderDetails.create_time || Date.now();
         const validOrderDate = new Date(Number(rawTime));
 
-        // 1. CREACIÓN EN BASE DE DATOS
+        // IMPROVED CALCULATION: Ensure we don't save 0 in notional
+        const size = parseFloat(orderDetails.size || orderDetails.filledSize || 0);
+        const price = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
+        
+        // If the API doesn't provide notional, we calculate it ourselves
+        const calculatedNotional = parseFloat(orderDetails.notional) || (size * price);
+
+        // 1. DATABASE CREATION
         const newOrder = await Order.create({
             userId: userId, 
-            strategy: strategy.toLowerCase(), // Normalizamos a minúsculas
-            cycleIndex: currentCycle, // <--- AHORA SÍ CUMPLE CON EL SCHEMA
+            strategy: strategy.toLowerCase(), // Normalize to lowercase
+            cycleIndex: currentCycle, 
             orderId: orderDetails.orderId || orderDetails.order_id, 
             symbol: orderDetails.symbol || 'BTC_USDT',
-            side: orderDetails.side.toUpperCase(),
+            side: (orderDetails.side || '').toUpperCase(),
             type: (orderDetails.type || 'MARKET').toUpperCase(),
-            size: parseFloat(orderDetails.size || 0),
-            price: parseFloat(orderDetails.priceAvg || orderDetails.price || 0),
-            notional: parseFloat(orderDetails.notional || (orderDetails.size * (orderDetails.price || 0))),
+            size: size,
+            price: price,
+            notional: calculatedNotional,
+            fee: parseFloat(orderDetails.fee || (calculatedNotional * 0.001)), // Estimated fee if missing
             status: 'FILLED', 
             orderTime: validOrderDate
         });
 
-        // 2. NOTIFICACIÓN (Asegúrate de usar la sala sin el prefijo 'user_')
+        // 2. NOTIFICATION
         if (newOrder && ioInstance) {
             const userRoom = userId.toString(); 
             ioInstance.to(userRoom).emit('new-order-executed', { strategy, order: newOrder });
@@ -61,12 +69,12 @@ async function saveExecutedOrder(orderDetails, strategy, userId, currentCycle = 
         return newOrder;
 
     } catch (error) {
-        // Manejo de duplicados (BitMart a veces envía el mismo evento 2 veces)
+        // Handle duplicates (BitMart sometimes sends the same event twice)
         if (error.code === 11000) {
-            console.warn(`[PERSISTENCE] Orden duplicada ${orderDetails.orderId}. No se requiere acción.`);
+            console.warn(`[PERSISTENCE] Duplicate order ${orderDetails.orderId || orderDetails.order_id}. No action required.`);
             return null;
         }
-        console.error(`[PERSISTENCE ERROR] Error crítico al guardar: ${error.message}`);
+        console.error(`[PERSISTENCE ERROR] Critical error while saving: ${error.message}`);
         return null;
     }
 }
