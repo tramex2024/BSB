@@ -14,7 +14,7 @@ function setIo(io) {
 
 /**
  * Saves the order linked to a user and notifies in real-time.
- * @param {Object} orderDetails - Data from BitMart
+ * @param {Object} orderDetails - Data from BitMart (Normalized by Consolidator)
  * @param {String} strategy - 'long', 'short', or 'ai'
  * @param {String} userId - ID of the owner user
  * @param {Number} currentCycle - The current cycle of the bot
@@ -29,12 +29,12 @@ async function saveExecutedOrder(orderDetails, strategy, userId, currentCycle = 
         const rawTime = orderDetails.orderTime || orderDetails.create_time || Date.now();
         const validOrderDate = new Date(Number(rawTime));
 
-        // IMPROVED CALCULATION: Ensure we don't save 0 in notional
-        const size = parseFloat(orderDetails.size || orderDetails.filledSize || 0);
+        // --- DATA EXTRACTION ---
+        // We rely on the Consolidator having injected 'size' and 'priceAvg'
+        const size = parseFloat(orderDetails.size || 0);
         const price = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
-        
-        // If the API doesn't provide notional, we calculate it ourselves
-        const calculatedNotional = parseFloat(orderDetails.notional) || (size * price);
+        const notional = parseFloat(orderDetails.notional || (size * price));
+        const fee = parseFloat(orderDetails.fee || 0);
 
         // 1. DATABASE CREATION
         const newOrder = await Order.create({
@@ -47,8 +47,8 @@ async function saveExecutedOrder(orderDetails, strategy, userId, currentCycle = 
             type: (orderDetails.type || 'MARKET').toUpperCase(),
             size: size,
             price: price,
-            notional: calculatedNotional,
-            fee: parseFloat(orderDetails.fee || (calculatedNotional * 0.001)), // Estimated fee if missing
+            notional: notional,
+            fee: fee,
             status: 'FILLED', 
             orderTime: validOrderDate
         });
