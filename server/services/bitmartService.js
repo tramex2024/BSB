@@ -179,8 +179,26 @@ const bitmartService = {
             const res = await makeRequest('POST', '/spot/v4/query/order', {}, { 
                 symbol, orderId: String(orderId), orderMode: 'spot' 
             }, creds);
-            return res.data?.data || res.data || null;
-        } catch (e) { return null; }
+            
+            const data = res.data?.data || res.data || null;
+            if (!data) return null;
+
+            // NORMALIZACIÓN: Aseguramos que los campos estándar tengan datos
+            return {
+                ...data,
+                // Si filledSize o filled_volume existen, los ponemos en size
+                size: parseFloat(data.filledSize || data.filled_volume || data.size || 0),
+                // Si priceAvg existe, lo ponemos en price
+                price: parseFloat(data.priceAvg || data.price_avg || data.price || 0),
+                // Si filledNotional existe, lo usamos
+                notional: parseFloat(data.filledNotional || data.notional || 0),
+                // Aseguramos el fee
+                fee: parseFloat(data.fee || 0)
+            };
+        } catch (e) { 
+            console.error(`[BITMART] Error fetching order detail ${orderId}:`, e.message);
+            return null; 
+        }
     },
 
     getTicker: async (symbol) => {

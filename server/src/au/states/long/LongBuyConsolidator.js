@@ -26,19 +26,23 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         // 2. CONSULTA AISLADA POR USUARIO
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
+        // CORRECCIÓN: BitMart V4 usa filled_size para el volumen ejecutado
         let filledVolume = parseFloat(
-            finalDetails?.filledSize || 
-            finalDetails?.filled_volume || 
-            finalDetails?.filledVolume || 0
+            finalDetails?.filled_size ||   // <--- Agregar este (API V4)
+            finalDetails?.filledSize ||    // (API V2/V4 fallback)
+            finalDetails?.filled_volume || // (Websocket/Historial)
+            0
         );
 
-        // --- LÓGICA DE RESPALDO POR USUARIO (Mantenida íntegra) ---
-        if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
-            const recentOrders = await getRecentOrders(SYMBOL, creds);
-            finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
-            if (finalDetails) {
-                filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
-            }
+        // Si la orden está 'filled', pero el objeto no tiene el campo 'size' normalizado, 
+        // lo inyectamos para que saveExecutedOrder lo encuentre.
+        if (finalDetails && !finalDetails.size && filledVolume > 0) {
+            finalDetails.size = filledVolume;
+        }
+        
+        // Lo mismo para el precio promedio si viene como price_avg o priceAvg
+        if (finalDetails && !finalDetails.priceAvg) {
+            finalDetails.priceAvg = finalDetails.price_avg || finalDetails.avg_price || 0;
         }
 
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
