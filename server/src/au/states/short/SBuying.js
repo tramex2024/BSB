@@ -37,25 +37,13 @@ async function run(dependencies) {
     const pm = parseFloat(botState.spm || 0);       // Suelo (mínimo)
     const pc = parseFloat(botState.spc || 0);       // Stop de recompra (precio gatillo)
 
-    // 1. BLOQUEO DE SEGURIDAD CON MONITOREO ACTIVO
-    // Si hay una orden, el monitor intentará cerrarla. Si sigue activa, retorna true y pausamos.
-    if (slastOrder) {
-        const orderIsActive = await monitorShortBuy(
-            botState, 
-            SYMBOL, 
-            log, 
-            updateSStateData, 
-            updateBotState, 
-            updateGeneralBotState, 
-            userId,
-            userCreds // <--- Pasamos las credenciales inyectadas
-        );
-
-        if (orderIsActive) {
-            log(`[S-BUYING] ⏳ Orden activa detectada. Esperando consolidación...`, 'debug');
-            return;
-        }
-    }
+    // 1. BLOQUEO DE SEGURIDAD SIMPLIFICADO (Igual al Long)
+if (slastOrder) {
+    // No llamamos a monitorShortBuy aquí. 
+    // Solo dejamos que el ciclo principal de autobotLogic.js lo gestione.
+    log(`[S-BUYING] ⏳ Orden de compra ${slastOrder.order_id} pendiente de confirmación...`, 'debug');
+    return;
+}
 
     // 2. LÓGICA DE TRAILING STOP INVERSO
     const configPercent = config.short?.trailing_percent || TRAILING_STOP_PERCENTAGE;

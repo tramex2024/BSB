@@ -96,6 +96,10 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     
     try {
         const totalBtcToSell = parseFloat(botStateObj.lac || 0);
+        if (totalBtcToSell <= 0) {
+    // Si ya no hay monedas, otro proceso ya cerró este ciclo.
+    return; 
+}
         const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         
         const totalUsdtReceived = (totalBtcToSell * sellPrice) * (1 - SELL_FEE_PERCENT);
