@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Limpio - Delegación de controles a botControls.js
+ * Estado: Corregido - Guardián de renderizado implementado
  */
 import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -9,8 +9,9 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
-// Instancias globales de gráficos
+// Instancias globales de gráficos y CONTROL DE RENDERIZADO
 let balanceChart = null; 
+let lastRenderedDataHash = ""; // <--- El Guardián: Evita re-renderizados idénticos
 
 /**
  * Inicializa la vista del Dashboard
@@ -18,6 +19,9 @@ let balanceChart = null;
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
+
+    // Resetear el hash al entrar para asegurar el primer renderizado de la pestaña
+    lastRenderedDataHash = "";
 
     // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
@@ -46,9 +50,25 @@ export function initializeDashboardView(initialState) {
     refreshAnalytics();
 }
 
+/**
+ * Manejador de actualización de métricas con lógica de Guardián
+ */
 function handleMetricsUpdate(e) {
-    if (e.detail) {
-        requestAnimationFrame(() => renderEquityCurve(e.detail));
+    if (e.detail && Array.isArray(e.detail)) {
+        const data = e.detail;
+        
+        // Creamos una huella basada en la longitud y el último elemento (ID o acumulado)
+        const lastItem = data[data.length - 1];
+        const currentHash = `${data.length}-${lastItem ? lastItem.cumulative : 'empty'}`;
+
+        // Verificamos si los datos realmente han cambiado
+        if (currentHash === lastRenderedDataHash) {
+            return; // Bloqueo: Los datos son los mismos, no renderizamos
+        }
+
+        // Actualizamos el hash y ejecutamos el render
+        lastRenderedDataHash = currentHash;
+        requestAnimationFrame(() => renderEquityCurve(data));
     }
 }
 
