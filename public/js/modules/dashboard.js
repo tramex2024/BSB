@@ -55,31 +55,13 @@ function handleMetricsUpdate(e) {
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
-        
-        // --- INICIO DE BLOQUE DE AUDITORÍA ---
-        console.log("🔍 AUDITORÍA: Respuesta cruda del Backend:", response);
-        
         if (response && response.success && Array.isArray(response.data)) {
-            const totalCiclosRecibidos = response.data.length;
-            const ultimoDato = response.data[totalCiclosRecibidos - 1];
-            
-            console.log("📊 AUDITORÍA: Conteo de ciclos en el paquete:", totalCiclosRecibidos);
-            console.log("💰 AUDITORÍA: Profit Acumulado final (Backend):", ultimoDato?.cumulative);
-            
-            // Verificamos si hay nombres de estrategias inconsistentes
-            const estrategias = [...new Set(response.data.map(c => c.strategy))];
-            console.log("🤖 AUDITORÍA: Estrategias detectadas en los datos:", estrategias);
-            
             Metrics.setAnalyticsData(response.data);
-            addTerminalLog(`ANALYTICS: ${totalCiclosRecibidos} CYCLES SYNCED`, 'success');
+            addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
         } else {
-            console.warn("⚠️ AUDITORÍA: El servidor respondió exitosamente pero sin datos o formato inválido.");
             renderEquityCurve([]); 
         }
-        // --- FIN DE BLOQUE DE AUDITORÍA ---
-
     } catch (e) { 
-        console.error("❌ AUDITORÍA: Error crítico en la petición fetch:", e);
         addTerminalLog("ERROR LOADING ANALYTICS", 'error');
     }
 }
