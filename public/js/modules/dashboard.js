@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Restaurado - Optimización de renderizado suave
+ * Estado: Limpio - Delegación de controles a botControls.js
  */
 import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -46,19 +46,10 @@ export function initializeDashboardView(initialState) {
     refreshAnalytics();
 }
 
-/**
- * handleMetricsUpdate - Restaurado a lógica funcional
- */
 function handleMetricsUpdate(e) {
-    // Si no hay datos o el array está vacío, no mandamos a renderizar para evitar parpadeos
-    if (!e.detail || !Array.isArray(e.detail) || e.detail.length === 0) {
-        return; 
+    if (e.detail) {
+        requestAnimationFrame(() => renderEquityCurve(e.detail));
     }
-
-    // Usamos requestAnimationFrame para sincronizar con el refresco del monitor
-    requestAnimationFrame(() => {
-        renderEquityCurve(e.detail);
-    });
 }
 
 async function refreshAnalytics() {
@@ -79,6 +70,10 @@ async function refreshAnalytics() {
  * Configuración de botones y inputs (Solo lógica que no está en botControls)
  */
 function setupActionButtons() {
+    // Nota: El 'panic-btn' y los botones 'start/stop' ya tienen sus listeners 
+    // registrados globalmente en botControls.js. No añadimos onclick aquí.
+
+    // Manejo de Inputs de Cantidad (Amount USDT)
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
         { id: 'auamounts-usdt', strategy: 'short' },
@@ -88,6 +83,7 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
+            // Sincronizar valor inicial con el estado
             if (currentBotState.config[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
