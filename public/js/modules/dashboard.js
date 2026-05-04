@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Debugging - Optimizando el Guardián de Renderizado
+ * Estado: Corregido - Validación de integridad de datos en el Guardián
  */
 import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -11,7 +11,7 @@ import { renderEquityCurve, initializeChart } from './chart.js';
 
 // Instancias globales de gráficos y CONTROL DE RENDERIZADO
 let balanceChart = null; 
-let lastRenderedDataHash = null; // Cambiado a null para asegurar diferencia inicial
+let lastRenderedDataHash = null; 
 
 /**
  * Inicializa la vista del Dashboard
@@ -20,7 +20,7 @@ export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
 
-    // Resetear el hash para forzar renderizado al cambiar de pestaña
+    // Reset total para forzar render inicial
     lastRenderedDataHash = null;
 
     // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
@@ -48,30 +48,38 @@ export function initializeDashboardView(initialState) {
 }
 
 /**
- * Manejador de actualización de métricas con lógica de Guardián Corregida
+ * Manejador de actualización de métricas con lógica de Guardián
  */
 function handleMetricsUpdate(e) {
-    // Verificamos que existan datos válidos
-    if (!e.detail || !Array.isArray(e.detail) || e.detail.length === 0) {
-        console.warn("⚠️ Guardián: Recibidos datos vacíos o inválidos.");
+    const data = e.detail;
+
+    // VALIDACIÓN DE INTEGRIDAD
+    if (!data || !Array.isArray(data)) {
+        return; 
+    }
+
+    // Si los datos están vacíos, solo renderizamos si antes había algo (para limpiar la gráfica)
+    if (data.length === 0) {
+        if (lastRenderedDataHash !== "EMPTY") {
+            console.log("🧹 Guardián: Limpiando gráfica (Datos vacíos).");
+            lastRenderedDataHash = "EMPTY";
+            renderEquityCurve([]);
+        }
         return;
     }
 
-    const data = e.detail;
-    
-    // Generamos el hash basado en longitud y valor acumulado del último ciclo
+    // Generamos la huella del estado actual
     const lastItem = data[data.length - 1];
     const currentHash = `LEN:${data.length}-VAL:${lastItem.cumulative || 0}`;
 
-    // LÓGICA DEL GUARDIÁN:
-    // Si el hash es igual al anterior, NO renderizamos para ahorrar recursos.
+    // BLOQUEO: Si el estado no ha cambiado, ignoramos el renderizado
     if (currentHash === lastRenderedDataHash) {
         return; 
     }
 
-    // Si llegamos aquí, es porque los datos son nuevos o es el primer render
-    console.log(`🎨 Renderizando gráfica: ${currentHash}`);
+    // Si llegamos aquí, hay cambios reales
     lastRenderedDataHash = currentHash;
+    console.log(`🎨 Renderizando Equity: ${currentHash}`);
     
     requestAnimationFrame(() => {
         renderEquityCurve(data);
@@ -81,12 +89,13 @@ function handleMetricsUpdate(e) {
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
+        // Verificamos que la respuesta del backend sea exitosa y contenga un array
         if (response && response.success && Array.isArray(response.data)) {
-            // Esto disparará el evento 'metricsUpdated' internamente en Metrics
+            // Enviamos los datos al gestor de métricas
             Metrics.setAnalyticsData(response.data);
             addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
         } else {
-            console.error("❌ Error en la data de Analytics:", response);
+            console.warn("⚠️ Analytics: No se recibieron datos históricos válidos.");
             renderEquityCurve([]); 
         }
     } catch (e) { 
@@ -94,9 +103,9 @@ async function refreshAnalytics() {
     }
 }
 
-// ... (El resto de las funciones setupActionButtons, setupAnalyticsFilters, addTerminalLog, 
-// initBalanceChart, updatePnLBar y updateDistributionWidget permanecen exactamente igual) ...
-
+/**
+ * Configuración de botones y inputs
+ */
 function setupActionButtons() {
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
