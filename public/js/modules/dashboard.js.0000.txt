@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Debugging - Optimizando el Guardián de Renderizado
+ * Estado: Limpio - Delegación de controles a botControls.js
  */
 import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -9,9 +9,8 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
-// Instancias globales de gráficos y CONTROL DE RENDERIZADO
+// Instancias globales de gráficos
 let balanceChart = null; 
-let lastRenderedDataHash = null; // Cambiado a null para asegurar diferencia inicial
 
 /**
  * Inicializa la vista del Dashboard
@@ -19,9 +18,6 @@ let lastRenderedDataHash = null; // Cambiado a null para asegurar diferencia ini
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
-
-    // Resetear el hash para forzar renderizado al cambiar de pestaña
-    lastRenderedDataHash = null;
 
     // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
@@ -42,51 +38,27 @@ export function initializeDashboardView(initialState) {
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
     }
 
+    // 4. CONFIGURAR INTERACTIVIDAD (Solo analítica e inputs)
     setupActionButtons();
     setupAnalyticsFilters();
+    
+    // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
 }
 
-/**
- * Manejador de actualización de métricas con lógica de Guardián Corregida
- */
 function handleMetricsUpdate(e) {
-    // Verificamos que existan datos válidos
-    if (!e.detail || !Array.isArray(e.detail) || e.detail.length === 0) {
-        console.warn("⚠️ Guardián: Recibidos datos vacíos o inválidos.");
-        return;
+    if (e.detail) {
+        requestAnimationFrame(() => renderEquityCurve(e.detail));
     }
-
-    const data = e.detail;
-    
-    // Generamos el hash basado en longitud y valor acumulado del último ciclo
-    const lastItem = data[data.length - 1];
-    const currentHash = `LEN:${data.length}-VAL:${lastItem.cumulative || 0}`;
-
-    // LÓGICA DEL GUARDIÁN:
-    // Si el hash es igual al anterior, NO renderizamos para ahorrar recursos.
-    if (currentHash === lastRenderedDataHash) {
-        return; 
-    }
-
-    // Si llegamos aquí, es porque los datos son nuevos o es el primer render
-    console.log(`🎨 Renderizando gráfica: ${currentHash}`);
-    lastRenderedDataHash = currentHash;
-    
-    requestAnimationFrame(() => {
-        renderEquityCurve(data);
-    });
 }
 
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
         if (response && response.success && Array.isArray(response.data)) {
-            // Esto disparará el evento 'metricsUpdated' internamente en Metrics
             Metrics.setAnalyticsData(response.data);
             addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
         } else {
-            console.error("❌ Error en la data de Analytics:", response);
             renderEquityCurve([]); 
         }
     } catch (e) { 
@@ -94,10 +66,14 @@ async function refreshAnalytics() {
     }
 }
 
-// ... (El resto de las funciones setupActionButtons, setupAnalyticsFilters, addTerminalLog, 
-// initBalanceChart, updatePnLBar y updateDistributionWidget permanecen exactamente igual) ...
-
+/**
+ * Configuración de botones y inputs (Solo lógica que no está en botControls)
+ */
 function setupActionButtons() {
+    // Nota: El 'panic-btn' y los botones 'start/stop' ya tienen sus listeners 
+    // registrados globalmente en botControls.js. No añadimos onclick aquí.
+
+    // Manejo de Inputs de Cantidad (Amount USDT)
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
         { id: 'auamounts-usdt', strategy: 'short' },
@@ -107,6 +83,7 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
+            // Sincronizar valor inicial con el estado
             if (currentBotState.config[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
@@ -136,6 +113,8 @@ function setupAnalyticsFilters() {
     if (bSel) bSel.onchange = () => Metrics.setBotFilter(bSel.value);
     if (pSel) pSel.onchange = () => Metrics.setChartParameter(pSel.value);
 }
+
+// --- TERMINAL Y GRÁFICOS (Se mantienen igual) ---
 
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
