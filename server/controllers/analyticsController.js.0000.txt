@@ -1,6 +1,6 @@
 /**
  * BSB/server/controllers/analyticsController.js
- * CONTROLADOR DE ANALÍTICAS - VERSIÓN AUDITADA CON LOGS DE SEGUIMIENTO
+ * CONTROLADOR DE ANALÍTICAS - VERSIÓN AUDITADA Y CORREGIDA
  */
 
 const mongoose = require('mongoose');
@@ -54,12 +54,6 @@ exports.getCycleKpis = async (req, res) => {
             }
         ]);
         
-        // --- LOG DE AUDITORÍA KPI ---
-        console.log('--- AUDITORÍA DE DATOS (KPI) ---');
-        console.log('Filtro aplicado:', strategyFilter);
-        console.log('Resultado KPI enviado:', JSON.stringify(kpis[0], null, 2));
-        // ----------------------------
-        
         res.json({ success: true, data: kpis[0] || { totalCycles: 0, averageProfitPercentage: 0, totalNetProfit: 0, winRate: 0 } }); 
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -89,14 +83,6 @@ exports.getEquityCurveData = async (req, res) => {
                 cumulative: parseFloat(cumulativeProfit)
             };
         });
-
-        // --- LOG DE AUDITORÍA GRÁFICA ---
-        console.log('--- AUDITORÍA DE DATOS (GRÁFICA) ---');
-        console.log('Ciclos encontrados para la curva:', cycles.length);
-        if (curveData.length > 0) {
-            console.log('Último acumulado calculado:', curveData[curveData.length - 1].cumulative);
-        }
-        // --------------------------------
 
         res.json({ success: true, data: curveData });
     } catch (error) {
