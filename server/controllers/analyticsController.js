@@ -1,6 +1,6 @@
 /**
  * BSB/server/controllers/analyticsController.js
- * CONTROLADOR DE ANALÍTICAS - VERSIÓN AUDITADA CON LOGS DE SEGUIMIENTO
+ * CONTROLADOR DE ANALÍTICAS - VERSIÓN PRODUCCIÓN
  */
 
 const mongoose = require('mongoose');
@@ -54,17 +54,10 @@ exports.getCycleKpis = async (req, res) => {
             }
         ]);
         
-        // --- LOG DE AUDITORÍA BACKEND (RENDER) ---
-        const resultadoFinal = kpis[0] || { totalNetProfit: 0, totalCycles: 0 };
-        console.log("====================================");
-        console.log("🔍 AUDITORÍA BACKEND - KPIs");
-        console.log(`Filtro Aplicado: ${strategyFilter}`);
-        console.log(`Total Ciclos: ${resultadoFinal.totalCycles}`);
-        console.log(`Suma totalNetProfit ($sum): ${resultadoFinal.totalNetProfit}`);
-        console.log("====================================");
-        // ----------------------------
-        
-        res.json({ success: true, data: kpis[0] || { totalCycles: 0, averageProfitPercentage: 0, totalNetProfit: 0, winRate: 0 } }); 
+        res.json({ 
+            success: true, 
+            data: kpis[0] || { totalCycles: 0, averageProfitPercentage: 0, totalNetProfit: 0, winRate: 0 } 
+        }); 
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -93,16 +86,6 @@ exports.getEquityCurveData = async (req, res) => {
                 cumulative: parseFloat(cumulativeProfit)
             };
         });
-
-        // --- LOG DE AUDITORÍA BACKEND (RENDER) ---
-        console.log("====================================");
-        console.log("📈 AUDITORÍA BACKEND - GRÁFICA");
-        console.log(`Ciclos encontrados: ${cycles.length}`);
-        if (curveData.length > 0) {
-            console.log(`Último Profit Acumulado: ${curveData[curveData.length - 1].cumulative}`);
-        }
-        console.log("====================================");
-        // --------------------------------
 
         res.json({ success: true, data: curveData });
     } catch (error) {
