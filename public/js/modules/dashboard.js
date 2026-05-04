@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Corregido - Validación de integridad de datos en el Guardián
+ * Estado: Restaurado - Optimización de renderizado suave
  */
 import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
 import { currentBotState } from '../main.js'; 
@@ -9,9 +9,8 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
-// Instancias globales de gráficos y CONTROL DE RENDERIZADO
+// Instancias globales de gráficos
 let balanceChart = null; 
-let lastRenderedDataHash = null; 
 
 /**
  * Inicializa la vista del Dashboard
@@ -19,9 +18,6 @@ let lastRenderedDataHash = null;
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
-
-    // Reset total para forzar render inicial
-    lastRenderedDataHash = null;
 
     // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
@@ -42,60 +38,36 @@ export function initializeDashboardView(initialState) {
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
     }
 
+    // 4. CONFIGURAR INTERACTIVIDAD (Solo analítica e inputs)
     setupActionButtons();
     setupAnalyticsFilters();
+    
+    // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
 }
 
 /**
- * Manejador de actualización de métricas con lógica de Guardián
+ * handleMetricsUpdate - Restaurado a lógica funcional
  */
 function handleMetricsUpdate(e) {
-    const data = e.detail;
-
-    // VALIDACIÓN DE INTEGRIDAD
-    if (!data || !Array.isArray(data)) {
+    // Si no hay datos o el array está vacío, no mandamos a renderizar para evitar parpadeos
+    if (!e.detail || !Array.isArray(e.detail) || e.detail.length === 0) {
         return; 
     }
 
-    // Si los datos están vacíos, solo renderizamos si antes había algo (para limpiar la gráfica)
-    if (data.length === 0) {
-        if (lastRenderedDataHash !== "EMPTY") {
-            console.log("🧹 Guardián: Limpiando gráfica (Datos vacíos).");
-            lastRenderedDataHash = "EMPTY";
-            renderEquityCurve([]);
-        }
-        return;
-    }
-
-    // Generamos la huella del estado actual
-    const lastItem = data[data.length - 1];
-    const currentHash = `LEN:${data.length}-VAL:${lastItem.cumulative || 0}`;
-
-    // BLOQUEO: Si el estado no ha cambiado, ignoramos el renderizado
-    if (currentHash === lastRenderedDataHash) {
-        return; 
-    }
-
-    // Si llegamos aquí, hay cambios reales
-    lastRenderedDataHash = currentHash;
-    console.log(`🎨 Renderizando Equity: ${currentHash}`);
-    
+    // Usamos requestAnimationFrame para sincronizar con el refresco del monitor
     requestAnimationFrame(() => {
-        renderEquityCurve(data);
+        renderEquityCurve(e.detail);
     });
 }
 
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
-        // Verificamos que la respuesta del backend sea exitosa y contenga un array
         if (response && response.success && Array.isArray(response.data)) {
-            // Enviamos los datos al gestor de métricas
             Metrics.setAnalyticsData(response.data);
             addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
         } else {
-            console.warn("⚠️ Analytics: No se recibieron datos históricos válidos.");
             renderEquityCurve([]); 
         }
     } catch (e) { 
@@ -104,7 +76,7 @@ async function refreshAnalytics() {
 }
 
 /**
- * Configuración de botones y inputs
+ * Configuración de botones y inputs (Solo lógica que no está en botControls)
  */
 function setupActionButtons() {
     const quickInputs = [
@@ -145,6 +117,8 @@ function setupAnalyticsFilters() {
     if (bSel) bSel.onchange = () => Metrics.setBotFilter(bSel.value);
     if (pSel) pSel.onchange = () => Metrics.setChartParameter(pSel.value);
 }
+
+// --- TERMINAL Y GRÁFICOS (Se mantienen igual) ---
 
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
