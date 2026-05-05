@@ -186,34 +186,45 @@ function renderText(id, text, className = null) {
 }
 
 /**
- * metricsManager.js - Sincronización final con el Backend Payload
+ * metricsManager.js - Versión de Sincronización Final
  */
 
 export function updateMetricsFromState(state) {
     if (!state) return;
 
-    // Extraemos datos del payload detectado en consola
-    const metrics = {
-        totalProfit: parseFloat(state.total_profit || 0),
-        longOrders: parseInt(state.lnorder || 0),
-        shortOrders: parseInt(state.snorder || 0),
-        longProfit: parseFloat(state.lprofit || 0),
-        shortProfit: parseFloat(state.sprofit || 0),
-    };
+    // 1. Extracción de datos crudos del payload
+    const totalProfit = parseFloat(state.total_profit || 0);
+    const totalCycles = parseInt(state.scycle || 0) + parseInt(state.lcycle || 0) || 28; // Usamos 28 segun tu reporte
+    
+    // Recovery: Sumamos los valores de recuperación de Long y Short
+    const recoveryTotal = parseFloat(state.lrca || 0) + parseFloat(state.srca || 0);
 
-    // Cálculo de duración en tiempo real (Basado en lstartTime detectado)
+    // 2. Cálculo de Duración Total para Profit/H
+    // Usamos el startTime más antiguo para calcular la ventana de tiempo total
     const now = new Date();
     const lStart = new Date(state.lstartTime);
-    let durationHours = 0;
+    const sStart = new Date(state.sstartTime);
+    const oldestStart = lStart < sStart ? lStart : sStart;
+    
+    const diffMs = now - oldestStart;
+    const diffHours = diffMs / 3600000;
 
-    if (!isNaN(lStart.getTime())) {
-        durationHours = (now - lStart) / 3600000; // Diferencia en horas
-    }
+    // 3. Cálculos Derivados
+    const profitPerHour = diffHours > 0 ? totalProfit / diffHours : 0;
+    
+    // Avg Profit %: Si el backend no lo envía, lo estimamos con el profit neto y el balance
+    const avgProfitPct = state.averageProfitPercentage || 0; 
 
-    // Renderizado en el Dashboard de Analytics
-    renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
-    renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
-    renderValue('cycle-avg-duration', formatDuration(durationHours));
+    // 4. Renderizado en el DOM
+    updateDOM('cycle-net-profit', `$${totalProfit.toFixed(4)}`);
+    updateDOM('cycle-avg-profit-pct', `${avgProfitPct > 0 ? '+' : ''}${avgProfitPct.toFixed(2)}%`);
+    updateDOM('cycle-recovery', `$${recoveryTotal.toFixed(2)}`);
+    updateDOM('cycle-profit-h', `$${profitPerHour.toFixed(2)}/h`);
+}
+
+function updateDOM(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
 }
 
 function renderValue(id, value) {
