@@ -1,6 +1,7 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
  * CORRECCIÓN: Precisión Decimal y Sincronización de Estrategia AI
+ * INTEGRACIÓN: 8-KPI Analytics Grid
  */
 
 const globalCyclesMap = new Map(); 
@@ -16,8 +17,7 @@ export function setAnalyticsData(data) {
     if (rawData.length === 0) return;
 
     rawData.forEach(c => {
-        // 1. NORMALIZACIÓN DE ESTRATEGIA (Mantenemos coherencia con el Backend)
-        // Convertimos a mayúsculas para que 'ai' sea siempre 'AI'
+        // 1. NORMALIZACIÓN DE ESTRATEGIA
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
         // 2. EXTRACCIÓN DE FECHA
@@ -25,7 +25,7 @@ export function setAnalyticsData(data) {
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // 3. NORMALIZACIÓN DE PROFIT (Alta precisión)
+        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
         // 4. GENERACIÓN DE ID ÚNICO
@@ -33,13 +33,15 @@ export function setAnalyticsData(data) {
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 5. GUARDADO EN MEMORIA
+        // 5. GUARDADO EN MEMORIA (Incluyendo nuevos parámetros del ciclo)
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
             profitPercentage: parseFloat(c.profitPercentage || 0),
+            orderCount: parseInt(c.orderCount || 1),
+            finalRecovery: parseFloat(c.finalRecovery || 0),
             processedDate: dateObj,
-            strategy: strategy // Guardado como 'LONG', 'SHORT' o 'AI'
+            strategy: strategy
         });
     });
 
@@ -48,14 +50,13 @@ export function setAnalyticsData(data) {
 
 /**
  * updateMetricsDisplay
- * Calcula KPIs usando precisión total de punto flotante.
+ * Calcula KPIs usando precisión total de punto flotante y actualiza la UI.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
     
     const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
-        // Comparamos en mayúsculas para evitar fallos de coincidencia
         return c.strategy === currentBotFilter.toUpperCase();
     });
 
@@ -66,12 +67,16 @@ function updateMetricsDisplay() {
 
     let totalProfitPct = 0;
     let totalNetProfitUsdt = 0;
+    let totalOrders = 0;
+    let totalRecovery = 0;
     let winningCycles = 0;
     let totalTimeMs = 0;
 
     filtered.forEach(cycle => {
         totalProfitPct += cycle.profitPercentage;
         totalNetProfitUsdt += cycle.netProfit;
+        totalOrders += cycle.orderCount;
+        totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
         let startRaw = cycle.startTime?.$date || cycle.startTime;
@@ -82,16 +87,40 @@ function updateMetricsDisplay() {
         }
     });
 
+    // Cálculos Finales
     const avgProfit = totalProfitPct / totalCycles;
+    const avgNetProfit = totalNetProfitUsdt / totalCycles;
+    const avgOrders = totalOrders / totalCycles;
+    const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     const totalHours = totalTimeMs / (1000 * 60 * 60);
+    const avgDurationMs = totalTimeMs / totalCycles;
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Actualizar UI - Solo redondeamos al momento de mostrar el texto (Visual)
-    renderText('total-cycles-closed', totalCycles);
+    // Formateador de duración
+    const fmtDuration = (ms) => {
+        const h = Math.floor(ms / (1000 * 60 * 60));
+        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        return `${h}h ${m}m`;
+    };
+
+    // --- ACTUALIZACIÓN DE INTERFAZ ---
+    
+    // Columna 1: Profit
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
+    renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
+
+    // Columna 2: Ciclos y Órdenes
+    renderText('total-cycles-closed', totalCycles);
+    renderText('cycle-avg-orders', avgOrders.toFixed(1));
+
+    // Columna 3: Tiempo y Recuperación
+    renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
+    renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
+
+    // Columna 4: WinRate y Eficiencia
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
-    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`);
+    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
 
     const chartData = prepareChartData(filtered);
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
@@ -99,7 +128,7 @@ function updateMetricsDisplay() {
 
 /**
  * prepareChartData
- * Eliminamos el toFixed(4) para mantener la curva real.
+ * Prepara los puntos para la gráfica de equity.
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
@@ -118,7 +147,7 @@ function prepareChartData(filteredArray) {
 
         points.push({
             time: label,
-            value: finalValue // Enviamos el valor crudo, la librería de gráficos se encargará de mostrarlo
+            value: finalValue
         });
     });
 
@@ -138,14 +167,13 @@ export function setChartParameter(param) {
 }
 
 export function setBotFilter(filter) {
-    // Almacenamos el filtro pero siempre compararemos en mayúsculas
     currentBotFilter = filter; 
     updateMetricsDisplay();
 }
 
 function resetKPIs() {
-    renderText('total-cycles-closed', '0');
-    renderText('cycle-avg-profit', '0.00%', 'text-sm font-bold text-gray-500');
+    const ids = ['total-cycles-closed', 'cycle-avg-profit', 'cycle-net-profit', 'cycle-avg-orders', 'cycle-avg-duration', 'cycle-avg-recovery', 'cycle-win-rate', 'cycle-efficiency'];
+    ids.forEach(id => renderText(id, '--'));
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: { points: [] } }));
 }
 
