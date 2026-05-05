@@ -184,7 +184,7 @@
                 </div>
             </div>
 
-            <!-- Grid de métricas avanzada: 4 columnas que contienen 8 puntos de datos -->
+            <!-- Grid de métricas avanzada: 4 columnas con jerarquía visual unificada -->
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
     
     <!-- COL 1: PROFIT Y RENTABILIDAD -->
@@ -223,15 +223,15 @@
         </div>
     </div>
 
-    <!-- COL 4: RATIOS DE ÉXITO -->
-    <div class="bg-black/20 p-2 rounded-lg border border-gray-700 text-right flex flex-col justify-between">
+    <!-- COL 4: RATIOS DE ÉXITO (CORREGIDA) -->
+    <div class="bg-black/20 p-2 rounded-lg border border-gray-700 flex flex-col justify-between">
         <div>
-            <p class="text-[7px] text-gray-500 uppercase font-bold">Win Rate / Efficiency</p>
+            <p class="text-[7px] text-gray-500 uppercase font-bold">Win Rate</p>
             <p id="cycle-win-rate" class="text-sm font-bold text-emerald-400">0%</p>
         </div>
         <div class="border-t border-gray-700/50 mt-1 pt-1 flex justify-between items-center">
-            <span id="cycle-efficiency" class="text-[9px] font-bold text-indigo-400">$0.00/h</span>
-            <span class="text-[7px] text-gray-500 font-bold uppercase ml-1">Profit/H</span>
+            <span class="text-[7px] text-gray-500 font-bold uppercase">Profit/H:</span>
+            <span id="cycle-efficiency" class="text-[9px] font-bold text-indigo-400 font-mono">$0.00/h</span>
         </div>
     </div>
 
