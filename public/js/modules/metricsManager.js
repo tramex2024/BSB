@@ -87,9 +87,8 @@ function updateMetricsDisplay() {
         }
     });
 
-    // Cálculos Finales
+    // Cálculos Finales basados en el historial filtrado
     const avgProfit = totalProfitPct / totalCycles;
-    const avgNetProfit = totalNetProfitUsdt / totalCycles;
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
@@ -97,25 +96,18 @@ function updateMetricsDisplay() {
     const avgDurationMs = totalTimeMs / totalCycles;
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Formateador de duración
-    const fmtDuration = (ms) => {
-        const h = Math.floor(ms / (1000 * 60 * 60));
-        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-        return `${h}h ${m}m`;
-    };
-
-    // --- ACTUALIZACIÓN DE INTERFAZ ---
+    // --- ACTUALIZACIÓN DE INTERFAZ (Histórica) ---
     
     // Columna 1: Profit
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
-    renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
+    renderText('cycle-net-profit', `+$${totalNetProfitUsdt.toFixed(4)}`);
 
     // Columna 2: Ciclos y Órdenes
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-orders', avgOrders.toFixed(1));
 
     // Columna 3: Tiempo y Recuperación
-    renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
+    renderText('cycle-avg-duration', formatDurationMs(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
 
     // Columna 4: WinRate y Eficiencia
@@ -186,55 +178,30 @@ function renderText(id, text, className = null) {
 }
 
 /**
- * metricsManager.js - Versión de Sincronización Final
+ * updateMetricsFromState
+ * Sincronización con el estado en vivo (EVITA sobreescribir históricos)
  */
-
 export function updateMetricsFromState(state) {
     if (!state) return;
 
-    // 1. Extracción de datos crudos del payload
+    // Solo actualizamos el profit total general si existe en el estado
     const totalProfit = parseFloat(state.total_profit || 0);
-    const totalCycles = parseInt(state.scycle || 0) + parseInt(state.lcycle || 0) || 28; // Usamos 28 segun tu reporte
+    const totalEl = document.getElementById('auprofit');
+    if (totalEl) {
+        totalEl.textContent = `+$${totalProfit.toFixed(4)}`;
+        totalEl.className = totalProfit >= 0 ? 'text-emerald-400' : 'text-red-500';
+    }
     
-    // Recovery: Sumamos los valores de recuperación de Long y Short
-    const recoveryTotal = parseFloat(state.lrca || 0) + parseFloat(state.srca || 0);
-
-    // 2. Cálculo de Duración Total para Profit/H
-    // Usamos el startTime más antiguo para calcular la ventana de tiempo total
-    const now = new Date();
-    const lStart = new Date(state.lstartTime);
-    const sStart = new Date(state.sstartTime);
-    const oldestStart = lStart < sStart ? lStart : sStart;
-    
-    const diffMs = now - oldestStart;
-    const diffHours = diffMs / 3600000;
-
-    // 3. Cálculos Derivados
-    const profitPerHour = diffHours > 0 ? totalProfit / diffHours : 0;
-    
-    // Avg Profit %: Si el backend no lo envía, lo estimamos con el profit neto y el balance
-    const avgProfitPct = state.averageProfitPercentage || 0; 
-
-    // 4. Renderizado en el DOM
-    updateDOM('cycle-net-profit', `$${totalProfit.toFixed(4)}`);
-    updateDOM('cycle-avg-profit-pct', `${avgProfitPct > 0 ? '+' : ''}${avgProfitPct.toFixed(2)}%`);
-    updateDOM('cycle-recovery', `$${recoveryTotal.toFixed(2)}`);
-    updateDOM('cycle-profit-h', `$${profitPerHour.toFixed(2)}/h`);
+    // El resto de métricas (promedios) se mantienen bajo el control de updateMetricsDisplay()
 }
 
-function updateDOM(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
-function renderValue(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
-function formatDuration(hours) {
-    if (hours <= 0) return "0h 0m";
-    const h = Math.floor(hours);
-    const m = Math.floor((hours % 1) * 60);
+/**
+ * formatDurationMs
+ * Formateador de duración para milisegundos
+ */
+function formatDurationMs(ms) {
+    if (!ms || ms <= 0) return "0h 0m";
+    const h = Math.floor(ms / (1000 * 60 * 60));
+    const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
     return `${h}h ${m}m`;
 }

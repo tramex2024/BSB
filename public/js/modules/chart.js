@@ -77,7 +77,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-// 2. PROCESAMIENTO DE PUNTOS
+    // 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const hasData = rawPoints.length > 0;
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
@@ -86,9 +86,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     
     // --- BLINDAJE DE EXTRACCIÓN ---
     const dataPoints = points.map(p => {
-        // Si p.value existe, lo usamos; si no, buscamos netProfit; si no, 0.
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
-        return parseFloat(parseFloat(val).toFixed(4)); // Doble parse para asegurar número
+        return parseFloat(parseFloat(val).toFixed(4)); 
     });
 
     // 3. GRADIENTE DINÁMICO
@@ -174,3 +173,13 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         console.error("💥 CRASH en Chart.js:", err);
     }
 }
+
+/**
+ * PASO 3: ESCUCHADOR DE EVENTOS DE MÉTRICAS
+ * Conecta el motor de cálculos con la interfaz visual de la gráfica.
+ */
+window.addEventListener('metricsUpdated', (event) => {
+    console.log("📈 Paso 3: Actualizando gráfica con nuevos datos filtrados");
+    const chartData = event.detail;
+    renderEquityCurve(chartData);
+});

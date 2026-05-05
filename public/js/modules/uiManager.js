@@ -6,6 +6,7 @@ import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
 import { isSavingConfig } from './apiService.js';
 import { updateMetricsFromState } from './metricsManager.js';
+import { setBotFilter, setChartParameter } from './metricsManager.js';
 
 export { displayMessage } from './ui/notifications.js';
 
@@ -209,3 +210,33 @@ export function updateControlsState(state) {
         }
     }
 }
+
+/**
+ * PASO 1: Inicialización de Filtros del Dashboard
+ * Esta función conecta los <select> del HTML con la lógica de métricas.
+ */
+
+export function initDashboardFilters() {
+    // 1. Selector de Bot (All, Long, Short, AI)
+    const botSelector = document.getElementById('chart-bot-selector');
+    if (botSelector) {
+        botSelector.addEventListener('change', (e) => {
+            console.log("Cambio de filtro de Bot a:", e.target.value);
+            setBotFilter(e.target.value);
+        });
+    }
+
+    // 2. Selector de Parámetro (Profit vs Duración)
+    const paramSelector = document.getElementById('chart-param-selector');
+    if (paramSelector) {
+        paramSelector.addEventListener('change', (e) => {
+            console.log("Cambio de parámetro de gráfica a:", e.target.value);
+            setChartParameter(e.target.value);
+        });
+    }
+}
+
+// Autoejecución al cargar el script
+document.addEventListener('DOMContentLoaded', () => {
+    initDashboardFilters();
+});
