@@ -5,6 +5,7 @@
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
 import { isSavingConfig } from './apiService.js';
+import { updateMetricsFromState } from './metricsManager.js';
 
 export { displayMessage } from './ui/notifications.js';
 
@@ -156,6 +157,9 @@ export async function updateBotUI(state) {
             if (totalEl) formatProfit(totalEl, totalProfit);
         }
     } catch (err) { /* Silencioso */ }
+
+    // Sincronizamos las métricas con el nuevo payload
+    updateMetricsFromState(state);
 }
 
 function updatePulseBars(id, value) {
