@@ -14,7 +14,8 @@ const normalize = (s) => {
 };
 
 /**
- * 1. OBTENER KPIs de Ciclos
+ * OBTENER KPIs de Ciclos - Versión Optimizada
+ * Calcula promedios de órdenes, recuperación y duración.
  */
 exports.getCycleKpis = async (req, res) => {
     const userId = req.user.id;
@@ -29,9 +30,15 @@ exports.getCycleKpis = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    totalCycles: { $sum: 1 }, 
-                    averageProfitPercentage: { $avg: '$profitPercentage' }, 
+                    totalCycles: { $sum: 1 },
                     totalNetProfit: { $sum: '$netProfit' },
+                    totalProfitPct: { $sum: '$profitPercentage' },
+                    totalOrders: { $sum: '$orderCount' },
+                    totalRecovery: { $sum: '$finalRecovery' },
+                    // Cálculo de duración total en milisegundos
+                    totalDurationMs: { 
+                        $sum: { $subtract: ["$endTime", "$startTime"] } 
+                    },
                     winningCycles: {
                         $sum: { $cond: [{ $gt: ["$netProfit", 0] }, 1, 0] }
                     }
@@ -41,23 +48,37 @@ exports.getCycleKpis = async (req, res) => {
                 $project: {
                     _id: 0,
                     totalCycles: 1,
-                    averageProfitPercentage: { $round: ["$averageProfitPercentage", 8] },
-                    totalNetProfit: { $round: ["$totalNetProfit", 8] },
+                    totalNetProfit: { $round: ["$totalNetProfit", 2] },
                     winRate: { 
+                        $cond: [{ $eq: ["$totalCycles", 0] }, 0, 
+                        { $multiply: [{ $divide: ["$winningCycles", "$totalCycles"] }, 100] }] 
+                    },
+                    // Promedios críticos para el Dashboard
+                    avgProfitPct: { 
+                        $cond: [{ $eq: ["$totalCycles", 0] }, 0, { $divide: ["$totalProfitPct", "$totalCycles"] }] 
+                    },
+                    avgOrders: { 
+                        $cond: [{ $eq: ["$totalCycles", 0] }, 0, { $divide: ["$totalOrders", "$totalCycles"] }] 
+                    },
+                    avgRecovery: { 
+                        $cond: [{ $eq: ["$totalCycles", 0] }, 0, { $divide: ["$totalRecovery", "$totalCycles"] }] 
+                    },
+                    // Convertir duración promedio de ms a horas
+                    avgDurationHours: {
                         $cond: [
                             { $eq: ["$totalCycles", 0] }, 
                             0, 
-                            { $multiply: [ { $divide: ["$winningCycles", "$totalCycles"] }, 100 ] }
+                            { $divide: [{ $divide: ["$totalDurationMs", "$totalCycles"] }, 3600000] }
                         ]
                     }
                 }
             }
         ]);
-        
+
         res.json({ 
             success: true, 
-            data: kpis[0] || { totalCycles: 0, averageProfitPercentage: 0, totalNetProfit: 0, winRate: 0 } 
-        }); 
+            data: kpis[0] || { totalCycles: 0, totalNetProfit: 0, winRate: 0, avgProfitPct: 0, avgOrders: 0, avgRecovery: 0, avgDurationHours: 0 } 
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
