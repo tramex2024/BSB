@@ -13,28 +13,34 @@ let currentBotFilter = 'all';
  * Fusiona datos sin duplicados y normaliza estrategias con precisión.
  */
 export function setAnalyticsData(data) {
-    // Auditado: Soporte para data.cycles o data.data según el apiService
+    // 1. EXTRAER DATOS: Obtenemos la lista de ciclos sin importar cómo venga del servidor
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     if (rawData.length === 0) return;
 
     rawData.forEach(c => {
-        // 1. NORMALIZACIÓN DE ESTRATEGIA
+        // 2. NORMALIZACIÓN DE ESTRATEGIA: (LONG, SHORT, etc.)
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // 2. EXTRACCIÓN DE FECHA
+        // 3. EXTRACCIÓN DE FECHA: Convertimos el tiempo del servidor a un objeto de fecha de JS
         let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
+        // 4. NORMALIZACIÓN DE VALORES: Aseguramos que los números sean tratados como números
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
-        // 4. GENERACIÓN DE ID ÚNICO (Auditado: Prioriza _id del backend)
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
+        /**
+         * 5. GENERACIÓN DE ID ÚNICO (EL CAMBIO CRÍTICO)
+         * Para evitar que 29 se conviertan en 49, la etiqueta debe ser idéntica para el mismo ciclo.
+         * Quitamos los milisegundos del tiempo para que pequeñas variaciones no creen duplicados.
+         */
+        const uniqueTime = Math.floor(dateObj.getTime() / 1000); // Tiempo redondeado al segundo
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${uniqueTime}`;
 
+        // Si la etiqueta ya existe en nuestra "caja" (Map), ignoramos este ciclo y pasamos al siguiente
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 5. GUARDADO EN MEMORIA
+        // 6. GUARDADO EN MEMORIA: Solo si es un ciclo que NO teníamos antes
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
@@ -46,6 +52,7 @@ export function setAnalyticsData(data) {
         });
     });
 
+    // 7. ACTUALIZAR PANTALLA: Ahora que la lista es real, dibujamos los números
     updateMetricsDisplay();
 }
 
