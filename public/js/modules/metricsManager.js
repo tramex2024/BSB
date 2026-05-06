@@ -14,46 +14,49 @@ let currentBotFilter = 'all';
  * Esta versión corrige el error de conteo (de 49 a 29) al mejorar la validación de IDs.
  */
 export function setAnalyticsData(data) {
-    // 1. Extraemos los datos del paquete recibido
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
-    if (rawData.length === 0) return;
+    
+    // --- INICIO DE AUDITORÍA ---
+    console.log("=== AUDITORÍA DE CICLOS ===");
+    console.log("Total de elementos recibidos del servidor:", rawData.length);
+    
+    if (rawData.length > 0) {
+        console.log("Muestra del primer ciclo:", {
+            id: rawData[0]._id,
+            id_oid: rawData[0]._id?.$oid,
+            timestamp: rawData[0].endTime || rawData[0].timestamp,
+            profit: rawData[0].profit
+        });
+    }
+    // --- FIN DE AUDITORÍA ---
 
     rawData.forEach(c => {
-        // 2. Normalizamos la estrategia (ej: LONG, SHORT)
         let strategy = (c.strategy || 'unknown').toUpperCase();
-        
-        // 3. Procesamos la fecha de finalización
         let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // 4. Aseguramos que los valores sean números precisos
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
-        /**
-         * 5. GENERACIÓN DE ID ÚNICO (Aquí se resuelve el error)
-         * Creamos una etiqueta basada en el tiempo redondeado al segundo más cercano.
-         * Esto evita que variaciones de milisegundos dupliquen el ciclo.
-         */
-        const secondsTimestamp = Math.floor(dateObj.getTime() / 1000);
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${secondsTimestamp}`;
+        // Generamos el ID
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        // Si ya tenemos esta etiqueta en memoria, ignoramos el dato y pasamos al siguiente
-        if (globalCyclesMap.has(fingerPrint)) return;
+        if (globalCyclesMap.has(fingerPrint)) {
+            // console.log("Duplicado detectado e ignorado:", fingerPrint); // Opcional
+            return;
+        }
 
-        // 6. Guardamos el ciclo en el mapa global
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
-            profitPercentage: parseFloat(c.profitPercentage || 0),
-            orderCount: parseInt(c.orderCount || 1),
-            finalRecovery: parseFloat(c.finalRecovery || 0),
-            processedDate: dateObj,
-            strategy: strategy
+            strategy: strategy,
+            processedDate: dateObj
         });
     });
 
-    // 7. Refrescamos los números en la pantalla del dashboard
+    console.log("Total de ciclos en el Mapa tras filtrar:", globalCyclesMap.size);
+    console.log("============================");
+
     updateMetricsDisplay();
 }
 
