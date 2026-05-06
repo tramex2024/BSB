@@ -1,6 +1,7 @@
+
 /**
  * socket.js - Communication Layer (Full Sync 2026)
- * Versión: BSB 2026 - Soporte Multiusuario y Optimización de Renderizado
+ * Versión: BSB 2026 - Soporte Multiusuario y Corrección de Integridad de Datos
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -17,11 +18,10 @@ let connectionWatchdog = null;
  */
 async function sendToDashboardTerminal(msg, type) {
     try {
-        // Importación dinámica para no cargar dashboard.js si no es necesario
         const { addTerminalLog } = await import('./dashboard.js');
         addTerminalLog(msg, type);
     } catch (e) {
-        // Falla silenciosa si el dashboard no está montado
+        // Dashboard no disponible en este momento
     }
 }
 
@@ -37,14 +37,14 @@ export function initSocket() {
     if (socket?.connected) return socket;
 
     socket = io(BACKEND_URL, { 
-        transports: ['websocket'], // Priorizamos websocket puro para trading
+        transports: ['websocket'],
         reconnection: true,
         reconnectionAttempts: 10,
         auth: { token },      
         query: { userId }     
     });
 
-    // --- CONNECTION LISTENERS ---
+    // --- EVENTOS DE CONEXIÓN ---
     socket.on('connect', () => {
         resetWatchdog();
         socket.emit('get-bot-state'); 
@@ -59,7 +59,7 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE & VARIATION) ---
+    // --- MARKET DATA (PRECIO Y VARIACIÓN) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
@@ -73,7 +73,6 @@ export function initSocket() {
                 currentBotState.lastPrice = newPrice;
             }
 
-            // Sincronización de UI y widgets
             updateBotUI(currentBotState); 
             syncDashboardWidgets(currentBotState);
         }
@@ -83,7 +82,7 @@ export function initSocket() {
         }
     });
 
-    // --- GLOBAL BOT STATE (SHIELDED) ---
+    // --- ESTADO GLOBAL DEL BOT (SINCRO MAESTRA) ---
     socket.on('bot-state-update', async (state) => {
         if (!state) return;
 
@@ -91,13 +90,12 @@ export function initSocket() {
         const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
         if (isEditing) {
-            // Mientras se edita, solo actualizamos datos no intrusivos (balances y estados de ejecución)
+            // Protección de inputs activos
             currentBotState.lastAvailableUSDT = state.lastAvailableUSDT ?? currentBotState.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = state.lastAvailableBTC ?? currentBotState.lastAvailableBTC;
             currentBotState.lstate = state.lstate ?? currentBotState.lstate;
             currentBotState.sstate = state.sstate ?? currentBotState.sstate;
         } else {
-            // Sincronización total si el usuario no está tocando inputs
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
             }
@@ -105,11 +103,15 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // Inyección de métricas si el historial viene en el estado
+        // CORRECCIÓN DE CICLOS: Aseguramos que el historial sea reemplazado, no acumulado
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
-            const Metrics = await import('./metricsManager.js');
-            Metrics.setAnalyticsData(historyData);
+            try {
+                const Metrics = await import('./metricsManager.js');
+                Metrics.setAnalyticsData(historyData); // Esto debe resetear el contador a 29
+            } catch (err) {
+                console.error("Error inyectando métricas:", err);
+            }
         }
 
         syncDashboardWidgets(currentBotState);
@@ -120,7 +122,7 @@ export function initSocket() {
         }
     });
 
-    // --- LOGS & AI UPDATES ---
+    // --- LOGS Y DEBUG ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
         const msg = data.message;
@@ -134,16 +136,37 @@ export function initSocket() {
         }
     });
 
+    // --- ACTUALIZACIÓN DE ÓRDENES Y DECISIONES IA ---
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        if (data.message?.includes('ORDER')) {
+            sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
+        }
+    });
+
+    socket.on('open-orders-update', async () => {
+        const { fetchOrders } = await import('./orders.js');
+        // Actualizar listas si los contenedores existen
+        const aiList = document.getElementById('ai-order-list');
+        if (aiList) fetchOrders('ai', aiList, true);
+        
+        const auList = document.getElementById('au-order-list');
+        if (auList) fetchOrders('all', auList, true);
+    });
+
+    socket.on('ai-history-update', async (trades) => {
+        if (trades) {
+            const Metrics = await import('./metricsManager.js');
+            Metrics.setAnalyticsData(trades);
+        }
     });
 
     return socket;
 }
 
 /**
- * Sincroniza widgets externos (Donut chart de balance)
+ * Sincroniza widgets visuales del dashboard
  */
 async function syncDashboardWidgets(state) {
     if (document.getElementById('balanceDonutChart')) {
@@ -153,7 +176,7 @@ async function syncDashboardWidgets(state) {
 }
 
 /**
- * Actualiza visualmente el porcentaje de cambio 24h (UI)
+ * UI para Variación de Precio 24h
  */
 function updatePriceVariationUI(percent) {
     const percentEl = document.getElementById('price-percent');
