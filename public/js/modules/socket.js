@@ -14,14 +14,27 @@ export let socket = null;
 let connectionWatchdog = null;
 
 /**
- * Auxiliar para enviar logs al Terminal sin bloquear el flujo principal
+ * Helper para obtener el módulo de métricas de forma asíncrona.
+ * Evita bloqueos en la carga inicial (Lazy Loading).
+ */
+const getMetrics = async () => {
+    try {
+        return await import('./metricsManager.js');
+    } catch (err) {
+        console.error("Error crítico: No se pudo cargar el módulo de métricas.", err);
+        return null;
+    }
+};
+
+/**
+ * Envía logs al Terminal del Dashboard de forma asíncrona.
  */
 async function sendToDashboardTerminal(msg, type) {
     try {
         const { addTerminalLog } = await import('./dashboard.js');
         addTerminalLog(msg, type);
     } catch (e) {
-        // Dashboard no disponible en este momento
+        // Silenciar si el dashboard aún no está listo
     }
 }
 
@@ -30,12 +43,13 @@ export function initSocket() {
     const userId = localStorage.getItem('userId');
 
     if (!token || !userId) {
-        console.warn("⚠️ Socket: No active session detected.");
+        console.warn("⚠️ Socket: No se detectó una sesión activa.");
         return null;
     }
 
     if (socket?.connected) return socket;
 
+    // Inicialización del cliente Socket.io
     socket = io(BACKEND_URL, { 
         transports: ['websocket'],
         reconnection: true,
@@ -47,15 +61,15 @@ export function initSocket() {
     // --- EVENTOS DE CONEXIÓN ---
     socket.on('connect', () => {
         resetWatchdog();
-        socket.emit('get-bot-state'); 
-        console.log(`✅ Socket: Connected as User ${userId}`);
-        sendToDashboardTerminal("System Connected: Ready", "success");
+        socket.emit('get-bot-state'); // Solicitar estado inicial
+        console.log(`✅ Socket: Conectado como Usuario ${userId}`);
+        sendToDashboardTerminal("Sistema Conectado: Listo para operar", "success");
         if (typeof updateSystemHealth === 'function') updateSystemHealth('online');
     });
 
     socket.on('disconnect', () => {
         updateConnectionStatus('DISCONNECTED');
-        sendToDashboardTerminal("Connection Lost with Server", "error");
+        sendToDashboardTerminal("Conexión perdida con el servidor", "error");
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
@@ -69,6 +83,7 @@ export function initSocket() {
             
             const priceEl = document.getElementById('auprice');
             if (priceEl) {
+                // Comparamos con el último precio para aplicar color verde/rojo
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
                 currentBotState.lastPrice = newPrice;
             }
@@ -87,15 +102,17 @@ export function initSocket() {
         if (!state) return;
 
         const now = Date.now();
+        // Verificamos si el usuario está editando un campo para no sobrescribir su escritura
         const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
         if (isEditing) {
-            // Protección de inputs activos
+            // Sincronización parcial: solo balances y estados de ejecución
             currentBotState.lastAvailableUSDT = state.lastAvailableUSDT ?? currentBotState.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = state.lastAvailableBTC ?? currentBotState.lastAvailableBTC;
             currentBotState.lstate = state.lstate ?? currentBotState.lstate;
             currentBotState.sstate = state.sstate ?? currentBotState.sstate;
         } else {
+            // Sincronización total
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
             }
@@ -103,15 +120,11 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // CORRECCIÓN DE CICLOS: Aseguramos que el historial sea reemplazado, no acumulado
+        // Sincronización de métricas (Snapshot completo)
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
-            try {
-                const Metrics = await import('./metricsManager.js');
-                Metrics.setAnalyticsData(historyData); // Esto debe resetear el contador a 29
-            } catch (err) {
-                console.error("Error inyectando métricas:", err);
-            }
+            const m = await getMetrics();
+            if (m) m.setAnalyticsData(historyData, true);
         }
 
         syncDashboardWidgets(currentBotState);
@@ -122,11 +135,22 @@ export function initSocket() {
         }
     });
 
+    // --- EVENTOS DE HISTORIAL ESPECÍFICOS ---
+    socket.on('history_update', async (data) => {
+        const m = await getMetrics();
+        if (m) m.setAnalyticsData(data, true); // True: Limpia memoria previa
+    });
+    
+    socket.on('new_cycle', async (data) => {
+        const m = await getMetrics();
+        if (m) m.setAnalyticsData(data, false); // False: Solo añade el nuevo registro
+    });
+
     // --- LOGS Y DEBUG ---
     socket.on('bot-log', (data) => {
         if (!data?.message) return;
         const msg = data.message;
-        const isDebug = msg.includes('[DEBUG]') || msg.includes('👁️');
+        const isDebug = msg.includes('[DEBUG]');
 
         if (!isDebug) logStatus(msg, data.type || 'info');
         sendToDashboardTerminal(msg, data.type || 'info');
@@ -136,18 +160,9 @@ export function initSocket() {
         }
     });
 
-    // --- ACTUALIZACIÓN DE ÓRDENES Y DECISIONES IA ---
-    socket.on('ai-decision-update', (data) => {
-        if (!data || !aiBotUI) return;
-        aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
-        if (data.message?.includes('ORDER')) {
-            sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
-        }
-    });
-
+    // --- ÓRDENES ABIERTAS ---
     socket.on('open-orders-update', async () => {
         const { fetchOrders } = await import('./orders.js');
-        // Actualizar listas si los contenedores existen
         const aiList = document.getElementById('ai-order-list');
         if (aiList) fetchOrders('ai', aiList, true);
         
@@ -155,18 +170,11 @@ export function initSocket() {
         if (auList) fetchOrders('all', auList, true);
     });
 
-    socket.on('ai-history-update', async (trades) => {
-        if (trades) {
-            const Metrics = await import('./metricsManager.js');
-            Metrics.setAnalyticsData(trades);
-        }
-    });
-
     return socket;
 }
 
 /**
- * Sincroniza widgets visuales del dashboard
+ * Actualiza widgets visuales que dependen del estado global.
  */
 async function syncDashboardWidgets(state) {
     if (document.getElementById('balanceDonutChart')) {
@@ -176,7 +184,7 @@ async function syncDashboardWidgets(state) {
 }
 
 /**
- * UI para Variación de Precio 24h
+ * Cambia el color y el icono de la variación porcentual del precio.
  */
 function updatePriceVariationUI(percent) {
     const percentEl = document.getElementById('price-percent');
@@ -185,14 +193,14 @@ function updatePriceVariationUI(percent) {
 
     const val = parseFloat(percent);
     percentEl.textContent = `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
-
     const colorClass = val > 0 ? 'text-emerald-500' : (val < 0 ? 'text-red-500' : 'text-gray-400');
-    const iconClass = val > 0 ? 'fa-caret-up' : (val < 0 ? 'fa-caret-down' : 'fa-minus');
-
     percentEl.className = `font-bold ${colorClass}`;
-    iconEl.className = `fas ${iconClass} mr-1 ${colorClass}`;
+    iconEl.className = `fas ${val > 0 ? 'fa-caret-up' : (val < 0 ? 'fa-caret-down' : 'fa-minus')} mr-1 ${colorClass}`;
 }
 
+/**
+ * Reinicia el temporizador de desconexión.
+ */
 function resetWatchdog() {
     updateConnectionStatus('CONNECTED');
     if (connectionWatchdog) clearTimeout(connectionWatchdog);
@@ -202,6 +210,9 @@ function resetWatchdog() {
     }, 15000);
 }
 
+/**
+ * Cambia visualmente el punto de estado (Online/Offline).
+ */
 function updateConnectionStatus(status) {
     const statusDot = document.getElementById('status-dot');
     if (statusDot) {
