@@ -13,50 +13,50 @@ let currentBotFilter = 'all';
  * Recibe los ciclos del bot y los organiza en memoria evitando duplicados.
  * Esta versión corrige el error de conteo (de 49 a 29) al mejorar la validación de IDs.
  */
+/**
+ * setAnalyticsData - Versión Auditada y Corregida
+ * Resuelve el problema de los 49 ciclos asegurando que el mapa se limpie
+ * antes de procesar una carga completa del servidor.
+ */
 export function setAnalyticsData(data) {
+    // 1. Extraer los datos brutos
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     
-    // --- INICIO DE AUDITORÍA ---
-    console.log("=== AUDITORÍA DE CICLOS ===");
-    console.log("Total de elementos recibidos del servidor:", rawData.length);
-    
-    if (rawData.length > 0) {
-        console.log("Muestra del primer ciclo:", {
-            id: rawData[0]._id,
-            id_oid: rawData[0]._id?.$oid,
-            timestamp: rawData[0].endTime || rawData[0].timestamp,
-            profit: rawData[0].profit
-        });
-    }
-    // --- FIN DE AUDITORÍA ---
+    // --- SOLUCIÓN AL ERROR DE 49 ---
+    // Si recibimos una lista (como la de 29 o la de 20), vaciamos el mapa previo.
+    // Esto evita que se sumen listas diferentes (29 + 20).
+    globalCyclesMap.clear(); 
 
     rawData.forEach(c => {
         let strategy = (c.strategy || 'unknown').toUpperCase();
-        let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
-        const dateObj = new Date(rawDate);
-        if (isNaN(dateObj.getTime())) return; 
-
-        const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
-        // Generamos el ID
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
+        // Extraer fecha con seguridad
+        let rawDate = c.endTime?.$date || c.endTime || c.timestamp || new Date();
+        const dateObj = new Date(rawDate);
+        
+        // Extraer beneficio con seguridad
+        const profitValue = parseFloat(c.profit || c.netProfit || 0);
 
-        if (globalCyclesMap.has(fingerPrint)) {
-            // console.log("Duplicado detectado e ignorado:", fingerPrint); // Opcional
-            return;
+        // 2. GENERACIÓN DE ETIQUETA ÚNICA (Fingerprint)
+        // Usamos el ID si existe, si no, una combinación de estrategia, profit y tiempo en segundos.
+        const timeInSeconds = Math.floor(dateObj.getTime() / 1000);
+        
+        // Si el ID no existe, creamos uno basado en los datos disponibles
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${timeInSeconds}-${Math.random()}`;
+
+        // 3. GUARDADO EN EL MAPA
+        // Solo guardamos si el ciclo tiene datos válidos (evitamos los 'undefined' de tu auditoría)
+        if (c.endTime || c.timestamp || c._id) {
+            globalCyclesMap.set(fingerPrint, {
+                ...c,
+                netProfit: profitValue, 
+                strategy: strategy,
+                processedDate: dateObj
+            });
         }
-
-        globalCyclesMap.set(fingerPrint, {
-            ...c,
-            netProfit: profitValue, 
-            strategy: strategy,
-            processedDate: dateObj
-        });
     });
 
-    console.log("Total de ciclos en el Mapa tras filtrar:", globalCyclesMap.size);
-    console.log("============================");
-
+    // 4. ACTUALIZAR INTERFAZ
     updateMetricsDisplay();
 }
 
