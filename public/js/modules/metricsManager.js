@@ -41,10 +41,11 @@ export function setAnalyticsData(data, isSnapshot = true) {
 
         if (isNaN(endObj.getTime())) return; 
 
-        // 5. MAPEO INTELIGENTE DE VALORES (Solución a los ceros)
-        const profitValue = parseFloat(c.profit || c.netProfit || c.profit_amount || 0);
-        const profitPct = parseFloat(c.profitPercentage || c.profit_pct || c.percentage || 0);
-        const orders = parseInt(c.orderCount || c.orders || c.total_orders || 1);
+        // 5. MAPEO INTELIGENTE DE VALORES (Solución definitiva a los ceros)
+        // Agregamos variantes comunes que envían los backends (profit_amount, net_profit, etc)
+        const profitValue = parseFloat(c.profit || c.netProfit || c.net_profit || c.profit_amount || 0);
+        const profitPct = parseFloat(c.profitPercentage || c.profit_pct || c.percentage || c.gain_percent || 0);
+        const orders = parseInt(c.orderCount || c.orders || c.total_orders || c.count || 1);
         const recovery = parseFloat(c.finalRecovery || c.recovery_amount || c.recovery || 0);
 
         // 6. FINGERPRINT ESTRICTO
@@ -102,12 +103,13 @@ function updateMetricsDisplay() {
         totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
-        // Cálculo de duración (Usa startTime o created_at como base)
-        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at || cycle.start_time;
+        // Cálculo de duración corregido: BuscastartTime, created_at o timestamp inicial
+        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at || cycle.start_time || cycle.timestamp;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
             const diff = cycle.processedDate.getTime() - start.getTime();
-            if (diff > 0) totalTimeMs += diff;
+            // Evitamos duraciones negativas o de 0 exacto para que el promedio sea real
+            if (diff > 1000) totalTimeMs += diff; 
         }
     });
 
