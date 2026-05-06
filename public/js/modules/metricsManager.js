@@ -9,47 +9,52 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * setAnalyticsData
- * Procesa el historial de ciclos, elimina duplicados mediante un fingerprint único
- * y normaliza los valores para el cálculo de métricas.
+ * setAnalyticsData - Versión con Extracción de Fecha Reforzada
  */
 export function setAnalyticsData(data) {
-    // 1. OBTENCIÓN DE DATOS
     const rawData = Array.isArray(data) ? data : (data?.data || data?.history || []);
     
-    if (rawData.length === 0) {
-        console.warn("Metrics: No hay datos para procesar.");
-        return;
-    }
+    if (rawData.length === 0) return;
 
-    // Nota: Mantenemos el mapa para persistencia durante la sesión, 
-    // el fingerprint se encarga de que no existan duplicados.
     rawData.forEach(c => {
-        // 2. NORMALIZACIÓN DE ESTRATEGIA
         let strategy = (c.strategy || 'UNKNOWN').toUpperCase();
         
-        // 3. EXTRACCIÓN Y VALIDACIÓN DE FECHA
-        let rawDate = c.endTime?.$date || c.endTime || c.timestamp || c.date;
-        const dateObj = new Date(rawDate);
-        
-        if (isNaN(dateObj.getTime())) {
-            console.error("Metrics: Fecha inválida detectada en ciclo", c);
-            return; 
+        // --- 3. EXTRACCIÓN DE FECHA MEJORADA ---
+        // Intentamos obtener la fecha de múltiples fuentes posibles
+        let rawDate = 
+            c.endTime?.$date ||   // Formato MongoDB expandido
+            c.endTime ||          // Campo estándar de ciclo
+            c.timestamp ||        // Campo estándar de socket
+            c.transactTime ||     // Campo común en órdenes de Exchange
+            c.createdAt ||        // Fecha de creación en DB
+            c.date;               // Backup simple
+
+        let dateObj = new Date(rawDate);
+
+        // Si la fecha sigue siendo inválida (NaN), intentamos el último recurso:
+        // Si hay un _id de MongoDB, podemos extraer el tiempo de ahí.
+        if (isNaN(dateObj.getTime()) && c._id && typeof c._id === 'string' && c._id.length === 24) {
+            // Los primeros 8 caracteres de un ObjectId de MongoDB son el timestamp
+            dateObj = new Date(parseInt(c._id.substring(0, 8), 16) * 1000);
         }
 
-        // 4. NORMALIZACIÓN DE VALORES NUMÉRICOS (Alta precisión)
+        // Si después de todo sigue siendo inválida, usamos la fecha actual 
+        // para evitar el error de consola y procesar el ciclo.
+        if (isNaN(dateObj.getTime())) {
+            console.warn("Metrics: Usando Date.now() para objeto sin fecha clara", c);
+            dateObj = new Date();
+        }
+        // ---------------------------------------
+
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         const profitPct = parseFloat(c.profitPercentage || 0);
         const orders = parseInt(c.orderCount || c.orders || 1);
         const recovery = parseFloat(c.finalRecovery || c.recovery || 0);
 
-        // 5. GENERACIÓN DE ID ÚNICO (Fingerprint)
         const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        // 6. CONTROL DE DUPLICADOS
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 7. GUARDADO EN MEMORIA NORMALIZADO
         globalCyclesMap.set(fingerPrint, {
             ...c, 
             id: fingerPrint,
