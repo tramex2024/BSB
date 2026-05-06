@@ -86,37 +86,62 @@ function processNextLog() {
 }
 
 // --- APP INITIALIZATION ---
-// Se añade 'async' para permitir la carga de ciclos antes de iniciar el socket
+/**
+ * Inicializa la aplicación completa, gestionando la sesión,
+ * la carga de métricas históricas y la conexión al socket.
+ */
 export async function initializeFullApp() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
     const userRole = localStorage.getItem('userRole'); 
 
     if (token && userId) {
-        // --- CORRECCIÓN: CARGA PREVENTIVA DE MÉTRICAS ---
+        // --- CORRECCIÓN CRÍTICA: CARGA ESTRATÉGICA DE MÉTRICAS ---
         try {
+            // Obtenemos los ciclos del backend
             const cycles = await fetchRawTradeCycles('all');
-            if (cycles && cycles.length > 0) {
-                setAnalyticsData(cycles);
-                logStatus("Análisis de ciclos sincronizado", "success");
+            
+            if (cycles && Array.isArray(cycles)) {
+                /**
+                 * setAnalyticsData(data, isSnapshot)
+                 * Enviamos 'true' como segundo parámetro para limpiar el Map global.
+                 * Esto corrige el error donde los 29 ciclos se convertían en 49.
+                 */
+                setAnalyticsData(cycles, true); 
+                
+                if (cycles.length > 0) {
+                    logStatus("Análisis de ciclos sincronizado", "success");
+                } else {
+                    logStatus("Sin ciclos previos en el historial", "info");
+                }
             }
         } catch (err) {
-            console.error("⚠️ Error precargando métricas:", err);
+            console.error("⚠️ Error crítico precargando métricas:", err);
+            logStatus("Error al sincronizar historial", "error");
         }
-        // ----------------------------------------------
+        // ------------------------------------------------------
 
+        // Gestión de permisos de administrador en la UI
         const adminTab = document.getElementById('tab-admin');
         if (adminTab && userRole === 'admin') {
             adminTab.style.display = 'block';
             adminTab.classList.remove('hidden');
         }
+        
         applyRolePermissions();
+
+        // Inicialización del Socket de tiempo real
         const socket = initSocket();
         if (socket) {
-            import('./modules/notifications.js').then(module => {
-                module.initializeNotifications(socket);
-            }).catch(err => console.error("❌ Error notifications:", err));
+            // Carga dinámica del módulo de notificaciones para optimizar recursos
+            import('./modules/notifications.js')
+                .then(module => {
+                    module.initializeNotifications(socket);
+                })
+                .catch(err => console.error("❌ Error inicializando notificaciones:", err));
         }
+    } else {
+        logStatus("Sesión no válida. Por favor, inicie sesión.", "warning");
     }
 }
 
