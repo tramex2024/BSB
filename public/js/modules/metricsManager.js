@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * UNIFICACIÓN: Sincronización de Historial + Estado en Tiempo Real
+ * CORRECCIÓN: Precisión Decimal y Sincronización de Estrategia AI
  * INTEGRACIÓN: 8-KPI Analytics Grid
  */
 
@@ -10,38 +10,30 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Recibe los ciclos del bot y los organiza en memoria evitando duplicados.
- * Esta versión corrige el error de conteo (de 49 a 29) al mejorar la validación de IDs.
+ * Fusiona datos sin duplicados y normaliza estrategias con precisión.
  */
 export function setAnalyticsData(data) {
-    // 1. Extraemos los datos del paquete recibido
-    const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
+    const rawData = Array.isArray(data) ? data : (data?.data || []);
     if (rawData.length === 0) return;
 
     rawData.forEach(c => {
-        // 2. Normalizamos la estrategia (ej: LONG, SHORT)
+        // 1. NORMALIZACIÓN DE ESTRATEGIA
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // 3. Procesamos la fecha de finalización
+        // 2. EXTRACCIÓN DE FECHA
         let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // 4. Aseguramos que los valores sean números precisos
+        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
-        /**
-         * 5. GENERACIÓN DE ID ÚNICO (Aquí se resuelve el error)
-         * Creamos una etiqueta basada en el tiempo redondeado al segundo más cercano.
-         * Esto evita que variaciones de milisegundos dupliquen el ciclo.
-         */
-        const secondsTimestamp = Math.floor(dateObj.getTime() / 1000);
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${secondsTimestamp}`;
+        // 4. GENERACIÓN DE ID ÚNICO
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        // Si ya tenemos esta etiqueta en memoria, ignoramos el dato y pasamos al siguiente
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 6. Guardamos el ciclo en el mapa global
+        // 5. GUARDADO EN MEMORIA (Incluyendo nuevos parámetros del ciclo)
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
@@ -53,13 +45,12 @@ export function setAnalyticsData(data) {
         });
     });
 
-    // 7. Refrescamos los números en la pantalla del dashboard
     updateMetricsDisplay();
 }
 
 /**
  * updateMetricsDisplay
- * Calcula KPIs usando la base de datos histórica acumulada.
+ * Calcula KPIs usando precisión total de punto flotante y actualiza la UI.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
@@ -88,8 +79,7 @@ function updateMetricsDisplay() {
         totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
-        // Auditoría de duración: Soporte para múltiples llaves del backend
-        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.lstartTime || cycle.sstartTime;
+        let startRaw = cycle.startTime?.$date || cycle.startTime;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
             const diff = cycle.processedDate.getTime() - start.getTime();
@@ -115,52 +105,25 @@ function updateMetricsDisplay() {
     };
 
     // --- ACTUALIZACIÓN DE INTERFAZ ---
+    
+    // Columna 1: Profit
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
+
+    // Columna 2: Ciclos y Órdenes
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-orders', avgOrders.toFixed(1));
+
+    // Columna 3: Tiempo y Recuperación
     renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
+
+    // Columna 4: WinRate y Eficiencia
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
 
     const chartData = prepareChartData(filtered);
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
-}
-
-/**
- * updateMetricsFromState
- * Sincronización inmediata con el Payload del Backend (Tiempo Real)
- */
-export function updateMetricsFromState(state) {
-    if (!state) return;
-
-    // 1. Actualización de Profit Total (KPI Principal)
-    const totalProfit = parseFloat(state.total_profit || 0);
-    const totalEl = document.getElementById('auprofit'); // ID del Dashboard principal
-    if (totalEl) {
-        totalEl.textContent = `+$${totalProfit.toFixed(4)}`;
-        totalEl.className = totalProfit >= 0 ? 'text-emerald-400' : 'text-red-500';
-    }
-
-    // 2. Sincronización de Duración del Ciclo Activo
-    const now = new Date();
-    // Auditado: El payload usa lstartTime para el ciclo Long activo
-    const activeStart = new Date(state.lstartTime || state.sstartTime);
-    
-    if (!isNaN(activeStart.getTime())) {
-        const durationHours = (now - activeStart) / 3600000;
-        // Solo actualizamos la duración si el historial está vacío o para mostrar tiempo real activo
-        const durationEl = document.getElementById('cycle-avg-duration');
-        if (durationEl && globalCyclesMap.size === 0) {
-            durationEl.textContent = formatDuration(durationHours);
-        }
-    }
-
-    // 3. Sincronización de Profit Neto en KPI si no hay ciclos históricos aún
-    if (globalCyclesMap.size === 0) {
-        renderValue('cycle-net-profit', `$${totalProfit.toFixed(4)}`);
-    }
 }
 
 /**
@@ -220,6 +183,37 @@ function renderText(id, text, className = null) {
         el.textContent = text;
         if (className) el.className = className;
     }
+}
+
+/**
+ * metricsManager.js - Sincronización final con el Backend Payload
+ */
+
+export function updateMetricsFromState(state) {
+    if (!state) return;
+
+    // Extraemos datos del payload detectado en consola
+    const metrics = {
+        totalProfit: parseFloat(state.total_profit || 0),
+        longOrders: parseInt(state.lnorder || 0),
+        shortOrders: parseInt(state.snorder || 0),
+        longProfit: parseFloat(state.lprofit || 0),
+        shortProfit: parseFloat(state.sprofit || 0),
+    };
+
+    // Cálculo de duración en tiempo real (Basado en lstartTime detectado)
+    const now = new Date();
+    const lStart = new Date(state.lstartTime);
+    let durationHours = 0;
+
+    if (!isNaN(lStart.getTime())) {
+        durationHours = (now - lStart) / 3600000; // Diferencia en horas
+    }
+
+    // Renderizado en el Dashboard de Analytics
+    renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
+    renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
+    renderValue('cycle-avg-duration', formatDuration(durationHours));
 }
 
 function renderValue(id, value) {
