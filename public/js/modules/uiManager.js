@@ -6,7 +6,6 @@ import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
 import { isSavingConfig } from './apiService.js';
 import { updateMetricsFromState } from './metricsManager.js';
-import { setBotFilter, setChartParameter } from './metricsManager.js';
 
 export { displayMessage } from './ui/notifications.js';
 
@@ -24,10 +23,14 @@ const STATUS_COLORS = {
  * Función Principal: Actualiza todos los elementos visuales
  */
 export async function updateBotUI(state) {
-    // 1. Blindaje inicial: Si no hay estado o está vacío, evitamos el crash
     if (!state) return;
-    const stats = state.stats || {}; // Shield contra stats nulos
     
+    // --- BLOQUE DE INSPECCIÓN TEMPORAL ---
+    console.log("--- BACKEND PAYLOAD INSPECTION ---");
+    console.log("Estructura completa:", state);
+    if (state.stats) console.log("Estadísticas detectadas:", state.stats);
+    // -------------------------------------
+
     // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
@@ -49,7 +52,7 @@ export async function updateBotUI(state) {
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder',
+        'aulnorder': 'lnorder', // <--- Coma agregada aquí para evitar el SyntaxError
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
@@ -59,7 +62,7 @@ export async function updateBotUI(state) {
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder',
+        'ausnorder': 'snorder', // <--- Coma agregada aquí por seguridad
 
         // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
@@ -79,8 +82,7 @@ export async function updateBotUI(state) {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // Prioridad: state directo -> state.stats -> undefined
-        let val = state[key] !== undefined ? state[key] : stats[key];
+        let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
 
         if (val === undefined || val === null) return;
 
@@ -99,25 +101,21 @@ export async function updateBotUI(state) {
         }
 
         // --- Renderizado de Números ---
-        try {
-            if (id.includes('profit')) {
-                formatProfit(el, val);
-            } else if (id.includes('btc') || id === 'aubalance-btc') {
-                const btcVal = parseFloat(val || 0).toFixed(6);
-                if (el.textContent !== btcVal) el.textContent = btcVal;
-            } else if (id.includes('cycle') || id.includes('norder')) {
-                const cycleVal = Math.floor(parseFloat(val || 0)).toString();
-                if (el.textContent !== cycleVal) el.textContent = cycleVal;
-            } else if (id.includes('adx') || id.includes('stoch')) {
-                el.textContent = parseFloat(val || 0).toFixed(1);
-                updatePulseBars(id, val); 
-            } else if (id.includes('coverage')) {
-                el.textContent = parseFloat(val || 0).toLocaleString(); 
-            } else {
-                formatValue(el, val, false, false);
-            }
-        } catch (e) {
-            console.warn(`Error formateando campo ${id}:`, e);
+        if (id.includes('profit')) {
+            formatProfit(el, val);
+        } else if (id.includes('btc') || id === 'aubalance-btc') {
+            const btcVal = parseFloat(val).toFixed(6);
+            if (el.textContent !== btcVal) el.textContent = btcVal;
+        } else if (id.includes('cycle') || id.includes('norder')) {
+            const cycleVal = Math.floor(val).toString();
+            if (el.textContent !== cycleVal) el.textContent = cycleVal;
+        } else if (id.includes('adx') || id.includes('stoch')) {
+            el.textContent = parseFloat(val).toFixed(1);
+            updatePulseBars(id, val); 
+        } else if (id.includes('coverage')) {
+            el.textContent = parseFloat(val).toLocaleString(); 
+        } else {
+            formatValue(el, val, false, false);
         }
     });
 
@@ -142,13 +140,13 @@ export async function updateBotUI(state) {
         updateControlsState(state);
     }
 
-    // 6. Actualización de Dashboard (Optimizado con Catch silencioso corregido)
+    // 6. Actualización de Dashboard (Optimizado)
     try {
         const dashboard = await import('./dashboard.js');
         if (dashboard && typeof dashboard.updatePnLBar === 'function') {
-            const lProfit = parseFloat(state.lprofit ?? stats.lprofit ?? 0);
-            const sProfit = parseFloat(state.sprofit ?? stats.sprofit ?? 0);
-            const aiProfit = parseFloat(state.aiprofit ?? stats.aiprofit ?? 0);
+            const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
+            const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
+            const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
 
             dashboard.updatePnLBar('long', lProfit);
             dashboard.updatePnLBar('short', sProfit);
@@ -158,9 +156,7 @@ export async function updateBotUI(state) {
             const totalEl = document.getElementById('auprofit');
             if (totalEl) formatProfit(totalEl, totalProfit);
         }
-    } catch (err) {
-        // El dashboard podría no estar cargado aún o no ser la vista activa
-    }
+    } catch (err) { /* Silencioso */ }
 
     // Sincronizamos las métricas con el nuevo payload
     updateMetricsFromState(state);
@@ -170,7 +166,7 @@ function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');
     const bar = document.getElementById(barId);
     if (!bar) return;
-    let percent = id.includes('adx') ? (parseFloat(value || 0) / 50) * 100 : parseFloat(value || 0); 
+    let percent = id.includes('adx') ? (value / 50) * 100 : value; 
     bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
 }
 
@@ -213,28 +209,3 @@ export function updateControlsState(state) {
         }
     }
 }
-
-/**
- * PASO 1: Inicialización de Filtros del Dashboard
- * Esta función conecta los <select> del HTML con la lógica de métricas.
- */
-export function initDashboardFilters() {
-    const botSelector = document.getElementById('chart-bot-selector');
-    if (botSelector) {
-        botSelector.addEventListener('change', (e) => {
-            setBotFilter(e.target.value);
-        });
-    }
-
-    const paramSelector = document.getElementById('chart-param-selector');
-    if (paramSelector) {
-        paramSelector.addEventListener('change', (e) => {
-            setChartParameter(e.target.value);
-        });
-    }
-}
-
-// Autoejecución al cargar el script
-document.addEventListener('DOMContentLoaded', () => {
-    initDashboardFilters();
-});

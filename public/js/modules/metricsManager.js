@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * CORRECCIÓN: Mapeo de variables de servidor y precisión de KPIs
+ * CORRECCIÓN: Precisión Decimal y Sincronización de Estrategia AI
  * INTEGRACIÓN: 8-KPI Analytics Grid
  */
 
@@ -10,71 +10,47 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Procesa los datos y asegura que los nombres de las variables sean correctos.
+ * Fusiona datos sin duplicados y normaliza estrategias con precisión.
  */
-export function setAnalyticsData(data, isSnapshot = true) {
-    // 1. OBTENCIÓN DE DATOS
-    const rawData = Array.isArray(data) ? data : (data?.data || data?.history || data?.cycleHistory || []);
-    
-    if (rawData.length === 0) {
-        console.warn("Metrics: No hay datos para procesar.");
-        return;
-    }
-
-    // 2. LIMPIEZA DE MEMORIA (Clave para sincronización)
-    if (isSnapshot) {
-        globalCyclesMap.clear();
-    }
+export function setAnalyticsData(data) {
+    const rawData = Array.isArray(data) ? data : (data?.data || []);
+    if (rawData.length === 0) return;
 
     rawData.forEach(c => {
-        // 3. NORMALIZACIÓN DE ESTRATEGIA
-        let strategy = (c.strategy || 'UNKNOWN').toUpperCase();
+        // 1. NORMALIZACIÓN DE ESTRATEGIA
+        let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // 4. EXTRACCIÓN DE FECHAS (Soporte para múltiples formatos)
-        let rawEnd = c.endTime?.$date || c.endTime || c.timestamp || c.date || c.closed_at;
-        let endObj = new Date(rawEnd);
+        // 2. EXTRACCIÓN DE FECHA
+        let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
+        const dateObj = new Date(rawDate);
+        if (isNaN(dateObj.getTime())) return; 
 
-        if (isNaN(endObj.getTime()) && c._id) {
-            const timestamp = parseInt(c._id.toString().substring(0, 8), 16) * 1000;
-            endObj = new Date(timestamp);
-        }
+        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
+        const profitValue = parseFloat(c.profit || c.netProfit || 0);
+        
+        // 4. GENERACIÓN DE ID ÚNICO
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        if (isNaN(endObj.getTime())) return; 
+        if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 5. MAPEO INTELIGENTE DE VALORES (Solución definitiva a los ceros)
-        // Agregamos variantes comunes que envían los backends (profit_amount, net_profit, etc)
-        const profitValue = parseFloat(c.profit || c.netProfit || c.net_profit || c.profit_amount || 0);
-        const profitPct = parseFloat(c.profitPercentage || c.profit_pct || c.percentage || c.gain_percent || 0);
-        const orders = parseInt(c.orderCount || c.orders || c.total_orders || c.count || 1);
-        const recovery = parseFloat(c.finalRecovery || c.recovery_amount || c.recovery || 0);
-
-        // 6. FINGERPRINT ESTRICTO
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${endObj.getTime()}`;
-
-        if (!globalCyclesMap.has(fingerPrint)) {
-            globalCyclesMap.set(fingerPrint, {
-                ...c,
-                id: fingerPrint,
-                netProfit: profitValue,
-                profitPercentage: profitPct,
-                orderCount: orders,
-                finalRecovery: recovery,
-                processedDate: endObj,
-                strategy: strategy
-            });
-        }
+        // 5. GUARDADO EN MEMORIA (Incluyendo nuevos parámetros del ciclo)
+        globalCyclesMap.set(fingerPrint, {
+            ...c,
+            netProfit: profitValue, 
+            profitPercentage: parseFloat(c.profitPercentage || 0),
+            orderCount: parseInt(c.orderCount || 1),
+            finalRecovery: parseFloat(c.finalRecovery || 0),
+            processedDate: dateObj,
+            strategy: strategy
+        });
     });
 
-    console.log(`📊 Metrics: ${globalCyclesMap.size} ciclos listos para cálculo.`);
-
-    if (typeof updateMetricsDisplay === 'function') {
-        updateMetricsDisplay();
-    }
+    updateMetricsDisplay();
 }
 
 /**
  * updateMetricsDisplay
- * Calcula los KPIs finales y los inyecta en el HTML.
+ * Calcula KPIs usando precisión total de punto flotante y actualiza la UI.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
@@ -103,49 +79,47 @@ function updateMetricsDisplay() {
         totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
-        // Cálculo de duración corregido: BuscastartTime, created_at o timestamp inicial
-        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at || cycle.start_time || cycle.timestamp;
+        let startRaw = cycle.startTime?.$date || cycle.startTime;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
             const diff = cycle.processedDate.getTime() - start.getTime();
-            // Evitamos duraciones negativas o de 0 exacto para que el promedio sea real
-            if (diff > 1000) totalTimeMs += diff; 
+            if (diff > 0) totalTimeMs += diff;
         }
     });
 
     // Cálculos Finales
     const avgProfit = totalProfitPct / totalCycles;
+    const avgNetProfit = totalNetProfitUsdt / totalCycles;
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const avgDurationMs = totalTimeMs / totalCycles;
-    const profitPerHour = totalHours > 0.01 ? (totalNetProfitUsdt / totalHours) : 0;
+    const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // --- RENDERIZADO EN INTERFAZ ---
+    // Formateador de duración
+    const fmtDuration = (ms) => {
+        const h = Math.floor(ms / (1000 * 60 * 60));
+        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        return `${h}h ${m}m`;
+    };
+
+    // --- ACTUALIZACIÓN DE INTERFAZ ---
+    
+    // Columna 1: Profit
+    renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
+    renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
+
+    // Columna 2: Ciclos y Órdenes
     renderText('total-cycles-closed', totalCycles);
-    
-    // Profit Promedio
-    renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
-        `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
-    
-    // Profit Neto Total
-    renderText('cycle-net-profit', `+$${totalNetProfitUsdt.toFixed(4)}`);
-
-    // Órdenes Promedio
     renderText('cycle-avg-orders', avgOrders.toFixed(1));
 
-    // Duración Promedio
-    renderText('cycle-avg-duration', formatDurationMs(avgDurationMs));
-
-    // Recuperación Promedio
+    // Columna 3: Tiempo y Recuperación
+    renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
 
-    // Win Rate
-    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, 
-        `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
-
-    // Eficiencia ($/h)
+    // Columna 4: WinRate y Eficiencia
+    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
 
     const chartData = prepareChartData(filtered);
@@ -153,20 +127,27 @@ function updateMetricsDisplay() {
 }
 
 /**
- * prepareChartData - Estructura para la gráfica
+ * prepareChartData
+ * Prepara los puntos para la gráfica de equity.
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
     const points = [];
 
     filteredArray.forEach(cycle => {
-        accumulated += cycle.netProfit;
+        const net = parseFloat(cycle.netProfit) || 0;
+        accumulated += net;
+
         const d = cycle.processedDate;
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 
+        let finalValue = (currentChartParameter === 'accumulatedProfit') 
+            ? accumulated 
+            : (parseFloat(cycle.profitPercentage) || 0);
+
         points.push({
             time: label,
-            value: (currentChartParameter === 'accumulatedProfit') ? accumulated : cycle.profitPercentage
+            value: finalValue
         });
     });
 
@@ -190,16 +171,6 @@ export function setBotFilter(filter) {
     updateMetricsDisplay();
 }
 
-export function updateMetricsFromState(state) {
-    if (!state) return;
-    const totalProfit = parseFloat(state.total_profit || 0);
-    const totalEl = document.getElementById('auprofit');
-    if (totalEl) {
-        totalEl.textContent = `+$${totalProfit.toFixed(4)}`;
-        totalEl.className = totalProfit >= 0 ? 'text-emerald-400' : 'text-red-500';
-    }
-}
-
 function resetKPIs() {
     const ids = ['total-cycles-closed', 'cycle-avg-profit', 'cycle-net-profit', 'cycle-avg-orders', 'cycle-avg-duration', 'cycle-avg-recovery', 'cycle-win-rate', 'cycle-efficiency'];
     ids.forEach(id => renderText(id, '--'));
@@ -214,9 +185,45 @@ function renderText(id, text, className = null) {
     }
 }
 
-function formatDurationMs(ms) {
-    if (!ms || ms <= 0) return "0h 0m";
-    const h = Math.floor(ms / (1000 * 60 * 60));
-    const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+/**
+ * metricsManager.js - Sincronización final con el Backend Payload
+ */
+
+export function updateMetricsFromState(state) {
+    if (!state) return;
+
+    // Extraemos datos del payload detectado en consola
+    const metrics = {
+        totalProfit: parseFloat(state.total_profit || 0),
+        longOrders: parseInt(state.lnorder || 0),
+        shortOrders: parseInt(state.snorder || 0),
+        longProfit: parseFloat(state.lprofit || 0),
+        shortProfit: parseFloat(state.sprofit || 0),
+    };
+
+    // Cálculo de duración en tiempo real (Basado en lstartTime detectado)
+    const now = new Date();
+    const lStart = new Date(state.lstartTime);
+    let durationHours = 0;
+
+    if (!isNaN(lStart.getTime())) {
+        durationHours = (now - lStart) / 3600000; // Diferencia en horas
+    }
+
+    // Renderizado en el Dashboard de Analytics
+    renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
+    renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
+    renderValue('cycle-avg-duration', formatDuration(durationHours));
+}
+
+function renderValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function formatDuration(hours) {
+    if (hours <= 0) return "0h 0m";
+    const h = Math.floor(hours);
+    const m = Math.floor((hours % 1) * 60);
     return `${h}h ${m}m`;
 }
