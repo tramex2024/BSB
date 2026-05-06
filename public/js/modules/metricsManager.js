@@ -17,30 +17,30 @@ export function setAnalyticsData(data) {
     if (rawData.length === 0) return;
 
     rawData.forEach(c => {
-        // 1. NORMALIZACIÓN DE ESTRATEGIA
-        let strategy = (c.strategy || 'unknown').toUpperCase();
+        let strategy = (c.strategy || 'UNKNOWN').toUpperCase();
         
-        // 2. EXTRACCIÓN DE FECHA
-        let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
-        const dateObj = new Date(rawDate);
-        if (isNaN(dateObj.getTime())) return; 
+        // Extracción segura de fechas (Maneja el formato $date de MongoDB)
+        const endRaw = c.endTime?.$date || c.endTime;
+        const startRaw = c.startTime?.$date || c.startTime;
+        
+        const endDate = new Date(endRaw);
+        const startDate = new Date(startRaw);
 
-        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
-        const profitValue = parseFloat(c.profit || c.netProfit || 0);
-        
-        // 4. GENERACIÓN DE ID ÚNICO
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
+        if (isNaN(endDate.getTime())) return; 
+
+        const profitValue = parseFloat(c.netProfit || 0);
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${endDate.getTime()}`;
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 5. GUARDADO EN MEMORIA (Incluyendo nuevos parámetros del ciclo)
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
             profitPercentage: parseFloat(c.profitPercentage || 0),
             orderCount: parseInt(c.orderCount || 1),
             finalRecovery: parseFloat(c.finalRecovery || 0),
-            processedDate: dateObj,
+            processedDate: endDate,
+            startDate: startDate, // Guardamos la fecha de inicio limpia
             strategy: strategy
         });
     });
@@ -77,41 +77,40 @@ function updateMetricsDisplay() {
         totalNetProfitUsdt += cycle.netProfit;
         totalOrders += cycle.orderCount;
         totalRecovery += cycle.finalRecovery;
+        
         if (cycle.netProfit > 0) winningCycles++;
 
-        let startRaw = cycle.startTime?.$date || cycle.startTime;
-        const start = new Date(startRaw);
-        if (!isNaN(start.getTime())) {
-            const diff = cycle.processedDate.getTime() - start.getTime();
+        // Cálculo de duración corregido
+        if (!isNaN(cycle.startDate.getTime()) && !isNaN(cycle.processedDate.getTime())) {
+            const diff = cycle.processedDate.getTime() - cycle.startDate.getTime();
             if (diff > 0) totalTimeMs += diff;
         }
     });
 
-    // Cálculos Finales basados en el historial filtrado
+    // Cálculos Finales
     const avgProfit = totalProfitPct / totalCycles;
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
+    
+    // Convertimos MS a Horas para la eficiencia
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const avgDurationMs = totalTimeMs / totalCycles;
-    const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
+    const profitPerHour = totalHours > 0 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // --- ACTUALIZACIÓN DE INTERFAZ (Histórica) ---
+    // --- ACTUALIZACIÓN DE UI ---
+    renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
+               `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     
-    // Columna 1: Profit
-    renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-net-profit', `+$${totalNetProfitUsdt.toFixed(4)}`);
-
-    // Columna 2: Ciclos y Órdenes
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-orders', avgOrders.toFixed(1));
-
-    // Columna 3: Tiempo y Recuperación
     renderText('cycle-avg-duration', formatDurationMs(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
-
-    // Columna 4: WinRate y Eficiencia
-    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
+    
+    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, 
+               `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
+    
     renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
 
     const chartData = prepareChartData(filtered);
