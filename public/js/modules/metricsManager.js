@@ -1,7 +1,7 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * UNIFICACIÓN: Sincronización de Historial + Estado en Tiempo Real
- * INTEGRACIÓN: 8-KPI Analytics Grid
+ * CORRECCIÓN: Eliminación de duplicados e integridad de funciones.
+ * ESTADO: Unificado (History + State)
  */
 
 const globalCyclesMap = new Map(); 
@@ -10,40 +10,44 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Fusiona datos sin duplicados y normaliza estrategias con precisión.
+ * Procesa los datos y asegura que el conteo de ciclos sea real (29, no 49).
  */
-export function setAnalyticsData(data) {
-    // Auditado: Soporte para data.cycles o data.data según el apiService
+export function setAnalyticsData(data, isSnapshot = true) {
+    // 1. OBTENCIÓN Y LIMPIEZA
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
-    if (rawData.length === 0) return;
+    
+    // Si es una carga nueva, limpiamos el mapa para evitar acumulaciones erróneas
+    if (isSnapshot) {
+        globalCyclesMap.clear();
+    }
 
     rawData.forEach(c => {
-        // 1. NORMALIZACIÓN DE ESTRATEGIA
+        // 2. NORMALIZACIÓN DE ESTRATEGIA
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // 2. EXTRACCIÓN DE FECHA
+        // 3. EXTRACCIÓN DE FECHA
         let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
+        // 4. NORMALIZACIÓN DE VALORES
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
-        // 4. GENERACIÓN DE ID ÚNICO (Auditado: Prioriza _id del backend)
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
+        // 5. GENERACIÓN DE ID ÚNICO (Clave para evitar los 49 ciclos)
+        // Priorizamos el ID del servidor; si no existe, creamos uno basado en tiempo sin milisegundos.
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.setMilliseconds(0)}`;
 
-        if (globalCyclesMap.has(fingerPrint)) return;
-
-        // 5. GUARDADO EN MEMORIA
-        globalCyclesMap.set(fingerPrint, {
-            ...c,
-            netProfit: profitValue, 
-            profitPercentage: parseFloat(c.profitPercentage || 0),
-            orderCount: parseInt(c.orderCount || 1),
-            finalRecovery: parseFloat(c.finalRecovery || 0),
-            processedDate: dateObj,
-            strategy: strategy
-        });
+        if (!globalCyclesMap.has(fingerPrint)) {
+            globalCyclesMap.set(fingerPrint, {
+                ...c,
+                netProfit: profitValue, 
+                profitPercentage: parseFloat(c.profitPercentage || 0),
+                orderCount: parseInt(c.orderCount || 1),
+                finalRecovery: parseFloat(c.finalRecovery || 0),
+                processedDate: dateObj,
+                strategy: strategy
+            });
+        }
     });
 
     updateMetricsDisplay();
@@ -51,7 +55,7 @@ export function setAnalyticsData(data) {
 
 /**
  * updateMetricsDisplay
- * Calcula KPIs usando la base de datos histórica acumulada.
+ * Calcula KPIs usando precisión total y actualiza la UI.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
@@ -80,7 +84,6 @@ function updateMetricsDisplay() {
         totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
-        // Auditoría de duración: Soporte para múltiples llaves del backend
         let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.lstartTime || cycle.sstartTime;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
@@ -99,7 +102,6 @@ function updateMetricsDisplay() {
     const avgDurationMs = totalTimeMs / totalCycles;
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Formateador de duración
     const fmtDuration = (ms) => {
         const h = Math.floor(ms / (1000 * 60 * 60));
         const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
@@ -109,7 +111,7 @@ function updateMetricsDisplay() {
     // --- ACTUALIZACIÓN DE INTERFAZ ---
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
-    renderText('total-cycles-closed', totalCycles);
+    renderText('total-cycles-closed', totalCycles); // <-- Aquí verás los 29
     renderText('cycle-avg-orders', avgOrders.toFixed(1));
     renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
@@ -121,43 +123,7 @@ function updateMetricsDisplay() {
 }
 
 /**
- * updateMetricsFromState
- * Sincronización inmediata con el Payload del Backend (Tiempo Real)
- */
-export function updateMetricsFromState(state) {
-    if (!state) return;
-
-    // 1. Actualización de Profit Total (KPI Principal)
-    const totalProfit = parseFloat(state.total_profit || 0);
-    const totalEl = document.getElementById('auprofit'); // ID del Dashboard principal
-    if (totalEl) {
-        totalEl.textContent = `+$${totalProfit.toFixed(4)}`;
-        totalEl.className = totalProfit >= 0 ? 'text-emerald-400' : 'text-red-500';
-    }
-
-    // 2. Sincronización de Duración del Ciclo Activo
-    const now = new Date();
-    // Auditado: El payload usa lstartTime para el ciclo Long activo
-    const activeStart = new Date(state.lstartTime || state.sstartTime);
-    
-    if (!isNaN(activeStart.getTime())) {
-        const durationHours = (now - activeStart) / 3600000;
-        // Solo actualizamos la duración si el historial está vacío o para mostrar tiempo real activo
-        const durationEl = document.getElementById('cycle-avg-duration');
-        if (durationEl && globalCyclesMap.size === 0) {
-            durationEl.textContent = formatDuration(durationHours);
-        }
-    }
-
-    // 3. Sincronización de Profit Neto en KPI si no hay ciclos históricos aún
-    if (globalCyclesMap.size === 0) {
-        renderValue('cycle-net-profit', `$${totalProfit.toFixed(4)}`);
-    }
-}
-
-/**
  * prepareChartData
- * Prepara los puntos para la gráfica de equity.
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
@@ -166,7 +132,6 @@ function prepareChartData(filteredArray) {
     filteredArray.forEach(cycle => {
         const net = parseFloat(cycle.netProfit) || 0;
         accumulated += net;
-
         const d = cycle.processedDate;
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 
@@ -174,10 +139,7 @@ function prepareChartData(filteredArray) {
             ? accumulated 
             : (parseFloat(cycle.profitPercentage) || 0);
 
-        points.push({
-            time: label,
-            value: finalValue
-        });
+        points.push({ time: label, value: finalValue });
     });
 
     return { points };
@@ -200,6 +162,23 @@ export function setBotFilter(filter) {
     updateMetricsDisplay();
 }
 
+export function updateMetricsFromState(state) {
+    if (!state) return;
+
+    const totalProfit = parseFloat(state.total_profit || 0);
+    const totalEl = document.getElementById('auprofit'); 
+    if (totalEl) {
+        totalEl.textContent = `+$${totalProfit.toFixed(4)}`;
+        totalEl.className = totalProfit >= 0 ? 'text-emerald-400' : 'text-red-500';
+    }
+
+    if (globalCyclesMap.size === 0) {
+        const totalStateCycles = (parseInt(state.lcycle) || 0) + (parseInt(state.scycle) || 0);
+        renderText('total-cycles-closed', totalStateCycles);
+        renderValue('cycle-net-profit', `$${totalProfit.toFixed(4)}`);
+    }
+}
+
 function resetKPIs() {
     const ids = ['total-cycles-closed', 'cycle-avg-profit', 'cycle-net-profit', 'cycle-avg-orders', 'cycle-avg-duration', 'cycle-avg-recovery', 'cycle-win-rate', 'cycle-efficiency'];
     ids.forEach(id => renderText(id, '--'));
@@ -217,11 +196,4 @@ function renderText(id, text, className = null) {
 function renderValue(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
-}
-
-function formatDuration(hours) {
-    if (hours <= 0) return "0h 0m";
-    const h = Math.floor(hours);
-    const m = Math.floor((hours % 1) * 60);
-    return `${h}h ${m}m`;
 }
