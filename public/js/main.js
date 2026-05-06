@@ -1,6 +1,6 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Corregido - Sincronización real de checkboxes Long/Short
+ * Estado: Actualizado - Sincronización de ciclos históricos y checkboxes
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -20,8 +20,9 @@ import { initializeGlobalButtonListeners } from './modules/botControls.js';
 import { displayMessage } from './modules/ui/notifications.js';
 import { applyRolePermissions } from './modules/role.js';
 
-// Importamos el servicio de API para poder guardar los cambios de los checkboxes
-import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
+// Importamos el servicio de API y el motor de métricas para la sincronización inicial
+import { sendConfigToBackend, getBotConfiguration, fetchRawTradeCycles } from './modules/apiService.js';
+import { setAnalyticsData } from './modules/metricsManager.js';
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -85,12 +86,25 @@ function processNextLog() {
 }
 
 // --- APP INITIALIZATION ---
-export function initializeFullApp() {
+// Se añade 'async' para permitir la carga de ciclos antes de iniciar el socket
+export async function initializeFullApp() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
     const userRole = localStorage.getItem('userRole'); 
 
     if (token && userId) {
+        // --- CORRECCIÓN: CARGA PREVENTIVA DE MÉTRICAS ---
+        try {
+            const cycles = await fetchRawTradeCycles('all');
+            if (cycles && cycles.length > 0) {
+                setAnalyticsData(cycles);
+                logStatus("Análisis de ciclos sincronizado", "success");
+            }
+        } catch (err) {
+            console.error("⚠️ Error precargando métricas:", err);
+        }
+        // ----------------------------------------------
+
         const adminTab = document.getElementById('tab-admin');
         if (adminTab && userRole === 'admin') {
             adminTab.style.display = 'block';
@@ -155,29 +169,24 @@ function syncAIElementsInDOM() {
 
 // --- CONFIGURATION DELEGATION (CHECKBOXES FIX) ---
 document.addEventListener('change', async (e) => {
-    // 1. Manejo de Input de cantidad AI
     if (e.target && e.target.id === 'ai-amount-usdt') {
         const val = parseFloat(e.target.value);
         if (isNaN(val) || val <= 0) return;
         await saveAIConfigGlobal({ amountUsdt: val });
     }
     
-    // 2. Manejo de Checkbox AI
     if (e.target && e.target.id === 'ai-stop-at-cycle') {
         await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
     }
 
-    // 3. [FIX] Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot)
     if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         const isChecked = e.target.checked;
         
         logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
         
-        // Actualizamos el estado local inmediatamente
         currentBotState.config[side].stopAtCycle = isChecked;
 
-        // Enviamos la configuración completa al servidor
         const fullConfig = getBotConfiguration();
         await sendConfigToBackend({ config: fullConfig });
     }
