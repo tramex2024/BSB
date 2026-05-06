@@ -86,62 +86,43 @@ function processNextLog() {
 }
 
 // --- APP INITIALIZATION ---
-/**
- * Inicializa la aplicación completa, gestionando la sesión,
- * la carga de métricas históricas y la conexión al socket.
- */
+// --- APP INITIALIZATION (Versión Auditada) ---
 export async function initializeFullApp() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
     const userRole = localStorage.getItem('userRole'); 
 
     if (token && userId) {
-        // --- CORRECCIÓN CRÍTICA: CARGA ESTRATÉGICA DE MÉTRICAS ---
+        // Bloque de Sincronización Inicial
         try {
-            // Obtenemos los ciclos del backend
+            logStatus("Sincronizando historial...", "info");
+            
             const cycles = await fetchRawTradeCycles('all');
             
-            if (cycles && Array.isArray(cycles)) {
-                /**
-                 * setAnalyticsData(data, isSnapshot)
-                 * Enviamos 'true' como segundo parámetro para limpiar el Map global.
-                 * Esto corrige el error donde los 29 ciclos se convertían en 49.
-                 */
-                setAnalyticsData(cycles, true); 
-                
-                if (cycles.length > 0) {
-                    logStatus("Análisis de ciclos sincronizado", "success");
-                } else {
-                    logStatus("Sin ciclos previos en el historial", "info");
-                }
+            // Verificamos si realmente hay datos antes de proceder
+            if (cycles && Array.isArray(cycles) && cycles.length > 0) {
+                // Sincronizamos los datos. 
+                // Si el problema persiste, el error está en cómo el servidor 
+                // genera los IDs de estos ciclos.
+                setAnalyticsData(cycles);
+                logStatus(`Sincronizados ${cycles.length} ciclos`, "success");
             }
         } catch (err) {
-            console.error("⚠️ Error crítico precargando métricas:", err);
-            logStatus("Error al sincronizar historial", "error");
+            console.error("⚠️ Fallo en carga de métricas:", err);
+            logStatus("Error de sincronización", "error");
         }
-        // ------------------------------------------------------
 
-        // Gestión de permisos de administrador en la UI
-        const adminTab = document.getElementById('tab-admin');
-        if (adminTab && userRole === 'admin') {
-            adminTab.style.display = 'block';
-            adminTab.classList.remove('hidden');
-        }
-        
+        // Solo después de intentar cargar las métricas, iniciamos el socket
+        // para evitar que los eventos en tiempo real colisionen con la carga inicial.
         applyRolePermissions();
-
-        // Inicialización del Socket de tiempo real
-        const socket = initSocket();
+        
+        const socket = initSocket(); 
+        
         if (socket) {
-            // Carga dinámica del módulo de notificaciones para optimizar recursos
-            import('./modules/notifications.js')
-                .then(module => {
-                    module.initializeNotifications(socket);
-                })
-                .catch(err => console.error("❌ Error inicializando notificaciones:", err));
+            import('./modules/notifications.js').then(module => {
+                module.initializeNotifications(socket);
+            }).catch(err => console.error("❌ Error notifications:", err));
         }
-    } else {
-        logStatus("Sesión no válida. Por favor, inicie sesión.", "warning");
     }
 }
 
