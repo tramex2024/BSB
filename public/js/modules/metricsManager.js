@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * VERSIÓN INTEGRAL: Auditoría de datos + Funcionalidad Completa
+ * VERSIÓN INTEGRAL: Auditoría de datos + Funcionalidad Completa + Exportación
  */
 
 const globalCyclesMap = new Map(); 
@@ -33,7 +33,7 @@ export function setAnalyticsData(data) {
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // NORMALIZACIÓN DE VALORES (El corazón del problema de los ceros)
+        // NORMALIZACIÓN DE VALORES (Corrección de valores en cero)
         const profitValue = parseFloat(c.netProfit || c.net_profit || c.profit || c.pnl || 0);
         
         let pPct = parseFloat(c.profitPercentage || c.profit_pct || c.percent || c.pnl_pct || 0);
@@ -93,7 +93,7 @@ function updateMetricsDisplay() {
         totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
-        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at;
+        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at || cycle.timestamp;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
             const diff = cycle.processedDate.getTime() - start.getTime();
@@ -156,6 +156,9 @@ function prepareChartData(filteredArray) {
     return { points };
 }
 
+/**
+ * FUNCIONES DE FILTRADO Y CONTROL
+ */
 export function getFilteredData() {
     const allData = Array.from(globalCyclesMap.values());
     const filtered = allData.filter(c => currentBotFilter === 'all' || c.strategy === currentBotFilter.toUpperCase());
@@ -173,6 +176,9 @@ export function setBotFilter(filter) {
     updateMetricsDisplay();
 }
 
+/**
+ * RENDERIZADO Y UTILIDADES
+ */
 function resetKPIs() {
     const ids = ['total-cycles-closed', 'cycle-avg-profit', 'cycle-net-profit', 'cycle-avg-orders', 'cycle-avg-duration', 'cycle-avg-recovery', 'cycle-win-rate', 'cycle-efficiency'];
     ids.forEach(id => renderText(id, '--'));
