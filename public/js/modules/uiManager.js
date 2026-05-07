@@ -5,7 +5,7 @@
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
 import { isSavingConfig } from './apiService.js';
-import { updateMetricsFromState } from './metricsManager.js';
+import { setAnalyticsData } from './metricsManager.js';
 
 export { displayMessage } from './ui/notifications.js';
 
