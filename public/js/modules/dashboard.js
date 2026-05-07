@@ -52,17 +52,32 @@ function handleMetricsUpdate(e) {
     }
 }
 
+/**
+ * refreshAnalytics
+ * Carga datos históricos y aplica una limpieza preventiva antes de 
+ * procesar las métricas para evitar conteos duplicados.
+ */
 async function refreshAnalytics() {
     try {
         const response = await fetchEquityCurveData();
+        
         if (response && response.success && Array.isArray(response.data)) {
-            Metrics.setAnalyticsData(response.data);
-            addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
+            // Limpieza preventiva: Filtramos nulos o datos incompletos
+            const cleanData = response.data.filter(item => 
+                item && (item.endTime || item.timestamp) && item.profit !== undefined
+            );
+
+            // Enviamos los datos limpios al gestor de métricas
+            Metrics.setAnalyticsData(cleanData);
+            
+            addTerminalLog(`ANALYTICS: ${cleanData.length} RAW RECORDS LOADED`, 'success');
         } else {
             renderEquityCurve([]); 
+            addTerminalLog("ANALYTICS: NO DATA FOUND", 'warning');
         }
     } catch (e) { 
         addTerminalLog("ERROR LOADING ANALYTICS", 'error');
+        console.error("Dashboard Refresh Error:", e);
     }
 }
 
