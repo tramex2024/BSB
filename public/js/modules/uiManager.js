@@ -26,9 +26,9 @@ export async function updateBotUI(state) {
     if (!state) return;
     
     // --- BLOQUE DE INSPECCIÓN TEMPORAL ---
-    console.log("--- BACKEND PAYLOAD INSPECTION ---");
-    console.log("Estructura completa:", state);
-    if (state.stats) console.log("Estadísticas detectadas:", state.stats);
+    //console.log("--- BACKEND PAYLOAD INSPECTION ---");
+    //console.log("Estructura completa:", state);
+    //if (state.stats) console.log("Estadísticas detectadas:", state.stats);
     // -------------------------------------
 
     // 1. Actualización de Precio (Con suavizado)
