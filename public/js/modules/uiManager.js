@@ -1,11 +1,12 @@
 /**
  * uiManager.js - Orquestador Atómico (Sincronizado 2026)
  * Etapa 1: Protección Total contra parpadeo y reseteo de estados.
+ * CORRECCIÓN: Eliminada dependencia de updateMetricsFromState para evitar SyntaxError.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
 import { isSavingConfig } from './apiService.js';
-import { setAnalyticsData } from './metricsManager.js';
+import { setAnalyticsData } from './metricsManager.js'; // Solo importamos lo necesario
 
 export { displayMessage } from './ui/notifications.js';
 
@@ -14,7 +15,7 @@ let lastPrice = 0;
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
     'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',         
+    'BUYING': '#60a5fa',          
     'SELLING': '#fbbf24',      
     'PAUSED': '#fb923c',    
 };
@@ -25,12 +26,6 @@ const STATUS_COLORS = {
 export async function updateBotUI(state) {
     if (!state) return;
     
-    // --- BLOQUE DE INSPECCIÓN TEMPORAL ---
-    //console.log("--- BACKEND PAYLOAD INSPECTION ---");
-    //console.log("Estructura completa:", state);
-    //if (state.stats) console.log("Estadísticas detectadas:", state.stats);
-    // -------------------------------------
-
     // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
@@ -52,7 +47,7 @@ export async function updateBotUI(state) {
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder', // <--- Coma agregada aquí para evitar el SyntaxError
+        'aulnorder': 'lnorder', 
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
@@ -62,7 +57,7 @@ export async function updateBotUI(state) {
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder', // <--- Coma agregada aquí por seguridad
+        'ausnorder': 'snorder', 
 
         // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
@@ -158,8 +153,8 @@ export async function updateBotUI(state) {
         }
     } catch (err) { /* Silencioso */ }
 
-    // Sincronizamos las métricas con el nuevo payload
-    updateMetricsFromState(state);
+    // NOTA: Se ha eliminado la llamada a updateMetricsFromState para centralizar 
+    // la lógica en setAnalyticsData y evitar errores de importación.
 }
 
 function updatePulseBars(id, value) {
