@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * CORRECCIÓN: Precisión Decimal y Sincronización de Estrategia AI
+ * CORRECCIÓN: Mapeo de atributos de versión antigua (net_profit, profit_pct, etc)
  * INTEGRACIÓN: 8-KPI Analytics Grid
  */
 
@@ -10,10 +10,11 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Fusiona datos sin duplicados y normaliza estrategias con precisión.
+ * Fusiona datos capturando atributos de versiones antiguas y nuevas.
  */
 export function setAnalyticsData(data) {
-    const rawData = Array.isArray(data) ? data : (data?.data || []);
+    // Según tu apiService.js, los datos pueden venir en data.cycles o data.data
+    const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     if (rawData.length === 0) return;
 
     rawData.forEach(c => {
@@ -21,32 +22,35 @@ export function setAnalyticsData(data) {
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
         // 2. EXTRACCIÓN DE FECHA
-        let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
+        let rawDate = c.endTime?.$date || c.endTime || c.timestamp || c.closed_at;
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
 
-        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
-        const profitValue = parseFloat(c.profit || c.netProfit || 0);
+        // 3. NORMALIZACIÓN DE PROFIT (Mapeo de nombres antiguos: net_profit, profit)
+        const profitValue = parseFloat(c.netProfit || c.net_profit || c.profit || 0);
         
-        // --- CORRECCIÓN: Cálculo de Porcentaje si es 0 ---
-        let pPct = parseFloat(c.profitPercentage || c.percent || 0);
-        if (pPct === 0 && profitValue !== 0 && c.amount) {
-            pPct = (profitValue / parseFloat(c.amount)) * 100;
+        // 4. NORMALIZACIÓN DE PORCENTAJE (Mapeo: profitPercentage, profit_pct, percent)
+        let pPct = parseFloat(c.profitPercentage || c.profit_pct || c.percent || 0);
+        
+        // Fallback: Si sigue siendo 0 pero hay ganancia, calculamos sobre el amount
+        if (pPct === 0 && profitValue !== 0 && (c.amount || c.cost)) {
+            const capital = parseFloat(c.amount || c.cost);
+            pPct = (profitValue / capital) * 100;
         }
         
-        // 4. GENERACIÓN DE ID ÚNICO
+        // 5. GENERACIÓN DE ID ÚNICO (Preservando precisión de milisegundos)
         const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 5. GUARDADO EN MEMORIA (Incluyendo nuevos parámetros del ciclo)
+        // 6. GUARDADO EN MEMORIA
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
             profitPercentage: pPct,
-            orderCount: parseInt(c.orderCount || 1),
-            // --- CORRECCIÓN: Búsqueda de campo Recovery ---
-            finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.rec_amount || 0),
+            orderCount: parseInt(c.orderCount || c.orders_count || 1),
+            // Mapeo de Recovery (finalRecovery, recovery_amount)
+            finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.recovery_amount || 0),
             processedDate: dateObj,
             strategy: strategy
         });
@@ -57,7 +61,7 @@ export function setAnalyticsData(data) {
 
 /**
  * updateMetricsDisplay
- * Calcula KPIs usando precisión total de punto flotante y actualiza la UI.
+ * Calcula KPIs usando precisión total y actualiza la UI.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
@@ -86,7 +90,7 @@ function updateMetricsDisplay() {
         totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
-        let startRaw = cycle.startTime?.$date || cycle.startTime;
+        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at;
         const start = new Date(startRaw);
         if (!isNaN(start.getTime())) {
             const diff = cycle.processedDate.getTime() - start.getTime();
@@ -100,44 +104,34 @@ function updateMetricsDisplay() {
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
-    
-    // --- CORRECCIÓN: Ajuste de sensibilidad para Profit/H ---
-    const totalHours = totalTimeMs / (1000 * 60 * 60);
+    const totalHours = totalTimeMs / 3600000;
     const avgDurationMs = totalTimeMs / totalCycles;
-    const profitPerHour = totalHours > 0.001 ? (totalNetProfitUsdt / totalHours) : 0;
+    
+    // Profit/H: Sensibilidad aumentada para detectar ganancias en poco tiempo
+    const profitPerHour = totalHours > 0.0001 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Formateador de duración
     const fmtDuration = (ms) => {
-        const h = Math.floor(ms / (1000 * 60 * 60));
-        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        const h = Math.floor(ms / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
         return `${h}h ${m}m`;
     };
 
     // --- ACTUALIZACIÓN DE INTERFAZ ---
-    
-    // Columna 1: Profit
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
-
-    // Columna 2: Ciclos y Órdenes
     renderText('total-cycles-closed', totalCycles);
     renderText('cycle-avg-orders', avgOrders.toFixed(1));
-
-    // Columna 3: Tiempo y Recuperación
     renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
-
-    // Columna 4: WinRate y Eficiencia
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
-    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
+    renderText('cycle-efficiency', `$${profitPerHour.toFixed(4)}/h`);
 
     const chartData = prepareChartData(filtered);
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
 }
 
 /**
- * prepareChartData
- * Prepara los puntos para la gráfica de equity.
+ * prepareChartData - Gráfica de equity
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
@@ -195,31 +189,25 @@ function renderText(id, text, className = null) {
 }
 
 /**
- * metricsManager.js - Sincronización final con el Backend Payload
+ * Sincronización con Estado Actual (Real-time)
  */
-
 export function updateMetricsFromState(state) {
     if (!state) return;
 
-    // Extraemos datos del payload detectado en consola
     const metrics = {
         totalProfit: parseFloat(state.total_profit || 0),
         longOrders: parseInt(state.lnorder || 0),
-        shortOrders: parseInt(state.snorder || 0),
-        longProfit: parseFloat(state.lprofit || 0),
-        shortProfit: parseFloat(state.sprofit || 0),
+        shortOrders: parseInt(state.snorder || 0)
     };
 
-    // Cálculo de duración en tiempo real (Basado en lstartTime detectado)
     const now = new Date();
     const lStart = new Date(state.lstartTime);
     let durationHours = 0;
 
     if (!isNaN(lStart.getTime())) {
-        durationHours = (now - lStart) / 3600000; // Diferencia en horas
+        durationHours = (now - lStart) / 3600000;
     }
 
-    // Renderizado en el Dashboard de Analytics
     renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
     renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
     renderValue('cycle-avg-duration', formatDuration(durationHours));
