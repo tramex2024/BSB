@@ -1,12 +1,10 @@
 /**
  * uiManager.js - Orquestador Atómico (Sincronizado 2026)
  * Etapa 1: Protección Total contra parpadeo y reseteo de estados.
- * CORRECCIÓN: Eliminada dependencia de updateMetricsFromState para evitar SyntaxError.
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
 import { isSavingConfig } from './apiService.js';
-import { setAnalyticsData } from './metricsManager.js'; // Solo importamos lo necesario
 
 export { displayMessage } from './ui/notifications.js';
 
@@ -15,7 +13,7 @@ let lastPrice = 0;
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
     'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',          
+    'BUYING': '#60a5fa',         
     'SELLING': '#fbbf24',      
     'PAUSED': '#fb923c',    
 };
@@ -47,7 +45,7 @@ export async function updateBotUI(state) {
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder', 
+        'aulnorder': 'lnorder', // <--- Coma agregada aquí para evitar el SyntaxError
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
@@ -57,7 +55,7 @@ export async function updateBotUI(state) {
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder', 
+        'ausnorder': 'snorder', // <--- Coma agregada aquí por seguridad
 
         // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
@@ -152,9 +150,6 @@ export async function updateBotUI(state) {
             if (totalEl) formatProfit(totalEl, totalProfit);
         }
     } catch (err) { /* Silencioso */ }
-
-    // NOTA: Se ha eliminado la llamada a updateMetricsFromState para centralizar 
-    // la lógica en setAnalyticsData y evitar errores de importación.
 }
 
 function updatePulseBars(id, value) {

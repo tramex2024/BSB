@@ -1,6 +1,6 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Actualizado - Sincronización de ciclos históricos y checkboxes
+ * Estado: Corregido - Sincronización real de checkboxes Long/Short
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -20,9 +20,8 @@ import { initializeGlobalButtonListeners } from './modules/botControls.js';
 import { displayMessage } from './modules/ui/notifications.js';
 import { applyRolePermissions } from './modules/role.js';
 
-// Importamos el servicio de API y el motor de métricas para la sincronización inicial
-import { sendConfigToBackend, getBotConfiguration, fetchRawTradeCycles } from './modules/apiService.js';
-import { setAnalyticsData } from './modules/metricsManager.js';
+// Importamos el servicio de API para poder guardar los cambios de los checkboxes
+import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -86,38 +85,19 @@ function processNextLog() {
 }
 
 // --- APP INITIALIZATION ---
-// --- APP INITIALIZATION (Versión Auditada) ---
-export async function initializeFullApp() {
+export function initializeFullApp() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
     const userRole = localStorage.getItem('userRole'); 
 
     if (token && userId) {
-        // Bloque de Sincronización Inicial
-        try {
-            logStatus("Sincronizando historial...", "info");
-            
-            const cycles = await fetchRawTradeCycles('all');
-            
-            // Verificamos si realmente hay datos antes de proceder
-            if (cycles && Array.isArray(cycles) && cycles.length > 0) {
-                // Sincronizamos los datos. 
-                // Si el problema persiste, el error está en cómo el servidor 
-                // genera los IDs de estos ciclos.
-                setAnalyticsData(cycles);
-                logStatus(`Sincronizados ${cycles.length} ciclos`, "success");
-            }
-        } catch (err) {
-            console.error("⚠️ Fallo en carga de métricas:", err);
-            logStatus("Error de sincronización", "error");
+        const adminTab = document.getElementById('tab-admin');
+        if (adminTab && userRole === 'admin') {
+            adminTab.style.display = 'block';
+            adminTab.classList.remove('hidden');
         }
-
-        // Solo después de intentar cargar las métricas, iniciamos el socket
-        // para evitar que los eventos en tiempo real colisionen con la carga inicial.
         applyRolePermissions();
-        
-        const socket = initSocket(); 
-        
+        const socket = initSocket();
         if (socket) {
             import('./modules/notifications.js').then(module => {
                 module.initializeNotifications(socket);
@@ -175,24 +155,29 @@ function syncAIElementsInDOM() {
 
 // --- CONFIGURATION DELEGATION (CHECKBOXES FIX) ---
 document.addEventListener('change', async (e) => {
+    // 1. Manejo de Input de cantidad AI
     if (e.target && e.target.id === 'ai-amount-usdt') {
         const val = parseFloat(e.target.value);
         if (isNaN(val) || val <= 0) return;
         await saveAIConfigGlobal({ amountUsdt: val });
     }
     
+    // 2. Manejo de Checkbox AI
     if (e.target && e.target.id === 'ai-stop-at-cycle') {
         await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
     }
 
+    // 3. [FIX] Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot)
     if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         const isChecked = e.target.checked;
         
         logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
         
+        // Actualizamos el estado local inmediatamente
         currentBotState.config[side].stopAtCycle = isChecked;
 
+        // Enviamos la configuración completa al servidor
         const fullConfig = getBotConfiguration();
         await sendConfigToBackend({ config: fullConfig });
     }

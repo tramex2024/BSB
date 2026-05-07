@@ -207,18 +207,3 @@ export async function triggerPanicStop() {
         return { success: false };
     }
 }
-
-// --- Añade esto a tu apiService.js ---
-
-/**
- * Obtiene los ciclos de trading detallados para el motor de métricas.
- * Esto asegura que tengamos startTime y endTime para calcular duraciones reales.
- */
-export async function fetchRawTradeCycles(strategy = 'all') {
-    const data = await privateFetch(`/api/v1/analytics/cycles?strategy=${strategy}`);
-    // Verificamos si la respuesta es exitosa y contiene el array de datos
-    if (data && data.success) {
-        return data.cycles || data.data || [];
-    }
-    return [];
-}

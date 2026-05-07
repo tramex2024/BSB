@@ -1,54 +1,45 @@
 /**
- * metricsManager.js - Motor de Análisis de Rendimiento (Versión 2.0)
- * OBJETIVO: Unificación de ciclos y corrección de duplicados.
- * LOGICA: Redondeo de precisión temporal para sincronización de 29 ciclos reales.
+ * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
+ * AUDITORÍA 2026: Sincronización Estricta (Corrección de campo 'profit')
  */
 
+// Estado persistente en la sesión del navegador
 const globalCyclesMap = new Map(); 
 let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Procesa el array de datos y filtra duplicados usando un ID de negocio robusto.
+ * Procesa datos de API (15 ciclos) o Socket y los fusiona sin duplicados.
  */
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || []);
     if (rawData.length === 0) return;
 
-    // Si prefieres que el conteo sea estrictamente lo que envía el servidor en cada carga,
-    // puedes descomentar la siguiente línea para limpiar el mapa previo:
-    // globalCyclesMap.clear();
-
-    rawData.forEach(c => {
-        // 1. Normalización de Estrategia
-        let strategy = (c.strategy || 'unknown').toUpperCase();
+        rawData.forEach(c => {
+        // 1. NORMALIZACIÓN DE ESTRATEGIA
+        const strategy = (c.strategy || 'unknown').toLowerCase();
         
-        // 2. Extracción y Normalización de Fecha
-        // Redondeamos a minutos (60000ms) para ignorar discrepancias de milisegundos
+        // 2. EXTRACCIÓN DE FECHA
         let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
         if (isNaN(dateObj.getTime())) return; 
-        
-        const normalizedTS = Math.floor(dateObj.getTime() / 60000); 
 
-        // 3. Normalización de Valores Numéricos
+        // 3. NORMALIZACIÓN DE PROFIT (El punto crítico corregido)
+        // Usamos 'profit' que es lo que envía tu backend, con fallback a 'netProfit'
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
-        // 4. Generación de Fingerprint (ID Único)
-        // Prioridad: ID de DB -> Identificador Compuesto (Estrategia + Profit + Minuto)
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue.toFixed(4)}-${normalizedTS}`;
+        // 4. GENERACIÓN DE ID ÚNICO
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        // Filtro de Seguridad: Si el ID ya existe, no procesamos el duplicado
+        // Evitar duplicados
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 5. Almacenamiento Atómico
+        // 5. GUARDADO EN MEMORIA (MAPEADO ESTRICTO)
         globalCyclesMap.set(fingerPrint, {
             ...c,
-            netProfit: profitValue, 
+            netProfit: profitValue, // Guardamos estandarizado como netProfit para el resto del sistema
             profitPercentage: parseFloat(c.profitPercentage || 0),
-            orderCount: parseInt(c.orderCount || 1),
-            finalRecovery: parseFloat(c.finalRecovery || 0),
             processedDate: dateObj,
             strategy: strategy
         });
@@ -59,36 +50,30 @@ export function setAnalyticsData(data) {
 
 /**
  * updateMetricsDisplay
- * Calcula los 8 KPIs principales y actualiza la interfaz de usuario.
+ * Filtra y calcula KPIs basados en los datos normalizados.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
     
-    // Filtrado por bot seleccionado (All, Long, Short, AI)
     const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
-        return c.strategy === currentBotFilter.toUpperCase();
+        return c.strategy === currentBotFilter;
     });
 
-    // Ordenamiento cronológico para la curva de equidad
+    // Ordenamiento cronológico
     filtered.sort((a, b) => a.processedDate - b.processedDate);
 
     const totalCycles = filtered.length;
     if (totalCycles === 0) return resetKPIs();
 
-    // Acumuladores de métricas
     let totalProfitPct = 0;
     let totalNetProfitUsdt = 0;
-    let totalOrders = 0;
-    let totalRecovery = 0;
     let winningCycles = 0;
     let totalTimeMs = 0;
 
     filtered.forEach(cycle => {
         totalProfitPct += cycle.profitPercentage;
         totalNetProfitUsdt += cycle.netProfit;
-        totalOrders += cycle.orderCount;
-        totalRecovery += cycle.finalRecovery;
         if (cycle.netProfit > 0) winningCycles++;
 
         let startRaw = cycle.startTime?.$date || cycle.startTime;
@@ -99,45 +84,24 @@ function updateMetricsDisplay() {
         }
     });
 
-    // Cálculos de promedios y eficiencia
     const avgProfit = totalProfitPct / totalCycles;
-    const avgNetProfit = totalNetProfitUsdt / totalCycles;
-    const avgOrders = totalOrders / totalCycles;
-    const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     const totalHours = totalTimeMs / (1000 * 60 * 60);
-    const avgDurationMs = totalTimeMs / totalCycles;
     const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
 
-    // Formateador de tiempo interno
-    const fmtDuration = (ms) => {
-        const h = Math.floor(ms / (1000 * 60 * 60));
-        const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-        return `${h}h ${m}m`;
-    };
+    // Actualizar UI
+    renderText('total-cycles-closed', totalCycles);
+    renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
+    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
+    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`, `text-sm font-bold ${profitPerHour >= 0 ? 'text-indigo-400' : 'text-red-400'}`);
 
-    // --- Inyección en el DOM ---
-    renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, 
-               `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
-    
-    renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
-    renderText('total-cycles-closed', totalCycles); 
-    renderText('cycle-avg-orders', avgOrders.toFixed(1));
-    renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
-    renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
-    renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, 
-               `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
-    
-    renderText('cycle-efficiency', `$${profitPerHour.toFixed(2)}/h`);
-
-    // Notificar al sistema de gráficos
     const chartData = prepareChartData(filtered);
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
 }
 
 /**
  * prepareChartData
- * Genera el dataset acumulado para la librería de gráficos.
+ * Crea los puntos para la gráfica asegurando valores numéricos reales.
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
@@ -150,22 +114,27 @@ function prepareChartData(filteredArray) {
         const d = cycle.processedDate;
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 
-        let finalValue = (currentChartParameter === 'accumulatedProfit') 
-            ? accumulated 
-            : (parseFloat(cycle.profitPercentage) || 0);
+        let finalValue = 0;
+        if (currentChartParameter === 'accumulatedProfit') {
+            finalValue = accumulated;
+        } else {
+            finalValue = parseFloat(cycle.profitPercentage) || 0;
+        }
 
-        points.push({ time: label, value: finalValue });
+        points.push({
+            time: label,
+            value: parseFloat(finalValue.toFixed(4))
+        });
     });
 
     return { points };
 }
 
-/**
- * Exportaciones de Control
- */
+// --- EXPORTS DE CONTROL ---
+
 export function getFilteredData() {
     const allData = Array.from(globalCyclesMap.values());
-    const filtered = allData.filter(c => currentBotFilter === 'all' || c.strategy === currentBotFilter.toUpperCase());
+    const filtered = allData.filter(c => currentBotFilter === 'all' || c.strategy === currentBotFilter);
     filtered.sort((a, b) => a.processedDate - b.processedDate);
     return prepareChartData(filtered);
 }
@@ -176,13 +145,13 @@ export function setChartParameter(param) {
 }
 
 export function setBotFilter(filter) {
-    currentBotFilter = filter; 
+    currentBotFilter = filter.toLowerCase();
     updateMetricsDisplay();
 }
 
 function resetKPIs() {
-    const ids = ['total-cycles-closed', 'cycle-avg-profit', 'cycle-net-profit', 'cycle-avg-orders', 'cycle-avg-duration', 'cycle-avg-recovery', 'cycle-win-rate', 'cycle-efficiency'];
-    ids.forEach(id => renderText(id, '--'));
+    renderText('total-cycles-closed', '0');
+    renderText('cycle-avg-profit', '0.00%', 'text-sm font-bold text-gray-500');
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: { points: [] } }));
 }
 

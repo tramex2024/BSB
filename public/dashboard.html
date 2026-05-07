@@ -184,58 +184,24 @@
                 </div>
             </div>
 
-            <!-- Grid de métricas avanzada: 4 columnas con jerarquía visual unificada -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
-    
-    <!-- COL 1: PROFIT Y RENTABILIDAD -->
-    <div class="bg-black/20 p-2 rounded-lg border border-gray-700 flex flex-col justify-between">
-        <div>
-            <p class="text-[7px] text-gray-500 uppercase font-bold">Avg. Profit</p>
-            <p id="cycle-avg-profit" class="text-sm font-bold text-white">0.00%</p>
-        </div>
-        <div class="border-t border-gray-700/50 mt-1 pt-1 flex justify-between">
-            <span class="text-[7px] text-gray-500 font-bold uppercase">Net Avg:</span>
-            <span id="cycle-net-profit" class="text-[8px] text-emerald-400 font-mono">+$0.00</span>
-        </div>
-    </div>
-
-    <!-- COL 2: VOLUMEN Y ACTIVIDAD -->
-    <div class="bg-black/20 p-2 rounded-lg border border-gray-700 flex flex-col justify-between">
-        <div>
-            <p class="text-[7px] text-gray-500 uppercase font-bold">Total Cycles</p>
-            <p id="total-cycles-closed" class="text-sm font-bold text-white">0</p>
-        </div>
-        <div class="border-t border-gray-700/50 mt-1 pt-1 flex justify-between">
-            <span class="text-[7px] text-gray-500 font-bold uppercase">Avg. Orders:</span>
-            <span id="cycle-avg-orders" class="text-[8px] text-indigo-400 font-mono">0.0</span>
-        </div>
-    </div>
-
-    <!-- COL 3: EFICIENCIA TEMPORAL -->
-    <div class="bg-black/20 p-2 rounded-lg border border-gray-700 flex flex-col justify-between">
-        <div>
-            <p class="text-[7px] text-gray-500 uppercase font-bold">Avg. Duration</p>
-            <p id="cycle-avg-duration" class="text-sm font-bold text-white">0h 0m</p>
-        </div>
-        <div class="border-t border-gray-700/50 mt-1 pt-1 flex justify-between">
-            <span class="text-[7px] text-gray-500 font-bold uppercase">Recovery:</span>
-            <span id="cycle-avg-recovery" class="text-[8px] text-orange-400 font-mono">$0.00</span>
-        </div>
-    </div>
-
-    <!-- COL 4: RATIOS DE ÉXITO (CORREGIDA) -->
-    <div class="bg-black/20 p-2 rounded-lg border border-gray-700 flex flex-col justify-between">
-        <div>
-            <p class="text-[7px] text-gray-500 uppercase font-bold">Win Rate</p>
-            <p id="cycle-win-rate" class="text-sm font-bold text-emerald-400">0%</p>
-        </div>
-        <div class="border-t border-gray-700/50 mt-1 pt-1 flex justify-between items-center">
-            <span class="text-[7px] text-gray-500 font-bold uppercase">Profit/H:</span>
-            <span id="cycle-efficiency" class="text-[9px] font-bold text-indigo-400 font-mono">$0.00/h</span>
-        </div>
-    </div>
-
-</div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+                <div class="bg-black/20 p-2 rounded-lg border border-gray-700">
+                    <p class="text-[7px] text-gray-500 uppercase font-bold">Avg. Profit</p>
+                    <p id="cycle-avg-profit" class="text-sm font-bold text-white">0.00%</p>
+                </div>
+                <div class="bg-black/20 p-2 rounded-lg border border-gray-700">
+                    <p class="text-[7px] text-gray-500 uppercase font-bold">Total Cycles</p>
+                    <p id="total-cycles-closed" class="text-sm font-bold text-white">0</p>
+                </div>
+                <div class="bg-black/20 p-2 rounded-lg border border-gray-700">
+                    <p class="text-[7px] text-gray-500 uppercase font-bold">Win Rate</p>
+                    <p id="cycle-win-rate" class="text-sm font-bold text-emerald-400">0%</p>
+                </div>
+                <div class="bg-black/20 p-2 rounded-lg border border-gray-700 text-right">
+                    <p class="text-[7px] text-gray-500 uppercase font-bold">Profit/Hour</p>
+                    <p id="cycle-efficiency" class="text-sm font-bold text-indigo-400">$0.00/h</p>
+                </div>
+            </div>
 
             <div class="flex-grow relative bg-black/10 rounded-lg border border-gray-900/50 min-h-0 min-w-0">
                 <canvas id="equityCurveChart"></canvas>

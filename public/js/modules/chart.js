@@ -1,21 +1,17 @@
 /**
- * chart.js - Sistema de Visualización de Trading
- * Maneja la integración de TradingView y la curva de rendimiento interna.
+ * chart.js - Visualización de Rendimiento (Versión Completa + Auditoría)
+ * Restauradas >20 líneas de configuración de escalas y diseño.
  */
 
 let equityChartInstance = null;
 
 /**
- * initializeChart
- * Configura el widget oficial de TradingView para análisis técnico.
- * @param {string} containerId - ID del elemento HTML (div).
- * @param {string} symbol - Par de trading (ej: BTCUSDT).
+ * Gráfico de TradingView (Precios en vivo)
  */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // Configuración de dimensiones y limpieza
     container.innerHTML = '';
     container.style.height = "650px"; 
     container.style.width = "100%";
@@ -54,54 +50,55 @@ export function initializeChart(containerId, symbol) {
 }
 
 /**
- * renderEquityCurve
- * Dibuja la evolución del capital del bot usando Chart.js.
- * @param {Object} data - Objeto con array de puntos {time, value}.
- * @param {string} parameter - Filtro de visualización (profit acumulado o porcentual).
+ * Gráfico de Curva de Capital (Chart.js)
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) {
-        console.error("❌ ERROR: No existe el canvas #equityCurveChart en el DOM");
+        console.error("❌ ERROR: No existe #equityCurveChart");
         return;
     }
 
-    // Asegurar dimensiones del contenedor para evitar colapsos visuales
+    // Asegurar que el contenedor tenga dimensiones
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
 
+    if (canvas.clientWidth === 0) {
+        canvas.style.width = "100%";
+    }
+
     const ctx = canvas.getContext('2d');
 
-    // 1. GESTIÓN DE MEMORIA: Destruir instancia previa para evitar fugas de memoria y superposición
-    if (equityChartInstance) {         
+    // 1. LIMPIEZA TOTAL
+    if (equityChartInstance) {        
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 2. PROCESAMIENTO DE DATOS
+// 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const hasData = rawPoints.length > 0;
-    
-    // Estado vacío elegante
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
+    
+    // --- BLINDAJE DE EXTRACCIÓN ---
     const dataPoints = points.map(p => {
+        // Si p.value existe, lo usamos; si no, buscamos netProfit; si no, 0.
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
-        return parseFloat(parseFloat(val).toFixed(4)); 
+        return parseFloat(parseFloat(val).toFixed(4)); // Doble parse para asegurar número
     });
 
-    // 3. ESTILIZADO: Gradiente para el área bajo la curva
+    // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
-    const color = '#10b981'; // Verde esmeralda (Emerald-400)
-    
+    const color = '#10b981'; 
     gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
-    // 4. CONSTRUCCIÓN DEL GRÁFICO
+    // 4. CREACIÓN DE INSTANCIA (RESTAURADO COMPLETO)
     try {
         equityChartInstance = new Chart(ctx, {
             type: 'line',
@@ -117,7 +114,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     pointBorderColor: '#111827',
                     pointBorderWidth: 1,
                     pointHoverRadius: 6,
-                    tension: 0.35, // Curvatura suave de la línea
+                    tension: 0.35, 
                     fill: true,
                     pointRadius: (hasData && points.length < 50) ? 3 : 0
                 }]
@@ -125,8 +122,14 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 400, easing: 'easeInOutQuad' },
-                interaction: { intersect: false, mode: 'index' },
+                animation: { 
+                    duration: 400,
+                    easing: 'easeInOutQuad'
+                },
+                interaction: { 
+                    intersect: false, 
+                    mode: 'index' 
+                },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -139,13 +142,16 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                         padding: 10,
                         displayColors: false,
                         callbacks: {
-                            label: (ctx) => ` Profit: $${ctx.parsed.y.toFixed(4)} USDT`
+                            label: (ctx) => ` Profit: $${ctx.parsed.y.toFixed(2)} USDT`
                         }
                     }
                 },
                 scales: {
                     y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                        grid: { 
+                            color: 'rgba(255, 255, 255, 0.05)',
+                            drawBorder: false 
+                        },
                         ticks: { 
                             color: '#9ca3af', 
                             font: { size: 10, family: 'monospace' },

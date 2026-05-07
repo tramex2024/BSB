@@ -134,14 +134,11 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // --- AUDITORÍA DE HISTORIAL EN SOCKET ---
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
             try {
                 const Metrics = await import('./metricsManager.js');
-                // Solo inyectamos si el mapa está vacío o si es una actualización forzada
-                // para evitar el stacking de 29 + 20
-                Metrics.setAnalyticsData(historyData, { isSnapshot: true }); 
+                Metrics.setAnalyticsData(historyData);
             } catch (err) {
                 console.error("Error injecting metrics:", err);
             }
