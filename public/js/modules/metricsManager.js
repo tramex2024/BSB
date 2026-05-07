@@ -28,6 +28,12 @@ export function setAnalyticsData(data) {
         // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
         
+        // --- CORRECCIÓN: Cálculo de Porcentaje si es 0 ---
+        let pPct = parseFloat(c.profitPercentage || c.percent || 0);
+        if (pPct === 0 && profitValue !== 0 && c.amount) {
+            pPct = (profitValue / parseFloat(c.amount)) * 100;
+        }
+        
         // 4. GENERACIÓN DE ID ÚNICO
         const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
@@ -37,9 +43,10 @@ export function setAnalyticsData(data) {
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profitValue, 
-            profitPercentage: parseFloat(c.profitPercentage || 0),
+            profitPercentage: pPct,
             orderCount: parseInt(c.orderCount || 1),
-            finalRecovery: parseFloat(c.finalRecovery || 0),
+            // --- CORRECCIÓN: Búsqueda de campo Recovery ---
+            finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.rec_amount || 0),
             processedDate: dateObj,
             strategy: strategy
         });
@@ -93,9 +100,11 @@ function updateMetricsDisplay() {
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
+    
+    // --- CORRECCIÓN: Ajuste de sensibilidad para Profit/H ---
     const totalHours = totalTimeMs / (1000 * 60 * 60);
     const avgDurationMs = totalTimeMs / totalCycles;
-    const profitPerHour = totalHours > 0.1 ? (totalNetProfitUsdt / totalHours) : 0;
+    const profitPerHour = totalHours > 0.001 ? (totalNetProfitUsdt / totalHours) : 0;
 
     // Formateador de duración
     const fmtDuration = (ms) => {
