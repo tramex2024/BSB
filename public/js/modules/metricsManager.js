@@ -9,49 +9,42 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * setAnalyticsData - Versión Auditada y Corregida
- * Resuelve el problema de los 49 ciclos asegurando que el mapa se limpie
- * antes de procesar una carga completa del servidor.
+ * setAnalyticsData
+ * Fusiona datos sin duplicados y normaliza estrategias con precisión.
  */
 export function setAnalyticsData(data) {
-    // 1. Extraer los datos brutos
-    const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
-    
-    // --- SOLUCIÓN AL ERROR DE 49 ---
-    // Si recibimos una lista (como la de 29 o la de 20), vaciamos el mapa previo.
-    // Esto evita que se sumen listas diferentes (29 + 20).
-    globalCyclesMap.clear(); 
+    const rawData = Array.isArray(data) ? data : (data?.data || []);
+    if (rawData.length === 0) return;
 
     rawData.forEach(c => {
+        // 1. NORMALIZACIÓN DE ESTRATEGIA
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // Extraer fecha con seguridad
-        let rawDate = c.endTime?.$date || c.endTime || c.timestamp || new Date();
+        // 2. EXTRACCIÓN DE FECHA
+        let rawDate = c.endTime?.$date || c.endTime || c.timestamp;
         const dateObj = new Date(rawDate);
-        
-        // Extraer beneficio con seguridad
+        if (isNaN(dateObj.getTime())) return; 
+
+        // 3. NORMALIZACIÓN DE PROFIT Y VALORES (Alta precisión)
         const profitValue = parseFloat(c.profit || c.netProfit || 0);
-
-        // 2. GENERACIÓN DE ETIQUETA ÚNICA (Fingerprint)
-        // Usamos el ID si existe, si no, una combinación de estrategia, profit y tiempo en segundos.
-        const timeInSeconds = Math.floor(dateObj.getTime() / 1000);
         
-        // Si el ID no existe, creamos uno basado en los datos disponibles
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${timeInSeconds}-${Math.random()}`;
+        // 4. GENERACIÓN DE ID ÚNICO
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
 
-        // 3. GUARDADO EN EL MAPA
-        // Solo guardamos si el ciclo tiene datos válidos (evitamos los 'undefined' de tu auditoría)
-        if (c.endTime || c.timestamp || c._id) {
-            globalCyclesMap.set(fingerPrint, {
-                ...c,
-                netProfit: profitValue, 
-                strategy: strategy,
-                processedDate: dateObj
-            });
-        }
+        if (globalCyclesMap.has(fingerPrint)) return;
+
+        // 5. GUARDADO EN MEMORIA (Incluyendo nuevos parámetros del ciclo)
+        globalCyclesMap.set(fingerPrint, {
+            ...c,
+            netProfit: profitValue, 
+            profitPercentage: parseFloat(c.profitPercentage || 0),
+            orderCount: parseInt(c.orderCount || 1),
+            finalRecovery: parseFloat(c.finalRecovery || 0),
+            processedDate: dateObj,
+            strategy: strategy
+        });
     });
 
-    // 4. ACTUALIZAR INTERFAZ
     updateMetricsDisplay();
 }
 
