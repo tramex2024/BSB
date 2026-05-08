@@ -11,50 +11,55 @@ let currentBotFilter = 'all';
  * setAnalyticsData
  * Fusiona datos, detecta estructuras antiguas y audita el payload.
  */
-/**
- * setAnalyticsData - Versión Ultra-Compatible
- * Detecta si el dato es una Orden individual o un Ciclo completo.
- */
 export function setAnalyticsData(data) {
-    console.log("🔍 [AUDITORÍA] Analizando datos recibidos...");
+    console.log("🔍 [DEBUG] Datos brutos recibidos:", data);
 
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     
-    rawData.forEach((item) => {
-        // 1. Identificación de Estrategia
-        let strategy = (item.strategy || 'unknown').toUpperCase();
+    if (rawData.length === 0) {
+        console.warn("⚠️ [DEBUG] El array de ciclos está vacío.");
+        return;
+    }
+
+    rawData.forEach((c) => {
+        let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // 2. Mapeo de Tiempos (Usando orderTime y createdAt del log de tu consola)
-        let rawEndDate = item.endTime || item.updatedAt || item.orderTime || item.createdAt;
-        let rawStartDate = item.startTime || item.entryTime || item.orderTime || item.createdAt;
+        // Normalización de fechas
+        let rawEndDate = c.endTime?.$date || c.endTime || c.closed_at || c.timestamp;
+        let rawStartDate = c.startTime?.$date || c.startTime || c.entryTime || c.created_at;
 
         const dateEnd = new Date(rawEndDate);
         const dateStart = new Date(rawStartDate);
 
         if (isNaN(dateEnd.getTime())) return; 
 
-        // 3. Mapeo de Valores (Detección de 'notional' si netProfit no existe)
-        // Nota: Si es una orden individual, el profit suele ser 0 hasta que se cierra el ciclo.
-        const profitValue = parseFloat(item.netProfit || item.pnl || item.profit || 0);
+        const profitValue = parseFloat(c.netProfit || c.net_profit || c.profit || c.pnl || 0);
+        let pPct = parseFloat(c.profitPercentage || c.profit_pct || c.percent || c.pnl_pct || 0);
         
-        // 4. Cálculo de Duración (Evitar el 0 si faltan durationHours)
-        let durationMs = 0;
-        if (!isNaN(dateEnd) && !isNaN(dateStart)) {
-            durationMs = dateEnd.getTime() - dateStart.getTime();
+        if (pPct === 0 && profitValue !== 0) {
+            const capital = parseFloat(c.amount || c.cost || c.total_amount || 0);
+            if (capital > 0) pPct = (profitValue / capital) * 100;
         }
 
-        // 5. Creación de Fingerprint único para evitar duplicados
-        const fingerPrint = item._id?.$oid || item._id || `${strategy}-${item.orderId || index}`;
+        // CÁLCULO DE DURACIÓN BLINDADO
+        let durationMs = 0;
+        if (c.durationHours) {
+            durationMs = parseFloat(c.durationHours) * 3600000;
+        } else if (!isNaN(dateEnd) && !isNaN(dateStart)) {
+            durationMs = dateEnd - dateStart;
+        }
+
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateEnd.getTime()}`;
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 6. Normalización para el Dashboard
         globalCyclesMap.set(fingerPrint, {
-            ...item,
+            ...c,
             netProfit: profitValue, 
-            profitPercentage: parseFloat(item.profitPercentage || item.pnl_pct || 0),
-            orderCount: parseInt(item.orderCount || 1), // Si es una orden del log, cuenta como 1
-            durationMs: Math.max(0, durationMs),
+            profitPercentage: pPct,
+            orderCount: parseInt(c.orderCount || c.orders_count || 1),
+            finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.recovery_amount || 0),
+            durationMs: Math.max(0, durationMs), // Aseguramos que no sea negativo
             processedDate: dateEnd,
             strategy: strategy
         });
