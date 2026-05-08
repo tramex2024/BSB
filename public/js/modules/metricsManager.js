@@ -8,6 +8,10 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
+ * setAnalyticsData
+ * Fusiona datos, detecta estructuras antiguas y audita el payload.
+ */
+/**
  * setAnalyticsData - Versión Ultra-Compatible
  * Detecta si el dato es una Orden individual o un Ciclo completo.
  */
