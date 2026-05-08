@@ -158,9 +158,15 @@ export async function updateBotUI(state) {
         }
     } catch (err) { /* Silencioso */ }
 
-    // Sincronizamos las métricas con el nuevo payload
-    updateMetricsFromState(state);
+    // Sincronizamos las métricas asegurando que los valores de profit estén presentes
+    updateMetricsFromState({
+        ...state,
+        lprofit: state.lprofit ?? state.stats?.lprofit ?? 0,
+        sprofit: state.sprofit ?? state.stats?.sprofit ?? 0,
+        total_profit: state.total_profit ?? state.stats?.total_profit ?? 0
+    });
 }
+
 
 function updatePulseBars(id, value) {
     const barId = id.replace('-val', '-bar');

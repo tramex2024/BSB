@@ -9,63 +9,52 @@ let currentBotFilter = 'all';
 
 /**
  * setAnalyticsData
- * Fusiona datos, detecta estructuras antiguas y audita el payload.
+ * Procesa la respuesta optimizada del controlador de analíticas.
  */
-export function setAnalyticsData(data) {
-    console.log("🔍 [DEBUG] Datos brutos recibidos:", data);
+export function setAnalyticsData(response) {
+    // 1. AUDITORÍA: Validamos si es el objeto de KPIs o el listado de ciclos
+    console.log("🔍 [DEBUG] Respuesta del controlador:", response);
 
-    const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
-    
-    if (rawData.length === 0) {
-        console.warn("⚠️ [DEBUG] El array de ciclos está vacío.");
+    if (!response.success || !response.data) {
+        console.warn("⚠️ [DEBUG] Respuesta inválida o sin datos.");
         return;
     }
 
-    rawData.forEach((c) => {
-        let strategy = (c.strategy || 'unknown').toUpperCase();
+    const d = response.data;
+
+    // Si la respuesta es el objeto de KPIs único (getCycleKpis)
+    if (d.totalCycles !== undefined) {
+        renderText('total-cycles-closed', d.totalCycles);
+        renderText('cycle-avg-profit', `${d.avgProfitPct >= 0 ? '+' : ''}${d.avgProfitPct.toFixed(2)}%`, 
+            `text-sm font-bold ${d.avgProfitPct >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
+        renderText('cycle-net-profit', `$${d.totalNetProfit.toFixed(2)}`);
+        renderText('cycle-avg-orders', (d.avgOrders || 0).toFixed(1));
+        renderText('cycle-win-rate', `${(d.winRate || 0).toFixed(1)}%`);
+        renderText('cycle-avg-recovery', `$${(d.avgRecovery || 0).toFixed(2)}`);
         
-        // Normalización de fechas
-        let rawEndDate = c.endTime?.$date || c.endTime || c.closed_at || c.timestamp;
-        let rawStartDate = c.startTime?.$date || c.startTime || c.entryTime || c.created_at;
+        // Manejo de duración
+        const hours = d.avgDurationHours || 0;
+        const h = Math.floor(hours);
+        const m = Math.floor((hours % 1) * 60);
+        renderText('cycle-avg-duration', `${h}h ${m}m`);
 
-        const dateEnd = new Date(rawEndDate);
-        const dateStart = new Date(rawStartDate);
-
-        if (isNaN(dateEnd.getTime())) return; 
-
-        const profitValue = parseFloat(c.netProfit || c.net_profit || c.profit || c.pnl || 0);
-        let pPct = parseFloat(c.profitPercentage || c.profit_pct || c.percent || c.pnl_pct || 0);
-        
-        if (pPct === 0 && profitValue !== 0) {
-            const capital = parseFloat(c.amount || c.cost || c.total_amount || 0);
-            if (capital > 0) pPct = (profitValue / capital) * 100;
-        }
-
-        // CÁLCULO DE DURACIÓN BLINDADO
-        let durationMs = 0;
-        if (c.durationHours) {
-            durationMs = parseFloat(c.durationHours) * 3600000;
-        } else if (!isNaN(dateEnd) && !isNaN(dateStart)) {
-            durationMs = dateEnd - dateStart;
-        }
-
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateEnd.getTime()}`;
-
-        if (globalCyclesMap.has(fingerPrint)) return;
-
-        globalCyclesMap.set(fingerPrint, {
-            ...c,
-            netProfit: profitValue, 
-            profitPercentage: pPct,
-            orderCount: parseInt(c.orderCount || c.orders_count || 1),
-            finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.recovery_amount || 0),
-            durationMs: Math.max(0, durationMs), // Aseguramos que no sea negativo
-            processedDate: dateEnd,
-            strategy: strategy
+        // Eficiencia (Profit/H)
+        const totalDurationHours = hours * d.totalCycles;
+        const profitPerHour = totalDurationHours > 0 ? (d.totalNetProfit / totalDurationHours) : 0;
+        renderText('cycle-efficiency', `$${profitPerHour.toFixed(4)}/h`);
+    } 
+    
+    // Si la respuesta es una lista (getTradeCycles), la guardamos en el mapa
+    if (Array.isArray(d)) {
+        d.forEach(cycle => {
+            const fingerPrint = cycle._id;
+            globalCyclesMap.set(fingerPrint, {
+                ...cycle,
+                processedDate: new Date(cycle.endTime)
+            });
         });
-    });
-
-    updateMetricsDisplay();
+        updateMetricsDisplay(); // Recalcular con la lista
+    }
 }
 
 /**
