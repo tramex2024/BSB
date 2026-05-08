@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * VERSIÓN INTEGRAL: Auditoría de datos + Funcionalidad Completa + Exportación
+ * VERSIÓN INTEGRAL CORREGIDA 2026
  */
 
 const globalCyclesMap = new Map(); 
@@ -12,39 +12,44 @@ let currentBotFilter = 'all';
  * Fusiona datos, detecta estructuras antiguas y audita el payload.
  */
 export function setAnalyticsData(data) {
-    // 1. AUDITORÍA: Inspección del objeto que llega del apiService.js
     console.log("🔍 [DEBUG] Datos brutos recibidos:", data);
 
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     
     if (rawData.length === 0) {
-        console.warn("⚠️ [DEBUG] El array de ciclos está vacío. Revisa la respuesta de la red.");
+        console.warn("⚠️ [DEBUG] El array de ciclos está vacío.");
         return;
     }
 
-    rawData.forEach((c, index) => {
-        if (index === 0) console.log("📝 [DEBUG] Estructura del primer ciclo detectada:", c);
-
-        // Normalización de Estrategia
+    rawData.forEach((c) => {
         let strategy = (c.strategy || 'unknown').toUpperCase();
         
-        // Extracción de Fecha (Soporta múltiples formatos de backend)
-        let rawDate = c.endTime?.$date || c.endTime || c.timestamp || c.closed_at;
-        const dateObj = new Date(rawDate);
-        if (isNaN(dateObj.getTime())) return; 
+        // Normalización de fechas
+        let rawEndDate = c.endTime?.$date || c.endTime || c.closed_at || c.timestamp;
+        let rawStartDate = c.startTime?.$date || c.startTime || c.entryTime || c.created_at;
 
-        // NORMALIZACIÓN DE VALORES (Corrección de valores en cero)
+        const dateEnd = new Date(rawEndDate);
+        const dateStart = new Date(rawStartDate);
+
+        if (isNaN(dateEnd.getTime())) return; 
+
         const profitValue = parseFloat(c.netProfit || c.net_profit || c.profit || c.pnl || 0);
-        
         let pPct = parseFloat(c.profitPercentage || c.profit_pct || c.percent || c.pnl_pct || 0);
         
-        // Cálculo manual si el porcentaje falta pero hay beneficio y capital
         if (pPct === 0 && profitValue !== 0) {
             const capital = parseFloat(c.amount || c.cost || c.total_amount || 0);
             if (capital > 0) pPct = (profitValue / capital) * 100;
         }
 
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateObj.getTime()}`;
+        // CÁLCULO DE DURACIÓN BLINDADO
+        let durationMs = 0;
+        if (c.durationHours) {
+            durationMs = parseFloat(c.durationHours) * 3600000;
+        } else if (!isNaN(dateEnd) && !isNaN(dateStart)) {
+            durationMs = dateEnd - dateStart;
+        }
+
+        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateEnd.getTime()}`;
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
@@ -54,7 +59,8 @@ export function setAnalyticsData(data) {
             profitPercentage: pPct,
             orderCount: parseInt(c.orderCount || c.orders_count || 1),
             finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.recovery_amount || 0),
-            processedDate: dateObj,
+            durationMs: Math.max(0, durationMs), // Aseguramos que no sea negativo
+            processedDate: dateEnd,
             strategy: strategy
         });
     });
@@ -64,7 +70,7 @@ export function setAnalyticsData(data) {
 
 /**
  * updateMetricsDisplay
- * Calcula y renderiza los 8 KPIs en el Dashboard.
+ * Versión corregida: Utiliza durationMs para evitar ceros.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
@@ -84,21 +90,17 @@ function updateMetricsDisplay() {
     let totalOrders = 0;
     let totalRecovery = 0;
     let winningCycles = 0;
-    let totalTimeMs = 0;
+    let totalDurationMs = 0; // Cambiado para claridad
 
     filtered.forEach(cycle => {
-        totalProfitPct += cycle.profitPercentage;
-        totalNetProfitUsdt += cycle.netProfit;
-        totalOrders += cycle.orderCount;
-        totalRecovery += cycle.finalRecovery;
+        totalProfitPct += (cycle.profitPercentage || 0);
+        totalNetProfitUsdt += (cycle.netProfit || 0);
+        totalOrders += (cycle.orderCount || 0);
+        totalRecovery += (cycle.finalRecovery || 0);
         if (cycle.netProfit > 0) winningCycles++;
 
-        let startRaw = cycle.startTime?.$date || cycle.startTime || cycle.created_at || cycle.timestamp;
-        const start = new Date(startRaw);
-        if (!isNaN(start.getTime())) {
-            const diff = cycle.processedDate.getTime() - start.getTime();
-            if (diff > 0) totalTimeMs += diff;
-        }
+        // USAR EL DURATION MS YA CALCULADO
+        totalDurationMs += (cycle.durationMs || 0);
     });
 
     // Cálculos Finales
@@ -107,17 +109,20 @@ function updateMetricsDisplay() {
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
-    const totalHours = totalTimeMs / 3600000;
-    const avgDurationMs = totalTimeMs / totalCycles;
+    
+    // Cálculo de Eficiencia (Profit/H)
+    const totalHours = totalDurationMs / 3600000;
+    const avgDurationMs = totalDurationMs / totalCycles;
     const profitPerHour = totalHours > 0.0001 ? (totalNetProfitUsdt / totalHours) : 0;
 
     const fmtDuration = (ms) => {
+        if (ms <= 0) return "0h 0m";
         const h = Math.floor(ms / 3600000);
         const m = Math.floor((ms % 3600000) / 60000);
         return `${h}h ${m}m`;
     };
 
-    // --- RENDERIZADO DE INTERFAZ ---
+    // --- RENDERIZADO ---
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
     renderText('total-cycles-closed', totalCycles);
