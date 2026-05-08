@@ -8,53 +8,55 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * setAnalyticsData
- * Procesa la respuesta optimizada del controlador de analíticas.
+ * setAnalyticsData - Versión Ultra-Compatible
+ * Detecta si el dato es una Orden individual o un Ciclo completo.
  */
-export function setAnalyticsData(response) {
-    // 1. AUDITORÍA: Validamos si es el objeto de KPIs o el listado de ciclos
-    console.log("🔍 [DEBUG] Respuesta del controlador:", response);
+export function setAnalyticsData(data) {
+    console.log("🔍 [AUDITORÍA] Analizando datos recibidos...");
 
-    if (!response.success || !response.data) {
-        console.warn("⚠️ [DEBUG] Respuesta inválida o sin datos.");
-        return;
-    }
-
-    const d = response.data;
-
-    // Si la respuesta es el objeto de KPIs único (getCycleKpis)
-    if (d.totalCycles !== undefined) {
-        renderText('total-cycles-closed', d.totalCycles);
-        renderText('cycle-avg-profit', `${d.avgProfitPct >= 0 ? '+' : ''}${d.avgProfitPct.toFixed(2)}%`, 
-            `text-sm font-bold ${d.avgProfitPct >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
-        renderText('cycle-net-profit', `$${d.totalNetProfit.toFixed(2)}`);
-        renderText('cycle-avg-orders', (d.avgOrders || 0).toFixed(1));
-        renderText('cycle-win-rate', `${(d.winRate || 0).toFixed(1)}%`);
-        renderText('cycle-avg-recovery', `$${(d.avgRecovery || 0).toFixed(2)}`);
-        
-        // Manejo de duración
-        const hours = d.avgDurationHours || 0;
-        const h = Math.floor(hours);
-        const m = Math.floor((hours % 1) * 60);
-        renderText('cycle-avg-duration', `${h}h ${m}m`);
-
-        // Eficiencia (Profit/H)
-        const totalDurationHours = hours * d.totalCycles;
-        const profitPerHour = totalDurationHours > 0 ? (d.totalNetProfit / totalDurationHours) : 0;
-        renderText('cycle-efficiency', `$${profitPerHour.toFixed(4)}/h`);
-    } 
+    const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     
-    // Si la respuesta es una lista (getTradeCycles), la guardamos en el mapa
-    if (Array.isArray(d)) {
-        d.forEach(cycle => {
-            const fingerPrint = cycle._id;
-            globalCyclesMap.set(fingerPrint, {
-                ...cycle,
-                processedDate: new Date(cycle.endTime)
-            });
+    rawData.forEach((item) => {
+        // 1. Identificación de Estrategia
+        let strategy = (item.strategy || 'unknown').toUpperCase();
+        
+        // 2. Mapeo de Tiempos (Usando orderTime y createdAt del log de tu consola)
+        let rawEndDate = item.endTime || item.updatedAt || item.orderTime || item.createdAt;
+        let rawStartDate = item.startTime || item.entryTime || item.orderTime || item.createdAt;
+
+        const dateEnd = new Date(rawEndDate);
+        const dateStart = new Date(rawStartDate);
+
+        if (isNaN(dateEnd.getTime())) return; 
+
+        // 3. Mapeo de Valores (Detección de 'notional' si netProfit no existe)
+        // Nota: Si es una orden individual, el profit suele ser 0 hasta que se cierra el ciclo.
+        const profitValue = parseFloat(item.netProfit || item.pnl || item.profit || 0);
+        
+        // 4. Cálculo de Duración (Evitar el 0 si faltan durationHours)
+        let durationMs = 0;
+        if (!isNaN(dateEnd) && !isNaN(dateStart)) {
+            durationMs = dateEnd.getTime() - dateStart.getTime();
+        }
+
+        // 5. Creación de Fingerprint único para evitar duplicados
+        const fingerPrint = item._id?.$oid || item._id || `${strategy}-${item.orderId || index}`;
+
+        if (globalCyclesMap.has(fingerPrint)) return;
+
+        // 6. Normalización para el Dashboard
+        globalCyclesMap.set(fingerPrint, {
+            ...item,
+            netProfit: profitValue, 
+            profitPercentage: parseFloat(item.profitPercentage || item.pnl_pct || 0),
+            orderCount: parseInt(item.orderCount || 1), // Si es una orden del log, cuenta como 1
+            durationMs: Math.max(0, durationMs),
+            processedDate: dateEnd,
+            strategy: strategy
         });
-        updateMetricsDisplay(); // Recalcular con la lista
-    }
+    });
+
+    updateMetricsDisplay();
 }
 
 /**
