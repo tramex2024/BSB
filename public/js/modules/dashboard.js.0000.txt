@@ -2,7 +2,8 @@
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
  * Estado: Limpio - Delegación de controles a botControls.js
  */
-import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
+
+import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
 import { currentBotState } from '../main.js'; 
 import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
@@ -46,23 +47,100 @@ export function initializeDashboardView(initialState) {
     refreshAnalytics();
 }
 
-function handleMetricsUpdate(e) {
-    if (e.detail) {
-        requestAnimationFrame(() => renderEquityCurve(e.detail));
+/**
+ * dashboard.js - Versión con Respaldo de Cálculo Local
+ */
+async function refreshAnalytics() {
+    try {
+        addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
+
+        // Ejecutamos las peticiones
+        const [curveRes, cyclesRes, kpiRes] = await Promise.all([
+            fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
+            fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
+            fetch('/api/v1/analytics/kpis', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            }).then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            }).catch(err => {
+                console.warn("KPIs API falló, activando cálculo local:", err.message);
+                return null; 
+            })
+        ]);
+
+        // 1. Renderizar Gráfico de Equidad
+        if (curveRes?.success) {
+            requestAnimationFrame(() => renderEquityCurve(curveRes.data));
+        }
+
+        // 2. Sincronizar Ciclos y realizar cálculo local si es necesario
+        if (cyclesRes && cyclesRes.length > 0) {
+            Metrics.setAnalyticsData(cyclesRes);
+            addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
+            
+            // SI LA API DE KPIs FALLÓ (null), calculamos nosotros
+            if (!kpiRes) {
+                calculateLocalKPIs(cyclesRes);
+            }
+        }
+
+        // 3. Si la API de KPIs funcionó, usamos sus datos directamente
+        if (kpiRes && kpiRes.success) {
+            updateQuickStats(kpiRes.data);
+        }
+
+    } catch (e) {
+        console.error("Dashboard Error:", e);
+        addTerminalLog("ERROR SYNCING ANALYTICS", 'error');
     }
 }
 
-async function refreshAnalytics() {
-    try {
-        const response = await fetchEquityCurveData();
-        if (response && response.success && Array.isArray(response.data)) {
-            Metrics.setAnalyticsData(response.data);
-            addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
-        } else {
-            renderEquityCurve([]); 
+/**
+ * Calcula los KPIs localmente basándose en los ciclos recibidos
+ */
+function calculateLocalKPIs(cycles) {
+    console.group("🧮 CÁLCULO LOCAL DE RESPALDO");
+    
+    let totalProfit = 0;
+    let totalMs = 0;
+
+    cycles.forEach(cycle => {
+        // Sumar profit
+        totalProfit += parseFloat(cycle.netProfit || 0);
+
+        // Calcular duración (startTime y endTime deben ser ISO strings o Timestamps)
+        const start = new Date(cycle.startTime);
+        const end = new Date(cycle.endTime);
+        
+        if (!isNaN(start) && !isNaN(end)) {
+            totalMs += (end - start);
         }
-    } catch (e) { 
-        addTerminalLog("ERROR LOADING ANALYTICS", 'error');
+    });
+
+    const totalHours = totalMs / 3600000;
+    
+    // Objeto compatible con updateQuickStats
+    const localKpiData = {
+        totalNetProfit: totalProfit,
+        totalCycles: cycles.length,
+        avgDurationHours: cycles.length > 0 ? (totalHours / cycles.length) : 0
+    };
+
+    console.log("Datos generados localmente:", localKpiData);
+    updateQuickStats(localKpiData);
+    console.groupEnd();
+}
+
+/**
+ * handleMetricsUpdate
+ * Escucha el evento del MetricsManager para redibujar el gráfico
+ * cuando el usuario cambia filtros (AI/Long/Short).
+ */
+function handleMetricsUpdate(e) {
+    if (e.detail && e.detail.points) {
+        // e.detail.points contiene los datos ya procesados por el manager
+        requestAnimationFrame(() => renderEquityCurve(e.detail.points));
     }
 }
 
@@ -170,4 +248,52 @@ export function updateDistributionWidget(state) {
             if (bBar) bBar.style.width = `${(btcInUsdt / total) * 100}%`;
         }
     }
+}
+
+/**
+ * dashboard.js - Auditoría de KPIs (Profit/D)
+ * Este script imprimirá los cálculos detallados en la consola.
+ */
+function updateQuickStats(response) {
+    console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
+    
+    // 1. Extraer datos
+    const kpis = response.data || response;
+    console.log("1. Datos Crudos (KPIs):", kpis);
+
+    const totalProfit = parseFloat(kpis.totalNetProfit) || 0;
+    const totalCycles = parseInt(kpis.totalCycles) || 0;
+    const avgHours = parseFloat(kpis.avgDurationHours) || 0;
+
+    // 2. Cálculos intermedios
+    const totalTimeHours = avgHours * totalCycles;
+    
+    console.log("2. Desglose de variables:");
+    console.log(`   - Profit Total: $${totalProfit}`);
+    console.log(`   - Ciclos Totales: ${totalCycles}`);
+    console.log(`   - Horas Promedio/Ciclo: ${avgHours.toFixed(4)}h`);
+    console.log(`   - TIEMPO TOTAL CALCULADO: ${totalTimeHours.toFixed(4)}h`);
+
+    // 3. Cálculo final
+    let profitPerDay = 0;
+    if (totalTimeHours > 0) {
+        const profitPerHour = totalProfit / totalTimeHours;
+        profitPerDay = profitPerHour * 24;
+        console.log(`3. Cálculo Exitoso: ($${totalProfit} / ${totalTimeHours.toFixed(2)}h) * 24 = $${profitPerDay.toFixed(4)}/d`);
+    } else {
+        console.warn("3. ⚠️ ERROR: El tiempo total es 0. No se puede calcular el Profit/D.");
+    }
+
+    // 4. Actualización del DOM
+    const profitElement = document.getElementById('cycle-efficiency');
+    if (profitElement) {
+        const finalValue = `$${profitPerDay.toFixed(4)}/d`;
+        profitElement.innerText = finalValue;
+        profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
+        console.log(`4. ✅ DOM Actualizado con éxito: ${finalValue}`);
+    } else {
+        console.error("4. ❌ ERROR: No se encontró el elemento 'cycle-efficiency' en el HTML.");
+    }
+
+    console.groupEnd();
 }
