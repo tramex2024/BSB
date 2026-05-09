@@ -12,7 +12,7 @@ let currentBotFilter = 'all';
  * Fusiona datos, detecta estructuras antiguas y audita el payload.
  */
 export function setAnalyticsData(data) {
-    //console.log("🔍 [DEBUG] Datos brutos recibidos:", data);
+    console.log("🔍 [DEBUG] Datos brutos recibidos:", data);
 
     const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
     
