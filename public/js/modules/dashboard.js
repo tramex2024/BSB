@@ -56,9 +56,10 @@ async function refreshAnalytics() {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
 
         // Ejecutamos ambas peticiones en paralelo para mayor velocidad
-        const [curveRes, cyclesRes] = await Promise.all([
+        const [curveRes, cyclesRes, kpiRes] = await Promise.all([
             fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
-            fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all')
+            fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
+            fetch('/api/v1/analytics/kpis').then(res => res.json()) // Llamada a la ruta de promedios
         ]);
 
         // 1. Procesar Datos para el Gráfico (Equity Curve)
@@ -75,6 +76,11 @@ async function refreshAnalytics() {
             addTerminalLog("ANALYTICS: KPIs SYNCHRONIZED", 'success');
         } else {
             addTerminalLog("ANALYTICS: NO HISTORICAL CYCLES FOUND", 'warning');
+        }
+       
+        // 3. PROCESAR KPIs (Para quitar el $0.00/h)
+        if (kpiRes && kpiRes.success) {
+            updateQuickStats(kpiRes.data);
         }
 
     } catch (e) {
@@ -198,5 +204,36 @@ export function updateDistributionWidget(state) {
             if (uBar) uBar.style.width = `${(usdt / total) * 100}%`;
             if (bBar) bBar.style.width = `${(btcInUsdt / total) * 100}%`;
         }
+    }
+}
+
+/**
+ * dashboard.js - Actualización de KPIs de Tiempo y Profit
+ */
+
+function updateQuickStats(kpiData) {
+    // kpiData viene de la respuesta de /api/v1/analytics/kpis
+    
+    // 1. Obtener los valores del objeto data del backend
+    const totalProfit = kpiData.totalNetProfit || 0;
+    const totalCycles = kpiData.totalCycles || 0;
+    const avgHoursPerCycle = kpiData.avgDurationHours || 0;
+
+    // 2. Calcular el Profit por Hora Real
+    // Multiplicamos el promedio de horas por el total de ciclos para tener el tiempo total
+    const totalTimeHours = avgHoursPerCycle * totalCycles;
+    
+    let profitPerHour = 0;
+    if (totalTimeHours > 0) {
+        profitPerHour = totalProfit / totalTimeHours;
+    }
+
+    // 3. Inyectar en el DOM (Asegúrate de que el ID coincida con tu HTML)
+    const profitHourElement = document.getElementById('profit-per-hour');
+    if (profitHourElement) {
+        profitHourElement.innerText = `$${profitPerHour.toFixed(4)}/h`;
+        
+        // Estética: Cambiar color si es positivo o negativo
+        profitHourElement.style.color = profitPerHour >= 0 ? '#10b981' : '#ef4444';
     }
 }

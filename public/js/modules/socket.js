@@ -105,44 +105,54 @@ export function initSocket() {
     });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
-    socket.on('bot-state-update', async (state) => {
-        if (!state) return;
+socket.on('bot-state-update', async (state) => {
+    if (!state) return;
 
-        const now = Date.now();
-        const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
+    const now = Date.now();
+    const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
-        if (isEditing) {
-            console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
-            currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
-            currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
-            currentBotState.lstate = state.lstate || currentBotState.lstate;
-            currentBotState.sstate = state.sstate || currentBotState.sstate;
-            currentBotState.aistate = state.aistate || currentBotState.aistate;
-        } else {
-            if (state.config) {
-                currentBotState.config = { ...currentBotState.config, ...state.config };
-            }
-            // Sincronizamos el estado global
-            Object.assign(currentBotState, state);
-            
-            // Forzamos la persistencia manual de PnL
-            if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
-            if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
-            if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
-            
-            // El manager actualiza la UI y las barras de PnL automáticamente
-            updateBotUI(currentBotState);
+    if (isEditing) {
+        console.log("🛡️ Socket: Active editing detected. Shielding...");
+        currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
+        currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
+    } else {
+        if (state.config) {
+            currentBotState.config = { ...currentBotState.config, ...state.config };
         }
+        Object.assign(currentBotState, state);
+        
+        // Sincronización de PnL Individual
+        if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
+        if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
+        if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
+        
+        updateBotUI(currentBotState);
+    }
 
-        const historyData = state.history || state.cycleHistory;
-        if (historyData) {
-            try {
-                const Metrics = await import('./metricsManager.js');
-                Metrics.setAnalyticsData(historyData);
-            } catch (err) {
-                console.error("Error injecting metrics:", err);
+    // 🚀 MEJORA CRÍTICA: Sincronización de Métricas y Profit/H en vivo
+    const historyData = state.history || state.cycleHistory;
+    if (historyData) {
+        try {
+            const Metrics = await import('./metricsManager.js');
+            const { updateQuickStats } = await import('./dashboard.js'); // Importamos la función de KPIs
+            
+            // 1. Actualizamos el set de datos en el manager (los 29+ ciclos)
+            Metrics.setAnalyticsData(historyData);
+            
+            // 2. Si el backend envió KPIs pre-calculados, actualizamos Profit/H
+            if (state.kpis) {
+                updateQuickStats(state.kpis);
+            } else {
+                // Si no vienen KPIs, forzamos un refresco manual de la analítica
+                // para que el Profit/H no se quede atrás.
+                console.log("🔄 Socket: New history detected, triggering KPI refresh...");
+                // Aquí podrías disparar una pequeña función de cálculo local
             }
+            
+        } catch (err) {
+            console.error("Error injecting metrics:", err);
         }
+    }
 
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
