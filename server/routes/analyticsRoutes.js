@@ -3,35 +3,39 @@
 const express = require('express');
 const router = express.Router();
 const analyticsController = require('../controllers/analyticsController');
-const userController = require('../controllers/userController'); // Usando el middleware unificado
+const userController = require('../controllers/userController');
 
 /**
  * RUTAS DE ANALÍTICAS Y RENDIMIENTO (BSB 2026)
  * Prefijo en server.js: /api/v1/analytics
  */
 
-// Aplicamos autenticación a todas las rutas de este archivo
+/**
+ * NIVEL DE SEGURIDAD:
+ * Aplicamos autenticación a todas las rutas de este archivo de forma global.
+ * Esto significa que cualquier petición a este router debe llevar un JWT válido.
+ */
 router.use(userController.authenticateToken);
 
 /**
  * 1. Obtener Estadísticas Globales (KPIs)
- * Proporciona: Win Rate, Beneficio Neto Total, Promedio por ciclo.
+ * Devuelve: Win Rate, Beneficio Neto, y el Profit/H que necesitamos para el dashboard.
+ * Accesible vía: GET /api/v1/analytics/kpis
  */
-router.get('/stats', analyticsController.getCycleKpis);
+router.get('/kpis', analyticsController.getCycleKpis);
 
 /**
  * 2. Obtener datos para la Curva de Capital (Equity Curve)
- * Devuelve una serie temporal para graficar el crecimiento de la cuenta.
+ * Proporciona la serie temporal necesaria para renderizar el gráfico de crecimiento.
+ * Accesible vía: GET /api/v1/analytics/equity-curve
  */
 router.get('/equity-curve', analyticsController.getEquityCurveData);
 
 /**
  * 3. Obtener Historial de Ciclos (Tabla)
- * Devuelve la lista de ciclos completados con paginación.
+ * Devuelve la lista de ciclos completados con soporte para paginación.
+ * Accesible vía: GET /api/v1/analytics/cycles
  */
 router.get('/cycles', analyticsController.getTradeCycles);
-
-// Asegúrate de que esta línea exista y apunte a getCycleKpis
-router.get('/kpis', protect, analyticsController.getCycleKpis);
 
 module.exports = router;
