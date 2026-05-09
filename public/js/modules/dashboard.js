@@ -210,45 +210,46 @@ export function updateDistributionWidget(state) {
 }
 
 /**
- * dashboard.js - Actualización de KPIs
- * Sincronizado con analyticsController.js y el ID cycle-efficiency
+ * SCRIPT DE AUDITORÍA: updateQuickStats
+ * Objetivo: Detectar por qué el Profit/H permanece en 0.
  */
 function updateQuickStats(response) {
-    // 1. Extraer el objeto 'data' de la respuesta del servidor
-    // Si la respuesta es directamente el objeto de KPIs, usamos response.
-    // Si viene del fetch del controlador, usamos response.data.
+    console.group("🚀 AUDITORÍA BSB: UPDATE QUICK STATS");
+    
+    // 1. Ver qué datos llegan del servidor
+    console.log("DATOS RECIBIDOS:", response);
+    
     const kpis = response.data || response;
     
-    if (!kpis) {
-        console.warn("⚠️ Dashboard: No se recibieron KPIs válidos");
-        return;
-    }
-
-    // 2. Obtener los valores (Usando los nombres exactos del controlador)
+    // 2. Extraer y loguear variables individuales
     const totalProfit = kpis.totalNetProfit || 0;
     const totalCycles = kpis.totalCycles || 0;
-    const avgHoursPerCycle = kpis.avgDurationHours || 0;
+    const avgHours = kpis.avgDurationHours || 0;
+    
+    console.log(`VARIABLES: Profit(${totalProfit}), Cycles(${totalCycles}), AvgHours(${avgHours})`);
 
-    // 3. Calcular el Profit por Hora Real
-    const totalTimeHours = avgHoursPerCycle * totalCycles;
+    // 3. Auditar el cálculo matemático
+    const totalTimeHours = avgHours * totalCycles;
     let profitPerHour = 0;
     
     if (totalTimeHours > 0) {
         profitPerHour = totalProfit / totalTimeHours;
+    } else {
+        console.warn("⚠️ ALERTA: totalTimeHours es 0. ¿avgDurationHours o totalCycles son cero?");
     }
+    
+    console.log(`RESULTADO CÁLCULO: Profit/H = ${profitPerHour}`);
 
-    // 4. Inyectar en el DOM usando el ID correcto: 'cycle-efficiency'
+    // 4. Auditar el DOM
     const profitHourElement = document.getElementById('cycle-efficiency');
     
     if (profitHourElement) {
-        // Aplicamos el valor formateado
-        profitHourElement.innerText = `$${profitPerHour.toFixed(2)}/h`;
-        
-        // Estética: Emerald para positivo, Red para negativo
-        if (profitPerHour >= 0) {
-            profitHourElement.style.color = '#34d399'; // emerald-400
-        } else {
-            profitHourElement.style.color = '#ef4444'; // red-500
-        }
+        console.log("✅ DOM: Elemento 'cycle-efficiency' ENCONTRADO.");
+        profitHourElement.innerText = `$${profitPerHour.toFixed(4)}/h`;
+        profitHourElement.style.color = profitPerHour >= 0 ? '#34d399' : '#ef4444';
+    } else {
+        console.error("❌ DOM: No se encontró el ID 'cycle-efficiency'. Revisa tu HTML.");
     }
+
+    console.groupEnd();
 }
