@@ -48,44 +48,46 @@ export function initializeDashboardView(initialState) {
 }
 
 /**
- * refreshAnalytics - VERSIÓN REFORZADA
- * Obtiene datos para el gráfico Y para las métricas de la tabla.
+ * dashboard.js - refreshAnalytics (Versión Robusta)
  */
 async function refreshAnalytics() {
     try {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
 
-        // Ejecutamos ambas peticiones en paralelo para mayor velocidad
+        // Usamos rutas relativas para que funcione tanto en local como en Vercel
         const [curveRes, cyclesRes, kpiRes] = await Promise.all([
             fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
             fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
-            fetch('/api/v1/analytics/kpis').then(res => res.json()) // Llamada a la ruta de promedios
+            fetch('/api/v1/analytics/kpis', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            }).then(res => {
+                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+                return res.json();
+            }).catch(err => {
+                console.warn("KPIs no disponibles aún:", err.message);
+                return null; // Retornamos null para no romper el Promise.all
+            })
         ]);
 
-        // 1. Procesar Datos para el Gráfico (Equity Curve)
-        if (curveRes && curveRes.success && Array.isArray(curveRes.data)) {
-            // Enviamos a Metrics para que los normalice si es necesario
-            // Aunque equity-curve suele ir directo al gráfico
+        // 1. Renderizar Gráfico
+        if (curveRes?.success) {
             requestAnimationFrame(() => renderEquityCurve(curveRes.data));
         }
 
-        // 2. Procesar Datos para KPIs y Tabla (Cycles)
+        // 2. Sincronizar Ciclos (¡Los 29 detectados!)
         if (cyclesRes && cyclesRes.length > 0) {
-            // Esta es la llamada CRÍTICA que quita los ceros del dashboard
-            Metrics.setAnalyticsData(cyclesRes); 
-            addTerminalLog("ANALYTICS: KPIs SYNCHRONIZED", 'success');
-        } else {
-            addTerminalLog("ANALYTICS: NO HISTORICAL CYCLES FOUND", 'warning');
+            Metrics.setAnalyticsData(cyclesRes);
+            addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
         }
-       
-        // 3. PROCESAR KPIs (Para quitar el $0.00/h)
+
+        // 3. Actualizar Profit/H y KPIs
         if (kpiRes && kpiRes.success) {
             updateQuickStats(kpiRes.data);
         }
 
     } catch (e) {
         console.error("Dashboard Error:", e);
-        addTerminalLog("ERROR LOADING ANALYTICS ENGINE", 'error');
+        addTerminalLog("ERROR SYNCING ANALYTICS", 'error');
     }
 }
 

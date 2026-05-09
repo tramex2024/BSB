@@ -31,4 +31,7 @@ router.get('/equity-curve', analyticsController.getEquityCurveData);
  */
 router.get('/cycles', analyticsController.getTradeCycles);
 
+// Asegúrate de que esta línea exista y apunte a getCycleKpis
+router.get('/kpis', protect, analyticsController.getCycleKpis);
+
 module.exports = router;
