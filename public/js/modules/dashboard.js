@@ -211,31 +211,38 @@ export function updateDistributionWidget(state) {
 
 /**
  * dashboard.js - Actualización de KPIs de Tiempo y Profit
+ * Corregido para sincronizar con el ID del HTML 'cycle-efficiency'
  */
-
 function updateQuickStats(kpiData) {
-    // kpiData viene de la respuesta de /api/v1/analytics/kpis
-    
-    // 1. Obtener los valores del objeto data del backend
-    const totalProfit = kpiData.totalNetProfit || 0;
-    const totalCycles = kpiData.totalCycles || 0;
-    const avgHoursPerCycle = kpiData.avgDurationHours || 0;
+    // 1. Extraer valores con seguridad (opcionalmente desestructurando)
+    const { 
+        totalNetProfit = 0, 
+        totalCycles = 0, 
+        avgDurationHours = 0 
+    } = kpiData;
 
-    // 2. Calcular el Profit por Hora Real
-    // Multiplicamos el promedio de horas por el total de ciclos para tener el tiempo total
-    const totalTimeHours = avgHoursPerCycle * totalCycles;
-    
+    // 2. Lógica de cálculo
+    const totalTimeHours = avgDurationHours * totalCycles;
     let profitPerHour = 0;
+    
     if (totalTimeHours > 0) {
-        profitPerHour = totalProfit / totalTimeHours;
+        profitPerHour = totalNetProfit / totalTimeHours;
     }
 
-    // 3. Inyectar en el DOM (Asegúrate de que el ID coincida con tu HTML)
-    const profitHourElement = document.getElementById('profit-per-hour');
+    // 3. Inyectar en el DOM usando el ID real del HTML: 'cycle-efficiency'
+    const profitHourElement = document.getElementById('cycle-efficiency');
+    
     if (profitHourElement) {
+        // Formateamos a 4 decimales para capturar micro-ganancias de la AI
         profitHourElement.innerText = `$${profitPerHour.toFixed(4)}/h`;
         
-        // Estética: Cambiar color si es positivo o negativo
-        profitHourElement.style.color = profitPerHour >= 0 ? '#10b981' : '#ef4444';
+        // Sincronizar colores con Tailwind (Emerald-400 o Red-500)
+        if (profitPerHour >= 0) {
+            profitHourElement.classList.add('text-emerald-400');
+            profitHourElement.classList.remove('text-red-500');
+        } else {
+            profitHourElement.classList.add('text-red-500');
+            profitHourElement.classList.remove('text-emerald-400');
+        }
     }
 }
