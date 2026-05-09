@@ -212,31 +212,25 @@ export async function triggerPanicStop() {
  * BSB/client/src/services/apiService.js
  * Función optimizada para capturar los ciclos reales de la DB
  */
+// apiService.js
+
 export async function fetchRawTradeCycles(strategy = 'all') {
     try {
-        // Llamada a la ruta definida en analyticsRoutes.js
-        const data = await privateFetch(`/api/v1/analytics/cycles?strategy=${strategy}`);
+        // Forzamos 'all' si queremos ver todo el inventario de la DB
+        const response = await privateFetch(`/api/v1/analytics/cycles?strategy=${strategy}`);
         
-        if (data && data.success) {
-            // El controlador devuelve los ciclos dentro de la propiedad 'data'
-            const rawCycles = data.data || [];
-            
-            console.log(`📊 [DEBUG] Procesando ${rawCycles.length} ciclos desde el servidor.`);
+        console.log("📦 [DEBUG] Respuesta bruta del servidor:", response);
 
-            return rawCycles.map(c => ({
-                ...c,
-                // CORRECCIÓN CRÍTICA: Mapeo de nombres según TradeCycle.js y Controller
-                // Usamos 'netProfit' que es el campo real en tu MongoDB
-                profit: parseFloat(c.netProfit || 0), 
-                recovery: parseFloat(c.finalRecovery || 0),
-                percentage: parseFloat(c.profitPercentage || 0),
-                // Aseguramos una fecha válida para la línea de tiempo
-                timestamp: c.endTime || c.startTime || new Date()
-            }));
+        if (response && response.success) {
+            const data = response.data || [];
+            
+            // Si esto sigue diciendo 20, el problema es el FILTRO o la QUERY en el Backend.
+            console.log(`📊 [DEBUG] Procesando ${data.length} ciclos desde el servidor.`);
+            return data;
         }
         return [];
     } catch (err) {
-        console.error("❌ Error en fetchRawTradeCycles:", err.message);
+        console.error("❌ Error en apiService:", err);
         return [];
     }
 }

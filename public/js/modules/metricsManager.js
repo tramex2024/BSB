@@ -221,3 +221,50 @@ function formatDuration(hours) {
     const m = Math.floor((hours % 1) * 60);
     return `${h}h ${m}m`;
 }
+
+/**
+ * metricsManager.js - Auditoría de Ciclos y Estadísticas
+ */
+
+export function calculateSummary(allCycles) {
+    // 1. Inicialización limpia de contadores
+    const summary = {
+        total: allCycles.length,
+        long: 0,
+        short: 0,
+        ai: 0,
+        totalProfit: 0,
+        winRate: 0
+    };
+
+    let wins = 0;
+
+    // 2. Procesamiento con validación estricta de tipo
+    allCycles.forEach(cycle => {
+        // Normalizamos el tipo a minúsculas para evitar errores de "Long" vs "long"
+        const type = (cycle.type || 'ai').toLowerCase();
+        const profit = parseFloat(cycle.netProfit || 0);
+
+        // Clasificación
+        if (type === 'long') {
+            summary.long++;
+        } else if (type === 'short') {
+            summary.short++;
+        } else {
+            summary.ai++;
+        }
+
+        // Cálculo de rentabilidad
+        summary.totalProfit += profit;
+        if (profit > 0) wins++;
+    });
+
+    // 3. Cálculo de Win Rate (Evitar división por cero)
+    summary.winRate = summary.total > 0 
+        ? ((wins / summary.total) * 100).toFixed(2) 
+        : 0;
+
+    console.log(`[AUDITORÍA] Total: ${summary.total} | L: ${summary.long} | S: ${summary.short} | AI: ${summary.ai}`);
+    
+    return summary;
+}

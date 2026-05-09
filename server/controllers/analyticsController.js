@@ -115,22 +115,28 @@ exports.getEquityCurveData = async (req, res) => {
 };
 
 /**
- * 3. OBTENER LISTADO DE CICLOS
+ * 3. OBTENER LISTADO DE CICLOS - VERSIÓN CORREGIDA
+ * Se eliminó el límite forzado para permitir analíticas completas.
  */
 exports.getTradeCycles = async (req, res) => {
     const userId = req.user.id;
-    const { strategy, limit = 20, page = 1 } = req.query;
+    const { strategy, limit, page = 1 } = req.query; // Quitamos el limit = 20 por defecto
     const strategyFilter = normalize(strategy || 'all');
 
     try {
         const filter = { userId: new mongoose.Types.ObjectId(userId) };
         if (strategyFilter !== 'all') filter.strategy = strategyFilter;
 
+        // Lógica de paginación inteligente:
+        // Si no se envía un límite (como en la carga inicial del Dashboard), traemos TODO.
+        const parsedLimit = limit ? parseInt(limit) : 0; 
+        const parsedPage = parseInt(page);
+
         const [cycles, total] = await Promise.all([
             TradeCycle.find(filter)
                 .sort({ startTime: -1 })
-                .limit(parseInt(limit))
-                .skip((parseInt(page) - 1) * parseInt(limit))
+                .limit(parsedLimit) // Si es 0, Mongoose ignora el límite
+                .skip(parsedLimit ? (parsedPage - 1) * parsedLimit : 0)
                 .lean(),
             TradeCycle.countDocuments(filter)
         ]);
@@ -138,7 +144,11 @@ exports.getTradeCycles = async (req, res) => {
         res.json({ 
             success: true, 
             data: cycles,
-            pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit) }
+            pagination: { 
+                total, 
+                page: parsedPage, 
+                pages: parsedLimit ? Math.ceil(total / parsedLimit) : 1 
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
