@@ -8,63 +8,49 @@ let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
 /**
- * setAnalyticsData
- * Fusiona datos, detecta estructuras antiguas y audita el payload.
+ * setAnalyticsData - Versión Optimizada 2026
+ * Procesa y almacena los ciclos en el mapa global para su análisis.
  */
 export function setAnalyticsData(data) {
-    console.log("🔍 [DEBUG] Datos brutos recibidos:", data);
-
-    const rawData = Array.isArray(data) ? data : (data?.cycles || data?.data || []);
+    // 1. Extraer el array de datos independientemente de la envoltura
+    const rawData = Array.isArray(data) ? data : (data?.data || data?.cycles || []);
     
     if (rawData.length === 0) {
-        console.warn("⚠️ [DEBUG] El array de ciclos está vacío.");
+        console.warn("⚠️ [METRICS] No hay datos para procesar.");
         return;
     }
 
     rawData.forEach((c) => {
-        let strategy = (c.strategy || 'unknown').toUpperCase();
-        
-        // Normalización de fechas
-        let rawEndDate = c.endTime?.$date || c.endTime || c.closed_at || c.timestamp;
-        let rawStartDate = c.startTime?.$date || c.startTime || c.entryTime || c.created_at;
-
-        const dateEnd = new Date(rawEndDate);
-        const dateStart = new Date(rawStartDate);
-
-        if (isNaN(dateEnd.getTime())) return; 
-
-        const profitValue = parseFloat(c.netProfit || c.net_profit || c.profit || c.pnl || 0);
-        let pPct = parseFloat(c.profitPercentage || c.profit_pct || c.percent || c.pnl_pct || 0);
-        
-        if (pPct === 0 && profitValue !== 0) {
-            const capital = parseFloat(c.amount || c.cost || c.total_amount || 0);
-            if (capital > 0) pPct = (profitValue / capital) * 100;
-        }
-
-        // CÁLCULO DE DURACIÓN BLINDADO
-        let durationMs = 0;
-        if (c.durationHours) {
-            durationMs = parseFloat(c.durationHours) * 3600000;
-        } else if (!isNaN(dateEnd) && !isNaN(dateStart)) {
-            durationMs = dateEnd - dateStart;
-        }
-
-        const fingerPrint = c._id?.$oid || c._id || `${strategy}-${profitValue}-${dateEnd.getTime()}`;
+        // 2. Normalización de Identidad (Fingerprint)
+        // Priorizamos el ID de MongoDB, si no, generamos uno único basado en tiempo y beneficio
+        const fingerPrint = c._id?.$oid || c._id || `fallback-${c.endTime || c.timestamp}-${c.netProfit}`;
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
+        // 3. Extracción Segura de Valores Numéricos
+        // Aquí es donde vinculamos con lo que envía el API Service
+        const profit = parseFloat(c.netProfit || c.profit || 0);
+        const recovery = parseFloat(c.finalRecovery || c.recovery || 0);
+        const pct = parseFloat(c.profitPercentage || c.percentage || 0);
+        
+        // 4. Procesamiento de Fechas
+        const dateEnd = new Date(c.endTime || c.timestamp || c.processedDate);
+        if (isNaN(dateEnd.getTime())) return; 
+
+        // 5. Guardado en Memoria
         globalCyclesMap.set(fingerPrint, {
             ...c,
-            netProfit: profitValue, 
-            profitPercentage: pPct,
-            orderCount: parseInt(c.orderCount || c.orders_count || 1),
-            finalRecovery: parseFloat(c.finalRecovery || c.recovery || c.recovery_amount || 0),
-            durationMs: Math.max(0, durationMs), // Aseguramos que no sea negativo
+            netProfit: profit,
+            profitPercentage: pct,
+            finalRecovery: recovery,
             processedDate: dateEnd,
-            strategy: strategy
+            strategy: (c.strategy || 'UNKNOWN').toUpperCase(),
+            // Si no hay duración, calculamos 0 por defecto
+            durationMs: parseInt(c.durationMs || 0) 
         });
     });
 
+    // 6. Disparar la actualización de la UI
     updateMetricsDisplay();
 }
 

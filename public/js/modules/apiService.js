@@ -209,33 +209,34 @@ export async function triggerPanicStop() {
 }
 
 /**
- * fetchRawTradeCycles
- * Obtiene los ciclos y asegura que los campos de beneficio y recuperación 
- * existan para evitar los ceros en el dashboard.
+ * BSB/client/src/services/apiService.js
+ * Función optimizada para capturar los ciclos reales de la DB
  */
 export async function fetchRawTradeCycles(strategy = 'all') {
     try {
+        // Llamada a la ruta definida en analyticsRoutes.js
         const data = await privateFetch(`/api/v1/analytics/cycles?strategy=${strategy}`);
         
         if (data && data.success) {
-            const cycles = data.cycles || data.data || [];
+            // El controlador devuelve los ciclos dentro de la propiedad 'data'
+            const rawCycles = data.data || [];
             
-            // LOG DE AUDITORÍA: Para ver exactamente qué campos envía el servidor
-            if (cycles.length > 0) {
-                console.log("📊 [API] Campos recibidos del primer ciclo:", Object.keys(cycles[0]));
-            }
+            console.log(`📊 [DEBUG] Procesando ${rawCycles.length} ciclos desde el servidor.`);
 
-            return cycles.map(c => ({
+            return rawCycles.map(c => ({
                 ...c,
-                // Aseguramos que existan valores numéricos aunque el campo varíe
-                profit: parseFloat(c.profit || c.net_profit || c.pnl || 0),
-                recovery: parseFloat(c.finalRecovery || c.recovery_amount || c.recovery || 0),
-                percentage: parseFloat(c.profitPercentage || c.profit_pct || c.pnl_pct || 0)
+                // CORRECCIÓN CRÍTICA: Mapeo de nombres según TradeCycle.js y Controller
+                // Usamos 'netProfit' que es el campo real en tu MongoDB
+                profit: parseFloat(c.netProfit || 0), 
+                recovery: parseFloat(c.finalRecovery || 0),
+                percentage: parseFloat(c.profitPercentage || 0),
+                // Aseguramos una fecha válida para la línea de tiempo
+                timestamp: c.endTime || c.startTime || new Date()
             }));
         }
         return [];
     } catch (err) {
-        console.error("❌ Error en fetchRawTradeCycles:", err);
+        console.error("❌ Error en fetchRawTradeCycles:", err.message);
         return [];
     }
 }

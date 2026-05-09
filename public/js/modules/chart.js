@@ -1,12 +1,13 @@
 /**
  * chart.js - Visualización de Rendimiento (Versión Completa + Auditoría)
- * Restauradas >20 líneas de configuración de escalas y diseño.
+ * Estado: Estable - Manejo de TradingView y Chart.js
  */
 
 let equityChartInstance = null;
 
 /**
  * Gráfico de TradingView (Precios en vivo)
+ * Configura el widget principal para ver el mercado en tiempo real.
  */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
@@ -51,61 +52,60 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
+ * Renderiza el historial de beneficios acumulados del bot.
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) {
-        console.error("❌ ERROR: No existe #equityCurveChart");
+        console.error("❌ ERROR: No existe #equityCurveChart en el DOM");
         return;
     }
 
-    // Asegurar que el contenedor tenga dimensiones
+    // Asegurar dimensiones del contenedor para evitar colapsos visuales
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
 
-    if (canvas.clientWidth === 0) {
-        canvas.style.width = "100%";
-    }
-
     const ctx = canvas.getContext('2d');
 
-    // 1. LIMPIEZA TOTAL
+    // 1. LIMPIEZA TOTAL: Evita que se solapen gráficos al actualizar
     if (equityChartInstance) {        
         equityChartInstance.destroy();
         equityChartInstance = null;
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-// 2. PROCESAMIENTO DE PUNTOS
+    // 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const hasData = rawPoints.length > 0;
+    
+    // Placeholder si no hay datos
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
 
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
     
-    // --- BLINDAJE DE EXTRACCIÓN ---
+    // Blindaje de extracción de valores numéricos
     const dataPoints = points.map(p => {
-        // Si p.value existe, lo usamos; si no, buscamos netProfit; si no, 0.
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
-        return parseFloat(parseFloat(val).toFixed(4)); // Doble parse para asegurar número
+        return parseFloat(parseFloat(val).toFixed(4));
     });
 
     // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
-    const color = '#10b981'; 
+    const color = '#10b981'; // Esmeralda (Verde bot)
+    
     gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
-    // 4. CREACIÓN DE INSTANCIA (RESTAURADO COMPLETO)
+    // 4. CREACIÓN DE INSTANCIA
     try {
         equityChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Capital Acumulado (USDT)',
+                    label: parameter === 'accumulatedProfit' ? 'Capital Acumulado (USDT)' : 'Retorno (%)',
                     data: dataPoints,
                     borderColor: hasData ? color : 'rgba(255, 255, 255, 0.2)',
                     backgroundColor: gradient,

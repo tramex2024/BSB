@@ -2,7 +2,8 @@
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
  * Estado: Limpio - Delegación de controles a botControls.js
  */
-import { fetchEquityCurveData, sendConfigToBackend } from './apiService.js'; 
+
+import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
 import { currentBotState } from '../main.js'; 
 import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
@@ -46,23 +47,51 @@ export function initializeDashboardView(initialState) {
     refreshAnalytics();
 }
 
-function handleMetricsUpdate(e) {
-    if (e.detail) {
-        requestAnimationFrame(() => renderEquityCurve(e.detail));
+/**
+ * refreshAnalytics - VERSIÓN REFORZADA
+ * Obtiene datos para el gráfico Y para las métricas de la tabla.
+ */
+async function refreshAnalytics() {
+    try {
+        addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
+
+        // Ejecutamos ambas peticiones en paralelo para mayor velocidad
+        const [curveRes, cyclesRes] = await Promise.all([
+            fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
+            fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all')
+        ]);
+
+        // 1. Procesar Datos para el Gráfico (Equity Curve)
+        if (curveRes && curveRes.success && Array.isArray(curveRes.data)) {
+            // Enviamos a Metrics para que los normalice si es necesario
+            // Aunque equity-curve suele ir directo al gráfico
+            requestAnimationFrame(() => renderEquityCurve(curveRes.data));
+        }
+
+        // 2. Procesar Datos para KPIs y Tabla (Cycles)
+        if (cyclesRes && cyclesRes.length > 0) {
+            // Esta es la llamada CRÍTICA que quita los ceros del dashboard
+            Metrics.setAnalyticsData(cyclesRes); 
+            addTerminalLog("ANALYTICS: KPIs SYNCHRONIZED", 'success');
+        } else {
+            addTerminalLog("ANALYTICS: NO HISTORICAL CYCLES FOUND", 'warning');
+        }
+
+    } catch (e) {
+        console.error("Dashboard Error:", e);
+        addTerminalLog("ERROR LOADING ANALYTICS ENGINE", 'error');
     }
 }
 
-async function refreshAnalytics() {
-    try {
-        const response = await fetchEquityCurveData();
-        if (response && response.success && Array.isArray(response.data)) {
-            Metrics.setAnalyticsData(response.data);
-            addTerminalLog("ANALYTICS: SYNCHRONIZED", 'success');
-        } else {
-            renderEquityCurve([]); 
-        }
-    } catch (e) { 
-        addTerminalLog("ERROR LOADING ANALYTICS", 'error');
+/**
+ * handleMetricsUpdate
+ * Escucha el evento del MetricsManager para redibujar el gráfico
+ * cuando el usuario cambia filtros (AI/Long/Short).
+ */
+function handleMetricsUpdate(e) {
+    if (e.detail && e.detail.points) {
+        // e.detail.points contiene los datos ya procesados por el manager
+        requestAnimationFrame(() => renderEquityCurve(e.detail.points));
     }
 }
 
