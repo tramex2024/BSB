@@ -210,46 +210,42 @@ export function updateDistributionWidget(state) {
 }
 
 /**
- * SCRIPT DE AUDITORÍA: updateQuickStats
- * Objetivo: Detectar por qué el Profit/H permanece en 0.
+ * dashboard.js - Actualización de KPIs
+ * CAMBIO: De Profit por Hora a Profit por Día (/d)
  */
 function updateQuickStats(response) {
-    console.group("🚀 AUDITORÍA BSB: UPDATE QUICK STATS");
-    
-    // 1. Ver qué datos llegan del servidor
-    console.log("DATOS RECIBIDOS:", response);
-    
+    // 1. Extraer el objeto 'data' de la respuesta del servidor
     const kpis = response.data || response;
     
-    // 2. Extraer y loguear variables individuales
+    if (!kpis) return;
+
+    // 2. Obtener valores base del backend
     const totalProfit = kpis.totalNetProfit || 0;
     const totalCycles = kpis.totalCycles || 0;
-    const avgHours = kpis.avgDurationHours || 0;
-    
-    console.log(`VARIABLES: Profit(${totalProfit}), Cycles(${totalCycles}), AvgHours(${avgHours})`);
+    const avgHoursPerCycle = kpis.avgDurationHours || 0;
 
-    // 3. Auditar el cálculo matemático
-    const totalTimeHours = avgHours * totalCycles;
-    let profitPerHour = 0;
+    // 3. Cálculo de Profit Diario
+    const totalTimeHours = avgHoursPerCycle * totalCycles;
+    let profitPerDay = 0;
     
     if (totalTimeHours > 0) {
-        profitPerHour = totalProfit / totalTimeHours;
-    } else {
-        console.warn("⚠️ ALERTA: totalTimeHours es 0. ¿avgDurationHours o totalCycles son cero?");
-    }
-    
-    console.log(`RESULTADO CÁLCULO: Profit/H = ${profitPerHour}`);
-
-    // 4. Auditar el DOM
-    const profitHourElement = document.getElementById('cycle-efficiency');
-    
-    if (profitHourElement) {
-        console.log("✅ DOM: Elemento 'cycle-efficiency' ENCONTRADO.");
-        profitHourElement.innerText = `$${profitPerHour.toFixed(4)}/h`;
-        profitHourElement.style.color = profitPerHour >= 0 ? '#34d399' : '#ef4444';
-    } else {
-        console.error("❌ DOM: No se encontró el ID 'cycle-efficiency'. Revisa tu HTML.");
+        // Primero calculamos el profit por hora
+        const profitPerHour = totalProfit / totalTimeHours;
+        // Multiplicamos por 24 para obtener el rendimiento proyectado por día
+        profitPerDay = profitPerHour * 24;
     }
 
-    console.groupEnd();
+    // 4. Inyección en el DOM con el nuevo sufijo /d
+    const profitElement = document.getElementById('cycle-efficiency');
+    
+    if (profitElement) {
+        // Usamos 4 decimales (.toFixed(4)) para capturar valores pequeños
+        profitElement.innerText = `$${profitPerDay.toFixed(4)}/d`;
+        
+        // Color dinámico según rendimiento
+        profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
+        
+        // Log de depuración para verificar el cambio en consola
+        console.log(`Auditoría: Profit/H fue ${profitPerDay/24}, proyectado a Día: ${profitPerDay}`);
+    }
 }
