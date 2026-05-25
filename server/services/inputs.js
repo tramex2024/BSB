@@ -3,7 +3,7 @@
  * ESTRATEGIA: BALA DE PLATA (REMANENTE AL FINAL)
  * COBERTURA: 20% | NIVELES: 8 MÁXIMO | MULTIPLICADOR: 2.0x
  * MAX_CAPITAL_STRATEGY: 2500.00 USDT
- * ACTUALIZADO: Soporte para persistencia de stopAtCycle
+ * ACTUALIZADO: Soporte para persistencia de stopAtCycle y buscador de step inteligente por lado
  */
 
 /**
@@ -40,11 +40,60 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
 
         if (n < 3) return null; 
 
-        // 2. CÁLCULO DEL STEP (EL ACORDEÓN)
+        // =================================================================
+        // 2. CÁLCULO DEL STEP (EL ACORDEÓN INTELIGENTE EN CASCADA LONG / SHORT)
+        // DOCUMENTACIÓN: Este bloque simula el comportamiento exacto del 
+        // motor en cascada para encontrar el 'stepInc' que estira la última 
+        // orden exactamente hasta el ABRANGE_TARGET (20%) desde la orden anterior.
+        // =================================================================
         let stepInc = 0;
+
         if (n > 1) {
-            let targetRatio = ABRANGE_TARGET / (START_PRICE_VAR * n);
-            stepInc = (Math.pow(targetRatio, 1 / (n * 0.75)) - 1) * 100;
+            const baseStepDec = START_PRICE_VAR / 100; // Ejemplo: 1.5% -> 0.015
+            
+            let low = 0;        // Límite inferior de búsqueda para el incremento (%)
+            let high = 500;     // Límite superior seguro de búsqueda para el incremento (%)
+            let iterations = 0; // Contador de seguridad para evitar bucles infinitos
+
+            // Búsqueda binaria numérica de alta precisión (Máximo 40 ciclos para precisión milimétrica)
+            while (iterations < 40) {
+                let mid = (low + high) / 2;
+                let simulatedPriceFactor = 1.0; 
+                
+                // Simulación exacta del comportamiento en cascada del motor de cálculos
+                for (let i = 0; i < n - 1; i++) {
+                    let currentIncrementFactor = 1 + (mid / 100);
+                    let currentStep = baseStepDec * Math.pow(currentIncrementFactor, i);
+                    
+                    // Aplicamos el operador correspondiente al tipo de estrategia analizada
+                    if (side === 'long') {
+                        simulatedPriceFactor = simulatedPriceFactor * (1 - currentStep);
+                    } else {
+                        simulatedPriceFactor = simulatedPriceFactor * (1 + currentStep);
+                    }
+                }
+
+                // Evaluación de objetivos según el lado de la estrategia
+                if (side === 'long') {
+                    const targetDropFactor = 1 - (ABRANGE_TARGET / 100); // 20% de caída -> 0.80
+                    if (simulatedPriceFactor > targetDropFactor) {
+                        low = mid;  // Cayó menos del 20%, necesitamos aumentar el paso
+                    } else {
+                        high = mid; // Cayó más del 20%, necesitamos reducir el paso
+                    }
+                } else {
+                    const targetRiseFactor = 1 + (ABRANGE_TARGET / 100); // 20% de subida -> 1.20
+                    if (simulatedPriceFactor < targetRiseFactor) {
+                        low = mid;  // Subió menos del 20%, necesitamos aumentar el paso
+                    } else {
+                        high = mid; // Subió más del 20%, necesitamos reducir el paso
+                    }
+                }
+                iterations++;
+            }
+            
+            // Asignamos el incremento óptimo encontrado por el buscador algorítmico
+            stepInc = low;
         }
 
         // Recuperamos el estado previo de stopAtCycle para ese lado (long/short)
