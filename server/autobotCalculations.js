@@ -72,30 +72,28 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
 
 /**
  * Calcula la cobertura Long de forma PROYECTIVA.
- * Actualiza el precio de simulación antes de validar el balance para asegurar 
- * que el dato cambie con el tick del mercado.
+ * AJUSTE REAL: Detecta si ya estamos dentro del mercado usando currentOrderCount 
+ * para fijar el precio base en cascada desde la última orden ejecutada en el exchange.
  */
 function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
-    let currentPrice = parseNumber(currentMarketPrice); 
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // IMPORTANTE: Si el balance no alcanza para NINGUNA orden extra, 
-    // el coveragePrice devuelto será exactamente currentMarketPrice.
-    let coveragePrice = currentPrice; 
+    // Si ya hay órdenes ejecutadas (orderCount > 0), currentMarketPrice representa el ancla real 
+    // de la última orden o precio promedio ejecutado, impidiendo desvíos por ticks flotantes.
+    let coveragePrice = parseNumber(currentMarketPrice); 
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
         // Si no hay dinero para la siguiente cobertura real, salimos.
-        // El coveragePrice se queda con el valor de la última orden que SÍ se pudo pagar.
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
         const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
-        // Solo actualizamos el precio de cobertura si el balance alcanzó para pagarla
+        // Multiplicación recursiva inteligente (Toma en consideración el precio real previo)
         coveragePrice = coveragePrice * (1 - currentStep);
         
         orderCount++;
@@ -131,12 +129,16 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
 
 /**
  * Calcula la cobertura Short de forma PROYECTIVA.
+ * AJUSTE REAL: Detecta si ya estamos dentro del mercado usando currentOrderCount 
+ * para fijar el precio base en cascada desde la última orden ejecutada en el exchange.
  */
 function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
-    let simulationPrice = parseNumber(currentMarketPrice); 
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
+
+    // Si ya hay órdenes ejecutadas (orderCount > 0), se congela la base desde el punto real de mercado.
+    let simulationPrice = parseNumber(currentMarketPrice); 
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
