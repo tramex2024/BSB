@@ -69,28 +69,21 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
     };
 }
 
-/**
- * Calcula la cobertura Long de forma PROYECTIVA y ANCLADA.
- * @param {Number} referencePrice - Pasa 'currentMarketPrice' si locc es 0, o 'llep' si locc > 0.
- */
 function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
-
-    // Fijamos de manera estricta el punto de origen de la proyección
     let coveragePrice = parseNumber(referencePrice); 
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
-        
-        // Si el dinero remanente en la billetera no alcanza para el siguiente nivel real, frena.
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
-        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
-        // Multiplicación en cascada inteligente basada en la orden anterior
+        // CORRECCIÓN: El paso de precio debe calcularse usando el índice relativo (numberOfExtraOrders)
+        // para que no arrastre el desfase del nivel actual ejecutado en el exchange.
+        const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
         coveragePrice = coveragePrice * (1 - currentStep);
         
         orderCount++;
@@ -125,24 +118,23 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
 
 /**
  * Calcula la cobertura Short de forma PROYECTIVA y ANCLADA.
- * @param {Number} referencePrice - Pasa 'currentMarketPrice' si socc es 0, o 'slep' si socc > 0.
+ * CORREGIDA: Sincroniza los pasos del acordeón con las órdenes restantes reales.
  */
 function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
-
-    // Fijamos de manera estricta el punto de origen de la proyección
     let simulationPrice = parseNumber(referencePrice); 
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
-        
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
-        const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
+        // CORRECCIÓN: Usamos numberOfExtraOrders para mantener la simulación
+        // alineada con el paso correspondiente del Step original.
+        const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
         simulationPrice = simulationPrice * (1 + currentStep);
         
         orderCount++;
