@@ -53,7 +53,6 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
-    // ELIMINAMOS || config?.trigger para alinearnos al modelo de Mongoose
     const priceVarDec = parseNumber(config?.price_var || 0) / 100;
     const priceVarInc = parseNumber(config?.price_step_inc || 0);
     const profitPercent = parseNumber(config?.profit_percent || 0); 
@@ -71,29 +70,27 @@ function calculateLongTargets(lastPrice, config, currentOrderCount) {
 }
 
 /**
- * Calcula la cobertura Long de forma PROYECTIVA.
- * AJUSTE REAL: Detecta si ya estamos dentro del mercado usando currentOrderCount 
- * para fijar el precio base en cascada desde la última orden ejecutada en el exchange.
+ * Calcula la cobertura Long de forma PROYECTIVA y ANCLADA.
+ * @param {Number} referencePrice - Pasa 'currentMarketPrice' si locc es 0, o 'llep' si locc > 0.
  */
-function calculateLongCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
+function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // Si ya hay órdenes ejecutadas (orderCount > 0), currentMarketPrice representa el ancla real 
-    // de la última orden o precio promedio ejecutado, impidiendo desvíos por ticks flotantes.
-    let coveragePrice = parseNumber(currentMarketPrice); 
+    // Fijamos de manera estricta el punto de origen de la proyección
+    let coveragePrice = parseNumber(referencePrice); 
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // Si no hay dinero para la siguiente cobertura real, salimos.
+        // Si el dinero remanente en la billetera no alcanza para el siguiente nivel real, frena.
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
         const currentStep = getExponentialPriceStep(priceVarDec, orderCount, priceVarIncrement);
-        // Multiplicación recursiva inteligente (Toma en consideración el precio real previo)
+        // Multiplicación en cascada inteligente basada en la orden anterior
         coveragePrice = coveragePrice * (1 - currentStep);
         
         orderCount++;
@@ -111,7 +108,6 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
     const conf = config || {}; 
     
-    // ELIMINAMOS || conf.trigger
     const priceVarDec = parseNumber(conf.price_var) / 100;
     const priceVarInc = parseNumber(conf.price_step_inc || 0);
     const profitPercent = parseNumber(conf.profit_percent || 0);
@@ -128,22 +124,20 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
 }
 
 /**
- * Calcula la cobertura Short de forma PROYECTIVA.
- * AJUSTE REAL: Detecta si ya estamos dentro del mercado usando currentOrderCount 
- * para fijar el precio base en cascada desde la última orden ejecutada en el exchange.
+ * Calcula la cobertura Short de forma PROYECTIVA y ANCLADA.
+ * @param {Number} referencePrice - Pasa 'currentMarketPrice' si socc es 0, o 'slep' si socc > 0.
  */
-function calculateShortCoverage(balance, currentMarketPrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
+function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
 
-    // Si ya hay órdenes ejecutadas (orderCount > 0), se congela la base desde el punto real de mercado.
-    let simulationPrice = parseNumber(currentMarketPrice); 
+    // Fijamos de manera estricta el punto de origen de la proyección
+    let simulationPrice = parseNumber(referencePrice); 
 
     while (numberOfExtraOrders < 50) {
         let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         
-        // VALIDACIÓN REAL
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;

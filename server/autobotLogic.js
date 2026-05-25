@@ -170,7 +170,19 @@ async function botCycle(priceFromWebSocket) {
             if (botState.lstate !== 'STOPPED' && botState.config.long) {
                 const activeLBalance = changeSet.lbalance !== undefined ? changeSet.lbalance : (botState.lbalance || 0);
                 const activeLOCC = changeSet.locc !== undefined ? changeSet.locc : (botState.locc || 0);
-                const longCov = calculateLongCoverage(activeLBalance, currentPrice, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), activeLOCC, parseNumber(botState.config.long.price_step_inc));
+                
+                // CONDICIONAMIENTO INTELIGENTE LONG: Si locc > 0, fijamos de forma estricta el ancla llep de la base de datos
+                const longPriceRef = activeLOCC > 0 ? (botState.llep || currentPrice) : currentPrice;
+
+                const longCov = calculateLongCoverage(
+                    activeLBalance, 
+                    longPriceRef, // Inyectamos la referencia controlada
+                    botState.config.long.purchaseUsdt, 
+                    parseNumber(botState.config.long.price_var) / 100, 
+                    parseNumber(botState.config.long.size_var), 
+                    activeLOCC, 
+                    parseNumber(botState.config.long.price_step_inc)
+                );
                 changeSet.lcoverage = longCov.coveragePrice;
                 changeSet.lnorder = longCov.numberOfOrders;
                 const activeLPPC = changeSet.lppc !== undefined ? changeSet.lppc : (botState.lppc || 0);
@@ -181,7 +193,19 @@ async function botCycle(priceFromWebSocket) {
             if (botState.sstate !== 'STOPPED' && botState.config.short) {
                 const activeSBalance = changeSet.sbalance !== undefined ? changeSet.sbalance : (botState.sbalance || 0);
                 const activeSOCC = changeSet.socc !== undefined ? changeSet.socc : (botState.socc || 0);
-                const shortCov = calculateShortCoverage(activeSBalance, currentPrice, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), activeSOCC, parseNumber(botState.config.short.price_step_inc));
+                
+                // CONDICIONAMIENTO INTELIGENTE SHORT: Si socc > 0, fijamos de forma estricta el ancla slep de la base de datos
+                const shortPriceRef = activeSOCC > 0 ? (botState.slep || currentPrice) : currentPrice;
+
+                const shortCov = calculateShortCoverage(
+                    activeSBalance, 
+                    shortPriceRef, // Inyectamos la referencia controlada
+                    botState.config.short.purchaseUsdt, 
+                    parseNumber(botState.config.short.price_var) / 100, 
+                    parseNumber(botState.config.short.size_var), 
+                    activeSOCC, 
+                    parseNumber(botState.config.short.price_step_inc)
+                );
                 changeSet.scoverage = shortCov.coveragePrice;
                 changeSet.snorder = shortCov.numberOfOrders;
                 const activeSPPC = changeSet.sppc !== undefined ? changeSet.sppc : (botState.sppc || 0);
