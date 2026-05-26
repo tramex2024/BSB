@@ -1,7 +1,7 @@
 // BSB/server/src/au/states/short/ShortBuyConsolidator.js
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
-const { handleSuccessfulShortBuy } = require('../managers/shortDataManager');
+const { handleSuccessfulShortBuy } = require('../../managers/shortDataManager');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService'); 
 
 /**
