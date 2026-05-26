@@ -1,7 +1,7 @@
 // BSB/server/src/au/states/long/LRunning.js
 
-const MarketSignal = require('../../../../models/MarketSignal');
-const { calculateLongCoverage } = require('../../../../autobotCalculations');
+const MarketSignal = require('../../../models/MarketSignal');
+const { calculateLongCoverage } = require('../../../autobotCalculations');
 
 /**
  * RUNNING STATE (LONG):

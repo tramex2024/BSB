@@ -4,7 +4,7 @@
  * LONG ORDER MANAGER:
  * Responsible for triggering executions to BitMart using signed functions.
  */
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../../utils/tradeConstants');
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/tradeConstants');
 
 /**
  * LONG OPENING: Initial buy (Market Buy).

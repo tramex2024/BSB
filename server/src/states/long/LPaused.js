@@ -4,7 +4,7 @@
  * Corrected: Coverage synchronization with real-time market price (2026).
  */
 
-const { calculateLongTargets, calculateLongCoverage } = require('../../../../autobotCalculations');
+const { calculateLongTargets, calculateLongCoverage } = require('../../../autobotCalculations');
 const MIN_USDT_VALUE_FOR_BITMART = 5.0;
 
 async function run(dependencies) {

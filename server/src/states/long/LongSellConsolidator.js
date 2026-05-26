@@ -1,8 +1,8 @@
 // BSB/server/src/au/states/long/LongSellConsolidator.js
 
-const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
+const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 const { handleSuccessfulSell } = require('../../managers/longDataManager');
-const { logSuccessfulCycle } = require('../../../../services/cycleLogService'); 
+const { logSuccessfulCycle } = require('../../../services/cycleLogService'); 
 
 /**
  * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.

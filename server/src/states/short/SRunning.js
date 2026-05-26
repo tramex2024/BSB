@@ -6,8 +6,8 @@
  * Corregido: Sincronización de proyección visual en tiempo real (2026).
  */
 
-const MarketSignal = require('../../../../models/MarketSignal');
-const { calculateShortCoverage } = require('../../../../autobotCalculations');
+const MarketSignal = require('../../../models/MarketSignal');
+const { calculateShortCoverage } = require('../../../autobotCalculations');
 
 async function run(dependencies) {
     // 1. Contexto inyectado

@@ -3,11 +3,11 @@
  * Gestión de ciclos de vida para operaciones de Venta/Recompra.
  */
 
-const SRunning = require('./au/states/short/SRunning'); // Scan de entrada
-const SSelling = require('./au/states/short/SSelling'); // DCA (Venta de BTC)
-const SBuying  = require('./au/states/short/SBuying');  // Take Profit (Compra de BTC)
-const SPaused  = require('./au/states/short/SPaused');
-const SStopped = require('./au/states/short/SStopped');
+const SRunning = require('./states/short/SRunning'); // Scan de entrada
+const SSelling = require('./states/short/SSelling'); // DCA (Venta de BTC)
+const SBuying  = require('./states/short/SBuying');  // Take Profit (Compra de BTC)
+const SPaused  = require('./states/short/SPaused');
+const SStopped = require('./states/short/SStopped');
 
 /**
  * Ejecuta la lógica correspondiente según el estado actual del Short.

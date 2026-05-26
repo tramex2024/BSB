@@ -1,6 +1,6 @@
 // BSB/server/src/au/states/short/ShortSellConsolidator.js
 
-const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
+const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 const { handleSuccessfulShortSell } = require('../../managers/shortDataManager'); 
 
 /**

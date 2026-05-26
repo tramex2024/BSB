@@ -21,10 +21,10 @@ const {
     calculatePotentialProfit 
 } = require('./autobotCalculations');
 
-const { monitorAndConsolidate: monitorLongBuy } = require('./src/au/states/long/LongBuyConsolidator');
-const { monitorAndConsolidateLongSell: monitorLongSell } = require('./src/au/states/long/LongSellConsolidator'); 
-const { monitorAndConsolidateShort: monitorShortSell } = require('./src/au/states/short/ShortSellConsolidator');
-const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/au/states/short/ShortBuyConsolidator');
+const { monitorAndConsolidate: monitorLongBuy } = require('./src/states/long/LongBuyConsolidator');
+const { monitorAndConsolidateLongSell: monitorLongSell } = require('./src/states/long/LongSellConsolidator'); 
+const { monitorAndConsolidateShort: monitorShortSell } = require('./src/states/short/ShortSellConsolidator');
+const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/states/short/ShortBuyConsolidator');
 
 // IMPORTACIÓN DE NUEVO MÓDULO START/STOP
 const { updateConfig, startSide, stopSide } = require('./startStop');

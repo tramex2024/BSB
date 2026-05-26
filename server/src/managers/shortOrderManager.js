@@ -4,7 +4,7 @@
  * SHORT ORDER MANAGER:
  * Executes sell orders (opening/DCA) and buy orders (closing) with strategy signatures.
  */
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../../utils/tradeConstants');
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/tradeConstants');
 
 /**
  * Converts USDT amounts to BTC units based on current price.

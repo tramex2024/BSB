@@ -1,6 +1,6 @@
 // BSB/server/src/au/states/long/LongBuyConsolidator.js
 
-const { getOrderDetail, getRecentOrders } = require('../../../../services/bitmartService');
+const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 const { handleSuccessfulBuy } = require('../../managers/longDataManager'); 
 
 /**
