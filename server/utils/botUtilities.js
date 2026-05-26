@@ -6,8 +6,8 @@
  * Unlike DataManagers, this reset is used for emergencies or manual user-requested cleanups.
  */
 
-const Autobot = require('../../../models/Autobot'); 
-const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('../au/utils/cleanState');
+const Autobot = require('../models/Autobot'); 
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./cleanState');
 
 /**
  * Performs a total reset of the bot state for a specific user.

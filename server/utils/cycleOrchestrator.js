@@ -4,11 +4,11 @@
  * MODO SEGURO: Gestión de Bitmart para Real y DB para IA.
  */
 
-const Autobot = require('../../../models/Autobot');
-const User = require('../../../models/User'); 
-const Order = require('../../../models/Order'); 
-const bitmartService = require('../../../services/bitmartService');
-const { decrypt } = require('../../../utils/encryption'); 
+const Autobot = require('../models/Autobot');
+const User = require('../models/User'); 
+const Order = require('../models/Order'); 
+const bitmartService = require('../services/bitmartService');
+const { decrypt } = require('../utils/encryption'); 
 
 let io;
 let lastCyclePrice = 0;
