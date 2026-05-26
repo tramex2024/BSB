@@ -5,7 +5,7 @@ const autobotLogic = require('../autobotLogic');
 const configController = require('../controllers/configController');
 
 // Importamos los validadores y servicios acordados
-const strategyValidator = require('../src/au/utils/strategyValidator');
+const strategyValidator = require('../utils/strategyValidator');
 const ExitLiquidationService = require('../services/exitLiquidationService'); // Para el preview de STOP
 const Autobot = require('../models/Autobot'); // Tu modelo de Mongoose
 
