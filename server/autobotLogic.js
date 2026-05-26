@@ -6,13 +6,13 @@
 const Autobot = require('./models/Autobot');
 const User = require('./models/User'); 
 const bitmartService = require('./services/bitmartService');
-const orchestrator = require('./src/au/utils/cycleOrchestrator');
+const orchestrator = require('./utils/cycleOrchestrator');
 const { decrypt } = require('./utils/encryption'); 
 
 const { runLongStrategy } = require('./src/longStrategy');
 const { runShortStrategy } = require('./src/shortStrategy');
 const { runAIStrategy } = require('./src/aiStrategy'); 
-const { canExecuteStrategy } = require('./src/au/utils/strategyValidator');
+const { canExecuteStrategy } = require('./utils/strategyValidator');
 
 const { 
     calculateLongCoverage, 
