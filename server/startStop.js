@@ -2,9 +2,9 @@
 // Management of states and configuration (Start/Stop/Update) - English Version
 
 const Autobot = require('./models/Autobot');
-const orchestrator = require('./src/au/utils/cycleOrchestrator');
-const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./src/au/utils/cleanState');
-const { getStartAnalysis } = require('./src/au/utils/strategyValidator');
+const orchestrator = require('./utils/cycleOrchestrator');
+const { CLEAN_LONG_ROOT, CLEAN_SHORT_ROOT } = require('./utils/cleanState');
+const { getStartAnalysis } = require('./utils/strategyValidator');
 
 async function updateConfig(userId, newConfig) {
     const currentPrice = orchestrator.getLastPrice();
