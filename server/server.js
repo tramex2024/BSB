@@ -14,7 +14,7 @@ const path = require('path');
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const autobotLogic = require('./autobotLogic.js');
 const centralAnalyzer = require('./services/CentralAnalyzer'); 
-const aiEngine = require(path.join(__dirname, 'src', 'ai', 'AIEngine')); 
+const aiEngine = require(path.join(__dirname, 'src', 'states', 'ai', 'AIEngine')); 
 const orderPersistenceService = require('./services/orderPersistenceService');
 const marketService = require('./services/marketService');
 const cronService = require('./services/cronService'); // <--- El "Jefe" de los tiempos
