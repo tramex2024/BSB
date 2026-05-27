@@ -6,9 +6,9 @@
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
 const bitmartService = require('./bitmartService'); 
 const MarketSignal = require('../models/MarketSignal');
-const AIEngine = require('../src/ai/AIEngine');
+const AIEngine = require('../src/states/ai/AIEngine');
 const AutoBot = require('../models/Autobot');
-const StrategyManager = require('../src/ai/StrategyManager'); // Importado para el cálculo de confianza
+const StrategyManager = require('../src/managers/StrategyManager'); // Importado para el cálculo de confianza
 
 class CentralAnalyzer {
     constructor() {
