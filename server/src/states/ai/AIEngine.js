@@ -1,6 +1,6 @@
-const Order = require('../../models/Order'); 
-const RiskManager = require('./AIRiskManager');
-const AutoBot = require('../../models/Autobot');
+const Order = require('../../../models/Order'); 
+const RiskManager = require('../../managers/AIRiskManager');
+const AutoBot = require('../../../models/Autobot');
 
 class AIEngine {
     constructor() {

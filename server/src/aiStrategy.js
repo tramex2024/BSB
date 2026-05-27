@@ -3,7 +3,7 @@
  * Versión Blindada: Adaptador de ejecución para el Motor de IA.
  */
 
-const aiEngine = require('./ai/AIEngine');
+const aiEngine = require('./states/ai/AIEngine');
 
 async function runAIStrategy(dependencies) {
     // 1. Validación de integridad de datos
