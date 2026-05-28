@@ -162,6 +162,18 @@ export async function updateBotUI(state) {
             }
         }
     } catch (err) { /* Silencioso */ }
+    
+    // Dentro de uiManager.js -> updateBotUI
+    try {
+    // Si la función del dashboard está exportada o disponible, la ejecutamos
+    import('./dashboard.js').then(db => {
+        if (typeof db.updateAIMarketPulse === 'function') {
+            db.updateAIMarketPulse(state);
+        }
+    });
+} catch (err) {
+    console.warn("Dashboard no listo para recibir Market Pulse");
+}
 
     // Sincronizamos las métricas con el nuevo payload
     updateMetricsFromState(state);

@@ -205,8 +205,8 @@ export function updateDistributionWidget(state) {
 }
 
 /**
- * AGREGADO: Renderizador dinámico del Widget AI Market Pulse
- * Controla barras de progreso, etiquetas y animación del SVG de confianza.
+ * AGREGADO: Renderizador dinámico del Widget AI Market Pulse (Edición Dashboard Aislada)
+ * Controla barras de progreso, etiquetas y animación del SVG de confianza de la pestaña principal.
  */
 export function updateAIMarketPulse(state) {
     if (!state) return;
@@ -218,12 +218,12 @@ export function updateAIMarketPulse(state) {
     const trendLabel = state.aiTrendLabel || 'NEUTRAL';
     const engineMsg = state.aiEngineMsg || 'System Operational';
 
-    // 2. Actualizar etiquetas de texto de forma segura
-    const trendEl = document.getElementById('ai-trend-label');
-    const msgEl = document.getElementById('ai-engine-msg');
-    const adxValEl = document.getElementById('ai-adx-val');
-    const stochValEl = document.getElementById('ai-stoch-val');
-    const confValEl = document.getElementById('ai-confidence-value');
+    // 2. Actualizar etiquetas de texto usando los nuevos IDs con prefijo db-
+    const trendEl = document.getElementById('db-ai-trend-label');
+    const msgEl = document.getElementById('db-ai-engine-msg');
+    const adxValEl = document.getElementById('db-ai-adx-val');
+    const stochValEl = document.getElementById('db-ai-stoch-val');
+    const confValEl = document.getElementById('db-ai-confidence-value');
 
     if (trendEl) trendEl.innerText = trendLabel;
     if (msgEl) msgEl.innerText = engineMsg;
@@ -231,14 +231,14 @@ export function updateAIMarketPulse(state) {
     if (stochValEl) stochValEl.innerText = stoch.toFixed(1);
     if (confValEl) confValEl.innerText = `${confidence}%`;
 
-    // 3. Sincronizar las micro-barras horizontales
-    const adxBar = document.getElementById('ai-adx-bar');
-    const stochBar = document.getElementById('ai-stoch-bar');
+    // 3. Sincronizar las micro-barras horizontales del dashboard
+    const adxBar = document.getElementById('db-ai-adx-bar');
+    const stochBar = document.getElementById('db-ai-stoch-bar');
     if (adxBar) adxBar.style.width = `${Math.min(adx, 100)}%`;
     if (stochBar) stochBar.style.width = `${Math.min(stoch, 100)}%`;
 
-    // 4. ANIMACIÓN TRIGGER DEL CÍRCULO SVG (Perímetro exacto r=58 -> 364.42)
-    const confidenceCircle = document.getElementById('ai-confidence-circle');
+    // 4. ANIMACIÓN TRIGGER DEL CÍRCULO SVG EXCLUSIVO DEL DASHBOARD
+    const confidenceCircle = document.getElementById('db-ai-confidence-circle');
     if (confidenceCircle) {
         const perimeter = 364.42;
         const offset = perimeter - (confidence / 100) * perimeter;
