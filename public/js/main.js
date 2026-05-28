@@ -1,6 +1,6 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Corregido - Sincronización real de checkboxes Long/Short y Widget de IA
+ * Estado: Corregido - Sincronización real de checkboxes Long/Short
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -42,12 +42,6 @@ export const currentBotState = {
     lprofit: 0,
     sprofit: 0,
     aiprofit: 0,
-    // Respaldos para el Widget de IA por si el backend tarda en responder
-    aiAdx: 0,
-    aiStoch: 0,
-    aiConfidence: 0,
-    aiTrendLabel: 'NEUTRAL',
-    aiEngineMsg: 'Waiting for market pulse...',
     config: {
         symbol: 'BTC_USDT', 
         long: { amountUsdt: 0, enabled: false, stopAtCycle: false },
@@ -131,16 +125,8 @@ export async function initializeTab(tabName) {
             
             if (initFn) {
                 await initFn(currentBotState);
-                
-                // [NUEVO SINCRONIZADOR DE COMPONENTES DEL DASHBOARD]
-                if (tabName === 'dashboard') {
-                    if (module.updateDistributionWidget) {
-                        module.updateDistributionWidget(currentBotState);
-                    }
-                    // CORRECCIÓN CRÍTICA: Forzamos la renderización del círculo y métricas de IA
-                    if (module.updateAIMarketPulse) {
-                        module.updateAIMarketPulse(currentBotState);
-                    }
+                if (tabName === 'dashboard' && module.updateDistributionWidget) {
+                    module.updateDistributionWidget(currentBotState);
                 }
             }
             if (tabName === 'aibot') {
@@ -181,15 +167,17 @@ document.addEventListener('change', async (e) => {
         await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
     }
 
-    // 3. Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot)
+    // 3. [FIX] Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot)
     if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         const isChecked = e.target.checked;
         
         logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
         
+        // Actualizamos el estado local inmediatamente
         currentBotState.config[side].stopAtCycle = isChecked;
 
+        // Enviamos la configuración completa al servidor
         const fullConfig = getBotConfiguration();
         await sendConfigToBackend({ config: fullConfig });
     }
