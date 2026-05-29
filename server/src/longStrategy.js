@@ -1,6 +1,6 @@
 /**
  * ESTRATEGIA LONG - STATE MACHINE (BSB 2026)
- * Gestión segura de ciclos de vida de posiciones Long.
+ * Gestión segura de ciclos de vida de posiciones Long con mitigación de pánico.
  */
 
 const LRunning = require('./states/long/LRunning');
@@ -15,20 +15,17 @@ const LStopped = require('./states/long/LStopped');
  */
 async function runLongStrategy(dependencies) {
     // 1. Verificación de integridad (Fail-fast)
-    // 🟢 AUDITORÍA: userId es mandatorio para asegurar que ningún proceso corra sin identidad
     if (!dependencies || !dependencies.botState || !dependencies.userId) {
         return; 
     }
 
-    const { botState, log, userId } = dependencies;
+    const { botState, log, userId, updateBotState } = dependencies;
     const currentState = botState.lstate || 'STOPPED';
 
     try {
         /**
          * PATRÓN STATE MACHINE
          * Delegamos la lógica pesada a submódulos especializados.
-         * El objeto 'log' ya viene configurado desde autobotLogic para emitir
-         * a la sala privada (userId) sin prefijos incorrectos.
          */
         switch (currentState) {
             case 'RUNNING':
@@ -57,15 +54,28 @@ async function runLongStrategy(dependencies) {
                 break;
                 
             default:
-                // Log estanco por usuario
                 log(`⚠️ Unknown Long state: ${currentState}`, 'error');
                 break;
         }
     } catch (error) {
-        // Aislamiento de errores: El fallo de un usuario no afecta al resto del botCycle
-        // 🟢 AUDITORÍA: El uso de userId en el console.error permite debugear fallos específicos sin mezclar logs
-        log(`🔥 Error in LongStrategy [${currentState}]: ${error.message}`, 'error');
+        // [BLINDAJE DE EMERGENCIA]: Aislamos el error e impedimos bucles infinitos de CPU.
+        log(`🔥 Error crítico en LongStrategy [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-LONG][User: ${userId}]:`, error);
+
+        // Si el error ocurre en un estado operativo crucial, pausamos el bot por seguridad del capital
+        if (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING') {
+            try {
+                log(`🚨 [FALLBACK ACTIVADO] Forzando transición de emergencia [${currentState} ➡️ PAUSED] para evitar corrupción de ciclo.`, 'warning');
+                if (typeof updateBotState === 'function') {
+                    await updateBotState('PAUSED', 'long');
+                } else {
+                    // Respaldo directo si el wrapper atómico de dependencias no responde
+                    botState.lstate = 'PAUSED';
+                }
+            } catch (fallbackError) {
+                console.error(`💥 [SUPER-CRITICAL] Falló el sistema de mitigación de pánico del usuario ${userId}:`, fallbackError.message);
+            }
+        }
     }
 }
 

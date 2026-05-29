@@ -1,6 +1,6 @@
 /**
  * ESTRATEGIA SHORT - STATE MACHINE (BSB 2026)
- * Gestión de ciclos de vida para operaciones de Venta/Recompra.
+ * Gestión de ciclos de vida para operaciones de Venta/Recompra con mitigación de pánico.
  */
 
 const SRunning = require('./states/short/SRunning'); // Scan de entrada
@@ -14,19 +14,16 @@ const SStopped = require('./states/short/SStopped');
  * @param {Object} dependencies - Inyección de contexto atómica por usuario.
  */
 async function runShortStrategy(dependencies) {
-    // 1. Validación de seguridad
-    // 🟢 AUDITORÍA: fail-fast para evitar ejecuciones sin estado definido.
-    if (!dependencies || !dependencies.botState) return;
+    // 1. Validación de seguridad (Fail-fast)
+    if (!dependencies || !dependencies.botState || !dependencies.userId) return;
 
-    const { botState, userId, log } = dependencies;
+    const { botState, userId, log, updateBotState } = dependencies;
     const currentState = botState.sstate || 'STOPPED';
 
     try {
         /**
          * MÁQUINA DE ESTADOS SHORT
-         * Delegamos la ejecución a submódulos. 
-         * El objeto 'log' inyectado emitirá a la sala privada (userId) 
-         * permitiendo el aislamiento total entre usuarios.
+         * Delegamos la ejecución a submódulos especializados. 
          */
         switch (currentState) {
             case 'RUNNING':
@@ -55,15 +52,28 @@ async function runShortStrategy(dependencies) {
                 break;
 
             default:
-                // Log estanco usando el canal corregido
                 log(`⚠️ Unknown Short state: ${currentState}`, 'error');
                 break;
         }
     } catch (error) {
-        // Aislamiento de errores para no afectar a otros usuarios en el loop
-        // 🟢 AUDITORÍA: El console.error segmentado por userId es vital para el soporte técnico multiusuario.
+        // [BLINDAJE DE EMERGENCIA]: Aislamos el error e impedimos bucles infinitos de CPU/Red en operaciones Short.
         log(`🔥 ShortStrategy Error [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-SHORT][User: ${userId}]:`, error);
+
+        // Si el error ocurre en un estado transaccional activo, pausamos el bot para congelar la exposición al mercado
+        if (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING') {
+            try {
+                log(`🚨 [FALLBACK SHORT ACTIVADO] Forzando transición de emergencia [${currentState} ➡️ PAUSED] para mitigar riesgos en corto.`, 'warning');
+                if (typeof updateBotState === 'function') {
+                    await updateBotState('PAUSED', 'short');
+                } else {
+                    // Respaldo directo en el objeto en memoria por seguridad de subprocesos
+                    botState.sstate = 'PAUSED';
+                }
+            } catch (fallbackError) {
+                console.error(`💥 [SUPER-CRITICAL-SHORT] Falló el sistema de mitigación de pánico Short para el usuario ${userId}:`, fallbackError.message);
+            }
+        }
     }
 }
 

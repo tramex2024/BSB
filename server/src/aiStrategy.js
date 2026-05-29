@@ -1,14 +1,13 @@
 /**
  * BSB/server/src/aiStrategy.js
- * Versión Blindada: Adaptador de ejecución para el Motor de IA.
+ * Versión Blindada: Adaptador de ejecución para el Motor de IA (Anti-Fugas y Multi-User)
  */
 
 const aiEngine = require('./states/ai/AIEngine');
 
 async function runAIStrategy(dependencies) {
-    // 1. Validación de integridad de datos
-    // 🟢 AUDITORÍA: Previene fallos en cascada si el orquestador no provee el estado.
-    if (!dependencies || !dependencies.botState || !dependencies.currentPrice) {
+    // 1. Validación de integridad de datos (Fail-fast)
+    if (!dependencies || !dependencies.botState || !dependencies.currentPrice || !dependencies.userId) {
         return;
     }
 
@@ -16,40 +15,34 @@ async function runAIStrategy(dependencies) {
         currentPrice, 
         botState, 
         userId, 
-        io, 
         log, 
-        placeAIOrder,           // Inyectado desde autobotLogic
-        updateAIStateData,      // Inyectado desde autobotLogic
-        updateBotState          // Inyectado desde autobotLogic
+        placeAIOrder,           
+        updateAIStateData,      
+        updateBotState          
     } = dependencies;
+
+    const currentState = botState.aistate || 'STOPPED';
 
     try {
         // 2. FILTRO DE ESTADO OPERATIVO
-        // 🟢 AUDITORÍA: Si el usuario apagó específicamente la IA, el motor ni siquiera se invoca.
-        if (!botState.aistate || botState.aistate === 'STOPPED') {
+        if (currentState === 'STOPPED') {
             return;
         }
 
-        // 3. OPTIMIZACIÓN DE SOCKET (Solo si el Engine tiene el método)
-        // 🟢 AUDITORÍA: Permite que la IA emita eventos en tiempo real al frontend del usuario.
-        if (io && aiEngine.io !== io && typeof aiEngine.setIo === 'function') {
-            aiEngine.setIo(io);
-        }
-
         /**
-         * 4. EJECUCIÓN DE ANÁLISIS Y ACCIÓN
-         * Pasamos las funciones de ejecución (placeAIOrder, etc.) al Engine.
-         * Esto permite que el Engine decida QUÉ hacer, pero que use el 
-         * canal oficial de la IA para ejecutar las órdenes.
+         * 3. EJECUCIÓN DE ANÁLISIS Y ACCIÓN
+         * [BLINDAJE]: Pasamos la referencia directa de las funciones operativas y evitamos
+         * el anti-patrón de clonación superficial que rompía la persistencia en memoria.
+         * Eliminamos la mutación global de setIo para prevenir fugas de información entre usuarios.
          */
-        // 🟢 AUDITORÍA: El Engine recibe un snapshot del botState + las funciones firmadas.
         await aiEngine.analyze(currentPrice, userId, {
-            ...botState,
-            // Sobreescribimos con las funciones oficiales del orquestador para este userId
+            botState, // Pasamos el estado real para permitir mutaciones e inspección directa
             placeAIOrder,
             updateAIStateData,
             updateBotState,
-            log
+            log,
+            // Si el motor de IA requiere emitir al cliente, usará el wrapper seguro provisto por el orquestador
+            syncFrontendState: dependencies.syncFrontendState 
         });
 
     } catch (error) {
@@ -57,6 +50,21 @@ async function runAIStrategy(dependencies) {
             log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
         }
         console.error(`[AI-STRATEGY][User: ${userId}]:`, error);
+
+        // [FALLBACK DE SEGURIDAD]: Mantenemos la simetría con Long y Short. 
+        // Si el motor de IA colapsa, pausamos la estrategia para proteger la cuenta.
+        if (currentState === 'RUNNING') {
+            try {
+                log(`🚨 [FALLBACK AI ACTIVADO] Forzando pausa de emergencia [RUNNING ➡️ PAUSED] por error en Engine.`, 'warning');
+                if (typeof updateBotState === 'function') {
+                    await updateBotState('PAUSED', 'ai');
+                } else {
+                    botState.aistate = 'PAUSED';
+                }
+            } catch (fallbackError) {
+                console.error(`💥 [SUPER-CRITICAL-AI] Falló la mitigación de pánico de IA para el usuario ${userId}:`, fallbackError.message);
+            }
+        }
     }
 }
 
