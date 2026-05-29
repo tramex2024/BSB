@@ -36,7 +36,6 @@ export function initializeDashboardView(initialState) {
         updatePnLBar('long', stateToUse.lprofit || 0);
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
-        updateAIMarketPulse(stateToUse); // <-- AGREGADO: Carga inicial del pulso de IA
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
     }
 
@@ -99,6 +98,7 @@ async function refreshAnalytics() {
  */
 function handleMetricsUpdate(e) {
     if (e.detail && e.detail.points) {
+        // e.detail.points contiene los datos ya procesados por el manager
         requestAnimationFrame(() => renderEquityCurve(e.detail.points));
     }
 }
@@ -107,6 +107,10 @@ function handleMetricsUpdate(e) {
  * Configuración de botones y inputs (Solo lógica que no está en botControls)
  */
 function setupActionButtons() {
+    // Nota: El 'panic-btn' y los botones 'start/stop' ya tienen sus listeners 
+    // registrados globalmente en botControls.js. No añadimos onclick aquí.
+
+    // Manejo de Inputs de Cantidad (Amount USDT)
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
         { id: 'auamounts-usdt', strategy: 'short' },
@@ -116,7 +120,8 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
-            if (currentBotState.config && currentBotState.config[input.strategy]) {
+            // Sincronizar valor inicial con el estado
+            if (currentBotState.config[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
 
@@ -146,7 +151,7 @@ function setupAnalyticsFilters() {
     if (pSel) pSel.onchange = () => Metrics.setChartParameter(pSel.value);
 }
 
-// --- TERMINAL Y GRÁFICOS ---
+// --- TERMINAL Y GRÁFICOS (Se mantienen igual) ---
 
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
@@ -205,72 +210,49 @@ export function updateDistributionWidget(state) {
 }
 
 /**
- * AGREGADO: Renderizador dinámico del Widget AI Market Pulse
- * Controla barras de progreso, etiquetas y animación del SVG de confianza.
- */
-export function updateAIMarketPulse(state) {
-    if (!state) return;
-
-    // 1. Extraer variables desde el payload del estado (con valores de respaldo)
-    const adx = parseFloat(state.aiAdx) || 0;
-    const stoch = parseFloat(state.aiStoch) || 0;
-    const confidence = Math.min(Math.max(parseInt(state.aiConfidence) || 0, 0), 100);
-    const trendLabel = state.aiTrendLabel || 'NEUTRAL';
-    const engineMsg = state.aiEngineMsg || 'System Operational';
-
-    // 2. Actualizar etiquetas de texto de forma segura
-    const trendEl = document.getElementById('ai-trend-label');
-    const msgEl = document.getElementById('ai-engine-msg');
-    const adxValEl = document.getElementById('ai-adx-val');
-    const stochValEl = document.getElementById('ai-stoch-val');
-    const confValEl = document.getElementById('ai-confidence-value');
-
-    if (trendEl) trendEl.innerText = trendLabel;
-    if (msgEl) msgEl.innerText = engineMsg;
-    if (adxValEl) adxValEl.innerText = adx.toFixed(1);
-    if (stochValEl) stochValEl.innerText = stoch.toFixed(1);
-    if (confValEl) confValEl.innerText = `${confidence}%`;
-
-    // 3. Sincronizar las micro-barras horizontales
-    const adxBar = document.getElementById('ai-adx-bar');
-    const stochBar = document.getElementById('ai-stoch-bar');
-    if (adxBar) adxBar.style.width = `${Math.min(adx, 100)}%`;
-    if (stochBar) stochBar.style.width = `${Math.min(stoch, 100)}%`;
-
-    // 4. ANIMACIÓN TRIGGER DEL CÍRCULO SVG (Perímetro exacto r=58 -> 364.42)
-    const confidenceCircle = document.getElementById('ai-confidence-circle');
-    if (confidenceCircle) {
-        const perimeter = 364.42;
-        const offset = perimeter - (confidence / 100) * perimeter;
-        requestAnimationFrame(() => {
-            confidenceCircle.style.strokeDashoffset = offset;
-        });
-    }
-}
-
-/**
  * dashboard.js - Auditoría de KPIs (Profit/D)
+ * Este script imprimirá los cálculos detallados en la consola.
  */
 function updateQuickStats(response) {
     console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
-    const kpis = response.data || response;
     
+    // 1. Extraer datos
+    const kpis = response.data || response;
+    console.log("1. Datos Crudos (KPIs):", kpis);
+
     const totalProfit = parseFloat(kpis.totalNetProfit) || 0;
     const totalCycles = parseInt(kpis.totalCycles) || 0;
     const avgHours = parseFloat(kpis.avgDurationHours) || 0;
-    const totalTimeHours = avgHours * totalCycles;
 
+    // 2. Cálculos intermedios
+    const totalTimeHours = avgHours * totalCycles;
+    
+    console.log("2. Desglose de variables:");
+    console.log(`   - Profit Total: $${totalProfit}`);
+    console.log(`   - Ciclos Totales: ${totalCycles}`);
+    console.log(`   - Horas Promedio/Ciclo: ${avgHours.toFixed(4)}h`);
+    console.log(`   - TIEMPO TOTAL CALCULADO: ${totalTimeHours.toFixed(4)}h`);
+
+    // 3. Cálculo final
     let profitPerDay = 0;
     if (totalTimeHours > 0) {
         const profitPerHour = totalProfit / totalTimeHours;
         profitPerDay = profitPerHour * 24;
+        console.log(`3. Cálculo Exitoso: ($${totalProfit} / ${totalTimeHours.toFixed(2)}h) * 24 = $${profitPerDay.toFixed(4)}/d`);
+    } else {
+        console.warn("3. ⚠️ ERROR: El tiempo total es 0. No se puede calcular el Profit/D.");
     }
 
+    // 4. Actualización del DOM
     const profitElement = document.getElementById('cycle-efficiency');
     if (profitElement) {
         const finalValue = `$${profitPerDay.toFixed(4)}/d`;
         profitElement.innerText = finalValue;
         profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
+        console.log(`4. ✅ DOM Actualizado con éxito: ${finalValue}`);
+    } else {
+        console.error("4. ❌ ERROR: No se encontró el elemento 'cycle-efficiency' en el HTML.");
     }
+
     console.groupEnd();
 }

@@ -24,6 +24,12 @@ const STATUS_COLORS = {
  */
 export async function updateBotUI(state) {
     if (!state) return;
+    
+    // --- BLOQUE DE INSPECCIÓN TEMPORAL ---
+    //console.log("--- BACKEND PAYLOAD INSPECTION ---");
+    //console.log("Estructura completa:", state);
+    //if (state.stats) console.log("Estadísticas detectadas:", state.stats);
+    // -------------------------------------
 
     // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
@@ -32,7 +38,7 @@ export async function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // 2. MAPEO MAESTRO (Sincronizado con IDs de HTML y Propiedades del Estado)
+    // 2. MAPEO MAESTRO (Sincronizado con IDs de HTML)
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -46,7 +52,7 @@ export async function updateBotUI(state) {
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder', 
+        'aulnorder': 'lnorder', // <--- Coma agregada aquí para evitar el SyntaxError
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
@@ -56,15 +62,15 @@ export async function updateBotUI(state) {
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder', 
+        'ausnorder': 'snorder', // <--- Coma agregada aquí por seguridad
 
-        // AI ENGINE (CORREGIDO: Sincronización exacta con las propiedades del backend)
+        // AI ENGINE
         'ai-virtual-balance': 'aibalance', 
-        'ai-adx-val': 'aiAdx',                   
-        'ai-stoch-val': 'aiStoch',                
+        'ai-adx-val': 'lai',                 
+        'ai-stoch-val': 'lac',               
         'aubot-aistate': 'aistate', 
-        'ai-trend-label': 'aiTrendLabel',     
-        'ai-engine-msg': 'aiEngineMsg',  
+        'ai-trend-label': 'trend',     
+        'ai-engine-msg': 'aiMessage',  
 
         // ESTADOS DE TEXTO
         'aubot-lstate': 'lstate',
@@ -94,7 +100,7 @@ export async function updateBotUI(state) {
             return;
         }
 
-        // --- Renderizado de Números y Datos de Mercado ---
+        // --- Renderizado de Números ---
         if (id.includes('profit')) {
             formatProfit(el, val);
         } else if (id.includes('btc') || id === 'aubalance-btc') {
@@ -113,13 +119,10 @@ export async function updateBotUI(state) {
         }
     });
 
-    // 3. Barras de Confianza AI y Círculo de Confianza
+    // 3. Barras de Confianza AI
     if (state.aiConfidence !== undefined) {
         const bar = document.getElementById('ai-confidence-fill');
         if (bar) bar.style.width = `${state.aiConfidence}%`;
-        
-        const confValEl = document.getElementById('ai-confidence-value');
-        if (confValEl) confValEl.textContent = `${parseInt(state.aiConfidence)}%`;
     }
 
     // 4. Sincronización de Inputs
@@ -137,29 +140,21 @@ export async function updateBotUI(state) {
         updateControlsState(state);
     }
 
-    // 6. Actualización de Dashboard e Integración de Pulso de Mercado
+    // 6. Actualización de Dashboard (Optimizado)
     try {
         const dashboard = await import('./dashboard.js');
-        if (dashboard) {
-            // Actualización de barras de PnL
-            if (typeof dashboard.updatePnLBar === 'function') {
-                const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
-                const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
-                const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
+        if (dashboard && typeof dashboard.updatePnLBar === 'function') {
+            const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
+            const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
+            const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
 
-                dashboard.updatePnLBar('long', lProfit);
-                dashboard.updatePnLBar('short', sProfit);
-                dashboard.updatePnLBar('ai', aiProfit);
-                
-                const totalProfit = state.total_profit ?? (lProfit + sProfit + aiProfit);
-                const totalEl = document.getElementById('auprofit');
-                if (totalEl) formatProfit(totalEl, totalProfit);
-            }
-
-            // CORRECCIÓN DIRECTA: Inyectar datos en tiempo real al widget de IA del Dashboard
-            if (typeof dashboard.updateAIMarketPulse === 'function') {
-                dashboard.updateAIMarketPulse(state);
-            }
+            dashboard.updatePnLBar('long', lProfit);
+            dashboard.updatePnLBar('short', sProfit);
+            dashboard.updatePnLBar('ai', aiProfit);
+            
+            const totalProfit = state.total_profit ?? (lProfit + sProfit + aiProfit);
+            const totalEl = document.getElementById('auprofit');
+            if (totalEl) formatProfit(totalEl, totalProfit);
         }
     } catch (err) { /* Silencioso */ }
 
@@ -205,10 +200,10 @@ export function updateControlsState(state) {
         const engineMsg = document.getElementById('ai-engine-msg');
         if (engineMsg) {
             if (actualAiStatus === 'RUNNING') {
-                engineMsg.textContent = state.aiMessage || state.aiEngineMsg || "NEURAL CORE ANALYZING...";
+                engineMsg.textContent = state.aiMessage || "NEURAL CORE ANALYZING...";
                 engineMsg.classList.add('animate-pulse', 'text-blue-400');
             } else {
-                engineMsg.textContent = state.aiEngineMsg || "AI CORE IN STANDBY";
+                engineMsg.textContent = "AI CORE IN STANDBY";
                 engineMsg.classList.remove('animate-pulse', 'text-blue-400');
             }
         }

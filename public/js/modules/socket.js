@@ -74,7 +74,7 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE & VARIATION) ---
+// --- MARKET DATA (PRICE & VARIATION) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
@@ -82,16 +82,17 @@ export function initSocket() {
             const newPrice = parseFloat(data.price);
             currentBotState.price = newPrice;
             
+            // Solo actualizamos el precio visualmente aquí
             const priceEl = document.getElementById('auprice');
             if (priceEl) {
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
                 currentBotState.lastPrice = newPrice;
             }
 
-            // Pasamos el estado global blindado con las últimas métricas de IA guardadas
+            // LANZAMOS EL MANAGER: Él se encarga de las barras de PnL y todo lo demás
             updateBotUI(currentBotState); 
 
-            // Widget de Donut
+            // Widget de Donut (Si existe)
             if (document.getElementById('balanceDonutChart')) {
                 const { updateDistributionWidget } = await import('./dashboard.js');
                 updateDistributionWidget(currentBotState);
@@ -104,58 +105,54 @@ export function initSocket() {
     });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
-    socket.on('bot-state-update', async (state) => {
-        if (!state) return;
+socket.on('bot-state-update', async (state) => {
+    if (!state) return;
 
-        const now = Date.now();
-        const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
+    const now = Date.now();
+    const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
-        if (isEditing) {
-            console.log("🛡️ Socket: Active editing detected. Shielding...");
-            currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
-            currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
-        } else {
-            if (state.config) {
-                currentBotState.config = { ...currentBotState.config, ...state.config };
+    if (isEditing) {
+        console.log("🛡️ Socket: Active editing detected. Shielding...");
+        currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
+        currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
+    } else {
+        if (state.config) {
+            currentBotState.config = { ...currentBotState.config, ...state.config };
+        }
+        Object.assign(currentBotState, state);
+        
+        // Sincronización de PnL Individual
+        if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
+        if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
+        if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
+        
+        updateBotUI(currentBotState);
+    }
+
+    // 🚀 MEJORA CRÍTICA: Sincronización de Métricas y Profit/H en vivo
+    const historyData = state.history || state.cycleHistory;
+    if (historyData) {
+        try {
+            const Metrics = await import('./metricsManager.js');
+            const { updateQuickStats } = await import('./dashboard.js'); // Importamos la función de KPIs
+            
+            // 1. Actualizamos el set de datos en el manager (los 29+ ciclos)
+            Metrics.setAnalyticsData(historyData);
+            
+            // 2. Si el backend envió KPIs pre-calculados, actualizamos Profit/H
+            if (state.kpis) {
+                updateQuickStats(state.kpis);
+            } else {
+                // Si no vienen KPIs, forzamos un refresco manual de la analítica
+                // para que el Profit/H no se quede atrás.
+                console.log("🔄 Socket: New history detected, triggering KPI refresh...");
+                // Aquí podrías disparar una pequeña función de cálculo local
             }
             
-            // Sincronizamos propiedades nativas en el estado global
-            Object.assign(currentBotState, state);
-            
-            // CORRECCIÓN: Aseguramos el mapeo explícito de las variables de IA del backend al estado global
-            currentBotState.aiAdx = state.aiAdx !== undefined ? state.aiAdx : (state.lai || currentBotState.aiAdx || 0);
-            currentBotState.aiStoch = state.aiStoch !== undefined ? state.aiStoch : (state.lac || currentBotState.aiStoch || 0);
-            currentBotState.aiConfidence = state.aiConfidence !== undefined ? state.aiConfidence : currentBotState.aiConfidence || 0;
-            currentBotState.aiTrendLabel = state.aiTrendLabel || state.trend || currentBotState.aiTrendLabel || 'NEUTRAL';
-            currentBotState.aiEngineMsg = state.aiEngineMsg || state.aiMessage || currentBotState.aiEngineMsg || 'System Operational';
-
-            // Sincronización de PnL Individual
-            if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
-            if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
-            if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
-            
-            updateBotUI(currentBotState);
+        } catch (err) {
+            console.error("Error injecting metrics:", err);
         }
-
-        // --- Sincronización de Métricas y Profit/H en vivo ---
-        const historyData = state.history || state.cycleHistory;
-        if (historyData) {
-            try {
-                const Metrics = await import('./metricsManager.js');
-                const { updateQuickStats } = await import('./dashboard.js');
-                
-                Metrics.setAnalyticsData(historyData);
-                
-                if (state.kpis) {
-                    updateQuickStats(state.kpis);
-                } else {
-                    console.log("🔄 Socket: New history detected, triggering KPI refresh...");
-                }
-                
-            } catch (err) {
-                console.error("Error injecting metrics:", err);
-            }
-        }
+    }
 
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
@@ -270,6 +267,30 @@ function resetWatchdog() {
         updateConnectionStatus('DISCONNECTED');
         updateSystemHealth('offline');
     }, 15000);
+}
+
+/**
+ * Actualiza la barra de PnL dinámica
+ */
+function updatePnLBar(id, pnlValue) {
+    const bar = document.getElementById(`pnl-bar-${id}`);
+    if (!bar) return;
+
+    const pnl = parseFloat(pnlValue) || 0;
+    
+    // Rango de visualización (hasta 10% de PnL para el 50% de la barra)
+    const limit = 10; 
+    const size = Math.min(Math.abs(pnl) / limit * 50, 50);
+
+    if (pnl >= 0) {
+        bar.style.left = '50%';
+        bar.style.width = `${size}%`;
+        bar.className = 'absolute h-full transition-all duration-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+    } else {
+        bar.style.left = `${50 - size}%`;
+        bar.style.width = `${size}%`;
+        bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+    }
 }
 
 function updateConnectionStatus(status) {
