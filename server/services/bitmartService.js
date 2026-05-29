@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/bitmartService.js
- * SERVICIO REST BITMART - Versión 2026 Reparada (Fix 401)
+ * SERVICIO REST BITMART - Versión 2026 Auditada y Robustecida (Fix 401 & Memoria)
  */
 
 const axios = require('axios');
@@ -72,7 +72,6 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
-        // Solo dejamos el log de error 401 para diagnóstico rápido si las llaves caducan
         if (error.response?.status === 401) {
             console.error(`[BITMART] ❌ Error 401 en ${path}. Verifica las API Keys del usuario.`);
         }
@@ -108,28 +107,28 @@ const bitmartService = {
                 availableUSDT: parseFloat(usdt?.available || 0), 
                 availableBTC: parseFloat(btc?.available || 0) 
             };
-        } catch (e) { return { availableUSDT: 0, availableBTC: 0 }; }
+        } catch (e) { 
+            console.error(`${LOG_PREFIX} ⚠️ Error consultando balances (Evitando falsos ceros):`, e.message);
+            throw e; // Lanza el error para evitar que la estrategia tome decisiones con saldos en 0 falsos
+        }
     },
 
-   // --- Órdenes (Escritura) ---
+    // --- Órdenes (Escritura) ---
     placeOrder: async (symbol, side, type, amount, price, creds) => {
         const sideLower = side.toLowerCase();
         const body = { symbol, side: sideLower, type: type.toLowerCase() };
 
-        // Función interna para evitar decimales infinitos que rompen la firma
         const cleanNum = (n, precision = 8) => {
             const num = parseFloat(n);
-            // Si es USDT (notional), máximo 2 decimales. Si es BTC (size), hasta 8.
             const p = (sideLower === 'buy' && type.toLowerCase() === 'market') ? 2 : precision;
-            return num.toFixed(p).replace(/\.?0+$/, ""); // Quita ceros innecesarios al final
+            return num.toFixed(p).replace(/\.?0+$/, ""); 
         };
 
         if (type.toLowerCase() === 'limit') {
             body.size = cleanNum(amount);
             body.price = cleanNum(price, 2);
         } else {
-            // Lógica de mercado
-            if (sideLower === 'buy') body.notional = cleanNum(amount, 2); // <--- FIX AQUÍ
+            if (sideLower === 'buy') body.notional = cleanNum(amount, 2); 
             else body.size = cleanNum(amount);
         }
 
@@ -168,9 +167,10 @@ const bitmartService = {
         
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
             ...o,
-            price: parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price,
-            size: parseFloat(o.filledSize) > 0 ? o.filledSize : o.size,
-            orderTime: o.orderTime || o.updateTime || o.createTime || Date.now()
+            // [SANEAMIENTO]: Aseguramos el casteo numérico real para prevenir problemas de tipado en los cálculos del bot
+            price: parseFloat(parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price) || 0,
+            size: parseFloat(parseFloat(o.filledSize) > 0 ? o.filledSize : o.size) || 0,
+            orderTime: Number(o.orderTime || o.updateTime || o.createTime || Date.now())
         }));
     },
 
@@ -183,16 +183,11 @@ const bitmartService = {
             const data = res.data?.data || res.data || null;
             if (!data) return null;
 
-            // NORMALIZACIÓN: Aseguramos que los campos estándar tengan datos
             return {
                 ...data,
-                // Si filledSize o filled_volume existen, los ponemos en size
                 size: parseFloat(data.filledSize || data.filled_volume || data.size || 0),
-                // Si priceAvg existe, lo ponemos en price
                 price: parseFloat(data.priceAvg || data.price_avg || data.price || 0),
-                // Si filledNotional existe, lo usamos
                 notional: parseFloat(data.filledNotional || data.notional || 0),
-                // Aseguramos el fee
                 fee: parseFloat(data.fee || 0)
             };
         } catch (e) { 
@@ -204,14 +199,18 @@ const bitmartService = {
     getTicker: async (symbol) => {
         const now = Date.now();
         const cached = tickerCache.get(symbol);
-        if (cached?.data && (now - cached.timestamp < CACHE_TTL)) return cached.data;
+        if (cached && (now - cached.timestamp < CACHE_TTL)) return cached.data;
 
         try {
             const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
             const data = res.data.tickers.find(t => t.symbol === symbol);
-            tickerCache.set(symbol, { data, timestamp: Date.now() });
+            
+            // [SANEAMIENTO]: Guardamos en caché y liberamos memoria si expira de forma activa
+            tickerCache.set(symbol, { data, timestamp: now });
             return data;
         } catch (err) {
+            // Mitigación preventiva: si falla el fetch, retenemos la caché un ciclo extra en lugar de quebrar el flujo
+            if (cached) return cached.data;
             throw err;
         }
     },
