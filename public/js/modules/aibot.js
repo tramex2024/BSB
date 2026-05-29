@@ -1,10 +1,12 @@
-// public/js/modules/aiBot.js
+/**
+ * aiBot.js - Controlador de la estrategia de Inteligencia Artificial (Versión Blindada 2026)
+ * Estado: Auditado y Corregido - Remoción de clonaciones destructivas y sincronización reactiva inmediata
+ */
 
 import { currentBotState, BACKEND_URL } from '../main.js';
 import aiBotUI from './aiBotUI.js';
 import { fetchOrders } from './orders.js';
 import { displayMessage } from './uiManager.js';
-import { askConfirmation } from './confirmModal.js'
 
 /**
  * Gestiona los clics en las pestañas de filtros dentro de AIBOT
@@ -16,7 +18,7 @@ function setupAiOrderTabs() {
     if (!tabs.length) return;
 
     tabs.forEach(tab => {
-        tab.onclick = null; // Limpiar eventos previos
+        tab.onclick = null; // Limpiar eventos previos de forma segura sin romper el árbol del DOM
 
         tab.onclick = (e) => {
             const strategy = e.currentTarget.getAttribute('data-strategy') || 'ai';
@@ -38,7 +40,7 @@ function setupAiOrderTabs() {
 export function initializeAibotView() {
     console.log("🚀 AI System: Syncing card-style interface...");
     
-    // BLINDAJE: Asegurar integridad del objeto config
+    // BLINDAJE: Asegurar integridad estructural del objeto config
     if (!currentBotState.config) currentBotState.config = {};
     if (!currentBotState.config.ai) currentBotState.config.ai = { amountUsdt: 6.0, stopAtCycle: false };
 
@@ -54,14 +56,16 @@ export function initializeAibotView() {
         stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
     }
 
-    // Usamos aistate para determinar el estado de ejecución
-    const isAiRunning = currentBotState.aistate === 'RUNNING';
+    // Determinación precisa del estado basándonos en la arquitectura unificada
+    const isAiRunning = currentBotState.aistate === 'RUNNING' || currentBotState.isRunning === true;
 
-    aiBotUI.setRunningStatus(
-        isAiRunning, 
-        currentBotState.config.ai.stopAtCycle,
-        currentBotState.historyCount || 0
-    );
+    if (aiBotUI) {
+        aiBotUI.setRunningStatus(
+            isAiRunning, 
+            currentBotState.config.ai.stopAtCycle,
+            currentBotState.historyCount || 0
+        );
+    }
 
     const aiOrderCont = document.getElementById('ai-order-list'); 
     if (aiOrderCont) {
@@ -71,18 +75,16 @@ export function initializeAibotView() {
 }
 
 /**
- * Configura los event listeners de los controles de IA
+ * Configura los event listeners de los inputs de la IA
  */
 function setupAIControls() {
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopCycleCheck = document.getElementById('ai-stop-at-cycle');
-    const btnStartAi = document.getElementById('btn-start-ai');
 
-    // Manejo de Inputs (Esto se queda igual)
     if (aiInput) {
         aiInput.onchange = async () => {
             const val = parseFloat(aiInput.value);
-            if (isNaN(val)) return;
+            if (isNaN(val) || val < 0) return;
             await saveAIConfig({ amountUsdt: val });
         };
     }
@@ -93,15 +95,9 @@ function setupAIControls() {
         };
     }
 
-    // --- LIMPIEZA DEL BOTÓN ---
-    // Solo clonamos para asegurar que el botón esté "fresco" visualmente,
-    // pero NO le agregamos un addEventListener aquí. 
-    // La lógica de clic la manejará el main.js de forma global.
-    if (btnStartAi) {
-        const newBtn = btnStartAi.cloneNode(true);
-        btnStartAi.parentNode.replaceChild(newBtn, btnStartAi);
-        // NO agregamos el listener aquí.
-    }
+    // [BLINDAJE 2026]: Eliminamos la clonación destructiva de btn-start-ai.
+    // La delegación de su evento 'onclick' se centraliza limpiamente en botControls.js / main.js
+    // para evitar romper las referencias globales del ciclo de vida de la SPA.
 }
 
 /**
@@ -115,24 +111,26 @@ async function saveAIConfig(aiPayload) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             },
-            // Enviamos solo lo que cambió, el controlador ya sabe manejarlo
             body: JSON.stringify(aiPayload) 
         });
         
         const data = await response.json();
         
         if (data.success) {
-            // 🟢 CRÍTICO: El servidor nos devuelve el valor REAL procesado (ej. si mandamos 5 y el min era 10)
+            // Sincronización del valor REAL procesado por las reglas de negocio del backend
             if (data.amountUsdt !== undefined) {
                 currentBotState.config.ai.amountUsdt = data.amountUsdt;
                 const aiInput = document.getElementById('ai-amount-usdt');
-                if (aiInput) aiInput.value = data.amountUsdt; // Sincronizamos el input visualmente
+                if (aiInput) aiInput.value = data.amountUsdt;
             }
             
             if (data.virtualBalance !== undefined) {
                 currentBotState.aibalance = data.virtualBalance;
-                // Aquí podrías disparar una actualización de la UI del balance si tienes la función
             }
+
+            // PROPAGACIÓN REACTIVA: Forzamos al uiManager a redibujar el estado mutado instantáneamente
+            const { updateBotUI } = await import('./uiManager.js');
+            updateBotUI(currentBotState);
 
             displayMessage(data.message || "IA Sincronizada", "success");
         } else {
@@ -145,7 +143,7 @@ async function saveAIConfig(aiPayload) {
 }
 
 /**
- * Notificaciones Visuales (Toasts)
+ * Notifications Visuales (Toasts de ejecución en tiempo real)
  */
 export function showAiToast(order) {
     const toast = document.createElement('div');
@@ -171,7 +169,7 @@ export function showAiToast(order) {
 }
 
 /**
- * Sonido de ejecución (Feedback auditivo)
+ * Sonido de ejecución (Feedback auditivo sintetizado)
  */
 export function playNeuralSound(side) {
     try {
@@ -185,5 +183,5 @@ export function playNeuralSound(side) {
         gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.2);
-    } catch (e) {}
+    } catch (e) { /* Mitigar bloqueos de políticas de auto-play del navegador */ }
 }

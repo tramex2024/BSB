@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Orquestador Atómico (Sincronizado 2026)
- * Etapa 1: Protección Total contra parpadeo y reseteo de estados.
+ * Etapa 1: Protección Total contra parpadeo y reseteo de estados - AUDITADO
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
@@ -24,12 +24,6 @@ const STATUS_COLORS = {
  */
 export async function updateBotUI(state) {
     if (!state) return;
-    
-    // --- BLOQUE DE INSPECCIÓN TEMPORAL ---
-    //console.log("--- BACKEND PAYLOAD INSPECTION ---");
-    //console.log("Estructura completa:", state);
-    //if (state.stats) console.log("Estadísticas detectadas:", state.stats);
-    // -------------------------------------
 
     // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
@@ -52,7 +46,7 @@ export async function updateBotUI(state) {
         'aultprice': 'ltprice',       
         'aultppc': 'lppc',           
         'aulcoverage': 'lcoverage',   
-        'aulnorder': 'lnorder', // <--- Coma agregada aquí para evitar el SyntaxError
+        'aulnorder': 'lnorder', 
 
         // ESTRATEGIA SHORT
         'ausprofit-val': 'sprofit',   
@@ -62,12 +56,10 @@ export async function updateBotUI(state) {
         'austprice': 'stprice',       
         'austppc': 'sppc',           
         'auscoverage': 'scoverage',   
-        'ausnorder': 'snorder', // <--- Coma agregada aquí por seguridad
+        'ausnorder': 'snorder', 
 
-        // AI ENGINE
+        // AI ENGINE (Fallbacks de persistencia estática)
         'ai-virtual-balance': 'aibalance', 
-        'ai-adx-val': 'lai',                 
-        'ai-stoch-val': 'lac',               
         'aubot-aistate': 'aistate', 
         'ai-trend-label': 'trend',     
         'ai-engine-msg': 'aiMessage',  
@@ -83,7 +75,6 @@ export async function updateBotUI(state) {
         if (!el) return;
         
         let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
-
         if (val === undefined || val === null) return;
 
         // --- Renderizado de Estados ---
@@ -109,9 +100,6 @@ export async function updateBotUI(state) {
         } else if (id.includes('cycle') || id.includes('norder')) {
             const cycleVal = Math.floor(val).toString();
             if (el.textContent !== cycleVal) el.textContent = cycleVal;
-        } else if (id.includes('adx') || id.includes('stoch')) {
-            el.textContent = parseFloat(val).toFixed(1);
-            updatePulseBars(id, val); 
         } else if (id.includes('coverage')) {
             el.textContent = parseFloat(val).toLocaleString(); 
         } else {
@@ -119,18 +107,33 @@ export async function updateBotUI(state) {
         }
     });
 
-    // 3. Barras de Confianza AI
-    if (state.aiConfidence !== undefined) {
-        const bar = document.getElementById('ai-confidence-fill');
-        if (bar) bar.style.width = `${state.aiConfidence}%`;
+    // 3. Renderizado defensivo de métricas de pulso IA si vienen en el state plano
+    const adxEl = document.getElementById('ai-adx-val');
+    const stochEl = document.getElementById('ai-stoch-val');
+    
+    if (adxEl && (state.lai !== undefined || state.aiAdx !== undefined)) {
+        const rawAdx = parseFloat(state.aiAdx ?? state.lai ?? 0);
+        adxEl.textContent = rawAdx.toFixed(1);
+        updatePulseBars('ai-adx-val', rawAdx);
+    }
+    if (stochEl && (state.lac !== undefined || state.aiStoch !== undefined)) {
+        const rawStoch = parseFloat(state.aiStoch ?? state.lac ?? 0);
+        stochEl.textContent = rawStoch.toFixed(1);
+        updatePulseBars('ai-stoch-val', rawStoch);
     }
 
-    // 4. Sincronización de Inputs
+    // 4. Barras de Confianza AI
+    if (state.aiConfidence !== undefined) {
+        const bar = document.getElementById('ai-confidence-fill');
+        if (bar) bar.style.width = `${Math.min(Math.max(state.aiConfidence, 0), 100)}%`;
+    }
+
+    // 5. Sincronización de Inputs
     if (state.config && !isSavingConfig) { 
         syncInputsFromConfig(state.config); 
     }
 
-    // 5. Control de Botones
+    // 6. Control de Botones
     const hasStateData = state.lstate !== undefined || 
                          state.sstate !== undefined || 
                          state.aistate !== undefined || 
@@ -140,7 +143,7 @@ export async function updateBotUI(state) {
         updateControlsState(state);
     }
 
-    // 6. Actualización de Dashboard (Optimizado)
+    // 7. Actualización de Dashboard y PnL Bars (Con saneamiento flotante)
     try {
         const dashboard = await import('./dashboard.js');
         if (dashboard && typeof dashboard.updatePnLBar === 'function') {
@@ -152,11 +155,11 @@ export async function updateBotUI(state) {
             dashboard.updatePnLBar('short', sProfit);
             dashboard.updatePnLBar('ai', aiProfit);
             
-            const totalProfit = state.total_profit ?? (lProfit + sProfit + aiProfit);
+            const totalProfit = parseFloat(state.total_profit ?? (lProfit + sProfit + aiProfit));
             const totalEl = document.getElementById('auprofit');
             if (totalEl) formatProfit(totalEl, totalProfit);
         }
-    } catch (err) { /* Silencioso */ }
+    } catch (err) { /* Silencioso para evitar romper el hilo principal */ }
 
     // Sincronizamos las métricas con el nuevo payload
     updateMetricsFromState(state);

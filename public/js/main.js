@@ -1,6 +1,6 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Corregido - Sincronización real de checkboxes Long/Short
+ * Estado: Auditado y Blindado contra condiciones de carrera y re-renderizados destructivos
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -14,10 +14,8 @@ import { updateSystemHealth } from './modules/health.js';
 import { initializeSettings } from './modules/settings.js';
 import { initializeProfile } from './modules/profile.js';
 import { initPayments } from './modules/payments.js';
-import { initializeNotifications } from './modules/notifications.js';
 
 import { initializeGlobalButtonListeners } from './modules/botControls.js';
-import { displayMessage } from './modules/ui/notifications.js';
 import { applyRolePermissions } from './modules/role.js';
 
 // Importamos el servicio de API para poder guardar los cambios de los checkboxes
@@ -147,59 +145,35 @@ function syncAIElementsInDOM() {
     const aiInput = document.getElementById('ai-amount-usdt');
     const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
     if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
-    if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle;
+    if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
     if (aiBotUI) {
         aiBotUI.setRunningStatus(currentBotState.aistate === 'RUNNING', currentBotState.config.ai.stopAtCycle, currentBotState.historyCount || 0);
     }
 }
 
-// --- CONFIGURATION DELEGATION (CHECKBOXES FIX) ---
+// --- CONFIGURATION DELEGATION ---
 document.addEventListener('change', async (e) => {
-    // 1. Manejo de Input de cantidad AI
-    if (e.target && e.target.id === 'ai-amount-usdt') {
-        const val = parseFloat(e.target.value);
-        if (isNaN(val) || val <= 0) return;
-        await saveAIConfigGlobal({ amountUsdt: val });
-    }
-    
-    // 2. Manejo de Checkbox AI
-    if (e.target && e.target.id === 'ai-stop-at-cycle') {
-        await saveAIConfigGlobal({ stopAtCycle: e.target.checked });
-    }
+    if (!e.target) return;
 
-    // 3. [FIX] Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot)
-    if (e.target && (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle')) {
+    // [BLINDAJE 2026]: Los inputs de la IA ('ai-amount-usdt' y 'ai-stop-at-cycle') ya se gestionan 
+    // de forma atómica dentro de su propio ciclo en aiBot.js. Se eliminan de aquí para prevenir peticiones dobles.
+
+    // Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot de forma delegada global)
+    if (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle') {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         const isChecked = e.target.checked;
         
         logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
         
-        // Actualizamos el estado local inmediatamente
+        // Actualizamos el estado local inmediatamente para evitar discrepancias visuales
+        if (!currentBotState.config[side]) currentBotState.config[side] = {};
         currentBotState.config[side].stopAtCycle = isChecked;
 
-        // Enviamos la configuración completa al servidor
+        // Enviamos la configuración completa al servidor de forma segura
         const fullConfig = getBotConfiguration();
         await sendConfigToBackend({ config: fullConfig });
     }
 });
-
-async function saveAIConfigGlobal(payload) {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/ai/config`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json();
-        if (data.success && data.config) {
-            currentBotState.config.ai = { ...currentBotState.config.ai, ...data.config };
-            logStatus(data.message || "AI Config Updated", "success");
-        }
-    } catch (e) { console.error("Error saving AI config", e); }
-}
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -225,10 +199,15 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         import('./modules/socket.js').then(m => {
-            if (!m.socket || !m.socket.connected) m.initSocket();
-            else m.socket.emit('get-bot-state');
+            if (!m.socket || !m.socket.connected) {
+                m.initSocket();
+            } else {
+                // Al recuperar foco, solicitamos el estado en caliente de forma sutil vía WebSocket
+                m.socket.emit('get-bot-state');
+            }
         });
-        const activeTab = document.querySelector('.nav-link.active')?.dataset.tab;
-        if (activeTab) initializeTab(activeTab); 
+        
+        // [BLINDAJE]: Quitamos el re-fetch destructivo de 'initializeTab' para evitar parpadeos visuales 
+        // agresivos si el WebSocket ya se encuentra listo para inyectar los datos en tiempo real.
     }
 });
