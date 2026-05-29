@@ -182,7 +182,9 @@ export function updateControlsState(state) {
 
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    const aiInputs = ['ai-amount-usdt']; 
+    
+    // CORRECCIÓN: Incluimos ambos IDs para que el bloqueo sea total en toda la SPA
+    const aiInputs = ['auamountai-usdt', 'ai-amount-usdt']; 
 
     if (lState !== undefined) {
         updateButtonState('austartl-btn', lState, 'LONG', longInputs);
@@ -196,7 +198,7 @@ export function updateControlsState(state) {
         const btnAi = document.getElementById('btn-start-ai') || document.getElementById('austartai-btn');
         const actualAiStatus = aiState || (state.isRunning ? 'RUNNING' : 'STOPPED');
 
-        if (btnAi && !btnAi.disabled) {
+        if (btnAi) { // Eliminamos la condición !btnAi.disabled para asegurar que siempre se intente el bloqueo
             updateButtonState(btnAi.id, actualAiStatus, 'AI', aiInputs); 
         }
         
