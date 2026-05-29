@@ -74,7 +74,7 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-// --- MARKET DATA (PRICE & VARIATION) ---
+    // --- MARKET DATA (PRICE & VARIATION) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
@@ -105,54 +105,51 @@ export function initSocket() {
     });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
-socket.on('bot-state-update', async (state) => {
-    if (!state) return;
+    socket.on('bot-state-update', async (state) => {
+        if (!state) return;
 
-    const now = Date.now();
-    const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
+        const now = Date.now();
+        const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
-    if (isEditing) {
-        console.log("🛡️ Socket: Active editing detected. Shielding...");
-        currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
-        currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
-    } else {
-        if (state.config) {
-            currentBotState.config = { ...currentBotState.config, ...state.config };
-        }
-        Object.assign(currentBotState, state);
-        
-        // Sincronización de PnL Individual
-        if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
-        if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
-        if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
-        
-        updateBotUI(currentBotState);
-    }
-
-    // 🚀 MEJORA CRÍTICA: Sincronización de Métricas y Profit/H en vivo
-    const historyData = state.history || state.cycleHistory;
-    if (historyData) {
-        try {
-            const Metrics = await import('./metricsManager.js');
-            const { updateQuickStats } = await import('./dashboard.js'); // Importamos la función de KPIs
-            
-            // 1. Actualizamos el set de datos en el manager (los 29+ ciclos)
-            Metrics.setAnalyticsData(historyData);
-            
-            // 2. Si el backend envió KPIs pre-calculados, actualizamos Profit/H
-            if (state.kpis) {
-                updateQuickStats(state.kpis);
-            } else {
-                // Si no vienen KPIs, forzamos un refresco manual de la analítica
-                // para que el Profit/H no se quede atrás.
-                console.log("🔄 Socket: New history detected, triggering KPI refresh...");
-                // Aquí podrías disparar una pequeña función de cálculo local
+        if (isEditing) {
+            console.log("🛡️ Socket: Active editing detected. Shielding...");
+            currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
+            currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
+        } else {
+            if (state.config) {
+                currentBotState.config = { ...currentBotState.config, ...state.config };
             }
+            Object.assign(currentBotState, state);
             
-        } catch (err) {
-            console.error("Error injecting metrics:", err);
+            // Sincronización de PnL Individual
+            if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
+            if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
+            if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
+            
+            updateBotUI(currentBotState);
         }
-    }
+
+        // 🚀 MEJORA CRÍTICA: Sincronización de Métricas y Profit/H en vivo
+        const historyData = state.history || state.cycleHistory;
+        if (historyData) {
+            try {
+                const Metrics = await import('./metricsManager.js');
+                const { updateQuickStats } = await import('./dashboard.js'); // Importamos la función de KPIs
+                
+                // 1. Actualizamos el set de datos en el manager (los 29+ ciclos)
+                Metrics.setAnalyticsData(historyData);
+                
+                // 2. Si el backend envió KPIs pre-calculados, actualizamos Profit/H
+                if (state.kpis) {
+                    updateQuickStats(state.kpis);
+                } else {
+                    console.log("🔄 Socket: New history detected, triggering KPI refresh...");
+                }
+                
+            } catch (err) {
+                console.error("Error injecting metrics:", err);
+            }
+        }
 
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
@@ -194,6 +191,39 @@ socket.on('bot-state-update', async (state) => {
         aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
         if (data.message && data.message.includes('ORDER')) {
             sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
+        }
+    });
+
+    // 🧠 ADENTRO DE LA FUNCIÓN: Sincronización en tiempo real del Pulso Neural
+    socket.on('ai-pulse-broadcast', (data) => {
+        if (!data) return;
+
+        // 1. Buscamos el círculo e indicadores del Dashboard si están montados en el DOM
+        const dbCircle = document.getElementById('ai-confidence-circle');
+        if (dbCircle) {
+            const confidence = data.aiConfidence;
+            const perimeter = 364.42;
+            const offset = perimeter - (confidence / 100) * perimeter;
+            
+            // Renderizado instantáneo del SVG sin lags de base de datos
+            dbCircle.style.strokeDashoffset = offset;
+            
+            // Actualización de textos e indicadores del Pulse en el Dashboard
+            const confVal = document.getElementById('ai-confidence-value');
+            const trendLabel = document.getElementById('ai-trend-label');
+            const adxVal = document.getElementById('ai-adx-val');
+            const stochVal = document.getElementById('ai-stoch-val');
+            const adxBar = document.getElementById('ai-adx-bar');
+            const stochBar = document.getElementById('ai-stoch-bar');
+            const engineMsg = document.getElementById('ai-engine-msg');
+
+            if (confVal) confVal.innerText = `${confidence}%`;
+            if (trendLabel) trendLabel.innerText = data.aiTrendLabel;
+            if (adxVal) adxVal.innerText = data.aiAdx.toFixed(1);
+            if (stochVal) stochVal.innerText = data.aiStoch.toFixed(1);
+            if (adxBar) adxBar.style.width = `${Math.min(data.aiAdx, 100)}%`;
+            if (stochBar) stochBar.style.width = `${Math.min(data.aiStoch, 100)}%`;
+            if (engineMsg) engineMsg.innerText = data.aiEngineMsg;
         }
     });
 
