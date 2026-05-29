@@ -1,7 +1,7 @@
 /**
  * BSB/server/services/marketService.js
  * Orquestador de Conexiones BitMart - Versión Auditada (Sincronización Total)
- * FIX: RSI Freeze & MarketSignal Continuity
+ * FIX: RSI Freeze & MarketSignal Continuity & Syntax Error Fix
  */
 const WebSocket = require('ws');
 const bitmartWs = require('./bitmartWs'); 
@@ -57,10 +57,7 @@ function setupPublicTicker(io) {
                 const closedCandle = candleBuilder.processTick(price, volume);
                 
                 if (closedCandle) {
-//                    console.log(`🕯️ [CANDLE-CLOSE] Nueva vela generada: ${closedCandle.close} | Vol: ${closedCandle.volume}`);
-                    
                     // 3. Persistencia en DB (ETAPA 2: PERSISTENCIA)
-                    // Usamos findOneAndUpdate para obtener el historial actualizado de 250 velas
                     const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
                         { symbol: 'BTC_USDT' },
                         { 
@@ -76,7 +73,6 @@ function setupPublicTicker(io) {
                     );
 
                     // 4. Recálculo Mandatorio (ETAPA 3: AUDITORÍA DE RSI)
-                    // Le pasamos el historial completo para que el RSI no se congele
                     if (updatedSignalDoc && updatedSignalDoc.history) {
                         await centralAnalyzer.analyze(updatedSignalDoc.history);
                     }
@@ -85,7 +81,6 @@ function setupPublicTicker(io) {
                 // =================================================================
                 // 5. EMISIÓN OPTIMIZADA A FRONTEND (Inyección de Pulso Neural Blindada)
                 // =================================================================
-                // Obtenemos de forma segura el último análisis técnico calculado
                 let lastAiAnalysis = {};
                 try {
                     lastAiAnalysis = (typeof centralAnalyzer.getLastAnalysis === 'function') 
@@ -96,7 +91,7 @@ function setupPublicTicker(io) {
                     lastAiAnalysis = global.lastAiStateSnapshot || {};
                 }
 
-                // Formateamos la confianza a escala 0-100% con validación estricta ante nulos o NaN
+                // Formateamos la confianza a escala 0-100% con validación estricta
                 let confidencePct = null;
                 if (lastAiAnalysis && lastAiAnalysis.confidence !== undefined && lastAiAnalysis.confidence !== null) {
                     const parsedConf = parseFloat(lastAiAnalysis.confidence);
@@ -105,7 +100,7 @@ function setupPublicTicker(io) {
                     }
                 }
 
-                // Extracción defensiva de métricas técnicas con fallback a 0 para prevenir errores en el cliente
+                // Extracción defensiva de métricas técnicas con fallback a 0
                 const safeFloat = (val) => {
                     const parsed = parseFloat(val);
                     return isNaN(parsed) ? 0 : parsed;
@@ -116,7 +111,6 @@ function setupPublicTicker(io) {
                     price, 
                     priceChangePercent, 
                     exchangeOnline: isMarketConnected,
-                    // Inyección segura de métricas de IA síncronas con el ticker
                     aiPulse: confidencePct !== null ? {
                         aiConfidence: confidencePct,
                         aiAdx: safeFloat(lastAiAnalysis.adx),
@@ -127,13 +121,18 @@ function setupPublicTicker(io) {
                 });
 
                 await autobotLogic.botCycle(price);
+            }
+        } catch (e) { 
+            console.error("❌ [MARKET_WS_ERROR]:", e.message); 
+        }
+    });
 
     marketWs.on('close', () => {
         isMarketConnected = false;
         console.warn("⚠️ [MARKET_WS] Conexión cerrada. Reintentando en 5s...");
         setTimeout(() => setupPublicTicker(io), 5000);
     });
-}
+} // <--- ¡AQUÍ FALTABA ESTE CIERRE DE LA FUNCIÓN PRINCIPAL!
 
 // --- GESTIÓN DE WEBSOCKETS PRIVADOS (Órdenes de Usuarios) ---
 async function initializePrivateWebSockets(io, orderPersistenceService) {
