@@ -10,12 +10,14 @@ class AIEngine {
 
     setIo(io) { this.io = io; }
 
-async analyze(price, userId, context, brain) {
+    async analyze(price, userId, context, brain) {
         if (!userId || !price || !context || !brain) return;
+        
+        // Asignación segura del snapshot global una vez validados los datos
+        global.lastAiStateSnapshot = brain;
 
         try {
             const bot = context;
-            // Extraemos los indicadores reales enviados por el pipeline del cron
             const { confidence, signal, reason, adx, stochK } = brain;
             const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
             
@@ -32,7 +34,7 @@ async analyze(price, userId, context, brain) {
             const pnl = bot.ainorder > 0 ? ` | PNL: ${(((price / bot.aippc) - 1) * 100).toFixed(2)}%` : '';
             console.log(`[${new Date().toLocaleTimeString()}] [INFO] [User: ${userId}] ${aiStateTag} 🧠 Conf: ${confidencePct}% | BTC: ${price}${pnl}`);
 
-            // BROADCAST EN TIEMPO REAL: Emitimos en cada tick de precio para actualizar Dashboard y AIBot al instante
+            // BROADCAST EN TIEMPO REAL: Emisión atómica instantánea
             if (this.io) {
                 this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
                     aiConfidence: confidencePct,
@@ -51,20 +53,23 @@ async analyze(price, userId, context, brain) {
             const riskStatus = RiskManager.checkOperatingState(bot);
             if (bot.aistate !== 'RUNNING' && riskStatus.action !== 'RESUME') return;
 
-            // 1. GESTIÓN DE SALIDA
+            // 1. GESTIÓN DE SALIDA (Evaluación de Trailing Stop y Take Profit)
             if (bot.ainorder > 0) {
                 const minProfitTarget = config.profitPercent || 1.2;
                 const currentProfit = ((price / bot.aippc) - 1) * 100;
+                const trailingPct = config.trailingPercent || 0.006;
+                const stopPrice = (bot.aihighestPrice || price) * (1 - trailingPct);
 
-                if (currentProfit >= minProfitTarget || price < (bot.aihighestPrice * (1 - (config.trailingPercent || 0.006)))) {
-                    return await this._manageTrailingStop(price, userId, bot, safeLog, config);
+                // Si se alcanza el objetivo mínimo o el precio cae por debajo del trailing stop disparado
+                if (currentProfit >= minProfitTarget || price <= stopPrice) {
+                    return await this._manageTrailingStop(price, userId, bot, safeLog, config, currentProfit);
                 }
             }
 
             // 2. LÓGICA DE ENTRADA / DCA
             if (confidence >= userThreshold && bot.ainorder < maxOrders) {
                 const isDCA = bot.ainorder > 0;
-                const shouldBuy = !isDCA || (price < bot.ailastEntryPrice * 0.99);
+                const shouldBuy = !isDCA || (price < lastEntryPrice * 0.99);
 
                 if (shouldBuy && riskStatus.canOperate) {
                     await this._trade(userId, 'BUY', price, bot, safeLog, reason, maxOrders);
@@ -75,19 +80,21 @@ async analyze(price, userId, context, brain) {
         }
     }
 
-    async _manageTrailingStop(price, userId, bot, safeLog, config) {
+    async _manageTrailingStop(price, userId, bot, safeLog, config, currentProfit) {
         try {
-            let highest = Math.max(price, bot.aihighestPrice || 0);
             const trailingPct = config.trailingPercent || 0.006;
 
-            if (price > bot.aihighestPrice) {
+            // Si el precio marca un nuevo máximo histórico del ciclo, actualizamos DB y memoria local
+            if (price > (bot.aihighestPrice || 0)) {
+                bot.aihighestPrice = price; // Mutación en memoria crítica
                 await AutoBot.updateOne({ userId }, { aihighestPrice: price });
             }
 
-            const stopPrice = highest * (1 - trailingPct);
+            const stopPrice = bot.aihighestPrice * (1 - trailingPct);
 
-            if (price <= stopPrice && ((price / bot.aippc) - 1) * 100 > 0.3) { 
-                await this._trade(userId, 'SELL', price, bot, safeLog, "Trailing Stop Loss/Profit");
+            // EJECUCIÓN DE VENTA: Se ejecuta si cruza el Stop y asegura al menos un break-even razonable (+0.1% post comisiones)
+            if (price <= stopPrice && currentProfit > 0.1) { 
+                await this._trade(userId, 'SELL', price, bot, safeLog, `Trailing Stop Activado (Max: $${bot.aihighestPrice})`);
             }
         } catch (err) {
             console.error("Error en TrailingStop:", err);

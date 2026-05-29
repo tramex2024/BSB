@@ -74,7 +74,7 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE & VARIATION) ---
+   // --- MARKET DATA (PRICE, VARIATION & REALTIME AI PULSE) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
@@ -87,6 +87,17 @@ export function initSocket() {
             if (priceEl) {
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
                 currentBotState.lastPrice = newPrice;
+            }
+
+            // --- PERSISTENCIA Y RENDERIZADO INMEDIATO DE LA IA ---
+            // Si el tick contiene el pulso neural del backend, lo salvamos en el estado de memoria global
+            if (data.aiPulse) {
+                currentBotState.aiLastPulse = data.aiPulse;
+                renderAiPulseUI(data.aiPulse);
+            } else if (currentBotState.aiLastPulse) {
+                // EFECTO MEMORIA AL NAVEGAR: Si regresamos de otra pestaña y el tick actual no trae datos, 
+                // forzamos el renderizado usando la memoria caché global.
+                renderAiPulseUI(currentBotState.aiLastPulse);
             }
 
             // LANZAMOS EL MANAGER: Él se encarga de las barras de PnL y todo lo demás
@@ -102,6 +113,13 @@ export function initSocket() {
         if (data?.priceChangePercent !== undefined) {
             updatePriceVariationUI(parseFloat(data.priceChangePercent));
         }
+    });
+
+    // Mantén este listener para conservar la compatibilidad si el motor neural emite de forma aislada
+    socket.on('ai-pulse-broadcast', (data) => {
+        if (!data) return;
+        currentBotState.aiLastPulse = data;
+        renderAiPulseUI(data);
     });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
@@ -334,4 +352,35 @@ function updateConnectionStatus(status) {
             isConnected ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]'
         }`;
     }
+}
+
+/**
+ * Renderiza de forma atómica las variables y componentes de la IA en el DOM
+ */
+function renderAiPulseUI(aiData) {
+    const dbCircle = document.getElementById('ai-confidence-circle');
+    if (!dbCircle) return; // Si el usuario está en otra vista que no tiene el widget, salimos elegantemente
+
+    const confidence = aiData.aiConfidence;
+    const perimeter = 364.42;
+    const offset = perimeter - (confidence / 100) * perimeter;
+    
+    // Sincronización vectorial sin latencia
+    dbCircle.style.strokeDashoffset = offset;
+    
+    const confVal = document.getElementById('ai-confidence-value');
+    const trendLabel = document.getElementById('ai-trend-label');
+    const adxVal = document.getElementById('ai-adx-val');
+    const stochVal = document.getElementById('ai-stoch-val');
+    const adxBar = document.getElementById('ai-adx-bar');
+    const stochBar = document.getElementById('ai-stoch-bar');
+    const engineMsg = document.getElementById('ai-engine-msg');
+
+    if (confVal) confVal.innerText = `${confidence}%`;
+    if (trendLabel) trendLabel.innerText = aiData.aiTrendLabel;
+    if (adxVal) adxVal.innerText = Number(aiData.aiAdx).toFixed(1);
+    if (stochVal) stochVal.innerText = Number(aiData.aiStoch).toFixed(1);
+    if (adxBar) adxBar.style.width = `${Math.min(aiData.aiAdx, 100)}%`;
+    if (stochBar) stochBar.style.width = `${Math.min(aiData.aiStoch, 100)}%`;
+    if (engineMsg) engineMsg.innerText = aiData.aiEngineMsg;
 }

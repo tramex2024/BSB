@@ -82,14 +82,51 @@ function setupPublicTicker(io) {
                     }
                 }
 
-                // 5. Emisión a Frontend y Lógica de Bot
-                io.emit('marketData', { price, priceChangePercent, exchangeOnline: isMarketConnected });
+                // =================================================================
+                // 5. EMISIÓN OPTIMIZADA A FRONTEND (Inyección de Pulso Neural Blindada)
+                // =================================================================
+                // Obtenemos de forma segura el último análisis técnico calculado
+                let lastAiAnalysis = {};
+                try {
+                    lastAiAnalysis = (typeof centralAnalyzer.getLastAnalysis === 'function') 
+                        ? (centralAnalyzer.getLastAnalysis() || {}) 
+                        : (global.lastAiStateSnapshot || {});
+                } catch (analyzerErr) {
+                    console.warn("⚠️ [MARKET_WS] No se pudo obtener el análisis del CentralAnalyzer:", analyzerErr.message);
+                    lastAiAnalysis = global.lastAiStateSnapshot || {};
+                }
+
+                // Formateamos la confianza a escala 0-100% con validación estricta ante nulos o NaN
+                let confidencePct = null;
+                if (lastAiAnalysis && lastAiAnalysis.confidence !== undefined && lastAiAnalysis.confidence !== null) {
+                    const parsedConf = parseFloat(lastAiAnalysis.confidence);
+                    if (!isNaN(parsedConf)) {
+                        confidencePct = Math.min(Math.max(Math.round(parsedConf * 100), 0), 100);
+                    }
+                }
+
+                // Extracción defensiva de métricas técnicas con fallback a 0 para prevenir errores en el cliente
+                const safeFloat = (val) => {
+                    const parsed = parseFloat(val);
+                    return isNaN(parsed) ? 0 : parsed;
+                };
+
+                // Estructuramos el payload unificado de alta velocidad hacia el Frontend
+                io.emit('marketData', { 
+                    price, 
+                    priceChangePercent, 
+                    exchangeOnline: isMarketConnected,
+                    // Inyección segura de métricas de IA síncronas con el ticker
+                    aiPulse: confidencePct !== null ? {
+                        aiConfidence: confidencePct,
+                        aiAdx: safeFloat(lastAiAnalysis.adx),
+                        aiStoch: safeFloat(lastAiAnalysis.stochK || lastAiAnalysis.stochD),
+                        aiTrendLabel: lastAiAnalysis.signal || 'NEUTRAL',
+                        aiEngineMsg: lastAiAnalysis.reason || 'Market Scanning Live'
+                    } : null
+                });
+
                 await autobotLogic.botCycle(price);
-            }
-        } catch (e) { 
-            console.error("❌ [MARKET_WS_ERROR]:", e.message); 
-        }
-    });
 
     marketWs.on('close', () => {
         isMarketConnected = false;

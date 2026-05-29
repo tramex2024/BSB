@@ -256,3 +256,10 @@ function updateQuickStats(response) {
 
     console.groupEnd();
 }
+
+// Añadir al final de la inicialización/montaje de la pestaña del Dashboard
+if (currentBotState && currentBotState.aiLastPulse) {
+    console.log("🧠 Recuperando Pulso Neural desde la caché global...");
+    // Forzamos el pintado inmediato con los datos en memoria para evitar pantallas en blanco
+    renderAiPulseUI(currentBotState.aiLastPulse);
+}
