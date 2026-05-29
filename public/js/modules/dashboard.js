@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Limpio - Delegación de controles a botControls.js
+ * Estado: Auditado y Corregido - Integración Total de Memoria Caché de IA
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
@@ -30,13 +30,22 @@ export function initializeDashboardView(initialState) {
         initializeChart('tv-chart-container', stateToUse.symbol);
     }
 
-    // 3. ACTUALIZACIÓN DE UI INICIAL
+    // 3. ACTUALIZACIÓN DE UI INICIAL Y RECUPERACIÓN DE CACHÉ
     if (stateToUse) {
         updateBotUI(stateToUse);
         updatePnLBar('long', stateToUse.lprofit || 0);
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
+
+        // [MIGUARD] BLINDAJE DE PERSISTENCIA: Recuperación del pulso neural al cambiar de pestañas
+        if (stateToUse.aiLastPulse) {
+            console.log("🧠 Memoria Recuperada: Pintando pulso de IA instantáneamente...");
+            // Buscamos dinámicamente si la UI de renderizado está disponible en el DOM
+            requestAnimationFrame(() => {
+                renderAiPulseUI(stateToUse.aiLastPulse);
+            });
+        }
     }
 
     // 4. CONFIGURAR INTERACTIVIDAD (Solo analítica e inputs)
@@ -48,13 +57,12 @@ export function initializeDashboardView(initialState) {
 }
 
 /**
- * dashboard.js - refreshAnalytics (Versión Robusta)
+ * refreshAnalytics (Versión Robusta)
  */
 async function refreshAnalytics() {
     try {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
 
-        // Usamos rutas relativas para que funcione tanto en local como en Vercel
         const [curveRes, cyclesRes, kpiRes] = await Promise.all([
             fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
             fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
@@ -65,7 +73,7 @@ async function refreshAnalytics() {
                 return res.json();
             }).catch(err => {
                 console.warn("KPIs no disponibles aún:", err.message);
-                return null; // Retornamos null para no romper el Promise.all
+                return null;
             })
         ]);
 
@@ -74,15 +82,15 @@ async function refreshAnalytics() {
             requestAnimationFrame(() => renderEquityCurve(curveRes.data));
         }
 
-        // 2. Sincronizar Ciclos (¡Los 29 detectados!)
+        // 2. Sincronizar Ciclos
         if (cyclesRes && cyclesRes.length > 0) {
             Metrics.setAnalyticsData(cyclesRes);
             addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
         }
 
-        // 3. Actualizar Profit/H y KPIs
+        // 3. Actualizar Profit/H y KPIs de manera segura
         if (kpiRes && kpiRes.success) {
-            updateQuickStats(kpiRes.data);
+            updateQuickStats(kpiRes.data || kpiRes);
         }
 
     } catch (e) {
@@ -93,24 +101,17 @@ async function refreshAnalytics() {
 
 /**
  * handleMetricsUpdate
- * Escucha el evento del MetricsManager para redibujar el gráfico
- * cuando el usuario cambia filtros (AI/Long/Short).
  */
 function handleMetricsUpdate(e) {
     if (e.detail && e.detail.points) {
-        // e.detail.points contiene los datos ya procesados por el manager
         requestAnimationFrame(() => renderEquityCurve(e.detail.points));
     }
 }
 
 /**
- * Configuración de botones y inputs (Solo lógica que no está en botControls)
+ * Configuración de botones y inputs
  */
 function setupActionButtons() {
-    // Nota: El 'panic-btn' y los botones 'start/stop' ya tienen sus listeners 
-    // registrados globalmente en botControls.js. No añadimos onclick aquí.
-
-    // Manejo de Inputs de Cantidad (Amount USDT)
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
         { id: 'auamounts-usdt', strategy: 'short' },
@@ -120,8 +121,7 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
-            // Sincronizar valor inicial con el estado
-            if (currentBotState.config[input.strategy]) {
+            if (currentBotState?.config?.[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
 
@@ -150,8 +150,6 @@ function setupAnalyticsFilters() {
     if (bSel) bSel.onchange = () => Metrics.setBotFilter(bSel.value);
     if (pSel) pSel.onchange = () => Metrics.setChartParameter(pSel.value);
 }
-
-// --- TERMINAL Y GRÁFICOS (Se mantienen igual) ---
 
 export function addTerminalLog(msg, type = 'info') {
     const logContainer = document.getElementById('dashboard-logs');
@@ -209,57 +207,56 @@ export function updateDistributionWidget(state) {
     }
 }
 
-/**
- * dashboard.js - Auditoría de KPIs (Profit/D)
- * Este script imprimirá los cálculos detallados en la consola.
- */
-function updateQuickStats(response) {
+function updateQuickStats(kpiData) {
     console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
     
-    // 1. Extraer datos
-    const kpis = response.data || response;
-    console.log("1. Datos Crudos (KPIs):", kpis);
-
-    const totalProfit = parseFloat(kpis.totalNetProfit) || 0;
-    const totalCycles = parseInt(kpis.totalCycles) || 0;
-    const avgHours = parseFloat(kpis.avgDurationHours) || 0;
-
-    // 2. Cálculos intermedios
+    const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
+    const totalCycles = parseInt(kpiData.totalCycles) || 0;
+    const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
     const totalTimeHours = avgHours * totalCycles;
     
-    console.log("2. Desglose de variables:");
-    console.log(`   - Profit Total: $${totalProfit}`);
-    console.log(`   - Ciclos Totales: ${totalCycles}`);
-    console.log(`   - Horas Promedio/Ciclo: ${avgHours.toFixed(4)}h`);
-    console.log(`   - TIEMPO TOTAL CALCULADO: ${totalTimeHours.toFixed(4)}h`);
-
-    // 3. Cálculo final
     let profitPerDay = 0;
     if (totalTimeHours > 0) {
         const profitPerHour = totalProfit / totalTimeHours;
         profitPerDay = profitPerHour * 24;
-        console.log(`3. Cálculo Exitoso: ($${totalProfit} / ${totalTimeHours.toFixed(2)}h) * 24 = $${profitPerDay.toFixed(4)}/d`);
-    } else {
-        console.warn("3. ⚠️ ERROR: El tiempo total es 0. No se puede calcular el Profit/D.");
     }
 
-    // 4. Actualización del DOM
     const profitElement = document.getElementById('cycle-efficiency');
     if (profitElement) {
         const finalValue = `$${profitPerDay.toFixed(4)}/d`;
         profitElement.innerText = finalValue;
         profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
-        console.log(`4. ✅ DOM Actualizado con éxito: ${finalValue}`);
-    } else {
-        console.error("4. ❌ ERROR: No se encontró el elemento 'cycle-efficiency' en el HTML.");
     }
-
     console.groupEnd();
 }
 
-// Añadir al final de la inicialización/montaje de la pestaña del Dashboard
-if (currentBotState && currentBotState.aiLastPulse) {
-    console.log("🧠 Recuperando Pulso Neural desde la caché global...");
-    // Forzamos el pintado inmediato con los datos en memoria para evitar pantallas en blanco
-    renderAiPulseUI(currentBotState.aiLastPulse);
+/**
+ * FUNCIÓN ATÓMICA REUTILIZABLE: Renderiza los componentes vectoriales del Pulso IA
+ * Se exporta para que socket.js la use, y se ejecuta internamente al restaurar caché.
+ */
+export function renderAiPulseUI(aiData) {
+    const dbCircle = document.getElementById('ai-confidence-circle');
+    if (!dbCircle) return; 
+
+    const confidence = aiData.aiConfidence || 0;
+    const perimeter = 364.42;
+    const offset = perimeter - (confidence / 100) * perimeter;
+    
+    dbCircle.style.strokeDashoffset = offset;
+    
+    const confVal = document.getElementById('ai-confidence-value');
+    const trendLabel = document.getElementById('ai-trend-label');
+    const adxVal = document.getElementById('ai-adx-val');
+    const stochVal = document.getElementById('ai-stoch-val');
+    const adxBar = document.getElementById('ai-adx-bar');
+    const stochBar = document.getElementById('ai-stoch-bar');
+    const engineMsg = document.getElementById('ai-engine-msg');
+
+    if (confVal) confVal.innerText = `${confidence}%`;
+    if (trendLabel) trendLabel.innerText = aiData.aiTrendLabel || 'NEUTRAL';
+    if (adxVal) adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
+    if (stochVal) stochVal.innerText = Number(aiData.aiStoch || 0).toFixed(1);
+    if (adxBar) adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
+    if (stochBar) stochBar.style.width = `${Math.min(aiData.aiStoch || 0, 100)}%`;
+    if (engineMsg) engineMsg.innerText = aiData.aiEngineMsg || 'System Live';
 }
