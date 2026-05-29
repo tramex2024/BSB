@@ -1,16 +1,20 @@
 /**
- * admin.js - Admin Control Panel Logic (Plan Activation & Broadcast System)
+ * admin.js - Admin Control Panel Logic (Plan Activation, Broadcast System & Tab Navigation)
+ * Estado: Auditado y Adaptado a Interfaz Modular por Menús (Sincronizado 2026)
  */
 import { logStatus, BACKEND_URL } from '../main.js';
 
 export async function initializeAdminView() {
-    console.log("🛠️ Admin View Loaded");
+    console.log("🛠️ Admin View Loaded & Submenus Synchronized");
     
     // --- 1. REFERENCIAS DE ELEMENTOS ---
     const activationForm = document.getElementById('admin-activation-form');
     const notifyForm = document.getElementById('admin-notify-form');
     const targetSelect = document.getElementById('notify-target');
     const specificUserContainer = document.getElementById('specific-user-container');
+
+    // Inicializar el sistema de subpestañas internas
+    setupAdminSubTabs();
 
     // --- 2. LÓGICA DE ACTIVACIÓN DE PLANES ---
     if (activationForm) {
@@ -56,12 +60,14 @@ export async function initializeAdminView() {
 
     // --- 3. LÓGICA DE NOTIFICACIONES (BROADCAST) ---
     if (notifyForm) {
-        // Mostrar/Ocultar campo de email según el target
-        targetSelect?.addEventListener('change', (e) => {
-            if (specificUserContainer) {
-                specificUserContainer.style.display = e.target.value === 'one' ? 'block' : 'none';
-            }
-        });
+        // [BLINDAJE]: Cambiado addEventListener por onchange para evitar duplicidad de listeners al re-entrar a la pestaña
+        if (targetSelect) {
+            targetSelect.onchange = (e) => {
+                if (specificUserContainer) {
+                    specificUserContainer.style.display = e.target.value === 'one' ? 'block' : 'none';
+                }
+            };
+        }
 
         notifyForm.onsubmit = async (e) => {
             e.preventDefault();
@@ -113,4 +119,43 @@ export async function initializeAdminView() {
             }
         };
     }
+}
+
+/**
+ * --- 4. ORQUESTADOR DE NAVEGACIÓN INTERNA ---
+ * Controla la visualización modular de las tarjetas mediante el submenú superior
+ */
+function setupAdminSubTabs() {
+    const tabs = [
+        { btn: 'btn-sub-notifications', sec: 'sec-admin-notifications' },
+        { btn: 'btn-sub-activation', sec: 'sec-admin-activation' },
+        { btn: 'btn-sub-payments', sec: 'sec-admin-payments' }
+    ];
+
+    tabs.forEach(tab => {
+        const btnEl = document.getElementById(tab.btn);
+        if (!btnEl) return;
+
+        btnEl.onclick = null; // Limpieza preventiva de manejadores previos
+        btnEl.onclick = () => {
+            tabs.forEach(t => {
+                const b = document.getElementById(t.btn);
+                const s = document.getElementById(t.sec);
+                
+                if (b && s) {
+                    if (t.btn === tab.btn) {
+                        // Estilo Activo (Fondo Ámbar, Texto Oscuro)
+                        b.className = "flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 bg-amber-500 text-gray-950 shadow-md";
+                        s.classList.remove('hidden');
+                        s.classList.add('block', 'animate-fade-in');
+                    } else {
+                        // Estilo Inactivo (Texto Atenuado, Efecto Hover)
+                        b.className = "flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-gray-400 hover:text-white hover:bg-gray-800";
+                        s.classList.add('hidden');
+                        s.classList.remove('block', 'animate-fade-in');
+                    }
+                }
+            });
+        };
+    });
 }
