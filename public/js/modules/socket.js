@@ -198,6 +198,9 @@ export function initSocket() {
     socket.on('ai-pulse-broadcast', (data) => {
         if (!data) return;
 
+        // RESPALDO CRÍTICO: Guardamos el estado en la memoria global para que no se pierda al navegar
+        currentBotState.aiLastPulse = data;
+
         // 1. Buscamos el círculo e indicadores del Dashboard si están montados en el DOM
         const dbCircle = document.getElementById('ai-confidence-circle');
         if (dbCircle) {
