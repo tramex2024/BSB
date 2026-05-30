@@ -6,11 +6,11 @@
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
-    'RUNNING': '#10b981',      
-    'STOPPED': '#ef4444',      
-    'BUYING': '#60a5fa',        
-    'SELLING': '#fbbf24',      
-    'PAUSED': '#fb923c',
+    'RUNNING': '#10b981', // Verde esmeralda
+    'STOPPED': '#ef4444', // Rojo (antes estaba vacío o incorrecto)
+    'BUYING': '#60a5fa',  // Azul
+    'SELLING': '#fbbf24', // Amarillo
+    'PAUSED': '#fb923c',  // Naranja
 };
 
 export const activeEdits = {};
@@ -32,14 +32,21 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // --- 1. Sincronización de Label (Texto de estado arriba del botón) ---
+    // --- 1. Sincronización de Label ---
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
 
-    if (label && label.textContent !== currentStatus) {
-        label.textContent = currentStatus;
+    if (label) {
+        if (label.textContent !== currentStatus) {
+            label.textContent = currentStatus;
+        }
+        
+        // FORZAR EL COLOR: Eliminamos clases de texto existentes y aplicamos el color del objeto
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
+        
+        // Limpiamos clases de Tailwind que puedan estar forzando colores (como text-white o text-blue-500)
+        label.classList.remove('text-white', 'text-blue-500', 'text-emerald-500', 'text-red-500');
     }
 
     // --- 2. Lógica de Persistencia del Botón (EVITA EL FLASH) ---
@@ -62,13 +69,13 @@ if (spanText.innerText !== newText) {
     btn.appendChild(textNode);
 }
 
-    // Actualización Atómica de Clases (Sin parpadeo)
+    // Actualización Atómica de Clases
+    btn.classList.remove('bg-emerald-600', 'bg-blue-600', 'bg-red-600', 'hover:bg-blue-500', 'hover:bg-emerald-500', 'hover:bg-red-500');
+    
     if (isBusy) {
-        btn.classList.remove('bg-emerald-600', 'bg-blue-600', 'hover:bg-blue-500', 'hover:bg-emerald-500');
         btn.classList.add('bg-red-600', 'hover:bg-red-500');
     } else {
-        btn.classList.remove('bg-red-600', 'hover:bg-red-500', 'bg-blue-600', 'hover:bg-blue-500');
-        // AHORA SIEMPRE SERÁ ESMERALDA (VERDE)
+        // Ahora, todos los estados 'OFF' serán verdes (Emerald)
         btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
     }
 
