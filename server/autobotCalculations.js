@@ -155,9 +155,17 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
     
     if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
 
-    let grossProfit = (strategy === 'long') 
-        ? (p - entry) * qty 
-        : (entry - p) * qty;
+    // LÓGICA DIFERENCIADA POR ESTRATEGIA
+    let grossProfit = 0;
+    if (strategy === 'long') {
+        grossProfit = (p - entry) * qty;
+    } else if (strategy === 'short') {
+        grossProfit = (entry - p) * qty;
+    } else if (strategy === 'ai') {
+        // Asumiendo que AI es Long por defecto. 
+        // Si tu IA es dinámica, ajusta la lógica aquí.
+        grossProfit = (p - entry) * qty; 
+    }
     
     const entryValue = entry * qty;
     const exitValue = p * qty;

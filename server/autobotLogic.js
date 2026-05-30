@@ -133,39 +133,58 @@ async function processSingleBot(botState, currentPrice) {
         Object.assign(botState, changeSet);
 
         // --- 2. CÁLCULOS MATEMÁTICOS ---
+        
+        // 2.1 CÁLCULO LONG
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
             const activeLBalance = botState.lbalance || 0;
             const activeLOCC = botState.locc || 0;
             const longPriceRef = activeLOCC > 0 ? (botState.llep || currentPrice) : currentPrice;
 
-            const longCov = calculateLongCoverage(activeLBalance, longPriceRef, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), activeLOCC, parseNumber(botState.config.long.price_step_inc));
+            const longCov = calculateLongCoverage(
+                activeLBalance, 
+                longPriceRef, 
+                botState.config.long.purchaseUsdt, 
+                parseNumber(botState.config.long.price_var) / 100, 
+                parseNumber(botState.config.long.size_var), 
+                activeLOCC, 
+                parseNumber(botState.config.long.price_step_inc)
+            );
             changeSet.lcoverage = longCov.coveragePrice;
             changeSet.lnorder = longCov.numberOfOrders;
             changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lac || 0, currentPrice, 'long') : 0;
         }
 
+        // 2.2 CÁLCULO SHORT
         if (botState.sstate !== 'STOPPED' && botState.config.short) {
             const activeSBalance = botState.sbalance || 0;
             const activeSOCC = botState.socc || 0;
             const shortPriceRef = activeSOCC > 0 ? (botState.slep || currentPrice) : currentPrice;
 
-            const shortCov = calculateShortCoverage(activeSBalance, shortPriceRef, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), activeSOCC, parseNumber(botState.config.short.price_step_inc));
+            const shortCov = calculateShortCoverage(
+                activeSBalance, 
+                shortPriceRef, 
+                botState.config.short.purchaseUsdt, 
+                parseNumber(botState.config.short.price_var) / 100, 
+                parseNumber(botState.config.short.size_var), 
+                activeSOCC, 
+                parseNumber(botState.config.short.price_step_inc)
+            );
             changeSet.scoverage = shortCov.coveragePrice;
             changeSet.snorder = shortCov.numberOfOrders;
             changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sac || 0, currentPrice, 'short') : 0;
         }
 
-        // AGREGA ESTE BLOQUE PARA EL AI BOT:
+        // 2.3 CÁLCULO AI
         if (botState.aistate !== 'STOPPED' && botState.config.ai) {
-            // Nota: Si el bot de IA usa la misma lógica de cálculo, 
-            // asegúrate de que 'aipcc' (AI Potential Price Cost) y 'aiac' (AI Average Cost) 
-            // existan en tu modelo de datos del bot.
-            changeSet.aiprofit = (botState.aipcc || 0) > 0 
-                ? calculatePotentialProfit(botState.aipcc, botState.aiac || 0, currentPrice, 'ai') 
+            // El cálculo de profit de la IA depende de la precisión de 'aippc' y 'aiac' 
+            // gestionados internamente por runAIStrategy o el monitor de estado de IA.
+            changeSet.aiprofit = (botState.aippc || 0) > 0 
+                ? calculatePotentialProfit(botState.aippc, botState.aiac || 0, currentPrice, 'ai') 
                 : 0;
         }
 
         // Re-fusionar para consistencia en ejecución de estrategias
+        Object.assign(botState, changeSet);
         Object.assign(botState, changeSet);
 
         // --- 3. EJECUCIÓN DE ESTRATEGIAS ---
