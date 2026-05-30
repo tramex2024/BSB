@@ -219,7 +219,13 @@ export function initSocket() {
         // RESPALDO CRÍTICO: Guardamos el estado en la memoria global para que no se pierda al navegar
         currentBotState.aiLastPulse = data;
 
-        // 1. Buscamos el círculo e indicadores del Dashboard si están montados en el DOM
+        // 1. ACTUALIZACIÓN DINÁMICA DE LA BARRA PnL DE LA IA
+        // Si el backend envía el aiprofit calculado, actualizamos la barra visualmente
+        if (data.aiprofit !== undefined) {
+            updatePnLBar('ai', data.aiprofit);
+        }
+
+        // 2. Buscamos el círculo e indicadores del Dashboard si están montados en el DOM
         const dbCircle = document.getElementById('ai-confidence-circle');
         if (dbCircle) {
             const confidence = data.aiConfidence;
@@ -240,8 +246,8 @@ export function initSocket() {
 
             if (confVal) confVal.innerText = `${confidence}%`;
             if (trendLabel) trendLabel.innerText = data.aiTrendLabel;
-            if (adxVal) adxVal.innerText = data.aiAdx.toFixed(1);
-            if (stochVal) stochVal.innerText = data.aiStoch.toFixed(1);
+            if (adxVal) adxVal.innerText = Number(data.aiAdx).toFixed(1);
+            if (stochVal) stochVal.innerText = Number(data.aiStoch).toFixed(1);
             if (adxBar) adxBar.style.width = `${Math.min(data.aiAdx, 100)}%`;
             if (stochBar) stochBar.style.width = `${Math.min(data.aiStoch, 100)}%`;
             if (engineMsg) engineMsg.innerText = data.aiEngineMsg;

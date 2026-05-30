@@ -13,28 +13,32 @@ class AIEngine {
     async analyze(price, userId, context, brain) {
         if (!userId || !price || !context || !brain) return;
         
-        // Asignación segura del snapshot global una vez validados los datos
         global.lastAiStateSnapshot = brain;
 
         try {
             const bot = context;
             const { confidence, signal, reason, adx, stochK } = brain;
-            const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
             
+            // Configuración
             const config = bot.config?.ai || {};
             const userThreshold = config.minConfidence || 0.20;
             const maxOrders = config.maxOrders || 3;
 
-            // Convertimos los decimales de la DB a porcentajes reales (0 - 100) para el SVG
+            // Cálculos para el Dashboard
             const confidencePct = Math.min(Math.max(Math.round((parseFloat(confidence) || 0) * 100), 0), 100);
             const liveAdx = parseFloat(adx) || parseFloat(brain.adx) || 0;
             const liveStoch = parseFloat(stochK) || parseFloat(brain.stochD) || 0;
 
-            const aiStateTag = bot.ainorder > 0 ? `[AI-POS:${bot.ainorder}]` : '[AI-SCANNING]';
-            const pnl = bot.ainorder > 0 ? ` | PNL: ${(((price / bot.aippc) - 1) * 100).toFixed(2)}%` : '';
-            console.log(`[${new Date().toLocaleTimeString()}] [INFO] [User: ${userId}] ${aiStateTag} 🧠 Conf: ${confidencePct}% | BTC: ${price}${pnl}`);
+            // CÁLCULO DE PROFIT EN TIEMPO REAL
+            // Si hay posición, calculamos la diferencia entre precio actual y costo promedio
+            let currentAiProfit = 0;
+            if (bot.ainorder > 0 && bot.aippc > 0) {
+                // Cálculo simplificado: (precio_actual / precio_entrada - 1) * cantidad_total
+                // Esto se sincroniza con tu función de PnL del frontend
+                currentAiProfit = ((price / bot.aippc) - 1) * 100;
+            }
 
-            // BROADCAST EN TIEMPO REAL: Emisión atómica instantánea
+            // BROADCAST EN TIEMPO REAL: Emisión atómica
             if (this.io) {
                 this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
                     aiConfidence: confidencePct,
@@ -42,7 +46,8 @@ class AIEngine {
                     aiStoch: liveStoch,
                     aiTrendLabel: signal || 'NEUTRAL',
                     aiEngineMsg: reason || 'System Operational',
-                    price: price
+                    price: price,
+                    aiprofit: currentAiProfit // <--- Este es el valor que moverá tu barra
                 });
             }
 
@@ -53,22 +58,22 @@ class AIEngine {
             const riskStatus = RiskManager.checkOperatingState(bot);
             if (bot.aistate !== 'RUNNING' && riskStatus.action !== 'RESUME') return;
 
-            // 1. GESTIÓN DE SALIDA (Evaluación de Trailing Stop y Take Profit)
+            // Lógica de Salida
             if (bot.ainorder > 0) {
                 const minProfitTarget = config.profitPercent || 1.2;
-                const currentProfit = ((price / bot.aippc) - 1) * 100;
+                const currentProfitPct = ((price / bot.aippc) - 1) * 100;
                 const trailingPct = config.trailingPercent || 0.006;
                 const stopPrice = (bot.aihighestPrice || price) * (1 - trailingPct);
 
-                // Si se alcanza el objetivo mínimo o el precio cae por debajo del trailing stop disparado
-                if (currentProfit >= minProfitTarget || price <= stopPrice) {
-                    return await this._manageTrailingStop(price, userId, bot, safeLog, config, currentProfit);
+                if (currentProfitPct >= minProfitTarget || price <= stopPrice) {
+                    return await this._manageTrailingStop(price, userId, bot, safeLog, config, currentProfitPct);
                 }
             }
 
-            // 2. LÓGICA DE ENTRADA / DCA
+            // Lógica de Entrada
             if (confidence >= userThreshold && bot.ainorder < maxOrders) {
                 const isDCA = bot.ainorder > 0;
+                const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
                 const shouldBuy = !isDCA || (price < lastEntryPrice * 0.99);
 
                 if (shouldBuy && riskStatus.canOperate) {
@@ -123,8 +128,8 @@ class AIEngine {
                 updateData = {
                     aibalance: parseFloat((bot.aibalance - investmentAmount).toFixed(2)),
                     ailastEntryPrice: price,
-                    aippc: newPPC,
-                    aiac: newQty,
+                    aippc: newPPC, // Precio promedio de compra
+                    aiac: newQty,   // Cantidad acumulada
                     aihighestPrice: price,
                     aistartTime: bot.aistartTime || new Date(),
                     ainorder: (bot.ainorder || 0) + 1
@@ -141,8 +146,8 @@ class AIEngine {
                 updateData = {
                     aibalance: parseFloat((bot.aibalance + totalValue - (totalValue * this.EXCHANGE_FEE)).toFixed(2)),
                     ailastEntryPrice: 0,
-                    aippc: 0,
-                    aiac: 0,
+                    aippc: 0, // Reseteamos al cerrar posición
+                    aiac: 0,  // Reseteamos al cerrar posición
                     aihighestPrice: 0,
                     aistartTime: null,
                     ainorder: 0,
@@ -150,7 +155,11 @@ class AIEngine {
                 };
             }
 
+            // 1. Actualizamos en Base de Datos
             const updatedBot = await AutoBot.findOneAndUpdate({ userId }, updateData, { new: true });
+            
+            // 2. [MEJORA] Actualizamos el objeto en memoria para que el dashboard vea los cambios inmediatamente
+            Object.assign(bot, updatedBot.toObject());
 
             await Order.create({
                 userId,
@@ -174,6 +183,5 @@ class AIEngine {
             console.error("❌ Error detallado en _trade AI:", error);
         }
     }
-}
 
 module.exports = new AIEngine();
