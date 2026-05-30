@@ -64,16 +64,12 @@ if (spanText.innerText !== newText) {
 
     // Actualización Atómica de Clases (Sin parpadeo)
     if (isBusy) {
-        // En lugar de remover todo, reemplazamos específicamente
         btn.classList.remove('bg-emerald-600', 'bg-blue-600', 'hover:bg-blue-500', 'hover:bg-emerald-500');
         btn.classList.add('bg-red-600', 'hover:bg-red-500');
     } else {
-        btn.classList.remove('bg-red-600', 'hover:bg-red-500');
-        if (type === 'AI') {
-            btn.classList.add('bg-blue-600', 'hover:bg-blue-500');
-        } else {
-            btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
-        }
+        btn.classList.remove('bg-red-600', 'hover:bg-red-500', 'bg-blue-600', 'hover:bg-blue-500');
+        // AHORA SIEMPRE SERÁ ESMERALDA (VERDE)
+        btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
     }
 
     // Guardamos el nuevo estado para la próxima comparación
