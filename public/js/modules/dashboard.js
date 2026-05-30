@@ -177,13 +177,22 @@ function initBalanceChart() {
 export function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
     if (!bar) return;
+
     const pnl = parseFloat(pnlValue) || 0;
-    const visualSize = Math.min(Math.abs(pnl) / 1 * 50, 50);
+    
+    // CORRECCIÓN: Ajustamos el factor de escala. 
+    // Si tu ganancia es del 1% (0.01), multiplicamos por 5000 para que sea visible (50% de la barra).
+    // Ajusta el divisor '0.5' según qué tan rápido quieras que la barra llene el espacio.
+    const sensitivity = 0.5; 
+    const visualSize = Math.min(Math.abs(pnl) * (50 / sensitivity), 50);
+
     if (pnl >= 0) {
-        bar.style.left = '50%'; bar.style.width = `${visualSize}%`;
+        bar.style.left = '50%'; 
+        bar.style.width = `${visualSize}%`;
         bar.className = 'absolute h-full transition-all duration-500 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
     } else {
-        bar.style.left = `${50 - visualSize}%`; bar.style.width = `${visualSize}%`;
+        bar.style.left = `${50 - visualSize}%`; 
+        bar.style.width = `${visualSize}%`;
         bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
     }
 }

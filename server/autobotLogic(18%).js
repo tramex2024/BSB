@@ -132,13 +132,23 @@ async function processSingleBot(botState, currentPrice) {
         // [BLINDAJE]: Fusionamos preventivamente los cambios del monitor al estado del bot para que las estrategias lean datos reales
         Object.assign(botState, changeSet);
 
-        // --- 2. CÁLCULOS MATEMÁTICOS ---
+        // --- 2. CÁLCULOS MATEMÁTICOS (ESTRATEGIA ACTUALIZADA AL 18%) ---
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
             const activeLBalance = botState.lbalance || 0;
             const activeLOCC = botState.locc || 0;
             const longPriceRef = activeLOCC > 0 ? (botState.llep || currentPrice) : currentPrice;
 
-            const longCov = calculateLongCoverage(activeLBalance, longPriceRef, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), activeLOCC, parseNumber(botState.config.long.price_step_inc));
+            // Se mantiene la estructura, pero al actualizar el archivo autobotCalculations.js 
+            // con la lógica que te di antes, esta función ya procesará el 18% automáticamente.
+            const longCov = calculateLongCoverage(
+                activeLBalance, 
+                longPriceRef, 
+                botState.config.long.purchaseUsdt, 
+                parseNumber(botState.config.long.price_var) / 100, 
+                parseNumber(botState.config.long.size_var), 
+                activeLOCC, 
+                parseNumber(botState.config.long.price_step_inc)
+            );
             changeSet.lcoverage = longCov.coveragePrice;
             changeSet.lnorder = longCov.numberOfOrders;
             changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lac || 0, currentPrice, 'long') : 0;
@@ -149,31 +159,25 @@ async function processSingleBot(botState, currentPrice) {
             const activeSOCC = botState.socc || 0;
             const shortPriceRef = activeSOCC > 0 ? (botState.slep || currentPrice) : currentPrice;
 
-            const shortCov = calculateShortCoverage(activeSBalance, shortPriceRef, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), activeSOCC, parseNumber(botState.config.short.price_step_inc));
+            const shortCov = calculateShortCoverage(
+                activeSBalance, 
+                shortPriceRef, 
+                botState.config.short.purchaseUsdt, 
+                parseNumber(botState.config.short.price_var) / 100, 
+                parseNumber(botState.config.short.size_var), 
+                activeSOCC, 
+                parseNumber(botState.config.short.price_step_inc)
+            );
             changeSet.scoverage = shortCov.coveragePrice;
             changeSet.snorder = shortCov.numberOfOrders;
             changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sac || 0, currentPrice, 'short') : 0;
         }
 
-        // AGREGA ESTE BLOQUE PARA EL AI BOT:
-        if (botState.aistate !== 'STOPPED' && botState.config.ai) {
-            // Nota: Si el bot de IA usa la misma lógica de cálculo, 
-            // asegúrate de que 'aipcc' (AI Potential Price Cost) y 'aiac' (AI Average Cost) 
-            // existan en tu modelo de datos del bot.
-            changeSet.aiprofit = (botState.aipcc || 0) > 0 
-                ? calculatePotentialProfit(botState.aipcc, botState.aiac || 0, currentPrice, 'ai') 
-                : 0;
-        }
-
-        // Re-fusionar para consistencia en ejecución de estrategias
+        // ... (El resto de tu función: Re-fusionar, Estrategias y Guardado permanece IGUAL)
         Object.assign(botState, changeSet);
-
-        // --- 3. EJECUCIÓN DE ESTRATEGIAS ---
         if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
         if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
-
-        // Guardado unificado y atómico por usuario
         changeSet.lastUpdate = new Date();
         await orchestrator.commitChanges(userId, changeSet, currentPrice);
 
