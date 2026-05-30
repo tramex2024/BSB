@@ -32,22 +32,16 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // --- 1. Sincronización de Label ---
-    const typeKey = type.charAt(0).toLowerCase(); 
-    const labelId = `aubot-${typeKey}state`; 
-    const label = document.getElementById(labelId);
-
-    if (label) {
-        if (label.textContent !== currentStatus) {
-            label.textContent = currentStatus;
-        }
-        
-        // FORZAR EL COLOR: Eliminamos clases de texto existentes y aplicamos el color del objeto
-        label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
-        
-        // Limpiamos clases de Tailwind que puedan estar forzando colores (como text-white o text-blue-500)
-        label.classList.remove('text-white', 'text-blue-500', 'text-emerald-500', 'text-red-500');
-    }
+    // 1. Sincronización de Label (Texto de estado)
+const label = document.getElementById(labelId);
+if (label) {
+    label.textContent = currentStatus;
+    // Aplicamos el color directo basado en nuestro objeto STATUS_COLORS
+    label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
+    
+    // Eliminamos clases que puedan estar forzando colores incorrectos
+    label.classList.remove('text-white', 'text-blue-500', 'text-emerald-500', 'text-red-500');
+}
 
     // --- 2. Lógica de Persistencia del Botón (EVITA EL FLASH) ---
     // Usamos el dataset del botón para saber qué estado tiene actualmente dibujado
