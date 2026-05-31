@@ -6,11 +6,13 @@
 const Order = require('../../../models/Order'); 
 const RiskManager = require('../../managers/AIRiskManager');
 const AutoBot = require('../../../models/Autobot');
+const TradeCycle = require('../../../models/TradeCycle');
 
 class AIEngine {
     constructor() {
         this.io = null;
         this.EXCHANGE_FEE = 0.001; 
+        this.lastEmit = 0;
     }
 
     setIo(io) { this.io = io; }
@@ -31,7 +33,7 @@ class AIEngine {
             // 2. LOGICA DE CIERRE OBLIGATORIO (FIX PARA CICLOS BLOQUEADOS)
             if (botState.ainorder > 0 && (signal === 'STRONG_SELL' || (rsi14 > 80))) {
                 await this._trade(userId, 'SELL', price, botState, safeLog, `Cierre Forzoso: Señal ${signal} / RSI ${rsi14?.toFixed(1) || 'N/A'}`);
-                return; // Salimos para evitar abrir operaciones en el mismo tick
+                return;
             }
 
             // 3. LOGICA DE APERTURA (DCA)
@@ -46,22 +48,19 @@ class AIEngine {
                 }
             }
 
-            // 4. EMISIÓN AL FRONTEND (CONTROL DE PARPADEO CON THROTTLING)
-            // Solo emitimos si existe la instancia de io y controlamos la frecuencia
+            // 4. EMISIÓN AL FRONTEND (CONTROL DE PARPADEO)
             if (this.io) {
-        // Solo emitimos si detectamos que NO hay un polling de API activo
-        // O más simple: añadimos una bandera para reducir la carga
-        const now = Date.now();
-        if (now - this.lastEmit > 3000) { // Aumentamos a 3s para dar aire al API Polling
-            this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
-                aiConfidence: confidencePct || 0,
-                aiAdx: parseFloat(adx || 0).toFixed(2),
-                aiTrendLabel: signal || 'HOLD',
-                price: price || 0,
-                aiprofit: botState.ainorder > 0 ? (((price / botState.aippc) - 1) * 100).toFixed(2) : 0
-            });
-            this.lastEmit = now;
-        }
+                const now = Date.now();
+                if (now - this.lastEmit > 3000) {
+                    this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
+                        aiConfidence: confidencePct || 0,
+                        aiAdx: parseFloat(adx || 0).toFixed(2),
+                        aiTrendLabel: signal || 'HOLD',
+                        price: price || 0,
+                        aiprofit: botState.ainorder > 0 ? (((price / botState.aippc) - 1) * 100).toFixed(2) : 0
+                    });
+                    this.lastEmit = now;
+                }
             }
         } catch (error) {
             console.error(`❌ AI Engine Critical Error [User: ${userId}]:`, error);
@@ -127,6 +126,30 @@ class AIEngine {
                     ainorder: 0,
                     $inc: { aicycle: 1, total_profit: parseFloat(netProfit.toFixed(4)) }
                 };
+
+                // REGISTRO DE CICLO CERRADO
+                try {
+                    await TradeCycle.create({
+                        userId: userId,
+                        strategy: 'AI',
+                        cycleIndex: (bot.aicycle || 0) + 1,
+                        symbol: bot.config?.symbol || 'BTC_USDT',
+                        startTime: bot.aistartTime || new Date(),
+                        endTime: new Date(),
+                        durationHours: (new Date() - new Date(bot.aistartTime || Date.now())) / (1000 * 60 * 60),
+                        initialInvestment: totalCost,
+                        finalRecovery: totalValue,
+                        netProfit: netProfit,
+                        profitPercentage: ((price / (bot.aippc || price)) - 1) * 100,
+                        averagePPC: bot.aippc || 0,
+                        finalSellPrice: price,
+                        orderCount: bot.ainorder || 0,
+                        status: 'COMPLETED',
+                        autobotId: bot._id
+                    });
+                } catch (cycleErr) {
+                    console.error("❌ Error al guardar TradeCycle:", cycleErr);
+                }
             }
 
             const updatedBot = await AutoBot.findOneAndUpdate({ userId }, updateData, { new: true });
@@ -142,7 +165,6 @@ class AIEngine {
             });
 
             safeLog(`✅ AI ${side} @ $${price} | Size: ${orderSize}`, 'success');
-            console.log(`[DB-SYNC] Orden guardada y Bot actualizado para User ${userId}`);
         } catch (error) {
             console.error("❌ Error detallado en _trade AI:", error);
         }
