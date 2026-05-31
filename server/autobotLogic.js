@@ -13,6 +13,7 @@ const { runLongStrategy } = require('./src/longStrategy');
 const { runShortStrategy } = require('./src/shortStrategy');
 const { runAIStrategy } = require('./src/aiStrategy'); 
 const { canExecuteStrategy } = require('./utils/strategyValidator');
+const MarketSignal = require('./models/MarketSignal');
 
 const { 
     calculateLongCoverage, 
@@ -32,12 +33,25 @@ let isProcessing = false;
 
 /**
  * Procesa el ciclo individual de trading para un bot específico de forma aislada y segura
+ * Versión Integrada: Consume MarketSignal centralizado para toma de decisiones
  */
 async function processSingleBot(botState, currentPrice) {
     const userId = botState.userId;
     const changeSet = {};
 
     try {
+        // --- 0. OBTENCIÓN DE DATOS CENTRALIZADOS (FUENTE DE VERDAD) ---
+        const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || 'BTC_USDT' }).lean();
+        
+        // Contexto técnico que será inyectado en las estrategias
+        const marketContext = marketData ? {
+            rsi14: marketData.rsi14,
+            adx: marketData.adx,
+            signal: marketData.signal,
+            aiConfidence: marketData.aiConfidence,
+            trend: marketData.trend
+        } : { rsi14: 50, adx: 0, signal: 'NEUTRAL', aiConfidence: 0, trend: 'NEUTRAL' };
+
         const user = await User.findById(userId).lean();
         if (!user || !user.bitmartApiKey) {
             orchestrator.log(`⚠️ Salto: Usuario ${userId} sin llaves API.`, 'error', userId);
@@ -49,11 +63,7 @@ async function processSingleBot(botState, currentPrice) {
         try {
             decryptedApiKey = decrypt(user.bitmartApiKey).trim();
             decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
-            try {
-                decryptedMemo = decrypt(user.bitmartApiMemoEncrypted || user.bitmartApiMemo).trim();
-            } catch (e) {
-                decryptedMemo = (user.bitmartApiMemo || "").trim();
-            }
+            decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo).trim() : (user.bitmartApiMemo || "").trim();
         } catch (err) {
             orchestrator.log(`❌ Error al desencriptar llaves de usuario ${userId}`, 'error', userId);
             return;
@@ -61,15 +71,16 @@ async function processSingleBot(botState, currentPrice) {
 
         const userCreds = { apiKey: decryptedApiKey, apiMemo: decryptedMemo, secretKey: decryptedSecret };
 
-        // Sincronización preventiva de balances si están vacíos
+        // Sincronización de balances
         if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
             await orchestrator.slowBalanceCacheUpdate(userId);
         }
 
-        // Construcción de dependencias atómicas
+        // Construcción de dependencias (INYECTAMOS marketContext)
         const dependencies = {
             userId,
             userCreds, 
+            marketContext, // <--- NUEVA FUENTE DE DATOS PARA ESTRATEGIAS
             log: (msg, type) => orchestrator.log(msg, type, userId),
             io: orchestrator.io || null,
             bitmartService, Autobot, currentPrice,
@@ -81,24 +92,12 @@ async function processSingleBot(botState, currentPrice) {
             scycle: botState.scycle || 0,
             aicycle: botState.aicycle || 0,
 
-            placeLongOrder: async (params) => {
-                const clientOrderId = `L_${botState.lcycle || 0}_${Date.now()}`;
-                return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
-            },
-            placeShortOrder: async (params) => {
-                const clientOrderId = `S_${botState.scycle || 0}_${Date.now()}`;
-                return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
-            },
-            placeAIOrder: async (params) => {
-                const clientOrderId = `AI_${botState.aicycle || 0}_${Date.now()}`;
-                return await bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, clientOrderId);
-            },
+            placeLongOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `L_${botState.lcycle || 0}_${Date.now()}`),
+            placeShortOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `S_${botState.scycle || 0}_${Date.now()}`),
+            placeAIOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `AI_${botState.aicycle || 0}_${Date.now()}`),
             placeMarketOrder: async (params) => bitmartService.placeMarketOrder(params, userCreds),
 
-            updateBotState: async (val, strat) => { 
-                const field = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
-                changeSet[field] = val; 
-            },
+            updateBotState: async (val, strat) => { changeSet[strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate')] = val; },
             updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
             updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
             updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
@@ -111,80 +110,39 @@ async function processSingleBot(botState, currentPrice) {
         // --- 1. MONITOREO DE ÓRDENES ---
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
             try {
-                if (botState.llastOrder.side === 'buy') {
-                    await monitorLongBuy(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-                } else {
-                    await monitorLongSell(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-                }
+                if (botState.llastOrder.side === 'buy') await monitorLongBuy(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                else await monitorLongSell(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
             } catch (e) { orchestrator.log(`Error Long Monitor: ${e.message}`, 'error', userId); }
         }
 
         if (botState.slastOrder && botState.sstate !== 'STOPPED') {
             try {
-                if (botState.slastOrder.side === 'sell') { 
-                    await monitorShortSell(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-                } else {
-                    await monitorShortBuy(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-                }
+                if (botState.slastOrder.side === 'sell') await monitorShortSell(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                else await monitorShortBuy(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
             } catch (e) { orchestrator.log(`Error Short Monitor: ${e.message}`, 'error', userId); }
         }
 
-        // [BLINDAJE]: Fusionamos preventivamente los cambios del monitor al estado del bot para que las estrategias lean datos reales
         Object.assign(botState, changeSet);
 
         // --- 2. CÁLCULOS MATEMÁTICOS ---
-        
-        // 2.1 CÁLCULO LONG
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
-            const activeLBalance = botState.lbalance || 0;
-            const activeLOCC = botState.locc || 0;
-            const longPriceRef = activeLOCC > 0 ? (botState.llep || currentPrice) : currentPrice;
-
-            const longCov = calculateLongCoverage(
-                activeLBalance, 
-                longPriceRef, 
-                botState.config.long.purchaseUsdt, 
-                parseNumber(botState.config.long.price_var) / 100, 
-                parseNumber(botState.config.long.size_var), 
-                activeLOCC, 
-                parseNumber(botState.config.long.price_step_inc)
-            );
+            const longCov = calculateLongCoverage(botState.lbalance || 0, botState.locc > 0 ? (botState.llep || currentPrice) : currentPrice, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), botState.locc || 0, parseNumber(botState.config.long.price_step_inc));
             changeSet.lcoverage = longCov.coveragePrice;
             changeSet.lnorder = longCov.numberOfOrders;
             changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lac || 0, currentPrice, 'long') : 0;
         }
 
-        // 2.2 CÁLCULO SHORT
         if (botState.sstate !== 'STOPPED' && botState.config.short) {
-            const activeSBalance = botState.sbalance || 0;
-            const activeSOCC = botState.socc || 0;
-            const shortPriceRef = activeSOCC > 0 ? (botState.slep || currentPrice) : currentPrice;
-
-            const shortCov = calculateShortCoverage(
-                activeSBalance, 
-                shortPriceRef, 
-                botState.config.short.purchaseUsdt, 
-                parseNumber(botState.config.short.price_var) / 100, 
-                parseNumber(botState.config.short.size_var), 
-                activeSOCC, 
-                parseNumber(botState.config.short.price_step_inc)
-            );
+            const shortCov = calculateShortCoverage(botState.sbalance || 0, botState.socc > 0 ? (botState.slep || currentPrice) : currentPrice, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), botState.socc || 0, parseNumber(botState.config.short.price_step_inc));
             changeSet.scoverage = shortCov.coveragePrice;
             changeSet.snorder = shortCov.numberOfOrders;
             changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sac || 0, currentPrice, 'short') : 0;
         }
 
-        // 2.3 CÁLCULO AI
         if (botState.aistate !== 'STOPPED' && botState.config.ai) {
-            // El cálculo de profit de la IA depende de la precisión de 'aippc' y 'aiac' 
-            // gestionados internamente por runAIStrategy o el monitor de estado de IA.
-            changeSet.aiprofit = (botState.aippc || 0) > 0 
-                ? calculatePotentialProfit(botState.aippc, botState.aiac || 0, currentPrice, 'ai') 
-                : 0;
+            changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.aiac || 0, currentPrice, 'ai') : 0;
         }
 
-        // Re-fusionar para consistencia en ejecución de estrategias
-        Object.assign(botState, changeSet);
         Object.assign(botState, changeSet);
 
         // --- 3. EJECUCIÓN DE ESTRATEGIAS ---
@@ -192,7 +150,6 @@ async function processSingleBot(botState, currentPrice) {
         if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
 
-        // Guardado unificado y atómico por usuario
         changeSet.lastUpdate = new Date();
         await orchestrator.commitChanges(userId, changeSet, currentPrice);
 

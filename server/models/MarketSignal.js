@@ -1,6 +1,6 @@
 /**
  * BSB/server/models/MarketSignal.js
- * CENTRAL DE INTELIGENCIA DE MERCADO - Modelo con IA
+ * CENTRAL DE INTELIGENCIA DE MERCADO - Modelo Centralizado y Optimizado para IA
  */
 
 const mongoose = require('mongoose');
@@ -32,17 +32,27 @@ const MarketSignalSchema = new mongoose.Schema({
     macdSignal: { type: Number },
     macdHist: { type: Number },
 
-    // --- NUEVO BLOQUE DE INTELIGENCIA ARTIFICIAL ---
+    // --- NUEVO BLOQUE DE VOLATILIDAD Y TENDENCIA (Para gestión de salida) ---
+    atr: { type: Number, default: 0 },         // Average True Range
+    volatilityIndex: { type: Number, default: 0 },
+    priceSlope: { type: Number, default: 0 },   // Pendiente de tendencia (Delta de precio)
+
+    // --- BLOQUE DE INTELIGENCIA ARTIFICIAL ---
     aiConfidence: { 
         type: Number, 
         default: 0,
         min: 0,
-        max: 1 // Guardamos de 0 a 1 (ej: 0.85 para 85%)
+        max: 1 
     },
     marketPhase: { 
         type: String, 
         enum: ['ACCUMULATION', 'TREND', 'DISTRIBUTION', 'DORMANT', 'UNKNOWN'],
         default: 'UNKNOWN'
+    },
+    // Contenedor para los inputs normalizados que consumirá XGBoost
+    featureVector: {
+        type: Object,
+        default: {}
     },
 
     // --- LEGADO Y COMPATIBILIDAD ---
@@ -68,7 +78,7 @@ const MarketSignalSchema = new mongoose.Schema({
     timestamps: true 
 });
 
-// Middleware de actualización
+// Middleware de actualización para asegurar que la marca de tiempo siempre sea actual
 MarketSignalSchema.pre('save', function(next) {
     this.lastUpdate = Date.now();
     next();

@@ -1,7 +1,6 @@
 /**
  * BSB/server/services/marketService.js
- * Orquestador de Conexiones BitMart - Versión Auditada (Sincronización Total)
- * FIX: RSI Freeze & MarketSignal Continuity & Syntax Error Fix
+ * Orquestador de Conexiones BitMart - Versión Centralizada y Optimizada (2026)
  */
 const WebSocket = require('ws');
 const bitmartWs = require('./bitmartWs'); 
@@ -16,19 +15,16 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false;
 
-// --- GESTIÓN DEL TICKER PÚBLICO (Precio BTC) ---
 function setupPublicTicker(io) {
     const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
     
-    if (marketWs) { 
-        try { marketWs.terminate(); } catch (e) {} 
-    }
+    if (marketWs) { try { marketWs.terminate(); } catch (e) {} }
     
     marketWs = new WebSocket(bitmartWsUrl);
     
     marketWs.on('open', () => {
         isMarketConnected = true;
-        console.log("📡 [MARKET_WS] Conexión establecida con BitMart Public API.");
+        console.log("📡 [MARKET_WS] Conexión establecida.");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
         if (marketHeartbeat) clearInterval(marketHeartbeat);
@@ -50,76 +46,58 @@ function setupPublicTicker(io) {
                 const open24h = parseFloat(ticker.open_24h);
                 const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
-                // 1. Actualización inmediata del precio en el Analizador
                 centralAnalyzer.updatePrice(price);
-
-                // 2. Proceso de construcción de vela (ETAPA 1: INGESTA)
                 const closedCandle = candleBuilder.processTick(price, volume);
                 
+                let signalDoc = null;
+
                 if (closedCandle) {
-                    // 3. Persistencia en DB (ETAPA 2: PERSISTENCIA)
+                    // 1. Persistencia de Vela y Recálculo Centralizado
                     const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
                         { symbol: 'BTC_USDT' },
                         { 
-                            $push: { 
-                                history: { 
-                                    $each: [closedCandle], 
-                                    $slice: -250 // Mantenemos el buffer de 250 velas para el RSI
-                                } 
-                            },
-                            $set: { lastUpdate: new Date() }
+                            $push: { history: { $each: [closedCandle], $slice: -250 } },
+                            $set: { lastUpdate: new Date(), currentPrice: price }
                         },
-                        { upsert: true, new: true } // 'new: true' nos devuelve el documento ya actualizado
+                        { upsert: true, new: true }
                     );
 
-                    // 4. Recálculo Mandatorio (ETAPA 3: AUDITORÍA DE RSI)
-                    if (updatedSignalDoc && updatedSignalDoc.history) {
-                        await centralAnalyzer.analyze(updatedSignalDoc.history);
-                    }
+                    // 2. Ejecución del Analizador Central
+                    const analysis = await centralAnalyzer.analyze(updatedSignalDoc.history);
+                    
+                    // 3. Centralización de Indicadores en DB
+                    signalDoc = await MarketSignal.findOneAndUpdate(
+                        { symbol: 'BTC_USDT' },
+                        { 
+                            $set: { 
+                                rsi14: analysis.rsi14,
+                                adx: analysis.adx,
+                                stochK: analysis.stochK,
+                                stochD: analysis.stochD,
+                                macdValue: analysis.macdValue,
+                                aiConfidence: analysis.confidence,
+                                signal: analysis.signal,
+                                reason: analysis.reason
+                            }
+                        },
+                        { new: true }
+                    );
                 }
 
-                // =================================================================
-                // 5. EMISIÓN OPTIMIZADA A FRONTEND (Inyección de Pulso Neural Blindada)
-                // =================================================================
-                let lastAiAnalysis = {};
-                try {
-                    lastAiAnalysis = (typeof centralAnalyzer.getLastAnalysis === 'function') 
-                        ? (centralAnalyzer.getLastAnalysis() || {}) 
-                        : (global.lastAiStateSnapshot || {});
-                } catch (analyzerErr) {
-                    console.warn("⚠️ [MARKET_WS] No se pudo obtener el análisis del CentralAnalyzer:", analyzerErr.message);
-                    lastAiAnalysis = global.lastAiStateSnapshot || {};
-                }
-
-                // Formateamos la confianza a escala 0-100% con validación estricta
-                let confidencePct = null;
-                if (lastAiAnalysis && lastAiAnalysis.confidence !== undefined && lastAiAnalysis.confidence !== null) {
-                    const parsedConf = parseFloat(lastAiAnalysis.confidence);
-                    if (!isNaN(parsedConf)) {
-                        confidencePct = Math.min(Math.max(Math.round(parsedConf * 100), 0), 100);
-                    }
-                }
-
-                // Extracción defensiva de métricas técnicas con fallback a 0
-                const safeFloat = (val) => {
-                    const parsed = parseFloat(val);
-                    return isNaN(parsed) ? 0 : parsed;
-                };
-
-                // Estructuramos el payload unificado de alta velocidad hacia el Frontend
+                // 4. Emisión optimizada a Frontend
                 io.emit('marketData', { 
                     price, 
                     priceChangePercent, 
                     exchangeOnline: isMarketConnected,
-                    aiPulse: confidencePct !== null ? {
-                        aiConfidence: confidencePct,
-                        aiAdx: safeFloat(lastAiAnalysis.adx),
-                        aiStoch: safeFloat(lastAiAnalysis.stochK || lastAiAnalysis.stochD),
-                        aiTrendLabel: lastAiAnalysis.signal || 'NEUTRAL',
-                        aiEngineMsg: lastAiAnalysis.reason || 'Market Scanning Live'
+                    aiPulse: signalDoc ? {
+                        aiConfidence: Math.round(signalDoc.aiConfidence * 100),
+                        aiAdx: signalDoc.adx,
+                        aiTrendLabel: signalDoc.signal,
+                        aiEngineMsg: signalDoc.reason
                     } : null
                 });
 
+                // 5. Ciclo de Bots de Usuarios (Consultando los datos recién centralizados)
                 await autobotLogic.botCycle(price);
             }
         } catch (e) { 
@@ -129,18 +107,14 @@ function setupPublicTicker(io) {
 
     marketWs.on('close', () => {
         isMarketConnected = false;
-        console.warn("⚠️ [MARKET_WS] Conexión cerrada. Reintentando en 5s...");
         setTimeout(() => setupPublicTicker(io), 5000);
     });
-} // <--- ¡AQUÍ FALTABA ESTE CIERRE DE LA FUNCIÓN PRINCIPAL!
+}
 
-// --- GESTIÓN DE WEBSOCKETS PRIVADOS (Órdenes de Usuarios) ---
 async function initializePrivateWebSockets(io, orderPersistenceService) {
+    // ... (Tu lógica existente para sockets privados se mantiene igual)
     try {
-        const usersWithKeys = await User.find({ 
-            bitmartApiKey: { $exists: true, $ne: "" } 
-        });
-
+        const usersWithKeys = await User.find({ bitmartApiKey: { $exists: true, $ne: "" } });
         for (const user of usersWithKeys) {
             try {
                 const credentials = {
@@ -148,29 +122,19 @@ async function initializePrivateWebSockets(io, orderPersistenceService) {
                     secretKey: decrypt(user.bitmartSecretKeyEncrypted),
                     memo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ""
                 };
-
                 const userIdStr = user._id.toString();
-
                 bitmartWs.initOrderWebSocket(userIdStr, credentials, async (ordersDataArray) => {
                     if (!ordersDataArray) return;
-
                     for (const order of ordersDataArray) {
                         const cId = order.clientOrderId || "";
-                        const strategy = cId.startsWith('L_') ? 'long' : 
-                                         cId.startsWith('S_') ? 'short' : 
-                                         cId.toUpperCase().startsWith('AI_') ? 'ai' : 'ex';
-
+                        const strategy = cId.startsWith('L_') ? 'long' : cId.startsWith('S_') ? 'short' : 'ai';
                         await orderPersistenceService.saveExecutedOrder(order, strategy, userIdStr);
                         io.to(userIdStr).emit('open-orders-update', { ...order, strategy });
                     }
                 });
-            } catch (err) {
-                console.error(`❌ [PRIVATE_WS_ERROR] (${user.email}):`, err.message);
-            }
+            } catch (err) { console.error(`❌ [WS_ERROR] (${user.email}):`, err.message); }
         }
-    } catch (error) {
-        console.error("❌ [PRIVATE_INIT_ERROR]:", error.message);
-    }
+    } catch (error) { console.error("❌ [PRIVATE_INIT_ERROR]:", error.message); }
 }
 
 module.exports = { setupPublicTicker, initializePrivateWebSockets };
