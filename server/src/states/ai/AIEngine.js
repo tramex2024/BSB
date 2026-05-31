@@ -19,20 +19,19 @@ class AIEngine {
         if (!userId || !price || !context) return;
         
         try {
-            const { botState, marketContext, safeLog, placeAIOrder } = context; // marketContext es la clave
+            const { botState, marketContext, safeLog } = context;
             const config = botState.config?.ai || {};
             const userThreshold = config.minConfidence || 0.20;
             const maxOrders = config.maxOrders || 3;
 
             // 1. ANÁLISIS BASADO EN CONTEXTO CENTRALIZADO
             const { signal, aiConfidence, rsi14, adx } = marketContext;
-            const confidencePct = Math.round(aiConfidence * 100);
+            const confidencePct = Math.round((aiConfidence || 0) * 100);
 
             // 2. LOGICA DE CIERRE OBLIGATORIO (FIX PARA CICLOS BLOQUEADOS)
-            // Si la señal es 'STRONG_SELL' o el RSI indica sobrecompra extrema, forzamos cierre
-            if (botState.ainorder > 0 && (signal === 'STRONG_SELL' || rsi14 > 80)) {
-                await this._trade(userId, 'SELL', price, botState, safeLog, `Cierre Forzoso: Señal ${signal} / RSI ${rsi14.toFixed(1)}`);
-                return; // Salimos para evitar abrir en el mismo tick
+            if (botState.ainorder > 0 && (signal === 'STRONG_SELL' || (rsi14 > 80))) {
+                await this._trade(userId, 'SELL', price, botState, safeLog, `Cierre Forzoso: Señal ${signal} / RSI ${rsi14?.toFixed(1) || 'N/A'}`);
+                return; // Salimos para evitar abrir operaciones en el mismo tick
             }
 
             // 3. LOGICA DE APERTURA (DCA)
@@ -41,21 +40,29 @@ class AIEngine {
                 const lastEntryPrice = parseFloat(botState.ailastEntryPrice || 0);
                 const shouldBuy = !isDCA || (price < lastEntryPrice * 0.99);
 
-                const riskStatus = RiskManager.checkOperatingState(botState);
+                const riskStatus = RiskManager.checkOperatingState(botState, marketContext);
                 if (shouldBuy && riskStatus.canOperate) {
                     await this._trade(userId, 'BUY', price, botState, safeLog, `AI Signal: ${signal}`, maxOrders);
                 }
             }
 
-            // 4. EMISIÓN AL FRONTEND
+            // 4. EMISIÓN AL FRONTEND (CONTROL DE PARPADEO CON THROTTLING)
+            // Solo emitimos si existe la instancia de io y controlamos la frecuencia
             if (this.io) {
-                this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
-                    aiConfidence: confidencePct,
-                    aiAdx: adx,
-                    aiTrendLabel: signal,
-                    price: price,
-                    aiprofit: botState.ainorder > 0 ? ((price / botState.aippc) - 1) * 100 : 0
-                });
+                // Inicializamos lastEmit si no existe
+                if (!this.lastEmit) this.lastEmit = 0;
+                
+                const now = Date.now();
+                if (now - this.lastEmit > 2000) { // Emisión limitada a cada 2 segundos
+                    this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
+                        aiConfidence: confidencePct || 0,
+                        aiAdx: parseFloat(adx || 0).toFixed(2),
+                        aiTrendLabel: signal || 'HOLD',
+                        price: price || 0,
+                        aiprofit: botState.ainorder > 0 ? (((price / botState.aippc) - 1) * 100).toFixed(2) : 0
+                    });
+                    this.lastEmit = now;
+                }
             }
         } catch (error) {
             console.error(`❌ AI Engine Critical Error [User: ${userId}]:`, error);
