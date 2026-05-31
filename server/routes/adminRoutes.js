@@ -145,5 +145,15 @@ module.exports = function(io) {
         }
     });
 
+    // --- RUTA 4: LISTAR TODOS LOS EMAILS ---
+    router.get('/users-list', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+        try {
+            const users = await User.find({}, 'email'); // Solo traemos los emails
+            res.status(200).json(users);
+        } catch (error) {
+            res.status(500).json({ success: false, message: "Error fetching users" });
+        }
+    });
+
     return router;
 };
