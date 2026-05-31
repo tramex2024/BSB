@@ -1,3 +1,8 @@
+/**
+ * BSB/server/src/states/ai/AIEngine.js
+ * Versión Centralizada: Toma de decisiones basada en MarketContext
+ */
+
 const Order = require('../../../models/Order'); 
 const RiskManager = require('../../managers/AIRiskManager');
 const AutoBot = require('../../../models/Autobot');
@@ -5,79 +10,55 @@ const AutoBot = require('../../../models/Autobot');
 class AIEngine {
     constructor() {
         this.io = null;
-        this.EXCHANGE_FEE = 0.001; // 0.1%
+        this.EXCHANGE_FEE = 0.001; 
     }
 
     setIo(io) { this.io = io; }
 
-    async analyze(price, userId, context, brain) {
-        if (!userId || !price || !context || !brain) return;
+    async analyze(price, userId, context) {
+        if (!userId || !price || !context) return;
         
-        global.lastAiStateSnapshot = brain;
-
         try {
-            const bot = context;
-            const { confidence, signal, reason, adx, stochK } = brain;
-            
-            const config = bot.config?.ai || {};
+            const { botState, marketContext, safeLog, placeAIOrder } = context; // marketContext es la clave
+            const config = botState.config?.ai || {};
             const userThreshold = config.minConfidence || 0.20;
             const maxOrders = config.maxOrders || 3;
 
-            const confidencePct = Math.min(Math.max(Math.round((parseFloat(confidence) || 0) * 100), 0), 100);
-            const liveAdx = parseFloat(adx) || parseFloat(brain.adx) || 0;
-            const liveStoch = parseFloat(stochK) || parseFloat(brain.stochD) || 0;
+            // 1. ANÁLISIS BASADO EN CONTEXTO CENTRALIZADO
+            const { signal, aiConfidence, rsi14, adx } = marketContext;
+            const confidencePct = Math.round(aiConfidence * 100);
 
-            const aiStateTag = bot.ainorder > 0 ? `[AI-POS:${bot.ainorder}]` : '[AI-SCANNING]';
-            const pnl = bot.ainorder > 0 ? ` | PNL: ${(((price / bot.aippc) - 1) * 100).toFixed(2)}%` : '';
-            console.log(`[${new Date().toLocaleTimeString()}] [INFO] [User: ${userId}] ${aiStateTag} 🧠 Conf: ${confidencePct}% | BTC: ${price}${pnl}`);
-
-            // CÁLCULO DE PROFIT PARA EL DASHBOARD
-            let currentAiProfit = 0;
-            if (bot.ainorder > 0 && bot.aippc > 0) {
-                currentAiProfit = ((price / bot.aippc) - 1) * 100;
+            // 2. LOGICA DE CIERRE OBLIGATORIO (FIX PARA CICLOS BLOQUEADOS)
+            // Si la señal es 'STRONG_SELL' o el RSI indica sobrecompra extrema, forzamos cierre
+            if (botState.ainorder > 0 && (signal === 'STRONG_SELL' || rsi14 > 80)) {
+                await this._trade(userId, 'SELL', price, botState, safeLog, `Cierre Forzoso: Señal ${signal} / RSI ${rsi14.toFixed(1)}`);
+                return; // Salimos para evitar abrir en el mismo tick
             }
 
+            // 3. LOGICA DE APERTURA (DCA)
+            if (botState.ainorder < maxOrders && aiConfidence >= userThreshold && signal !== 'STRONG_SELL') {
+                const isDCA = botState.ainorder > 0;
+                const lastEntryPrice = parseFloat(botState.ailastEntryPrice || 0);
+                const shouldBuy = !isDCA || (price < lastEntryPrice * 0.99);
+
+                const riskStatus = RiskManager.checkOperatingState(botState);
+                if (shouldBuy && riskStatus.canOperate) {
+                    await this._trade(userId, 'BUY', price, botState, safeLog, `AI Signal: ${signal}`, maxOrders);
+                }
+            }
+
+            // 4. EMISIÓN AL FRONTEND
             if (this.io) {
                 this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
                     aiConfidence: confidencePct,
-                    aiAdx: liveAdx,
-                    aiStoch: liveStoch,
-                    aiTrendLabel: signal || 'NEUTRAL',
-                    aiEngineMsg: reason || 'System Operational',
+                    aiAdx: adx,
+                    aiTrendLabel: signal,
                     price: price,
-                    aiprofit: currentAiProfit
+                    aiprofit: botState.ainorder > 0 ? ((price / botState.aippc) - 1) * 100 : 0
                 });
             }
-
-            const safeLog = (msg, type) => {
-                if (this.io) this.io.to(userId.toString()).emit('ai-decision-update', { confidence: confidencePct, message: msg, isAnalyzing: true });
-            };
-
-            const riskStatus = RiskManager.checkOperatingState(bot);
-            if (bot.aistate !== 'RUNNING' && riskStatus.action !== 'RESUME') return;
-
-            if (bot.ainorder > 0) {
-                const minProfitTarget = config.profitPercent || 1.2;
-                const currentProfit = ((price / bot.aippc) - 1) * 100;
-                const trailingPct = config.trailingPercent || 0.006;
-                const stopPrice = (bot.aihighestPrice || price) * (1 - trailingPct);
-
-                if (currentProfit >= minProfitTarget || price <= stopPrice) {
-                    return await this._manageTrailingStop(price, userId, bot, safeLog, config, currentProfit);
-                }
-            }
-
-            if (confidence >= userThreshold && bot.ainorder < maxOrders) {
-                const isDCA = bot.ainorder > 0;
-                const lastEntryPrice = parseFloat(bot.ailastEntryPrice || 0);
-                const shouldBuy = !isDCA || (price < lastEntryPrice * 0.99);
-
-                if (shouldBuy && riskStatus.canOperate) {
-                    await this._trade(userId, 'BUY', price, bot, safeLog, reason, maxOrders);
-                }
-            }
         } catch (error) {
-            console.error(`❌ AI Engine Error [User: ${userId}]:`, error);
+            console.error(`❌ AI Engine Critical Error [User: ${userId}]:`, error);
         }
     }
 
