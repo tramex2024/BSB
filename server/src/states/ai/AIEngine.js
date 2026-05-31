@@ -21,7 +21,11 @@ class AIEngine {
         if (!userId || !price || !context) return;
         
         try {
-            const { botState, marketContext, safeLog } = context;
+            const { botState, marketContext } = context;
+            
+            // Normalización de logger: prioriza safeLog, luego log, luego consola
+            const safeLog = context.safeLog || context.log || ((msg, type) => console.log(`[${type?.toUpperCase() || 'INFO'}] ${msg}`));
+
             const config = botState.config?.ai || {};
             const userThreshold = config.minConfidence || 0.20;
             const maxOrders = config.maxOrders || 3;
@@ -49,12 +53,12 @@ class AIEngine {
             }
 
             // 3.5 LOG DE MONITOREO (FORMATO OJO)
-if (botState.ainorder > 0) {
-    const pnl = (price * (botState.aiac || 0)) - ((botState.aiac || 0) * (botState.aippc || 0));
-    const profitPct = (((price / (botState.aippc || price)) - 1) * 100).toFixed(2);
-    
-    safeLog(`[AI-MONITOR] 👁️ BTC: ${price} | PPC: ${parseFloat(botState.aippc).toFixed(2)} (${profitPct}%) | Orders: ${botState.ainorder} | PNL: ${pnl.toFixed(2)} USDT`, 'info');
-}
+            if (botState.ainorder > 0) {
+                const pnl = (price * (botState.aiac || 0)) - ((botState.aiac || 0) * (botState.aippc || 0));
+                const profitPct = (((price / (botState.aippc || price)) - 1) * 100).toFixed(2);
+                
+                safeLog(`[AI-MONITOR] 👁️ BTC: ${price} | PPC: ${parseFloat(botState.aippc || 0).toFixed(2)} (${profitPct}%) | Orders: ${botState.ainorder} | PNL: ${pnl.toFixed(2)} USDT`, 'info');
+            }
 
             // 4. EMISIÓN AL FRONTEND (CONTROL DE PARPADEO)
             if (this.io) {
