@@ -49,20 +49,19 @@ class AIEngine {
             // 4. EMISIÓN AL FRONTEND (CONTROL DE PARPADEO CON THROTTLING)
             // Solo emitimos si existe la instancia de io y controlamos la frecuencia
             if (this.io) {
-                // Inicializamos lastEmit si no existe
-                if (!this.lastEmit) this.lastEmit = 0;
-                
-                const now = Date.now();
-                if (now - this.lastEmit > 2000) { // Emisión limitada a cada 2 segundos
-                    this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
-                        aiConfidence: confidencePct || 0,
-                        aiAdx: parseFloat(adx || 0).toFixed(2),
-                        aiTrendLabel: signal || 'HOLD',
-                        price: price || 0,
-                        aiprofit: botState.ainorder > 0 ? (((price / botState.aippc) - 1) * 100).toFixed(2) : 0
-                    });
-                    this.lastEmit = now;
-                }
+        // Solo emitimos si detectamos que NO hay un polling de API activo
+        // O más simple: añadimos una bandera para reducir la carga
+        const now = Date.now();
+        if (now - this.lastEmit > 3000) { // Aumentamos a 3s para dar aire al API Polling
+            this.io.to(userId.toString()).emit('ai-pulse-broadcast', {
+                aiConfidence: confidencePct || 0,
+                aiAdx: parseFloat(adx || 0).toFixed(2),
+                aiTrendLabel: signal || 'HOLD',
+                price: price || 0,
+                aiprofit: botState.ainorder > 0 ? (((price / botState.aippc) - 1) * 100).toFixed(2) : 0
+            });
+            this.lastEmit = now;
+        }
             }
         } catch (error) {
             console.error(`❌ AI Engine Critical Error [User: ${userId}]:`, error);
