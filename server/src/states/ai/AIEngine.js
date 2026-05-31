@@ -48,7 +48,15 @@ class AIEngine {
                 }
             }
 
-            // 4. EMISIÓN AL FRONTEND
+            // 3.5 LOG DE MONITOREO (FORMATO OJO)
+if (botState.ainorder > 0) {
+    const pnl = (price * (botState.aiac || 0)) - ((botState.aiac || 0) * (botState.aippc || 0));
+    const profitPct = (((price / (botState.aippc || price)) - 1) * 100).toFixed(2);
+    
+    safeLog(`[AI-MONITOR] 👁️ BTC: ${price} | PPC: ${parseFloat(botState.aippc).toFixed(2)} (${profitPct}%) | Orders: ${botState.ainorder} | PNL: ${pnl.toFixed(2)} USDT`, 'info');
+}
+
+            // 4. EMISIÓN AL FRONTEND (CONTROL DE PARPADEO)
             if (this.io) {
                 const now = Date.now();
                 if (now - this.lastEmit > 3000) {
