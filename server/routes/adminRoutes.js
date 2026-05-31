@@ -155,5 +155,26 @@ module.exports = function(io) {
         }
     });
 
+    // --- RUTA 5: ACTUALIZAR DATOS DE AUTOBOT ---
+    router.post('/update-bot', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+        try {
+            const { userId, updatedData } = req.body;
+
+            // Buscamos y actualizamos el bot del usuario específico
+            const result = await Autobot.findOneAndUpdate(
+                { userId: userId },
+                { $set: updatedData },
+                { new: true }
+            );
+
+            if (!result) return res.status(404).json({ success: false, message: "Bot not found" });
+
+            res.status(200).json({ success: true, message: "Database updated successfully" });
+        } catch (error) {
+            console.error("❌ Admin Update Error:", error);
+            res.status(500).json({ success: false, message: "Error updating database" });
+        }
+    });
+
     return router;
 };

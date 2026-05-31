@@ -126,17 +126,35 @@ export async function initializeAdminView() {
     }
 
     if (btnUpdateDb) {
-        btnUpdateDb.onclick = async () => {
-            const jsonText = document.getElementById('json-display').innerText;
-            try {
-                const updatedData = JSON.parse(jsonText);
-                logStatus("💾 Updating database...", "info");
-                // Aquí llamaremos al endpoint de actualización en el siguiente paso
-                console.log("Datos listos para enviar:", updatedData);
-            } catch (e) {
-                logStatus("❌ Invalid JSON format! Check your syntax.", "error");
-            }
-        };
+        // Dentro de btnUpdateDb.onclick en admin.js:
+btnUpdateDb.onclick = async () => {
+    const jsonText = document.getElementById('json-display').innerText;
+    try {
+        const updatedData = JSON.parse(jsonText);
+        
+        // Enviamos al servidor
+        const response = await fetch(`${BACKEND_URL}/api/admin/update-bot`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}` 
+            },
+            body: JSON.stringify({ 
+                userId: updatedData.userId, // Usamos el ID que viene en el JSON
+                updatedData: updatedData 
+            })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            logStatus("✅ Database updated successfully!", "success");
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (e) {
+        logStatus("❌ Update Failed: " + e.message, "error");
+    }
+};
     }
 }
 
