@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const authMiddleware = require('../middleware/authMiddleware');
 const roleMiddleware = require('../middleware/roleMiddleware');
+const Autobot = require('../models/Autobot'); // Añade esta línea si no la tienes
 
 module.exports = function(io) {
 
@@ -107,6 +108,40 @@ module.exports = function(io) {
         } catch (error) {
             console.error("❌ Admin Notify Error:", error);
             res.status(500).json({ success: false, message: "Error processing notification" });
+        }
+    });
+
+    // --- RUTA 3: OBTENER DATOS DE AUTOBOT (DB EXPLORER) ---
+    router.get('/bot-data', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+        try {
+            const { email } = req.query;
+            if (!email) {
+                return res.status(400).json({ success: false, message: "Email is required" });
+            }
+
+            // 1. Buscar al usuario por email
+            const user = await User.findOne({ email: email.toLowerCase().trim() });
+            if (!user) {
+                return res.status(404).json({ success: false, message: "User not found" });
+            }
+
+            // 2. Buscar el Autobot vinculado usando el userId
+            // Nota: Como tu Autobot.js tiene userId, usamos ese campo para buscar
+            const botData = await Autobot.findOne({ userId: user._id });
+            
+            if (!botData) {
+                return res.status(404).json({ success: false, message: "No autobot found for this user" });
+            }
+
+            // 3. Devolver los datos
+            res.status(200).json({
+                success: true,
+                data: botData
+            });
+
+        } catch (error) {
+            console.error("❌ Admin DB Fetch Error:", error);
+            res.status(500).json({ success: false, message: "Error fetching bot data" });
         }
     });
 
