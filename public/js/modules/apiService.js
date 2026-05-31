@@ -6,6 +6,7 @@ import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
 export let isSavingConfig = false;
+export let socketIsActive = false;
 
 const MINIMOS = {
     amount: 6.0,
@@ -14,6 +15,10 @@ const MINIMOS = {
     profit: 0.1,
     step: 0
 };
+
+export function setSocketActive(status) {
+    socketIsActive = status;
+}
 
 async function privateFetch(endpoint, options = {}) {
     const token = localStorage.getItem('token');

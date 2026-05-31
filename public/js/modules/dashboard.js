@@ -13,6 +13,8 @@ import { renderEquityCurve, initializeChart } from './chart.js';
 // Instancias globales de gráficos
 let balanceChart = null; 
 
+let lastRenderedData = null;
+
 /**
  * Inicializa la vista del Dashboard
  */
@@ -241,18 +243,35 @@ function updateQuickStats(kpiData) {
 
 /**
  * FUNCIÓN ATÓMICA REUTILIZABLE: Renderiza los componentes vectoriales del Pulso IA
- * Se exporta para que socket.js la use, y se ejecuta internamente al restaurar caché.
+ * Blindaje: Compara el estado anterior para evitar parpadeos (flickering) por re-render.
  */
 export function renderAiPulseUI(aiData) {
-    const dbCircle = document.getElementById('ai-confidence-circle');
-    if (!dbCircle) return; 
+    if (!aiData) return;
 
-    const confidence = aiData.aiConfidence || 0;
-    const perimeter = 364.42;
-    const offset = perimeter - (confidence / 100) * perimeter;
-    
-    dbCircle.style.strokeDashoffset = offset;
-    
+    // 1. NORMALIZACIÓN DE DATOS PARA COMPARACIÓN
+    // Redondeamos para evitar que cambios ínfimos en decimales disparen un re-render
+    const cleanData = {
+        aiConfidence: Math.round(aiData.aiConfidence || 0),
+        aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
+        aiAdx: parseFloat(aiData.aiAdx || 0).toFixed(1),
+        aiStoch: parseFloat(aiData.aiStoch || 0).toFixed(1),
+        aiEngineMsg: aiData.aiEngineMsg || 'System Live'
+    };
+
+    // 2. BLINDAJE: Solo ejecutamos lógica si hay un cambio real
+    if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) {
+        return;
+    }
+    lastRenderedAiData = cleanData;
+
+    // 3. ACTUALIZACIÓN DE DOM
+    const dbCircle = document.getElementById('ai-confidence-circle');
+    if (dbCircle) {
+        const perimeter = 364.42;
+        const offset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
+        dbCircle.style.strokeDashoffset = offset;
+    }
+
     const confVal = document.getElementById('ai-confidence-value');
     const trendLabel = document.getElementById('ai-trend-label');
     const adxVal = document.getElementById('ai-adx-val');
@@ -261,11 +280,11 @@ export function renderAiPulseUI(aiData) {
     const stochBar = document.getElementById('ai-stoch-bar');
     const engineMsg = document.getElementById('ai-engine-msg');
 
-    if (confVal) confVal.innerText = `${confidence}%`;
-    if (trendLabel) trendLabel.innerText = aiData.aiTrendLabel || 'NEUTRAL';
-    if (adxVal) adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
-    if (stochVal) stochVal.innerText = Number(aiData.aiStoch || 0).toFixed(1);
-    if (adxBar) adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
-    if (stochBar) stochBar.style.width = `${Math.min(aiData.aiStoch || 0, 100)}%`;
-    if (engineMsg) engineMsg.innerText = aiData.aiEngineMsg || 'System Live';
+    if (confVal) confVal.innerText = `${cleanData.aiConfidence}%`;
+    if (trendLabel) trendLabel.innerText = cleanData.aiTrendLabel;
+    if (adxVal) adxVal.innerText = cleanData.aiAdx;
+    if (stochVal) stochVal.innerText = cleanData.aiStoch;
+    if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
+    if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
+    if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
 }
