@@ -1,54 +1,46 @@
 /**
- * BSB/server/src/au/engines/AIRiskManager.js
- * Risk and Capital Manager: Compound Interest Engine.
- * Armored Version: Floating point error prevention and normalization.
+ * BSB/server/src/managers/AIRiskManager.js
+ * Versión Híbrida: Validación de Saldo + Validación de Tendencia
  */
 
 class AIRiskManager {
     constructor() {
-        // 🟢 AUDIT: Minimum limit to avoid dust operations.
         this.MIN_TRADE_AMOUNT = 5.0; 
-        this.SAFETY_MARGIN = 0.02; // Increased slightly for safer JS rounding
+        this.SAFETY_MARGIN = 0.02; 
     }
 
     /**
-     * Determines if the bot has enough "fuel" (balance) to operate.
+     * Valida si la operación es segura basándose en balance y contexto de mercado
      */
-    checkOperatingState(bot) {
-    if (!bot) return { action: 'NONE', canOperate: false };
+    checkOperatingState(bot, marketContext = null) {
+        if (!bot) return { action: 'NONE', canOperate: false };
 
-    const currentBalance = parseFloat(bot.aibalance || 0);
-    
-    if (bot.aistate === 'PAUSED' && currentBalance >= (this.MIN_TRADE_AMOUNT + 0.5)) {
-        return { action: 'RESUME', canOperate: true };
-    }
-    
-    if (bot.aistate === 'RUNNING' && currentBalance < this.MIN_TRADE_AMOUNT) {
-        return { action: 'PAUSE', canOperate: false };
-    }
-    
-    // Si está RUNNING y tiene saldo, puede operar
-    return { 
-        action: 'CONTINUE', 
-        canOperate: bot.aistate === 'RUNNING' && currentBalance >= this.MIN_TRADE_AMOUNT 
-    };
-}
+        const currentBalance = parseFloat(bot.aibalance || 0);
+        
+        // 1. Validación de Saldo
+        const hasBalance = currentBalance >= this.MIN_TRADE_AMOUNT;
+        
+        // 2. Validación de Mercado (Nuevo: Si la señal es 'STRONG_SELL', bloqueamos nuevas compras)
+        const marketSafe = marketContext ? (marketContext.signal !== 'STRONG_SELL') : true;
 
-    /**
-     * Capital Management Strategy.
-     * 🟢 AUDIT: Implements full compound interest.
-     * Ensures a clean number is returned and restricts the amount to available balance.
-     */
+        if (bot.aistate === 'PAUSED' && hasBalance) {
+            return { action: 'RESUME', canOperate: true };
+        }
+        
+        if (bot.aistate === 'RUNNING' && (!hasBalance || !marketSafe)) {
+            return { action: 'PAUSE', canOperate: false };
+        }
+        
+        return { 
+            action: 'CONTINUE', 
+            canOperate: bot.aistate === 'RUNNING' && hasBalance && marketSafe
+        };
+    }
+
     calculateInvestment(bot) {
         const balance = parseFloat(bot.aibalance || 0);
-        
         if (balance < this.MIN_TRADE_AMOUNT) return 0;
-
-        // We return the balance minus a safety margin to prevent 
-        // "Insufficient Balance" errors due to JS decimal precision.
         const safeInvestment = balance - this.SAFETY_MARGIN;
-        
-        // Return a clean 2-decimal number
         return parseFloat(Math.max(0, safeInvestment).toFixed(2));
     }
 }
