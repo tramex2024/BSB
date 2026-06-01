@@ -429,7 +429,7 @@ main#main-content {
 
 /* Ocultamos el contenedor por defecto para evitar el parpadeo */
 #step-carousel-body {
-    display: none !important;
+    display: none;
 }
 
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */

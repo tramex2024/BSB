@@ -54,23 +54,21 @@ export function stopAutoCarousel() {
 }
 
 export function checkAndHideGuide(state) {
-    console.log("🔍 [DEBUG] Estado recibido en checkAndHideGuide:", state);
-    
     const config = state?.config || {};
-    // Vamos a imprimir qué valor tiene realmente la propiedad
-    console.log("🔍 [DEBUG] ¿Qué contiene config?:", config);
-    console.log("🔍 [DEBUG] Valor de apiKeysConfigured:", config.apiKeysConfigured);
-
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body');
     
+    console.log("🔍 [DEBUG] ¿Tiene APIs configuradas?:", hasApiKeys);
+
     if (carouselContainer) {
         if (hasApiKeys) {
+            // Si tiene llaves, ocultamos
             carouselContainer.style.display = 'none';
-            carouselContainer.classList.add('hidden');
         } else {
+            // Si NO tiene llaves, mostramos y eliminamos la clase hidden de Tailwind
             carouselContainer.style.display = 'block';
             carouselContainer.classList.remove('hidden');
+            console.log("✅ Carrusel activado por falta de APIs.");
         }
     }
 }
