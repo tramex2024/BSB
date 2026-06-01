@@ -78,6 +78,16 @@ export function initializeDashboardView(initialState) {
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
+
+    // Activar carrusel automático
+    startAutoCarousel();
+    
+    // Opcional: Detener el carrusel si el usuario pone el mouse encima (para que pueda leer)
+    const container = document.querySelector('.custom-scrollbar');
+    if (container) {
+        container.addEventListener('mouseenter', () => clearInterval(carouselInterval));
+        container.addEventListener('mouseleave', startAutoCarousel);
+    }
 }
 
 /**
@@ -326,4 +336,23 @@ function checkAndHideGuide(state) {
         console.log("⚠️ APIs no detectadas: Guía debería estar visible.");
         if (carouselContainer) carouselContainer.style.display = 'block';
     }
+}
+
+let carouselInterval;
+
+function startAutoCarousel() {
+    const container = document.querySelector('.custom-scrollbar');
+    if (!container) return;
+
+    // Detener si ya existe un intervalo previo para no duplicar
+    clearInterval(carouselInterval);
+
+    carouselInterval = setInterval(() => {
+        // Si el usuario ya está haciendo scroll manual, no lo molestamos
+        if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 10) {
+            container.scrollTo({ left: 0, behavior: 'smooth' }); // Vuelve al inicio
+        } else {
+            container.scrollBy({ left: 200, behavior: 'smooth' }); // Mueve 200px a la derecha
+        }
+    }, 4000); // Cambia cada 4 segundos
 }
