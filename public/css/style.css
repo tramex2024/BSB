@@ -427,6 +427,18 @@ main#main-content {
     overflow-y: auto;
 }
 
+#tradingview_container_id { /* Cambia por el ID que uses */
+    width: 100% !important;
+    height: 100% !important;
+    display: flex;
+}
+
+/* TradingView inyecta un iframe, hay que forzarlo */
+#tradingview_container_id iframe {
+    width: 100% !important;
+    height: 100% !important;
+}
+
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */
 @media (max-width: 640px) {
     /* 1. El header se queda arriba para utilidades (Logo/Ajustes) */
