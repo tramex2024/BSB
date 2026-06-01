@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Auditado y Refactorizado (Carrusel extraído a carousel.js)
+ * Estado: Auditado y Corregido - Integración Total de Memoria Caché de IA
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
@@ -9,10 +9,10 @@ import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
-// Importamos solo lo necesario del nuevo módulo
-import { checkAndHideGuide, initCarousel } from './carousel.js';
 
+// Instancias globales de gráficos
 let balanceChart = null; 
+let lastRenderedData = null;
 let lastRenderedAiData = null;
 
 /**
@@ -39,10 +39,7 @@ export function initializeDashboardView(initialState) {
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         
-        // CAMBIO: Aseguramos que se ejecute al final de la carga inicial
-        requestAnimationFrame(() => {
-            checkAndHideGuide(stateToUse);
-        }); 
+        checkAndHideGuide(stateToUse); 
 
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
@@ -53,15 +50,62 @@ export function initializeDashboardView(initialState) {
         }
     }
 
-    // 4. CONFIGURAR INTERACTIVIDAD
+    // 4. CONFIGURAR INTERACTIVIDAD Y BOTÓN DEL CARRUSEL
     setupActionButtons();
     setupAnalyticsFilters();
+
+    // Nueva conexión segura del botón (Reemplaza al onclick del HTML)
+    const btnToggle = document.getElementById('btn-toggle-carousel');
+    if (btnToggle) {
+        btnToggle.addEventListener('click', () => {
+            const body = document.getElementById('step-carousel-body');
+            const chevron = document.getElementById('carousel-chevron');
+            if (body && chevron) {
+                body.classList.toggle('hidden');
+                chevron.classList.toggle('rotate-180');
+            }
+        });
+    }
     
-    // Inicialización delegada al módulo carrusel.js
-    initCarousel();
+    // Configuración de la guía
+    const ENABLE_STEP_GUIDE = true; // Asegúrate de tenerlo en true para que sea interactivo
+    if (ENABLE_STEP_GUIDE) {
+        // setupCarouselListeners(); // Si esta función existía, puedes mantenerla o usar el listener de arriba
+    } else {
+        const carousel = document.querySelector('#step-carousel-body');
+        if (carousel) carousel.classList.add('hidden');
+    }
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
+
+    // Activar carrusel automático
+    startAutoCarousel();
+    
+    // Opcional: Detener el carrusel si el usuario pone el mouse encima (para que pueda leer)
+    const container = document.querySelector('.custom-scrollbar');
+    if (container) {
+        container.addEventListener('mouseenter', () => clearInterval(carouselInterval));
+        container.addEventListener('mouseleave', startAutoCarousel);
+    }
+}
+
+/**
+ * Gestión del Carrusel de Pasos
+ */
+function setupCarouselListeners() {
+    const btn = document.querySelector('[onclick="toggleStepCarousel()"]');
+    if (btn) {
+        btn.onclick = (e) => {
+            e.preventDefault();
+            const body = document.getElementById('step-carousel-body');
+            const chevron = document.getElementById('carousel-chevron');
+            if (body && chevron) {
+                body.classList.toggle('hidden');
+                chevron.classList.toggle('rotate-180');
+            }
+        };
+    }
 }
 
 /**
@@ -212,6 +256,7 @@ export function updateDistributionWidget(state) {
 }
 
 function updateQuickStats(kpiData) {
+    console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
     const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
     const totalCycles = parseInt(kpiData.totalCycles) || 0;
     const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
@@ -227,6 +272,7 @@ function updateQuickStats(kpiData) {
         profitElement.innerText = finalValue;
         profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
     }
+    console.groupEnd();
 }
 
 export function renderAiPulseUI(aiData) {
@@ -266,4 +312,47 @@ export function renderAiPulseUI(aiData) {
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
     if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
     if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
+}
+
+/**
+ * Verifica si el usuario ya tiene las llaves registradas para ocultar el carrusel
+ */
+function checkAndHideGuide(state) {
+    console.log("🔍 Diagnóstico Carrusel: Estado del estado:", state);
+    
+    // Accedemos a la configuración de forma más segura
+    const config = state?.config || {};
+    const hasApiKeys = config.apiKeysConfigured === true;
+    
+    console.log("🔍 ¿Tiene APIs configuradas?:", hasApiKeys);
+    
+    const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
+    
+    if (hasApiKeys) {
+        if (carouselContainer) carouselContainer.style.display = 'none';
+        console.log("✅ APIs detectadas: Guía oculta.");
+    } else {
+        // Si no tiene, forzamos que se muestre (si la variable de control lo permite)
+        console.log("⚠️ APIs no detectadas: Guía debería estar visible.");
+        if (carouselContainer) carouselContainer.style.display = 'block';
+    }
+}
+
+let carouselInterval;
+
+function startAutoCarousel() {
+    const container = document.querySelector('.custom-scrollbar');
+    if (!container) return;
+
+    // Detener si ya existe un intervalo previo para no duplicar
+    clearInterval(carouselInterval);
+
+    carouselInterval = setInterval(() => {
+        // Si el usuario ya está haciendo scroll manual, no lo molestamos
+        if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 10) {
+            container.scrollTo({ left: 0, behavior: 'smooth' }); // Vuelve al inicio
+        } else {
+            container.scrollBy({ left: 200, behavior: 'smooth' }); // Mueve 200px a la derecha
+        }
+    }, 4000); // Cambia cada 4 segundos
 }
