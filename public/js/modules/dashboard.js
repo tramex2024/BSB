@@ -1,20 +1,26 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Refactorizado - Integración Delegada de Carousel
+ * Estado: Refactorizado - Lógica de Carrusel delegada a carousel.js
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
 import { currentBotState } from '../main.js'; 
+import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
-// --- IMPORTACIÓN DEL MÓDULO EXTERNO ---
-import { initCarousel, checkAndHideGuide, stopAutoCarousel } from './carousel.js';
+// --- IMPORTACIÓN DEL MÓDULO DELEGADO ---
+import { setupCarousel, startAutoCarousel, stopAutoCarousel, checkAndHideGuide } from './carousel.js';
 
+// Instancias globales de gráficos
 let balanceChart = null; 
+let lastRenderedData = null;
 let lastRenderedAiData = null;
 
+/**
+ * Inicializa la vista del Dashboard
+ */
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
@@ -29,19 +35,21 @@ export function initializeDashboardView(initialState) {
         initializeChart('tv-chart-container', stateToUse.symbol);
     }
 
-    // 3. ACTUALIZACIÓN DE UI INICIAL
+    // 3. ACTUALIZACIÓN DE UI INICIAL Y RECUPERACIÓN DE CACHÉ
     if (stateToUse) {
         updateBotUI(stateToUse);
         updatePnLBar('long', stateToUse.lprofit || 0);
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         
-        // --- DELEGACIÓN: Lógica de visibilidad movida a carousel.js ---
+        // Uso de la función importada
         checkAndHideGuide(stateToUse); 
 
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
+        // [MIGUARD] BLINDAJE DE PERSISTENCIA
         if (stateToUse.aiLastPulse) {
+            console.log("🧠 Memoria Recuperada: Pintando pulso de IA instantáneamente...");
             requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
         }
     }
@@ -49,25 +57,21 @@ export function initializeDashboardView(initialState) {
     // 4. CONFIGURAR INTERACTIVIDAD
     setupActionButtons();
     setupAnalyticsFilters();
-    
-    // --- DELEGACIÓN: Inicialización de carrusel movida a carousel.js ---
-    initCarousel();
+
+    // Inicialización del carrusel delegada
+    setupCarousel();
+    startAutoCarousel();
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
 }
 
 /**
- * IMPORTANTE: Función para limpiar el dashboard al salir
- * Debe ser invocada desde main.js al cambiar de pestaña
+ * Función para limpiar el dashboard al navegar fuera
  */
 export function cleanupDashboard() {
-    stopAutoCarousel(); // Limpieza del intervalo delegada
+    stopAutoCarousel();
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
-    if (balanceChart) {
-        balanceChart.destroy();
-        balanceChart = null;
-    }
 }
 
 /**
