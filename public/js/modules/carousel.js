@@ -2,36 +2,47 @@
  * carousel.js - Controlador especializado del carrusel
  */
 
+/**
+ * carousel.js - Controlador especializado (Versión Delegada)
+ */
+
 let carouselInterval = null;
-// Variable para controlar el estado visual: true = visible, false = oculto
-let isCarouselVisible = true; 
+let isCarouselVisible = true;
 
 export function initCarousel() {
-    const btnToggle = document.getElementById('btn-toggle-carousel');
-    const body = document.getElementById('step-carousel-body');
-    const chevron = document.getElementById('carousel-chevron');
+    // 1. ELIMINAR CUALQUIER LISTENER ANTIGUO para evitar duplicados
+    const oldBtn = document.getElementById('btn-toggle-carousel');
+    const newBtn = oldBtn ? oldBtn.cloneNode(true) : null;
+    if (oldBtn && newBtn) oldBtn.parentNode.replaceChild(newBtn, oldBtn);
 
-    if (btnToggle) {
-        btnToggle.addEventListener('click', () => {
+    // 2. DELEGACIÓN DE EVENTO: Escuchamos en el documento
+    // Esto funciona aunque el botón se cree después
+    document.addEventListener('click', function(event) {
+        if (event.target && (event.target.id === 'btn-toggle-carousel' || event.target.closest('#btn-toggle-carousel'))) {
+            const body = document.getElementById('step-carousel-body');
+            const chevron = document.getElementById('carousel-chevron');
+            
             if (!body) return;
 
-            // Invertimos el estado
             isCarouselVisible = !isCarouselVisible;
 
-            // Aplicamos la visibilidad
             if (isCarouselVisible) {
                 body.style.display = 'block';
                 body.classList.remove('hidden');
                 if (chevron) chevron.classList.remove('rotate-180');
-                startAutoCarousel(); // Reanudamos el auto-scroll
+                startAutoCarousel();
             } else {
                 body.style.display = 'none';
                 body.classList.add('hidden');
                 if (chevron) chevron.classList.add('rotate-180');
-                stopAutoCarousel(); // Pausamos el auto-scroll para ahorrar recursos
+                stopAutoCarousel();
             }
-        });
-    }
+        }
+    });
+
+    // 3. Inicio estándar
+    startAutoCarousel();
+}
 
     // Iniciamos por defecto
     startAutoCarousel();
