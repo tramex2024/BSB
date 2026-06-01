@@ -12,8 +12,8 @@ import { renderEquityCurve, initializeChart } from './chart.js';
 
 // Instancias globales de gráficos
 let balanceChart = null; 
-
 let lastRenderedData = null;
+let lastRenderedAiData = null;
 
 /**
  * Inicializa la vista del Dashboard
@@ -40,22 +40,38 @@ export function initializeDashboardView(initialState) {
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
-        // [MIGUARD] BLINDAJE DE PERSISTENCIA: Recuperación del pulso neural al cambiar de pestañas
+        // [MIGUARD] BLINDAJE DE PERSISTENCIA
         if (stateToUse.aiLastPulse) {
             console.log("🧠 Memoria Recuperada: Pintando pulso de IA instantáneamente...");
-            // Buscamos dinámicamente si la UI de renderizado está disponible en el DOM
-            requestAnimationFrame(() => {
-                renderAiPulseUI(stateToUse.aiLastPulse);
-            });
+            requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
         }
     }
 
-    // 4. CONFIGURAR INTERACTIVIDAD (Solo analítica e inputs)
+    // 4. CONFIGURAR INTERACTIVIDAD
     setupActionButtons();
     setupAnalyticsFilters();
+    setupCarouselListeners(); 
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
+}
+
+/**
+ * Gestión del Carrusel de Pasos
+ */
+function setupCarouselListeners() {
+    const btn = document.querySelector('[onclick="toggleStepCarousel()"]');
+    if (btn) {
+        btn.onclick = (e) => {
+            e.preventDefault();
+            const body = document.getElementById('step-carousel-body');
+            const chevron = document.getElementById('carousel-chevron');
+            if (body && chevron) {
+                body.classList.toggle('hidden');
+                chevron.classList.toggle('rotate-180');
+            }
+        };
+    }
 }
 
 /**
@@ -79,18 +95,15 @@ async function refreshAnalytics() {
             })
         ]);
 
-        // 1. Renderizar Gráfico
         if (curveRes?.success) {
             requestAnimationFrame(() => renderEquityCurve(curveRes.data));
         }
 
-        // 2. Sincronizar Ciclos
         if (cyclesRes && cyclesRes.length > 0) {
             Metrics.setAnalyticsData(cyclesRes);
             addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
         }
 
-        // 3. Actualizar Profit/H y KPIs de manera segura
         if (kpiRes && kpiRes.success) {
             updateQuickStats(kpiRes.data || kpiRes);
         }
@@ -101,18 +114,12 @@ async function refreshAnalytics() {
     }
 }
 
-/**
- * handleMetricsUpdate
- */
 function handleMetricsUpdate(e) {
     if (e.detail && e.detail.points) {
         requestAnimationFrame(() => renderEquityCurve(e.detail.points));
     }
 }
 
-/**
- * Configuración de botones y inputs
- */
 function setupActionButtons() {
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
@@ -181,10 +188,6 @@ export function updatePnLBar(id, pnlValue) {
     if (!bar) return;
 
     const pnl = parseFloat(pnlValue) || 0;
-    
-    // CORRECCIÓN: Ajustamos el factor de escala. 
-    // Si tu ganancia es del 1% (0.01), multiplicamos por 5000 para que sea visible (50% de la barra).
-    // Ajusta el divisor '0.5' según qué tan rápido quieras que la barra llene el espacio.
     const sensitivity = 0.5; 
     const visualSize = Math.min(Math.abs(pnl) * (50 / sensitivity), 50);
 
@@ -220,18 +223,15 @@ export function updateDistributionWidget(state) {
 
 function updateQuickStats(kpiData) {
     console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
-    
     const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
     const totalCycles = parseInt(kpiData.totalCycles) || 0;
     const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
     const totalTimeHours = avgHours * totalCycles;
-    
     let profitPerDay = 0;
     if (totalTimeHours > 0) {
         const profitPerHour = totalProfit / totalTimeHours;
         profitPerDay = profitPerHour * 24;
     }
-
     const profitElement = document.getElementById('cycle-efficiency');
     if (profitElement) {
         const finalValue = `$${profitPerDay.toFixed(4)}/d`;
@@ -241,15 +241,8 @@ function updateQuickStats(kpiData) {
     console.groupEnd();
 }
 
-/**
- * FUNCIÓN ATÓMICA REUTILIZABLE: Renderiza los componentes vectoriales del Pulso IA
- * Blindaje: Compara el estado anterior para evitar parpadeos (flickering) por re-render.
- */
 export function renderAiPulseUI(aiData) {
     if (!aiData) return;
-
-    // 1. NORMALIZACIÓN DE DATOS PARA COMPARACIÓN
-    // Redondeamos para evitar que cambios ínfimos en decimales disparen un re-render
     const cleanData = {
         aiConfidence: Math.round(aiData.aiConfidence || 0),
         aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
@@ -258,13 +251,11 @@ export function renderAiPulseUI(aiData) {
         aiEngineMsg: aiData.aiEngineMsg || 'System Live'
     };
 
-    // 2. BLINDAJE: Solo ejecutamos lógica si hay un cambio real
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) {
         return;
     }
     lastRenderedAiData = cleanData;
 
-    // 3. ACTUALIZACIÓN DE DOM
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
