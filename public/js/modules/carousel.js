@@ -44,17 +44,20 @@ export function initCarousel() {
     startAutoCarousel();
 }
 
-    // Iniciamos por defecto
-    startAutoCarousel();
-
+    // Aseguramos limpieza antes de empezar
+function startAutoCarousel() {
     const container = document.querySelector('.custom-scrollbar');
-    if (container) {
-        container.addEventListener('mouseenter', stopAutoCarousel);
-        container.addEventListener('mouseleave', () => {
-            // Solo reanudamos si está visible
-            if (isCarouselVisible) startAutoCarousel();
-        });
-    }
+    if (!container) return;
+
+    // LIMPIEZA CRÍTICA: Evita acumulaciones al cambiar de tabs
+    if (window.carouselInterval) clearInterval(window.carouselInterval);
+    
+    // Reset visual
+    container.scrollTo({ left: 0, behavior: 'auto' });
+
+    window.carouselInterval = setInterval(() => {
+        // Lógica de movimiento...
+    }, 4000);
 }
 
 export function startAutoCarousel() {
