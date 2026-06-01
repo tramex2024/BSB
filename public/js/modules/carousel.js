@@ -50,15 +50,16 @@ export function stopAutoCarousel() {
 export function checkAndHideGuide(state) {
     const config = state?.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
-    const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
+    const carouselContainer = document.querySelector('#step-carousel-body');
     
     if (carouselContainer) {
-        // FORZAMOS el estilo para asegurar que se oculte desde el segundo 0
-        carouselContainer.style.display = hasApiKeys ? 'none' : 'block';
-        if (hasApiKeys) {
-            carouselContainer.classList.add('hidden');
-        } else {
+        // Si NO tiene llaves, lo mostramos. Si tiene, lo mantenemos oculto (el CSS ya lo hizo).
+        if (!hasApiKeys) {
+            carouselContainer.style.display = 'block'; 
             carouselContainer.classList.remove('hidden');
+        } else {
+            carouselContainer.style.display = 'none';
+            carouselContainer.classList.add('hidden');
         }
     }
 }

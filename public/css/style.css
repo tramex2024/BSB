@@ -427,6 +427,11 @@ main#main-content {
     overflow-y: auto;
 }
 
+/* Ocultamos el contenedor por defecto para evitar el parpadeo */
+#step-carousel-body {
+    display: none !important;
+}
+
 /* --- AJUSTE PARA MÓVIL: SOLO EL MENÚ BAJA (MODO APP CON ICONOS) --- */
 @media (max-width: 640px) {
     /* 1. El header se queda arriba para utilidades (Logo/Ajustes) */
