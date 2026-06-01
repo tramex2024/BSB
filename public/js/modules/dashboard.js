@@ -39,8 +39,10 @@ export function initializeDashboardView(initialState) {
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         
-        // Llamada al módulo externo
-        checkAndHideGuide(stateToUse); 
+        // CAMBIO: Aseguramos que se ejecute al final de la carga inicial
+        requestAnimationFrame(() => {
+            checkAndHideGuide(stateToUse);
+        }); 
 
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
