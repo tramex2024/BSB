@@ -302,13 +302,22 @@ export function renderAiPulseUI(aiData) {
  * Verifica si el usuario ya tiene las llaves registradas para ocultar el carrusel
  */
 function checkAndHideGuide(state) {
-    // Suponiendo que tu estado tiene un campo para validar las llaves
-    const hasApiKeys = state?.config?.apiKeysConfigured === true; 
+    console.log("🔍 Diagnóstico Carrusel: Estado del estado:", state);
+    
+    // Accedemos a la configuración de forma más segura
+    const config = state?.config || {};
+    const hasApiKeys = config.apiKeysConfigured === true;
+    
+    console.log("🔍 ¿Tiene APIs configuradas?:", hasApiKeys);
+    
+    const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
     
     if (hasApiKeys) {
-        const carousel = document.querySelector('#step-carousel-body');
-        const container = carousel?.parentElement;
-        if (container) container.style.display = 'none'; // Oculta todo el bloque
-        console.log("✅ APIs detectadas: Guía de inicio ocultada automáticamente.");
+        if (carouselContainer) carouselContainer.style.display = 'none';
+        console.log("✅ APIs detectadas: Guía oculta.");
+    } else {
+        // Si no tiene, forzamos que se muestre (si la variable de control lo permite)
+        console.log("⚠️ APIs no detectadas: Guía debería estar visible.");
+        if (carouselContainer) carouselContainer.style.display = 'block';
     }
 }
