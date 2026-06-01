@@ -2,31 +2,47 @@
  * carousel.js - Controlador especializado del carrusel
  */
 
-// Declaramos la variable global dentro del módulo para que sea accesible
 let carouselInterval = null;
+// Variable para controlar el estado visual: true = visible, false = oculto
+let isCarouselVisible = true; 
 
 export function initCarousel() {
-    // 1. Conectar botón de toggle
     const btnToggle = document.getElementById('btn-toggle-carousel');
+    const body = document.getElementById('step-carousel-body');
+    const chevron = document.getElementById('carousel-chevron');
+
     if (btnToggle) {
         btnToggle.addEventListener('click', () => {
-            const body = document.getElementById('step-carousel-body');
-            const chevron = document.getElementById('carousel-chevron');
-            if (body && chevron) {
-                body.classList.toggle('hidden');
-                chevron.classList.toggle('rotate-180');
+            if (!body) return;
+
+            // Invertimos el estado
+            isCarouselVisible = !isCarouselVisible;
+
+            // Aplicamos la visibilidad
+            if (isCarouselVisible) {
+                body.style.display = 'block';
+                body.classList.remove('hidden');
+                if (chevron) chevron.classList.remove('rotate-180');
+                startAutoCarousel(); // Reanudamos el auto-scroll
+            } else {
+                body.style.display = 'none';
+                body.classList.add('hidden');
+                if (chevron) chevron.classList.add('rotate-180');
+                stopAutoCarousel(); // Pausamos el auto-scroll para ahorrar recursos
             }
         });
     }
 
-    // 2. Iniciar auto-scroll
+    // Iniciamos por defecto
     startAutoCarousel();
 
-    // 3. Pausar en hover
     const container = document.querySelector('.custom-scrollbar');
     if (container) {
         container.addEventListener('mouseenter', stopAutoCarousel);
-        container.addEventListener('mouseleave', startAutoCarousel);
+        container.addEventListener('mouseleave', () => {
+            // Solo reanudamos si está visible
+            if (isCarouselVisible) startAutoCarousel();
+        });
     }
 }
 
@@ -34,7 +50,6 @@ export function startAutoCarousel() {
     const container = document.querySelector('.custom-scrollbar');
     if (!container) return;
 
-    // Limpiamos cualquier intervalo previo usando la variable declarada arriba
     stopAutoCarousel(); 
 
     carouselInterval = setInterval(() => {
@@ -53,22 +68,16 @@ export function stopAutoCarousel() {
     }
 }
 
+// Mantenemos esta función para que el Dashboard la use cuando decida ocultar
+// automáticamente basándose en la configuración de APIs
 export function checkAndHideGuide(state) {
     const config = state?.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body');
     
-    console.log("🔍 [DEBUG] ¿Tiene APIs configuradas?:", hasApiKeys);
-
-    if (carouselContainer) {
-        if (hasApiKeys) {
-            // Si tiene llaves, ocultamos
-            carouselContainer.style.display = 'none';
-        } else {
-            // Si NO tiene llaves, mostramos y eliminamos la clase hidden de Tailwind
-            carouselContainer.style.display = 'block';
-            carouselContainer.classList.remove('hidden');
-            console.log("✅ Carrusel activado por falta de APIs.");
-        }
+    if (carouselContainer && hasApiKeys) {
+        carouselContainer.style.display = 'none';
+        carouselContainer.classList.add('hidden');
+        isCarouselVisible = false; // Sincronizamos nuestro estado
     }
 }
