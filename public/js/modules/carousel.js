@@ -2,6 +2,9 @@
  * carousel.js - Controlador especializado del carrusel
  */
 
+// Declaramos la variable global dentro del módulo para que sea accesible
+let carouselInterval = null;
+
 export function initCarousel() {
     // 1. Conectar botón de toggle
     const btnToggle = document.getElementById('btn-toggle-carousel');
@@ -31,7 +34,8 @@ export function startAutoCarousel() {
     const container = document.querySelector('.custom-scrollbar');
     if (!container) return;
 
-    stopAutoCarousel(); // Limpiar previo
+    // Limpiamos cualquier intervalo previo usando la variable declarada arriba
+    stopAutoCarousel(); 
 
     carouselInterval = setInterval(() => {
         if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 10) {
@@ -43,23 +47,25 @@ export function startAutoCarousel() {
 }
 
 export function stopAutoCarousel() {
-    if (carouselInterval) clearInterval(carouselInterval);
+    if (carouselInterval) {
+        clearInterval(carouselInterval);
+        carouselInterval = null;
+    }
 }
 
-// Nueva versión robusta de checkAndHideGuide
 export function checkAndHideGuide(state) {
     const config = state?.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body');
     
     if (carouselContainer) {
-        // Si NO tiene llaves, lo mostramos. Si tiene, lo mantenemos oculto (el CSS ya lo hizo).
-        if (!hasApiKeys) {
-            carouselContainer.style.display = 'block'; 
-            carouselContainer.classList.remove('hidden');
-        } else {
+        // Usamos display none para asegurar que desaparezca
+        if (hasApiKeys) {
             carouselContainer.style.display = 'none';
             carouselContainer.classList.add('hidden');
+        } else {
+            carouselContainer.style.display = 'block';
+            carouselContainer.classList.remove('hidden');
         }
     }
 }
