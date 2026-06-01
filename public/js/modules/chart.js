@@ -28,6 +28,8 @@ export function initializeChart(containerId, symbol) {
         "symbol": `BITMART:${symbol}`,
         "interval": savedInterval,
         "autosize": true,
+        "width": "100%",  // Forzamos el ancho
+        "height": "100%", // Forzamos el alto
         "theme": "dark",
         "style": "1",
         "timezone": "Etc/UTC",
