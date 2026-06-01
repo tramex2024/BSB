@@ -1,8 +1,6 @@
 /**
- * carousel.js - Controlador especializado del carrusel de inicio
+ * carousel.js - Controlador especializado del carrusel
  */
-
-let carouselInterval = null;
 
 export function initCarousel() {
     // 1. Conectar botón de toggle
@@ -48,12 +46,19 @@ export function stopAutoCarousel() {
     if (carouselInterval) clearInterval(carouselInterval);
 }
 
+// Nueva versión robusta de checkAndHideGuide
 export function checkAndHideGuide(state) {
     const config = state?.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
     
     if (carouselContainer) {
+        // FORZAMOS el estilo para asegurar que se oculte desde el segundo 0
         carouselContainer.style.display = hasApiKeys ? 'none' : 'block';
+        if (hasApiKeys) {
+            carouselContainer.classList.add('hidden');
+        } else {
+            carouselContainer.classList.remove('hidden');
+        }
     }
 }
