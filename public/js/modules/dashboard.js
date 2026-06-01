@@ -22,6 +22,9 @@ export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
 
+    // Variable de control: cambiar a 'true' para forzar la visibilidad o lógica de ocultado automático
+    const ENABLE_STEP_GUIDE = false;
+
     // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
@@ -33,12 +36,16 @@ export function initializeDashboardView(initialState) {
     }
 
     // 3. ACTUALIZACIÓN DE UI INICIAL Y RECUPERACIÓN DE CACHÉ
-    if (stateToUse) {
-        updateBotUI(stateToUse);
-        updatePnLBar('long', stateToUse.lprofit || 0);
-        updatePnLBar('short', stateToUse.sprofit || 0);
-        updatePnLBar('ai', stateToUse.aiprofit || 0);
-        setTimeout(() => updateDistributionWidget(stateToUse), 150);
+if (stateToUse) {
+    updateBotUI(stateToUse);
+    updatePnLBar('long', stateToUse.lprofit || 0);
+    updatePnLBar('short', stateToUse.sprofit || 0);
+    updatePnLBar('ai', stateToUse.aiprofit || 0);
+    
+    // Nueva verificación de seguridad para el carrusel
+    checkAndHideGuide(stateToUse); 
+
+    setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
         // [MIGUARD] BLINDAJE DE PERSISTENCIA
         if (stateToUse.aiLastPulse) {
@@ -47,10 +54,21 @@ export function initializeDashboardView(initialState) {
         }
     }
 
-    // 4. CONFIGURAR INTERACTIVIDAD
-    setupActionButtons();
-    setupAnalyticsFilters();
-    setupCarouselListeners(); 
+    // ... dentro de initializeDashboardView ...
+
+// 4. CONFIGURAR INTERACTIVIDAD
+setupActionButtons();
+setupAnalyticsFilters();
+
+// Implementación controlada por variable
+if (ENABLE_STEP_GUIDE) {
+    setupCarouselListeners();
+} else {
+    // Si está en false, nos aseguramos de que el elemento esté oculto por seguridad
+    const carousel = document.querySelector('#step-carousel-body');
+    if (carousel) carousel.classList.add('hidden');
+    console.log("🛠️ Guía de inicio: En modo de espera (disabled)");
+}
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
@@ -278,4 +296,19 @@ export function renderAiPulseUI(aiData) {
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
     if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
     if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
+}
+
+/**
+ * Verifica si el usuario ya tiene las llaves registradas para ocultar el carrusel
+ */
+function checkAndHideGuide(state) {
+    // Suponiendo que tu estado tiene un campo para validar las llaves
+    const hasApiKeys = state?.config?.apiKeysConfigured === true; 
+    
+    if (hasApiKeys) {
+        const carousel = document.querySelector('#step-carousel-body');
+        const container = carousel?.parentElement;
+        if (container) container.style.display = 'none'; // Oculta todo el bloque
+        console.log("✅ APIs detectadas: Guía de inicio ocultada automáticamente.");
+    }
 }

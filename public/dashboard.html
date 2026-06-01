@@ -1,27 +1,31 @@
 <div class="w-full bg-gray-800 border border-gray-700 rounded-xl overflow-hidden mb-3 animate-fadeIn">
     <button onclick="toggleStepCarousel()" class="w-full flex justify-between items-center p-3 hover:bg-gray-750 transition-colors">
         <span class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-2">
-            <i class="fas fa-info-circle"></i> How to start
+            <i class="fas fa-info-circle"></i> Quick Start Guide
         </span>
         <i id="carousel-chevron" class="fas fa-chevron-up text-[10px] text-gray-500 transition-transform"></i>
     </button>
 
     <div id="step-carousel-body" class="p-3 pt-0 border-t border-gray-700">
         <div class="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
-            <div class="flex-shrink-0 w-[180px] bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                <div class="text-indigo-400 mb-1"><i class="fas fa-wallet"></i></div>
-                <h4 class="text-[9px] font-bold text-white uppercase">1. Verifica Fondos</h4>
-                <p class="text-[8px] text-gray-500 mt-1">Asegúrate de tener USDT y BTC disponibles en tu wallet.</p>
+            <div class="flex-shrink-0 w-[200px] bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
+                <div class="text-indigo-400 mb-2"><i class="fas fa-user-plus"></i></div>
+                <h4 class="text-[9px] font-bold text-white uppercase">1. BitMart Account</h4>
+                <p class="text-[8px] text-gray-400 mt-1 mb-2">Create account & get 20% discount:</p>
+                <a href="https://www.bitmart.com/en-US/invite/VuMvJK" target="_blank" class="text-[9px] text-emerald-500 font-bold hover:underline">Register Here</a>
+                <p class="text-[8px] text-gray-500 mt-1">Complete KYC & deposit assets.</p>
             </div>
-            <div class="flex-shrink-0 w-[180px] bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                <div class="text-emerald-400 mb-1"><i class="fas fa-cogs"></i></div>
-                <h4 class="text-[9px] font-bold text-white uppercase">2. Configura Bots</h4>
-                <p class="text-[8px] text-gray-500 mt-1">Ajusta el monto inicial y porcentaje de estrategia en Master Config.</p>
+            <div class="flex-shrink-0 w-[200px] bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
+                <div class="text-emerald-400 mb-2"><i class="fas fa-key"></i></div>
+                <h4 class="text-[9px] font-bold text-white uppercase">2. Connection Setup</h4>
+                <p class="text-[8px] text-gray-400 mt-1">Create API Keys (Spot Trade only).</p>
+                <p class="text-[8px] text-gray-500 mt-1">Register keys in BSB (Key Icon) and verify balance synchronization.</p>
             </div>
-            <div class="flex-shrink-0 w-[180px] bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                <div class="text-purple-400 mb-1"><i class="fas fa-robot"></i></div>
-                <h4 class="text-[9px] font-bold text-white uppercase">3. Activa AI/Manual</h4>
-                <p class="text-[8px] text-gray-500 mt-1">Presiona "AI" o inicia los bots manuales Long/Short.</p>
+            <div class="flex-shrink-0 w-[200px] bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
+                <div class="text-purple-400 mb-2"><i class="fas fa-robot"></i></div>
+                <h4 class="text-[9px] font-bold text-white uppercase">3. Bot Configuration</h4>
+                <p class="text-[8px] text-gray-400 mt-1">Set amounts (Min. $378 recommended).</p>
+                <p class="text-[8px] text-gray-500 mt-1">Activate Long, Short, or AI bots to start generating profit.</p>
             </div>
         </div>
     </div>
