@@ -54,27 +54,23 @@ export function stopAutoCarousel() {
 }
 
 export function checkAndHideGuide(state) {
-    // Si no hay estado, por defecto mostramos el carrusel para no romper la UI
-    if (!state) {
-        console.warn("⚠️ No hay estado, mostrando carrusel por defecto.");
-        return;
-    }
+    console.log("🔍 [DEBUG] Estado recibido en checkAndHideGuide:", state);
+    
+    const config = state?.config || {};
+    // Vamos a imprimir qué valor tiene realmente la propiedad
+    console.log("🔍 [DEBUG] ¿Qué contiene config?:", config);
+    console.log("🔍 [DEBUG] Valor de apiKeysConfigured:", config.apiKeysConfigured);
 
-    const config = state.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body');
-
-    console.log("🔍 Diagnóstico Carrusel: apiKeysConfigured =", hasApiKeys);
-
+    
     if (carouselContainer) {
         if (hasApiKeys) {
             carouselContainer.style.display = 'none';
             carouselContainer.classList.add('hidden');
         } else {
-            // FORZAMOS el display block
             carouselContainer.style.display = 'block';
             carouselContainer.classList.remove('hidden');
-            console.log("✅ Carrusel forzado a visible.");
         }
     }
 }
