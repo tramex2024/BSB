@@ -22,9 +22,6 @@ export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
 
-    // Variable de control: cambiar a 'true' para forzar la visibilidad o lógica de ocultado automático
-    const ENABLE_STEP_GUIDE = false;
-
     // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
@@ -36,16 +33,15 @@ export function initializeDashboardView(initialState) {
     }
 
     // 3. ACTUALIZACIÓN DE UI INICIAL Y RECUPERACIÓN DE CACHÉ
-if (stateToUse) {
-    updateBotUI(stateToUse);
-    updatePnLBar('long', stateToUse.lprofit || 0);
-    updatePnLBar('short', stateToUse.sprofit || 0);
-    updatePnLBar('ai', stateToUse.aiprofit || 0);
-    
-    // Nueva verificación de seguridad para el carrusel
-    checkAndHideGuide(stateToUse); 
+    if (stateToUse) {
+        updateBotUI(stateToUse);
+        updatePnLBar('long', stateToUse.lprofit || 0);
+        updatePnLBar('short', stateToUse.sprofit || 0);
+        updatePnLBar('ai', stateToUse.aiprofit || 0);
+        
+        checkAndHideGuide(stateToUse); 
 
-    setTimeout(() => updateDistributionWidget(stateToUse), 150);
+        setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
         // [MIGUARD] BLINDAJE DE PERSISTENCIA
         if (stateToUse.aiLastPulse) {
@@ -54,21 +50,31 @@ if (stateToUse) {
         }
     }
 
-    // ... dentro de initializeDashboardView ...
+    // 4. CONFIGURAR INTERACTIVIDAD Y BOTÓN DEL CARRUSEL
+    setupActionButtons();
+    setupAnalyticsFilters();
 
-// 4. CONFIGURAR INTERACTIVIDAD
-setupActionButtons();
-setupAnalyticsFilters();
-
-// Implementación controlada por variable
-if (ENABLE_STEP_GUIDE) {
-    setupCarouselListeners();
-} else {
-    // Si está en false, nos aseguramos de que el elemento esté oculto por seguridad
-    const carousel = document.querySelector('#step-carousel-body');
-    if (carousel) carousel.classList.add('hidden');
-    console.log("🛠️ Guía de inicio: En modo de espera (disabled)");
-}
+    // Nueva conexión segura del botón (Reemplaza al onclick del HTML)
+    const btnToggle = document.getElementById('btn-toggle-carousel');
+    if (btnToggle) {
+        btnToggle.addEventListener('click', () => {
+            const body = document.getElementById('step-carousel-body');
+            const chevron = document.getElementById('carousel-chevron');
+            if (body && chevron) {
+                body.classList.toggle('hidden');
+                chevron.classList.toggle('rotate-180');
+            }
+        });
+    }
+    
+    // Configuración de la guía
+    const ENABLE_STEP_GUIDE = true; // Asegúrate de tenerlo en true para que sea interactivo
+    if (ENABLE_STEP_GUIDE) {
+        // setupCarouselListeners(); // Si esta función existía, puedes mantenerla o usar el listener de arriba
+    } else {
+        const carousel = document.querySelector('#step-carousel-body');
+        if (carousel) carousel.classList.add('hidden');
+    }
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
