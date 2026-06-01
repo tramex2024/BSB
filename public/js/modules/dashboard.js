@@ -9,7 +9,7 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
-// --- IMPORTACIÓN DEL NUEVO MÓDULO ---
+// --- IMPORTACIÓN DEL MÓDULO EXTERNO ---
 import { initCarousel, checkAndHideGuide, stopAutoCarousel } from './carousel.js';
 
 let balanceChart = null; 
@@ -36,7 +36,7 @@ export function initializeDashboardView(initialState) {
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         
-        // Delegamos la lógica de visibilidad de la guía
+        // --- DELEGACIÓN: Lógica de visibilidad movida a carousel.js ---
         checkAndHideGuide(stateToUse); 
 
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
@@ -50,7 +50,7 @@ export function initializeDashboardView(initialState) {
     setupActionButtons();
     setupAnalyticsFilters();
     
-    // --- NUEVA INICIALIZACIÓN DELEGADA ---
+    // --- DELEGACIÓN: Inicialización de carrusel movida a carousel.js ---
     initCarousel();
     
     // 5. CARGA DE DATOS HISTÓRICOS
@@ -62,7 +62,7 @@ export function initializeDashboardView(initialState) {
  * Debe ser invocada desde main.js al cambiar de pestaña
  */
 export function cleanupDashboard() {
-    stopAutoCarousel();
+    stopAutoCarousel(); // Limpieza del intervalo delegada
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     if (balanceChart) {
         balanceChart.destroy();
@@ -218,7 +218,6 @@ export function updateDistributionWidget(state) {
 }
 
 function updateQuickStats(kpiData) {
-    console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
     const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
     const totalCycles = parseInt(kpiData.totalCycles) || 0;
     const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
@@ -234,7 +233,6 @@ function updateQuickStats(kpiData) {
         profitElement.innerText = finalValue;
         profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
     }
-    console.groupEnd();
 }
 
 export function renderAiPulseUI(aiData) {
