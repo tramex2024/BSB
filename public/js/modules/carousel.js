@@ -54,18 +54,27 @@ export function stopAutoCarousel() {
 }
 
 export function checkAndHideGuide(state) {
-    const config = state?.config || {};
+    // Si no hay estado, por defecto mostramos el carrusel para no romper la UI
+    if (!state) {
+        console.warn("⚠️ No hay estado, mostrando carrusel por defecto.");
+        return;
+    }
+
+    const config = state.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body');
-    
+
+    console.log("🔍 Diagnóstico Carrusel: apiKeysConfigured =", hasApiKeys);
+
     if (carouselContainer) {
-        // Usamos display none para asegurar que desaparezca
         if (hasApiKeys) {
             carouselContainer.style.display = 'none';
             carouselContainer.classList.add('hidden');
         } else {
+            // FORZAMOS el display block
             carouselContainer.style.display = 'block';
             carouselContainer.classList.remove('hidden');
+            console.log("✅ Carrusel forzado a visible.");
         }
     }
 }
