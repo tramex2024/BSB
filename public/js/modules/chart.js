@@ -10,41 +10,39 @@ window.tvWidget = null;
  * Gráfico de TradingView (Precios en vivo)
  * Configura el widget principal para ver el mercado en tiempo real.
  */
+// Asegúrate de que esta lógica esté en tu export:
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // Solo inicializar si no existe, o forzar la limpieza si cambias de símbolo
-    if (window.tvWidget) {
-        // Si el símbolo es el mismo, no hagas nada; si cambió, remuévelo
-        if (window.tvWidget.options.symbol === `BITMART:${symbol}`) return;
-        window.tvWidget.remove();
-    }
+    // Limpieza total del contenedor antes de inyectar el nuevo widget
+    container.innerHTML = ''; 
 
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
     window.tvWidget = new TradingView.widget({
-        "container_id": containerId,
+        "container_id": containerId, // Esto inyecta el widget dentro del div
         "symbol": `BITMART:${symbol}`,
         "interval": savedInterval,
         "autosize": true,
-        "width": "100%",  // Forzamos el ancho
-        "height": "100%", // Forzamos el alto
         "theme": "dark",
         "style": "1",
         "timezone": "Etc/UTC",
         "locale": "es",
         "enable_publishing": false,
-        "allow_symbol_change": true, // Permite que el usuario cambie el par
-        "save_image": false,
-        "studies": [
-            "RSI@tv-basicstudies",
-            "BB@tv-basicstudies",
-            "MACD@tv-basicstudies"
-        ],
-        // Asegura que los datos sean en tiempo real
-        "datafeed_provider": "BITMART", 
+        "allow_symbol_change": true,
+        "datafeed_provider": "BITMART",
+        // FORZAR ALTURA DENTRO DEL WIDGET
+        "width": "100%",
+        "height": "100%",
         "loading_screen": { "backgroundColor": "#111827" }
+    });
+
+    window.tvWidget.onChartReady(() => {
+        // Corrección de background post-carga
+        window.tvWidget.applyOverrides({
+            "paneProperties.background": "#111827"
+        });
     });
 }
 
