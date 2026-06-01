@@ -1,23 +1,20 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Auditado y Corregido - Integración Total de Memoria Caché de IA
+ * Estado: Refactorizado - Integración Delegada de Carousel
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
 import { currentBotState } from '../main.js'; 
-import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 
-// Instancias globales de gráficos
+// --- IMPORTACIÓN DEL NUEVO MÓDULO ---
+import { initCarousel, checkAndHideGuide, stopAutoCarousel } from './carousel.js';
+
 let balanceChart = null; 
-let lastRenderedData = null;
 let lastRenderedAiData = null;
 
-/**
- * Inicializa la vista del Dashboard
- */
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
@@ -32,79 +29,44 @@ export function initializeDashboardView(initialState) {
         initializeChart('tv-chart-container', stateToUse.symbol);
     }
 
-    // 3. ACTUALIZACIÓN DE UI INICIAL Y RECUPERACIÓN DE CACHÉ
+    // 3. ACTUALIZACIÓN DE UI INICIAL
     if (stateToUse) {
         updateBotUI(stateToUse);
         updatePnLBar('long', stateToUse.lprofit || 0);
         updatePnLBar('short', stateToUse.sprofit || 0);
         updatePnLBar('ai', stateToUse.aiprofit || 0);
         
+        // Delegamos la lógica de visibilidad de la guía
         checkAndHideGuide(stateToUse); 
 
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
-        // [MIGUARD] BLINDAJE DE PERSISTENCIA
         if (stateToUse.aiLastPulse) {
-            console.log("🧠 Memoria Recuperada: Pintando pulso de IA instantáneamente...");
             requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
         }
     }
 
-    // 4. CONFIGURAR INTERACTIVIDAD Y BOTÓN DEL CARRUSEL
+    // 4. CONFIGURAR INTERACTIVIDAD
     setupActionButtons();
     setupAnalyticsFilters();
-
-    // Nueva conexión segura del botón (Reemplaza al onclick del HTML)
-    const btnToggle = document.getElementById('btn-toggle-carousel');
-    if (btnToggle) {
-        btnToggle.addEventListener('click', () => {
-            const body = document.getElementById('step-carousel-body');
-            const chevron = document.getElementById('carousel-chevron');
-            if (body && chevron) {
-                body.classList.toggle('hidden');
-                chevron.classList.toggle('rotate-180');
-            }
-        });
-    }
     
-    // Configuración de la guía
-    const ENABLE_STEP_GUIDE = true; // Asegúrate de tenerlo en true para que sea interactivo
-    if (ENABLE_STEP_GUIDE) {
-        // setupCarouselListeners(); // Si esta función existía, puedes mantenerla o usar el listener de arriba
-    } else {
-        const carousel = document.querySelector('#step-carousel-body');
-        if (carousel) carousel.classList.add('hidden');
-    }
+    // --- NUEVA INICIALIZACIÓN DELEGADA ---
+    initCarousel();
     
     // 5. CARGA DE DATOS HISTÓRICOS
     refreshAnalytics();
-
-    // Activar carrusel automático
-    startAutoCarousel();
-    
-    // Opcional: Detener el carrusel si el usuario pone el mouse encima (para que pueda leer)
-    const container = document.querySelector('.custom-scrollbar');
-    if (container) {
-        container.addEventListener('mouseenter', () => clearInterval(carouselInterval));
-        container.addEventListener('mouseleave', startAutoCarousel);
-    }
 }
 
 /**
- * Gestión del Carrusel de Pasos
+ * IMPORTANTE: Función para limpiar el dashboard al salir
+ * Debe ser invocada desde main.js al cambiar de pestaña
  */
-function setupCarouselListeners() {
-    const btn = document.querySelector('[onclick="toggleStepCarousel()"]');
-    if (btn) {
-        btn.onclick = (e) => {
-            e.preventDefault();
-            const body = document.getElementById('step-carousel-body');
-            const chevron = document.getElementById('carousel-chevron');
-            if (body && chevron) {
-                body.classList.toggle('hidden');
-                chevron.classList.toggle('rotate-180');
-            }
-        };
+export function cleanupDashboard() {
+    stopAutoCarousel();
+    window.removeEventListener('metricsUpdated', handleMetricsUpdate);
+    if (balanceChart) {
+        balanceChart.destroy();
+        balanceChart = null;
     }
 }
 
@@ -312,47 +274,4 @@ export function renderAiPulseUI(aiData) {
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
     if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
     if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
-}
-
-/**
- * Verifica si el usuario ya tiene las llaves registradas para ocultar el carrusel
- */
-function checkAndHideGuide(state) {
-    console.log("🔍 Diagnóstico Carrusel: Estado del estado:", state);
-    
-    // Accedemos a la configuración de forma más segura
-    const config = state?.config || {};
-    const hasApiKeys = config.apiKeysConfigured === true;
-    
-    console.log("🔍 ¿Tiene APIs configuradas?:", hasApiKeys);
-    
-    const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
-    
-    if (hasApiKeys) {
-        if (carouselContainer) carouselContainer.style.display = 'none';
-        console.log("✅ APIs detectadas: Guía oculta.");
-    } else {
-        // Si no tiene, forzamos que se muestre (si la variable de control lo permite)
-        console.log("⚠️ APIs no detectadas: Guía debería estar visible.");
-        if (carouselContainer) carouselContainer.style.display = 'block';
-    }
-}
-
-let carouselInterval;
-
-function startAutoCarousel() {
-    const container = document.querySelector('.custom-scrollbar');
-    if (!container) return;
-
-    // Detener si ya existe un intervalo previo para no duplicar
-    clearInterval(carouselInterval);
-
-    carouselInterval = setInterval(() => {
-        // Si el usuario ya está haciendo scroll manual, no lo molestamos
-        if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 10) {
-            container.scrollTo({ left: 0, behavior: 'smooth' }); // Vuelve al inicio
-        } else {
-            container.scrollBy({ left: 200, behavior: 'smooth' }); // Mueve 200px a la derecha
-        }
-    }, 4000); // Cambia cada 4 segundos
 }
