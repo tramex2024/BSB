@@ -177,6 +177,21 @@ document.addEventListener('change', async (e) => {
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. GESTIÓN DEL SPLASH SCREEN (Prioridad Visual)
+    const splash = document.getElementById('welcome-splash');
+    const closeSplash = document.getElementById('close-splash');
+
+    if (localStorage.getItem('splash-hidden') === 'true') {
+        if (splash) splash.remove();
+    } else {
+        closeSplash?.addEventListener('click', () => {
+            splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+            setTimeout(() => splash.remove(), 500);
+            localStorage.setItem('splash-hidden', 'true');
+        });
+    }
+
+    // 2. INICIALIZACIÓN DE LA APLICACIÓN
     applyRolePermissions();
     initializeGlobalButtonListeners();
 
@@ -186,10 +201,15 @@ document.addEventListener('DOMContentLoaded', () => {
         logStatus("Please sign in to access bot controls.", "warning");
     }
 
+    // 3. CARGA DE MÓDULOS Y VISTAS
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
+    
+    // Carga inicial del dashboard
     initializeTab('dashboard'); 
+    
+    // Servicios de soporte y utilidades
     initializeSupport();
     initializeSettings();
     initializeProfile();
