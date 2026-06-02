@@ -177,19 +177,21 @@ document.addEventListener('change', async (e) => {
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. GESTIÓN DEL SPLASH SCREEN (Prioridad Visual)
-    const splash = document.getElementById('welcome-splash');
-    const closeSplash = document.getElementById('close-splash');
+    // 1. GESTIÓN DEL SPLASH SCREEN
+const splash = document.getElementById('welcome-splash');
+const closeSplash = document.getElementById('close-splash');
 
-    if (localStorage.getItem('splash-hidden') === 'true') {
-        if (splash) splash.remove();
-    } else {
-        closeSplash?.addEventListener('click', () => {
-            splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
-            setTimeout(() => splash.remove(), 500);
-            localStorage.setItem('splash-hidden', 'true');
-        });
-    }
+// Usamos sessionStorage para que se resetee al cerrar la pestaña/navegador
+if (sessionStorage.getItem('splash-hidden') === 'true') {
+    if (splash) splash.remove();
+} else {
+    closeSplash?.addEventListener('click', () => {
+        splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+        setTimeout(() => splash.remove(), 500);
+        // Marcamos que ya se vio, pero solo por esta sesión
+        sessionStorage.setItem('splash-hidden', 'true');
+    });
+}
 
     // 2. INICIALIZACIÓN DE LA APLICACIÓN
     applyRolePermissions();
