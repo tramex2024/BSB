@@ -276,7 +276,10 @@ function updateQuickStats(kpiData) {
 }
 
 export function renderAiPulseUI(aiData) {
-    // 1. Preparar datos limpios (si aiData es null/undefined, usamos valores por defecto)
+    // 1. Si no hay datos, no hagas nada o mantén el último valor, no fuerces a 0
+    if (!aiData || typeof aiData.aiConfidence === 'undefined') return;
+
+    // 2. Preparar datos limpios (si aiData es null/undefined, usamos valores por defecto)
     const cleanData = {
         aiConfidence: Math.round(aiData?.aiConfidence || 0),
         aiTrendLabel: aiData?.aiTrendLabel || 'WAITING...',
@@ -285,13 +288,13 @@ export function renderAiPulseUI(aiData) {
         aiEngineMsg: aiData?.aiEngineMsg || 'Syncing data...'
     };
 
-    // 2. Evitar re-renderizado innecesario si los datos son idénticos
+    // 3. Evitar re-renderizado innecesario si los datos son idénticos
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) {
         return;
     }
     lastRenderedAiData = cleanData;
 
-    // 3. Obtención de elementos del DOM
+    // 4. Obtención de elementos del DOM
     const dbCircle = document.getElementById('ai-confidence-circle');
     const confVal = document.getElementById('ai-confidence-value');
     const trendLabel = document.getElementById('ai-trend-label');
@@ -301,7 +304,7 @@ export function renderAiPulseUI(aiData) {
     const stochBar = document.getElementById('ai-stoch-bar');
     const engineMsg = document.getElementById('ai-engine-msg');
 
-    // 4. Actualización del Círculo (UI Atómica)
+    // 5. Actualización del Círculo (UI Atómica)
     if (dbCircle) {
         const perimeter = 364.42;
         // Si cleanData.aiConfidence es 0, el offset será igual al perímetro (invisible)
@@ -309,7 +312,7 @@ export function renderAiPulseUI(aiData) {
         dbCircle.style.strokeDashoffset = offset;
     }
 
-    // 5. Actualización de textos y barras
+    // 6. Actualización de textos y barras
     if (confVal) confVal.innerText = `${cleanData.aiConfidence}%`;
     if (trendLabel) trendLabel.innerText = cleanData.aiTrendLabel;
     if (adxVal) adxVal.innerText = cleanData.aiAdx;
