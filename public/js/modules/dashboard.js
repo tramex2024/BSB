@@ -276,27 +276,23 @@ function updateQuickStats(kpiData) {
 }
 
 export function renderAiPulseUI(aiData) {
-    if (!aiData) return;
+    // 1. Preparar datos limpios (si aiData es null/undefined, usamos valores por defecto)
     const cleanData = {
-        aiConfidence: Math.round(aiData.aiConfidence || 0),
-        aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
-        aiAdx: parseFloat(aiData.aiAdx || 0).toFixed(1),
-        aiStoch: parseFloat(aiData.aiStoch || 0).toFixed(1),
-        aiEngineMsg: aiData.aiEngineMsg || 'System Live'
+        aiConfidence: Math.round(aiData?.aiConfidence || 0),
+        aiTrendLabel: aiData?.aiTrendLabel || 'WAITING...',
+        aiAdx: parseFloat(aiData?.aiAdx || 0).toFixed(1),
+        aiStoch: parseFloat(aiData?.aiStoch || 0).toFixed(1),
+        aiEngineMsg: aiData?.aiEngineMsg || 'Syncing data...'
     };
 
+    // 2. Evitar re-renderizado innecesario si los datos son idénticos
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) {
         return;
     }
     lastRenderedAiData = cleanData;
 
+    // 3. Obtención de elementos del DOM
     const dbCircle = document.getElementById('ai-confidence-circle');
-    if (dbCircle) {
-        const perimeter = 364.42;
-        const offset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
-        dbCircle.style.strokeDashoffset = offset;
-    }
-
     const confVal = document.getElementById('ai-confidence-value');
     const trendLabel = document.getElementById('ai-trend-label');
     const adxVal = document.getElementById('ai-adx-val');
@@ -305,12 +301,23 @@ export function renderAiPulseUI(aiData) {
     const stochBar = document.getElementById('ai-stoch-bar');
     const engineMsg = document.getElementById('ai-engine-msg');
 
+    // 4. Actualización del Círculo (UI Atómica)
+    if (dbCircle) {
+        const perimeter = 364.42;
+        // Si cleanData.aiConfidence es 0, el offset será igual al perímetro (invisible)
+        const offset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
+        dbCircle.style.strokeDashoffset = offset;
+    }
+
+    // 5. Actualización de textos y barras
     if (confVal) confVal.innerText = `${cleanData.aiConfidence}%`;
     if (trendLabel) trendLabel.innerText = cleanData.aiTrendLabel;
     if (adxVal) adxVal.innerText = cleanData.aiAdx;
     if (stochVal) stochVal.innerText = cleanData.aiStoch;
+    
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
     if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
+    
     if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
 }
 
