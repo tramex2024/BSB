@@ -276,12 +276,16 @@ function updateQuickStats(kpiData) {
 }
 
 export function renderAiPulseUI(aiData) {
-    // 1. Si no hay datos, no hagas nada o mantén el último valor, no fuerces a 0
-    if (!aiData || typeof aiData.aiConfidence === 'undefined') return;
+    // Si no tenemos datos válidos (confidence es nulo o indefinido), 
+    // NO pintamos nada. Mantenemos el estado anterior en el DOM.
+    if (!aiData || aiData.aiConfidence === undefined) {
+        console.warn("⚠️ Datos de IA incompletos recibidos, ignorando actualización para evitar parpadeo.");
+        return;
+    }
 
     // 2. Preparar datos limpios (si aiData es null/undefined, usamos valores por defecto)
     const cleanData = {
-        aiConfidence: Math.round(aiData?.aiConfidence || 0),
+        aiConfidence: Math.round(aiData.aiConfidence),
         aiTrendLabel: aiData?.aiTrendLabel || 'WAITING...',
         aiAdx: parseFloat(aiData?.aiAdx || 0).toFixed(1),
         aiStoch: parseFloat(aiData?.aiStoch || 0).toFixed(1),
