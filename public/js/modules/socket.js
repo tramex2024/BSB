@@ -84,7 +84,10 @@ export function initSocket() {
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
-        if (data?.price) {
+        // AUDITORÍA: LOG COMPLETO DEL PAQUETE MARKET DATA
+    console.log("🔍 AUDITORÍA MARKETDATA DETALLADA:", data);
+	
+	if (data?.price) {
             const newPrice = parseFloat(data.price);
             currentBotState.price = newPrice;
             
