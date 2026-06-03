@@ -109,10 +109,16 @@ export function initSocket() {
                 renderAiPulseUI(currentBotState.aiLastPulse);
             }*/
 
-	    if (data.aiPulse) {
+	    // CAMBIA ESTA PARTE:
+    if (data.aiPulse !== undefined) { // Cambiamos la condición
+        if (data.aiPulse !== null) { // Solo actualizamos si es un dato válido
             currentBotState.aiLastPulse = data.aiPulse;
             renderAiPulseUI(data.aiPulse);
+        } else {
+            console.warn("⚠️ Servidor envió pulso nulo, manteniendo estado anterior.");
+            // Si llega null, no hacemos nada. Mantenemos el estado que ya tiene currentBotState.
         }
+    }
 
             // LANZAMOS EL MANAGER: Él se encarga de las barras de PnL y todo lo demás
             updateBotUI(currentBotState); 
