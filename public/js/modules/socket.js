@@ -122,7 +122,9 @@ export function initSocket() {
 
     // Mantén este listener para conservar la compatibilidad si el motor neural emite de forma aislada
     socket.on('ai-pulse-broadcast', (data) => {
-        if (!data) return;
+        console.log("🚀 AUDITORÍA: Recibido ai-pulse-broadcast ->", data);
+
+	if (!data) return;
         currentBotState.aiLastPulse = data;
         renderAiPulseUI(data);
     });
