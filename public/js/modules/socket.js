@@ -100,25 +100,14 @@ export function initSocket() {
 
             // --- PERSISTENCIA Y RENDERIZADO INMEDIATO DE LA IA ---
             // Si el tick contiene el pulso neural del backend, lo salvamos en el estado de memoria global
-            /*if (data.aiPulse) {
+            if (data.aiPulse) {
                 currentBotState.aiLastPulse = data.aiPulse;
                 renderAiPulseUI(data.aiPulse);
             } else if (currentBotState.aiLastPulse) {
                 // EFECTO MEMORIA AL NAVEGAR: Si regresamos de otra pestaña y el tick actual no trae datos, 
                 // forzamos el renderizado usando la memoria caché global.
                 renderAiPulseUI(currentBotState.aiLastPulse);
-            }*/
-
-	    // CAMBIA ESTA PARTE:
-    if (data.aiPulse !== undefined) { // Cambiamos la condición
-        if (data.aiPulse !== null) { // Solo actualizamos si es un dato válido
-            currentBotState.aiLastPulse = data.aiPulse;
-            renderAiPulseUI(data.aiPulse);
-        } else {
-            console.warn("⚠️ Servidor envió pulso nulo, manteniendo estado anterior.");
-            // Si llega null, no hacemos nada. Mantenemos el estado que ya tiene currentBotState.
-        }
-    }
+            }
 
             // LANZAMOS EL MANAGER: Él se encarga de las barras de PnL y todo lo demás
             updateBotUI(currentBotState); 
