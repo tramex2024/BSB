@@ -1,6 +1,6 @@
 /**
  * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Auditado y Corregido - Integración Total de Memoria Caché de IA
+ * Estado: Auditado - Refactorización de Carrusel (Lógica movida a carousel.js)
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
@@ -9,11 +9,14 @@ import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
+// Módulo extraído
+import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
 
 // Instancias globales de gráficos
 let balanceChart = null; 
 let lastRenderedData = null;
 let lastRenderedAiData = null;
+let carouselInterval; // Mantenemos la variable aquí para no romper referencias externas si las hubiera
 
 /**
  * Inicializa la vista del Dashboard
@@ -54,7 +57,6 @@ export function initializeDashboardView(initialState) {
     setupActionButtons();
     setupAnalyticsFilters();
 
-    // Nueva conexión segura del botón (Reemplaza al onclick del HTML)
     const btnToggle = document.getElementById('btn-toggle-carousel');
     if (btnToggle) {
         btnToggle.addEventListener('click', () => {
@@ -68,10 +70,8 @@ export function initializeDashboardView(initialState) {
     }
     
     // Configuración de la guía
-    const ENABLE_STEP_GUIDE = true; // Asegúrate de tenerlo en true para que sea interactivo
-    if (ENABLE_STEP_GUIDE) {
-        // setupCarouselListeners(); // Si esta función existía, puedes mantenerla o usar el listener de arriba
-    } else {
+    const ENABLE_STEP_GUIDE = true; 
+    if (!ENABLE_STEP_GUIDE) {
         const carousel = document.querySelector('#step-carousel-body');
         if (carousel) carousel.classList.add('hidden');
     }
@@ -82,7 +82,6 @@ export function initializeDashboardView(initialState) {
     // Activar carrusel automático
     startAutoCarousel();
     
-    // Opcional: Detener el carrusel si el usuario pone el mouse encima (para que pueda leer)
     const container = document.querySelector('.custom-scrollbar');
     if (container) {
         container.addEventListener('mouseenter', () => clearInterval(carouselInterval));
@@ -90,31 +89,11 @@ export function initializeDashboardView(initialState) {
     }
 }
 
-/**
- * Gestión del Carrusel de Pasos
- */
-function setupCarouselListeners() {
-    const btn = document.querySelector('[onclick="toggleStepCarousel()"]');
-    if (btn) {
-        btn.onclick = (e) => {
-            e.preventDefault();
-            const body = document.getElementById('step-carousel-body');
-            const chevron = document.getElementById('carousel-chevron');
-            if (body && chevron) {
-                body.classList.toggle('hidden');
-                chevron.classList.toggle('rotate-180');
-            }
-        };
-    }
-}
+// --- MANTENEMOS TODAS LAS FUNCIONES ORIGINALES EXACTAS ---
 
-/**
- * refreshAnalytics (Versión Robusta)
- */
 async function refreshAnalytics() {
     try {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
-
         const [curveRes, cyclesRes, kpiRes] = await Promise.all([
             fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
             fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
@@ -129,19 +108,12 @@ async function refreshAnalytics() {
             })
         ]);
 
-        if (curveRes?.success) {
-            requestAnimationFrame(() => renderEquityCurve(curveRes.data));
-        }
-
+        if (curveRes?.success) requestAnimationFrame(() => renderEquityCurve(curveRes.data));
         if (cyclesRes && cyclesRes.length > 0) {
             Metrics.setAnalyticsData(cyclesRes);
             addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
         }
-
-        if (kpiRes && kpiRes.success) {
-            updateQuickStats(kpiRes.data || kpiRes);
-        }
-
+        if (kpiRes && kpiRes.success) updateQuickStats(kpiRes.data || kpiRes);
     } catch (e) {
         console.error("Dashboard Error:", e);
         addTerminalLog("ERROR SYNCING ANALYTICS", 'error');
@@ -149,9 +121,7 @@ async function refreshAnalytics() {
 }
 
 function handleMetricsUpdate(e) {
-    if (e.detail && e.detail.points) {
-        requestAnimationFrame(() => renderEquityCurve(e.detail.points));
-    }
+    if (e.detail && e.detail.points) requestAnimationFrame(() => renderEquityCurve(e.detail.points));
 }
 
 function setupActionButtons() {
@@ -167,21 +137,16 @@ function setupActionButtons() {
             if (currentBotState?.config?.[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
-
             el.onchange = async () => {
                 const newVal = parseFloat(el.value);
                 if (isNaN(newVal) || newVal < 0) return;
-
                 const configPayload = {
                     config: { [input.strategy]: { amountUsdt: newVal } },
                     applyShield: true,
                     strategy: input.strategy
                 };
-
                 const res = await sendConfigToBackend(configPayload);
-                if (res?.success) {
-                    addTerminalLog(`${input.strategy.toUpperCase()}: AMOUNT UPDATED TO $${newVal}`, 'success');
-                }
+                if (res?.success) addTerminalLog(`${input.strategy.toUpperCase()}: AMOUNT UPDATED TO $${newVal}`, 'success');
             };
         }
     });
@@ -220,11 +185,9 @@ function initBalanceChart() {
 export function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
     if (!bar) return;
-
     const pnl = parseFloat(pnlValue) || 0;
     const sensitivity = 0.5; 
     const visualSize = Math.min(Math.abs(pnl) * (50 / sensitivity), 50);
-
     if (pnl >= 0) {
         bar.style.left = '50%'; 
         bar.style.width = `${visualSize}%`;
@@ -284,19 +247,14 @@ export function renderAiPulseUI(aiData) {
         aiStoch: parseFloat(aiData.aiStoch || 0).toFixed(1),
         aiEngineMsg: aiData.aiEngineMsg || 'System Live'
     };
-
-    if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) {
-        return;
-    }
+    if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
     lastRenderedAiData = cleanData;
-
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
         const offset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
         dbCircle.style.strokeDashoffset = offset;
     }
-
     const confVal = document.getElementById('ai-confidence-value');
     const trendLabel = document.getElementById('ai-trend-label');
     const adxVal = document.getElementById('ai-adx-val');
@@ -304,7 +262,6 @@ export function renderAiPulseUI(aiData) {
     const adxBar = document.getElementById('ai-adx-bar');
     const stochBar = document.getElementById('ai-stoch-bar');
     const engineMsg = document.getElementById('ai-engine-msg');
-
     if (confVal) confVal.innerText = `${cleanData.aiConfidence}%`;
     if (trendLabel) trendLabel.innerText = cleanData.aiTrendLabel;
     if (adxVal) adxVal.innerText = cleanData.aiAdx;
@@ -312,47 +269,4 @@ export function renderAiPulseUI(aiData) {
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
     if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
     if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
-}
-
-/**
- * Verifica si el usuario ya tiene las llaves registradas para ocultar el carrusel
- */
-function checkAndHideGuide(state) {
-    console.log("🔍 Diagnóstico Carrusel: Estado del estado:", state);
-    
-    // Accedemos a la configuración de forma más segura
-    const config = state?.config || {};
-    const hasApiKeys = config.apiKeysConfigured === true;
-    
-    console.log("🔍 ¿Tiene APIs configuradas?:", hasApiKeys);
-    
-    const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
-    
-    if (hasApiKeys) {
-        if (carouselContainer) carouselContainer.style.display = 'none';
-        console.log("✅ APIs detectadas: Guía oculta.");
-    } else {
-        // Si no tiene, forzamos que se muestre (si la variable de control lo permite)
-        console.log("⚠️ APIs no detectadas: Guía debería estar visible.");
-        if (carouselContainer) carouselContainer.style.display = 'block';
-    }
-}
-
-let carouselInterval;
-
-function startAutoCarousel() {
-    const container = document.querySelector('.custom-scrollbar');
-    if (!container) return;
-
-    // Detener si ya existe un intervalo previo para no duplicar
-    clearInterval(carouselInterval);
-
-    carouselInterval = setInterval(() => {
-        // Si el usuario ya está haciendo scroll manual, no lo molestamos
-        if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 10) {
-            container.scrollTo({ left: 0, behavior: 'smooth' }); // Vuelve al inicio
-        } else {
-            container.scrollBy({ left: 200, behavior: 'smooth' }); // Mueve 200px a la derecha
-        }
-    }, 4000); // Cambia cada 4 segundos
 }

@@ -1,11 +1,11 @@
 /**
- * carousel.js - Módulo delegado de Guía de Usuario
+ * carousel.js - Lógica de control del carrusel de pasos
  */
 
 let carouselInterval;
 
-export function setupCarousel() {
-    // 1. Conexión del botón de toggle
+export function initCarousel() {
+    // Listener del botón de toggle
     const btnToggle = document.getElementById('btn-toggle-carousel');
     if (btnToggle) {
         btnToggle.addEventListener('click', () => {
@@ -18,7 +18,10 @@ export function setupCarousel() {
         });
     }
 
-    // 2. Configuración del scroll con mouse
+    // Iniciar movimiento automático
+    startAutoCarousel();
+
+    // Detener al hacer hover
     const container = document.querySelector('.custom-scrollbar');
     if (container) {
         container.addEventListener('mouseenter', () => clearInterval(carouselInterval));
@@ -40,12 +43,7 @@ export function startAutoCarousel() {
     }, 4000);
 }
 
-export function stopAutoCarousel() {
-    clearInterval(carouselInterval);
-}
-
 export function checkAndHideGuide(state) {
-    console.log("🔍 Diagnóstico Carrusel: Estado del estado:", state);
     const config = state?.config || {};
     const hasApiKeys = config.apiKeysConfigured === true;
     const carouselContainer = document.querySelector('#step-carousel-body')?.parentElement;
