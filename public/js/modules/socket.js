@@ -83,9 +83,6 @@ export function initSocket() {
    // --- MARKET DATA (PRICE, VARIATION & REALTIME AI PULSE) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
-        
-        // AUDITORÍA: LOG COMPLETO DEL PAQUETE MARKET DATA
-    console.log("🔍 AUDITORÍA MARKETDATA DETALLADA:", data);
 	
 	if (data?.price) {
             const newPrice = parseFloat(data.price);
