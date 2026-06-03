@@ -28,6 +28,11 @@ async function sendToDashboardTerminal(msg, type) {
     }
 }
 
+// Añade este listener global para ver todo el tráfico entrante
+socket.onAny((event, ...args) => {
+    console.log(`📡 SOCKET EVENTO RECIBIDO: [${event}]`, args);
+});
+
 export function initSocket() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
