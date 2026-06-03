@@ -139,6 +139,14 @@ export function initSocket() {
     socket.on('bot-state-update', async (state) => {
         if (!state) return;
 
+	// NUEVA AUDITORÍA DE PULSO:
+    // Si el estado enviado contiene información de IA, la pintamos aquí mismo
+    if (state.aiPulse || state.aiLastPulse) {
+        const pulseData = state.aiPulse || state.aiLastPulse;
+        currentBotState.aiLastPulse = pulseData;
+        renderAiPulseUI(pulseData);
+    }
+
         const now = Date.now();
         const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
 
