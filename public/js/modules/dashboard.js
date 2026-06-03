@@ -239,6 +239,9 @@ function updateQuickStats(kpiData) {
 }
 
 export function renderAiPulseUI(aiData) {
+
+    console.log("DEBUG PULSE: Recibido ->", aiData);
+
     if (!aiData) return;
     const cleanData = {
         aiConfidence: Math.round(aiData.aiConfidence || 0),
