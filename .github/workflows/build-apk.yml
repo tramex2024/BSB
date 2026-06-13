@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ] # Se ejecutará cada vez que hagas push a la rama main
+    branches: [ main ]
 
 jobs:
   build:
@@ -15,7 +15,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-size: 18
+        node-version: 24 # <-- Corregido (antes decía node-size)
         cache: 'npm'
 
     - name: Install Dependencies
@@ -36,6 +36,7 @@ jobs:
     - name: Build APK with Gradle
       run: |
         cd android
+        chmod +x gradlew # Otorga permisos de ejecución al script de Gradle
         ./gradlew assembleDebug
 
     - name: Upload APK Artifact
