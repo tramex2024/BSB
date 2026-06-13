@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Permiso obligatorio para crear el release en tu repositorio
 
     steps:
     - name: Checkout Source Code
@@ -43,10 +45,11 @@ jobs:
         ./gradlew clean
         ./gradlew assembleDebug --stacktrace
 
-    - name: Generate Direct Download Link
-      run: |
-        echo "=========================================================="
-        echo "TU ENLACE DE DESCARGA DIRECTA ESTARÁ ABAJO:"
-        curl --upload-file android/app/build/outputs/apk/debug/app-debug.apk https://transfer.sh
-        echo ""
-        echo "=========================================================="
+    - name: Create GitHub Release and Upload APK
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: "BSB App v1.0.${{ github.run_number }}"
+        draft: false
+        prerelease: false
+        files: android/app/build/outputs/apk/debug/app-debug.apk
