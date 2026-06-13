@@ -30,6 +30,9 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
+    - name: Automatically Accept Android Licenses
+      run: yes | sdkmanager --licenses || true
+
     - name: Sync Capacitor
       run: node node_modules/@capacitor/cli/bin/capacitor sync android
 
@@ -37,10 +40,4 @@ jobs:
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug
-
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug-apk
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+        ./gradlew assembleDebug --stacktrace
