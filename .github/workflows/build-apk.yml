@@ -31,9 +31,7 @@ jobs:
       uses: android-actions/setup-android@v3
 
     - name: Sync Capacitor
-      run: |
-        chmod -R +x node_modules/.bin/
-        npx @capacitor/cli sync android
+      run: npx --package=@capacitor/cli cap sync android
 
     - name: Build APK with Gradle
       run: |
