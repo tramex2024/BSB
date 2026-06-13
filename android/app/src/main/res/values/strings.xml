@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">bsb</string>
+    <string name="title_activity_main">bsb</string>
+    <string name="package_name">com.nexuslabs.bsb</string>
+    <string name="custom_url_scheme">com.nexuslabs.bsb</string>
+</resources>

@@ -9,6 +9,9 @@
     "build-css": "npx tailwindcss -i ./public/src/input.css -o ./public/css/style.css"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

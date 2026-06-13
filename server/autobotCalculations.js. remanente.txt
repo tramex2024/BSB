@@ -1,0 +1,124 @@
+/**
+ * BSB/server/autobotCalculations.js
+ * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
+ * BASADO EN ESTRATEGIA: BALA DE PLATA (2026).
+ * CENTRALIZACIÓN: Motor de generación de estrategia unificado.
+ */
+
+const parseNumber = (val) => {
+    const n = parseFloat(val);
+    return isNaN(n) ? 0 : n;
+};
+
+/**
+ * MOTOR CENTRAL DE ESTRATEGIA
+ * Genera la configuración exacta de la malla y tamaños para cualquier amount.
+ */
+function generateScalpingStrategy(totalAmount) {
+    const MAX_CAP = 6140.0;
+    const amount = Math.min(parseNumber(totalAmount), MAX_CAP);
+    const PURCHASE_FIXED = 6.0;
+    const MATH_MULTIPLIER = 2.0;
+    const MAX_LEVELS = 10;
+    const ABRANGE_TARGET = 20.0; // 20% cobertura
+    const START_STEP = 1.5;      // 1.5% primer salto
+
+    if (amount < 42) return null;
+
+    // 1. Generación de Capas (Base + Excedente)
+    let baseSizes = [];
+    let currentBase = PURCHASE_FIXED;
+    let cumulativeBase = 0;
+    while (cumulativeBase + currentBase <= amount && baseSizes.length < MAX_LEVELS) {
+        baseSizes.push(currentBase);
+        cumulativeBase += currentBase;
+        currentBase *= MATH_MULTIPLIER;
+    }
+
+    const n = baseSizes.length;
+    let finalSizes = [...baseSizes];
+    const excedente = amount - cumulativeBase;
+
+    if (excedente > 0 && n > 1) {
+        let sumWeights = 0;
+        for (let i = 1; i < n; i++) sumWeights += baseSizes[i];
+        for (let i = 1; i < n; i++) {
+            finalSizes[i] += (baseSizes[i] / sumWeights) * excedente;
+        }
+    }
+
+    // 2. Búsqueda Binaria de stepGrow para cubrir 20%
+    let stepGrow = 1.0;
+    if (n > 1) {
+        let low = 1.0, high = 5.0;
+        for (let iter = 0; iter < 100; iter++) {
+            let mid = (low + high) / 2;
+            let totalRange = START_STEP * (Math.pow(mid, n - 1) - 1) / (mid - 1);
+            if (totalRange < ABRANGE_TARGET) low = mid;
+            else high = mid;
+        }
+        stepGrow = low;
+    }
+
+    return {
+        sizes: finalSizes.map(val => parseFloat(val.toFixed(2))),
+        stepGrow: parseFloat(stepGrow.toFixed(4)),
+        levels: n
+    };
+}
+
+/**
+ * CÁLCULO DE TARGET CON FEES
+ */
+function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', feeRate = 0.001) {
+    const p = parseNumber(entryPrice);
+    const netProfitDec = parseNumber(targetProfitNet) / 100;
+    const totalMarkup = netProfitDec + (feeRate * 2);
+    return side === 'long' ? p * (1 + totalMarkup) : p * (1 - totalMarkup);
+}
+
+/**
+ * COBERTURA CENTRALIZADA (Long/Short)
+ * Ahora lee directamente de la estrategia generada.
+ */
+function calculateCoverage(balance, referencePrice, strategy, side = 'long') {
+    let remainingBalance = parseNumber(balance);
+    let numberOfExtraOrders = 0;
+    let coveragePrice = parseNumber(referencePrice);
+    let orderCount = 1; // Empezamos desde la segunda orden
+
+    while (numberOfExtraOrders < strategy.sizes.length - 1) {
+        let nextOrderAmount = strategy.sizes[orderCount];
+        if (remainingBalance < nextOrderAmount) break;
+        
+        remainingBalance -= nextOrderAmount;
+        
+        // Cálculo del paso usando stepGrow centralizado
+        let step = 1.5 * Math.pow(strategy.stepGrow, numberOfExtraOrders);
+        if (side === 'long') coveragePrice *= (1 - (step / 100));
+        else coveragePrice *= (1 + (step / 100));
+        
+        orderCount++;
+        numberOfExtraOrders++;
+    }
+
+    return { coveragePrice, numberOfOrders: numberOfExtraOrders };
+}
+
+function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
+    const p = parseFloat(currentPrice);
+    const entry = parseFloat(ppc);
+    const qty = parseFloat(ac);
+    if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
+    let grossProfit = strategy === 'long' ? (p - entry) * qty : (entry - p) * qty;
+    const totalFees = (entry * qty + p * qty) * feeRate;
+    return grossProfit - totalFees;
+}
+
+module.exports = {
+    parseNumber,
+    generateScalpingStrategy,
+    calculateCoverage,
+    calculatePotentialProfit,
+    calculateTargetWithFees
+};

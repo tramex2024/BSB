@@ -1,0 +1,10 @@
+{
+  "appId": "com.nexuslabs.bsb",
+  "appName": "bsb",
+  "webDir": "public",
+  "server": {
+    "url": "https://vercel.app",
+    "cleartext": true
+  }
+}
+
