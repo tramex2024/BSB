@@ -21,11 +21,11 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
-        java-version: '17'
+        java-version: '21' # <-- Actualizado a Java 21 para máxima compatibilidad con Gradle moderno
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
@@ -40,4 +40,5 @@ jobs:
       run: |
         cd android
         chmod +x gradlew
+        ./gradlew clean # Limpia compilaciones corruptas o cachés previas
         ./gradlew assembleDebug --stacktrace
