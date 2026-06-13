@@ -25,7 +25,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
-        java-version: '21'
+        java-version: '21' # <-- Actualizado a Java 21 para máxima compatibilidad con Gradle moderno
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
@@ -40,13 +40,5 @@ jobs:
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew clean
+        ./gradlew clean # Limpia compilaciones corruptas o cachés previas
         ./gradlew assembleDebug --stacktrace
-
-    - name: Generate Direct Download Link
-      run: |
-        echo "=========================================================="
-        echo "TU ENLACE DE DESCARGA DIRECTA ESTARÁ ABAJO:"
-        curl --upload-file android/app/build/outputs/apk/debug/app-debug.apk https://transfer.sh
-        echo ""
-        echo "=========================================================="
