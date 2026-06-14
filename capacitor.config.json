@@ -3,7 +3,7 @@
   "appName": "bsb",
   "webDir": "public",
   "server": {
-    "url": "https://vercel.app",
+    "url": "https://bsb-lime.vercel.app",
     "cleartext": true,
     "allowNavigation": [
       "bsb-lime.vercel.app"      
