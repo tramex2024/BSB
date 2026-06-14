@@ -21,17 +21,14 @@ jobs:
         cache: 'npm'
 
     - name: Install Dependencies
-      run: |
-        npm install
-        # Fuerza la instalación limpia del motor gráfico para evitar fallos de iconos
-        npm install --ignore-scripts=false --foreground-scripts sharp --force
+      run: npm install
 
-    - name: Generate Custom Icons and Splash Assets
+    - name: Generate Custom App Icons
       run: |
-        if [ -d "assets" ]; then
-          npx @capacitor/assets generate --android
+        if [ -f "assets/icon.png" ]; then
+          npx @capacitor/assets generate --android --icon
         else
-          echo "No assets folder found. Skipping icon generation."
+          echo "Icon not found. Skipping icon generation."
         fi
 
     - name: Set up JDK 21
