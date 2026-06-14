@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Permiso obligatorio para crear el release en tu repositorio
+      contents: write
 
     steps:
     - name: Checkout Source Code
@@ -22,6 +22,14 @@ jobs:
 
     - name: Install Dependencies
       run: npm install
+
+    - name: Generate Custom Icons and Splash Assets
+      run: |
+        if [ -d "assets" ]; then
+          npx @capacitor/assets generate --android
+        else
+          echo "No assets folder found. Skipping icon generation."
+        fi
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4

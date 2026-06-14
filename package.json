@@ -30,6 +30,7 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "autoprefixer": "^10.4.21",
     "dotenv-cli": "^10.0.0",
     "nodemon": "^3.1.10",
