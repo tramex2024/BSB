@@ -1,0 +1,8 @@
+<!-- Modifica o añade las propiedades scaleX, scaleY, pivotX y pivotY dentro del <group> principal -->
+<group
+    android:pivotX="54"
+    android:pivotY="54"
+    android:scaleX="0.75"
+    android:scaleY="0.75">
+    <!-- Aquí dentro se quedan los paths de tu logo intactos -->
+</group>
