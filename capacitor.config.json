@@ -6,8 +6,7 @@
     "url": "https://vercel.app",
     "cleartext": true,
     "allowNavigation": [
-      "bsb-lime.vercel.app",
-      "*.vercel.app"
+      "bsb-lime.vercel.app"      
     ]
   }
 }
