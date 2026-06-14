@@ -21,7 +21,10 @@ jobs:
         cache: 'npm'
 
     - name: Install Dependencies
-      run: npm install
+      run: |
+        npm install
+        # Fuerza la instalación limpia del motor gráfico para evitar fallos de iconos
+        npm install --ignore-scripts=false --foreground-scripts sharp --force
 
     - name: Generate Custom Icons and Splash Assets
       run: |
