@@ -23,14 +23,6 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Generate Custom App Icons
-      run: |
-        if [ -f "assets/icon.png" ]; then
-          npx @capacitor/assets generate --android --icon
-        else
-          echo "Icon not found. Skipping icon generation."
-        fi
-
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
