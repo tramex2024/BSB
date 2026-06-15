@@ -65,18 +65,18 @@ function processAIInputs(amtAI, existingAIConfig = {}) {
  * Procesa y limpia los inputs manuales del modo Advanced (Autobot)
  */
 function processAdvancedInputs(data) {
-    if (!data) {
-        console.error("❌ processAdvancedInputs: No se recibieron datos");
-        return null;
-    }
+    if (!data) return null;
+
+    // Solo validamos que sea un número, SIN imponer valores por defecto forzosos
+    // que puedan corromper la estrategia avanzada.
     return {
-        amountUsdt: parseFloat(parseFloat(data.amountUsdt || 0).toFixed(2)),
-        purchaseUsdt: parseFloat(parseFloat(data.purchaseUsdt || 6.0).toFixed(2)),
-        price_var: parseFloat(parseFloat(data.price_var || 0.1).toFixed(2)),
-        size_var: parseFloat(parseFloat(data.size_var || 1.0).toFixed(2)),
-        profit_percent: parseFloat(parseFloat(data.profit_percent || 0.1).toFixed(2)),
-        price_step_inc: parseFloat(parseFloat(data.price_step_inc || 0).toFixed(4)), // Corregido a 4
-        stopAtCycle: data.stopAtCycle === true || data.stopAtCycle === 'true'
+        amountUsdt: parseFloat(data.amountUsdt || 0),
+        purchaseUsdt: data.purchaseUsdt !== undefined ? parseFloat(data.purchaseUsdt) : undefined,
+        price_var: data.price_var !== undefined ? parseFloat(data.price_var) : undefined,
+        size_var: data.size_var !== undefined ? parseFloat(data.size_var) : undefined, // <--- EL CAMBIO
+        profit_percent: data.profit_percent !== undefined ? parseFloat(data.profit_percent) : undefined,
+        price_step_inc: data.price_step_inc !== undefined ? parseFloat(data.price_step_inc) : undefined,
+        stopAtCycle: !!data.stopAtCycle
     };
 }
 

@@ -90,9 +90,9 @@ const autobotSchema = new mongoose.Schema({
             amountUsdt: { type: Number, default: 6, min: 6 },
             purchaseUsdt: { type: Number, default: 6, min: 6 },
             price_var: { type: Number, default: 0.5, min: 0.1 },
-            size_var: { type: Number, default: 55, min: 1 },
+            size_var: { type: Number, default: null },
             profit_percent: { type: Number, default: 1.2, min: 0.3 },
-            price_step_inc: { type: Number, default: 0, min: 0 },
+            price_step_inc: { type: Number, default: null },
             stopAtCycle: { type: Boolean, default: false }
         },
         short: {
@@ -100,9 +100,9 @@ const autobotSchema = new mongoose.Schema({
             amountUsdt: { type: Number, default: 6, min: 6 },
             purchaseUsdt: { type: Number, default: 6, min: 6 },
             price_var: { type: Number, default: 0.5, min: 0.1 },
-            size_var: { type: Number, default: 55, min: 1 },
+            size_var: { type: Number, default: null },
             profit_percent: { type: Number, default: 1.2, min: 0.3 },
-            price_step_inc: { type: Number, default: 0, min: 0 },
+            price_step_inc: { type: Number, default: null },
             stopAtCycle: { type: Boolean, default: false }
         },
         ai: {
