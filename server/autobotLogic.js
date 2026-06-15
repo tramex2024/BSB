@@ -54,7 +54,7 @@ async function processSingleBot(botState, currentPrice) {
 
         const user = await User.findById(userId).lean();
         if (!user || !user.bitmartApiKey) {
-            orchestrator.log(`⚠️ Salto: Usuario ${userId} sin llaves API.`, 'error', userId);
+            orchestrator.log(`⚠️ Skip: User ${userId} missing API keys.`, 'error', userId);
             return;
         }
 
@@ -65,7 +65,7 @@ async function processSingleBot(botState, currentPrice) {
             decryptedSecret = decrypt(user.bitmartSecretKeyEncrypted).trim();
             decryptedMemo = user.bitmartApiMemo ? decrypt(user.bitmartApiMemo).trim() : (user.bitmartApiMemo || "").trim();
         } catch (err) {
-            orchestrator.log(`❌ Error al desencriptar llaves de usuario ${userId}`, 'error', userId);
+            orchestrator.log(`❌ Error decrypting API keys for user ${userId}`, 'error', userId);
             return;
         }
 
@@ -151,7 +151,7 @@ async function processSingleBot(botState, currentPrice) {
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
 
         changeSet.lastUpdate = new Date();
-        await orchestrator.commitChanges(userId, changeSet, currentPrice);
+        await orchestrator.commitChanges(userId, botState, currentPrice);
 
     } catch (botErr) {
         console.error(`❌ Error en ejecución aislada del bot de usuario ${userId}:`, botErr.message);
@@ -185,7 +185,7 @@ async function botCycle(priceFromWebSocket) {
         await Promise.all(activeBots.map(bot => processSingleBot(bot, currentPrice)));
         
     } catch (error) {
-        orchestrator.log(`❌ Error crítico general en el ciclo principal: ${error.message}`, 'error');
+        orchestrator.log(`❌ Critical error in main cycle: ${error.message}`, 'error');
     } finally {
         isProcessing = false; 
     }
@@ -214,8 +214,8 @@ startGlobalSync();
 
 module.exports = {
     setIo: orchestrator.setIo, 
-    start: () => orchestrator.log('🚀 Autobot Iniciado', 'success'), 
-    stop: () => orchestrator.log('🛑 Autobot Detenido', 'warning'),
+    start: () => orchestrator.log('🚀 Autobot Started', 'success'), 
+    stop: () => orchestrator.log('🛑 Autobot Stopped', 'warning'),
     log: orchestrator.log, 
     botCycle, 
     slowBalanceCacheUpdate: orchestrator.slowBalanceCacheUpdate, 
