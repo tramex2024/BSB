@@ -1,6 +1,6 @@
 /**
  * BSB/server/controllers/configController.js
- * CONTROLADOR MAESTRO - VERSIÓN CORREGIDA Y NORMALIZADA
+ * CONTROLADOR MAESTRO - VERSIÓN BLINDADA (Sincronización de Balance y Configuración)
  */
 
 const Autobot = require('../models/Autobot'); 
@@ -40,11 +40,12 @@ async function updateBotConfig(req, res) {
 
         let update = {};
 
-        // --- LÓGICA DE BLINDAJE (Dashboard) ---
+        // --- LÓGICA DE BLINDAJE (Dashboard / Paso 1) ---
         if (applyShield && strategy) {
             const amt = parseFloat(newConfig[strategy]?.amountUsdt);
             
             if (!isNaN(amt)) {
+                // Sincronizamos montos actuales para el recalculo de blindaje
                 const fullShield = processUserInputs(
                     strategy === 'long' ? amt : botState.config.long.amountUsdt,
                     strategy === 'short' ? amt : botState.config.short.amountUsdt,
@@ -57,19 +58,19 @@ async function updateBotConfig(req, res) {
 
                 update[`config.${s}.amountUsdt`] = d.amountUsdt;
 
+                // 🟢 SINCRONIZACIÓN DE BALANCE POR ESTADO "STOPPED"
                 if (s === 'long' && botState.lstate === 'STOPPED') update.lbalance = d.amountUsdt;
                 if (s === 'short' && botState.sstate === 'STOPPED') update.sbalance = d.amountUsdt;
                 if (s === 'ai' && botState.aistate === 'STOPPED') update.aibalance = d.amountUsdt;
 
                 if (s !== 'ai') {
                     update[`config.${s}.purchaseUsdt`] = d.purchaseUsdt;
+                    update[`config.${s}.size_var`] = d.size_var;
+                    update[`config.${s}.price_step_inc`] = d.price_step_inc;
                     
-                    // NORMALIZACIÓN: Convertimos el porcentaje antiguo a factor industrial (ej: 1.5% -> 1.015)
-                    update[`config.${s}.size_var`] = (d.size_var / 100) + 1;
-                    update[`config.${s}.price_step_inc`] = (d.price_step_inc / 100) + 1;
-                    
-                    update[`config.${s}.price_var`] = d.price_var;       
-                    update[`config.${s}.profit_percent`] = d.profit_percent; 
+                    // ASIGNACIÓN SEMÁNTICA EXPLÍCITA (Evita inversión de valores)
+                    update[`config.${s}.price_var`] = d.price_var;       // Caída
+                    update[`config.${s}.profit_percent`] = d.profit_percent; // Profit
                 }
 
                 update[`config.${s}.stopAtCycle`] = typeof newConfig[s]?.stopAtCycle === 'boolean' 
@@ -77,7 +78,7 @@ async function updateBotConfig(req, res) {
                     : botState.config[s].stopAtCycle;
             }
         } else {
-            // --- MODO MANUAL (Pestañas Autobot/Aibot) ---
+            // --- MODO MANUAL (Pestañas Autobot/Aibot - Paso 3) ---
             
             // 1. Procesar LONG
             if (newConfig.long) {
@@ -121,7 +122,7 @@ async function updateBotConfig(req, res) {
                 const cleanShort = processAdvancedInputs(dataShort);
                 
                 update['config.short.amountUsdt'] = cleanShort.amountUsdt;
-                update['config.short.purchaseUsdt'] = cleanShort.purchaseShort;
+                update['config.short.purchaseUsdt'] = cleanShort.purchaseUsdt;
                 update['config.short.price_var'] = cleanShort.price_var;
                 update['config.short.size_var'] = cleanShort.size_var;
                 update['config.short.profit_percent'] = cleanShort.profit_percent;
@@ -159,7 +160,7 @@ async function updateBotConfig(req, res) {
 
         return res.json({ 
             success: true, 
-            message: applyShield ? "Blindaje aplicado." : "Configuración actualizada.",
+            message: applyShield ? "Blindaje aplicado y balances sincronizados." : "Configuración y balances actualizados.",
             data: updatedBot.config 
         });
 
