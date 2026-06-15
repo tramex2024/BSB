@@ -1,5 +1,5 @@
 /**
- * BSB/server/src/au/utils/cycleOrchestrator.js
+ * BSB/server/utils/cycleOrchestrator.js
  * Soporte Multi-Usuario y Sincronización - Edición Unificada 2026
  * MODO SEGURO: Gestión de Bitmart para Real y DB para IA.
  */
@@ -8,7 +8,7 @@ const Autobot = require('../models/Autobot');
 const User = require('../models/User'); 
 const Order = require('../models/Order'); 
 const bitmartService = require('../services/bitmartService');
-const { decrypt } = require('../utils/encryption'); 
+const { decrypt } = require('./encryption'); 
 
 let io;
 let lastCyclePrice = 0;
@@ -33,14 +33,25 @@ const orchestrator = {
     },
 
     syncFrontendState: async (currentPrice, botState, userId) => {
+        const now = Date.now();
+        // Si hay un bloqueo activo para este usuario, no enviamos nada
+        if (syncLock[userId] && now < syncLock[userId]) {
+            return; 
+        }
+
         if (io && botState && userId) {
             const priceToEmit = parseFloat(currentPrice) || lastCyclePrice || 0;
             io.to(userId.toString()).emit('bot-state-update', { 
                 ...botState, 
                 price: priceToEmit,
-                serverTime: Date.now() 
+                serverTime: now 
             });
         }
+    },
+
+    // Agregamos esta nueva función para bloquear actualizaciones durante la edición
+    lockSync: (userId, durationMs = 2000) => {
+        syncLock[userId] = Date.now() + durationMs;
     },
 
     /**
