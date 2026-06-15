@@ -2,7 +2,7 @@
  * BSB/server/autobotCalculations.js
  * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
  * BASADO EN LÓGICA EXPONENCIAL DINÁMICA 2026.
- * * ATENCIÓN: No modificar operadores matemáticos fundamentales.
+ * ESTÁNDAR: Multiplicadores (Factores) - Sin conversiones de porcentaje ocultas.
  */
 
 const parseNumber = (val) => {
@@ -12,7 +12,6 @@ const parseNumber = (val) => {
 
 /**
  * FUNCIÓN: Distribución de tamaños según Reglas 1-7
- * Calcula los tamaños de las órdenes garantizando la relación geométrica y la distribución del excedente.
  */
 function calculateDistributedSizes(totalAmount) {
     const amount = parseNumber(totalAmount);
@@ -46,16 +45,14 @@ function calculateDistributedSizes(totalAmount) {
 
 /**
  * FUNCIÓN: Cálculo de StepGrow mediante Producto Productorio
- * Calcula el 'g' tal que, para n niveles, la cobertura sea exactamente el 18%.
  */
 function calculateStepGrow(levels) {
     const n = parseInt(levels);
-    const TARGET_RATIO = 0.82; // 18% de caída/subida = 82% del precio original
-    const START_STEP = 0.015;  // 1.5%
+    const TARGET_RATIO = 0.82; 
+    const START_STEP = 0.015;  
 
     if (n <= 1) return 1.0;
 
-    // Rango amplio para asegurar que 'g' se encuentre sin importar n
     let low = 0.1, high = 10.0; 
     
     for (let i = 0; i < 40; i++) {
@@ -75,74 +72,74 @@ function calculateStepGrow(levels) {
 }
 
 /**
- * LÓGICA DE MONTO EXPONENCIAL
+ * LÓGICA DE MONTO EXPONENCIAL (Factor directo)
  */
-function getExponentialAmount(baseAmount, orderCount, sizeVar) {
+function getExponentialAmount(baseAmount, orderCount, sizeMultiplier) {
     const base = parseNumber(baseAmount);
     const count = parseNumber(orderCount); 
-    const sVar = parseNumber(sizeVar);
+    const multiplier = parseNumber(sizeMultiplier);
 
     if (base <= 0) return 0;
-    const multiplier = 1 + (sVar / 100);
-    
+    // Cálculo directo: base * (factor ^ count)
     return base * Math.pow(multiplier, count);
 }
 
 /**
- * LÓGICA DE DISTANCIA DE PRECIO
+ * LÓGICA DE DISTANCIA DE PRECIO (Factor directo)
  */
-function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncrement = 0) {
-    const baseStep = parseNumber(basePriceVarDec);
-    const increment = 1 + (parseNumber(priceVarIncrement) / 100);
-    return baseStep * Math.pow(increment, coverageIndex);
+function getExponentialPriceStep(baseGridStep, coverageIndex, gridStepMultiplier = 1.0) {
+    const baseStep = parseNumber(baseGridStep);
+    const multiplier = parseNumber(gridStepMultiplier);
+    // Cálculo directo: base * (multiplier ^ index)
+    return baseStep * Math.pow(multiplier, coverageIndex);
 }
 
 /**
  * CÁLCULO DE TARGET CON FEES
  */
-function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', feeRate = 0.001) {
+function calculateTargetWithFees(entryPrice, targetProfitFactor, side = 'long', feeRate = 0.001) {
     const p = parseNumber(entryPrice);
-    const netProfitDec = parseNumber(targetProfitNet) / 100;
-    const totalMarkup = netProfitDec + (feeRate * 2);
+    const profitFactor = parseNumber(targetProfitFactor);
+    const totalMarkup = profitFactor + (feeRate * 2);
 
     return side === 'long' ? p * (1 + totalMarkup) : p * (1 - totalMarkup);
 }
 
 // ==========================================
-//                 LÓGICA PARA LONG
+// LÓGICA PARA LONG
 // ==========================================
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
-    const priceVarDec = parseNumber(config?.price_var || 0) / 100;
-    const priceVarInc = parseNumber(config?.price_step_inc || 0);
-    const profitPercent = parseNumber(config?.profit_percent || 0); 
-    const sizeVar = parseNumber(config?.size_var || 0);
+    const gridStep = parseNumber(config?.price_var || 0);
+    const gridStepMultiplier = parseNumber(config?.price_step_inc || 1.0);
+    const profitFactor = parseNumber(config?.profit_percent || 0); 
+    const sizeMultiplier = parseNumber(config?.size_var || 1.0);
     const purchaseUsdt = parseNumber(config?.purchaseUsdt || 0);
     
     const feeRate = 0.001;
-    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
+    const currentStep = getExponentialPriceStep(gridStep, currentOrderCount, gridStepMultiplier);
 
     return {
-        ltprice: calculateTargetWithFees(p, profitPercent, 'long', feeRate),
+        ltprice: calculateTargetWithFees(p, profitFactor, 'long', feeRate),
         nextCoveragePrice: p * (1 - currentStep),
-        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeMultiplier)
     };
 }
 
-function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
+function calculateLongCoverage(balance, referencePrice, baseAmount, gridStep, sizeMultiplier, currentOrderCount, gridStepMultiplier = 1.0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
     let coveragePrice = parseNumber(referencePrice); 
 
     while (numberOfExtraOrders < 50) {
-        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeMultiplier);
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
-        const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
+        const currentStep = getExponentialPriceStep(gridStep, numberOfExtraOrders, gridStepMultiplier);
         coveragePrice = coveragePrice * (1 - currentStep);
         
         orderCount++;
@@ -153,41 +150,41 @@ function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec,
 }
 
 // ==========================================
-//                 LÓGICA PARA SHORT
+// LÓGICA PARA SHORT
 // ==========================================
 
 function calculateShortTargets(lastPrice, config, currentOrderCount) {
     const p = parseNumber(lastPrice);
     const conf = config || {}; 
     
-    const priceVarDec = parseNumber(conf.price_var) / 100;
-    const priceVarInc = parseNumber(conf.price_step_inc || 0);
-    const profitPercent = parseNumber(conf.profit_percent || 0);
-    const sizeVar = parseNumber(conf.size_var || 0);
+    const gridStep = parseNumber(conf.price_var || 0);
+    const gridStepMultiplier = parseNumber(conf.price_step_inc || 1.0);
+    const profitFactor = parseNumber(conf.profit_percent || 0);
+    const sizeMultiplier = parseNumber(conf.size_var || 1.0);
     const purchaseUsdt = parseNumber(conf.purchaseUsdt || 0);
 
-    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
+    const currentStep = getExponentialPriceStep(gridStep, currentOrderCount, gridStepMultiplier);
 
     return {
-        stprice: calculateTargetWithFees(p, profitPercent, 'short', 0.001),
+        stprice: calculateTargetWithFees(p, profitFactor, 'short', 0.001),
         nextCoveragePrice: p * (1 + currentStep),
-        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeMultiplier)
     };
 }
 
-function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
+function calculateShortCoverage(balance, referencePrice, baseAmount, gridStep, sizeMultiplier, currentOrderCount, gridStepMultiplier = 1.0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
     let numberOfExtraOrders = 0;
     let simulationPrice = parseNumber(referencePrice); 
 
     while (numberOfExtraOrders < 50) {
-        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeMultiplier);
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
-        const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
+        const currentStep = getExponentialPriceStep(gridStep, numberOfExtraOrders, gridStepMultiplier);
         simulationPrice = simulationPrice * (1 + currentStep);
         
         orderCount++;
@@ -198,7 +195,7 @@ function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec
 }
 
 // ==========================================
-//                 PNL Y UTILIDADES
+// PNL Y UTILIDADES
 // ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
