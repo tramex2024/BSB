@@ -1,115 +1,43 @@
 /**
  * BSB/server/services/inputs.js
- * ESTRATEGIA: BALA DE PLATA (REMANENTE AL FINAL)
- * COBERTURA: 20% | NIVELES: 8 MÁXIMO | MULTIPLICADOR: 2.0x
- * MAX_CAPITAL_STRATEGY: 2500.00 USDT
- * ACTUALIZADO: Soporte para persistencia de stopAtCycle y buscador de step inteligente por lado
+ * ESTRATEGIA: REMANENTE DISTRIBUIDO
+ * ACTUALIZADO: Integración con motor central de cálculos (autobotCalculations.js)
  */
 
-/**
- * Procesa los inputs del Dashboard (Blindaje)
- * Ahora recibe 'existingConfig' para no perder el estado de stopAtCycle
- */
+const { 
+    calculateDistributedSizes, 
+    calculateStepGrow 
+} = require('../autobotCalculations');
+
 function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
-    // Aplicamos el techo de 2500 USD por estrategia antes de procesar
-    const MAX_CAP = 2500.0;
+    const MAX_CAP = 6140.0;
     const l = Math.min(parseFloat(amtL) || 0, MAX_CAP);
     const s = Math.min(parseFloat(amtS) || 0, MAX_CAP);
 
     const calculateScalpingGrid = (totalAmount, side) => {
-        // --- PARÁMETROS DE ORO ---
-        const ABRANGE_TARGET = 20;     
-        const SIZE_VAR_BOT = 100;      
-        const START_PRICE_VAR = 1.5;   
-        const PURCHASE_FIXED = 6.0;    
-        const MAX_LEVELS = 8;          
-        const MATH_MULTIPLIER = 2.0;   
-        
-        if (totalAmount < 186) return null; 
+        // 1. Obtener distribución de tamaños (Reglas 1-7)
+        const sizes = calculateDistributedSizes(totalAmount);
+        if (!sizes) return null;
 
-        // 1. DETERMINAR NÚMERO DE NIVELES (N)
-        let n = 0;
-        let cumulativeBase = 0;
-        let orderBase = PURCHASE_FIXED;
-        
-        while (cumulativeBase + orderBase <= totalAmount && n < MAX_LEVELS) {
-            cumulativeBase += orderBase;
-            n++;
-            orderBase *= MATH_MULTIPLIER;
-        }
+        const n = sizes.length;
+        if (n < 3) return null;
 
-        if (n < 3) return null; 
+        // 2. Obtener StepGrow exacto para el 18% de cobertura (Target 0.82)
+        const stepInc = calculateStepGrow(n);
 
-        // =================================================================
-        // 2. CÁLCULO DEL STEP (EL ACORDEÓN INTELIGENTE EN CASCADA LONG / SHORT)
-        // DOCUMENTACIÓN: Este bloque simula el comportamiento exacto del 
-        // motor en cascada para encontrar el 'stepInc' que estira la última 
-        // orden exactamente hasta el ABRANGE_TARGET (20%) desde la orden anterior.
-        // =================================================================
-        let stepInc = 0;
-
-        if (n > 1) {
-            const baseStepDec = START_PRICE_VAR / 100; // Ejemplo: 1.5% -> 0.015
-            
-            let low = 0;        // Límite inferior de búsqueda para el incremento (%)
-            let high = 500;     // Límite superior seguro de búsqueda para el incremento (%)
-            let iterations = 0; // Contador de seguridad para evitar bucles infinitos
-
-            // Búsqueda binaria numérica de alta precisión (Máximo 40 ciclos para precisión milimétrica)
-            while (iterations < 40) {
-                let mid = (low + high) / 2;
-                let simulatedPriceFactor = 1.0; 
-                
-                // Simulación exacta del comportamiento en cascada del motor de cálculos
-                for (let i = 0; i < n - 1; i++) {
-                    let currentIncrementFactor = 1 + (mid / 100);
-                    let currentStep = baseStepDec * Math.pow(currentIncrementFactor, i);
-                    
-                    // Aplicamos el operador correspondiente al tipo de estrategia analizada
-                    if (side === 'long') {
-                        simulatedPriceFactor = simulatedPriceFactor * (1 - currentStep);
-                    } else {
-                        simulatedPriceFactor = simulatedPriceFactor * (1 + currentStep);
-                    }
-                }
-
-                // Evaluación de objetivos según el lado de la estrategia
-                if (side === 'long') {
-                    const targetDropFactor = 1 - (ABRANGE_TARGET / 100); // 20% de caída -> 0.80
-                    if (simulatedPriceFactor > targetDropFactor) {
-                        low = mid;  // Cayó menos del 20%, necesitamos aumentar el paso
-                    } else {
-                        high = mid; // Cayó más del 20%, necesitamos reducir el paso
-                    }
-                } else {
-                    const targetRiseFactor = 1 + (ABRANGE_TARGET / 100); // 20% de subida -> 1.20
-                    if (simulatedPriceFactor < targetRiseFactor) {
-                        low = mid;  // Subió menos del 20%, necesitamos aumentar el paso
-                    } else {
-                        high = mid; // Subió más del 20%, necesitamos reducir el paso
-                    }
-                }
-                iterations++;
-            }
-            
-            // Asignamos el incremento óptimo encontrado por el buscador algorítmico
-            stepInc = low;
-        }
-
-        // Recuperamos el estado previo de stopAtCycle para ese lado (long/short)
-        // Si no existe, por defecto es false.
+        // Recuperar estado de persistencia
         const prevStopAtCycle = existingConfig[side]?.stopAtCycle || false;
 
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
-            purchaseUsdt: PURCHASE_FIXED, 
-            price_var: START_PRICE_VAR,
+            purchaseUsdt: 6.0, 
+            price_var: 1.5, // START_STEP
             price_step_inc: parseFloat(stepInc.toFixed(1)),
-            size_var: SIZE_VAR_BOT,
+            size_var: 100, // Ajustado según tu lógica de escalado
             profit_percent: 1.3,
             trailing_percent: 0.3,
             levels: n,
-            stopAtCycle: prevStopAtCycle // <-- Aquí es donde el bot "recuerda"
+            stopAtCycle: prevStopAtCycle
         };
     };
 

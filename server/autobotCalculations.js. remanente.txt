@@ -1,8 +1,8 @@
 /**
  * BSB/server/autobotCalculations.js
  * Centraliza las matemáticas de Long, Short y cálculos de cobertura.
- * BASADO EN ESTRATEGIA: BALA DE PLATA (2026).
- * CENTRALIZACIÓN: Motor de generación de estrategia unificado.
+ * BASADO EN LÓGICA EXPONENCIAL DINÁMICA 2026.
+ * * ATENCIÓN: No modificar operadores matemáticos fundamentales.
  */
 
 const parseNumber = (val) => {
@@ -11,60 +11,90 @@ const parseNumber = (val) => {
 };
 
 /**
- * MOTOR CENTRAL DE ESTRATEGIA
- * Genera la configuración exacta de la malla y tamaños para cualquier amount.
+ * FUNCIÓN: Distribución de tamaños según Reglas 1-7
+ * Calcula los tamaños de las órdenes garantizando la relación geométrica y la distribución del excedente.
  */
-function generateScalpingStrategy(totalAmount) {
-    const MAX_CAP = 6140.0;
-    const amount = Math.min(parseNumber(totalAmount), MAX_CAP);
-    const PURCHASE_FIXED = 6.0;
-    const MATH_MULTIPLIER = 2.0;
-    const MAX_LEVELS = 10;
-    const ABRANGE_TARGET = 20.0; // 20% cobertura
-    const START_STEP = 1.5;      // 1.5% primer salto
+function calculateDistributedSizes(totalAmount) {
+    const amount = parseNumber(totalAmount);
+    if (amount < 42.00) return null;
 
-    if (amount < 42) return null;
-
-    // 1. Generación de Capas (Base + Excedente)
-    let baseSizes = [];
-    let currentBase = PURCHASE_FIXED;
-    let cumulativeBase = 0;
-    while (cumulativeBase + currentBase <= amount && baseSizes.length < MAX_LEVELS) {
-        baseSizes.push(currentBase);
-        cumulativeBase += currentBase;
-        currentBase *= MATH_MULTIPLIER;
+    let baseSeries = [6.00];
+    let sumBase = 6.00;
+    
+    while (baseSeries.length < 10) {
+        let next = baseSeries[baseSeries.length - 1] * 2;
+        if (sumBase + next > amount) break;
+        baseSeries.push(next);
+        sumBase += next;
     }
 
-    const n = baseSizes.length;
-    let finalSizes = [...baseSizes];
-    const excedente = amount - cumulativeBase;
+    let n = baseSeries.length;
+    let excedente = amount - sumBase;
+    let finalSizes = [...baseSeries];
 
     if (excedente > 0 && n > 1) {
-        let sumWeights = 0;
-        for (let i = 1; i < n; i++) sumWeights += baseSizes[i];
+        let sumWeights = baseSeries.slice(1).reduce((a, b) => a + b, 0);
+        let factor = 1 + (excedente / sumWeights);
+
         for (let i = 1; i < n; i++) {
-            finalSizes[i] += (baseSizes[i] / sumWeights) * excedente;
+            finalSizes[i] = baseSeries[i] * factor;
         }
     }
 
-    // 2. Búsqueda Binaria de stepGrow para cubrir 20%
-    let stepGrow = 1.0;
-    if (n > 1) {
-        let low = 1.0, high = 5.0;
-        for (let iter = 0; iter < 100; iter++) {
-            let mid = (low + high) / 2;
-            let totalRange = START_STEP * (Math.pow(mid, n - 1) - 1) / (mid - 1);
-            if (totalRange < ABRANGE_TARGET) low = mid;
-            else high = mid;
-        }
-        stepGrow = low;
-    }
+    return finalSizes.map(s => parseFloat(s.toFixed(2)));
+}
 
-    return {
-        sizes: finalSizes.map(val => parseFloat(val.toFixed(2))),
-        stepGrow: parseFloat(stepGrow.toFixed(4)),
-        levels: n
-    };
+/**
+ * FUNCIÓN: Cálculo de StepGrow mediante Producto Productorio
+ * Calcula el 'g' tal que, para n niveles, la cobertura sea exactamente el 18%.
+ */
+function calculateStepGrow(levels) {
+    const n = parseInt(levels);
+    const TARGET_RATIO = 0.82; // 18% de caída/subida = 82% del precio original
+    const START_STEP = 0.015;  // 1.5%
+
+    if (n <= 1) return 1.0;
+
+    // Rango amplio para asegurar que 'g' se encuentre sin importar n
+    let low = 0.1, high = 10.0; 
+    
+    for (let i = 0; i < 40; i++) {
+        let g = (low + high) / 2;
+        let cumulativePriceRatio = 1.0;
+        
+        for (let j = 0; j < n - 1; j++) {
+            let step = START_STEP * Math.pow(g, j);
+            cumulativePriceRatio *= (1 - step);
+        }
+        
+        if (cumulativePriceRatio > TARGET_RATIO) low = g;
+        else high = g;
+    }
+    
+    return parseFloat(((low + high) / 2).toFixed(4));
+}
+
+/**
+ * LÓGICA DE MONTO EXPONENCIAL
+ */
+function getExponentialAmount(baseAmount, orderCount, sizeVar) {
+    const base = parseNumber(baseAmount);
+    const count = parseNumber(orderCount); 
+    const sVar = parseNumber(sizeVar);
+
+    if (base <= 0) return 0;
+    const multiplier = 1 + (sVar / 100);
+    
+    return base * Math.pow(multiplier, count);
+}
+
+/**
+ * LÓGICA DE DISTANCIA DE PRECIO
+ */
+function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncrement = 0) {
+    const baseStep = parseNumber(basePriceVarDec);
+    const increment = 1 + (parseNumber(priceVarIncrement) / 100);
+    return baseStep * Math.pow(increment, coverageIndex);
 }
 
 /**
@@ -74,51 +104,135 @@ function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', fee
     const p = parseNumber(entryPrice);
     const netProfitDec = parseNumber(targetProfitNet) / 100;
     const totalMarkup = netProfitDec + (feeRate * 2);
+
     return side === 'long' ? p * (1 + totalMarkup) : p * (1 - totalMarkup);
 }
 
-/**
- * COBERTURA CENTRALIZADA (Long/Short)
- * Ahora lee directamente de la estrategia generada.
- */
-function calculateCoverage(balance, referencePrice, strategy, side = 'long') {
-    let remainingBalance = parseNumber(balance);
-    let numberOfExtraOrders = 0;
-    let coveragePrice = parseNumber(referencePrice);
-    let orderCount = 1; // Empezamos desde la segunda orden
+// ==========================================
+//                 LÓGICA PARA LONG
+// ==========================================
 
-    while (numberOfExtraOrders < strategy.sizes.length - 1) {
-        let nextOrderAmount = strategy.sizes[orderCount];
+function calculateLongTargets(lastPrice, config, currentOrderCount) {
+    const p = parseNumber(lastPrice);
+    const priceVarDec = parseNumber(config?.price_var || 0) / 100;
+    const priceVarInc = parseNumber(config?.price_step_inc || 0);
+    const profitPercent = parseNumber(config?.profit_percent || 0); 
+    const sizeVar = parseNumber(config?.size_var || 0);
+    const purchaseUsdt = parseNumber(config?.purchaseUsdt || 0);
+    
+    const feeRate = 0.001;
+    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
+
+    return {
+        ltprice: calculateTargetWithFees(p, profitPercent, 'long', feeRate),
+        nextCoveragePrice: p * (1 - currentStep),
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
+    };
+}
+
+function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
+    let remainingBalance = parseNumber(balance);
+    let orderCount = parseNumber(currentOrderCount);
+    let numberOfExtraOrders = 0;
+    let coveragePrice = parseNumber(referencePrice); 
+
+    while (numberOfExtraOrders < 50) {
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
         if (remainingBalance < nextOrderAmount) break;
         
         remainingBalance -= nextOrderAmount;
         
-        // Cálculo del paso usando stepGrow centralizado
-        let step = 1.5 * Math.pow(strategy.stepGrow, numberOfExtraOrders);
-        if (side === 'long') coveragePrice *= (1 - (step / 100));
-        else coveragePrice *= (1 + (step / 100));
+        const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
+        coveragePrice = coveragePrice * (1 - currentStep);
         
         orderCount++;
         numberOfExtraOrders++;
     }
 
-    return { coveragePrice, numberOfOrders: numberOfExtraOrders };
+    return { coveragePrice: coveragePrice, numberOfOrders: numberOfExtraOrders };
 }
+
+// ==========================================
+//                 LÓGICA PARA SHORT
+// ==========================================
+
+function calculateShortTargets(lastPrice, config, currentOrderCount) {
+    const p = parseNumber(lastPrice);
+    const conf = config || {}; 
+    
+    const priceVarDec = parseNumber(conf.price_var) / 100;
+    const priceVarInc = parseNumber(conf.price_step_inc || 0);
+    const profitPercent = parseNumber(conf.profit_percent || 0);
+    const sizeVar = parseNumber(conf.size_var || 0);
+    const purchaseUsdt = parseNumber(conf.purchaseUsdt || 0);
+
+    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
+
+    return {
+        stprice: calculateTargetWithFees(p, profitPercent, 'short', 0.001),
+        nextCoveragePrice: p * (1 + currentStep),
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
+    };
+}
+
+function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
+    let remainingBalance = parseNumber(balance);
+    let orderCount = parseNumber(currentOrderCount);
+    let numberOfExtraOrders = 0;
+    let simulationPrice = parseNumber(referencePrice); 
+
+    while (numberOfExtraOrders < 50) {
+        let nextOrderAmount = getExponentialAmount(baseAmount, orderCount, sizeVar);
+        if (remainingBalance < nextOrderAmount) break;
+        
+        remainingBalance -= nextOrderAmount;
+        
+        const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
+        simulationPrice = simulationPrice * (1 + currentStep);
+        
+        orderCount++;
+        numberOfExtraOrders++;
+    }
+
+    return { coveragePrice: simulationPrice, numberOfOrders: numberOfExtraOrders };
+}
+
+// ==========================================
+//                 PNL Y UTILIDADES
+// ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
     const p = parseFloat(currentPrice);
     const entry = parseFloat(ppc);
     const qty = parseFloat(ac);
+    
     if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
-    let grossProfit = strategy === 'long' ? (p - entry) * qty : (entry - p) * qty;
-    const totalFees = (entry * qty + p * qty) * feeRate;
+
+    let grossProfit = 0;
+    if (strategy === 'long') {
+        grossProfit = (p - entry) * qty;
+    } else if (strategy === 'short') {
+        grossProfit = (entry - p) * qty;
+    } else if (strategy === 'ai') {
+        grossProfit = (p - entry) * qty; 
+    }
+    
+    const entryValue = entry * qty;
+    const exitValue = p * qty;
+    const totalFees = (entryValue + exitValue) * feeRate;
+
     return grossProfit - totalFees;
 }
 
 module.exports = {
     parseNumber,
-    generateScalpingStrategy,
-    calculateCoverage,
+    calculateLongTargets,
+    calculateLongCoverage,
+    calculateShortTargets,
+    calculateShortCoverage,
     calculatePotentialProfit,
-    calculateTargetWithFees
+    getExponentialAmount,
+    calculateTargetWithFees,
+    calculateDistributedSizes,
+    calculateStepGrow
 };

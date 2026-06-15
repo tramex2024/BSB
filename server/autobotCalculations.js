@@ -11,8 +11,71 @@ const parseNumber = (val) => {
 };
 
 /**
+ * FUNCIÓN: Distribución de tamaños según Reglas 1-7
+ * Calcula los tamaños de las órdenes garantizando la relación geométrica y la distribución del excedente.
+ */
+function calculateDistributedSizes(totalAmount) {
+    const amount = parseNumber(totalAmount);
+    if (amount < 42.00) return null;
+
+    let baseSeries = [6.00];
+    let sumBase = 6.00;
+    
+    while (baseSeries.length < 10) {
+        let next = baseSeries[baseSeries.length - 1] * 2;
+        if (sumBase + next > amount) break;
+        baseSeries.push(next);
+        sumBase += next;
+    }
+
+    let n = baseSeries.length;
+    let excedente = amount - sumBase;
+    let finalSizes = [...baseSeries];
+
+    if (excedente > 0 && n > 1) {
+        let sumWeights = baseSeries.slice(1).reduce((a, b) => a + b, 0);
+        let factor = 1 + (excedente / sumWeights);
+
+        for (let i = 1; i < n; i++) {
+            finalSizes[i] = baseSeries[i] * factor;
+        }
+    }
+
+    return finalSizes.map(s => parseFloat(s.toFixed(2)));
+}
+
+/**
+ * FUNCIÓN: Cálculo de StepGrow mediante Producto Productorio
+ * Calcula el 'g' tal que, para n niveles, la cobertura sea exactamente el 18%.
+ */
+function calculateStepGrow(levels) {
+    const n = parseInt(levels);
+    const TARGET_RATIO = 0.82; // 18% de caída/subida = 82% del precio original
+    const START_STEP = 0.015;  // 1.5%
+
+    if (n <= 1) return 1.0;
+
+    // Rango amplio para asegurar que 'g' se encuentre sin importar n
+    let low = 0.1, high = 10.0; 
+    
+    for (let i = 0; i < 40; i++) {
+        let g = (low + high) / 2;
+        let cumulativePriceRatio = 1.0;
+        
+        for (let j = 0; j < n - 1; j++) {
+            let step = START_STEP * Math.pow(g, j);
+            cumulativePriceRatio *= (1 - step);
+        }
+        
+        if (cumulativePriceRatio > TARGET_RATIO) low = g;
+        else high = g;
+    }
+    
+    return parseFloat(((low + high) / 2).toFixed(4));
+}
+
+/**
  * LÓGICA DE MONTO EXPONENCIAL
- * $Amount = Base \times (1 + \frac{sizeVar}{100})^{orderCount}$
  */
 function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     const base = parseNumber(baseAmount);
@@ -26,7 +89,7 @@ function getExponentialAmount(baseAmount, orderCount, sizeVar) {
 }
 
 /**
- * LÓGICA DE DISTANCIA DE PRECIO (Price Var Increment)
+ * LÓGICA DE DISTANCIA DE PRECIO
  */
 function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncrement = 0) {
     const baseStep = parseNumber(basePriceVarDec);
@@ -35,20 +98,18 @@ function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncreme
 }
 
 /**
- * CÁLCULO DE TARGET CON FEES (Precisión PNL)
- * Asegura que el profit_percent sea NETO tras pagar comisiones.
+ * CÁLCULO DE TARGET CON FEES
  */
 function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', feeRate = 0.001) {
     const p = parseNumber(entryPrice);
     const netProfitDec = parseNumber(targetProfitNet) / 100;
-    
     const totalMarkup = netProfitDec + (feeRate * 2);
 
     return side === 'long' ? p * (1 + totalMarkup) : p * (1 - totalMarkup);
 }
 
 // ==========================================
-//                LÓGICA PARA LONG
+//                 LÓGICA PARA LONG
 // ==========================================
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
@@ -81,8 +142,6 @@ function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec,
         
         remainingBalance -= nextOrderAmount;
         
-        // CORRECCIÓN: El paso de precio debe calcularse usando el índice relativo (numberOfExtraOrders)
-        // para que no arrastre el desfase del nivel actual ejecutado en el exchange.
         const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
         coveragePrice = coveragePrice * (1 - currentStep);
         
@@ -94,7 +153,7 @@ function calculateLongCoverage(balance, referencePrice, baseAmount, priceVarDec,
 }
 
 // ==========================================
-//                LÓGICA PARA SHORT
+//                 LÓGICA PARA SHORT
 // ==========================================
 
 function calculateShortTargets(lastPrice, config, currentOrderCount) {
@@ -116,10 +175,6 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     };
 }
 
-/**
- * Calcula la cobertura Short de forma PROYECTIVA y ANCLADA.
- * CORREGIDA: Sincroniza los pasos del acordeón con las órdenes restantes reales.
- */
 function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec, sizeVar, currentOrderCount, priceVarIncrement = 0) {
     let remainingBalance = parseNumber(balance);
     let orderCount = parseNumber(currentOrderCount);
@@ -132,8 +187,6 @@ function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec
         
         remainingBalance -= nextOrderAmount;
         
-        // CORRECCIÓN: Usamos numberOfExtraOrders para mantener la simulación
-        // alineada con el paso correspondiente del Step original.
         const currentStep = getExponentialPriceStep(priceVarDec, numberOfExtraOrders, priceVarIncrement);
         simulationPrice = simulationPrice * (1 + currentStep);
         
@@ -145,7 +198,7 @@ function calculateShortCoverage(balance, referencePrice, baseAmount, priceVarDec
 }
 
 // ==========================================
-//                PNL Y UTILIDADES
+//                 PNL Y UTILIDADES
 // ==========================================
 
 function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeRate = 0.001) {
@@ -155,15 +208,12 @@ function calculatePotentialProfit(ppc, ac, currentPrice, strategy = 'long', feeR
     
     if (!qty || qty <= 0 || !entry || entry <= 0) return 0;
 
-    // LÓGICA DIFERENCIADA POR ESTRATEGIA
     let grossProfit = 0;
     if (strategy === 'long') {
         grossProfit = (p - entry) * qty;
     } else if (strategy === 'short') {
         grossProfit = (entry - p) * qty;
     } else if (strategy === 'ai') {
-        // Asumiendo que AI es Long por defecto. 
-        // Si tu IA es dinámica, ajusta la lógica aquí.
         grossProfit = (p - entry) * qty; 
     }
     
@@ -182,5 +232,7 @@ module.exports = {
     calculateShortCoverage,
     calculatePotentialProfit,
     getExponentialAmount,
-    calculateTargetWithFees
+    calculateTargetWithFees,
+    calculateDistributedSizes,
+    calculateStepGrow
 };
