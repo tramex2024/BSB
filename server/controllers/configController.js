@@ -147,8 +147,6 @@ async function updateBotConfig(req, res) {
                 }
             }
         }
-        // Bloqueamos las actualizaciones de socket por 2 segundos para evitar el rebote
-	orchestrator.lockSync(userId, 2000);
 
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
