@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/inputs.js
- * ESTRATEGIA: REMANENTE DISTRIBUIDO (Refactorizada a Factores Estándar)
+ * ESTRATEGIA: REMANENTE DISTRIBUIDO EXPONENCIAL
  */
 
 const { 
@@ -9,33 +9,28 @@ const {
 } = require('../autobotCalculations');
 
 function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
-    const MAX_CAP = 6140.0;
+    const MAX_CAP = 6140.0; // Regla 6
     const l = Math.min(parseFloat(amtL) || 0, MAX_CAP);
     const s = Math.min(parseFloat(amtS) || 0, MAX_CAP);
 
     const calculateScalpingGrid = (totalAmount, side) => {
         const sizes = calculateDistributedSizes(totalAmount);
-        if (!sizes || sizes.length < 3) return null;
+        if (!sizes || sizes.length < 3) return null; // Mínimo 42.00 USDT genera 3 niveles
 
         const n = sizes.length;
-        // stepInc sigue siendo un factor (ej. 1.05)
-        const stepInc = calculateStepGrow(n);
-        
-        // REFACTOR: Ahora es un factor, no un porcentaje. 
-        // Ejemplo: Si sizes[1] es 1.5 veces sizes[0], el factor es 1.5
+        const stepInc = calculateStepGrow(n); 
         const sizeMultiplier = sizes[1] / sizes[0]; 
-        const prevStopAtCycle = existingConfig[side]?.stopAtCycle || false;
-
+        
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
-            purchaseUsdt: 6.0, 
-            price_var: 1.5, // Mantener como factor (ej. 1.5% -> 0.015, pero si tu motor espera el número, mantenlo)
-            gridStepMultiplier: parseFloat(stepInc.toFixed(4)), // Renombrado de price_step_inc
-            sizeMultiplier: parseFloat(sizeMultiplier.toFixed(4)), // Renombrado de size_var
-            profit_percent: 1.3,
-            trailing_percent: 0.3,
+            purchaseUsdt: 6.0, // Regla 1
+            price_var: 0.015, // Regla 8: 1.5% inicial en formato estándar multiplicador
+            price_step_inc: parseFloat(stepInc.toFixed(4)), // CORREGIDO NOMBRE (Antes gridStepMultiplier)
+            size_var: parseFloat(sizeMultiplier.toFixed(4)), // CORREGIDO NOMBRE (Antes sizeMultiplier)
+            profit_percent: 0.013, // Convertido a estándar decimal (1.3%)
+            trailing_percent: 0.003, // Convertido a estándar decimal (0.3%)
             levels: n,
-            stopAtCycle: prevStopAtCycle
+            stopAtCycle: existingConfig[side]?.stopAtCycle || false
         };
     };
 
@@ -49,9 +44,6 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
     };
 }
 
-/**
- * Procesa y limpia los inputs manuales del modo Advanced
- */
 function processAdvancedInputs(data) {
     if (!data) return null;
     return {
@@ -65,9 +57,6 @@ function processAdvancedInputs(data) {
     };
 }
 
-/**
- * Procesa la configuración específica para el bot de Inteligencia Artificial
- */
 function processAIInputs(amtAI, existingAIConfig = {}) {
     const amount = parseFloat(amtAI) || 0;
     const minAI = 20.0; 
