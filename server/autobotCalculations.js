@@ -163,12 +163,72 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
     };
 }
 
+// =========================================================================
+// 🟢 CAPAS DE COMPATIBILIDAD GEOMÉTRICA EXPO PARA EL MOTOR DE CICLOS UNIFICADO
+// =========================================================================
+
+/**
+ * Interfaz compatible para calcular el precio extremo inferior de cobertura de la grilla Long
+ */
+function calculateLongCoverage(balance, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
+    // Reconstruimos la grilla usando la suma total de asignación del bot (balance de órdenes asignado)
+    const currentPrice = parseFloat(entryPrice) || 1;
+    const grid = generateAutobotGrid(balance || purchaseUsdt || 50, currentPrice, 'long');
+    
+    if (!grid || grid.orders.length === 0) {
+        return { coveragePrice: currentPrice * 0.82, numberOfOrders: 5 };
+    }
+    
+    const lastOrder = grid.orders[grid.orders.length - 1];
+    return {
+        coveragePrice: lastOrder.price,
+        numberOfOrders: grid.totalLevels
+    };
+}
+
+/**
+ * Interfaz compatible para calcular el precio extremo superior de cobertura de la grilla Short
+ */
+function calculateShortCoverage(balance, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
+    const currentPrice = parseFloat(entryPrice) || 1;
+    const grid = generateAutobotGrid(balance || purchaseUsdt || 50, currentPrice, 'short');
+    
+    if (!grid || grid.orders.length === 0) {
+        return { coveragePrice: currentPrice * 1.18, numberOfOrders: 5 };
+    }
+    
+    const lastOrder = grid.orders[grid.orders.length - 1];
+    return {
+        coveragePrice: lastOrder.price,
+        numberOfOrders: grid.totalLevels
+    };
+}
+
+/**
+ * Calcula de forma limpia el profit latente porcentual y nominal de la operación activa
+ */
+function calculatePotentialProfit(ppc, ac, currentPrice, side) {
+    const avgPrice = parseFloat(ac);
+    const price = parseFloat(currentPrice);
+    if (!avgPrice || !price || avgPrice <= 0 || price <= 0) return 0;
+
+    let profitPct = 0;
+    if (side === 'long' || side === 'ai') {
+        profitPct = (price - avgPrice) / avgPrice;
+    } else if (side === 'short') {
+        profitPct = (avgPrice - price) / avgPrice;
+    }
+    
+    // Retorna el beneficio neto flotante escalado al capital invertido actual (ppc)
+    return parseFloat((profitPct * parseFloat(ppc)).toFixed(4));
+}
+
 // Exportar funciones para NodeJS / Jest / Suite de pruebas
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-        calculateLongCoverage,    // 👈 ¡Esta debe estar aquí declarada exactamente así!
-        calculateShortCoverage,   // 👈 ¡Y esta también!
-        calculatePotentialProfit,
+        calculateLongCoverage,    // 👈 Vinculada a tu lógica exponencial pura
+        calculateShortCoverage,   // 👈 Vinculada a tu lógica exponencial pura
+        calculatePotentialProfit, // 👈 Sincronizador de rendimientos para el dashboard
         calculateDistributedSizes,
         calculateStepGrow,
         generateAutobotGrid
