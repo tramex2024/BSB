@@ -92,13 +92,16 @@ class CentralAnalyzer {
             });
 
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
+            const prevRSI14 = rsi14Arr.length > 1 ? parseFloat(rsi14Arr[rsi14Arr.length - 2].toFixed(2)) : curRSI14;
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const prevRSI21 = rsi21Arr.length > 1 ? parseFloat(rsi21Arr[rsi21Arr.length - 2].toFixed(2)) : curRSI21;
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
             const price = this.lastPrice || closes[closes.length - 1];
-            const signal = this._getSignal(curRSI21, prevRSI21, curADX, curMACD, price);
+            
+            // 🟢 CORRECCIÓN DE SINCRONIZACIÓN: Ahora se evalúa el RSI de 14 períodos para los quiebres de 30 y 70
+            const signal = this._getSignal(curRSI14, prevRSI14, curADX, curMACD, price);
 
             // 3. CÁLCULO DE CONFIANZA IA CON SUAVIZADO
             const analysis = StrategyManager.calculate(candles);
@@ -123,7 +126,7 @@ class CentralAnalyzer {
                     rsi14: curRSI14,
                     rsi21: curRSI21,
                     currentRSI: curRSI14,
-                    prevRSI: prevRSI21,
+                    prevRSI: prevRSI14, // 🟢 Sincronizado para guardar el histórico de 14 usado en la toma de decisiones
                     adx: curADX,
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
@@ -183,22 +186,35 @@ class CentralAnalyzer {
         }
     }
 
+    /**
+     * EVALUACIÓN TÉCNICA DINÁMICA POR CRUCE DE FRONTERAS (Regulación de estados)
+     */
     _getSignal(rsi, prevRsi, adx, macd, price) {
-        if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
+        if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
+        
         const rsiDiff = rsi - prevRsi;
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        if (rsi <= 35 && rsiDiff > 0 && !macdBearish) {
-            return { action: "BUY", reason: "RSI Oversold + MACD Neutral/Bullish" };
+        // 🟢 CONDICIÓN COMPRA: El RSI rompe la barrera de 30 viniendo desde abajo (Incorporación)
+        const rsiCrossesUp30 = prevRsi <= 30 && rsi > 30;
+        if (rsiCrossesUp30 && !macdBearish) {
+            return { action: "BUY", reason: `RSI Cruce Ascendente 30 (${prevRsi} -> ${rsi}) + MACD Estable/Alcista` };
         }
-        if (rsi >= 65 && (rsiDiff < 0 || macdBearish)) {
-            return { action: "SELL", reason: "RSI Overbought + MACD Bearish Cross" };
+
+        // 🟢 CONDICIÓN VENTA: El RSI rompe la barrera de 70 viniendo desde arriba hacia abajo (Incorporación)
+        const rsiCrossesDown70 = prevRsi >= 70 && rsi < 70;
+        if (rsiCrossesDown70 || (rsi >= 70 && macdBearish)) {
+            return { action: "SELL", reason: `RSI Cruce Descendente 70 o Sobrecompra Extrema con MACD Bajista` };
         }
-        if (rsiDiff > this.config.MOMENTUM_THRESHOLD && macdBullish) {
-            return { action: "BUY", reason: "Strong Momentum Bullish" };
+
+        // CONDICIÓN EXTRA: IMPULSO FUERTE (MOMENTUM)
+        if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
+            return { action: "BUY", reason: "Strong Momentum Bullish Breakout" };
         }
-        return { action: "HOLD", reason: "Market Stable" };
+
+        // Si el precio fluctúa dentro de las bandas sin quebrar los niveles, no altera el flujo
+        return { action: "HOLD", reason: "Market Stable / RSI No Cross" };
     }
 }
 
