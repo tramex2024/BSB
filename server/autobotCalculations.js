@@ -166,6 +166,9 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
 // Exportar funciones para NodeJS / Jest / Suite de pruebas
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        calculateLongCoverage,    // 👈 ¡Esta debe estar aquí declarada exactamente así!
+        calculateShortCoverage,   // 👈 ¡Y esta también!
+        calculatePotentialProfit,
         calculateDistributedSizes,
         calculateStepGrow,
         generateAutobotGrid
