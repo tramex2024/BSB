@@ -12,6 +12,7 @@ const { decrypt } = require('./encryption');
 
 let io;
 let lastCyclePrice = 0;
+const syncLock = {}; // 🟢 CORRECCIÓN: Inicialización del objeto de bloqueos para evitar el error de referencia
 
 const orchestrator = {
     setIo: (socketIo) => { io = socketIo; orchestrator.io = socketIo; }, 

@@ -15,10 +15,10 @@ const { runAIStrategy } = require('./src/aiStrategy');
 const { canExecuteStrategy } = require('./utils/strategyValidator');
 const MarketSignal = require('./models/MarketSignal');
 
+// 🟢 CORRECCIÓN: Se elimina parseNumber de la importación ya que se usará parseFloat nativo
 const { 
     calculateLongCoverage, 
     calculateShortCoverage, 
-    parseNumber, 
     calculatePotentialProfit 
 } = require('./autobotCalculations');
 
@@ -125,15 +125,32 @@ async function processSingleBot(botState, currentPrice) {
         Object.assign(botState, changeSet);
 
         // --- 2. CÁLCULOS MATEMÁTICOS ---
+        // 🟢 CORRECCIÓN: Se reemplaza parseNumber por parseFloat nativo de Javascript
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
-            const longCov = calculateLongCoverage(botState.lbalance || 0, botState.locc > 0 ? (botState.llep || currentPrice) : currentPrice, botState.config.long.purchaseUsdt, parseNumber(botState.config.long.price_var) / 100, parseNumber(botState.config.long.size_var), botState.locc || 0, parseNumber(botState.config.long.price_step_inc));
+            const longCov = calculateLongCoverage(
+                botState.lbalance || 0, 
+                botState.locc > 0 ? (botState.llep || currentPrice) : currentPrice, 
+                botState.config.long.purchaseUsdt, 
+                parseFloat(botState.config.long.price_var) / 100, 
+                parseFloat(botState.config.long.size_var), 
+                botState.locc || 0, 
+                parseFloat(botState.config.long.price_step_inc)
+            );
             changeSet.lcoverage = longCov.coveragePrice;
             changeSet.lnorder = longCov.numberOfOrders;
             changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lac || 0, currentPrice, 'long') : 0;
         }
 
         if (botState.sstate !== 'STOPPED' && botState.config.short) {
-            const shortCov = calculateShortCoverage(botState.sbalance || 0, botState.socc > 0 ? (botState.slep || currentPrice) : currentPrice, botState.config.short.purchaseUsdt, parseNumber(botState.config.short.price_var) / 100, parseNumber(botState.config.short.size_var), botState.socc || 0, parseNumber(botState.config.short.price_step_inc));
+            const shortCov = calculateShortCoverage(
+                botState.sbalance || 0, 
+                botState.socc > 0 ? (botState.slep || currentPrice) : currentPrice, 
+                botState.config.short.purchaseUsdt, 
+                parseFloat(botState.config.short.price_var) / 100, 
+                parseFloat(botState.config.short.size_var), 
+                botState.socc || 0, 
+                parseFloat(botState.config.short.price_step_inc)
+            );
             changeSet.scoverage = shortCov.coveragePrice;
             changeSet.snorder = shortCov.numberOfOrders;
             changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sac || 0, currentPrice, 'short') : 0;
