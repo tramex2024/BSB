@@ -34,7 +34,7 @@ class CentralAnalyzer {
 
     async init(io) {
         this.io = io;
-//        console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con Smoothing y Fuzzy Logic activo.");
+//         console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con Smoothing y Fuzzy Logic activo.");
         await this.analyze();
     }
 
@@ -164,7 +164,7 @@ class CentralAnalyzer {
                     // Ahora AIEngine recibirá la decisión ya tomada
                     await AIEngine.analyze(price, bot.userId, bot, brain);
                     
-//                    console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
+//                     console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
 
                     if (this.io) {
                         this.io.to(bot.userId.toString()).emit('ai-decision-update', { 
@@ -196,21 +196,26 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // 🟢 CONDICIÓN COMPRA: El RSI rompe la barrera de 30 viniendo desde abajo (Incorporación)
+        // 1. 🟢 CONDICIÓN COMPRA TRADICIONAL (LONG GRID): El RSI rompe la barrera de 30 viniendo desde abajo (Incorporación)
         const rsiCrossesUp30 = prevRsi <= 30 && rsi > 30;
         if (rsiCrossesUp30 && !macdBearish) {
             return { action: "BUY", reason: `RSI Cruce Ascendente 30 (${prevRsi} -> ${rsi}) + MACD Estable/Alcista` };
         }
 
-        // 🟢 CONDICIÓN VENTA: El RSI rompe la barrera de 70 viniendo desde arriba hacia abajo (Incorporación)
+        // 2. 🟢 CONDICIÓN VENTA TRADICIONAL (SHORT GRID): El RSI rompe la barrera de 70 viniendo desde arriba hacia abajo (Incorporación)
         const rsiCrossesDown70 = prevRsi >= 70 && rsi < 70;
         if (rsiCrossesDown70 || (rsi >= 70 && macdBearish)) {
             return { action: "SELL", reason: `RSI Cruce Descendente 70 o Sobrecompra Extrema con MACD Bajista` };
         }
 
-        // CONDICIÓN EXTRA: IMPULSO FUERTE (MOMENTUM)
+        // 3. 🧠 CONDICIÓN MOMENTUM ALCISTA (SÓLO PARA AI BOT): Impulso fuerte con RSI alto
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
-            return { action: "BUY", reason: "Strong Momentum Bullish Breakout" };
+            return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
+        }
+
+        // 4. 🧠 CONDICIÓN MOMENTUM BAJISTA (SÓLO PARA AI BOT): Caída fuerte con RSI bajo
+        if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish) {
+            return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
 
         // Si el precio fluctúa dentro de las bandas sin quebrar los niveles, no altera el flujo

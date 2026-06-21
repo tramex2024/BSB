@@ -61,7 +61,8 @@ const MarketSignalSchema = new mongoose.Schema({
     signal: { 
         type: String, 
         required: true,
-        enum: ['BUY', 'SELL', 'HOLD', 'STRONG_BUY', 'STRONG_SELL'] 
+        // 🟢 AUDITORÍA: Se expande el enum para admitir las señales de momentum exclusivas del bot de IA
+        enum: ['BUY', 'SELL', 'HOLD', 'STRONG_BUY', 'STRONG_SELL', 'AIBUY', 'AISELL'] 
     }, 
     reason: { type: String },
 
