@@ -188,6 +188,7 @@ class CentralAnalyzer {
 
     /**
      * EVALUACIÓN TÉCNICA DINÁMICA POR CRUCE DE FRONTERAS (Regulación de estados)
+     * Optimizada con filtros de Histéresis y Tendencia (ADX) para eliminar ruidos y falsas rupturas.
      */
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
@@ -196,16 +197,29 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // 1. 🟢 CONDICIÓN COMPRA TRADICIONAL (LONG GRID): El RSI rompe la barrera de 30 viniendo desde abajo (Incorporación)
-        const rsiCrossesUp30 = prevRsi <= 30 && rsi > 30;
-        if (rsiCrossesUp30 && !macdBearish) {
-            return { action: "BUY", reason: `RSI Cruce Ascendente 30 (${prevRsi} -> ${rsi}) + MACD Estable/Alcista` };
+        // --- CONFIGURACIÓN DE HISTÉRESIS (Filtro Anti-Ruido) ---
+        const UMBRAL_CONFIRMADO_LONG = 33;  // Evita falsas entradas si el RSI juguetea justo en 30
+        const UMBRAL_CONFIRMADO_SHORT = 67; // Evita falsas entradas si el RSI juguetea justo en 70
+        const ADX_MAX_TREND = 30;           // Filtro: Si el ADX > 30 la tendencia es muy fuerte; peligroso para Grilla
+
+        // 1. 🟢 CONDICIÓN COMPRA TRADICIONAL (LONG GRID) con Histéresis y Confirmación
+        // El RSI estuvo abajo del suelo crítico (<= 33), pero confirma el rebote saliendo al alza.
+        const rsiConfirmedUp30 = prevRsi <= UMBRAL_CONFIRMADO_LONG && rsi > UMBRAL_CONFIRMADO_LONG;
+        if (rsiConfirmedUp30 && macdBullish && adx < ADX_MAX_TREND) {
+            return { 
+                action: "BUY", 
+                reason: `RSI Confirmó salida de sobreventa (>33) | RSI: ${rsi} | ADX Saludable: ${adx} | MACD Alcista` 
+            };
         }
 
-        // 2. 🟢 CONDICIÓN VENTA TRADICIONAL (SHORT GRID): El RSI rompe la barrera de 70 viniendo desde arriba hacia abajo (Incorporación)
-        const rsiCrossesDown70 = prevRsi >= 70 && rsi < 70;
-        if (rsiCrossesDown70 || (rsi >= 70 && macdBearish)) {
-            return { action: "SELL", reason: `RSI Cruce Descendente 70 o Sobrecompra Extrema con MACD Bajista` };
+        // 2. 🟢 CONDICIÓN VENTA TRADICIONAL (SHORT GRID) con Histéresis y Confirmación
+        // El RSI estuvo arriba del techo crítico (>= 67), pero confirma el giro cayendo a la baja.
+        const rsiConfirmedDown70 = prevRsi >= UMBRAL_CONFIRMADO_SHORT && rsi < UMBRAL_CONFIRMADO_SHORT;
+        if (rsiConfirmedDown70 && macdBearish && adx < ADX_MAX_TREND) {
+            return { 
+                action: "SELL", 
+                reason: `RSI Confirmó caída de sobrecompra (<67) | RSI: ${rsi} | ADX Saludable: ${adx} | MACD Bajista` 
+            };
         }
 
         // 3. 🧠 CONDICIÓN MOMENTUM ALCISTA (SÓLO PARA AI BOT): Impulso fuerte con RSI alto
@@ -218,9 +232,8 @@ class CentralAnalyzer {
             return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
 
-        // Si el precio fluctúa dentro de las bandas sin quebrar los niveles, no altera el flujo
-        return { action: "HOLD", reason: "Market Stable / RSI No Cross" };
+        // Si el precio fluctúa dentro de las bandas sin quebrar o confirmar los niveles, se mantiene a la espera
+        return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
-}
 
 module.exports = new CentralAnalyzer();
