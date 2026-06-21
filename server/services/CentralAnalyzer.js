@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Motor de Indicadores Técnicos Globales con Suavizado de Señal (Smoothing)
+ * Global Technical Indicators Motor with Signal Smoothing
  */
 
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
@@ -8,7 +8,7 @@ const bitmartService = require('./bitmartService');
 const MarketSignal = require('../models/MarketSignal');
 const AIEngine = require('../src/states/ai/AIEngine');
 const AutoBot = require('../models/Autobot');
-const StrategyManager = require('../src/managers/StrategyManager'); // Importado para el cálculo de confianza
+const StrategyManager = require('../src/managers/StrategyManager'); // Imported for confidence calculations
 
 class CentralAnalyzer {
     constructor() {
@@ -27,14 +27,14 @@ class CentralAnalyzer {
         };
         this.lastPrice = 0;
         
-        // --- SISTEMA DE SUAVIZADO (Smoothing) ---
-        this.confidenceHistory = []; // Memoria de lecturas de confianza
-        this.SMOOTHING_WINDOW = 5;    // Promedia las últimas 5 lecturas
+        // --- SMOOTHING SYSTEM ---
+        this.confidenceHistory = []; // Memory array for confidence readings
+        this.SMOOTHING_WINDOW = 5;    // Averages the last 5 readings
     }
 
     async init(io) {
         this.io = io;
-//         console.log("🧠 [CENTRAL-ANALYZER] Motor reactivo con Smoothing y Fuzzy Logic activo.");
+//         console.log("🧠 [CENTRAL-ANALYZER] Reactive motor with Smoothing and Fuzzy Logic active.");
         await this.analyze();
     }
 
@@ -46,7 +46,7 @@ class CentralAnalyzer {
         try {
             let candles = externalCandles;
 
-            // 1. OBTENCIÓN DE DATOS
+            // 1. DATA ACQUISITION
             if (!candles || candles.length === 0) {
                 const raw = await bitmartService.getKlines(this.symbol, '1', 300);
                 if (!raw || raw.length === 0) return;
@@ -62,7 +62,7 @@ class CentralAnalyzer {
                     open: parseFloat(c.open || c.close),
                     close: parseFloat(c.close),
                     volume: parseFloat(c.volume || 0),
-                    history: [] // Espacio para el array de velas que necesita el StrategyManager
+                    history: [] // Required space for StrategyManager array processing
                 }));
             }
 
@@ -79,7 +79,7 @@ class CentralAnalyzer {
                 currentCloses.push(this.lastPrice);
             }
 
-            // 2. CÁLCULO DE INDICADORES (Sincronización para DB)
+            // 2. INDICATOR CALCULATIONS (DB Synchronization)
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_21 });
             const adxArr = ADX.calculate({ high: highs, low: lows, close: closes, period: this.config.ADX_PERIOD });
@@ -100,25 +100,25 @@ class CentralAnalyzer {
 
             const price = this.lastPrice || closes[closes.length - 1];
             
-            // 🟢 CORRECCIÓN DE SINCRONIZACIÓN: Ahora se evalúa el RSI de 14 períodos para los quiebres de 30 y 70
+            // 🟢 EVALUATION WITH HYSTERESIS AND DECOUPLING
             const signal = this._getSignal(curRSI14, prevRSI14, curADX, curMACD, price);
 
-            // 3. CÁLCULO DE CONFIANZA IA CON SUAVIZADO
+            // 3. AI CONFIDENCE CALCULATION WITH SMOOTHING
             const analysis = StrategyManager.calculate(candles);
             let finalConfidence = 0;
 
             if (analysis) {
-                // Agregar al historial para promediar
+                // Push to memory history array to calculate weighted moving average
                 this.confidenceHistory.push(analysis.confidence);
                 if (this.confidenceHistory.length > this.SMOOTHING_WINDOW) {
                     this.confidenceHistory.shift();
                 }
-                // Calcular promedio ponderado (Smoothing)
+                // Calculate weighted average (Smoothing)
                 const sum = this.confidenceHistory.reduce((a, b) => a + b, 0);
                 finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
             }
 
-            // 4. PERSISTENCIA EN DB
+            // 4. DATABASE PERSISTENCE
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -126,21 +126,21 @@ class CentralAnalyzer {
                     rsi14: curRSI14,
                     rsi21: curRSI21,
                     currentRSI: curRSI14,
-                    prevRSI: prevRSI14, // 🟢 Sincronizado para guardar el histórico de 14 usado en la toma de decisiones
+                    prevRSI: prevRSI14,
                     adx: curADX,
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
                     macdHist: parseFloat(curMACD.histogram.toFixed(2)),
                     signal: signal.action, 
                     reason: signal.reason,
-                    history: candles, // Guardamos el historial para que AIEngine lo encuentre
-                    aiConfidence: finalConfidence, // <--- GUARDAMOS LA IA AQUÍ
+                    history: candles,
+                    aiConfidence: finalConfidence,
                     lastUpdate: new Date()
                 },
                 { upsert: true, new: true }
             );
 
-            // 5. BROADCAST GLOBAL
+            // 5. GLOBAL BROADCAST
             if (this.io) {
                 this.io.emit('market-signal-update', { 
                     price, 
@@ -150,21 +150,17 @@ class CentralAnalyzer {
                 });
             }
 
-            // 6. DISPARAR IA PARA USUARIOS ACTIVOS
+            // 6. TRIGGER AI BOT CHECKS FOR ACTIVE RUNNING INSTANCES
             try {
                 const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
                 
                 for (const bot of activeAiBots) {
-                    // 🟢 CAMBIO CLAVE: Enviamos un objeto 'brain' con la confianza ya calculada
                     const brain = {
                         confidence: finalConfidence,
                         signal: signal.action,
                         reason: signal.reason
                     };
-                    // Ahora AIEngine recibirá la decisión ya tomada
                     await AIEngine.analyze(price, bot.userId, bot, brain);
-                    
-//                     console.log(`🧠 [IA-DEBUG] Usuario: ${bot.userId} | Confianza Suavizada: ${finalConfidence}`);
 
                     if (this.io) {
                         this.io.to(bot.userId.toString()).emit('ai-decision-update', { 
@@ -175,20 +171,20 @@ class CentralAnalyzer {
                     }
                 }
             } catch (aiErr) {
-                console.error(`❌ [CENTRAL-ANALYZER] Error disparando IA: ${aiErr.message}`);
+                console.error(`❌ [CENTRAL-ANALYZER] Error executing AIEngine: ${aiErr.message}`);
             }
 
             return updatedSignal;
 
         } catch (err) {
-            console.error(`❌ [CENTRAL-ANALYZER] Error: ${err.message}`);
+            console.error(`❌ [CENTRAL-ANALYZER] Critical Error: ${err.message}`);
             console.error(err.stack);
         }
     }
 
     /**
-     * EVALUACIÓN TÉCNICA DINÁMICA POR CRUCE DE FRONTERAS (Regulación de estados)
-     * Optimizada con filtros de Histéresis y Tendencia (ADX) para eliminar ruidos y falsas rupturas.
+     * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS (State Regulation)
+     * Optimized with Hysteresis and Trend filters (ADX) to eliminate noise and false breakouts.
      */
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
@@ -197,43 +193,41 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // --- CONFIGURACIÓN DE HISTÉRESIS (Filtro Anti-Ruido) ---
-        const UMBRAL_CONFIRMADO_LONG = 33;  // Evita falsas entradas si el RSI juguetea justo en 30
-        const UMBRAL_CONFIRMADO_SHORT = 67; // Evita falsas entradas si el RSI juguetea justo en 70
-        const ADX_MAX_TREND = 30;           // Filtro: Si el ADX > 30 la tendencia es muy fuerte; peligroso para Grilla
+        // --- HYSTERESIS CONFIGURATION (Anti-Noise Filter) ---
+        const UMBRAL_CONFIRMADO_LONG = 33;  
+        const UMBRAL_CONFIRMADO_SHORT = 67; 
+        const ADX_MAX_TREND = 30;           // Filter: If ADX > 30 trend is too strong; risky for Grid
 
-        // 1. 🟢 CONDICIÓN COMPRA TRADICIONAL (LONG GRID) con Histéresis y Confirmación
-        // El RSI estuvo abajo del suelo crítico (<= 33), pero confirma el rebote saliendo al alza.
+        // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) with Hysteresis & Confirmation
         const rsiConfirmedUp30 = prevRsi <= UMBRAL_CONFIRMADO_LONG && rsi > UMBRAL_CONFIRMADO_LONG;
         if (rsiConfirmedUp30 && macdBullish && adx < ADX_MAX_TREND) {
             return { 
                 action: "BUY", 
-                reason: `RSI Confirmó salida de sobreventa (>33) | RSI: ${rsi} | ADX Saludable: ${adx} | MACD Alcista` 
+                reason: `RSI confirmed breakout from oversold (>33) | RSI: ${rsi} | Healthy ADX: ${adx} | MACD Bullish` 
             };
         }
 
-        // 2. 🟢 CONDICIÓN VENTA TRADICIONAL (SHORT GRID) con Histéresis y Confirmación
-        // El RSI estuvo arriba del techo crítico (>= 67), pero confirma el giro cayendo a la baja.
+        // 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) with Hysteresis & Confirmation
         const rsiConfirmedDown70 = prevRsi >= UMBRAL_CONFIRMADO_SHORT && rsi < UMBRAL_CONFIRMADO_SHORT;
         if (rsiConfirmedDown70 && macdBearish && adx < ADX_MAX_TREND) {
             return { 
                 action: "SELL", 
-                reason: `RSI Confirmó caída de sobrecompra (<67) | RSI: ${rsi} | ADX Saludable: ${adx} | MACD Bajista` 
+                reason: `RSI confirmed breakdown from overbought (<67) | RSI: ${rsi} | Healthy ADX: ${adx} | MACD Bearish` 
             };
         }
 
-        // 3. 🧠 CONDICIÓN MOMENTUM ALCISTA (SÓLO PARA AI BOT): Impulso fuerte con RSI alto
+        // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY): Strong impulse with high RSI
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
             return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
         }
 
-        // 4. 🧠 CONDICIÓN MOMENTUM BAJISTA (SÓLO PARA AI BOT): Caída fuerte con RSI bajo
+        // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY): Strong drop with low RSI
         if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish) {
             return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
 
-        // Si el precio fluctúa dentro de las bandas sin quebrar o confirmar los niveles, se mantiene a la espera
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
+}
 
 module.exports = new CentralAnalyzer();
