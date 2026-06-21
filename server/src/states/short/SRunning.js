@@ -1,4 +1,4 @@
-// BSB/server/src/au/states/short/SRunning.js
+// BSB/server/src/states/short/SRunning.js
 
 /**
  * S-RUNNING STATE (SHORT):
@@ -18,7 +18,8 @@ async function run(dependencies) {
         updateBotState, 
         currentPrice, 
         updateGeneralBotState,
-        config 
+        config,
+        marketContext // 🟢 AUDITORÍA: Recibimos el contexto optimizado e inyectado desde el motor maestro
     } = dependencies;
     
     // 0. Bloqueo de seguridad: Precio inválido
@@ -30,7 +31,7 @@ async function run(dependencies) {
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
-//        log("[S-RUNNING] 🛡️ Posición Short activa detectada (sac > 0). Corrigiendo estado a SELLING...", 'warning');
+//         log("[S-RUNNING] 🛡️ Posición Short activa detectada (sac > 0). Corrigiendo estado a SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
@@ -57,25 +58,40 @@ async function run(dependencies) {
     try {
         // 2. CONSULTA DE SEÑALES GLOBALES
         const SYMBOL = botState.config?.symbol || 'BTC_USDT';
-        // 🟢 AUDITORÍA: Una sola lectura a la DB para la señal compartida, optimizando recursos del servidor.
-        const globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
+        
+        // 🟢 AUDITORÍA: Usamos prioritariamente la inyección atómica del motor para evitar sobrecarga I/O de la DB.
+        // Si no existe, recurrimos al fallback de lectura directa.
+        let globalSignal = marketContext;
+
+        if (!globalSignal || !globalSignal.signal) {
+            globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
+        }
 
         if (!globalSignal) return;
 
+        // 🟢 AUDITORÍA: Control preventivo ante posibles valores nulos o indefinidos en variantes de campos espejo (rsi14 vs currentRSI)
+        const rsiValue = globalSignal.currentRSI !== undefined ? globalSignal.currentRSI : (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
+
         // Log de monitoreo (Heartbeat)
-        log(`[S-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
+        log(`[S-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
 
         // 3. VALIDACIÓN DE OBSOLESCENCIA
         // 🟢 AUDITORÍA: Vital para evitar entradas en falso si el servicio de señales (MarketSignal) se congela.
-        const signalAgeMinutes = (Date.now() - new Date(globalSignal.lastUpdate || globalSignal.updatedAt).getTime()) / 60000;
+        const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
+
+        if (!signalTime) {
+            return;
+        }
+
+        const signalAgeMinutes = (Date.now() - new Date(signalTime).getTime()) / 60000;
         if (signalAgeMinutes > 5) {
-//            log(`[S-RUNNING] ⚠️ Señal Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
+//             log(`[S-RUNNING] ⚠️ Señal Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
             return;
         }
 
         // 4. LÓGICA DE ACTIVACIÓN (Entrada al Mercado)
         if (globalSignal.signal === 'SELL') { 
-            log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${globalSignal.currentRSI.toFixed(2)}.`, 'success');
+            log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${rsiValue.toFixed(2)}.`, 'success');
             
             // Pasamos a SELLING para ejecutar la primera venta de apertura (Creación de la deuda)
             await updateBotState('SELLING', 'short'); 

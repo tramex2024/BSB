@@ -44,13 +44,17 @@ async function processSingleBot(botState, currentPrice) {
         const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || 'BTC_USDT' }).lean();
         
         // Contexto técnico que será inyectado en las estrategias
+        // 🟢 INYECCIÓN DE CORRECCIÓN: Añadidos campos para compatibilidad con validaciones temporales y de legado
         const marketContext = marketData ? {
             rsi14: marketData.rsi14,
+            currentRSI: marketData.currentRSI !== undefined ? marketData.currentRSI : marketData.rsi14,
+            prevRSI: marketData.prevRSI !== undefined ? marketData.prevRSI : marketData.rsi14,
             adx: marketData.adx,
             signal: marketData.signal,
             aiConfidence: marketData.aiConfidence,
-            trend: marketData.trend
-        } : { rsi14: 50, adx: 0, signal: 'NEUTRAL', aiConfidence: 0, trend: 'NEUTRAL' };
+            trend: marketData.trend,
+            lastUpdate: marketData.lastUpdate || marketData.updatedAt || new Date()
+        } : { rsi14: 50, currentRSI: 50, prevRSI: 50, adx: 0, signal: 'NEUTRAL', aiConfidence: 0, trend: 'NEUTRAL', lastUpdate: new Date() };
 
         const user = await User.findById(userId).lean();
         if (!user || !user.bitmartApiKey) {

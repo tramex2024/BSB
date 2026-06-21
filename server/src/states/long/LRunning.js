@@ -1,4 +1,4 @@
-// BSB/server/src/au/states/long/LRunning.js
+// BSB/server/src/states/long/LRunning.js
 
 const MarketSignal = require('../../../models/MarketSignal');
 const { calculateLongCoverage } = require('../../../autobotCalculations');
@@ -15,7 +15,8 @@ async function run(dependencies) {
         updateBotState, 
         currentPrice, 
         updateGeneralBotState,
-        config 
+        config,
+        marketContext // 🟢 AUDITORÍA: Recibimos el contexto optimizado e inyectado desde el motor maestro
     } = dependencies;
     
     // 1. SECURITY CHECK (Flat Architecture)
@@ -48,8 +49,14 @@ async function run(dependencies) {
     // 2. GLOBAL SIGNAL QUERY
     try {
         const currentSymbol = botState.config?.symbol || 'BTC_USDT';
-        // 🟢 AUDITORÍA: MarketSignal es una colección global, eficiente para no saturar la DB
-        const globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
+        
+        // 🟢 AUDITORÍA: Usamos prioritariamente la inyección atómica del motor para evitar sobrecarga I/O de la DB. 
+        // Si no existe, recurrimos al fallback de lectura directa.
+        let globalSignal = marketContext;
+        
+        if (!globalSignal || !globalSignal.signal) {
+            globalSignal = await MarketSignal.findOne({ symbol: currentSymbol });
+        }
 
         if (!globalSignal) {
             log("[L-RUNNING] ⏳ Waiting for market signals initialization...", 'debug');
@@ -58,7 +65,11 @@ async function run(dependencies) {
 
         // 3. FRESHNESS VALIDATION
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
-        log(`[L-RUNNING] 👁️ RSI: ${globalSignal.currentRSI.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
+        
+        // 🟢 AUDITORÍA: Control preventivo ante posibles valores nulos o indefinidos en variantes de campos espejo (rsi14 vs currentRSI)
+        const rsiValue = globalSignal.currentRSI !== undefined ? globalSignal.currentRSI : (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
+        
+        log(`[L-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
 
         if (!signalTime) {
             log("[L-RUNNING] ⚠️ Signal without timestamp. Waiting for update...", 'warning');
@@ -74,7 +85,7 @@ async function run(dependencies) {
 
         // 4. ACTIVATION LOGIC (Market Entry)
         if (globalSignal.signal === 'BUY') { 
-            log(`🚀 [L-SIGNAL] BUY DETECTED! RSI: ${globalSignal.currentRSI.toFixed(2)} | Entering Market...`, 'success');
+            log(`🚀 [L-SIGNAL] BUY DETECTED! RSI: ${rsiValue.toFixed(2)} | Entering Market...`, 'success');
             await updateBotState('BUYING', 'long'); 
             return; 
         }
