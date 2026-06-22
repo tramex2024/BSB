@@ -199,28 +199,26 @@ class CentralAnalyzer {
         const ZONA_SOBREVENTA = 30;
         const RETORNO_LONG = 33;
 
-        // 1. 🔴 TRADITIONAL SELL CONDITION (SHORT) - CORREGIDA Y SIMÉTRICA
+        // 1. 🔴 TRADITIONAL SELL CONDITION (SHORT) - MACD REMOVIDO
         const rsiDroppingFromTop = prevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
         const rsiCoolingInsideWindow = prevRsi >= RETORNO_SHORT && rsi <= RETORNO_SHORT;
 
-        if ((rsiDroppingFromTop || rsiCoolingInsideWindow) && macdBearish) {
+        if (rsiDroppingFromTop || rsiCoolingInsideWindow) {
             return { 
                 action: "SELL", 
-                reason: `RSI confirmed reversal from overbought top | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD Bearish` 
+                reason: `RSI confirmed reversal from overbought top | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD: ${macdBearish ? 'Bearish' : 'Bullish'}` 
             };
         }
 
-        // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - CORREGIDA Y SIMÉTRICA
+        // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - MACD REMOVIDO
         const rsiBouncingFromBottom = prevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
         const rsiRecoveringInsideWindow = prevRsi <= RETORNO_LONG && rsi >= RETORNO_LONG;
 
         if (rsiBouncingFromBottom || rsiRecoveringInsideWindow) {
-            if (macdBullish) {
-                return { 
-                    action: "BUY", 
-                    reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD Bullish` 
-                };
-            }
+            return { 
+                action: "BUY", 
+                reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD: ${macdBullish ? 'Bullish' : 'Bearish'}` 
+            };
         }
 
         // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
@@ -235,6 +233,6 @@ class CentralAnalyzer {
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
-} // <--- AQUÍ FALTABLA ESTA LLAVE PARA CERRAR LA CLASE
+}
 
 module.exports = new CentralAnalyzer();
