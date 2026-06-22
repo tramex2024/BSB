@@ -56,7 +56,7 @@ function setupPublicTicker(io) {
                     const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
                         { symbol: 'BTC_USDT' },
                         { 
-                            $push: { history: { $each: [closedCandle], $slice: -250 } },
+                            $push: { history: { $each: [closedCandle], $slice: -300 } },
                             $set: { lastUpdate: new Date(), currentPrice: price }
                         },
                         { upsert: true, new: true }
