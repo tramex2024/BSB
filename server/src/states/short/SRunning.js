@@ -2,15 +2,15 @@
 
 /**
  * S-RUNNING STATE (SHORT):
- * Monitorea señales de mercado para abrir una posición en corto.
- * Corregido: Sincronización de proyección visual en tiempo real (2026).
+ * Monitors market signals to open a short position.
+ * Fixed: Real-time visual projection synchronization (2026).
  */
 
 const MarketSignal = require('../../../models/MarketSignal');
 const { calculateShortCoverage } = require('../../../autobotCalculations');
 
 async function run(dependencies) {
-    // 1. Contexto inyectado
+    // 1. Injected Context
     const { 
         userId, 
         botState, 
@@ -19,34 +19,34 @@ async function run(dependencies) {
         currentPrice, 
         updateGeneralBotState,
         config,
-        marketContext // 🟢 AUDITORÍA: Recibimos el contexto optimizado e inyectado desde el motor maestro
+        marketContext // 🟢 AUDIT: Received optimized context injected from the master engine
     } = dependencies;
     
-    // 0. Bloqueo de seguridad: Precio inválido
+    // 0. Safety Lock: Invalid Price
     if (!currentPrice || currentPrice <= 0) return; 
 
-    // 1. VERIFICACIÓN DE POSICIÓN HUÉRFANA
-    // 🟢 AUDITORÍA: Si el usuario ya tiene activos vendidos (sac > 0), el bot debe gestionar la posición.
-    // Esto previene que el bot ignore una deuda abierta si el estado se desincronizó.
+    // 1. ORPHAN POSITION CHECK
+    // 🟢 AUDIT: If the user already has sold assets (sac > 0), the bot must manage the position.
+    // This prevents the bot from ignoring an open debt if the state becomes desynchronized.
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
-//         log("[S-RUNNING] 🛡️ Posición Short activa detectada (sac > 0). Corrigiendo estado a SELLING...", 'warning');
+//         log("[S-RUNNING] 🛡️ Active Short position detected (sac > 0). Correcting state to SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
 
-    // --- NUEVO: ACTUALIZACIÓN DE PROYECCIÓN VISUAL SHORT ---
-    // Proyectamos el techo de protección (scoverage) basado en el precio actual
-    // mientras esperamos la señal de entrada.
-    // 🟢 AUDITORÍA: El cálculo es 100% atómico por usuario al usar su sbalance y config.
+    // --- NEW: SHORT VISUAL PROJECTION UPDATE ---
+    // Project the protection ceiling (scoverage) based on the current price
+    // while waiting for the entry signal.
+    // 🟢 AUDIT: The calculation is 100% atomic per user using their sbalance and config.
     const coverageInfo = calculateShortCoverage(
         parseFloat(botState.sbalance || 0),
-        currentPrice, // Base real de mercado para el Short
+        currentPrice, // Real market base for Short
         config.short.purchaseUsdt,
         (config.short.price_var / 100),
         parseFloat(config.short.size_var || 0),
-        0, // Orden inicial
+        0, // Initial order
         (config.short.price_step_inc / 100)
     );
 
@@ -56,11 +56,11 @@ async function run(dependencies) {
     });
 
     try {
-        // 2. CONSULTA DE SEÑALES GLOBALES
+        // 2. GLOBAL SIGNALS QUERY
         const SYMBOL = botState.config?.symbol || 'BTC_USDT';
         
-        // 🟢 AUDITORÍA: Usamos prioritariamente la inyección atómica del motor para evitar sobrecarga I/O de la DB.
-        // Si no existe, recurrimos al fallback de lectura directa.
+        // 🟢 AUDIT: Prioritize using the engine's atomic injection to avoid DB I/O overhead.
+        // If it does not exist, fall back to direct reading.
         let globalSignal = marketContext;
 
         if (!globalSignal || !globalSignal.signal) {
@@ -69,14 +69,14 @@ async function run(dependencies) {
 
         if (!globalSignal) return;
 
-        // 🟢 AUDITORÍA: Control preventivo ante posibles valores nulos o indefinidos en variantes de campos espejo (rsi14 vs currentRSI)
+        // 🟢 AUDIT: Preventive control against potential null or undefined values in mirror field variations (rsi14 vs currentRSI)
         const rsiValue = globalSignal.currentRSI !== undefined ? globalSignal.currentRSI : (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
 
-        // Log de monitoreo (Heartbeat)
+        // Monitoring log (Heartbeat)
         log(`[S-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
 
-        // 3. VALIDACIÓN DE OBSOLESCENCIA
-        // 🟢 AUDITORÍA: Vital para evitar entradas en falso si el servicio de señales (MarketSignal) se congela.
+        // 3. OBSOLESCENCE VALIDATION
+        // 🟢 AUDIT: Vital to avoid false entries if the signaling service (MarketSignal) freezes.
         const signalTime = globalSignal.lastUpdate || globalSignal.updatedAt;
 
         if (!signalTime) {
@@ -85,21 +85,21 @@ async function run(dependencies) {
 
         const signalAgeMinutes = (Date.now() - new Date(signalTime).getTime()) / 60000;
         if (signalAgeMinutes > 5) {
-//             log(`[S-RUNNING] ⚠️ Señal Short obsoleta (${signalAgeMinutes.toFixed(1)} min). Ignorando.`, 'warning');
+//             log(`[S-RUNNING] ⚠️ Obsolete Short signal (${signalAgeMinutes.toFixed(1)} min). Ignoring.`, 'warning');
             return;
         }
 
-        // 4. LÓGICA DE ACTIVACIÓN (Entrada al Mercado)
+        // 4. ACTIVATION LOGIC (Market Entry)
         if (globalSignal.signal === 'SELL') { 
-            log(`🚀 [S-SIGNAL] ¡OPORTUNIDAD DE SHORT DETECTADA! RSI: ${rsiValue.toFixed(2)}.`, 'success');
+            log(`🚀 [S-SIGNAL] SHORT OPPORTUNITY DETECTED! RSI: ${rsiValue.toFixed(2)}.`, 'success');
             
-            // Pasamos a SELLING para ejecutar la primera venta de apertura (Creación de la deuda)
+            // Move to SELLING to execute the first opening sale (Debt creation)
             await updateBotState('SELLING', 'short'); 
             return; 
         }
 
     } catch (error) {
-        log(`[S-RUNNING] ❌ Error en señales: ${error.message}`, 'error');
+        log(`[S-RUNNING] ❌ Signals error: ${error.message}`, 'error');
     }
 }
 
