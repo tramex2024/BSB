@@ -199,23 +199,23 @@ class CentralAnalyzer {
         const UMBRAL_CONFIRMADO_LONG = 33;  
         const UMBRAL_CONFIRMADO_SHORT = 67; 
 
-        // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) - High Reactivity
-        const rsiConfirmedUp30 = prevRsi <= UMBRAL_CONFIRMADO_LONG && rsi > UMBRAL_CONFIRMADO_LONG;
-        if (rsiConfirmedUp30 && macdBullish) {
-            return { 
-                action: "BUY", 
-                reason: `RSI confirmed breakout from oversold (>33) | RSI: ${rsi} | MACD Bullish (High Reactivity Mode)` 
-            };
-        }
+        // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) - Reactive Zone
+// Triggers if current RSI is strictly in the recovery zone and MACD supports it
+if (rsi > 30 && rsi <= UMBRAL_CONFIRMADO_LONG && macdBullish) {
+    return { 
+        action: "BUY", 
+        reason: `RSI located inside entry zone (${rsi}) | MACD Bullish` 
+    };
+}
 
-        // 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) - High Reactivity
-        const rsiConfirmedDown70 = prevRsi >= UMBRAL_CONFIRMADO_SHORT && rsi < UMBRAL_CONFIRMADO_SHORT;
-        if (rsiConfirmedDown70 && macdBearish) {
-            return { 
-                action: "SELL", 
-                reason: `RSI confirmed breakdown from overbought (<67) | RSI: ${rsi} | MACD Bearish (High Reactivity Mode)` 
-            };
-        }
+// 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) - Reactive Zone
+// Triggers if current RSI is strictly below the overbought trigger and MACD supports it
+if (rsi < 70 && rsi >= UMBRAL_CONFIRMADO_SHORT && macdBearish) {
+    return { 
+        action: "SELL", 
+        reason: `RSI located inside short zone (${rsi}) | MACD Bearish` 
+    };
+}
 
         // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY): Strong impulse with high RSI
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
