@@ -23,7 +23,7 @@ class CentralAnalyzer {
             MACD_SLOW: 26,
             MACD_SIGNAL: 9,
             MOMENTUM_THRESHOLD: 0.8,
-            MAX_HISTORY: 250
+            MAX_HISTORY: 500
         };
         this.lastPrice = 0;
         
@@ -74,9 +74,15 @@ class CentralAnalyzer {
             const lows = candles.map(c => c.low);
 
             const currentCloses = [...closes];
-            if (this.lastPrice && this.lastPrice !== currentCloses[currentCloses.length - 1]) {
-                currentCloses.push(this.lastPrice);
-            }
+
+            if (this.lastPrice) {
+    if (currentCloses.length >= this.config.MAX_HISTORY) {
+        // Removemos el cierre más antiguo para no estirar el array artificialmente
+        currentCloses.shift(); 
+    }
+    // Inyectamos el precio actual estrictamente como el último elemento flotante
+    currentCloses.push(this.lastPrice); 
+}
 
             // 2. INDICATOR CALCULATIONS (DB Synchronization)
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
