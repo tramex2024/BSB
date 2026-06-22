@@ -76,13 +76,11 @@ class CentralAnalyzer {
             const currentCloses = [...closes];
 
             if (this.lastPrice) {
-    if (currentCloses.length >= this.config.MAX_HISTORY) {
-        // Removemos el cierre más antiguo para no estirar el array artificialmente
-        currentCloses.shift(); 
-    }
-    // Inyectamos el precio actual estrictamente como el último elemento flotante
-    currentCloses.push(this.lastPrice); 
-}
+                if (currentCloses.length >= this.config.MAX_HISTORY) {
+                    currentCloses.shift(); 
+                }
+                currentCloses.push(this.lastPrice); 
+            }
 
             // 2. INDICATOR CALCULATIONS (DB Synchronization)
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
@@ -196,7 +194,7 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // --- UMBRALES DE TRADING ---
+        // --- TRADING BOUNDARIES ---
         const ZONA_SOBRECOMPRA = 70;
         const RETORNO_SHORT = 67;
         
@@ -204,9 +202,7 @@ class CentralAnalyzer {
         const RETORNO_LONG = 33;
 
         // 1. 🟢 TRADITIONAL SELL CONDITION (SHORT) - DIRECTIONAL MEMORY
-        // CONDITION A: The RSI is currently dropping from above 70 down to the boundary.
         const rsiDroppingFromTop = prevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
-        // CONDITION B: The RSI already crossed down but is still cooling off inside the hot window (between 67 and 70), confirming it comes from the top.
         const rsiCoolingInsideWindow = prevRsi >= RETORNO_SHORT && rsi < RETORNO_SHORT && prevRsi <= ZONA_SOBRECOMPRA;
 
         if ((rsiDroppingFromTop || rsiCoolingInsideWindow) && macdBearish) {
@@ -217,9 +213,7 @@ class CentralAnalyzer {
         }
 
         // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - DIRECTIONAL MEMORY
-        // CONDITION A: The RSI is currently bouncing from below 30 up to the boundary.
         const rsiBouncingFromBottom = prevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
-        // CONDITION B: The RSI already crossed up but is still recovering inside the hot window (between 30 and 33), confirming it comes from the bottom.
         const rsiRecoveringInsideWindow = prevRsi <= RETORNO_LONG && rsi > RETORNO_LONG && prevRsi >= ZONA_SOBREVENTA;
 
         if ((rsiBouncingFromBottom || rsiRecoveringInsideWindow) && macdBullish) {
@@ -241,5 +235,6 @@ class CentralAnalyzer {
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
+}
 
 module.exports = new CentralAnalyzer();
