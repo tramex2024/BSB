@@ -34,7 +34,6 @@ class CentralAnalyzer {
 
     async init(io) {
         this.io = io;
-//         console.log("🧠 [CENTRAL-ANALYZER] Reactive motor with Smoothing and Fuzzy Logic active.");
         await this.analyze();
     }
 
@@ -62,7 +61,7 @@ class CentralAnalyzer {
                     open: parseFloat(c.open || c.close),
                     close: parseFloat(c.close),
                     volume: parseFloat(c.volume || 0),
-                    history: [] // Required space for StrategyManager array processing
+                    history: [] 
                 }));
             }
 
@@ -94,13 +93,12 @@ class CentralAnalyzer {
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
             const prevRSI14 = rsi14Arr.length > 1 ? parseFloat(rsi14Arr[rsi14Arr.length - 2].toFixed(2)) : curRSI14;
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
-            const prevRSI21 = rsi21Arr.length > 1 ? parseFloat(rsi21Arr[rsi21Arr.length - 2].toFixed(2)) : curRSI21;
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
             const price = this.lastPrice || closes[closes.length - 1];
             
-            // 🟢 EVALUATION WITH HYSTERESIS AND DECOUPLING
+            // Evaluate signals using the high reactivity model
             const signal = this._getSignal(curRSI14, prevRSI14, curADX, curMACD, price);
 
             // 3. AI CONFIDENCE CALCULATION WITH SMOOTHING
@@ -108,12 +106,10 @@ class CentralAnalyzer {
             let finalConfidence = 0;
 
             if (analysis) {
-                // Push to memory history array to calculate weighted moving average
                 this.confidenceHistory.push(analysis.confidence);
                 if (this.confidenceHistory.length > this.SMOOTHING_WINDOW) {
                     this.confidenceHistory.shift();
                 }
-                // Calculate weighted average (Smoothing)
                 const sum = this.confidenceHistory.reduce((a, b) => a + b, 0);
                 finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
             }
@@ -182,7 +178,7 @@ class CentralAnalyzer {
         }
     }
 
-/**
+    /**
      * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS (State Regulation)
      * High-reactivity mode: Trend filtering (ADX) removed to capture rapid price swings.
      */
@@ -198,7 +194,6 @@ class CentralAnalyzer {
         const UMBRAL_CONFIRMADO_SHORT = 67; 
 
         // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) - High Reactivity
-        // Triggers as soon as RSI recovers from oversold (>33) and MACD turns positive, ignoring ADX strength.
         const rsiConfirmedUp30 = prevRsi <= UMBRAL_CONFIRMADO_LONG && rsi > UMBRAL_CONFIRMADO_LONG;
         if (rsiConfirmedUp30 && macdBullish) {
             return { 
@@ -208,7 +203,6 @@ class CentralAnalyzer {
         }
 
         // 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) - High Reactivity
-        // Triggers as soon as RSI drops from overbought (<67) and MACD turns negative, ignoring ADX strength.
         const rsiConfirmedDown70 = prevRsi >= UMBRAL_CONFIRMADO_SHORT && rsi < UMBRAL_CONFIRMADO_SHORT;
         if (rsiConfirmedDown70 && macdBearish) {
             return { 
@@ -229,5 +223,6 @@ class CentralAnalyzer {
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
+}
 
 module.exports = new CentralAnalyzer();
