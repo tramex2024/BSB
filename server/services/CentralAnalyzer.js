@@ -118,7 +118,34 @@ class CentralAnalyzer {
                 finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
             }
 
-            // 4. DATABASE PERSISTENCE
+            // 4. DATABASE PERSISTENCE (With Flash Overwrite Protection Lock)
+            let actionToPersist = signal.action;
+            let reasonToPersist = signal.reason;
+            let timestampToPersist = new Date();
+
+            try {
+                // Consultamos el estado actual en la DB antes de escribir
+                const existingSignal = await MarketSignal.findOne({ symbol: this.symbol });
+
+                if (existingSignal && signal.action === 'HOLD') {
+                    const CRITICAL_SIGNALS = ['BUY', 'SELL', 'AIBUY', 'AISELL'];
+                    
+                    // Si hay una señal operativa viva en la base de datos
+                    if (CRITICAL_SIGNALS.includes(existingSignal.signal)) {
+                        const signalAgeMs = Date.now() - new Date(existingSignal.lastUpdate).getTime();
+                        
+                        // 🔒 CANDADO: Si la señal operativa tiene menos de 5 segundos, la protegemos
+                        if (signalAgeMs < 5000) { 
+                            actionToPersist = existingSignal.signal;
+                            reasonToPersist = existingSignal.reason;
+                            timestampToPersist = existingSignal.lastUpdate; // No refrescamos para que el candado expire naturalmente
+                        }
+                    }
+                }
+            } catch (dbErr) {
+                console.error(`⚠️ [CENTRAL-ANALYZER] Lock read failed, falling back to standard write: ${dbErr.message}`);
+            }
+
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -131,11 +158,11 @@ class CentralAnalyzer {
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
                     macdHist: parseFloat(curMACD.histogram.toFixed(2)),
-                    signal: signal.action, 
-                    reason: signal.reason,
+                    signal: actionToPersist,  // Guarda SELL/BUY protegido o el nuevo HOLD si ya expiró el tiempo
+                    reason: reasonToPersist,
                     history: candles,
                     aiConfidence: finalConfidence,
-                    lastUpdate: new Date()
+                    lastUpdate: timestampToPersist
                 },
                 { upsert: true, new: true }
             );
