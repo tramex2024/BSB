@@ -184,8 +184,6 @@ class CentralAnalyzer {
 
     /**
      * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS
-     * Uses a memory trigger mechanism: Requires RSI to have visited overbought/oversold 
-     * areas before confirming the directional reversal, preventing false entry on momentum extension.
      */
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
@@ -201,9 +199,9 @@ class CentralAnalyzer {
         const ZONA_SOBREVENTA = 30;
         const RETORNO_LONG = 33;
 
-        // 1. 🟢 TRADITIONAL SELL CONDITION (SHORT) - DIRECTIONAL MEMORY
+        // 1. 🔴 TRADITIONAL SELL CONDITION (SHORT) - CORREGIDA Y SIMÉTRICA
         const rsiDroppingFromTop = prevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
-        const rsiCoolingInsideWindow = prevRsi >= RETORNO_SHORT && rsi < RETORNO_SHORT && prevRsi <= ZONA_SOBRECOMPRA;
+        const rsiCoolingInsideWindow = prevRsi >= RETORNO_SHORT && rsi <= RETORNO_SHORT;
 
         if ((rsiDroppingFromTop || rsiCoolingInsideWindow) && macdBearish) {
             return { 
@@ -212,15 +210,17 @@ class CentralAnalyzer {
             };
         }
 
-        // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - DIRECTIONAL MEMORY
+        // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - CORREGIDA Y SIMÉTRICA
         const rsiBouncingFromBottom = prevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
-        const rsiRecoveringInsideWindow = prevRsi <= RETORNO_LONG && rsi > RETORNO_LONG && prevRsi >= ZONA_SOBREVENTA;
+        const rsiRecoveringInsideWindow = prevRsi <= RETORNO_LONG && rsi >= RETORNO_LONG;
 
-        if ((rsiBouncingFromBottom || rsiRecoveringInsideWindow) && macdBullish) {
-            return { 
-                action: "BUY", 
-                reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD Bullish` 
-            };
+        if (rsiBouncingFromBottom || rsiRecoveringInsideWindow) {
+            if (macdBullish) {
+                return { 
+                    action: "BUY", 
+                    reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD Bullish` 
+                };
+            }
         }
 
         // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
@@ -235,6 +235,6 @@ class CentralAnalyzer {
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
-}
+} // <--- AQUÍ FALTABLA ESTA LLAVE PARA CERRAR LA CLASE
 
 module.exports = new CentralAnalyzer();
