@@ -185,8 +185,9 @@ class CentralAnalyzer {
     }
 
     /**
-     * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS (State Regulation)
-     * High-reactivity mode: Trend filtering (ADX) removed to capture rapid price swings.
+     * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS
+     * Uses a memory trigger mechanism: Requires RSI to have visited overbought/oversold 
+     * areas before confirming the directional reversal, preventing false entry on momentum extension.
      */
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
@@ -195,40 +196,50 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // --- HYSTERESIS CONFIGURATION (Micro-noise protection only) ---
-        const UMBRAL_CONFIRMADO_LONG = 33;  
-        const UMBRAL_CONFIRMADO_SHORT = 67; 
+        // --- UMBRALES DE TRADING ---
+        const ZONA_SOBRECOMPRA = 70;
+        const RETORNO_SHORT = 67;
+        
+        const ZONA_SOBREVENTA = 30;
+        const RETORNO_LONG = 33;
 
-        // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) - Reactive Zone
-// Triggers if current RSI is strictly in the recovery zone and MACD supports it
-if (rsi > 30 && rsi <= UMBRAL_CONFIRMADO_LONG && macdBullish) {
-    return { 
-        action: "BUY", 
-        reason: `RSI located inside entry zone (${rsi}) | MACD Bullish` 
-    };
-}
+        // 1. 🟢 TRADITIONAL SELL CONDITION (SHORT) - DIRECTIONAL MEMORY
+        // CONDITION A: The RSI is currently dropping from above 70 down to the boundary.
+        const rsiDroppingFromTop = prevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
+        // CONDITION B: The RSI already crossed down but is still cooling off inside the hot window (between 67 and 70), confirming it comes from the top.
+        const rsiCoolingInsideWindow = prevRsi >= RETORNO_SHORT && rsi < RETORNO_SHORT && prevRsi <= ZONA_SOBRECOMPRA;
 
-// 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) - Reactive Zone
-// Triggers if current RSI is strictly below the overbought trigger and MACD supports it
-if (rsi < 70 && rsi >= UMBRAL_CONFIRMADO_SHORT && macdBearish) {
-    return { 
-        action: "SELL", 
-        reason: `RSI located inside short zone (${rsi}) | MACD Bearish` 
-    };
-}
+        if ((rsiDroppingFromTop || rsiCoolingInsideWindow) && macdBearish) {
+            return { 
+                action: "SELL", 
+                reason: `RSI confirmed reversal from overbought top | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD Bearish` 
+            };
+        }
 
-        // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY): Strong impulse with high RSI
+        // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - DIRECTIONAL MEMORY
+        // CONDITION A: The RSI is currently bouncing from below 30 up to the boundary.
+        const rsiBouncingFromBottom = prevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
+        // CONDITION B: The RSI already crossed up but is still recovering inside the hot window (between 30 and 33), confirming it comes from the bottom.
+        const rsiRecoveringInsideWindow = prevRsi <= RETORNO_LONG && rsi > RETORNO_LONG && prevRsi >= ZONA_SOBREVENTA;
+
+        if ((rsiBouncingFromBottom || rsiRecoveringInsideWindow) && macdBullish) {
+            return { 
+                action: "BUY", 
+                reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD Bullish` 
+            };
+        }
+
+        // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
             return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
         }
 
-        // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY): Strong drop with low RSI
+        // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY)
         if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish) {
             return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
-}
 
 module.exports = new CentralAnalyzer();
