@@ -23,7 +23,7 @@ class CentralAnalyzer {
             MACD_SLOW: 26,
             MACD_SIGNAL: 9,
             MOMENTUM_THRESHOLD: 0.8,
-            MAX_HISTORY: 300
+            MAX_HISTORY: 500
         };
         this.lastPrice = 0;
         
