@@ -182,9 +182,9 @@ class CentralAnalyzer {
         }
     }
 
-    /**
+/**
      * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS (State Regulation)
-     * Optimized with Hysteresis and Trend filters (ADX) to eliminate noise and false breakouts.
+     * High-reactivity mode: Trend filtering (ADX) removed to capture rapid price swings.
      */
     _getSignal(rsi, prevRsi, adx, macd, price) {
         if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
@@ -193,26 +193,27 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // --- HYSTERESIS CONFIGURATION (Anti-Noise Filter) ---
+        // --- HYSTERESIS CONFIGURATION (Micro-noise protection only) ---
         const UMBRAL_CONFIRMADO_LONG = 33;  
         const UMBRAL_CONFIRMADO_SHORT = 67; 
-        const ADX_MAX_TREND = 30;           // Filter: If ADX > 30 trend is too strong; risky for Grid
 
-        // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) with Hysteresis & Confirmation
+        // 1. 🟢 TRADITIONAL BUY CONDITION (LONG GRID) - High Reactivity
+        // Triggers as soon as RSI recovers from oversold (>33) and MACD turns positive, ignoring ADX strength.
         const rsiConfirmedUp30 = prevRsi <= UMBRAL_CONFIRMADO_LONG && rsi > UMBRAL_CONFIRMADO_LONG;
-        if (rsiConfirmedUp30 && macdBullish && adx < ADX_MAX_TREND) {
+        if (rsiConfirmedUp30 && macdBullish) {
             return { 
                 action: "BUY", 
-                reason: `RSI confirmed breakout from oversold (>33) | RSI: ${rsi} | Healthy ADX: ${adx} | MACD Bullish` 
+                reason: `RSI confirmed breakout from oversold (>33) | RSI: ${rsi} | MACD Bullish (High Reactivity Mode)` 
             };
         }
 
-        // 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) with Hysteresis & Confirmation
+        // 2. 🟢 TRADITIONAL SELL CONDITION (SHORT GRID) - High Reactivity
+        // Triggers as soon as RSI drops from overbought (<67) and MACD turns negative, ignoring ADX strength.
         const rsiConfirmedDown70 = prevRsi >= UMBRAL_CONFIRMADO_SHORT && rsi < UMBRAL_CONFIRMADO_SHORT;
-        if (rsiConfirmedDown70 && macdBearish && adx < ADX_MAX_TREND) {
+        if (rsiConfirmedDown70 && macdBearish) {
             return { 
                 action: "SELL", 
-                reason: `RSI confirmed breakdown from overbought (<67) | RSI: ${rsi} | Healthy ADX: ${adx} | MACD Bearish` 
+                reason: `RSI confirmed breakdown from overbought (<67) | RSI: ${rsi} | MACD Bearish (High Reactivity Mode)` 
             };
         }
 
@@ -228,6 +229,5 @@ class CentralAnalyzer {
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
     }
-}
 
 module.exports = new CentralAnalyzer();
