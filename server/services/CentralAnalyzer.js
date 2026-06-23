@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Global Technical Indicators Motor with Smart 5s Lock & Vertical Drop Detection
+ * Global Technical Indicators Motor with Live Intra-Candle Memory
  */
 
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
@@ -27,6 +27,10 @@ class CentralAnalyzer {
         };
         this.lastPrice = 0;
         
+        // --- LIVE MEMORY (NUEVO) ---
+        // Guarda el RSI en vivo del último ciclo (segundo a segundo)
+        this.lastLiveRsi = null;
+        
         // --- SMOOTHING SYSTEM ---
         this.confidenceHistory = []; 
         this.SMOOTHING_WINDOW = 5;    
@@ -34,7 +38,7 @@ class CentralAnalyzer {
         // --- 🛡️ SHIELD SYSTEMS ---
         this.isAnalyzing = false;       
         this.lastAnalysisTime = 0;      
-        this.EXECUTION_INTERVAL = 1000; // Analiza máximo 1 vez por segundo (Evita congelar el servidor)
+        this.EXECUTION_INTERVAL = 1000; 
     }
 
     async init(io) {
@@ -47,10 +51,8 @@ class CentralAnalyzer {
     }
 
     async analyze(externalCandles = null) {
-        // Evita que dos hilos calculen al mismo milisegundo exacto
         if (this.isAnalyzing) return;
 
-        // Limita la ejecución a 1 vez por segundo, manteniendo alta reactividad a caídas bruscas
         const now = Date.now();
         if (now - this.lastAnalysisTime < this.EXECUTION_INTERVAL) return;
 
@@ -108,15 +110,20 @@ class CentralAnalyzer {
             });
 
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
+            // prevRSI14 es el cierre de la VELA anterior
             const prevRSI14 = rsi14Arr.length > 1 ? parseFloat(rsi14Arr[rsi14Arr.length - 2].toFixed(2)) : curRSI14;
+            
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
             const price = this.lastPrice || closes[closes.length - 1];
             
-            // Evaluamos la señal con la lógica corregida
-            const signal = this._getSignal(curRSI14, prevRSI14, curADX, curMACD, price);
+            // 🧠 Evaluamos la señal pasando TANTO el RSI de la vela anterior COMO el RSI del segundo anterior
+            const signal = this._getSignal(curRSI14, prevRSI14, this.lastLiveRsi, curADX, curMACD, price);
+
+            // Actualizamos la memoria para el próximo ciclo de 1 segundo
+            this.lastLiveRsi = curRSI14;
 
             // 3. AI CONFIDENCE CALCULATION WITH SMOOTHING
             const analysis = StrategyManager.calculate(candles);
@@ -142,15 +149,12 @@ class CentralAnalyzer {
                 if (existingSignal) {
                     const signalAgeMs = Date.now() - new Date(existingSignal.lastUpdate).getTime();
                     
-                    // 🔒 CANDADO INTELIGENTE: 
-                    // Solo protegemos la base de datos si la nueva señal es un "HOLD" inofensivo.
-                    // Si el analizador detecta un desplome real (SELL/BUY), este "if" se salta y graba la orden al instante.
                     if (signal.action === 'HOLD' && signalAgeMs < 5000) { 
                         const CRITICAL_SIGNALS = ['BUY', 'SELL', 'AIBUY', 'AISELL'];
                         if (CRITICAL_SIGNALS.includes(existingSignal.signal)) {
                             actionToPersist = existingSignal.signal;
                             reasonToPersist = existingSignal.reason;
-                            timestampToPersist = existingSignal.lastUpdate; // Mantiene el tiempo original
+                            timestampToPersist = existingSignal.lastUpdate; 
                         }
                     }
                 }
@@ -226,10 +230,15 @@ class CentralAnalyzer {
     /**
      * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS
      */
-    _getSignal(rsi, prevRsi, adx, macd, price) {
-        if (!rsi || !prevRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
+    _getSignal(rsi, prevCandleRsi, lastLiveRsi, adx, macd, price) {
+        if (!rsi || !prevCandleRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
         
-        const rsiDiff = rsi - prevRsi;
+        // Momentum de vela entera (histórico)
+        const rsiDiff = rsi - prevCandleRsi; 
+        
+        // Momentum intra-vela (cambio segundo a segundo)
+        const liveRsiDiff = lastLiveRsi !== null ? rsi - lastLiveRsi : 0;
+
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
@@ -239,35 +248,40 @@ class CentralAnalyzer {
         const ZONA_SOBREVENTA = 30;
         const RETORNO_LONG = 33;
 
-        // 1. 🔴 TRADITIONAL SELL CONDITION - Modificado para atrapar caídas de 73 a 60
-        const rsiDroppingFromTop = prevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
-        const rsiPassedShortThreshold = prevRsi > RETORNO_SHORT && rsi <= RETORNO_SHORT;
+        // 🛡️ EL SECRETO: Usar el último RSI EN VIVO para cazar las caídas que ocurren en la misma vela
+        const effectivePrevRsi = lastLiveRsi !== null ? lastLiveRsi : prevCandleRsi;
+
+        // 1. 🔴 TRADITIONAL SELL CONDITION 
+        const rsiDroppingFromTop = effectivePrevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
+        const rsiPassedShortThreshold = effectivePrevRsi > RETORNO_SHORT && rsi <= RETORNO_SHORT;
 
         if (rsiDroppingFromTop || rsiPassedShortThreshold) {
             return { 
                 action: "SELL", 
-                reason: `RSI confirmed reversal from overbought top | Current RSI: ${rsi} (Prev: ${prevRsi})` 
+                reason: `RSI confirmed reversal from top | Live RSI dropped from ${effectivePrevRsi} to ${rsi}` 
             };
         }
 
-        // 2. 🟢 TRADITIONAL BUY CONDITION - Modificado para atrapar subidas rápidas
-        const rsiBouncingFromBottom = prevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
-        const rsiPassedLongThreshold = prevRsi < RETORNO_LONG && rsi >= RETORNO_LONG;
+        // 2. 🟢 TRADITIONAL BUY CONDITION
+        const rsiBouncingFromBottom = effectivePrevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
+        const rsiPassedLongThreshold = effectivePrevRsi < RETORNO_LONG && rsi >= RETORNO_LONG;
 
         if (rsiBouncingFromBottom || rsiPassedLongThreshold) {
             return { 
                 action: "BUY", 
-                reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi})` 
+                reason: `RSI confirmed reversal from bottom | Live RSI rose from ${effectivePrevRsi} to ${rsi}` 
             };
         }
 
-        // 3. 🧠 BULLISH MOMENTUM CONDITION
-        if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
+        // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
+        // Bloqueamos el AIBUY si el RSI está cayendo fuertemente en el segundo actual (liveRsiDiff < -1.5)
+        if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish && liveRsiDiff >= -1.5) {
             return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
         }
 
-        // 4. 🧠 BEARISH MOMENTUM CONDITION
-        if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish) {
+        // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY)
+        // Bloqueamos el AISELL si el RSI está rebotando fuertemente en el segundo actual
+        if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish && liveRsiDiff <= 1.5) {
             return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
 
