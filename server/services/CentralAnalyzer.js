@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Global Technical Indicators Motor with Signal Smoothing
+ * Global Technical Indicators Motor with Signal Smoothing and 5s Throttle Protection
  */
 
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
@@ -30,6 +30,11 @@ class CentralAnalyzer {
         // --- SMOOTHING SYSTEM ---
         this.confidenceHistory = []; // Memory array for confidence readings
         this.SMOOTHING_WINDOW = 5;    // Averages the last 5 readings
+
+        // --- 🛡️ SHIELD SYSTEMS AGAINST FLASH OVERWRITES ---
+        this.isAnalyzing = false;       // Prevents simultaneous overlapping execution threads
+        this.lastAnalysisTime = 0;      // Stores the timestamp of the last successful database write
+        this.THROTTLE_TIME = 5000;      // Hard limit: Updates only once every 5000 milliseconds (5 seconds)
     }
 
     async init(io) {
@@ -42,7 +47,15 @@ class CentralAnalyzer {
     }
 
     async analyze(externalCandles = null) {
+        // 🔒 ESCUDO 1: Si ya hay un proceso calculando activamente en este instante, aborta.
+        if (this.isAnalyzing) return;
+
+        // 🔒 ESCUDO 2: Control de frecuencia exacta. Si no han pasado 5 segundos, aborta y protege la señal previa.
+        const now = Date.now();
+        if (now - this.lastAnalysisTime < this.THROTTLE_TIME) return;
+
         try {
+            this.isAnalyzing = true; // Cierra la compuerta para otros hilos de ejecución
             let candles = externalCandles;
 
             // 1. DATA ACQUISITION
@@ -134,11 +147,11 @@ class CentralAnalyzer {
                     if (CRITICAL_SIGNALS.includes(existingSignal.signal)) {
                         const signalAgeMs = Date.now() - new Date(existingSignal.lastUpdate).getTime();
                         
-                        // 🔒 CANDADO: Si la señal operativa tiene menos de 5 segundos, la protegemos
+                        // 🔒 CANDADO ADICIONAL: Si la señal operativa tiene menos de 5 segundos, la protegemos en la escritura
                         if (signalAgeMs < 5000) { 
                             actionToPersist = existingSignal.signal;
                             reasonToPersist = existingSignal.reason;
-                            timestampToPersist = existingSignal.lastUpdate; // No refrescamos para que el candado expire naturalmente
+                            timestampToPersist = existingSignal.lastUpdate; // No refrescamos para que expire naturalmente
                         }
                     }
                 }
@@ -158,7 +171,7 @@ class CentralAnalyzer {
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
                     macdHist: parseFloat(curMACD.histogram.toFixed(2)),
-                    signal: actionToPersist,  // Guarda SELL/BUY protegido o el nuevo HOLD si ya expiró el tiempo
+                    signal: actionToPersist,  // Guarda la señal protegida o el nuevo HOLD si ya pasaron los 5s
                     reason: reasonToPersist,
                     history: candles,
                     aiConfidence: finalConfidence,
@@ -173,7 +186,7 @@ class CentralAnalyzer {
                     price, 
                     rsi14: curRSI14, 
                     macd: curMACD.histogram,
-                    signal: signal.action 
+                    signal: actionToPersist 
                 });
             }
 
@@ -184,8 +197,8 @@ class CentralAnalyzer {
                 for (const bot of activeAiBots) {
                     const brain = {
                         confidence: finalConfidence,
-                        signal: signal.action,
-                        reason: signal.reason
+                        signal: actionToPersist,
+                        reason: reasonToPersist
                     };
                     await AIEngine.analyze(price, bot.userId, bot, brain);
 
@@ -201,11 +214,15 @@ class CentralAnalyzer {
                 console.error(`❌ [CENTRAL-ANALYZER] Error executing AIEngine: ${aiErr.message}`);
             }
 
+            // Guardamos la marca de tiempo de la ejecución exitosa antes de liberar la compuerta
+            this.lastAnalysisTime = Date.now();
             return updatedSignal;
 
         } catch (err) {
             console.error(`❌ [CENTRAL-ANALYZER] Critical Error: ${err.message}`);
             console.error(err.stack);
+        } finally {
+            this.isAnalyzing = false; // 🔓 Abre la puerta para permitir el análisis del siguiente ciclo de 5s
         }
     }
 
