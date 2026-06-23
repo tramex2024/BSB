@@ -203,12 +203,12 @@ class CentralAnalyzer {
                 const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
                 
                 for (const bot of activeAiBots) {
-                    const brain = {
-                        confidence: finalConfidence,
-                        signal: actionToPersist,
-                        reason: reasonToPersist
-                    };
-                    await AIEngine.analyze(price, bot.userId, bot, brain);
+                    //const brain = {
+                    //    confidence: finalConfidence,
+                    //    signal: actionToPersist,
+                    //    reason: reasonToPersist
+                    //};
+                    //await AIEngine.analyze(price, bot.userId, bot, brain);
 
                     if (this.io) {
                         this.io.to(bot.userId.toString()).emit('ai-decision-update', { 
