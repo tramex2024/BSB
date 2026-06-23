@@ -276,13 +276,13 @@ class CentralAnalyzer {
         // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
         // Bloqueamos el AIBUY si el RSI está cayendo fuertemente en el segundo actual (liveRsiDiff < -1.5)
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish && liveRsiDiff >= -1.5) {
-            return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
+            //return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
         }
 
         // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY)
         // Bloqueamos el AISELL si el RSI está rebotando fuertemente en el segundo actual
         if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish && liveRsiDiff <= 1.5) {
-            return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
+            //return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
 
         return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
