@@ -155,7 +155,8 @@ class CentralAnalyzer {
 
             // Determinamos qué señal enviar a los bots
             // En CentralAnalyzer.js, donde calculas la señal:
-let actionToPersist = signal.action;
+	    let actionToPersist = signal.action;
+            let reasonToPersist = 'Market Stable';
 
 // 🛡️ FILTRO DE SEGURIDAD EXTREMO (Añade esto justo después de calcular signal)
 const AI_SIGNALS = ['AIBUY', 'AISELL'];
