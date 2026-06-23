@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Global Technical Indicators Motor with Signal Smoothing and 5s Throttle Protection
+ * Global Technical Indicators Motor with Smart 5s Lock & Vertical Drop Detection
  */
 
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
@@ -8,7 +8,7 @@ const bitmartService = require('./bitmartService');
 const MarketSignal = require('../models/MarketSignal');
 const AIEngine = require('../src/states/ai/AIEngine');
 const AutoBot = require('../models/Autobot');
-const StrategyManager = require('../src/managers/StrategyManager'); // Imported for confidence calculations
+const StrategyManager = require('../src/managers/StrategyManager');
 
 class CentralAnalyzer {
     constructor() {
@@ -28,13 +28,13 @@ class CentralAnalyzer {
         this.lastPrice = 0;
         
         // --- SMOOTHING SYSTEM ---
-        this.confidenceHistory = []; // Memory array for confidence readings
-        this.SMOOTHING_WINDOW = 5;    // Averages the last 5 readings
+        this.confidenceHistory = []; 
+        this.SMOOTHING_WINDOW = 5;    
 
-        // --- 🛡️ SHIELD SYSTEMS AGAINST FLASH OVERWRITES ---
-        this.isAnalyzing = false;       // Prevents simultaneous overlapping execution threads
-        this.lastAnalysisTime = 0;      // Stores the timestamp of the last successful database write
-        this.THROTTLE_TIME = 5000;      // Hard limit: Updates only once every 5000 milliseconds (5 seconds)
+        // --- 🛡️ SHIELD SYSTEMS ---
+        this.isAnalyzing = false;       
+        this.lastAnalysisTime = 0;      
+        this.EXECUTION_INTERVAL = 1000; // Analiza máximo 1 vez por segundo (Evita congelar el servidor)
     }
 
     async init(io) {
@@ -47,15 +47,15 @@ class CentralAnalyzer {
     }
 
     async analyze(externalCandles = null) {
-        // 🔒 ESCUDO 1: Si ya hay un proceso calculando activamente en este instante, aborta.
+        // Evita que dos hilos calculen al mismo milisegundo exacto
         if (this.isAnalyzing) return;
 
-        // 🔒 ESCUDO 2: Control de frecuencia exacta. Si no han pasado 5 segundos, aborta y protege la señal previa.
+        // Limita la ejecución a 1 vez por segundo, manteniendo alta reactividad a caídas bruscas
         const now = Date.now();
-        if (now - this.lastAnalysisTime < this.THROTTLE_TIME) return;
+        if (now - this.lastAnalysisTime < this.EXECUTION_INTERVAL) return;
 
         try {
-            this.isAnalyzing = true; // Cierra la compuerta para otros hilos de ejecución
+            this.isAnalyzing = true; 
             let candles = externalCandles;
 
             // 1. DATA ACQUISITION
@@ -95,7 +95,7 @@ class CentralAnalyzer {
                 currentCloses.push(this.lastPrice); 
             }
 
-            // 2. INDICATOR CALCULATIONS (DB Synchronization)
+            // 2. INDICATOR CALCULATIONS
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_21 });
             const adxArr = ADX.calculate({ high: highs, low: lows, close: closes, period: this.config.ADX_PERIOD });
@@ -115,7 +115,7 @@ class CentralAnalyzer {
 
             const price = this.lastPrice || closes[closes.length - 1];
             
-            // Evaluate signals using the high reactivity model
+            // Evaluamos la señal con la lógica corregida
             const signal = this._getSignal(curRSI14, prevRSI14, curADX, curMACD, price);
 
             // 3. AI CONFIDENCE CALCULATION WITH SMOOTHING
@@ -131,32 +131,31 @@ class CentralAnalyzer {
                 finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
             }
 
-            // 4. DATABASE PERSISTENCE (With Flash Overwrite Protection Lock)
+            // 4. DATABASE PERSISTENCE (With Smart Lock)
             let actionToPersist = signal.action;
             let reasonToPersist = signal.reason;
             let timestampToPersist = new Date();
 
             try {
-                // Consultamos el estado actual en la DB antes de escribir
                 const existingSignal = await MarketSignal.findOne({ symbol: this.symbol });
 
-                if (existingSignal && signal.action === 'HOLD') {
-                    const CRITICAL_SIGNALS = ['BUY', 'SELL', 'AIBUY', 'AISELL'];
+                if (existingSignal) {
+                    const signalAgeMs = Date.now() - new Date(existingSignal.lastUpdate).getTime();
                     
-                    // Si hay una señal operativa viva en la base de datos
-                    if (CRITICAL_SIGNALS.includes(existingSignal.signal)) {
-                        const signalAgeMs = Date.now() - new Date(existingSignal.lastUpdate).getTime();
-                        
-                        // 🔒 CANDADO ADICIONAL: Si la señal operativa tiene menos de 5 segundos, la protegemos en la escritura
-                        if (signalAgeMs < 5000) { 
+                    // 🔒 CANDADO INTELIGENTE: 
+                    // Solo protegemos la base de datos si la nueva señal es un "HOLD" inofensivo.
+                    // Si el analizador detecta un desplome real (SELL/BUY), este "if" se salta y graba la orden al instante.
+                    if (signal.action === 'HOLD' && signalAgeMs < 5000) { 
+                        const CRITICAL_SIGNALS = ['BUY', 'SELL', 'AIBUY', 'AISELL'];
+                        if (CRITICAL_SIGNALS.includes(existingSignal.signal)) {
                             actionToPersist = existingSignal.signal;
                             reasonToPersist = existingSignal.reason;
-                            timestampToPersist = existingSignal.lastUpdate; // No refrescamos para que expire naturalmente
+                            timestampToPersist = existingSignal.lastUpdate; // Mantiene el tiempo original
                         }
                     }
                 }
             } catch (dbErr) {
-                console.error(`⚠️ [CENTRAL-ANALYZER] Lock read failed, falling back to standard write: ${dbErr.message}`);
+                console.error(`⚠️ [CENTRAL-ANALYZER] Lock read failed: ${dbErr.message}`);
             }
 
             const updatedSignal = await MarketSignal.findOneAndUpdate(
@@ -171,7 +170,7 @@ class CentralAnalyzer {
                     macdValue: parseFloat(curMACD.MACD.toFixed(2)),
                     macdSignal: parseFloat(curMACD.signal.toFixed(2)),
                     macdHist: parseFloat(curMACD.histogram.toFixed(2)),
-                    signal: actionToPersist,  // Guarda la señal protegida o el nuevo HOLD si ya pasaron los 5s
+                    signal: actionToPersist,
                     reason: reasonToPersist,
                     history: candles,
                     aiConfidence: finalConfidence,
@@ -190,7 +189,7 @@ class CentralAnalyzer {
                 });
             }
 
-            // 6. TRIGGER AI BOT CHECKS FOR ACTIVE RUNNING INSTANCES
+            // 6. TRIGGER AI BOT CHECKS
             try {
                 const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
                 
@@ -214,15 +213,13 @@ class CentralAnalyzer {
                 console.error(`❌ [CENTRAL-ANALYZER] Error executing AIEngine: ${aiErr.message}`);
             }
 
-            // Guardamos la marca de tiempo de la ejecución exitosa antes de liberar la compuerta
             this.lastAnalysisTime = Date.now();
             return updatedSignal;
 
         } catch (err) {
             console.error(`❌ [CENTRAL-ANALYZER] Critical Error: ${err.message}`);
-            console.error(err.stack);
         } finally {
-            this.isAnalyzing = false; // 🔓 Abre la puerta para permitir el análisis del siguiente ciclo de 5s
+            this.isAnalyzing = false;
         }
     }
 
@@ -236,41 +233,40 @@ class CentralAnalyzer {
         const macdBullish = macd.MACD > macd.signal;
         const macdBearish = macd.MACD < macd.signal;
 
-        // --- TRADING BOUNDARIES ---
         const ZONA_SOBRECOMPRA = 70;
         const RETORNO_SHORT = 67;
         
         const ZONA_SOBREVENTA = 30;
         const RETORNO_LONG = 33;
 
-        // 1. 🔴 TRADITIONAL SELL CONDITION (SHORT) - MACD REMOVIDO
+        // 1. 🔴 TRADITIONAL SELL CONDITION - Modificado para atrapar caídas de 73 a 60
         const rsiDroppingFromTop = prevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
-        const rsiCoolingInsideWindow = prevRsi >= RETORNO_SHORT && rsi <= RETORNO_SHORT;
+        const rsiPassedShortThreshold = prevRsi > RETORNO_SHORT && rsi <= RETORNO_SHORT;
 
-        if (rsiDroppingFromTop || rsiCoolingInsideWindow) {
+        if (rsiDroppingFromTop || rsiPassedShortThreshold) {
             return { 
                 action: "SELL", 
-                reason: `RSI confirmed reversal from overbought top | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD: ${macdBearish ? 'Bearish' : 'Bullish'}` 
+                reason: `RSI confirmed reversal from overbought top | Current RSI: ${rsi} (Prev: ${prevRsi})` 
             };
         }
 
-        // 2. 🟢 TRADITIONAL BUY CONDITION (LONG) - MACD REMOVIDO
+        // 2. 🟢 TRADITIONAL BUY CONDITION - Modificado para atrapar subidas rápidas
         const rsiBouncingFromBottom = prevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
-        const rsiRecoveringInsideWindow = prevRsi <= RETORNO_LONG && rsi >= RETORNO_LONG;
+        const rsiPassedLongThreshold = prevRsi < RETORNO_LONG && rsi >= RETORNO_LONG;
 
-        if (rsiBouncingFromBottom || rsiRecoveringInsideWindow) {
+        if (rsiBouncingFromBottom || rsiPassedLongThreshold) {
             return { 
                 action: "BUY", 
-                reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi}) | MACD: ${macdBullish ? 'Bullish' : 'Bearish'}` 
+                reason: `RSI confirmed reversal from oversold bottom | Current RSI: ${rsi} (Prev: ${prevRsi})` 
             };
         }
 
-        // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
+        // 3. 🧠 BULLISH MOMENTUM CONDITION
         if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish) {
             return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
         }
 
-        // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY)
+        // 4. 🧠 BEARISH MOMENTUM CONDITION
         if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish) {
             return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
         }
