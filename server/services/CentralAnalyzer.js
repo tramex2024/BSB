@@ -27,9 +27,14 @@ class CentralAnalyzer {
         };
         this.lastPrice = 0;
         
-        // --- LIVE MEMORY (NUEVO) ---
+        // --- LIVE MEMORY ---
         // Guarda el RSI en vivo del último ciclo (segundo a segundo)
         this.lastLiveRsi = null;
+
+        // --- PULSE SYSTEM (TTL 5 SEGUNDOS) ---
+        this.activePulseSignal = 'HOLD';
+        this.activePulseReason = 'Market Stable';
+        this.pulseExpirationTime = 0;
         
         // --- SMOOTHING SYSTEM ---
         this.confidenceHistory = []; 
@@ -138,30 +143,30 @@ class CentralAnalyzer {
                 finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
             }
 
-            // 4. DATABASE PERSISTENCE (With Smart Lock)
-            let actionToPersist = signal.action;
-            let reasonToPersist = signal.reason;
-            let timestampToPersist = new Date();
-
-            try {
-                const existingSignal = await MarketSignal.findOne({ symbol: this.symbol });
-
-                if (existingSignal) {
-                    const signalAgeMs = Date.now() - new Date(existingSignal.lastUpdate).getTime();
-                    
-                    if (signal.action === 'HOLD' && signalAgeMs < 5000) { 
-                        const CRITICAL_SIGNALS = ['BUY', 'SELL', 'AIBUY', 'AISELL'];
-                        if (CRITICAL_SIGNALS.includes(existingSignal.signal)) {
-                            actionToPersist = existingSignal.signal;
-                            reasonToPersist = existingSignal.reason;
-                            timestampToPersist = existingSignal.lastUpdate; 
-                        }
-                    }
-                }
-            } catch (dbErr) {
-                console.error(`⚠️ [CENTRAL-ANALYZER] Lock read failed: ${dbErr.message}`);
+            // --- SISTEMA DE PULSO (TTL 5 SEGUNDOS EN RAM) ---
+            const currentTime = Date.now();
+            
+            // Si la matemática detecta una acción real, disparamos el pulso y fijamos la expiración
+            if (signal.action !== 'HOLD') {
+                this.activePulseSignal = signal.action;
+                this.activePulseReason = signal.reason;
+                this.pulseExpirationTime = currentTime + 5000; // Vive exactamente 5 segundos
             }
 
+            // Determinamos qué señal enviar a los bots
+            let actionToPersist = 'HOLD';
+            let reasonToPersist = 'Market Stable';
+
+            // Si el pulso actual sigue vivo, lo mantenemos
+            if (currentTime < this.pulseExpirationTime) {
+                actionToPersist = this.activePulseSignal;
+                reasonToPersist = this.activePulseReason;
+            } else {
+                // Si ya pasaron los 5 segundos, apagamos el pulso
+                this.activePulseSignal = 'HOLD';
+            }
+
+            // 4. DATABASE PERSISTENCE (Escritura limpia y directa)
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -177,8 +182,8 @@ class CentralAnalyzer {
                     signal: actionToPersist,
                     reason: reasonToPersist,
                     history: candles,
-                    aiConfidence: finalConfidence,
-                    lastUpdate: timestampToPersist
+                    aiConfidence: finalConfidence
+                    // Dejamos que Mongoose maneje 'lastUpdate' automáticamente sin romper el pulso
                 },
                 { upsert: true, new: true }
             );
