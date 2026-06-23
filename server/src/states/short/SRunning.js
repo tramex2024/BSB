@@ -59,18 +59,31 @@ async function run(dependencies) {
         // 2. GLOBAL SIGNALS QUERY
         const SYMBOL = botState.config?.symbol || 'BTC_USDT';
         
-        // 🟢 AUDIT: Prioritize using the engine's atomic injection to avoid DB I/O overhead.
-        // If it does not exist, fall back to direct reading.
-        let globalSignal = marketContext;
-
-        if (!globalSignal || !globalSignal.signal) {
-            globalSignal = await MarketSignal.findOne({ symbol: SYMBOL });
+        // Obtenemos la señal de la DB primero como fuente de verdad
+        const dbSignal = await MarketSignal.findOne({ symbol: SYMBOL });
+        
+        // Evaluamos: si la inyección atómica (marketContext) es nueva, la usamos, 
+        // pero si hay discrepancia, priorizamos la base de datos.
+        let globalSignal = dbSignal; 
+        
+        if (marketContext && marketContext.lastUpdate && dbSignal) {
+             const contextTime = new Date(marketContext.lastUpdate).getTime();
+             const dbTime = new Date(dbSignal.lastUpdate).getTime();
+             
+             // Si el contexto es más reciente, lo usamos, si no, usamos la DB
+             if (contextTime > dbTime) {
+                 globalSignal = marketContext;
+             }
         }
 
         if (!globalSignal) return;
 
-        // 🟢 AUDIT: Preventive control against potential null or undefined values in mirror field variations (rsi14 vs currentRSI)
-        const rsiValue = globalSignal.currentRSI !== undefined ? globalSignal.currentRSI : (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
+        // DEBUG LOG PARA VER SI REALMENTE ES 'SELL'
+        log(`[DEBUG] Signal Source: ${globalSignal.signal ? 'Valid' : 'Invalid'} | Value: "${globalSignal.signal}"`, 'debug');
+
+        const rsiValue = globalSignal.currentRSI ?? globalSignal.rsi14 ?? 50;
+
+        (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
 
         // Monitoring log (Heartbeat)
         log(`[S-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
