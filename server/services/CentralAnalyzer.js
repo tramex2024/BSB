@@ -154,8 +154,15 @@ class CentralAnalyzer {
             }
 
             // Determinamos qué señal enviar a los bots
-            let actionToPersist = 'HOLD';
-            let reasonToPersist = 'Market Stable';
+            // En CentralAnalyzer.js, donde calculas la señal:
+let actionToPersist = signal.action;
+
+// 🛡️ FILTRO DE SEGURIDAD EXTREMO (Añade esto justo después de calcular signal)
+const AI_SIGNALS = ['AIBUY', 'AISELL'];
+if (AI_SIGNALS.includes(actionToPersist)) {
+    actionToPersist = 'HOLD'; // Forzamos a HOLD si detecta una señal que no queremos
+    reasonToPersist = "AI Signals Disabled by User";
+}
 
             // Si el pulso actual sigue vivo, lo mantenemos
             if (currentTime < this.pulseExpirationTime) {
