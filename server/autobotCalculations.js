@@ -230,8 +230,19 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
 }
 
 function calculatePotentialProfit(ppc, ac, currentPrice, side) {
+    // AUDITORÍA: Captura de datos
     const avgPrice = parseFloat(ac);
     const price = parseFloat(currentPrice);
+    const capital = parseFloat(ppc);
+
+    // LOG DE EMERGENCIA: Si los datos se ven raros, los veremos en consola
+    if (Math.abs(capital) > 1000000 || Math.abs(avgPrice) > 1000000) {
+        console.warn(`[AUDITORÍA POTENTIAL PROFIT] Valores extremos detectados:`);
+        console.warn(`-> PPC (Capital): ${ppc} (Parsed: ${capital})`);
+        console.warn(`-> AC (AvgPrice): ${ac} (Parsed: ${avgPrice})`);
+        console.warn(`-> CurrentPrice: ${currentPrice} (Parsed: ${price})`);
+    }
+
     if (!avgPrice || !price || avgPrice <= 0 || price <= 0) return 0;
 
     let profitPct = 0;
@@ -240,7 +251,15 @@ function calculatePotentialProfit(ppc, ac, currentPrice, side) {
     } else if (side === 'short') {
         profitPct = (avgPrice - price) / avgPrice;
     }
-    return parseFloat((profitPct * parseFloat(ppc)).toFixed(4));
+    
+    const result = profitPct * capital;
+    
+    // Si el resultado sigue siendo astronómico, lo logueamos
+    if (Math.abs(result) > 1000000) {
+        console.error(`[CRÍTICO] Resultado calculado astronómico: ${result}`);
+    }
+
+    return parseFloat(result.toFixed(4));
 }
 
 // ==========================================
