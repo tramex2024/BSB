@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/CentralAnalyzer.js
- * Global Technical Indicators Motor with Live Intra-Candle Memory
+ * Global Technical Indicators Motor with Latch State Machine
  */
 
 const { RSI, ADX, Stochastic, MACD } = require('technicalindicators');
@@ -28,20 +28,23 @@ class CentralAnalyzer {
         this.lastPrice = 0;
         
         // --- LIVE MEMORY ---
-        // Guarda el RSI en vivo del último ciclo (segundo a segundo)
         this.lastLiveRsi = null;
 
-        // --- PULSE SYSTEM (TTL 5 SEGUNDOS) ---
+        // --- STATE MACHINE FLAGS (LATCH SYSTEM) ---
+        this.isArmedLong = false;
+        this.isArmedShort = false;
+
+        // --- PULSE SYSTEM ---
         this.activePulseSignal = 'HOLD';
         this.activePulseReason = 'Market Stable';
         this.pulseExpirationTime = 0;
         
         // --- SMOOTHING SYSTEM ---
-        this.confidenceHistory = []; 
+        this.confidenceHistory = [];  
         this.SMOOTHING_WINDOW = 5;    
 
         // --- 🛡️ SHIELD SYSTEMS ---
-        this.isAnalyzing = false;       
+        this.isAnalyzing = false;        
         this.lastAnalysisTime = 0;      
         this.EXECUTION_INTERVAL = 1000; 
     }
@@ -65,7 +68,6 @@ class CentralAnalyzer {
             this.isAnalyzing = true; 
             let candles = externalCandles;
 
-            // 1. DATA ACQUISITION
             if (!candles || candles.length === 0) {
                 const raw = await bitmartService.getKlines(this.symbol, '1', 300);
                 if (!raw || raw.length === 0) return;
@@ -102,7 +104,6 @@ class CentralAnalyzer {
                 currentCloses.push(this.lastPrice); 
             }
 
-            // 2. INDICATOR CALCULATIONS
             const rsi14Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_14 });
             const rsi21Arr = RSI.calculate({ values: currentCloses, period: this.config.RSI_21 });
             const adxArr = ADX.calculate({ high: highs, low: lows, close: closes, period: this.config.ADX_PERIOD });
@@ -115,22 +116,19 @@ class CentralAnalyzer {
             });
 
             const curRSI14 = rsi14Arr.length > 0 ? parseFloat(rsi14Arr[rsi14Arr.length - 1].toFixed(2)) : 0;
-            // prevRSI14 es el cierre de la VELA anterior
             const prevRSI14 = rsi14Arr.length > 1 ? parseFloat(rsi14Arr[rsi14Arr.length - 2].toFixed(2)) : curRSI14;
-            
             const curRSI21 = rsi21Arr.length > 0 ? parseFloat(rsi21Arr[rsi21Arr.length - 1].toFixed(2)) : 0;
             const curADX = adxArr.length > 0 ? parseFloat(adxArr[adxArr.length - 1].adx.toFixed(2)) : 0;
             const curMACD = macdArr.length > 0 ? macdArr[macdArr.length - 1] : { MACD: 0, signal: 0, histogram: 0 };
 
             const price = this.lastPrice || closes[closes.length - 1];
             
-            // 🧠 Evaluamos la señal pasando TANTO el RSI de la vela anterior COMO el RSI del segundo anterior
-            const signal = this._getSignal(curRSI14, prevRSI14, this.lastLiveRsi, curADX, curMACD, price);
+            // 🧠 Evaluamos con lógica de estado
+            const signal = this._getSignal(curRSI14, curADX, curMACD, price);
 
-            // Actualizamos la memoria para el próximo ciclo de 1 segundo
             this.lastLiveRsi = curRSI14;
 
-            // 3. AI CONFIDENCE CALCULATION WITH SMOOTHING
+            // 3. AI CONFIDENCE
             const analysis = StrategyManager.calculate(candles);
             let finalConfidence = 0;
 
@@ -143,38 +141,30 @@ class CentralAnalyzer {
                 finalConfidence = parseFloat((sum / this.confidenceHistory.length).toFixed(4));
             }
 
-            // --- SISTEMA DE PULSO (TTL 5 SEGUNDOS EN RAM) ---
             const currentTime = Date.now();
             
-            // Si la matemática detecta una acción real, disparamos el pulso y fijamos la expiración
             if (signal.action !== 'HOLD') {
                 this.activePulseSignal = signal.action;
                 this.activePulseReason = signal.reason;
-                this.pulseExpirationTime = currentTime + 5000; // Vive exactamente 5 segundos
+                this.pulseExpirationTime = currentTime + 5000;
             }
 
-            // Determinamos qué señal enviar a los bots
-            // En CentralAnalyzer.js, donde calculas la señal:
-	    let actionToPersist = signal.action;
+            let actionToPersist = signal.action;
             let reasonToPersist = 'Market Stable';
 
-// 🛡️ FILTRO DE SEGURIDAD EXTREMO (Añade esto justo después de calcular signal)
+            const AI_ENABLED = process.env.AI_ENABLED === 'true';
+            if (!AI_ENABLED && ['AIBUY', 'AISELL'].includes(actionToPersist)) {
+                actionToPersist = 'HOLD';
+                reasonToPersist = "AI Signals Disabled by Config";
+            }
 
-const AI_ENABLED = process.env.AI_ENABLED === 'true'; // O tu configuración de usuario
-if (!AI_ENABLED && ['AIBUY', 'AISELL'].includes(actionToPersist)) {
-    actionToPersist = 'HOLD';
-    reasonToPersist = "AI Signals Disabled by Config";
-}
-            // Si el pulso actual sigue vivo, lo mantenemos
             if (currentTime < this.pulseExpirationTime) {
                 actionToPersist = this.activePulseSignal;
                 reasonToPersist = this.activePulseReason;
             } else {
-                // Si ya pasaron los 5 segundos, apagamos el pulso
                 this.activePulseSignal = 'HOLD';
             }
 
-            // 4. DATABASE PERSISTENCE (Escritura limpia y directa)
             const updatedSignal = await MarketSignal.findOneAndUpdate(
                 { symbol: this.symbol },
                 {
@@ -196,38 +186,8 @@ if (!AI_ENABLED && ['AIBUY', 'AISELL'].includes(actionToPersist)) {
                 { upsert: true, new: true }
             );
 
-            // 5. GLOBAL BROADCAST
             if (this.io) {
-                this.io.emit('market-signal-update', { 
-                    price, 
-                    rsi14: curRSI14, 
-                    macd: curMACD.histogram,
-                    signal: actionToPersist 
-                });
-            }
-
-            // 6. TRIGGER AI BOT CHECKS
-            try {
-                const activeAiBots = await AutoBot.find({ aistate: 'RUNNING' });
-                
-                for (const bot of activeAiBots) {
-                    //const brain = {
-                    //    confidence: finalConfidence,
-                    //    signal: actionToPersist,
-                    //    reason: reasonToPersist
-                    //};
-                    //await AIEngine.analyze(price, bot.userId, bot, brain);
-
-                    if (this.io) {
-                        this.io.to(bot.userId.toString()).emit('ai-decision-update', { 
-                            confidence: finalConfidence, 
-                            message: analysis ? analysis.message : "Scanning...",
-                            isAnalyzing: true
-                        });
-                    }
-                }
-            } catch (aiErr) {
-                console.error(`❌ [CENTRAL-ANALYZER] Error executing AIEngine: ${aiErr.message}`);
+                this.io.emit('market-signal-update', { price, rsi14: curRSI14, macd: curMACD.histogram, signal: actionToPersist });
             }
 
             this.lastAnalysisTime = Date.now();
@@ -241,64 +201,36 @@ if (!AI_ENABLED && ['AIBUY', 'AISELL'].includes(actionToPersist)) {
     }
 
     /**
-     * DYNAMIC TECHNICAL EVALUATION BY FRONTIER CROSSINGS
+     * DYNAMIC TECHNICAL EVALUATION: LATCH SYSTEM
      */
-    _getSignal(rsi, prevCandleRsi, lastLiveRsi, adx, macd, price) {
-        if (!rsi || !prevCandleRsi || !macd) return { action: "HOLD", reason: "Data Loading" };
+    _getSignal(rsi, adx, macd, price) {
+        if (!rsi || !macd) return { action: "HOLD", reason: "Data Loading" };
+
+        // 1. LATCH ACTIVATION (Armado)
+        if (rsi <= 30) this.isArmedLong = true;
+        if (rsi >= 70) this.isArmedShort = true;
+
+        // 2. LATCH TRIGGER (Disparo)
         
-        // Momentum de vela entera (histórico)
-        const rsiDiff = rsi - prevCandleRsi; 
-        
-        // Momentum intra-vela (cambio segundo a segundo)
-        const liveRsiDiff = lastLiveRsi !== null ? rsi - lastLiveRsi : 0;
-
-        const macdBullish = macd.MACD > macd.signal;
-        const macdBearish = macd.MACD < macd.signal;
-
-        const ZONA_SOBRECOMPRA = 70;
-        const RETORNO_SHORT = 67;
-        
-        const ZONA_SOBREVENTA = 30;
-        const RETORNO_LONG = 33;
-
-        // 🛡️ EL SECRETO: Usar el último RSI EN VIVO para cazar las caídas que ocurren en la misma vela
-        const effectivePrevRsi = lastLiveRsi !== null ? lastLiveRsi : prevCandleRsi;
-
-        // 1. 🔴 TRADITIONAL SELL CONDITION 
-        const rsiDroppingFromTop = effectivePrevRsi >= ZONA_SOBRECOMPRA && rsi < ZONA_SOBRECOMPRA;
-        const rsiPassedShortThreshold = effectivePrevRsi > RETORNO_SHORT && rsi <= RETORNO_SHORT;
-
-        if (rsiDroppingFromTop || rsiPassedShortThreshold) {
-            return { 
-                action: "SELL", 
-                reason: `RSI confirmed reversal from top | Live RSI dropped from ${effectivePrevRsi} to ${rsi}` 
-            };
-        }
-
-        // 2. 🟢 TRADITIONAL BUY CONDITION
-        const rsiBouncingFromBottom = effectivePrevRsi <= ZONA_SOBREVENTA && rsi > ZONA_SOBREVENTA;
-        const rsiPassedLongThreshold = effectivePrevRsi < RETORNO_LONG && rsi >= RETORNO_LONG;
-
-        if (rsiBouncingFromBottom || rsiPassedLongThreshold) {
+        // Disparo LONG: RSI >= 33 y estábamos armados
+        if (this.isArmedLong && rsi >= 33) {
+            this.isArmedLong = false; // Reset inmediato
             return { 
                 action: "BUY", 
-                reason: `RSI confirmed reversal from bottom | Live RSI rose from ${effectivePrevRsi} to ${rsi}` 
+                reason: `RSI Latch Triggered: Recovered from <30 to ${rsi}` 
             };
         }
 
-        // 3. 🧠 BULLISH MOMENTUM CONDITION (AI BOT ONLY)
-        // Bloqueamos el AIBUY si el RSI está cayendo fuertemente en el segundo actual (liveRsiDiff < -1.5)
-        if (rsiDiff > this.config.MOMENTUM_THRESHOLD && rsi > 50 && macdBullish && liveRsiDiff >= -1.5) {
-            //return { action: "AIBUY", reason: "Strong Momentum Bullish Breakout (AI Target)" };
+        // Disparo SHORT: RSI <= 67 y estábamos armados
+        if (this.isArmedShort && rsi <= 67) {
+            this.isArmedShort = false; // Reset inmediato
+            return { 
+                action: "SELL", 
+                reason: `RSI Latch Triggered: Cooled from >70 to ${rsi}` 
+            };
         }
 
-        // 4. 🧠 BEARISH MOMENTUM CONDITION (AI BOT ONLY)
-        // Bloqueamos el AISELL si el RSI está rebotando fuertemente en el segundo actual
-        if (rsiDiff < -this.config.MOMENTUM_THRESHOLD && rsi < 50 && macdBearish && liveRsiDiff <= 1.5) {
-            //return { action: "AISELL", reason: "Strong Momentum Bearish Breakdown (AI Target)" };
-        }
-
-        return { action: "HOLD", reason: "Market Stable / RSI Within Safety Ranges" };
+        return { action: "HOLD", reason: "Monitoring Latch..." };
     }
 }
 
