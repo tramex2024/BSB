@@ -67,44 +67,55 @@ const orchestrator = {
      * commitChanges: Gestión atómica de la base de datos.
      */
     commitChanges: async (userId, changeSet, currentPrice) => {
-        if (!userId || Object.keys(changeSet).length === 0) return null;
+    if (!userId || Object.keys(changeSet).length === 0) return null;
+    
+    try {
+        const updateQuery = { $set: {}, $inc: {} };
         
-        try {
-            const updateQuery = { $set: {}, $inc: {} };
+        for (const key in changeSet) {
+            // SOLUCIÓN: Si detectamos que se intenta actualizar una ruta compleja 
+            // que sabemos que da problemas (config.*), mejor prevenimos aquí.
+            if (key.startsWith('config.')) {
+                 // Aquí podrías loguear una alerta específica
+                 console.warn(`[SEGURIDAD] Intento de actualización parcial de config bloqueado: ${key}`);
+                 continue; // Saltamos este campo para no romper la DB
+            }
             
-            for (const key in changeSet) {
-                if (key === '$inc') {
-                    Object.assign(updateQuery.$inc, changeSet[key]);
-                } else if (key.startsWith('$')) {
-                    // Soporte para otros operadores de mongo si fuera necesario
-                    updateQuery[key] = changeSet[key];
-                } else {
-                    updateQuery.$set[key] = changeSet[key];
-                }
-            }
-
-            if (Object.keys(updateQuery.$inc).length === 0) delete updateQuery.$inc;
-            if (Object.keys(updateQuery.$set).length === 0) {
-                delete updateQuery.$set;
+            if (key === '$inc') {
+                Object.assign(updateQuery.$inc, changeSet[key]);
+            } else if (key.startsWith('$')) {
+                updateQuery[key] = changeSet[key];
             } else {
-                updateQuery.$set.lastUpdate = new Date();
+                updateQuery.$set[key] = changeSet[key];
             }
-
-            const updated = await Autobot.findOneAndUpdate(
-                { userId }, 
-                updateQuery, 
-                { new: true, lean: true }
-            );
-
-            if (updated) {
-                await orchestrator.syncFrontendState(currentPrice, updated, userId);
-                return updated;
-            }
-        } catch (error) {
-            console.error(`[DB-ERROR] User ${userId}: ${error.message}`);
         }
-        return null;
-    },
+
+        if (Object.keys(updateQuery.$inc).length === 0) delete updateQuery.$inc;
+        if (Object.keys(updateQuery.$set).length === 0) {
+            delete updateQuery.$set;
+        } else {
+            updateQuery.$set.lastUpdate = new Date();
+        }
+
+        // Si no hay nada que actualizar tras el filtro de seguridad
+        if (!updateQuery.$set && !updateQuery.$inc) return null;
+
+        const updated = await Autobot.findOneAndUpdate(
+            { userId }, 
+            updateQuery, 
+            { new: true, lean: true }
+        );
+
+        if (!updated) throw new Error("Documento no encontrado o no actualizado");
+
+        await orchestrator.syncFrontendState(currentPrice, updated, userId);
+        return updated;
+    } catch (error) {
+        console.error(`[CRÍTICO] Fallo de persistencia para usuario ${userId}: ${error.message}`);
+        // LANZAMOS EL ERROR para que AutobotLogic sepa que el ciclo debe detenerse
+        throw new Error(`Persistencia fallida: ${error.message}`);
+    }
+},
 
     /**
      * slowBalanceCacheUpdate: Sincronización de balances de Bitmart.
