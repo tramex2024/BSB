@@ -171,6 +171,9 @@ async function processSingleBot(botState, currentPrice) {
         if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
 
+        // ✅ SOLUCIÓN: Fusionar los cambios finales antes de hacer el commit
+	Object.assign(botState, changeSet);
+
         changeSet.lastUpdate = new Date();
         await orchestrator.commitChanges(userId, botState, currentPrice);
 

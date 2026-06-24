@@ -159,12 +159,12 @@ class CentralAnalyzer {
             let reasonToPersist = 'Market Stable';
 
 // 🛡️ FILTRO DE SEGURIDAD EXTREMO (Añade esto justo después de calcular signal)
-const AI_SIGNALS = ['AIBUY', 'AISELL'];
-if (AI_SIGNALS.includes(actionToPersist)) {
-    actionToPersist = 'HOLD'; // Forzamos a HOLD si detecta una señal que no queremos
-    reasonToPersist = "AI Signals Disabled by User";
-}
 
+const AI_ENABLED = process.env.AI_ENABLED === 'true'; // O tu configuración de usuario
+if (!AI_ENABLED && ['AIBUY', 'AISELL'].includes(actionToPersist)) {
+    actionToPersist = 'HOLD';
+    reasonToPersist = "AI Signals Disabled by Config";
+}
             // Si el pulso actual sigue vivo, lo mantenemos
             if (currentTime < this.pulseExpirationTime) {
                 actionToPersist = this.activePulseSignal;
@@ -190,8 +190,8 @@ if (AI_SIGNALS.includes(actionToPersist)) {
                     signal: actionToPersist,
                     reason: reasonToPersist,
                     history: candles,
-                    aiConfidence: finalConfidence
-                    // Dejamos que Mongoose maneje 'lastUpdate' automáticamente sin romper el pulso
+                    aiConfidence: finalConfidence,
+                    lastUpdate: new Date()
                 },
                 { upsert: true, new: true }
             );

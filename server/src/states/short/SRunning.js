@@ -81,9 +81,7 @@ async function run(dependencies) {
         // DEBUG LOG PARA VER SI REALMENTE ES 'SELL'
         log(`[DEBUG] Signal Source: ${globalSignal.signal ? 'Valid' : 'Invalid'} | Value: "${globalSignal.signal}"`, 'debug');
 
-        const rsiValue = globalSignal.currentRSI ?? globalSignal.rsi14 ?? 50;
-
-        (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
+        const rsiValue = globalSignal.currentRSI ?? globalSignal.rsi14 ?? 50;        
 
         // Monitoring log (Heartbeat)
         log(`[S-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
