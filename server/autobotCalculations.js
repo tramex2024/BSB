@@ -12,14 +12,32 @@ const parseNumber = (val) => {
     return isNaN(n) ? 0 : n;
 };
 
+/**
+ * Calcula el monto total requerido para N órdenes exponenciales.
+ * Incluye protección contra desbordamiento (Overflow Protection).
+ */
 function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     const base = parseNumber(baseAmount);
-    const count = parseNumber(orderCount); 
+    const rawCount = parseNumber(orderCount); 
     const sVar = parseNumber(sizeVar);
 
+    // 1. Validación base
     if (base <= 0) return 0;
+
+    // 2. VÁLVULA DE SEGURIDAD (Safety Valve)
+    // Definimos un límite lógico de niveles. Si el sistema intenta calcular 
+    // más de 50 niveles, es un error de estado o de persistencia.
+    const MAX_ALLOWED_ORDERS = 50; 
+    const count = Math.min(rawCount, MAX_ALLOWED_ORDERS);
+
+    // Logging de alerta para auditoría si detectamos datos basura
+    if (rawCount > MAX_ALLOWED_ORDERS) {
+        console.error(`[SEGURIDAD] Intento de cálculo exponencial con ${rawCount} órdenes. Limitado a ${MAX_ALLOWED_ORDERS}.`);
+    }
+
     const multiplier = 1 + (sVar / 100);
     
+    // 3. Cálculo protegido
     return base * Math.pow(multiplier, count);
 }
 
@@ -229,22 +247,26 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     };
 }
 
+/**
+ * Versión blindada de calculatePotentialProfit
+ * Implementa validación estricta y protección contra resultados astronómicos
+ */
 function calculatePotentialProfit(ppc, ac, currentPrice, side) {
-    // AUDITORÍA: Captura de datos
+    // 1. Convertir a números con validación estricta
     const avgPrice = parseFloat(ac);
     const price = parseFloat(currentPrice);
     const capital = parseFloat(ppc);
 
-    // LOG DE EMERGENCIA: Si los datos se ven raros, los veremos en consola
-    if (Math.abs(capital) > 1000000 || Math.abs(avgPrice) > 1000000) {
-        console.warn(`[AUDITORÍA POTENTIAL PROFIT] Valores extremos detectados:`);
-        console.warn(`-> PPC (Capital): ${ppc} (Parsed: ${capital})`);
-        console.warn(`-> AC (AvgPrice): ${ac} (Parsed: ${avgPrice})`);
-        console.warn(`-> CurrentPrice: ${currentPrice} (Parsed: ${price})`);
+    // 2. Validación de "Integridad de Datos": Si los datos no son números finitos, abortamos
+    if (!isFinite(avgPrice) || !isFinite(price) || !isFinite(capital)) {
+        console.warn(`[SEGURIDAD] Datos corruptos detectados en cálculo de profit: AC=${ac}, PPC=${ppc}`);
+        return 0; 
     }
 
-    if (!avgPrice || !price || avgPrice <= 0 || price <= 0) return 0;
+    // 3. Validación de "Precios Reales": Si el precio promedio es <= 0, no podemos calcular
+    if (avgPrice <= 0 || price <= 0) return 0;
 
+    // 4. Cálculo del porcentaje
     let profitPct = 0;
     if (side === 'long' || side === 'ai') {
         profitPct = (price - avgPrice) / avgPrice;
@@ -252,11 +274,16 @@ function calculatePotentialProfit(ppc, ac, currentPrice, side) {
         profitPct = (avgPrice - price) / avgPrice;
     }
     
+    // 5. Cálculo del resultado final
     const result = profitPct * capital;
     
-    // Si el resultado sigue siendo astronómico, lo logueamos
-    if (Math.abs(result) > 1000000) {
-        console.error(`[CRÍTICO] Resultado calculado astronómico: ${result}`);
+    // 6. FILTRO DE SEGURIDAD (Safety Valve):
+    // Si el resultado calculado es mayor a 1,000,000 USDT (o cualquier cifra realista), 
+    // es un error de cálculo, NO profit real.
+    const MAX_REALISTIC_PROFIT = 1000000; 
+    if (Math.abs(result) > MAX_REALISTIC_PROFIT) {
+        console.error(`[CRÍTICO] Profit calculado fuera de límites normales: ${result}. Reset de seguridad.`);
+        return 0; 
     }
 
     return parseFloat(result.toFixed(4));
