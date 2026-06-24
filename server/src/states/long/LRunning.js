@@ -69,8 +69,8 @@ async function run(dependencies) {
         // 🟢 AUDITORÍA: Control preventivo ante posibles valores nulos o indefinidos en variantes de campos espejo (rsi14 vs currentRSI)
         const rsiValue = globalSignal.currentRSI !== undefined ? globalSignal.currentRSI : (globalSignal.rsi14 !== undefined ? globalSignal.rsi14 : 50);
         
-        log(`[L-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal}`, 'debug');
-
+        log(`[L-RUNNING] 👁️ RSI: ${rsiValue.toFixed(2)} | Signal: ${globalSignal.signal} | BTC: ${currentPrice.toFixed(2)}`, 'debug');
+        
         if (!signalTime) {
             log("[L-RUNNING] ⚠️ Signal without timestamp. Waiting for update...", 'warning');
             return;
