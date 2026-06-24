@@ -142,7 +142,7 @@ async function processSingleBot(botState, currentPrice) {
             );
             changeSet.lcoverage = longCov.coveragePrice;
             changeSet.lnorder = longCov.numberOfOrders;
-            changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lac || 0, currentPrice, 'long') : 0;
+            changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lai || 0, currentPrice, 'long') : 0;
         }
 
         if (botState.sstate !== 'STOPPED' && botState.config.short) {
@@ -157,11 +157,11 @@ async function processSingleBot(botState, currentPrice) {
             );
             changeSet.scoverage = shortCov.coveragePrice;
             changeSet.snorder = shortCov.numberOfOrders;
-            changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sac || 0, currentPrice, 'short') : 0;
+            changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sai || 0, currentPrice, 'short') : 0;
         }
 
         if (botState.aistate !== 'STOPPED' && botState.config.ai) {
-            changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.aiac || 0, currentPrice, 'ai') : 0;
+            changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.aiai || 0, currentPrice, 'ai') : 0;
         }
 
         Object.assign(botState, changeSet);

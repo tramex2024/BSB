@@ -248,45 +248,28 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
 }
 
 /**
- * Versión blindada de calculatePotentialProfit
- * Implementa validación estricta y protección contra resultados astronómicos
+ * Versión limpia y corregida de calculatePotentialProfit
+ * Sin filtros de reset a 0.
  */
 function calculatePotentialProfit(ppc, ac, currentPrice, side) {
-    // 1. Convertir a números con validación estricta
-    const avgPrice = parseFloat(ac);
+    // ppc: Precio promedio de entrada (Avg Price)
+    // ac:  Capital total invertido (Total Amount)
+    const avgPrice = parseFloat(ppc);
+    const capital = parseFloat(ac);
     const price = parseFloat(currentPrice);
-    const capital = parseFloat(ppc);
 
-    // 2. Validación de "Integridad de Datos": Si los datos no son números finitos, abortamos
-    if (!isFinite(avgPrice) || !isFinite(price) || !isFinite(capital)) {
-        console.warn(`[SEGURIDAD] Datos corruptos detectados en cálculo de profit: AC=${ac}, PPC=${ppc}`);
-        return 0; 
-    }
+    // Si el precio promedio es 0, no se puede calcular porcentaje
+    if (avgPrice <= 0) return 0;
 
-    // 3. Validación de "Precios Reales": Si el precio promedio es <= 0, no podemos calcular
-    if (avgPrice <= 0 || price <= 0) return 0;
-
-    // 4. Cálculo del porcentaje
     let profitPct = 0;
     if (side === 'long' || side === 'ai') {
         profitPct = (price - avgPrice) / avgPrice;
     } else if (side === 'short') {
         profitPct = (avgPrice - price) / avgPrice;
     }
-    
-    // 5. Cálculo del resultado final
-    const result = profitPct * capital;
-    
-    // 6. FILTRO DE SEGURIDAD (Safety Valve):
-    // Si el resultado calculado es mayor a 1,000,000 USDT (o cualquier cifra realista), 
-    // es un error de cálculo, NO profit real.
-    const MAX_REALISTIC_PROFIT = 1000000; 
-    if (Math.abs(result) > MAX_REALISTIC_PROFIT) {
-        console.error(`[CRÍTICO] Profit calculado fuera de límites normales: ${result}. Reset de seguridad.`);
-        return 0; 
-    }
 
-    return parseFloat(result.toFixed(4));
+    // Retorna el valor monetario del profit
+    return parseFloat((profitPct * capital).toFixed(4));
 }
 
 // ==========================================
