@@ -79,8 +79,7 @@ async function run(dependencies) {
         if (!globalSignal) return;
 
         // DEBUG LOG PARA VER SI REALMENTE ES 'SELL'
-        log(`[DEBUG] Signal Source: ${globalSignal.signal ? 'Valid' : 'Invalid'} | Value: "${globalSignal.signal}"`, 'debug');
-
+        
         const rsiValue = globalSignal.currentRSI ?? globalSignal.rsi14 ?? 50;        
 
         // Monitoring log (Heartbeat)
