@@ -1,20 +1,52 @@
 /**
  * ARCHIVO COMPLETO: autobotCalculations.js
- * Lógica Exponencial Pura con Cobertura Compuesta del 18% y Absorción del Excedente
+ * Integración total: Lógica Exponencial 2026 + Funciones de Compatibilidad Legacy
  */
 
-/**
- * CALCULO GEOMÉTRICO DE TAMAÑOS (Reglas 1, 2, 3, 4 y 7)
- * Distribuye uniformemente todo el capital modificando la tasa de crecimiento global.
- * @param {number} totalAmount - Capital total asignado a la grilla
- */
+// ==========================================
+// 1. HELPERS Y FUNCIONES DE COMPATIBILIDAD
+// ==========================================
+
+const parseNumber = (val) => {
+    const n = parseFloat(val);
+    return isNaN(n) ? 0 : n;
+};
+
+function getExponentialAmount(baseAmount, orderCount, sizeVar) {
+    const base = parseNumber(baseAmount);
+    const count = parseNumber(orderCount); 
+    const sVar = parseNumber(sizeVar);
+
+    if (base <= 0) return 0;
+    const multiplier = 1 + (sVar / 100);
+    
+    return base * Math.pow(multiplier, count);
+}
+
+function getExponentialPriceStep(basePriceVarDec, coverageIndex, priceVarIncrement = 0) {
+    const baseStep = parseNumber(basePriceVarDec);
+    const increment = 1 + (parseNumber(priceVarIncrement) / 100);
+    return baseStep * Math.pow(increment, coverageIndex);
+}
+
+function calculateTargetWithFees(entryPrice, targetProfitNet, side = 'long', feeRate = 0.001) {
+    const p = parseNumber(entryPrice);
+    const netProfitDec = parseNumber(targetProfitNet) / 100;
+    const totalMarkup = netProfitDec + (feeRate * 2);
+
+    return side === 'long' ? p * (1 + totalMarkup) : p * (1 - totalMarkup);
+}
+
+// ==========================================
+// 2. LÓGICA GEOMÉTRICA 2026
+// ==========================================
+
 function calculateDistributedSizes(totalAmount) {
     const amount = parseFloat(totalAmount);
-    if (amount < 42.00) return null; // Capital mínimo para operar (Regla 6)
+    if (amount < 42.00) return null;
     
-    // 1. Determinar el número máximo de niveles (n) usando multiplicador base 2
     let n = 1;
-    while (n < 10) { // Límite estricto de 10 niveles (Regla 4)
+    while (n < 10) {
         let nextSum = 6.00 * (Math.pow(2.0, n + 1) - 1);
         if (nextSum > amount) break;
         n++;
@@ -24,7 +56,6 @@ function calculateDistributedSizes(totalAmount) {
     let high = amount;
     let r = 2.0;
     
-    // 2. Buscador binario para ajustar el multiplicador de tamaño (r) y absorber el excedente (Regla 7)
     if (n > 1) {
         for (let i = 0; i < 60; i++) {
             let mid = (low + high) / 2;
@@ -38,13 +69,11 @@ function calculateDistributedSizes(totalAmount) {
         r = (low + high) / 2;
     }
     
-    // 3. Generar la serie geométrica pura de tamaños
     let finalSizes = [];
     for (let i = 0; i < n; i++) {
-        finalSizes.push(6.00 * Math.pow(r, i)); // Regla 1 (Base 6) y Regla 3 (Exponencial)
+        finalSizes.push(6.00 * Math.pow(r, i));
     }
     
-    // 4. Redondeo a 2 decimales y ajuste de céntimos finales por precisión matemática
     let roundedSizes = finalSizes.map(s => parseFloat(s.toFixed(2)));
     let sumRounded = roundedSizes.reduce((a, b) => a + b, 0);
     let delta = amount - sumRounded;
@@ -57,60 +86,37 @@ function calculateDistributedSizes(totalAmount) {
     };
 }
 
-/**
- * CALCULO DINÁMICO DE PASOS COMPUESTOS (Reglas 8 y 9)
- * Encuentra el multiplicador exacto para garantizar el 18% de cobertura de mercado.
- * @param {number} levels - Número de niveles (n)
- */
 function calculateStepGrow(levels) {
     const n = parseInt(levels);
-    const numSteps = n - 1; // n niveles tienen exactamente n-1 saltos de precio
+    const numSteps = n - 1;
     if (numSteps <= 0) return 1.0;
 
-    const TARGET_COVERAGE = 0.18; // 18% de cobertura objetivo (Regla 9)
-    const START_STEP = 0.015;     // 1.5% primer salto de precio (Regla 8)
+    const TARGET_COVERAGE = 0.18;
+    const START_STEP = 0.015;
     
     let low = 0.1;
-    let high = 5.0; // Rango elástico seguro para el buscador
+    let high = 5.0;
     
     for (let i = 0; i < 60; i++) {
         let mid = (low + high) / 2;
         let prod = 1.0;
         let invalid = false;
         
-        // Simular la multiplicación compuesta real de la grilla de precios
         for (let j = 0; j < numSteps; j++) {
             let step = START_STEP * Math.pow(mid, j);
-            if (step >= 1.0) { // Protección matemática contra caídas > 100%
-                invalid = true;
-                break;
-            }
+            if (step >= 1.0) { invalid = true; break; }
             prod *= (1.0 - step);
         }
         
-        if (invalid) {
-            high = mid; // Multiplicador demasiado agresivo, reduce el límite superior
-            continue;
-        }
+        if (invalid) { high = mid; continue; }
         
         let actualCoverage = 1.0 - prod;
-        
-        if (actualCoverage < TARGET_COVERAGE) {
-            low = mid; // Falta cobertura, necesitamos pasos más amplios
-        } else {
-            high = mid; // Sobra cobertura, reducimos los pasos
-        }
+        if (actualCoverage < TARGET_COVERAGE) { low = mid; } else { high = mid; }
     }
     
     return parseFloat(((low + high) / 2).toFixed(4));
 }
 
-/**
- * SIMULADOR COMPLETO DE GRILLA (Para Generar Órdenes Listas para API)
- * @param {number} amount - Capital total de la grilla
- * @param {number} initialPrice - Precio de la primera entrada (Orden 1)
- * @param {string} side - Tipo de operación: 'long' o 'short'
- */
 function generateAutobotGrid(amount, initialPrice, side = 'long') {
     const sizeData = calculateDistributedSizes(amount);
     if (!sizeData) return null;
@@ -122,7 +128,6 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
     let orders = [];
     let currentPrice = parseFloat(initialPrice);
     
-    // Primera orden: Siempre va al precio inicial de mercado (Regla 1)
     orders.push({
         orderNumber: 1,
         sizeUSDT: sizes[0],
@@ -130,12 +135,9 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
         distanceFromPrevious: "0.00%"
     });
     
-    // Generar el resto de niveles compuestos (Órdenes 2 hasta N)
     const START_STEP = 0.015;
     for (let i = 1; i < n; i++) {
-        // El paso actual crece exponencialmente con base en la orden ejecutada anterior (i - 1)
         let currentStep = START_STEP * Math.pow(gridStepMultiplier, i - 1);
-        
         if (side.toLowerCase() === 'long') {
             currentPrice = currentPrice * (1.0 - currentStep);
         } else {
@@ -150,7 +152,6 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
         });
     }
     
-    // Calcular métricas finales de control
     const totalCoverage = Math.abs((initialPrice - currentPrice) / initialPrice) * 100;
     
     return {
@@ -163,15 +164,11 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
     };
 }
 
-// =========================================================================
-// 🟢 CAPAS DE COMPATIBILIDAD GEOMÉTRICA EXPO PARA EL MOTOR DE CICLOS UNIFICADO
-// =========================================================================
+// ==========================================
+// 3. CAPAS DE INTERFAZ Y CICLOS
+// ==========================================
 
-/**
- * Interfaz compatible para calcular el precio extremo inferior de cobertura de la grilla Long
- */
 function calculateLongCoverage(balance, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
-    // Reconstruimos la grilla usando la suma total de asignación del bot (balance de órdenes asignado)
     const currentPrice = parseFloat(entryPrice) || 1;
     const grid = generateAutobotGrid(balance || purchaseUsdt || 50, currentPrice, 'long');
     
@@ -180,15 +177,9 @@ function calculateLongCoverage(balance, entryPrice, purchaseUsdt, priceVar, size
     }
     
     const lastOrder = grid.orders[grid.orders.length - 1];
-    return {
-        coveragePrice: lastOrder.price,
-        numberOfOrders: grid.totalLevels
-    };
+    return { coveragePrice: lastOrder.price, numberOfOrders: grid.totalLevels };
 }
 
-/**
- * Interfaz compatible para calcular el precio extremo superior de cobertura de la grilla Short
- */
 function calculateShortCoverage(balance, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
     const currentPrice = parseFloat(entryPrice) || 1;
     const grid = generateAutobotGrid(balance || purchaseUsdt || 50, currentPrice, 'short');
@@ -198,15 +189,46 @@ function calculateShortCoverage(balance, entryPrice, purchaseUsdt, priceVar, siz
     }
     
     const lastOrder = grid.orders[grid.orders.length - 1];
+    return { coveragePrice: lastOrder.price, numberOfOrders: grid.totalLevels };
+}
+
+function calculateLongTargets(lastPrice, config, currentOrderCount) {
+    const p = parseNumber(lastPrice);
+    const priceVarDec = parseNumber(config?.price_var || 0) / 100;
+    const priceVarInc = parseNumber(config?.price_step_inc || 0);
+    const profitPercent = parseNumber(config?.profit_percent || config?.trigger || 0);
+    const sizeVar = parseNumber(config?.size_var || 0);
+    const purchaseUsdt = parseNumber(config?.purchaseUsdt || 0);
+    
+    const feeRate = 0.001;
+    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
+
     return {
-        coveragePrice: lastOrder.price,
-        numberOfOrders: grid.totalLevels
+        ltprice: calculateTargetWithFees(p, profitPercent, 'long', feeRate),
+        nextCoveragePrice: p * (1 - currentStep),
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
     };
 }
 
-/**
- * Calcula de forma limpia el profit latente porcentual y nominal de la operación activa
- */
+function calculateShortTargets(lastPrice, config, currentOrderCount) {
+    const p = parseNumber(lastPrice);
+    const conf = config || {}; 
+    
+    const priceVarDec = parseNumber(conf.price_var) / 100;
+    const priceVarInc = parseNumber(conf.price_step_inc || 0);
+    const profitPercent = parseNumber(conf.profit_percent || conf.trigger || 0);
+    const sizeVar = parseNumber(conf.size_var || 0);
+    const purchaseUsdt = parseNumber(conf.purchaseUsdt || 0);
+
+    const currentStep = getExponentialPriceStep(priceVarDec, currentOrderCount, priceVarInc);
+
+    return {
+        stprice: calculateTargetWithFees(p, profitPercent, 'short', 0.001),
+        nextCoveragePrice: p * (1 + currentStep),
+        requiredCoverageAmount: getExponentialAmount(purchaseUsdt, currentOrderCount, sizeVar)
+    };
+}
+
 function calculatePotentialProfit(ppc, ac, currentPrice, side) {
     const avgPrice = parseFloat(ac);
     const price = parseFloat(currentPrice);
@@ -218,17 +240,21 @@ function calculatePotentialProfit(ppc, ac, currentPrice, side) {
     } else if (side === 'short') {
         profitPct = (avgPrice - price) / avgPrice;
     }
-    
-    // Retorna el beneficio neto flotante escalado al capital invertido actual (ppc)
     return parseFloat((profitPct * parseFloat(ppc)).toFixed(4));
 }
 
-// Exportar funciones para NodeJS / Jest / Suite de pruebas
+// ==========================================
+// EXPORTS
+// ==========================================
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-        calculateLongCoverage,    // 👈 Vinculada a tu lógica exponencial pura
-        calculateShortCoverage,   // 👈 Vinculada a tu lógica exponencial pura
-        calculatePotentialProfit, // 👈 Sincronizador de rendimientos para el dashboard
+        parseNumber,
+        getExponentialAmount,
+        calculateLongTargets,
+        calculateShortTargets,
+        calculateLongCoverage,
+        calculateShortCoverage,
+        calculatePotentialProfit,
         calculateDistributedSizes,
         calculateStepGrow,
         generateAutobotGrid
