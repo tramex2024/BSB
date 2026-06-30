@@ -85,17 +85,23 @@ function setupPublicTicker(io) {
                 }
 
                 // 4. Emisión optimizada a Frontend
-                io.emit('marketData', { 
-                    price, 
-                    priceChangePercent, 
-                    exchangeOnline: isMarketConnected,
-                    aiPulse: signalDoc ? {
-                        aiConfidence: Math.round(signalDoc.aiConfidence * 100),
-                        aiAdx: signalDoc.adx,
-                        aiTrendLabel: signalDoc.signal,
-                        aiEngineMsg: signalDoc.reason
-                    } : null
-                });
+// SI el signalDoc es null (porque no se cerró vela), intentamos buscar el último registro en la DB
+if (!signalDoc) {
+    signalDoc = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+}
+
+io.emit('marketData', { 
+    price, 
+    priceChangePercent, 
+    exchangeOnline: isMarketConnected,
+    // Ahora signalDoc tendrá datos siempre, ya sea recién calculados o recuperados de DB
+    aiPulse: signalDoc ? {
+        aiConfidence: Math.round((signalDoc.aiConfidence || 0) * 100),
+        aiAdx: signalDoc.adx || 0,
+        aiTrendLabel: signalDoc.signal || 'Neutral',
+        aiEngineMsg: signalDoc.reason || 'Waiting for signal...'
+    } : null 
+});
 
                 // 5. Ciclo de Bots de Usuarios (Consultando los datos recién centralizados)
                 await autobotLogic.botCycle(price);
