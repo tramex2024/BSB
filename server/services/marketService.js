@@ -49,82 +49,78 @@ async function setupPublicTicker(io) {
     });
 
     marketWs.on('message', async (data) => {
-        try {
-            const rawData = data.toString();
-            if (rawData === 'pong') return;
-            const parsed = JSON.parse(rawData);
-            
-            if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
-                const ticker = parsed.data[0];
-                const price = parseFloat(ticker.last_price);
-                const volume = parseFloat(ticker.base_volume_24h || 0);
-                const open24h = parseFloat(ticker.open_24h);
-                const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
+    // 1. Declaración en el alcance correcto (scope)
+    let signalDoc = null; 
 
-                centralAnalyzer.updatePrice(price);
-                const closedCandle = candleBuilder.processTick(price, volume);
-                
-                // Si la vela cierra, actualizamos la base de datos y refrescamos nuestra caché
-                if (closedCandle) {
-                    const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
-                        { symbol: 'BTC_USDT' },
-                        { 
-                            $push: { history: { $each: [closedCandle], $slice: -500 } },
-                            $set: { lastUpdate: new Date(), currentPrice: price }
-                        },
-                        { upsert: true, new: true }
-                    );
-
-                    const analysis = await centralAnalyzer.analyze(updatedSignalDoc.history);
-                    
-                    const signalDoc = await MarketSignal.findOneAndUpdate(
-                        { symbol: 'BTC_USDT' },
-                        { 
-                            $set: { 
-                                rsi14: analysis.rsi14, adx: analysis.adx, stochK: analysis.stochK,
-                                stochD: analysis.stochD, macdValue: analysis.macdValue,
-                                aiConfidence: analysis.confidence, signal: analysis.signal, reason: analysis.reason
-                            }
-                        },
-                        { new: true }
-                    );
-
-                    // ACTUALIZACIÓN DE CACHÉ: Solo ocurre cuando cierra vela
-                    cachedAiPulse = {
-                        aiConfidence: Math.round((signalDoc.aiConfidence || 0) * 100),
-                        aiAdx: signalDoc.adx || 0,
-                        aiTrendLabel: signalDoc.signal || 'Neutral',
-                        aiEngineMsg: signalDoc.reason || 'Analyzing...'
-                    };
-                }
-
-                // 4. Emisión optimizada a Frontend (Incluyendo los indicadores faltantes)
-io.emit('marketData', { 
-    price, 
-    priceChangePercent, 
-    exchangeOnline: isMarketConnected,
-    aiPulse: cachedAiPulse ? {
-        // Pulso principal
-        aiConfidence: cachedAiPulse.aiConfidence,
-        aiAdx: cachedAiPulse.aiAdx,
-        aiTrendLabel: cachedAiPulse.aiTrendLabel,
-        aiEngineMsg: cachedAiPulse.aiEngineMsg,
+    try {
+        const rawData = data.toString();
+        if (rawData === 'pong') return;
+        const parsed = JSON.parse(rawData);
         
-        // INDICADORES AGREGADOS PARA EL DASHBOARD
-        aiRsi: signalDoc ? signalDoc.rsi14 : null,
-        aiStochK: signalDoc ? signalDoc.stochK : null,
-        aiStochD: signalDoc ? signalDoc.stochD : null,
-        aiMacd: signalDoc ? signalDoc.macdValue : null
-    } : null 
-});
+        if (parsed.data && parsed.data[0]?.symbol === 'BTC_USDT') {
+            const ticker = parsed.data[0];
+            const price = parseFloat(ticker.last_price);
+            const volume = parseFloat(ticker.base_volume_24h || 0);
+            const open24h = parseFloat(ticker.open_24h);
+            const priceChangePercent = open24h > 0 ? ((price - open24h) / open24h) * 100 : 0;
 
-                // 5. Ciclo de Bots de Usuarios
-                await autobotLogic.botCycle(price);
+            centralAnalyzer.updatePrice(price);
+            const closedCandle = candleBuilder.processTick(price, volume);
+            
+            // 2. Lógica condicional segura
+            if (closedCandle) {
+                // Actualizamos DB solo al cerrar vela
+                const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
+                    { symbol: 'BTC_USDT' },
+                    { 
+                        $push: { history: { $each: [closedCandle], $slice: -500 } },
+                        $set: { lastUpdate: new Date(), currentPrice: price }
+                    },
+                    { upsert: true, new: true }
+                );
+
+                const analysis = await centralAnalyzer.analyze(updatedSignalDoc.history);
+                
+                signalDoc = await MarketSignal.findOneAndUpdate(
+                    { symbol: 'BTC_USDT' },
+                    { 
+                        $set: { 
+                            rsi14: analysis.rsi14, adx: analysis.adx, stochK: analysis.stochK,
+                            stochD: analysis.stochD, macdValue: analysis.macdValue,
+                            aiConfidence: analysis.confidence, signal: analysis.signal, reason: analysis.reason
+                        }
+                    },
+                    { new: true }
+                );
+
+                // 3. Actualizamos la caché solo cuando hay nueva data
+                cachedAiPulse = {
+                    aiConfidence: Math.round((signalDoc.aiConfidence || 0) * 100),
+                    aiAdx: signalDoc.adx || 0,
+                    aiTrendLabel: signalDoc.signal || 'Neutral',
+                    aiEngineMsg: signalDoc.reason || 'Analyzing...',
+                    aiRsi: signalDoc.rsi14,
+                    aiStochK: signalDoc.stochK,
+                    aiStochD: signalDoc.stochD,
+                    aiMacd: signalDoc.macdValue
+                };
             }
-        } catch (e) { 
-            console.error("❌ [MARKET_WS_ERROR]:", e.message); 
+
+            // 4. Emisión optimizada (usando la caché para evitar bloqueos)
+            io.emit('marketData', { 
+                price, 
+                priceChangePercent, 
+                exchangeOnline: isMarketConnected,
+                aiPulse: cachedAiPulse // Esto ya contiene todos tus indicadores
+            });
+
+            // 5. Ciclo de bots
+            await autobotLogic.botCycle(price);
         }
-    });
+    } catch (e) { 
+        console.error("❌ [MARKET_WS_ERROR]:", e.message); 
+    }
+});
 
     marketWs.on('close', () => {
         isMarketConnected = false;
