@@ -111,11 +111,10 @@ export async function updateBotUI(state) {
         }
     });
 
-    // --- 3. Renderizado defensivo de métricas de pulso IA (ROBUSTO) ---
+    // --- 3. Renderizado defensivo de métricas de pulso IA ---
 const pulseMetrics = [
     { id: 'ai-adx-val', key: 'aiAdx', barId: 'ai-adx-bar', scale: 50 },
-    // Buscamos 'aiStochK' O 'aiStoch' para no romper si el backend usa uno u otro
-    { id: 'ai-stoch-val', key: ['aiStochK', 'aiStoch'], barId: 'ai-stoch-bar', scale: 100 }, 
+    { id: 'ai-stoch-val', key: ['aiStochK', 'aiStoch'], barId: 'ai-stoch-bar', scale: 100 },
     { id: 'ai-rsi-val', key: 'aiRsi', barId: null, scale: 100 },
     { id: 'ai-macd-val', key: 'aiMacd', barId: null, scale: 100 }
 ];
@@ -124,12 +123,15 @@ pulseMetrics.forEach(metric => {
     const el = document.getElementById(metric.id);
     if (!el) return;
 
-    // Detectar qué clave existe (soporte para arrays de claves)
+    // LÓGICA DE DETECCIÓN: Busca en state.aiPulse primero, si no, en state
+    const source = state.aiPulse || state; 
+    
     let val = undefined;
     if (Array.isArray(metric.key)) {
-        val = state[metric.key[0]] !== undefined ? state[metric.key[0]] : state[metric.key[1]];
+        // Busca la primera coincidencia que exista en el objeto fuente
+        val = source[metric.key[0]] !== undefined ? source[metric.key[0]] : source[metric.key[1]];
     } else {
-        val = state[metric.key];
+        val = source[metric.key];
     }
 
     if (val !== undefined) {
