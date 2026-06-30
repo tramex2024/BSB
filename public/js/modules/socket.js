@@ -125,8 +125,13 @@ export function initSocket() {
     socket.on('ai-pulse-broadcast', (data) => {
         if (!data) return;
         currentBotState.aiLastPulse = data;
-        renderAiPulseUI(data);
-    });
+
+    // Sincronización de PnL si existe
+    if (data.aiprofit !== undefined) updatePnLBar('ai', data.aiprofit);
+
+    // LLLAMADA ÚNICA AL RENDERIZADOR (Se encarga de RSI, Stoch, ADX y Confianza)
+    renderAiPulseUI(data); 
+});
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (state) => {
@@ -379,28 +384,42 @@ function updateConnectionStatus(status) {
  */
 function renderAiPulseUI(aiData) {
     const dbCircle = document.getElementById('ai-confidence-circle');
-    if (!dbCircle) return; // Si el usuario está en otra vista que no tiene el widget, salimos elegantemente
+    if (!dbCircle) return;
 
-    const confidence = aiData.aiConfidence;
+    // 1. Lógica del Círculo de Confianza
+    const confidence = aiData.aiConfidence || 0;
     const perimeter = 364.42;
     const offset = perimeter - (confidence / 100) * perimeter;
-    
-    // Sincronización vectorial sin latencia
     dbCircle.style.strokeDashoffset = offset;
     
-    const confVal = document.getElementById('ai-confidence-value');
-    const trendLabel = document.getElementById('ai-trend-label');
-    const adxVal = document.getElementById('ai-adx-val');
-    const stochVal = document.getElementById('ai-stoch-val');
-    const adxBar = document.getElementById('ai-adx-bar');
-    const stochBar = document.getElementById('ai-stoch-bar');
-    const engineMsg = document.getElementById('ai-engine-msg');
+    // 2. Elementos del DOM
+    const elements = {
+        confVal: document.getElementById('ai-confidence-value'),
+        trendLabel: document.getElementById('ai-trend-label'),
+        adxVal: document.getElementById('ai-adx-val'),
+        adxBar: document.getElementById('ai-adx-bar'),
+        stochVal: document.getElementById('ai-stoch-val'),
+        stochBar: document.getElementById('ai-stoch-bar'),
+        rsiVal: document.getElementById('ai-rsi-val'), // NUEVO
+        rsiBar: document.getElementById('ai-rsi-bar'), // NUEVO
+        engineMsg: document.getElementById('ai-engine-msg')
+    };
 
-    if (confVal) confVal.innerText = `${confidence}%`;
-    if (trendLabel) trendLabel.innerText = aiData.aiTrendLabel;
-    if (adxVal) adxVal.innerText = Number(aiData.aiAdx).toFixed(1);
-    if (stochVal) stochVal.innerText = Number(aiData.aiStoch).toFixed(1);
-    if (adxBar) adxBar.style.width = `${Math.min(aiData.aiAdx, 100)}%`;
-    if (stochBar) stochBar.style.width = `${Math.min(aiData.aiStoch, 100)}%`;
-    if (engineMsg) engineMsg.innerText = aiData.aiEngineMsg;
+    // 3. Actualización de valores
+    if (elements.confVal) elements.confVal.innerText = `${confidence}%`;
+    if (elements.trendLabel) elements.trendLabel.innerText = aiData.aiTrendLabel || 'N/A';
+    
+    // ADX
+    if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
+    if (elements.adxBar) elements.adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
+    
+    // STOCH (Asegúrate de que 'aiStoch' coincida con tu log de consola)
+    if (elements.stochVal) elements.stochVal.innerText = Number(aiData.aiStoch || 0).toFixed(1);
+    if (elements.stochBar) elements.stochBar.style.width = `${Math.min(aiData.aiStoch || 0, 100)}%`;
+    
+    // RSI (Asegúrate de que 'aiRsi' coincida con tu log de consola)
+    if (elements.rsiVal) elements.rsiVal.innerText = Number(aiData.aiRsi || 0).toFixed(1);
+    if (elements.rsiBar) elements.rsiBar.style.width = `${Math.min(aiData.aiRsi || 0, 100)}%`;
+
+    if (elements.engineMsg) elements.engineMsg.innerText = aiData.aiEngineMsg || 'Waiting...';
 }
