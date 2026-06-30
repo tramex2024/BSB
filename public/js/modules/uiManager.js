@@ -111,10 +111,12 @@ export async function updateBotUI(state) {
         }
     });
 
-    // --- 3. Renderizado defensivo de métricas de pulso IA ---
+    // --- 3. Renderizado defensivo de métricas (Mapping a llaves reales del state) ---
 const pulseMetrics = [
-    { id: 'ai-adx-val', key: 'aiAdx', barId: 'ai-adx-bar', scale: 50 },
-    { id: 'ai-stoch-val', key: ['aiStochK', 'aiStoch'], barId: 'ai-stoch-bar', scale: 100 },
+    { id: 'ai-adx-val', key: 'lai', barId: 'ai-adx-bar', scale: 50 },
+    { id: 'ai-stoch-val', key: 'lac', barId: 'ai-stoch-bar', scale: 100 },
+    // Nota: Si 'aiRsi' y 'aiMacd' no aparecen en la lista de claves del log, 
+    // significa que el backend no los está incluyendo en el 'bot-state-update'.
     { id: 'ai-rsi-val', key: 'aiRsi', barId: null, scale: 100 },
     { id: 'ai-macd-val', key: 'aiMacd', barId: null, scale: 100 }
 ];
@@ -123,21 +125,15 @@ pulseMetrics.forEach(metric => {
     const el = document.getElementById(metric.id);
     if (!el) return;
 
-    // LÓGICA DE DETECCIÓN: Busca en state.aiPulse primero, si no, en state
-    const source = state.aiPulse || state; 
-    
-    let val = undefined;
-    if (Array.isArray(metric.key)) {
-        // Busca la primera coincidencia que exista en el objeto fuente
-        val = source[metric.key[0]] !== undefined ? source[metric.key[0]] : source[metric.key[1]];
-    } else {
-        val = source[metric.key];
-    }
+    // Buscamos la llave directamente en el state (que es donde realmente están)
+    const val = state[metric.key]; 
 
-    if (val !== undefined) {
+    if (val !== undefined && val !== null) {
         const floatVal = parseFloat(val);
+        // Formateo específico
         el.textContent = metric.id.includes('macd') ? floatVal.toFixed(4) : floatVal.toFixed(1);
         
+        // Actualización de barra (si aplica)
         if (metric.barId) {
             updatePulseBars(metric.id, floatVal);
         }
