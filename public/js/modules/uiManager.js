@@ -25,6 +25,10 @@ const STATUS_COLORS = {
 export async function updateBotUI(state) {
     if (!state) return;
 
+    // DEBUG: Descomenta esto para ver qué claves trae tu objeto 'state'
+    console.log("🔍 [DEBUG UI]: State recibido:", Object.keys(state));
+    console.log("🔍 [DEBUG UI]: Valor Stoch:", state.aiStoch, state.aiStochK);
+
     // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
