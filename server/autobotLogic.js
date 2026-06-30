@@ -172,13 +172,13 @@ async function processSingleBot(botState, currentPrice) {
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
 
         // ✅ SOLUCIÓN: Fusionar los cambios finales antes de hacer el commit
-	Object.assign(botState, changeSet);
+        Object.assign(botState, changeSet);
 
         changeSet.lastUpdate = new Date();
         await orchestrator.commitChanges(userId, botState, currentPrice);
 
     } catch (botErr) {
-        console.error(`❌ Error en ejecución aislada del bot de usuario ${userId}:`, botErr.message);
+        console.error(`❌ Error in isolated bot execution for user ${userId}:`, botErr.message);
     }
 }
 

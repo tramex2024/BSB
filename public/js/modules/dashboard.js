@@ -1,6 +1,6 @@
 /**
- * dashboard.js - Controlador de Interfaz (Versión Blindada 2026)
- * Estado: Auditado - Refactorización de Carrusel (Lógica movida a carousel.js)
+ * dashboard.js - Interface Controller (Shielded Version 2026)
+ * Status: Audited - Carousel refactoring (Logic moved to carousel.js)
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
@@ -9,33 +9,33 @@ import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
-// Módulo extraído
+// Extracted module
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
 
-// Instancias globales de gráficos
+// Global chart instances
 let balanceChart = null; 
 let lastRenderedData = null;
 let lastRenderedAiData = null;
-let carouselInterval; // Mantenemos la variable aquí para no romper referencias externas si las hubiera
+let carouselInterval; // We keep the variable here to avoid breaking external references
 
 /**
- * Inicializa la vista del Dashboard
+ * Initializes the Dashboard view
  */
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
     const stateToUse = initialState || currentBotState;
 
-    // 1. CONFIGURAR ESCUCHADORES DE MÉTRICAS
+    // 1. CONFIGURE METRICS LISTENERS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
-    // 2. INICIALIZAR COMPONENTES VISUALES
+    // 2. INITIALIZE VISUAL COMPONENTS
     initBalanceChart();
     if (stateToUse?.symbol) {
         initializeChart('tv-chart-container', stateToUse.symbol);
     }
 
-    // 3. ACTUALIZACIÓN DE UI INICIAL Y RECUPERACIÓN DE CACHÉ
+    // 3. INITIAL UI UPDATE AND CACHE RECOVERY
     if (stateToUse) {
         updateBotUI(stateToUse);
         updatePnLBar('long', stateToUse.lprofit || 0);
@@ -46,14 +46,14 @@ export function initializeDashboardView(initialState) {
 
         setTimeout(() => updateDistributionWidget(stateToUse), 150);
 
-        // [MIGUARD] BLINDAJE DE PERSISTENCIA
+        // [MIGUARD] PERSISTENCE SHIELD
         if (stateToUse.aiLastPulse) {
-            console.log("🧠 Memoria Recuperada: Pintando pulso de IA instantáneamente...");
+            console.log("🧠 Memory Recovered: Painting AI pulse instantly...");
             requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
         }
     }
 
-    // 4. CONFIGURAR INTERACTIVIDAD Y BOTÓN DEL CARRUSEL
+    // 4. CONFIGURE INTERACTIVITY AND CAROUSEL BUTTON
     setupActionButtons();
     setupAnalyticsFilters();
 
@@ -69,17 +69,17 @@ export function initializeDashboardView(initialState) {
         });
     }
     
-    // Configuración de la guía
+    // Guide configuration
     const ENABLE_STEP_GUIDE = true; 
     if (!ENABLE_STEP_GUIDE) {
         const carousel = document.querySelector('#step-carousel-body');
         if (carousel) carousel.classList.add('hidden');
     }
     
-    // 5. CARGA DE DATOS HISTÓRICOS
+    // 5. LOAD HISTORICAL DATA
     refreshAnalytics();
 
-    // Activar carrusel automático
+    // Activate automatic carousel
     startAutoCarousel();
     
     const container = document.querySelector('.custom-scrollbar');
@@ -89,7 +89,7 @@ export function initializeDashboardView(initialState) {
     }
 }
 
-// --- MANTENEMOS TODAS LAS FUNCIONES ORIGINALES EXACTAS ---
+// --- KEEPING ALL ORIGINAL FUNCTIONS EXACTLY AS THEY ARE ---
 
 async function refreshAnalytics() {
     try {
@@ -103,7 +103,7 @@ async function refreshAnalytics() {
                 if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
                 return res.json();
             }).catch(err => {
-                console.warn("KPIs no disponibles aún:", err.message);
+                console.warn("KPIs not available yet:", err.message);
                 return null;
             })
         ]);
@@ -219,7 +219,7 @@ export function updateDistributionWidget(state) {
 }
 
 function updateQuickStats(kpiData) {
-    console.group("📊 AUDITORÍA DE CÁLCULOS: PROFIT/D");
+    console.group("📊 CALCULATION AUDIT: PROFIT/D");
     const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
     const totalCycles = parseInt(kpiData.totalCycles) || 0;
     const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
@@ -241,46 +241,46 @@ function updateQuickStats(kpiData) {
 export function renderAiPulseUI(aiData) {
     if (!aiData) return;
 
-    // 1. Ampliamos el filtro para aceptar los nuevos indicadores
+    // 1. We expand the filter to accept the new indicators
     const cleanData = {
         aiConfidence: Math.round(aiData.aiConfidence || 0),
         aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
         aiAdx: parseFloat(aiData.aiAdx || 0).toFixed(1),
-        aiStochK: parseFloat(aiData.aiStochK || 0).toFixed(1), // Nuevo
-        aiStochD: parseFloat(aiData.aiStochD || 0).toFixed(1), // Nuevo
-        aiRsi: parseFloat(aiData.aiRsi || 0).toFixed(1),       // Nuevo
-        aiMacd: parseFloat(aiData.aiMacd || 0).toFixed(4),     // Nuevo
+        aiStochK: parseFloat(aiData.aiStochK || 0).toFixed(1), // New
+        aiStochD: parseFloat(aiData.aiStochD || 0).toFixed(1), // New
+        aiRsi: parseFloat(aiData.aiRsi || 0).toFixed(1),       // New
+        aiMacd: parseFloat(aiData.aiMacd || 0).toFixed(4),     // New
         aiEngineMsg: aiData.aiEngineMsg || 'System Live'
     };
 
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
     lastRenderedAiData = cleanData;
 
-    // 2. Actualización de elementos visuales
+    // 2. Visual element updates
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
         'ai-adx-val': cleanData.aiAdx,
-        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, // Mostramos ambos
+        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, // We show both
         'ai-rsi-val': cleanData.aiRsi,
         'ai-macd-val': cleanData.aiMacd,
         'ai-engine-msg': cleanData.aiEngineMsg
     };
 
-    // Aplicamos los valores a los IDs (asegúrate de que existan en tu HTML)
+    // We apply the values to the IDs (make sure they exist in your HTML)
     Object.entries(elements).forEach(([id, value]) => {
         const el = document.getElementById(id);
         if (el) el.innerText = value;
     });
 
-    // Gráfico de confianza
+    // Confidence chart
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
         dbCircle.style.strokeDashoffset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
     }
 
-    // Barras de progreso (Si tienes los IDs, se actualizarán)
+    // Progress bars (If you have the IDs, they will update)
     const adxBar = document.getElementById('ai-adx-bar');
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
 }

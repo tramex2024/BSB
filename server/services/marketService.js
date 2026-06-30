@@ -1,7 +1,7 @@
 /**
  * BSB/server/services/marketService.js
- * Orquestador de Conexiones BitMart - Versión Centralizada y Optimizada (2026)
- * Optimizada: Caché en memoria para evitar I/O bloqueante en cada tick.
+ * BitMart Connection Orchestrator - Centralized and Optimized Version (2026)
+ * Optimized: In-memory cache to avoid blocking I/O on every tick.
  */
 const WebSocket = require('ws');
 const bitmartWs = require('./bitmartWs'); 
@@ -16,11 +16,11 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false;
 
-// CACHÉ EN MEMORIA: Mantiene el último pulso conocido para evitar consultas a BD en cada tick
+// IN-MEMORY CACHE: Keeps the last known pulse to avoid DB queries on every tick
 let cachedAiPulse = null;
 
 async function setupPublicTicker(io) {
-    // Precarga del último estado conocido al iniciar para evitar huecos en la UI
+    // Preload the last known state at startup to avoid gaps in the UI
     const initialSignal = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
     if (initialSignal) {
         cachedAiPulse = {
@@ -39,7 +39,7 @@ async function setupPublicTicker(io) {
     
     marketWs.on('open', () => {
         isMarketConnected = true;
-        console.log("📡 [MARKET_WS] Conexión establecida.");
+        console.log("📡 [MARKET_WS] Connection established.");
         marketWs.send(JSON.stringify({ "op": "subscribe", "args": ["spot/ticker:BTC_USDT"] }));
 
         if (marketHeartbeat) clearInterval(marketHeartbeat);
@@ -49,7 +49,7 @@ async function setupPublicTicker(io) {
     });
 
     marketWs.on('message', async (data) => {
-    // 1. Declaración en el alcance correcto (scope)
+    // 1. Declaration in the correct scope
     let signalDoc = null; 
 
     try {
@@ -67,9 +67,9 @@ async function setupPublicTicker(io) {
             centralAnalyzer.updatePrice(price);
             const closedCandle = candleBuilder.processTick(price, volume);
             
-            // 2. Lógica condicional segura
+            // 2. Safe conditional logic
             if (closedCandle) {
-                // Actualizamos DB solo al cerrar vela
+                // Update DB only when the candle closes
                 const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
                     { symbol: 'BTC_USDT' },
                     { 
@@ -93,7 +93,7 @@ async function setupPublicTicker(io) {
                     { new: true }
                 );
 
-                // 3. Actualizamos la caché solo cuando hay nueva data
+                // 3. Update cache only when there is new data
                 cachedAiPulse = {
                     aiConfidence: Math.round((signalDoc.aiConfidence || 0) * 100),
                     aiAdx: signalDoc.adx || 0,
@@ -106,15 +106,15 @@ async function setupPublicTicker(io) {
                 };
             }
 
-            // 4. Emisión optimizada (usando la caché para evitar bloqueos)
+            // 4. Optimized emission (using cache to avoid blocking)
             io.emit('marketData', { 
                 price, 
                 priceChangePercent, 
                 exchangeOnline: isMarketConnected,
-                aiPulse: cachedAiPulse // Esto ya contiene todos tus indicadores
+                aiPulse: cachedAiPulse // This already contains all your indicators
             });
 
-            // 5. Ciclo de bots
+            // 5. Bot cycle
             await autobotLogic.botCycle(price);
         }
     } catch (e) { 

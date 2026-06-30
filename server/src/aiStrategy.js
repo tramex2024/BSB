@@ -1,12 +1,12 @@
 /**
  * BSB/server/src/aiStrategy.js
- * Versión Optimizada: Adaptador que inyecta MarketContext al Motor de IA
+ * Optimized Version: Adapter that injects MarketContext into the AI Engine
  */
 
 const aiEngine = require('./states/ai/AIEngine');
 
 async function runAIStrategy(dependencies) {
-    // 1. Validación de integridad (Fail-fast)
+    // 1. Integrity validation (Fail-fast)
     if (!dependencies || !dependencies.botState || !dependencies.currentPrice || !dependencies.userId) {
         return;
     }
@@ -16,7 +16,7 @@ async function runAIStrategy(dependencies) {
         botState, 
         userId, 
         log, 
-        marketContext, // <--- NUEVO: Acceso a la fuente única de verdad
+        marketContext, // <--- NEW: Access to the single source of truth
         placeAIOrder,           
         updateAIStateData,      
         updateBotState          
@@ -25,17 +25,17 @@ async function runAIStrategy(dependencies) {
     const currentState = botState.aistate || 'STOPPED';
 
     try {
-        // 2. FILTRO DE ESTADO OPERATIVO
+        // 2. OPERATIONAL STATE FILTER
         if (currentState === 'STOPPED') return;
 
         /**
-         * 3. EJECUCIÓN BASADA EN CONTEXTO CENTRALIZADO
-         * Pasamos el marketContext para que el AIEngine no pierda tiempo calculando,
-         * solo evalúe la estrategia de decisión.
+         * 3. EXECUTION BASED ON CENTRALIZED CONTEXT
+         * We pass the marketContext so the AIEngine doesn't waste time calculating,
+         * only evaluates the decision strategy.
          */
         await aiEngine.analyze(currentPrice, userId, {
             botState,
-            marketContext, // <--- INYECCIÓN DEL ESTADO GLOBAL DEL MERCADO
+            marketContext, // <--- INJECTION OF GLOBAL MARKET STATE
             placeAIOrder,
             updateAIStateData,
             updateBotState,
@@ -43,25 +43,25 @@ async function runAIStrategy(dependencies) {
             syncFrontendState: dependencies.syncFrontendState 
         });
 
-	// 🟢 AÑADE ESTO: Puente de datos (Sincroniza los indicadores de Market al BotState)
-	await updateAIStateData({
-    	    lac: marketContext.stochK || marketContext.stoch || 0, // Mapeo a 'lac' (el id que tu UI espera)
-    	    lai: marketContext.adx || 0,                          // Mapeo a 'lai' (el id que tu UI espera)
-    	    aiRsi: marketContext.rsi14 || 0,
-    	    aiMacd: marketContext.macdValue || 0
-	});
+    // 🟢 DATA BRIDGE: Syncs market indicators to BotState
+    await updateAIStateData({
+        lac: marketContext.stochK || marketContext.stoch || 0, // Mapping to 'lac' (the ID your UI expects)
+        lai: marketContext.adx || 0,                          // Mapping to 'lai' (the ID your UI expects)
+        aiRsi: marketContext.rsi14 || 0,
+        aiMacd: marketContext.macdValue || 0
+    });
 
     } catch (error) {
         if (log) log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
         console.error(`[AI-STRATEGY][User: ${userId}]:`, error);
 
-        // [FALLBACK DE SEGURIDAD]
+        // [SAFETY FALLBACK]
         if (currentState === 'RUNNING') {
             try {
-                log(`🚨 [FALLBACK AI] Pausa de emergencia por error en Engine.`, 'warning');
+                log(`🚨 [FALLBACK AI] Emergency pause due to Engine error.`, 'warning');
                 await updateBotState('PAUSED', 'ai');
             } catch (fallbackError) {
-                console.error(`💥 Error en mitigación de pánico AI ${userId}:`, fallbackError.message);
+                console.error(`💥 Error in AI panic mitigation for user ${userId}:`, fallbackError.message);
             }
         }
     }
