@@ -240,33 +240,47 @@ function updateQuickStats(kpiData) {
 
 export function renderAiPulseUI(aiData) {
     if (!aiData) return;
+
+    // 1. Ampliamos el filtro para aceptar los nuevos indicadores
     const cleanData = {
         aiConfidence: Math.round(aiData.aiConfidence || 0),
         aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
         aiAdx: parseFloat(aiData.aiAdx || 0).toFixed(1),
-        aiStoch: parseFloat(aiData.aiStoch || 0).toFixed(1),
+        aiStochK: parseFloat(aiData.aiStochK || 0).toFixed(1), // Nuevo
+        aiStochD: parseFloat(aiData.aiStochD || 0).toFixed(1), // Nuevo
+        aiRsi: parseFloat(aiData.aiRsi || 0).toFixed(1),       // Nuevo
+        aiMacd: parseFloat(aiData.aiMacd || 0).toFixed(4),     // Nuevo
         aiEngineMsg: aiData.aiEngineMsg || 'System Live'
     };
+
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
     lastRenderedAiData = cleanData;
+
+    // 2. Actualización de elementos visuales
+    const elements = {
+        'ai-confidence-value': `${cleanData.aiConfidence}%`,
+        'ai-trend-label': cleanData.aiTrendLabel,
+        'ai-adx-val': cleanData.aiAdx,
+        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, // Mostramos ambos
+        'ai-rsi-val': cleanData.aiRsi,
+        'ai-macd-val': cleanData.aiMacd,
+        'ai-engine-msg': cleanData.aiEngineMsg
+    };
+
+    // Aplicamos los valores a los IDs (asegúrate de que existan en tu HTML)
+    Object.entries(elements).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = value;
+    });
+
+    // Gráfico de confianza
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
-        const offset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
-        dbCircle.style.strokeDashoffset = offset;
+        dbCircle.style.strokeDashoffset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
     }
-    const confVal = document.getElementById('ai-confidence-value');
-    const trendLabel = document.getElementById('ai-trend-label');
-    const adxVal = document.getElementById('ai-adx-val');
-    const stochVal = document.getElementById('ai-stoch-val');
+
+    // Barras de progreso (Si tienes los IDs, se actualizarán)
     const adxBar = document.getElementById('ai-adx-bar');
-    const stochBar = document.getElementById('ai-stoch-bar');
-    const engineMsg = document.getElementById('ai-engine-msg');
-    if (confVal) confVal.innerText = `${cleanData.aiConfidence}%`;
-    if (trendLabel) trendLabel.innerText = cleanData.aiTrendLabel;
-    if (adxVal) adxVal.innerText = cleanData.aiAdx;
-    if (stochVal) stochVal.innerText = cleanData.aiStoch;
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
-    if (stochBar) stochBar.style.width = `${Math.min(cleanData.aiStoch, 100)}%`;
-    if (engineMsg) engineMsg.innerText = cleanData.aiEngineMsg;
 }

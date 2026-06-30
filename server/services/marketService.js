@@ -98,13 +98,25 @@ async function setupPublicTicker(io) {
                     };
                 }
 
-                // 4. EMISIÓN: Siempre enviamos la caché (ya sea la inicial o la actualizada)
-                io.emit('marketData', { 
-                    price, 
-                    priceChangePercent, 
-                    exchangeOnline: isMarketConnected,
-                    aiPulse: cachedAiPulse
-                });
+                // 4. Emisión optimizada a Frontend (Incluyendo los indicadores faltantes)
+io.emit('marketData', { 
+    price, 
+    priceChangePercent, 
+    exchangeOnline: isMarketConnected,
+    aiPulse: cachedAiPulse ? {
+        // Pulso principal
+        aiConfidence: cachedAiPulse.aiConfidence,
+        aiAdx: cachedAiPulse.aiAdx,
+        aiTrendLabel: cachedAiPulse.aiTrendLabel,
+        aiEngineMsg: cachedAiPulse.aiEngineMsg,
+        
+        // INDICADORES AGREGADOS PARA EL DASHBOARD
+        aiRsi: signalDoc ? signalDoc.rsi14 : null,
+        aiStochK: signalDoc ? signalDoc.stochK : null,
+        aiStochD: signalDoc ? signalDoc.stochD : null,
+        aiMacd: signalDoc ? signalDoc.macdValue : null
+    } : null 
+});
 
                 // 5. Ciclo de Bots de Usuarios
                 await autobotLogic.botCycle(price);

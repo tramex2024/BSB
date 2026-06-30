@@ -107,20 +107,28 @@ export async function updateBotUI(state) {
         }
     });
 
-    // 3. Renderizado defensivo de métricas de pulso IA si vienen en el state plano
-    const adxEl = document.getElementById('ai-adx-val');
-    const stochEl = document.getElementById('ai-stoch-val');
-    
-    if (adxEl && (state.lai !== undefined || state.aiAdx !== undefined)) {
-        const rawAdx = parseFloat(state.aiAdx ?? state.lai ?? 0);
-        adxEl.textContent = rawAdx.toFixed(1);
-        updatePulseBars('ai-adx-val', rawAdx);
+    // --- 3. Renderizado defensivo de métricas de pulso IA ---
+// Reemplaza el bloque anterior en uiManager.js por este más completo
+const pulseMetrics = [
+    { id: 'ai-adx-val', key: 'aiAdx', barId: 'ai-adx-bar', scale: 50 },
+    { id: 'ai-stoch-val', key: 'aiStochK', barId: 'ai-stoch-bar', scale: 100 },
+    { id: 'ai-rsi-val', key: 'aiRsi', barId: null, scale: 100 },
+    { id: 'ai-macd-val', key: 'aiMacd', barId: null, scale: 100 }
+];
+
+pulseMetrics.forEach(metric => {
+    const el = document.getElementById(metric.id);
+    if (el && state[metric.key] !== undefined) {
+        const val = parseFloat(state[metric.key]);
+        // Actualización de texto
+        el.textContent = metric.id.includes('macd') ? val.toFixed(4) : val.toFixed(1);
+        
+        // Actualización de barra (si existe id de barra)
+        if (metric.barId) {
+            updatePulseBars(metric.id, val);
+        }
     }
-    if (stochEl && (state.lac !== undefined || state.aiStoch !== undefined)) {
-        const rawStoch = parseFloat(state.aiStoch ?? state.lac ?? 0);
-        stochEl.textContent = rawStoch.toFixed(1);
-        updatePulseBars('ai-stoch-val', rawStoch);
-    }
+});
 
     // 4. Barras de Confianza AI
     if (state.aiConfidence !== undefined) {
