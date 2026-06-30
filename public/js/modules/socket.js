@@ -53,7 +53,7 @@ export function initSocket() {
 
     // MUEVE EL LISTENER AQUÍ, JUSTO DESPUÉS DE LA INICIALIZACIÓN
     socket.onAny((event, ...args) => {
-        console.log(`📡 SOCKET EVENTO RECIBIDO: [${event}]`, args);
+        //console.log(`📡 SOCKET EVENTO RECIBIDO: [${event}]`, args);
     });
 
     // --- CONNECTION LISTENERS ---
