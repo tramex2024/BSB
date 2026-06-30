@@ -1,6 +1,7 @@
 /**
  * BSB/server/services/marketService.js
  * Orquestador de Conexiones BitMart - Versión Centralizada y Optimizada (2026)
+ * Optimizada: Caché en memoria para evitar I/O bloqueante en cada tick.
  */
 const WebSocket = require('ws');
 const bitmartWs = require('./bitmartWs'); 
@@ -15,7 +16,21 @@ let marketWs = null;
 let marketHeartbeat = null;
 let isMarketConnected = false;
 
-function setupPublicTicker(io) {
+// CACHÉ EN MEMORIA: Mantiene el último pulso conocido para evitar consultas a BD en cada tick
+let cachedAiPulse = null;
+
+async function setupPublicTicker(io) {
+    // Precarga del último estado conocido al iniciar para evitar huecos en la UI
+    const initialSignal = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
+    if (initialSignal) {
+        cachedAiPulse = {
+            aiConfidence: Math.round((initialSignal.aiConfidence || 0) * 100),
+            aiAdx: initialSignal.adx || 0,
+            aiTrendLabel: initialSignal.signal || 'Neutral',
+            aiEngineMsg: initialSignal.reason || 'System Initialized'
+        };
+    }
+
     const bitmartWsUrl = 'wss://ws-manager-compress.bitmart.com/api?protocol=1.1&compression=true';
     
     if (marketWs) { try { marketWs.terminate(); } catch (e) {} }
@@ -49,10 +64,8 @@ function setupPublicTicker(io) {
                 centralAnalyzer.updatePrice(price);
                 const closedCandle = candleBuilder.processTick(price, volume);
                 
-                let signalDoc = null;
-
+                // Si la vela cierra, actualizamos la base de datos y refrescamos nuestra caché
                 if (closedCandle) {
-                    // 1. Persistencia de Vela y Recálculo Centralizado
                     const updatedSignalDoc = await MarketSignal.findOneAndUpdate(
                         { symbol: 'BTC_USDT' },
                         { 
@@ -62,48 +75,38 @@ function setupPublicTicker(io) {
                         { upsert: true, new: true }
                     );
 
-                    // 2. Ejecución del Analizador Central
                     const analysis = await centralAnalyzer.analyze(updatedSignalDoc.history);
                     
-                    // 3. Centralización de Indicadores en DB
-                    signalDoc = await MarketSignal.findOneAndUpdate(
+                    const signalDoc = await MarketSignal.findOneAndUpdate(
                         { symbol: 'BTC_USDT' },
                         { 
                             $set: { 
-                                rsi14: analysis.rsi14,
-                                adx: analysis.adx,
-                                stochK: analysis.stochK,
-                                stochD: analysis.stochD,
-                                macdValue: analysis.macdValue,
-                                aiConfidence: analysis.confidence,
-                                signal: analysis.signal,
-                                reason: analysis.reason
+                                rsi14: analysis.rsi14, adx: analysis.adx, stochK: analysis.stochK,
+                                stochD: analysis.stochD, macdValue: analysis.macdValue,
+                                aiConfidence: analysis.confidence, signal: analysis.signal, reason: analysis.reason
                             }
                         },
                         { new: true }
                     );
+
+                    // ACTUALIZACIÓN DE CACHÉ: Solo ocurre cuando cierra vela
+                    cachedAiPulse = {
+                        aiConfidence: Math.round((signalDoc.aiConfidence || 0) * 100),
+                        aiAdx: signalDoc.adx || 0,
+                        aiTrendLabel: signalDoc.signal || 'Neutral',
+                        aiEngineMsg: signalDoc.reason || 'Analyzing...'
+                    };
                 }
 
-                // 4. Emisión optimizada a Frontend
-// SI el signalDoc es null (porque no se cerró vela), intentamos buscar el último registro en la DB
-if (!signalDoc) {
-    signalDoc = await MarketSignal.findOne({ symbol: 'BTC_USDT' });
-}
+                // 4. EMISIÓN: Siempre enviamos la caché (ya sea la inicial o la actualizada)
+                io.emit('marketData', { 
+                    price, 
+                    priceChangePercent, 
+                    exchangeOnline: isMarketConnected,
+                    aiPulse: cachedAiPulse
+                });
 
-io.emit('marketData', { 
-    price, 
-    priceChangePercent, 
-    exchangeOnline: isMarketConnected,
-    // Ahora signalDoc tendrá datos siempre, ya sea recién calculados o recuperados de DB
-    aiPulse: signalDoc ? {
-        aiConfidence: Math.round((signalDoc.aiConfidence || 0) * 100),
-        aiAdx: signalDoc.adx || 0,
-        aiTrendLabel: signalDoc.signal || 'Neutral',
-        aiEngineMsg: signalDoc.reason || 'Waiting for signal...'
-    } : null 
-});
-
-                // 5. Ciclo de Bots de Usuarios (Consultando los datos recién centralizados)
+                // 5. Ciclo de Bots de Usuarios
                 await autobotLogic.botCycle(price);
             }
         } catch (e) { 
@@ -118,7 +121,6 @@ io.emit('marketData', {
 }
 
 async function initializePrivateWebSockets(io, orderPersistenceService) {
-    // ... (Tu lógica existente para sockets privados se mantiene igual)
     try {
         const usersWithKeys = await User.find({ bitmartApiKey: { $exists: true, $ne: "" } });
         for (const user of usersWithKeys) {
