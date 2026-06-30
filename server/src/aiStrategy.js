@@ -43,6 +43,14 @@ async function runAIStrategy(dependencies) {
             syncFrontendState: dependencies.syncFrontendState 
         });
 
+	// 🟢 AÑADE ESTO: Puente de datos (Sincroniza los indicadores de Market al BotState)
+	await updateAIStateData({
+    	    lac: marketContext.stochK || marketContext.stoch || 0, // Mapeo a 'lac' (el id que tu UI espera)
+    	    lai: marketContext.adx || 0,                          // Mapeo a 'lai' (el id que tu UI espera)
+    	    aiRsi: marketContext.rsi14 || 0,
+    	    aiMacd: marketContext.macdValue || 0
+	});
+
     } catch (error) {
         if (log) log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
         console.error(`[AI-STRATEGY][User: ${userId}]:`, error);
