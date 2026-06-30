@@ -83,33 +83,34 @@ export function initSocket() {
    // --- MARKET DATA (PRICE, VARIATION & REALTIME AI PULSE) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
-	
-	if (data?.price) {
+        
+        // 1. DEPURACIÓN: Solo se mostrará si el backend no envía datos de IA
+        if (!data?.aiPulse) {
+            console.warn("⚠️ [DEBUG] Backend envió marketData sin aiPulse. Datos recibidos:", data);
+        }
+
+        if (data?.price) {
             const newPrice = parseFloat(data.price);
             currentBotState.price = newPrice;
             
-            // Solo actualizamos el precio visualmente aquí
             const priceEl = document.getElementById('auprice');
             if (priceEl) {
                 formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
                 currentBotState.lastPrice = newPrice;
             }
 
-            // --- PERSISTENCIA Y RENDERIZADO INMEDIATO DE LA IA ---
-            // Si el tick contiene el pulso neural del backend, lo salvamos en el estado de memoria global
+            // 2. LÓGICA DE PERSISTENCIA Y RENDERIZADO (Mejorada)
             if (data.aiPulse) {
+                // Hay datos nuevos, actualizamos todo
                 currentBotState.aiLastPulse = data.aiPulse;
                 renderAiPulseUI(data.aiPulse);
             } else if (currentBotState.aiLastPulse) {
-                // EFECTO MEMORIA AL NAVEGAR: Si regresamos de otra pestaña y el tick actual no trae datos, 
-                // forzamos el renderizado usando la memoria caché global.
+                // No hay datos nuevos, intentamos recuperar del caché (Efecto Memoria)
                 renderAiPulseUI(currentBotState.aiLastPulse);
             }
 
-            // LANZAMOS EL MANAGER: Él se encarga de las barras de PnL y todo lo demás
             updateBotUI(currentBotState); 
 
-            // Widget de Donut (Si existe)
             if (document.getElementById('balanceDonutChart')) {
                 const { updateDistributionWidget } = await import('./dashboard.js');
                 updateDistributionWidget(currentBotState);
@@ -120,7 +121,7 @@ export function initSocket() {
             updatePriceVariationUI(parseFloat(data.priceChangePercent));
         }
     });
-
+        
     // Mantén este listener para conservar la compatibilidad si el motor neural emite de forma aislada
     socket.on('ai-pulse-broadcast', (data) => {
         if (!data) return;
