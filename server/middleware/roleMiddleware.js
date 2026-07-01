@@ -22,7 +22,7 @@ const roleMiddleware = (requiredRole) => {
         }
 
         // 3. Fallo de permisos
-        console.warn(`[SECURITY] Acceso denegado para ${req.user.email}. Requería: ${requiredRole}, Tenía: ${userRole}`);
+        console.warn(`[SECURITY] Access denied for ${req.user.email}. Requiered: ${requiredRole}, Had: ${userRole}`);
         
         return res.status(403).json({ 
             success: false,

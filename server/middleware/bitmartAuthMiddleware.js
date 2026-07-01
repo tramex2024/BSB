@@ -1,4 +1,6 @@
-// BSB/server/middleware/bitmartAuthMiddleware.js
+/**
+ * BSB/server/middleware/bitmartAuthMiddleware.js
+ */
 
 const { decrypt } = require('../utils/encryption'); 
 const User = require('../models/User'); 
@@ -9,21 +11,21 @@ const bitmartAuthMiddleware = async (req, res, next) => {
         const user = await User.findById(userId);
 
         if (!user) {
-            return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+            return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
-        // 1. VALIDACIÓN ESTRICTA: ¿Existen las llaves?
+        // 1. STRICT VALIDATION: Do keys exist?
         if (!user.bitmartApiKey || !user.bitmartSecretKeyEncrypted) {
-            console.warn(`[AUTH-MW] ⚠️ Acceso denegado: ${user.email} no tiene API Keys configuradas.`);
+            console.warn(`[AUTH-MW] ⚠️ Access denied: ${user.email} does not have API Keys configured.`);
             
-            // En lugar de pasar con null, cortamos la petición si es una acción que REQUIERE llaves
+            // Instead of passing with null, we cut the request if it's an action that REQUIRES keys
             return res.status(403).json({ 
                 success: false, 
-                message: "No se detectaron API Keys vinculadas. Por favor, configúralas en tu perfil." 
+                message: "No linked API Keys detected. Please configure them in your profile." 
             });
         }
 
-        // 2. DESENCRIPTACIÓN Y CARGA
+        // 2. DECRYPTION AND LOADING
         try {
             req.bitmartCreds = {
                 apiKey: decrypt(user.bitmartApiKey),
@@ -31,21 +33,21 @@ const bitmartAuthMiddleware = async (req, res, next) => {
                 apiMemo: user.bitmartApiMemo ? decrypt(user.bitmartApiMemo) : ''
             };
             
-            // Log de éxito (opcional, útil en desarrollo)
-            // console.log(`[AUTH-MW] 🛡️ Credenciales cargadas para: ${user.email}`);
+            // Success log (optional, useful in development)
+            // console.log(`[AUTH-MW] 🛡️ Credentials loaded for: ${user.email}`);
             next();
 
         } catch (decryptError) {
-            console.error(`[AUTH-MW] ❌ Error crítico de desencriptación para ${user.email}:`, decryptError.message);
+            console.error(`[AUTH-MW] ❌ Critical decryption error for ${user.email}:`, decryptError.message);
             return res.status(500).json({ 
                 success: false, 
-                message: "Error al procesar tus credenciales de seguridad. Contacta al soporte." 
+                message: "Error processing your security credentials. Please contact support." 
             });
         }
         
     } catch (error) {
-        console.error('❌ Error general en bitmartAuthMiddleware:', error.message);
-        res.status(500).json({ success: false, message: "Error interno de autenticación BitMart." });
+        console.error('❌ General error in bitmartAuthMiddleware:', error.message);
+        res.status(500).json({ success: false, message: "Internal BitMart authentication error." });
     }
 };
 
