@@ -15,6 +15,11 @@ console.log("🔍 EMAIL_PASS Longitud:", process.env.EMAIL_PASS ? process.env.EM
 // Configuración del transportador SMTP
 const transporter = nodemailer.createTransport({
     service: 'gmail',
+    // --- NUEVAS CONFIGURACIONES DE SEGURIDAD ---
+    connectionTimeout: 10000, // 10 segundos para conectar
+    greetingTimeout: 10000,   // 10 segundos para el saludo SMTP
+    socketTimeout: 10000,     // 10 segundos para la transferencia
+    // ------------------------------------------
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
