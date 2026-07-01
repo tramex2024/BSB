@@ -21,7 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.21.1",
     "node-cron": "^4.2.1",
-    "nodemailer": "^7.0.10",
+    "nodemailer": "^7.0.13",
     "querystring": "^0.2.1",
     "rand-token": "^1.0.1",
     "resend": "^6.6.0",
