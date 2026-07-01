@@ -5,6 +5,13 @@
 
 const nodemailer = require('nodemailer');
 
+// --- DEBUGGING CRÍTICO ---
+console.log("🔍 [DEBUG-EMAIL] Verificando variables de entorno...");
+console.log("🔍 EMAIL_USER:", process.env.EMAIL_USER ? "Cargado" : "NO ENCONTRADO");
+// Solo mostramos la longitud para no exponer la clave en los logs
+console.log("🔍 EMAIL_PASS Longitud:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : "NO ENCONTRADO");
+// -------------------------
+
 // Configuración del transportador SMTP
 const transporter = nodemailer.createTransport({
     service: 'gmail',
