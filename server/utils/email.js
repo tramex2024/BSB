@@ -33,9 +33,13 @@ async function sendMail(to, subject, htmlContent) {
     };
 
     try {
-        return await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL-SERVICE] Intentando enviar a: ${to}`);
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL-SERVICE] ÉXITO: ${info.messageId}`);
+        return info;
     } catch (error) {
-        console.error("❌ [EMAIL-SERVICE ERROR]:", error.message);
+        // ESTO ES LO QUE NOS DIRÁ EL ERROR REAL
+        console.error("❌ [EMAIL-SERVICE ERROR REAL]:", error); 
         throw error;
     }
 }
