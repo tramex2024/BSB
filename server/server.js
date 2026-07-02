@@ -4,6 +4,7 @@
  * Estado: Completamente Auditado y Secuenciado contra condiciones de carrera
  */
 
+dotenv.config();
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -20,7 +21,7 @@ const orderPersistenceService = require('./services/orderPersistenceService');
 const marketService = require('./services/marketService');
 const cronService = require('./services/cronService'); 
 
-dotenv.config();
+//dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
