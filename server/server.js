@@ -4,7 +4,6 @@
  * Estado: Completamente Auditado y Secuenciado contra condiciones de carrera
  */
 
-dotenv.config();
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -12,6 +11,8 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require("socket.io");
 const path = require('path');
+
+dotenv.config();
 
 // --- 1. IMPORTACIÓN DE SERVICIOS Y LÓGICA ---
 const autobotLogic = require('./autobotLogic.js');
