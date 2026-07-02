@@ -1,43 +1,68 @@
 /**
  * BSB/server/utils/email.js
- * EMAIL DELIVERY SERVICE VIA RESEND API (ANTI-BLOCK/NO-SMTP)
+ * EMAIL DELIVERY SERVICE VIA GMAIL API (HTTPS / NO-SMTP)
  */
 
-const { Resend } = require('resend');
+const { google } = require('googleapis');
 
 // --- DEBUGGING CRÍTICO ---
-console.log("🔍 [DEBUG-EMAIL] Verificando API de Resend...");
-console.log("🔍 RESEND_API_KEY:", process.env.RESEND_API_KEY ? "Cargada correctamente" : "NO ENCONTRADA");
+console.log("🔍 [DEBUG-EMAIL] Verificando credenciales de Gmail API...");
+console.log("🔍 GMAIL_USER:", process.env.GMAIL_USER ? "Cargado" : "NO ENCONTRADO");
+console.log("🔍 GMAIL_CLIENT_ID:", process.env.GMAIL_CLIENT_ID ? "Cargado" : "NO ENCONTRADO");
 // -------------------------
 
-// Inicializamos Resend con la API Key de las variables de entorno
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Configuración del cliente OAuth2 de Google
+const oAuth2Client = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    'https://developers.google.com/oauthplayground' // Debe coincidir con la redirección configurada
+);
+
+oAuth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
 
 /**
- * Función genérica de envío (privada utilizando la API de Resend)
+ * Helper para codificar el correo en el formato Base64 seguro que exige la API de Google (RFC 2822)
+ */
+function encodeEmail(to, from, subject, htmlContent) {
+    const str = [
+        `To: ${to}`,
+        `From: ${from}`,
+        `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=utf-8',
+        'Content-Transfer-Encoding: 7bit',
+        '',
+        htmlContent
+    ].join('\n');
+
+    return Buffer.from(str)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+/**
+ * Función genérica de envío a través de HTTPS POST
  */
 async function sendMail(to, subject, htmlContent) {
     try {
-        console.log(`[EMAIL-SERVICE] Intentando enviar vía API a: ${to}`);
+        console.log(`[EMAIL-SERVICE] Intentando enviar vía GMAIL API a: ${to}`);
         
-        // NOTA: Si usas la cuenta gratuita de Resend sin dominio propio verificado,
-        // el remitente obligatoriamente debe ser: 'onboarding@resend.dev'
-        // El destinatario solo podrá ser tu propio correo de registro para pruebas.
-        const data = await resend.emails.send({
-            from: 'BSB Verification <onboarding@resend.dev>', 
-            to: to,
-            subject: subject,
-            html: htmlContent,
+        const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+        const rawMessage = encodeEmail(to, `"Nexus Labs Support" <${process.env.GMAIL_USER}>`, subject, htmlContent);
+        
+        const response = await gmail.users.messages.send({
+            userId: 'me',
+            requestBody: {
+                raw: rawMessage
+            }
         });
 
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
-
-        console.log(`[EMAIL-SERVICE] ÉXITO: Correo enviado. ID: ${data.data.id}`);
-        return { messageId: data.data.id };
+        console.log(`[EMAIL-SERVICE] ÉXITO: Correo enviado. ID: ${response.data.id}`);
+        return { messageId: response.data.id };
     } catch (error) {
-        console.error("❌ [EMAIL-SERVICE ERROR REAL]:", error.message); 
+        console.error("❌ [EMAIL-SERVICE ERROR REAL VIA API]:", error.message);
         throw error;
     }
 }
@@ -65,15 +90,14 @@ async function sendSupportTicketEmail(ticketData) {
     const { email, category, message, ticketId } = ticketData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Ticket: ${ticketId}</h2><p><b>From:</b> ${email}</p><p>${message}</p></div>`;
     
-    // Para alertas internas, te lo envías a ti mismo
-    return await sendMail('tramex2024@gmail.com', `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
+    return await sendMail(process.env.GMAIL_USER, `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
 }
 
 async function sendPaymentNotificationEmail(paymentData) {
     const { email, amount, hash, type } = paymentData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Payment</h2><p>User: ${email}</p><p>Amount: ${amount} USDT</p><p>TXID: ${hash}</p></div>`;
     
-    return await sendMail('tramex2024@gmail.com', `💰 [PAYMENT: ${type}] from ${email}`, html);
+    return await sendMail(process.env.GMAIL_USER, `💰 [PAYMENT: ${type}] from ${email}`, html);
 }
 
 module.exports = { sendTokenEmail, sendSupportTicketEmail, sendPaymentNotificationEmail };
