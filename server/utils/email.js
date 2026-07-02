@@ -1,47 +1,43 @@
 /**
  * BSB/server/utils/email.js
- * EMAIL DELIVERY SERVICE VIA GMAIL (NODEMAILER)
+ * EMAIL DELIVERY SERVICE VIA RESEND API (ANTI-BLOCK/NO-SMTP)
  */
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 // --- DEBUGGING CRÍTICO ---
-console.log("🔍 [DEBUG-EMAIL] Verificando variables de entorno...");
-console.log("🔍 EMAIL_USER:", process.env.EMAIL_USER ? "Cargado" : "NO ENCONTRADO");
-// Solo mostramos la longitud para no exponer la clave en los logs
-console.log("🔍 EMAIL_PASS Longitud:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : "NO ENCONTRADO");
+console.log("🔍 [DEBUG-EMAIL] Verificando API de Resend...");
+console.log("🔍 RESEND_API_KEY:", process.env.RESEND_API_KEY ? "Cargada correctamente" : "NO ENCONTRADA");
 // -------------------------
 
-// Configuración del transportador SMTP
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, 
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+// Inicializamos Resend con la API Key de las variables de entorno
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
- * Función genérica de envío (privada)
+ * Función genérica de envío (privada utilizando la API de Resend)
  */
 async function sendMail(to, subject, htmlContent) {
-    const mailOptions = {
-        from: `"Nexus Labs Support" <${process.env.EMAIL_USER}>`,
-        to: to,
-        subject: subject,
-        html: htmlContent
-    };
-
     try {
-        console.log(`[EMAIL-SERVICE] Intentando enviar a: ${to}`);
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`[EMAIL-SERVICE] ÉXITO: ${info.messageId}`);
-        return info;
+        console.log(`[EMAIL-SERVICE] Intentando enviar vía API a: ${to}`);
+        
+        // NOTA: Si usas la cuenta gratuita de Resend sin dominio propio verificado,
+        // el remitente obligatoriamente debe ser: 'onboarding@resend.dev'
+        // El destinatario solo podrá ser tu propio correo de registro para pruebas.
+        const data = await resend.emails.send({
+            from: 'BSB Verification <onboarding@resend.dev>', 
+            to: to,
+            subject: subject,
+            html: htmlContent,
+        });
+
+        if (data.error) {
+            throw new Error(data.error.message);
+        }
+
+        console.log(`[EMAIL-SERVICE] ÉXITO: Correo enviado. ID: ${data.data.id}`);
+        return { messageId: data.data.id };
     } catch (error) {
-        // ESTO ES LO QUE NOS DIRÁ EL ERROR REAL
-        console.error("❌ [EMAIL-SERVICE ERROR REAL]:", error); 
+        console.error("❌ [EMAIL-SERVICE ERROR REAL]:", error.message); 
         throw error;
     }
 }
@@ -69,14 +65,15 @@ async function sendSupportTicketEmail(ticketData) {
     const { email, category, message, ticketId } = ticketData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Ticket: ${ticketId}</h2><p><b>From:</b> ${email}</p><p>${message}</p></div>`;
     
-    return await sendMail(process.env.EMAIL_USER, `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
+    // Para alertas internas, te lo envías a ti mismo
+    return await sendMail('tramex2024@gmail.com', `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
 }
 
 async function sendPaymentNotificationEmail(paymentData) {
     const { email, amount, hash, type } = paymentData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Payment</h2><p>User: ${email}</p><p>Amount: ${amount} USDT</p><p>TXID: ${hash}</p></div>`;
     
-    return await sendMail(process.env.EMAIL_USER, `💰 [PAYMENT: ${type}] from ${email}`, html);
+    return await sendMail('tramex2024@gmail.com', `💰 [PAYMENT: ${type}] from ${email}`, html);
 }
 
 module.exports = { sendTokenEmail, sendSupportTicketEmail, sendPaymentNotificationEmail };
