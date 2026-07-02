@@ -5,23 +5,23 @@
 
 const { google } = require('googleapis');
 
-// --- DEBUGGING CRÍTICO ---
-console.log("🔍 [DEBUG-EMAIL] Verificando credenciales de Gmail API...");
-console.log("🔍 GMAIL_USER:", process.env.GMAIL_USER ? "Cargado" : "NO ENCONTRADO");
-console.log("🔍 GMAIL_CLIENT_ID:", process.env.GMAIL_CLIENT_ID ? "Cargado" : "NO ENCONTRADO");
+// --- CRITICAL DEBUGGING ---
+console.log("🔍 [DEBUG-EMAIL] Verifying Gmail API credentials...");
+console.log("🔍 GMAIL_USER:", process.env.GMAIL_USER ? "Loaded" : "NOT FOUND");
+console.log("🔍 GMAIL_CLIENT_ID:", process.env.GMAIL_CLIENT_ID ? "Loaded" : "NOT FOUND");
 // -------------------------
 
-// Configuración del cliente OAuth2 de Google
+// Google OAuth2 client configuration
 const oAuth2Client = new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
     process.env.GMAIL_CLIENT_SECRET,
-    'https://developers.google.com/oauthplayground' // Debe coincidir con la redirección configurada
+    'https://developers.google.com/oauthplayground' // Must match the configured redirect URI
 );
 
 oAuth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
 
 /**
- * Helper para codificar el correo en el formato Base64 seguro que exige la API de Google (RFC 2822)
+ * Helper to encode the email into the secure Base64 format required by the Google API (RFC 2822)
  */
 function encodeEmail(to, from, subject, htmlContent) {
     const str = [
@@ -43,11 +43,11 @@ function encodeEmail(to, from, subject, htmlContent) {
 }
 
 /**
- * Función genérica de envío a través de HTTPS POST
+ * Generic send function via HTTPS POST
  */
 async function sendMail(to, subject, htmlContent) {
     try {
-        console.log(`[EMAIL-SERVICE] Intentando enviar vía GMAIL API a: ${to}`);
+        console.log(`[EMAIL-SERVICE] Attempting to send via GMAIL API to: ${to}`);
         
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
         const rawMessage = encodeEmail(to, `"Nexus Labs Support" <${process.env.GMAIL_USER}>`, subject, htmlContent);
@@ -59,10 +59,10 @@ async function sendMail(to, subject, htmlContent) {
             }
         });
 
-        console.log(`[EMAIL-SERVICE] ÉXITO: Correo enviado. ID: ${response.data.id}`);
+        console.log(`[EMAIL-SERVICE] SUCCESS: Email sent. ID: ${response.data.id}`);
         return { messageId: response.data.id };
     } catch (error) {
-        console.error("❌ [EMAIL-SERVICE ERROR REAL VIA API]:", error.message);
+        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR VIA API]:", error.message);
         throw error;
     }
 }
@@ -78,7 +78,7 @@ async function sendTokenEmail(email, token) {
             <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
                 <span style="font-size: 32px; font-weight: 800; letter-spacing: 5px; color: #111827;">${token}</span>
             </div>
-            <p style="font-size: 14px; line-height: 1.5;">Este código es válido por 10 minutos.</p>
+            <p style="font-size: 14px; line-height: 1.5;">This code is valid for 10 minutes.</p>
         </div>`;
 
     const info = await sendMail(email, "🔑 Your BSB Access Code", html);
