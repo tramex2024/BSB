@@ -15,10 +15,9 @@ const { runAIStrategy } = require('./src/aiStrategy');
 const { canExecuteStrategy } = require('./utils/strategyValidator');
 const MarketSignal = require('./models/MarketSignal');
 
-// Native parseFloat handles conversions cleanly
+// Centralized mathematical engine imports
 const { 
-    calculateLongCoverage, 
-    calculateShortCoverage, 
+    calculateLiveBotMetrics,
     calculatePotentialProfit 
 } = require('./autobotCalculations');
 
@@ -43,7 +42,7 @@ async function processSingleBot(botState, currentPrice) {
         // --- 0. CENTRALIZED MARKET DATA RETRIEVAL (SOURCE OF TRUTH) ---
         const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || 'BTC_USDT' }).lean();
         
-        // 🟢 CORREGIDO: Inyección total de indicadores técnicos requeridos por el AIEngine
+        // Total injection of technical indicators required by the AIEngine execution context
         const marketContext = marketData ? {
             rsi14: marketData.rsi14,
             rsi21: marketData.rsi21,
@@ -143,36 +142,11 @@ async function processSingleBot(botState, currentPrice) {
         Object.assign(botState, changeSet);
 
         // --- 2. MATHEMATICAL & COVERAGE CALCULATIONS ---
-        if (botState.lstate !== 'STOPPED' && botState.config.long) {
-            const longCov = calculateLongCoverage(
-                botState.lbalance || 0, 
-                botState.locc > 0 ? (botState.llep || currentPrice) : currentPrice, 
-                botState.config.long.purchaseUsdt, 
-                parseFloat(botState.config.long.price_var) / 100, 
-                parseFloat(botState.config.long.size_var), 
-                botState.locc || 0, 
-                parseFloat(botState.config.long.price_step_inc)
-            );
-            changeSet.lcoverage = longCov.coveragePrice;
-            changeSet.lnorder = longCov.numberOfOrders;
-            changeSet.lprofit = (botState.lppc || 0) > 0 ? calculatePotentialProfit(botState.lppc, botState.lai || 0, currentPrice, 'long') : 0;
-        }
+        // 🟢 DECOUPLED: Mathematical matrix evaluation is offloaded completely to the calculations module
+        const liveMetrics = calculateLiveBotMetrics(botState, currentPrice);
+        Object.assign(changeSet, liveMetrics);
 
-        if (botState.sstate !== 'STOPPED' && botState.config.short) {
-            const shortCov = calculateShortCoverage(
-                botState.sbalance || 0, 
-                botState.socc > 0 ? (botState.slep || currentPrice) : currentPrice, 
-                botState.config.short.purchaseUsdt, 
-                parseFloat(botState.config.short.price_var) / 100, 
-                parseFloat(botState.config.short.size_var), 
-                botState.socc || 0, 
-                parseFloat(botState.config.short.price_step_inc)
-            );
-            changeSet.scoverage = shortCov.coveragePrice;
-            changeSet.snorder = shortCov.numberOfOrders;
-            changeSet.sprofit = (botState.sppc || 0) > 0 ? calculatePotentialProfit(botState.sppc, botState.sai || 0, currentPrice, 'short') : 0;
-        }
-
+        // Separate calculation layer for active AI profit matrix tracking
         if (botState.aistate !== 'STOPPED' && botState.config.ai) {
             changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.ailastEntryPrice || 0, currentPrice, 'ai') : 0;
         }
@@ -233,7 +207,7 @@ async function botCycle(priceFromWebSocket) {
  */
 function startGlobalSync() {
     setInterval(async () => {
-        // 🟢 CORREGIDO: El candado ahora envuelve todo el proceso secuencial para evitar colisiones atómicas
+        // 🟢 SHIELDED: Process lock wraps the entire loop sequence to fully prevent collection deadlocks
         if (isProcessing) return; 
         isProcessing = true;
         try {

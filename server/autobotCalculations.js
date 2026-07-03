@@ -1,6 +1,7 @@
 /**
  * ARCHIVO COMPLETO: autobotCalculations.js
  * Integración total: Lógica Exponencial 2026 + Funciones de Compatibilidad Legacy
+ * Optimización: Centralización de Métricas de Cobertura en Vivo (SRP)
  */
 
 // ==========================================
@@ -183,31 +184,39 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
 }
 
 // ==========================================
-// 3. CAPAS DE INTERFAZ Y CICLOS
+// 3. CAPAS DE INTERFAZ Y CICLOS CORREGIDAS
 // ==========================================
 
-function calculateLongCoverage(balance, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
+function calculateLongCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
     const currentPrice = parseFloat(entryPrice) || 1;
-    const grid = generateAutobotGrid(balance || purchaseUsdt || 50, currentPrice, 'long');
+    // Usamos el presupuesto inicial total asignado para fijar la geometría real de la malla
+    const grid = generateAutobotGrid(totalAmount || purchaseUsdt || 50, currentPrice, 'long');
     
     if (!grid || grid.orders.length === 0) {
         return { coveragePrice: currentPrice * 0.82, numberOfOrders: 5 };
     }
     
     const lastOrder = grid.orders[grid.orders.length - 1];
-    return { coveragePrice: lastOrder.price, numberOfOrders: grid.totalLevels };
+    // Dynamic MaxSO: Restamos las órdenes vivas (occ) del total de niveles diseñado
+    const remainingOrders = Math.max(0, grid.totalLevels - parseNumber(occ));
+    
+    return { coveragePrice: lastOrder.price, numberOfOrders: remainingOrders };
 }
 
-function calculateShortCoverage(balance, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
+function calculateShortCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
     const currentPrice = parseFloat(entryPrice) || 1;
-    const grid = generateAutobotGrid(balance || purchaseUsdt || 50, currentPrice, 'short');
+    // Usamos el presupuesto inicial total asignado para fijar la geometría real de la malla
+    const grid = generateAutobotGrid(totalAmount || purchaseUsdt || 50, currentPrice, 'short');
     
     if (!grid || grid.orders.length === 0) {
         return { coveragePrice: currentPrice * 1.18, numberOfOrders: 5 };
     }
     
     const lastOrder = grid.orders[grid.orders.length - 1];
-    return { coveragePrice: lastOrder.price, numberOfOrders: grid.totalLevels };
+    // Dynamic MaxSO: Restamos las órdenes vivas (occ) del total de niveles diseñado
+    const remainingOrders = Math.max(0, grid.totalLevels - parseNumber(occ));
+    
+    return { coveragePrice: lastOrder.price, numberOfOrders: remainingOrders };
 }
 
 function calculateLongTargets(lastPrice, config, currentOrderCount) {
@@ -252,13 +261,10 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
  * Sin filtros de reset a 0.
  */
 function calculatePotentialProfit(ppc, ac, currentPrice, side) {
-    // ppc: Precio promedio de entrada (Avg Price)
-    // ac:  Capital total invertido (Total Amount)
     const avgPrice = parseFloat(ppc);
     const capital = parseFloat(ac);
     const price = parseFloat(currentPrice);
 
-    // Si el precio promedio es 0, no se puede calcular porcentaje
     if (avgPrice <= 0) return 0;
 
     let profitPct = 0;
@@ -268,8 +274,62 @@ function calculatePotentialProfit(ppc, ac, currentPrice, side) {
         profitPct = (avgPrice - price) / avgPrice;
     }
 
-    // Retorna el valor monetario del profit
     return parseFloat((profitPct * capital).toFixed(4));
+}
+
+// ==========================================
+// 4. NUEVA CENTRALIZACIÓN DE CÁLCULOS EN VIVO
+// ==========================================
+
+/**
+ * Procesa el estado completo del bot y devuelve un objeto de métricas 
+ * limpio listo para inyectarse al changeset de la base de datos.
+ */
+function calculateLiveBotMetrics(botState, currentPrice) {
+    const metrics = {};
+    const price = parseNumber(currentPrice);
+
+    if (!botState) return metrics;
+
+    // --- CÁLCULOS EXCLUSIVOS PARA LONG ---
+    if (botState.lstate !== 'STOPPED' && botState.config?.long) {
+        const longCov = calculateLongCoverage(
+            botState.config.long.amountUsdt, 
+            botState.locc > 0 ? (botState.llep || price) : price, 
+            botState.config.long.purchaseUsdt, 
+            parseNumber(botState.config.long.price_var) / 100, 
+            parseNumber(botState.config.long.size_var), 
+            botState.locc || 0, 
+            parseNumber(botState.config.long.price_step_inc)
+        );
+        
+        metrics.lcoverage = longCov.coveragePrice;
+        metrics.lnorder = longCov.numberOfOrders;
+        metrics.lprofit = (botState.lppc || 0) > 0 
+            ? calculatePotentialProfit(botState.lppc, botState.lai || 0, price, 'long') 
+            : 0;
+    }
+
+    // --- CÁLCULOS EXCLUSIVOS PARA SHORT ---
+    if (botState.sstate !== 'STOPPED' && botState.config?.short) {
+        const shortCov = calculateShortCoverage(
+            botState.config.short.amountUsdt, 
+            botState.socc > 0 ? (botState.slep || price) : price, 
+            botState.config.short.purchaseUsdt, 
+            parseNumber(botState.config.short.price_var) / 100, 
+            parseNumber(botState.config.short.size_var), 
+            botState.socc || 0, 
+            parseNumber(botState.config.short.price_step_inc)
+        );
+        
+        metrics.scoverage = shortCov.coveragePrice;
+        metrics.snorder = shortCov.numberOfOrders;
+        metrics.sprofit = (botState.sppc || 0) > 0 
+            ? calculatePotentialProfit(botState.sppc, botState.sai || 0, price, 'short') 
+            : 0;
+    }
+
+    return metrics;
 }
 
 // ==========================================
@@ -286,6 +346,7 @@ if (typeof module !== 'undefined' && module.exports) {
         calculatePotentialProfit,
         calculateDistributedSizes,
         calculateStepGrow,
-        generateAutobotGrid
+        generateAutobotGrid,
+        calculateLiveBotMetrics // Exportada correctamente para autobotLogic.js
     };
 }
