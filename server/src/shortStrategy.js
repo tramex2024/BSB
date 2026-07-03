@@ -1,20 +1,20 @@
 /**
- * ESTRATEGIA SHORT - STATE MACHINE (BSB 2026)
- * Gestión de ciclos de vida para operaciones de Venta/Recompra con mitigación de pánico.
+ * SHORT STRATEGY - STATE MACHINE (BSB 2026)
+ * Life cycle management for Sell/Buyback operations with panic mitigation.
  */
 
-const SRunning = require('./states/short/SRunning'); // Scan de entrada
-const SSelling = require('./states/short/SSelling'); // DCA (Venta de BTC)
-const SBuying  = require('./states/short/SBuying');  // Take Profit (Compra de BTC)
+const SRunning = require('./states/short/SRunning'); // Entry scan
+const SSelling = require('./states/short/SSelling'); // DCA (BTC Short Selling)
+const SBuying  = require('./states/short/SBuying');  // Take Profit (BTC Buyback)
 const SPaused  = require('./states/short/SPaused');
 const SStopped = require('./states/short/SStopped');
 
 /**
- * Ejecuta la lógica correspondiente según el estado actual del Short.
- * @param {Object} dependencies - Inyección de contexto atómica por usuario.
+ * Executes the corresponding logic based on the current Short state.
+ * @param {Object} dependencies - Atomic context injection per user.
  */
 async function runShortStrategy(dependencies) {
-    // 1. Validación de seguridad (Fail-fast)
+    // 1. Integrity verification (Fail-fast)
     if (!dependencies || !dependencies.botState || !dependencies.userId) return;
 
     const { botState, userId, log, updateBotState } = dependencies;
@@ -22,32 +22,32 @@ async function runShortStrategy(dependencies) {
 
     try {
         /**
-         * MÁQUINA DE ESTADOS SHORT
-         * Delegamos la ejecución a submódulos especializados. 
+         * SHORT STATE MACHINE
+         * We delegate execution to specialized submodules. 
          */
         switch (currentState) {
             case 'RUNNING':
-                // Buscando sobrecompra (RSI alto) o señal de caída
+                // Looking for overbought conditions (high RSI) or a drop signal
                 await SRunning.run(dependencies);
                 break;
 
             case 'SELLING': 
-                // Ejecutando venta inicial o incrementando posición (DCA Short)
+                // Executing initial sale or increasing position size (Short DCA)
                 await SSelling.run(dependencies);
                 break;
 
             case 'BUYING':
-                // Monitoreando el precio para recomprar con profit (Take Profit)
+                // Monitoring price to buyback with profit (Take Profit)
                 await SBuying.run(dependencies);
                 break;
 
             case 'PAUSED':
-                // Estado de espera por falta de colateral o error de API
+                // Waiting state due to insufficient collateral or API error
                 await SPaused.run(dependencies);
                 break;
 
             case 'STOPPED':
-                // Inactivo
+                // Inactive state
                 await SStopped.run(dependencies);
                 break;
 
@@ -56,22 +56,22 @@ async function runShortStrategy(dependencies) {
                 break;
         }
     } catch (error) {
-        // [BLINDAJE DE EMERGENCIA]: Aislamos el error e impedimos bucles infinitos de CPU/Red en operaciones Short.
-        log(`🔥 ShortStrategy Error [${currentState}]: ${error.message}`, 'error');
+        // [EMERGENCY PROTECTION]: Isolate the error and prevent infinite CPU/Network loops in Short operations.
+        log(`🔥 Critical error in ShortStrategy [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-SHORT][User: ${userId}]:`, error);
 
-        // Si el error ocurre en un estado transaccional activo, pausamos el bot para congelar la exposición al mercado
+        // If the error occurs in an active transactional state, pause the bot to freeze market exposure
         if (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING') {
             try {
-                log(`🚨 [FALLBACK SHORT ACTIVADO] Forzando transición de emergencia [${currentState} ➡️ PAUSED] para mitigar riesgos en corto.`, 'warning');
+                log(`🚨 [SHORT FALLBACK ACTIVATED] Forcing emergency transition [${currentState} ➡️ PAUSED] to mitigate risks in Short mode.`, 'warning');
                 if (typeof updateBotState === 'function') {
                     await updateBotState('PAUSED', 'short');
                 } else {
-                    // Respaldo directo en el objeto en memoria por seguridad de subprocesos
+                    // Direct database backup fallback if the atomic dependency wrapper does not respond
                     botState.sstate = 'PAUSED';
                 }
             } catch (fallbackError) {
-                console.error(`💥 [SUPER-CRITICAL-SHORT] Falló el sistema de mitigación de pánico Short para el usuario ${userId}:`, fallbackError.message);
+                console.error(`💥 [SUPER-CRITICAL-SHORT] Short panic mitigation system failed for user ${userId}:`, fallbackError.message);
             }
         }
     }

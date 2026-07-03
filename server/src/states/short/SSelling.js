@@ -1,4 +1,4 @@
-// BSB/server/src/au/states/short/SSelling.js
+// BSB/server/src/states/short/SSelling.js
 
 const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
@@ -21,22 +21,22 @@ async function run(dependencies) {
     const SSTATE = 'short';
 
     try {
-// 1. ACTIVE ORDER MONITOR
-const orderIsActive = await monitorShortSell(
-    botState, 
-    SYMBOL, 
-    log, 
-    updateSStateData, 
-    updateBotState, 
-    updateGeneralBotState, 
-    userId,
-    userCreds // <--- CORRECCIÓN: Inyección de credenciales
-);        
+        // 1. ACTIVE ORDER MONITOR
+        const orderIsActive = await monitorShortSell(
+            botState, 
+            SYMBOL, 
+            log, 
+            updateSStateData, 
+            updateBotState, 
+            updateGeneralBotState, 
+            userId,
+            userCreds
+        );        
+        
         // --- THE BLOCK: We only return if there's an actual active order ---
         if (orderIsActive) return; 
 
         // 2. MONITORING LOG (The "Eye" 👁️)
-        // Adjusted for Flat DB: botState.sppc, botState.sncp, etc.
         if (parseFloat(botState.sppc || 0) > 0) {
             const nextPrice = parseFloat(botState.sncp || 0); 
             const targetActivation = parseFloat(botState.stprice || 0); 
@@ -58,10 +58,15 @@ const orderIsActive = await monitorShortSell(
 
             if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
                 log(`🚀 [S-SELL] Starting SIGNED Short cycle.`, 'info');
-                await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
+                // SOLUCIÓN: Envolver en try/catch para manejar caídas del exchange por saldo u otros motivos
+                try {
+                    await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
+                } catch (orderError) {
+                    log(`❌ [S-SELL] Failed to place first Short order: ${orderError.message}. Pausing bot.`, 'error');
+                    await updateBotState('PAUSED', SSTATE);
+                }
             } else {
                 log(`⚠️ [S-SELL] Insufficient funds to open Short position.`, 'warning');
-                // We keep it in SELLING or move to PAUSED instead of STOPPED to avoid killing the process
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
@@ -102,7 +107,9 @@ const orderIsActive = await monitorShortSell(
                 try {
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice, placeShortOrder);
                 } catch (error) {
-                    log(`❌ [S-SELL] Error placing coverage: ${error.message}`, 'error');
+                    // SOLUCIÓN: Si falla la colocación en el exchange, forzar transición a PAUSED
+                    log(`❌ [S-SELL] Error placing coverage on Exchange: ${error.message}. Pausing bot to secure funds.`, 'error');
+                    await updateBotState('PAUSED', SSTATE);
                 }
             } else {
                 log(`🚫 [S-SELL] DCA failed due to insufficient balance. Pausing bot.`, 'error');
@@ -112,7 +119,13 @@ const orderIsActive = await monitorShortSell(
         }
 
     } catch (criticalError) {
-        log(`🔥 [CRITICAL] Error in SSelling: ${criticalError.message}`, 'error');
+        log(`🔥 [CRITICAL] Unexpected error in SSelling: ${criticalError.message}`, 'error');
+        // Salvaguarda: Si algo totalmente imprevisto rompe el flujo, pausamos por seguridad.
+        try {
+            await updateBotState('PAUSED', SSTATE);
+        } catch (dbError) {
+            log(`🚨 [CRITICAL] Could not even update state to PAUSED: ${dbError.message}`, 'error');
+        }
     }
 }
 

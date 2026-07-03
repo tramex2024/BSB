@@ -1,4 +1,4 @@
-// BSB/server/src/au/states/long/LBuying.js
+// BSB/server/src/states/long/LBuying.js
 
 const { placeFirstLongOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
@@ -18,7 +18,6 @@ async function run(dependencies) {
         updateLStateData, 
         updateGeneralBotState,
         availableUSDT,
-        // --- INYECCIÓN DE LA FUNCIÓN FIRMADA ---
         placeLongOrder 
     } = dependencies;
 
@@ -27,16 +26,16 @@ async function run(dependencies) {
 
     try {
         // 1. MONITOREO DE ÓRDENES PENDIENTES
-const orderIsActive = await monitorAndConsolidate(
-    botState, 
-    SYMBOL, 
-    log, 
-    updateLStateData, 
-    updateBotState, 
-    updateGeneralBotState, 
-    userId,
-    dependencies.userCreds // <--- AGREGAR ESTO
-);
+        const orderIsActive = await monitorAndConsolidate(
+            botState, 
+            SYMBOL, 
+            log, 
+            updateLStateData, 
+            updateBotState, 
+            updateGeneralBotState, 
+            userId,
+            dependencies.userCreds
+        );
         
         if (orderIsActive) return; 
         
@@ -62,8 +61,13 @@ const orderIsActive = await monitorAndConsolidate(
             if (availableUSDT >= purchaseAmount && botState.lbalance >= purchaseAmount) {
                 log("🚀 [L-BUY] Iniciando ciclo Long. Ejecutando primera orden firmada...", 'info');
                 
-                // --- CAMBIO: Pasamos placeLongOrder en lugar de userId ---
-                await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, placeLongOrder); 
+                // SOLUCIÓN: Envolver en try/catch para controlar rechazos de la API del exchange
+                try {
+                    await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, placeLongOrder); 
+                } catch (orderError) {
+                    log(`❌ [L-BUY] Error al colocar orden inicial en Exchange: ${orderError.message}. Pausando bot.`, 'error');
+                    await updateBotState('PAUSED', LSTATE);
+                }
             } else {
                 log(`⚠️ [L-BUY] Fondos insuficientes para apertura.`, 'warning');
                 await updateBotState('PAUSED', LSTATE); 
@@ -97,20 +101,27 @@ const orderIsActive = await monitorAndConsolidate(
             if (hasFunds && requiredAmount > 0) {
                 log(`📉 [L-BUY] Disparando DCA Exponencial: ${requiredAmount.toFixed(2)} USDT.`, 'warning');
                 try {
-                    // --- CAMBIO: Pasamos placeLongOrder en lugar de userId ---
                     await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, placeLongOrder);
                 } catch (error) {
-                    log(`❌ [L-BUY] Error en ejecución de DCA: ${error.message}`, 'error');
+                    // SOLUCIÓN: Si falla la colocación real de la cobertura, forzar transición a PAUSED
+                    log(`❌ [L-BUY] Error en ejecución de DCA en el Exchange: ${error.message}. Pausando bot por seguridad.`, 'error');
+                    await updateBotState('PAUSED', LSTATE);
                 }
             } else {
-                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial.`, 'error');
+                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial. Pausando bot.`, 'error');
                 await updateBotState('PAUSED', LSTATE);
             }
             return;
         }
 
     } catch (criticalError) {
-        log(`🔥 [CRITICAL] LBuying: ${criticalError.message}`, 'error');
+        log(`🔥 [CRITICAL] Error inesperado en LBuying: ${criticalError.message}`, 'error');
+        // Red de seguridad: Forzar transición a PAUSED ante cualquier desastre inesperado
+        try {
+            await updateBotState('PAUSED', LSTATE);
+        } catch (dbError) {
+            log(`🚨 [CRITICAL] Error masivo: No se pudo actualizar el estado a PAUSED en DB: ${dbError.message}`, 'error');
+        }
     }
 }
 

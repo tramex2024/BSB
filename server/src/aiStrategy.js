@@ -1,12 +1,12 @@
 /**
  * BSB/server/src/aiStrategy.js
- * Optimized Version: Adapter that injects MarketContext into the AI Engine
+ * Versión Final: Adaptador optimizado sin redundancia de telemetría.
  */
 
 const aiEngine = require('./states/ai/AIEngine');
 
 async function runAIStrategy(dependencies) {
-    // 1. Integrity validation (Fail-fast)
+    // 1. Validación de integridad (Fail-fast)
     if (!dependencies || !dependencies.botState || !dependencies.currentPrice || !dependencies.userId) {
         return;
     }
@@ -16,52 +16,42 @@ async function runAIStrategy(dependencies) {
         botState, 
         userId, 
         log, 
-        marketContext, // <--- NEW: Access to the single source of truth
+        marketContext, // Datos limpios provenientes de MarketSignal
         placeAIOrder,           
-        updateAIStateData,      
         updateBotState          
     } = dependencies;
 
     const currentState = botState.aistate || 'STOPPED';
 
     try {
-        // 2. OPERATIONAL STATE FILTER
+        // 2. Filtro de estado operativo
         if (currentState === 'STOPPED') return;
 
         /**
-         * 3. EXECUTION BASED ON CENTRALIZED CONTEXT
-         * We pass the marketContext so the AIEngine doesn't waste time calculating,
-         * only evaluates the decision strategy.
+         * 3. Ejecución estratégica centralizada
+         * Pasamos el marketContext directo de MarketSignal para que el AIEngine 
+         * tome decisiones analíticas inmediatas sin recalcular nada.
          */
         await aiEngine.analyze(currentPrice, userId, {
             botState,
-            marketContext, // <--- INJECTION OF GLOBAL MARKET STATE
+            marketContext, 
             placeAIOrder,
-            updateAIStateData,
             updateBotState,
             log,
             syncFrontendState: dependencies.syncFrontendState 
         });
 
-    // 🟢 DATA BRIDGE: Syncs market indicators to BotState
-    await updateAIStateData({
-        lac: marketContext.stochK || marketContext.stoch || 0, // Mapping to 'lac' (the ID your UI expects)
-        lai: marketContext.adx || 0,                          // Mapping to 'lai' (the ID your UI expects)
-        aiRsi: marketContext.rsi14 || 0,
-        aiMacd: marketContext.macdValue || 0
-    });
-
     } catch (error) {
         if (log) log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
         console.error(`[AI-STRATEGY][User: ${userId}]:`, error);
 
-        // [SAFETY FALLBACK]
+        // [Mitigación de Pánico]
         if (currentState === 'RUNNING') {
             try {
-                log(`🚨 [FALLBACK AI] Emergency pause due to Engine error.`, 'warning');
+                log(`🚨 [FALLBACK AI] Pausa de emergencia activada por excepción en el motor.`, 'warning');
                 await updateBotState('PAUSED', 'ai');
             } catch (fallbackError) {
-                console.error(`💥 Error in AI panic mitigation for user ${userId}:`, fallbackError.message);
+                console.error(`💥 Falla crítica en mitigación de pánico IA para usuario ${userId}:`, fallbackError.message);
             }
         }
     }

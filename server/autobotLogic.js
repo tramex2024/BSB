@@ -1,6 +1,6 @@
 /**
  * BSB/server/autobotLogic.js
- * Motor de Ciclos Unificado - Versión 2026 Auditada, Paralela y Blindada
+ * Unified Cycle Engine - 2026 Audited, Parallel, and Shielded Version
  */
 
 const Autobot = require('./models/Autobot');
@@ -15,7 +15,7 @@ const { runAIStrategy } = require('./src/aiStrategy');
 const { canExecuteStrategy } = require('./utils/strategyValidator');
 const MarketSignal = require('./models/MarketSignal');
 
-// 🟢 CORRECCIÓN: Se elimina parseNumber de la importación ya que se usará parseFloat nativo
+// Native parseFloat handles conversions cleanly
 const { 
     calculateLongCoverage, 
     calculateShortCoverage, 
@@ -32,29 +32,42 @@ const { updateConfig, startSide, stopSide } = require('./startStop');
 let isProcessing = false;
 
 /**
- * Procesa el ciclo individual de trading para un bot específico de forma aislada y segura
- * Versión Integrada: Consume MarketSignal centralizado para toma de decisiones
+ * Processes an individual trading cycle for a specific bot in an isolated and safe manner.
+ * Consumes the centralized MarketSignal database for execution data.
  */
 async function processSingleBot(botState, currentPrice) {
     const userId = botState.userId;
     const changeSet = {};
 
     try {
-        // --- 0. OBTENCIÓN DE DATOS CENTRALIZADOS (FUENTE DE VERDAD) ---
+        // --- 0. CENTRALIZED MARKET DATA RETRIEVAL (SOURCE OF TRUTH) ---
         const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || 'BTC_USDT' }).lean();
         
-        // Contexto técnico que será inyectado en las estrategias
-        // 🟢 INYECCIÓN DE CORRECCIÓN: Añadidos campos para compatibilidad con validaciones temporales y de legado
+        // 🟢 CORREGIDO: Inyección total de indicadores técnicos requeridos por el AIEngine
         const marketContext = marketData ? {
             rsi14: marketData.rsi14,
+            rsi21: marketData.rsi21,
             currentRSI: marketData.currentRSI !== undefined ? marketData.currentRSI : marketData.rsi14,
             prevRSI: marketData.prevRSI !== undefined ? marketData.prevRSI : marketData.rsi14,
             adx: marketData.adx,
+            stochK: marketData.stochK,
+            stochD: marketData.stochD,
+            macdValue: marketData.macdValue,
+            macdSignal: marketData.macdSignal,
+            macdHist: marketData.macdHist,
+            atr: marketData.atr || 0,
+            volatilityIndex: marketData.volatilityIndex || 0,
+            priceSlope: marketData.priceSlope || 0,
             signal: marketData.signal,
             aiConfidence: marketData.aiConfidence,
             trend: marketData.trend,
             lastUpdate: marketData.lastUpdate || marketData.updatedAt || new Date()
-        } : { rsi14: 50, currentRSI: 50, prevRSI: 50, adx: 0, signal: 'NEUTRAL', aiConfidence: 0, trend: 'NEUTRAL', lastUpdate: new Date() };
+        } : { 
+            rsi14: 50, rsi21: 50, currentRSI: 50, prevRSI: 50, adx: 0, 
+            stochK: 50, stochD: 50, macdValue: 0, macdSignal: 0, macdHist: 0,
+            atr: 0, volatilityIndex: 0, priceSlope: 0, signal: 'NEUTRAL', 
+            aiConfidence: 0, trend: 'NEUTRAL', lastUpdate: new Date() 
+        };
 
         const user = await User.findById(userId).lean();
         if (!user || !user.bitmartApiKey) {
@@ -62,7 +75,7 @@ async function processSingleBot(botState, currentPrice) {
             return;
         }
 
-        // Desencriptación segura de llaves
+        // Secure API Key decryption handling
         let decryptedApiKey, decryptedSecret, decryptedMemo;
         try {
             decryptedApiKey = decrypt(user.bitmartApiKey).trim();
@@ -75,21 +88,21 @@ async function processSingleBot(botState, currentPrice) {
 
         const userCreds = { apiKey: decryptedApiKey, apiMemo: decryptedMemo, secretKey: decryptedSecret };
 
-        // Sincronización de balances
+        // Synchronize exchange account balances on operational startup
         if (!botState.lastAvailableUSDT && (botState.lstate === 'RUNNING' || botState.aistate === 'RUNNING')) {
             await orchestrator.slowBalanceCacheUpdate(userId);
         }
 
-        // Construcción de dependencias (INYECTAMOS marketContext)
+        // Dependency assembly injection tree
         const dependencies = {
             userId,
             userCreds, 
-            marketContext, // <--- NUEVA FUENTE DE DATOS PARA ESTRATEGIAS
+            marketContext, 
             log: (msg, type) => orchestrator.log(msg, type, userId),
             io: orchestrator.io || null,
-            bitmartService, Autobot, currentPrice,
-            availableUSDT: botState.lastAvailableUSDT, 
-            availableBTC: botState.lastAvailableBTC,
+            bitmartService, 
+            Autobot, 
+            currentPrice,
             botState, 
             config: botState.config,
             lcycle: botState.lcycle || 0,
@@ -111,25 +124,25 @@ async function processSingleBot(botState, currentPrice) {
 
         const currentSymbol = botState.config.symbol || 'BTC_USDT';
 
-        // --- 1. MONITOREO DE ÓRDENES ---
+        // --- 1. ORDER LIFECYCLE MONITORING ---
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
             try {
                 if (botState.llastOrder.side === 'buy') await monitorLongBuy(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
                 else await monitorLongSell(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-            } catch (e) { orchestrator.log(`Error Long Monitor: ${e.message}`, 'error', userId); }
+            } catch (e) { orchestrator.log(`Long Monitor Error: ${e.message}`, 'error', userId); }
         }
 
         if (botState.slastOrder && botState.sstate !== 'STOPPED') {
             try {
                 if (botState.slastOrder.side === 'sell') await monitorShortSell(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
                 else await monitorShortBuy(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-            } catch (e) { orchestrator.log(`Error Short Monitor: ${e.message}`, 'error', userId); }
+            } catch (e) { orchestrator.log(`Short Monitor Error: ${e.message}`, 'error', userId); }
         }
 
+        // Apply critical changes found during order monitoring stage before processing calculations
         Object.assign(botState, changeSet);
 
-        // --- 2. CÁLCULOS MATEMÁTICOS ---
-        // 🟢 CORRECCIÓN: Se reemplaza parseNumber por parseFloat nativo de Javascript
+        // --- 2. MATHEMATICAL & COVERAGE CALCULATIONS ---
         if (botState.lstate !== 'STOPPED' && botState.config.long) {
             const longCov = calculateLongCoverage(
                 botState.lbalance || 0, 
@@ -161,17 +174,18 @@ async function processSingleBot(botState, currentPrice) {
         }
 
         if (botState.aistate !== 'STOPPED' && botState.config.ai) {
-            changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.aiai || 0, currentPrice, 'ai') : 0;
+            changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.ailastEntryPrice || 0, currentPrice, 'ai') : 0;
         }
 
+        // Synchronize structural calculations data into bot state instance prior to engine hand-off
         Object.assign(botState, changeSet);
 
-        // --- 3. EJECUCIÓN DE ESTRATEGIAS ---
+        // --- 3. STRATEGY EXECUTION ENGINE ---
         if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
         if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
 
-        // ✅ SOLUCIÓN: Fusionar los cambios finales antes de hacer el commit
+        // Final merge of strategy execution mutations before atomic storage commit
         Object.assign(botState, changeSet);
 
         changeSet.lastUpdate = new Date();
@@ -183,10 +197,10 @@ async function processSingleBot(botState, currentPrice) {
 }
 
 /**
- * Ciclo maestro disparado por los precios del WebSocket público
+ * Master engine cycle triggered directly by public WebSocket orderbook price updates
  */
 async function botCycle(priceFromWebSocket) {
-    if (isProcessing) return; // Protección contra ticks en ráfaga muy cercanos
+    if (isProcessing) return; // Burst protection against microsecond overlapping price ticks
 
     try {
         const currentPrice = parseFloat(priceFromWebSocket);
@@ -195,7 +209,7 @@ async function botCycle(priceFromWebSocket) {
         isProcessing = true; 
         orchestrator.setLastPrice(currentPrice);
 
-        // Obtenemos solo los bots que requieren procesamiento computacional
+        // Fetch only active engines that require computation to safeguard processing cycles
         const activeBots = await Autobot.find({
             $or: [
                 { lstate: { $ne: 'STOPPED' } },
@@ -204,8 +218,7 @@ async function botCycle(priceFromWebSocket) {
             ]
         }).lean();
 
-        // [OPTIMIZACIÓN CONCURRENTE]: Reemplazamos el for secuencial por ejecuciones en paralelo controladas.
-        // Evita retrasos de cola y pérdida de lecturas de ticks de precio esenciales.
+        // [CONCURRENT OPTIMIZATION]: Control active processing through non-blocking parallel workers
         await Promise.all(activeBots.map(bot => processSingleBot(bot, currentPrice)));
         
     } catch (error) {
@@ -216,13 +229,13 @@ async function botCycle(priceFromWebSocket) {
 }
 
 /**
- * Sincronización global lenta de balances
+ * Global slow balance background synchronization task
  */
 function startGlobalSync() {
     setInterval(async () => {
-        // [BLINDAJE]: Si el bot está procesando órdenes en un tick de precio, retrasamos la sincronización 
-        // para evitar bloqueos mutuos de colecciones en MongoDB.
+        // 🟢 CORREGIDO: El candado ahora envuelve todo el proceso secuencial para evitar colisiones atómicas
         if (isProcessing) return; 
+        isProcessing = true;
         try {
             const allBots = await Autobot.find({}).lean();
             for (const bot of allBots) {
@@ -230,8 +243,10 @@ function startGlobalSync() {
             }
         } catch (err) {
             console.error("[GLOBAL-SYNC-ERROR]:", err.message);
+        } finally {
+            isProcessing = false;
         }
-    }, 45000); // Elevado ligeramente a 45s para mitigar abusos de Rate Limits
+    }, 45000); // 45s threshold to gracefully clear high-volume Exchange rate limiting rules
 }
 
 startGlobalSync();

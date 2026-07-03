@@ -1,6 +1,6 @@
 /**
- * ESTRATEGIA LONG - STATE MACHINE (BSB 2026)
- * Gestión segura de ciclos de vida de posiciones Long con mitigación de pánico.
+ * LONG STRATEGY - STATE MACHINE (BSB 2026)
+ * Safe life cycle management of Long positions with panic mitigation.
  */
 
 const LRunning = require('./states/long/LRunning');
@@ -10,11 +10,11 @@ const LPaused  = require('./states/long/LPaused');
 const LStopped = require('./states/long/LStopped');
 
 /**
- * Ejecuta el paso correspondiente del State Machine del Long.
- * @param {Object} dependencies - Recibe las dependencias directamente del autobotLogic.
+ * Executes the corresponding step of the Long State Machine.
+ * @param {Object} dependencies - Receives dependencies directly from autobotLogic.
  */
 async function runLongStrategy(dependencies) {
-    // 1. Verificación de integridad (Fail-fast)
+    // 1. Integrity verification (Fail-fast)
     if (!dependencies || !dependencies.botState || !dependencies.userId) {
         return; 
     }
@@ -24,32 +24,32 @@ async function runLongStrategy(dependencies) {
 
     try {
         /**
-         * PATRÓN STATE MACHINE
-         * Delegamos la lógica pesada a submódulos especializados.
+         * STATE MACHINE PATTERN
+         * We delegate heavy execution logic to specialized submodules.
          */
         switch (currentState) {
             case 'RUNNING':
-                // Escaneo de señales de entrada (MarketSignal)
+                // Scan input signals (MarketSignal)
                 await LRunning.run(dependencies);
                 break;
                 
             case 'BUYING':
-                // Ejecución de órdenes de compra (Initial or DCA)
+                // Execution of buy orders (Initial or DCA)
                 await LBuying.run(dependencies);
                 break;
                 
             case 'SELLING':
-                // Vigilancia de Take Profit y Trailings
+                // Monitoring of Take Profit and Trailings
                 await LSelling.run(dependencies);
                 break;
                 
             case 'PAUSED':
-                // Buffer de seguridad (Error de fondos o API)
+                // Safety buffer (Insufficient funds or API error)
                 await LPaused.run(dependencies);
                 break;
                 
             case 'STOPPED':
-                // Estado inactivo
+                // Inactive state
                 await LStopped.run(dependencies);
                 break;
                 
@@ -58,22 +58,22 @@ async function runLongStrategy(dependencies) {
                 break;
         }
     } catch (error) {
-        // [BLINDAJE DE EMERGENCIA]: Aislamos el error e impedimos bucles infinitos de CPU.
-        log(`🔥 Error crítico en LongStrategy [${currentState}]: ${error.message}`, 'error');
+        // [EMERGENCY PROTECTION]: Isolate the error and prevent infinite CPU loops.
+        log(`🔥 Critical error in LongStrategy [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-LONG][User: ${userId}]:`, error);
 
-        // Si el error ocurre en un estado operativo crucial, pausamos el bot por seguridad del capital
+        // If the error occurs in a crucial operational state, pause the bot for capital safety
         if (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING') {
             try {
-                log(`🚨 [FALLBACK ACTIVADO] Forzando transición de emergencia [${currentState} ➡️ PAUSED] para evitar corrupción de ciclo.`, 'warning');
+                log(`🚨 [FALLBACK ACTIVATED] Forcing emergency transition [${currentState} ➡️ PAUSED] to prevent cycle corruption.`, 'warning');
                 if (typeof updateBotState === 'function') {
                     await updateBotState('PAUSED', 'long');
                 } else {
-                    // Respaldo directo si el wrapper atómico de dependencias no responde
+                    // Direct database backup fallback if the atomic dependency wrapper does not respond
                     botState.lstate = 'PAUSED';
                 }
             } catch (fallbackError) {
-                console.error(`💥 [SUPER-CRITICAL] Falló el sistema de mitigación de pánico del usuario ${userId}:`, fallbackError.message);
+                console.error(`💥 [SUPER-CRITICAL] User ${userId} panic mitigation system failed:`, fallbackError.message);
             }
         }
     }
