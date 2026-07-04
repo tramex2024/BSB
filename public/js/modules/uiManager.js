@@ -146,10 +146,30 @@ pulseMetrics.forEach(metric => {
         if (bar) bar.style.width = `${Math.min(Math.max(state.aiConfidence, 0), 100)}%`;
     }
 
-    // 5. Sincronización de Inputs
-    if (state.config && !isSavingConfig) { 
-        syncInputsFromConfig(state.config); 
+    // =========================================================================
+// 5. [BLINDAJE 2026] Sincronización de Inputs con Escudo de Enfoque Activo
+// =========================================================================
+if (state.config && !isSavingConfig) {
+    // Lista de IDs de inputs numéricos críticos expuestos al parpadeo
+    const criticalInputs = [
+        'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
+        'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
+        'auamountai-usdt', 'ai-amount-usdt'
+    ];
+
+    // Verificamos si el usuario está interactuando activamente con alguno de ellos
+    const userIsEditing = criticalInputs.some(id => {
+        const inputEl = document.getElementById(id);
+        return inputEl === document.activeElement;
+    });
+
+    // Solo permitimos que el estado del servidor sobrescriba el DOM si el usuario no tiene el foco ahí
+    if (!userIsEditing) {
+        syncInputsFromConfig(state.config);
+    } else {
+        console.log("🛡️ uiManager: Usuario editando input activamente. Escudo de enfoque activado.");
     }
+}
 
     // 6. Control de Botones
     const hasStateData = state.lstate !== undefined || 

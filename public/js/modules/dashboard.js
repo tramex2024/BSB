@@ -132,25 +132,53 @@ function setupActionButtons() {
     ];
 
     quickInputs.forEach(input => {
-        const el = document.getElementById(input.id);
-        if (el) {
-            if (currentBotState?.config?.[input.strategy]) {
-                el.value = currentBotState.config[input.strategy].amountUsdt || "";
-            }
-            el.onchange = async () => {
-                const newVal = parseFloat(el.value);
-                if (isNaN(newVal) || newVal < 0) return;
-                const configPayload = {
-                    config: { [input.strategy]: { amountUsdt: newVal } },
-                    applyShield: true,
-                    strategy: input.strategy
-                };
-                const res = await sendConfigToBackend(configPayload);
-                if (res?.success) addTerminalLog(`${input.strategy.toUpperCase()}: AMOUNT UPDATED TO $${newVal}`, 'success');
-            };
+    const el = document.getElementById(input.id);
+    if (el) {
+        // Carga inicial del valor desde el estado global centralizado
+        if (currentBotState?.config?.[input.strategy]) {
+            el.value = currentBotState.config[input.strategy].amountUsdt || "";
         }
-    });
-}
+
+        el.onchange = async () => {
+            const newVal = parseFloat(el.value);
+            if (isNaN(newVal) || newVal < 0) return;
+
+            const strategy = input.strategy;
+
+            // =========================================================================
+            // [BLINDAJE 2026]: ACTUALIZACIÓN OPTIMISTA INMEDIATA
+            // Mutamos la memoria local al instante. Si entra un pulso por WebSocket 
+            // en este milisegundo, leerá el nuevo valor y no provocará un 'snap-back'.
+            // =========================================================================
+            if (!currentBotState.config) currentBotState.config = {};
+            if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
+            currentBotState.config[strategy].amountUsdt = newVal;
+
+            // Preparación del payload para el servidor
+            const configPayload = {
+                config: { [strategy]: { amountUsdt: newVal } },
+                applyShield: true,
+                strategy: strategy
+            };
+
+            try {
+                // Despachamos la petición HTTP asíncrona de forma segura
+                const res = await sendConfigToBackend(configPayload);
+                
+                if (res?.success) {
+                    if (typeof addTerminalLog === 'function') {
+                        addTerminalLog(
+                            `${strategy.toUpperCase()}: AMOUNT UPDATED OPTIMISTICALLY TO $${newVal}`, 
+                            'success'
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error(`❌ Fallo crítico al sincronizar input de estrategia [${strategy}]:`, error);
+            }
+        };
+    }
+});
 
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');

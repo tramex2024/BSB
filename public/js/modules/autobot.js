@@ -15,6 +15,7 @@ let configDebounceTimeout = null;
 
 /**
  * Escucha cambios en los inputs exclusivamente del Autobot de forma segura
+ * Con Actualización Optimista Inmediata [Blindaje 2026]
  */
 function setupConfigListeners() {
     const configIds = [
@@ -27,21 +28,41 @@ function setupConfigListeners() {
         const el = document.getElementById(id);
         if (!el) return;
         
-        // [BLINDAJE 2026]: Usamos propiedades directas en lugar de addEventListener.
-        // Al cambiar de pestaña en la SPA, los listeners viejos quedan destruidos automáticamente de la memoria.
         const handler = () => {
+            // Registramos la edición activa para mitigar colisiones en tiempo real
             activeEdits[id] = Date.now();
 
+            // Validamos que el input no esté vacío o sea un valor roto antes de proceder
+            if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
+
+            // Identificación atómica del lado (Long / Short)
+            const side = id.includes('l') ? 'long' : 'short';
+            const s = side === 'long' ? 'l' : 's';
+
+            // Capturamos el valor actual del elemento que disparó el evento
+            const rawValue = el.type === 'checkbox' ? el.checked : parseFloat(el.value);
+
+            // =========================================================================
+            // 🚀 [BLINDAJE 2026]: MUTACIÓN OPTIMISTA INMEDIATA EN MEMORIA LOCAL
+            // Guardamos el cambio en el estado global instantáneamente. Si un tick de
+            // WebSocket entra durante el debounce de 1s, leerá este valor actualizado.
+            // =========================================================================
+            if (!currentBotState.config) currentBotState.config = {};
+            if (!currentBotState.config[side]) currentBotState.config[side] = {};
+
+            if (id.includes('amount')) currentBotState.config[side].amountUsdt = rawValue;
+            else if (id.includes('purchase')) currentBotState.config[side].purchaseUsdt = rawValue;
+            else if (id.includes('trigger')) currentBotState.config[side].price_var = rawValue;
+            else if (id.includes('increment')) currentBotState.config[side].size_var = rawValue;
+            else if (id.includes('decrement')) currentBotState.config[side].profit_percent = rawValue;
+            else if (id.includes('pricestep')) currentBotState.config[side].price_step_inc = rawValue;
+            else if (id.includes('stop')) currentBotState.config[side].stopAtCycle = rawValue;
+
+            // --- DEBOUNCE CONTROLADO PARA REDUCIR TRAFICO HTTP A RENDER ---
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             
             configDebounceTimeout = setTimeout(async () => {
-                // Si el input está vacío o es inválido (y no es un checkbox), abortamos el envío
-                if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
-
-                let side = id.includes('l') ? 'long' : 'short';
-                const s = side === 'long' ? 'l' : 's';
-
-                // Capturamos el valor actual del DOM o recurrimos de respaldo al estado en memoria
+                // Recolectamos el set completo de variables asegurando consistencia con la memoria optimista
                 const amountUsdt = parseFloat(document.getElementById(`auamount${s}-usdt`)?.value) || currentBotState.config[side]?.amountUsdt || 0;
                 const purchaseUsdt = parseFloat(document.getElementById(`aupurchase${s}-usdt`)?.value) || currentBotState.config[side]?.purchaseUsdt || 0;
                 const price_var = parseFloat(document.getElementById(`autrigger${s}`)?.value) || currentBotState.config[side]?.price_var || 0;
@@ -50,8 +71,7 @@ function setupConfigListeners() {
                 const price_step_inc = parseFloat(document.getElementById(`aupricestep-${s}`)?.value) || currentBotState.config[side]?.price_step_inc || 0;
                 const stopAtCycle = document.getElementById(`au-stop-${side}-at-cycle`) ? document.getElementById(`au-stop-${side}-at-cycle`).checked : false;
 
-                // [BLINDAJE CONTRA SOBREESCRITURAS DESTRUCTIVAS]:
-                // Armamos el payload mezclando de forma profunda el estado existente con los nuevos cambios de este bloque.
+                // Reconstrucción profunda del payload mezclando el estado maestro
                 const manualConfig = {
                     ...currentBotState.config,
                     [side]: {
@@ -69,20 +89,21 @@ function setupConfigListeners() {
                     const result = await sendConfigToBackend({
                         config: manualConfig, 
                         strategy: side,
-                        applyShield: false
+                        applyShield: true // Activamos el escudo en el backend si tu API lo soporta
                     });
 
                     if (result && result.success && result.data) {
+                        // Sincronización final tras confirmación del servidor (límites, redondeos, etc.)
                         currentBotState.config = result.data;
-                        // Sincronización visual inmediata de los controles por si el backend ajustó límites (ej. montos mínimos)
                         updateControlsState(currentBotState);
                     }
                 } catch (err) {
-                    console.error("❌ Error guardando config:", err);
+                    console.error(`❌ Error sincronizando configuración asíncrona [${side}]:`, err);
                 }
             }, 1000);
         };
 
+        // Asignación limpia de propiedades directas para evitar fugas de memoria en la SPA
         if (el.type === 'checkbox') {
             el.onchange = handler;
         } else {
