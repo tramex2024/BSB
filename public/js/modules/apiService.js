@@ -161,30 +161,17 @@ export function getBotConfiguration() {
 
 /**
  * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND (V1 RUTA MAESTRA)
+ * Envía el snapshot actual del DOM envuelto en el objeto estructurado que el controlador requiere.
  */
 export async function sendConfigToBackend(manualPayload = null) {
     const botConfig = getBotConfiguration();
     
-    // 🛡️ El candado determinista de concordancia siempre debe evaluar el objeto de configuración limpio
+    // 🛡️ Activación del candado transaccional para el Acknowledge Engine del WebSocket
     isSavingConfig = true; 
     inTransitConfig = botConfig;
     
-    // =========================================================================
-    // ⚙️ SELECCIÓN DE PAYLOAD (Prueba una a la vez descomentando según tu backend)
-    // =========================================================================
-    
-    // OPCIÓN 1: Estructura Envuelta (Tu versión original)
+    // Estructura alineada al 100% con la desestructuración del backend: const { config } = req.body;
     const payload = manualPayload || { config: botConfig };
-    
-    // OPCIÓN 2: Estructura Plana (Si el backend lee directamente req.body.long)
-    // const payload = manualPayload || botConfig;
-    
-    // OPCIÓN 3: Con UserId Explícito (Si el backend lo requiere para buscar en la DB)
-    // const payload = manualPayload || { 
-    //     userId: "69880862881f8789a039d0a3", // Reemplazar por variable dinámica si es necesario
-    //     config: botConfig 
-    // };
-    // =========================================================================
 
     try {
         const data = await privateFetch('/api/v1/config/update-config', {
@@ -193,7 +180,7 @@ export async function sendConfigToBackend(manualPayload = null) {
         });
 
         if (!data || !data.success) {
-            // Si el servidor responde un error controlado (ej. 400), liberamos cerraduras
+            // Si el servidor rechaza la transacción (ej. validation error), liberamos cerraduras de inmediato
             inTransitConfig = null;
             isSavingConfig = false;
         } else {
@@ -201,8 +188,8 @@ export async function sendConfigToBackend(manualPayload = null) {
         }
         return data;
     } catch (err) {
-        console.error("❌ Error al sincronizar configuración:", err);
-        // Si el servidor se cae (500) o la red falla, restauramos estados para permitir reintentos
+        console.error("❌ Error de red o crítico al sincronizar configuración:", err);
+        // Si hay un fallo total de conexión, liberamos los bloqueos para permitir reintentos del usuario
         inTransitConfig = null;
         isSavingConfig = false;
         return { success: false };

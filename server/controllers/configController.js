@@ -152,7 +152,7 @@ async function updateBotConfig(req, res) {
             { userId }, 
             { $set: update }, 
             { new: true, runValidators: true }
-        ).lean();
+        ); 
 
         if (updatedBot) {
             await autobotLogic.syncFrontendState(lastPrice, updatedBot, userId);
@@ -166,7 +166,8 @@ async function updateBotConfig(req, res) {
 
     } catch (error) {
         console.error("❌ Error en updateBotConfig:", error);
-        return res.status(500).json({ success: false, message: "Error interno." });
+        // 2. 🔍 TEMPORAL: Cambiamos "Error interno." por error.message para verlo en la consola del navegador
+        return res.status(500).json({ success: false, message: error.message });
     }
 }
 
