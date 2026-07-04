@@ -157,3 +157,6 @@ export function syncInputsFromConfig(conf) {
         });
     });
 }
+
+// Al final de public/js/ui/controls.js
+export const activeEdits = {};

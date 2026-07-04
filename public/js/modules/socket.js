@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Integración de Variación de Precio 24h + PnL Bars Sync
+ * Actualización: Consolidación de Emisiones de Pulso + Blindaje de Inputs
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -28,7 +28,6 @@ async function sendToDashboardTerminal(msg, type) {
     }
 }
 
-// Añade este listener global para ver todo el tráfico entrante
 export function initSocket() {
     const token = localStorage.getItem('token');
     const userId = localStorage.getItem('userId');
@@ -51,9 +50,9 @@ export function initSocket() {
         query: { userId }     
     });
 
-    // MUEVE EL LISTENER AQUÍ, JUSTO DESPUÉS DE LA INICIALIZACIÓN
     socket.onAny((event, ...args) => {
-        //console.log(`📡 SOCKET EVENTO RECIBIDO: [${event}]`, args);
+        // En producción se mantiene apagado para optimizar rendimiento de red
+        // console.log(`📡 SOCKET EVENTO: [${event}]`, args);
     });
 
     // --- CONNECTION LISTENERS ---
@@ -80,11 +79,10 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-   // --- MARKET DATA (PRICE, VARIATION & REALTIME AI PULSE) ---
+    // --- MARKET DATA (PRICE, VARIATION & REALTIME AI PULSE) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
-        // 1. DEPURACIÓN: Solo se mostrará si el backend no envía datos de IA
         if (!data?.aiPulse) {
             console.warn("⚠️ [DEBUG] Backend envió marketData sin aiPulse. Datos recibidos:", data);
         }
@@ -99,13 +97,11 @@ export function initSocket() {
                 currentBotState.lastPrice = newPrice;
             }
 
-            // 2. LÓGICA DE PERSISTENCIA Y RENDERIZADO (Mejorada)
+            // Efecto Memoria / Persistencia del Pulso Neural
             if (data.aiPulse) {
-                // Hay datos nuevos, actualizamos todo
                 currentBotState.aiLastPulse = data.aiPulse;
                 renderAiPulseUI(data.aiPulse);
             } else if (currentBotState.aiLastPulse) {
-                // No hay datos nuevos, intentamos recuperar del caché (Efecto Memoria)
                 renderAiPulseUI(currentBotState.aiLastPulse);
             }
 
@@ -122,35 +118,40 @@ export function initSocket() {
         }
     });
         
-    // Mantén este listener para conservar la compatibilidad si el motor neural emite de forma aislada
+    // 🧠 LISTENER UNIFICADO PARA EL PULSO NEURAL (Soporte Aislado y Persistencia)
     socket.on('ai-pulse-broadcast', (data) => {
         if (!data) return;
+        
         currentBotState.aiLastPulse = data;
 
-    // Sincronización de PnL si existe
-    if (data.aiprofit !== undefined) updatePnLBar('ai', data.aiprofit);
+        // Sincronización automática de PnL de la IA
+        if (data.aiprofit !== undefined) {
+            updatePnLBar('ai', data.aiprofit);
+        }
 
-    // LLLAMADA ÚNICA AL RENDERIZADOR (Se encarga de RSI, Stoch, ADX y Confianza)
-    renderAiPulseUI(data); 
-});
+        // Delegación atómica al renderizador del DOM (Evita duplicados)
+        renderAiPulseUI(data); 
+    });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (state) => {
         if (!state) return;
 
-	// NUEVA AUDITORÍA DE PULSO:
-    // Si el estado enviado contiene información de IA, la pintamos aquí mismo
-    if (state.aiPulse || state.aiLastPulse) {
-        const pulseData = state.aiPulse || state.aiLastPulse;
-        currentBotState.aiLastPulse = pulseData;
-        renderAiPulseUI(pulseData);
-    }
+        // Auditoría e inyección inmediata de flujos de IA
+        if (state.aiPulse || state.aiLastPulse) {
+            const pulseData = state.aiPulse || state.aiLastPulse;
+            currentBotState.aiLastPulse = pulseData;
+            renderAiPulseUI(pulseData);
+        }
 
+        // Mecanismo de blindaje contra sobreescritura (User Typing Shield)
         const now = Date.now();
-        const isEditing = Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000);
+        const isEditing = activeEdits && typeof activeEdits === 'object' 
+            ? Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000)
+            : false;
 
         if (isEditing) {
-            console.log("🛡️ Socket: Active editing detected. Shielding...");
+            console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
             currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
         } else {
@@ -159,7 +160,6 @@ export function initSocket() {
             }
             Object.assign(currentBotState, state);
             
-            // Sincronización de PnL Individual
             if (state.lprofit !== undefined) currentBotState.lprofit = state.lprofit;
             if (state.sprofit !== undefined) currentBotState.sprofit = state.sprofit;
             if (state.aiprofit !== undefined) currentBotState.aiprofit = state.aiprofit;
@@ -167,23 +167,18 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // 🚀 MEJORA CRÍTICA: Sincronización de Métricas y Profit/H en vivo
+        // Sincronización dinámica de métricas avanzadas e historial de ciclos
         const historyData = state.history || state.cycleHistory;
         if (historyData) {
             try {
                 const Metrics = await import('./metricsManager.js');
-                const { updateQuickStats } = await import('./dashboard.js'); // Importamos la función de KPIs
+                const { updateQuickStats } = await import('./dashboard.js');
                 
-                // 1. Actualizamos el set de datos en el manager (los 29+ ciclos)
                 Metrics.setAnalyticsData(historyData);
                 
-                // 2. Si el backend envió KPIs pre-calculados, actualizamos Profit/H
                 if (state.kpis) {
                     updateQuickStats(state.kpis);
-                } else {
-                    console.log("🔄 Socket: New history detected, triggering KPI refresh...");
                 }
-                
             } catch (err) {
                 console.error("Error injecting metrics:", err);
             }
@@ -197,10 +192,10 @@ export function initSocket() {
             updateDistributionWidget(currentBotState);
         }
 
-        if (aiBotUI) {
+        if (aiBotUI && typeof aiBotUI.setRunningStatus === 'function') {
             aiBotUI.setRunningStatus(
                 aiIsActive, 
-                currentBotState.config.ai?.stopAtCycle, 
+                currentBotState.config?.ai?.stopAtCycle, 
                 state.historyCount || 0
             );
         }
@@ -219,61 +214,24 @@ export function initSocket() {
         if (aiLogContainer) {
             if (aiLogContainer.innerText.includes("Establishing link")) aiLogContainer.innerHTML = '';
             const visualConf = isDebug ? 0.5 : (data.type === 'success' ? 0.9 : 0.5);
-            aiBotUI.addLogEntry(msg, visualConf);
+            if (aiBotUI && typeof aiBotUI.addLogEntry === 'function') {
+                aiBotUI.addLogEntry(msg, visualConf);
+            }
         }
     });
 
     // --- AI DECISIONS & ORDERS ---
     socket.on('ai-decision-update', (data) => {
         if (!data || !aiBotUI) return;
-        aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        if (typeof aiBotUI.updateConfidence === 'function') {
+            aiBotUI.updateConfidence(data.confidence, data.message, data.isAnalyzing);
+        }
         if (data.message && data.message.includes('ORDER')) {
             sendToDashboardTerminal(`AI Decision: ${data.message}`, 'warning');
         }
     });
 
-    // 🧠 ADENTRO DE LA FUNCIÓN: Sincronización en tiempo real del Pulso Neural
-    socket.on('ai-pulse-broadcast', (data) => {
-        if (!data) return;
-
-        // RESPALDO CRÍTICO: Guardamos el estado en la memoria global para que no se pierda al navegar
-        currentBotState.aiLastPulse = data;
-
-        // 1. ACTUALIZACIÓN DINÁMICA DE LA BARRA PnL DE LA IA
-        // Si el backend envía el aiprofit calculado, actualizamos la barra visualmente
-        if (data.aiprofit !== undefined) {
-            updatePnLBar('ai', data.aiprofit);
-        }
-
-        // 2. Buscamos el círculo e indicadores del Dashboard si están montados en el DOM
-        const dbCircle = document.getElementById('ai-confidence-circle');
-        if (dbCircle) {
-            const confidence = data.aiConfidence;
-            const perimeter = 364.42;
-            const offset = perimeter - (confidence / 100) * perimeter;
-            
-            // Renderizado instantáneo del SVG sin lags de base de datos
-            dbCircle.style.strokeDashoffset = offset;
-            
-            // Actualización de textos e indicadores del Pulse en el Dashboard
-            const confVal = document.getElementById('ai-confidence-value');
-            const trendLabel = document.getElementById('ai-trend-label');
-            const adxVal = document.getElementById('ai-adx-val');
-            const stochVal = document.getElementById('ai-stoch-val');
-            const adxBar = document.getElementById('ai-adx-bar');
-            const stochBar = document.getElementById('ai-stoch-bar');
-            const engineMsg = document.getElementById('ai-engine-msg');
-
-            if (confVal) confVal.innerText = `${confidence}%`;
-            if (trendLabel) trendLabel.innerText = data.aiTrendLabel;
-            if (adxVal) adxVal.innerText = Number(data.aiAdx).toFixed(1);
-            if (stochVal) stochVal.innerText = Number(data.aiStoch).toFixed(1);
-            if (adxBar) adxBar.style.width = `${Math.min(data.aiAdx, 100)}%`;
-            if (stochBar) stochBar.style.width = `${Math.min(data.aiStoch, 100)}%`;
-            if (engineMsg) engineMsg.innerText = data.aiEngineMsg;
-        }
-    });
-
+    // --- ORDER FLUX REFRESH ---
     socket.on('open-orders-update', async (data) => {
         const now = Date.now();
         if (currentBotState._lastOrderFetch && (now - currentBotState._lastOrderFetch < 1000)) return;
@@ -347,15 +305,13 @@ function resetWatchdog() {
 }
 
 /**
- * Actualiza la barra de PnL dinámica
+ * Actualiza la barra de PnL dinámica centrándola en el 50%
  */
 function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
     if (!bar) return;
 
     const pnl = parseFloat(pnlValue) || 0;
-    
-    // Rango de visualización (hasta 10% de PnL para el 50% de la barra)
     const limit = 10; 
     const size = Math.min(Math.abs(pnl) / limit * 50, 50);
 
@@ -387,13 +343,11 @@ function renderAiPulseUI(aiData) {
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (!dbCircle) return;
 
-    // 1. Lógica del Círculo de Confianza
     const confidence = aiData.aiConfidence || 0;
     const perimeter = 364.42;
     const offset = perimeter - (confidence / 100) * perimeter;
     dbCircle.style.strokeDashoffset = offset;
     
-    // 2. Elementos del DOM
     const elements = {
         confVal: document.getElementById('ai-confidence-value'),
         trendLabel: document.getElementById('ai-trend-label'),
@@ -401,24 +355,20 @@ function renderAiPulseUI(aiData) {
         adxBar: document.getElementById('ai-adx-bar'),
         stochVal: document.getElementById('ai-stoch-val'),
         stochBar: document.getElementById('ai-stoch-bar'),
-        rsiVal: document.getElementById('ai-rsi-val'), // NUEVO
-        rsiBar: document.getElementById('ai-rsi-bar'), // NUEVO
+        rsiVal: document.getElementById('ai-rsi-val'), 
+        rsiBar: document.getElementById('ai-rsi-bar'), 
         engineMsg: document.getElementById('ai-engine-msg')
     };
 
-    // 3. Actualización de valores
     if (elements.confVal) elements.confVal.innerText = `${confidence}%`;
     if (elements.trendLabel) elements.trendLabel.innerText = aiData.aiTrendLabel || 'N/A';
     
-    // ADX
     if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
     if (elements.adxBar) elements.adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
     
-    // STOCH (Asegúrate de que 'aiStoch' coincida con tu log de consola)
     if (elements.stochVal) elements.stochVal.innerText = Number(aiData.aiStoch || 0).toFixed(1);
     if (elements.stochBar) elements.stochBar.style.width = `${Math.min(aiData.aiStoch || 0, 100)}%`;
     
-    // RSI (Asegúrate de que 'aiRsi' coincida con tu log de consola)
     if (elements.rsiVal) elements.rsiVal.innerText = Number(aiData.aiRsi || 0).toFixed(1);
     if (elements.rsiBar) elements.rsiBar.style.width = `${Math.min(aiData.aiRsi || 0, 100)}%`;
 
