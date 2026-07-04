@@ -27,6 +27,19 @@ const CRITICAL_INPUTS = [
     'auamountai-usdt', 'ai-amount-usdt'
 ];
 
+/**
+ * 🛡️ CAPA DE SANEAMIENTO PREVENTIVO
+ * Valida y limpia el valor del input antes de su procesamiento/envío
+ */
+export function getSanitizedValue(id) {
+    const el = document.getElementById(id);
+    if (!el) return undefined;
+    const val = el.value.trim();
+    if (val === "") return undefined;
+    const parsed = parseFloat(val);
+    return isNaN(parsed) ? undefined : parsed;
+}
+
 // Escuchador global pasivo para registrar interacciones del usuario y evitar el snap-back cooperativo
 window.addEventListener('input', (e) => {
     if (CRITICAL_INPUTS.includes(e.target.id)) {

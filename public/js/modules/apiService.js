@@ -1,8 +1,8 @@
 /**
  * apiService.js - Comunicaciones REST Sincronizadas (2026)
- * Versión: Auditoría Final - Eliminación de Parches Temporales mediante Bloqueo Determinista
+ * Versión: Auditoría Final - Integración completa con getSanitizedValue
  */
-import { displayMessage } from './uiManager.js';
+import { displayMessage, getSanitizedValue } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
 // Control transaccional real libre de temporizadores arbitrarios
@@ -25,12 +25,10 @@ export function setSocketActive(status) {
 /**
  * 🛡️ VALIDADOR DE RECONOCIMIENTO (Acknowledge Engine)
  * Evalúa si el estado enviado por el WebSocket ya refleja los cambios del cliente.
- * Es invocado de forma cooperativa por el sincronizador visual.
  */
 export function checkConfigAcknowledgment(incomingConfig) {
     if (!inTransitConfig) return true;
 
-    // Comparamos los campos numéricos críticos que son propensos al parpadeo
     const isMatching = (
         Math.abs((incomingConfig.long?.amountUsdt || 0) - (inTransitConfig.long?.amountUsdt || 0)) < 0.000001 &&
         Math.abs((incomingConfig.long?.purchaseUsdt || 0) - (inTransitConfig.long?.purchaseUsdt || 0)) < 0.000001 &&
@@ -99,23 +97,19 @@ export async function fetchEquityCurveData(strategy = 'all') {
 
 /**
  * RECOLECTA CONFIGURACIÓN DESDE EL DOM
+ * Integrado con getSanitizedValue para evitar contaminación de datos
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
-        const el = document.getElementById(id);
-        if (!el) {
+        const sanitized = getSanitizedValue(id);
+        
+        // Si el valor no es válido (undefined), recuperamos el estado previo para no romper la configuración
+        if (sanitized === undefined) {
             const parts = path.split('.');
             return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? minVal;
         }
         
-        let rawValue = el.value.trim();
-        if (rawValue === "") {
-            const parts = path.split('.');
-            return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? minVal;
-        }
-
-        const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
-        return isNaN(val) ? minVal : val;
+        return sanitized;
     };
 
     const getCheck = (id, path) => {
@@ -161,7 +155,6 @@ export function getBotConfiguration() {
 
 /**
  * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND (V1 RUTA MAESTRA)
- * Envía el snapshot actual del DOM envuelto en el objeto estructurado que el controlador requiere.
  */
 export async function sendConfigToBackend(manualPayload = null) {
     const botConfig = getBotConfiguration();
@@ -170,7 +163,6 @@ export async function sendConfigToBackend(manualPayload = null) {
     isSavingConfig = true; 
     inTransitConfig = botConfig;
     
-    // Estructura alineada al 100% con la desestructuración del backend: const { config } = req.body;
     const payload = manualPayload || { config: botConfig };
 
     try {
@@ -180,7 +172,6 @@ export async function sendConfigToBackend(manualPayload = null) {
         });
 
         if (!data || !data.success) {
-            // Si el servidor rechaza la transacción (ej. validation error), liberamos cerraduras de inmediato
             inTransitConfig = null;
             isSavingConfig = false;
         } else {
@@ -189,7 +180,6 @@ export async function sendConfigToBackend(manualPayload = null) {
         return data;
     } catch (err) {
         console.error("❌ Error de red o crítico al sincronizar configuración:", err);
-        // Si hay un fallo total de conexión, liberamos los bloqueos para permitir reintentos del usuario
         inTransitConfig = null;
         isSavingConfig = false;
         return { success: false };
