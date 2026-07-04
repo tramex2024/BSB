@@ -102,20 +102,22 @@ export async function fetchEquityCurveData(strategy = 'all') {
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
     const sanitized = getSanitizedValue(id);
-    
-    // 1. Si el input es válido, lo retornamos inmediatamente
+    const parts = path.split('.');
+    const stateVal = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
+
+    // LOG DE AUDITORÍA
+    if (path === 'long.size_var') {
+        console.log(`🔍 DEBUG [${path}]: Sanitized=${sanitized}, StateValue=${stateVal}`);
+    }
+
     if (sanitized !== undefined) return sanitized;
 
-    // 2. Si el input no es válido, intentamos obtener el valor del estado actual
-    const parts = path.split('.');
-    let val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
-    
-    // 3. BLINDAJE: Si el valor del estado es undefined, null o NaN, forzamos el minVal
-    if (val === undefined || val === null || isNaN(parseFloat(val))) {
+    // Si el estado es inválido, forzamos minVal
+    if (stateVal === undefined || stateVal === null || isNaN(parseFloat(stateVal))) {
         return minVal;
     }
     
-    return val;
+    return stateVal;
 };
 
     const getCheck = (id, path) => {

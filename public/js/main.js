@@ -42,8 +42,16 @@ export const currentBotState = {
     aiprofit: 0,
     config: {
         symbol: 'BTC_USDT', 
-        long: { amountUsdt: 0, enabled: false, stopAtCycle: false },
-        short: { amountUsdt: 0, enabled: false, stopAtCycle: false },
+        long: { 
+            amountUsdt: 0, purchaseUsdt: 0, price_var: 0.1, 
+            profit_percent: 0.1, size_var: 1, price_step_inc: 0, 
+            enabled: false, stopAtCycle: false 
+        },
+        short: { 
+            amountUsdt: 0, purchaseUsdt: 0, price_var: 0.1, 
+            profit_percent: 0.1, size_var: 1, price_step_inc: 0, 
+            enabled: false, stopAtCycle: false 
+        },
         ai: { amountUsdt: 0, enabled: false, stopAtCycle: false }
     }
 };
