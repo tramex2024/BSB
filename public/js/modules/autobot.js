@@ -15,7 +15,7 @@ let configDebounceTimeout = null;
 
 /**
  * Escucha cambios en los inputs exclusivamente del Autobot de forma segura
- * Con Actualización Optimista Inmediata [Blindaje 2026]
+ * Con Actualización Optimista Inmediata y Blindaje [V2.1 - 2026]
  */
 function setupConfigListeners() {
     const configIds = [
@@ -29,27 +29,24 @@ function setupConfigListeners() {
         if (!el) return;
         
         const handler = () => {
-            // Registramos la edición activa para mitigar colisiones en tiempo real
             activeEdits[id] = Date.now();
 
-            // Validamos que el input no esté vacío o sea un valor roto antes de proceder
-            if (el.type !== 'checkbox' && (el.value === "" || isNaN(parseFloat(el.value)))) return;
+            // 1. OBTENCIÓN Y VALIDACIÓN ATÓMICA
+            const rawValue = el.type === 'checkbox' ? el.checked : parseFloat(el.value);
+            
+            // Si es un input numérico y no es un número válido (ej: está vacío o tiene caracteres raros), no hacemos nada.
+            // Esto evita que NaN entre en el sistema.
+            if (el.type !== 'checkbox' && isNaN(rawValue)) return;
 
             // Identificación atómica del lado (Long / Short)
             const side = id.includes('l') ? 'long' : 'short';
             const s = side === 'long' ? 'l' : 's';
 
-            // Capturamos el valor actual del elemento que disparó el evento
-            const rawValue = el.type === 'checkbox' ? el.checked : parseFloat(el.value);
-
-            // =========================================================================
-            // 🚀 [BLINDAJE 2026]: MUTACIÓN OPTIMISTA INMEDIATA EN MEMORIA LOCAL
-            // Guardamos el cambio en el estado global instantáneamente. Si un tick de
-            // WebSocket entra durante el debounce de 1s, leerá este valor actualizado.
-            // =========================================================================
+            // 2. MUTACIÓN PROTEGIDA (Solo si rawValue es seguro)
             if (!currentBotState.config) currentBotState.config = {};
             if (!currentBotState.config[side]) currentBotState.config[side] = {};
 
+            // Mapeo seguro
             if (id.includes('amount')) currentBotState.config[side].amountUsdt = rawValue;
             else if (id.includes('purchase')) currentBotState.config[side].purchaseUsdt = rawValue;
             else if (id.includes('trigger')) currentBotState.config[side].price_var = rawValue;
@@ -58,98 +55,74 @@ function setupConfigListeners() {
             else if (id.includes('pricestep')) currentBotState.config[side].price_step_inc = rawValue;
             else if (id.includes('stop')) currentBotState.config[side].stopAtCycle = rawValue;
 
-            // --- DEBOUNCE CONTROLADO PARA REDUCIR TRAFICO HTTP A RENDER ---
+            // 3. DEBOUNCE CONTROLADO
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             
             configDebounceTimeout = setTimeout(async () => {
-                // Recolectamos el set completo de variables asegurando consistencia con la memoria optimista
-                const amountUsdt = parseFloat(document.getElementById(`auamount${s}-usdt`)?.value) || currentBotState.config[side]?.amountUsdt || 0;
-                const purchaseUsdt = parseFloat(document.getElementById(`aupurchase${s}-usdt`)?.value) || currentBotState.config[side]?.purchaseUsdt || 0;
-                const price_var = parseFloat(document.getElementById(`autrigger${s}`)?.value) || currentBotState.config[side]?.price_var || 0;
-                const size_var = parseFloat(document.getElementById(`auincrement${s}`)?.value) || currentBotState.config[side]?.size_var || 0;
-                const profit_percent = parseFloat(document.getElementById(`audecrement${s}`)?.value) || currentBotState.config[side]?.profit_percent || 0;
-                const price_step_inc = parseFloat(document.getElementById(`aupricestep-${s}`)?.value) || currentBotState.config[side]?.price_step_inc || 0;
-                const stopAtCycle = document.getElementById(`au-stop-${side}-at-cycle`) ? document.getElementById(`au-stop-${side}-at-cycle`).checked : false;
+                // Validación final: extraemos del DOM solo valores numéricos válidos
+                const getVal = (selector, fallback) => {
+                    const el = document.getElementById(selector);
+                    const val = parseFloat(el?.value);
+                    return isNaN(val) ? fallback : val;
+                };
 
-                // Reconstrucción profunda del payload mezclando el estado maestro
+                const amountUsdt = getVal(`auamount${s}-usdt`, currentBotState.config[side]?.amountUsdt || 0);
+                const purchaseUsdt = getVal(`aupurchase${s}-usdt`, currentBotState.config[side]?.purchaseUsdt || 0);
+                const price_var = getVal(`autrigger${s}`, currentBotState.config[side]?.price_var || 0);
+                const size_var = getVal(`auincrement${s}`, currentBotState.config[side]?.size_var || 0);
+                const profit_percent = getVal(`audecrement${s}`, currentBotState.config[side]?.profit_percent || 0);
+                const price_step_inc = getVal(`aupricestep-${s}`, currentBotState.config[side]?.price_step_inc || 0);
+                const stopAtCycle = document.getElementById(`au-stop-${side}-at-cycle`)?.checked || false;
+
                 const manualConfig = {
                     ...currentBotState.config,
-                    [side]: {
-                        amountUsdt,
-                        purchaseUsdt,
-                        price_var,
-                        size_var,
-                        profit_percent,
-                        price_step_inc,
-                        stopAtCycle
-                    }
+                    [side]: { amountUsdt, purchaseUsdt, price_var, size_var, profit_percent, price_step_inc, stopAtCycle }
                 };
 
                 try {
                     const result = await sendConfigToBackend({
                         config: manualConfig, 
                         strategy: side,
-                        applyShield: true // Activamos el escudo en el backend si tu API lo soporta
+                        applyShield: true 
                     });
 
-                    if (result && result.success && result.data) {
-                        // Sincronización final tras confirmación del servidor (límites, redondeos, etc.)
+                    if (result?.success && result.data) {
                         currentBotState.config = result.data;
                         updateControlsState(currentBotState);
                     }
                 } catch (err) {
-                    console.error(`❌ Error sincronizando configuración asíncrona [${side}]:`, err);
+                    console.error(`❌ Error sincronizando [${side}]:`, err);
                 }
             }, 1000);
         };
 
-        // Asignación limpia de propiedades directas para evitar fugas de memoria en la SPA
-        if (el.type === 'checkbox') {
-            el.onchange = handler;
-        } else {
-            el.oninput = handler;
-        }
+        if (el.type === 'checkbox') el.onchange = handler;
+        else el.oninput = handler;
     });
 }
 
-/**
- * Inicializa la vista del Autobot
- */
 export async function initializeAutobotView() {
-    console.log("🤖 Autobot View: Syncing strategy core...");
     const auOrderList = document.getElementById('au-order-list');
-    
     if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
 
-    // Activamos los escuchadores limpios de cambios en inputs
     setupConfigListeners();
-
-    // Sincronizamos la UI con el estado global unificado
     updateBotUI(currentBotState);
     updateControlsState(currentBotState);
 
-    // Inicializamos el gráfico de TradingView de manera aislada
     const chartContainer = document.getElementById('au-tvchart');
     if (chartContainer) {
         setTimeout(() => {
             if (window.currentChart) {
-                try { 
-                    window.currentChart.remove(); 
-                    window.currentChart = null;
-                } catch(e) { console.warn("Chart removal mitigation:", e); }
+                try { window.currentChart.remove(); window.currentChart = null; } 
+                catch(e) { console.warn("Chart removal mitigation:", e); }
             }
             window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
         }, 300);
     }
 
-    if (auOrderList) {
-        setupOrderTabs(auOrderList);
-    }
+    if (auOrderList) setupOrderTabs(auOrderList);
 }
 
-/**
- * Controla el filtrado dinámico de órdenes para el Autobot
- */
 function setupOrderTabs(container) {
     const orderTabs = document.querySelectorAll('.autobot-tabs button');
     if (!orderTabs.length || !container) return;
@@ -166,7 +139,6 @@ function setupOrderTabs(container) {
     };
 
     orderTabs.forEach(tab => {
-        tab.onclick = null; // Limpieza preventiva antes de asignar
         tab.onclick = (e) => {
             const btn = e.currentTarget;
             const strategy = btn.getAttribute('data-strategy') || 'all';
@@ -176,7 +148,6 @@ function setupOrderTabs(container) {
         };
     });
 
-    // Estado inicial por defecto de la sub-navegación
     setActiveTabStyle('tab-all-strategies');
     fetchOrders('all', container);
 }
