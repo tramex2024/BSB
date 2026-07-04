@@ -1,5 +1,5 @@
 /**
- * uiManager.js - Orquestador Atómico (Sincronizado 2026)
+ * uiManager.js - Orquestador Atómico (Sincronizado & Blindado 2026)
  * Etapa 1: Protección Total contra parpadeo y reseteo de estados - AUDITADO
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
@@ -19,15 +19,25 @@ const STATUS_COLORS = {
     'PAUSED': '#fb923c',    
 };
 
+// Lista de IDs de inputs numéricos críticos expuestos al parpadeo por WebSockets
+const CRITICAL_INPUTS = [
+    'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
+    'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
+    'auamountai-usdt', 'ai-amount-usdt'
+];
+
+// Escuchador global pasivo para registrar interacciones del usuario y evitar el snap-back cooperativo
+window.addEventListener('input', (e) => {
+    if (CRITICAL_INPUTS.includes(e.target.id)) {
+        e.target.dataset.lastUserMutation = Date.now();
+    }
+}, true);
+
 /**
  * Función Principal: Actualiza todos los elementos visuales
  */
 export async function updateBotUI(state) {
     if (!state) return;
-
-    // DEBUG: Descomenta esto para ver qué claves trae tu objeto 'state'
-    //console.log("🔍 [DEBUG UI]: State recibido:", Object.keys(state));
-    //console.log("🔍 [DEBUG UI]: Valor Stoch:", state.aiStoch, state.aiStochK);
 
     // 1. Actualización de Precio (Con suavizado)
     const priceEl = document.getElementById('auprice');
@@ -111,34 +121,30 @@ export async function updateBotUI(state) {
         }
     });
 
-    // --- 3. Renderizado defensivo de métricas (Mapping a llaves reales del state) ---
-const pulseMetrics = [
-    { id: 'ai-adx-val', key: 'lai', barId: 'ai-adx-bar', scale: 50 },
-    { id: 'ai-stoch-val', key: 'lac', barId: 'ai-stoch-bar', scale: 100 },
-    // Nota: Si 'aiRsi' y 'aiMacd' no aparecen en la lista de claves del log, 
-    // significa que el backend no los está incluyendo en el 'bot-state-update'.
-    { id: 'ai-rsi-val', key: 'aiRsi', barId: null, scale: 100 },
-    { id: 'ai-macd-val', key: 'aiMacd', barId: null, scale: 100 }
-];
+    // --- 3. Renderizado defensivo de métricas (Con mapeo cruzado/fallbacks) ---
+    const pulseMetrics = [
+        { id: 'ai-adx-val', key: 'lai', fallbackKey: 'aiAdx', barId: 'ai-adx-bar' },
+        { id: 'ai-stoch-val', key: 'lac', fallbackKey: 'aiStochK', barId: 'ai-stoch-bar' },
+        { id: 'ai-rsi-val', key: 'aiRsi', fallbackKey: 'rsi', barId: null },
+        { id: 'ai-macd-val', key: 'aiMacd', fallbackKey: 'macd', barId: null }
+    ];
 
-pulseMetrics.forEach(metric => {
-    const el = document.getElementById(metric.id);
-    if (!el) return;
+    pulseMetrics.forEach(metric => {
+        const el = document.getElementById(metric.id);
+        if (!el) return;
 
-    // Buscamos la llave directamente en el state (que es donde realmente están)
-    const val = state[metric.key]; 
+        // Búsqueda elástica usando la llave principal o su alternativa de respaldo
+        const val = state[metric.key] !== undefined ? state[metric.key] : state[metric.fallbackKey]; 
 
-    if (val !== undefined && val !== null) {
-        const floatVal = parseFloat(val);
-        // Formateo específico
-        el.textContent = metric.id.includes('macd') ? floatVal.toFixed(4) : floatVal.toFixed(1);
-        
-        // Actualización de barra (si aplica)
-        if (metric.barId) {
-            updatePulseBars(metric.id, floatVal);
+        if (val !== undefined && val !== null) {
+            const floatVal = parseFloat(val);
+            el.textContent = metric.id.includes('macd') ? floatVal.toFixed(4) : floatVal.toFixed(1);
+            
+            if (metric.barId) {
+                updatePulseBars(metric.id, floatVal);
+            }
         }
-    }
-});
+    });
 
     // 4. Barras de Confianza AI
     if (state.aiConfidence !== undefined) {
@@ -147,29 +153,36 @@ pulseMetrics.forEach(metric => {
     }
 
     // =========================================================================
-// 5. [BLINDAJE 2026] Sincronización de Inputs con Escudo de Enfoque Activo
-// =========================================================================
-if (state.config && !isSavingConfig) {
-    // Lista de IDs de inputs numéricos críticos expuestos al parpadeo
-    const criticalInputs = [
-        'auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l',
-        'auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s',
-        'auamountai-usdt', 'ai-amount-usdt'
-    ];
+    // 5. [BLINDAJE INTERACTIVO 2026] Sincronización Avanzada con Escudo Temporal
+    // =========================================================================
+    if (state.config && !isSavingConfig) {
+        const activeLocks = {};
 
-    // Verificamos si el usuario está interactuando activamente con alguno de ellos
-    const userIsEditing = criticalInputs.some(id => {
-        const inputEl = document.getElementById(id);
-        return inputEl === document.activeElement;
-    });
+        // Escaneamos campo por campo buscando ediciones en curso o mutaciones muy recientes
+        CRITICAL_INPUTS.forEach(id => {
+            const inputEl = document.getElementById(id);
+            if (!inputEl) return;
 
-    // Solo permitimos que el estado del servidor sobrescriba el DOM si el usuario no tiene el foco ahí
-    if (!userIsEditing) {
+            const isFocused = inputEl === document.activeElement;
+            const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
+            const isInsideGracePeriod = (Date.now() - lastMutation) < 2500; // 2.5 segundos de inmunidad post-escritura
+
+            if (isFocused || isInsideGracePeriod) {
+                activeLocks[id] = inputEl.value; // Capturamos el estado actual para que el WS no lo altere
+            }
+        });
+
+        // Ejecutamos la sincronización por defecto de los controles
         syncInputsFromConfig(state.config);
-    } else {
-        console.log("🛡️ uiManager: Usuario editando input activamente. Escudo de enfoque activado.");
+
+        // Capa de Restauración Inmediata: Imponemos la voluntad local sobre los retrasos del WebSocket
+        Object.entries(activeLocks).forEach(([id, preservedValue]) => {
+            const inputEl = document.getElementById(id);
+            if (inputEl && inputEl.value !== preservedValue) {
+                inputEl.value = preservedValue;
+            }
+        });
     }
-}
 
     // 6. Control de Botones
     const hasStateData = state.lstate !== undefined || 
@@ -181,25 +194,36 @@ if (state.config && !isSavingConfig) {
         updateControlsState(state);
     }
 
-    // 7. Actualización de Dashboard y PnL Bars (Con saneamiento flotante)
+    // =========================================================================
+    // 7. Sincronización del Dashboard y Gráfico Donut de Distribución
+    // =========================================================================
     try {
         const dashboard = await import('./dashboard.js');
-        if (dashboard && typeof dashboard.updatePnLBar === 'function') {
+        if (dashboard) {
             const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
             const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
             const aiProfit = parseFloat(state.aiprofit ?? state.stats?.aiprofit ?? 0);
 
-            dashboard.updatePnLBar('long', lProfit);
-            dashboard.updatePnLBar('short', sProfit);
-            dashboard.updatePnLBar('ai', aiProfit);
+            if (typeof dashboard.updatePnLBar === 'function') {
+                dashboard.updatePnLBar('long', lProfit);
+                dashboard.updatePnLBar('short', sProfit);
+                dashboard.updatePnLBar('ai', aiProfit);
+            }
             
+            // 🛡️ REPARACIÓN: Forzamos la actualización completa del gráfico circular y barras asociadas
+            if (typeof dashboard.updateDistributionWidget === 'function') {
+                dashboard.updateDistributionWidget(state);
+            }
+
             const totalProfit = parseFloat(state.total_profit ?? (lProfit + sProfit + aiProfit));
             const totalEl = document.getElementById('auprofit');
             if (totalEl) formatProfit(totalEl, totalProfit);
         }
-    } catch (err) { /* Silencioso para evitar romper el hilo principal */ }
+    } catch (err) {
+        console.error("⚠️ Falló el enlace de actualización cruzada con dashboard.js:", err);
+    }
 
-    // Sincronizamos las métricas con el nuevo payload
+    // Sincronizamos las métricas analíticas intermedias con el nuevo payload
     updateMetricsFromState(state);
 }
 
@@ -220,8 +244,6 @@ export function updateControlsState(state) {
 
     const longInputs = ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l'];
     const shortInputs = ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s'];
-    
-    // CORRECCIÓN: Incluimos ambos IDs para que el bloqueo sea total en toda la SPA
     const aiInputs = ['auamountai-usdt', 'ai-amount-usdt']; 
 
     if (lState !== undefined) {
@@ -236,7 +258,7 @@ export function updateControlsState(state) {
         const btnAi = document.getElementById('btn-start-ai') || document.getElementById('austartai-btn');
         const actualAiStatus = aiState || (state.isRunning ? 'RUNNING' : 'STOPPED');
 
-        if (btnAi) { // Eliminamos la condición !btnAi.disabled para asegurar que siempre se intente el bloqueo
+        if (btnAi) {
             updateButtonState(btnAi.id, actualAiStatus, 'AI', aiInputs); 
         }
         

@@ -1,6 +1,6 @@
 /**
- * dashboard.js - Interface Controller (Shielded Version 2026)
- * Status: Audited - Carousel refactoring (Logic moved to carousel.js)
+ * dashboard.js - Interface Controller (Shielded & Audited Version 2026)
+ * Status: Secured against lifecycle exceptions and partial payload overwrites.
  */
 
 import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from './apiService.js';
@@ -9,14 +9,13 @@ import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
-// Extracted module
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
 
 // Global chart instances
 let balanceChart = null; 
 let lastRenderedData = null;
 let lastRenderedAiData = null;
-let carouselInterval; // We keep the variable here to avoid breaking external references
+let carouselInterval; 
 
 /**
  * Initializes the Dashboard view
@@ -29,27 +28,44 @@ export function initializeDashboardView(initialState) {
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
-    // 2. INITIALIZE VISUAL COMPONENTS
-    initBalanceChart();
+    // 2. INITIALIZE VISUAL COMPONENTS (Wrapped defensively to prevent cascading failures)
+    try {
+        initBalanceChart();
+    } catch (chartError) {
+        console.error("❌ [LIFECYCLE CRITICAL] Failed to initialize balance Donut Chart:", chartError);
+    }
+
     if (stateToUse?.symbol) {
-        initializeChart('tv-chart-container', stateToUse.symbol);
+        try {
+            initializeChart('tv-chart-container', stateToUse.symbol);
+        } catch (tvError) {
+            console.error("❌ Failed to initialize TradingView Chart container:", tvError);
+        }
     }
 
     // 3. INITIAL UI UPDATE AND CACHE RECOVERY
     if (stateToUse) {
-        updateBotUI(stateToUse);
-        updatePnLBar('long', stateToUse.lprofit || 0);
-        updatePnLBar('short', stateToUse.sprofit || 0);
-        updatePnLBar('ai', stateToUse.aiprofit || 0);
-        
-        checkAndHideGuide(stateToUse); 
+        try {
+            updateBotUI(stateToUse);
+            updatePnLBar('long', stateToUse.lprofit || 0);
+            updatePnLBar('short', stateToUse.sprofit || 0);
+            updatePnLBar('ai', stateToUse.aiprofit || 0);
+            
+            checkAndHideGuide(stateToUse); 
 
-        setTimeout(() => updateDistributionWidget(stateToUse), 150);
+            setTimeout(() => {
+                try {
+                    updateDistributionWidget(stateToUse);
+                } catch (e) { console.warn("Deferred widget distribution failed:", e); }
+            }, 150);
 
-        // [MIGUARD] PERSISTENCE SHIELD
-        if (stateToUse.aiLastPulse) {
-            console.log("🧠 Memory Recovered: Painting AI pulse instantly...");
-            requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
+            // [MIGUARD] PERSISTENCE SHIELD
+            if (stateToUse.aiLastPulse) {
+                console.log("🧠 Memory Recovered: Painting AI pulse instantly...");
+                requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
+            }
+        } catch (uiError) {
+            console.error("❌ Error painting core bot UI components:", uiError);
         }
     }
 
@@ -59,21 +75,14 @@ export function initializeDashboardView(initialState) {
 
     const btnToggle = document.getElementById('btn-toggle-carousel');
     if (btnToggle) {
-        btnToggle.addEventListener('click', () => {
+        btnToggle.onclick = () => {
             const body = document.getElementById('step-carousel-body');
             const chevron = document.getElementById('carousel-chevron');
             if (body && chevron) {
                 body.classList.toggle('hidden');
                 chevron.classList.toggle('rotate-180');
             }
-        });
-    }
-    
-    // Guide configuration
-    const ENABLE_STEP_GUIDE = true; 
-    if (!ENABLE_STEP_GUIDE) {
-        const carousel = document.querySelector('#step-carousel-body');
-        if (carousel) carousel.classList.add('hidden');
+        };
     }
     
     // 5. LOAD HISTORICAL DATA
@@ -88,8 +97,6 @@ export function initializeDashboardView(initialState) {
         container.addEventListener('mouseleave', startAutoCarousel);
     }
 }
-
-// --- KEEPING ALL ORIGINAL FUNCTIONS EXACTLY AS THEY ARE ---
 
 async function refreshAnalytics() {
     try {
@@ -115,7 +122,7 @@ async function refreshAnalytics() {
         }
         if (kpiRes && kpiRes.success) updateQuickStats(kpiRes.data || kpiRes);
     } catch (e) {
-        console.error("Dashboard Error:", e);
+        console.error("Dashboard Analytics Sync Error:", e);
         addTerminalLog("ERROR SYNCING ANALYTICS", 'error');
     }
 }
@@ -132,53 +139,54 @@ function setupActionButtons() {
     ];
 
     quickInputs.forEach(input => {
-    const el = document.getElementById(input.id);
-    if (el) {
-        // Carga inicial del valor desde el estado global centralizado
-        if (currentBotState?.config?.[input.strategy]) {
-            el.value = currentBotState.config[input.strategy].amountUsdt || "";
-        }
-
-        el.onchange = async () => {
-            const newVal = parseFloat(el.value);
-            if (isNaN(newVal) || newVal < 0) return;
-
-            const strategy = input.strategy;
-
-            // =========================================================================
-            // [BLINDAJE 2026]: ACTUALIZACIÓN OPTIMISTA INMEDIATA
-            // Mutamos la memoria local al instante. Si entra un pulso por WebSocket 
-            // en este milisegundo, leerá el nuevo valor y no provocará un 'snap-back'.
-            // =========================================================================
-            if (!currentBotState.config) currentBotState.config = {};
-            if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
-            currentBotState.config[strategy].amountUsdt = newVal;
-
-            // Preparación del payload para el servidor
-            const configPayload = {
-                config: { [strategy]: { amountUsdt: newVal } },
-                applyShield: true,
-                strategy: strategy
-            };
-
-            try {
-                // Despachamos la petición HTTP asíncrona de forma segura
-                const res = await sendConfigToBackend(configPayload);
-                
-                if (res?.success) {
-                    if (typeof addTerminalLog === 'function') {
-                        addTerminalLog(
-                            `${strategy.toUpperCase()}: AMOUNT UPDATED OPTIMISTICALLY TO $${newVal}`, 
-                            'success'
-                        );
-                    }
-                }
-            } catch (error) {
-                console.error(`❌ Fallo crítico al sincronizar input de estrategia [${strategy}]:`, error);
+        const el = document.getElementById(input.id);
+        if (el) {
+            // Carga inicial segura del valor
+            if (currentBotState?.config?.[input.strategy]) {
+                el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
-        };
-    }
-});
+
+            el.onchange = async () => {
+                const newVal = parseFloat(el.value);
+                if (isNaN(newVal) || newVal < 0) return;
+
+                const strategy = input.strategy;
+
+                // 🚀 ACTUALIZACIÓN OPTIMISTA LOCAL DE INMEDIATO
+                if (!currentBotState.config) currentBotState.config = {};
+                if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
+                currentBotState.config[strategy].amountUsdt = newVal;
+
+                // 🛡️payload no destructivo: preservamos los parámetros hermanos de la estrategia
+                const strategyConfigSnapshot = {
+                    ...currentBotState.config[strategy],
+                    amountUsdt: newVal
+                };
+
+                const configPayload = {
+                    config: { 
+                        ...currentBotState.config,
+                        [strategy]: strategyConfigSnapshot
+                    },
+                    applyShield: true,
+                    strategy: strategy
+                };
+
+                try {
+                    const res = await sendConfigToBackend(configPayload);
+                    if (res?.success && res.data) {
+                        currentBotState.config = res.data;
+                        if (typeof addTerminalLog === 'function') {
+                            addTerminalLog(`${strategy.toUpperCase()}: INSTANT AMOUNT ALIGNED TO $${newVal}`, 'success');
+                        }
+                    }
+                } catch (error) {
+                    console.error(`❌ Fallo crítico al sincronizar input de estrategia [${strategy}]:`, error);
+                }
+            };
+        }
+    });
+}
 
 function setupAnalyticsFilters() {
     const bSel = document.getElementById('chart-bot-selector');
@@ -202,7 +210,18 @@ export function addTerminalLog(msg, type = 'info') {
 function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
-    if (balanceChart) balanceChart.destroy();
+    
+    // Si la librería Chart no está mapeada globalmente en este ciclo de la SPA, salimos sin romper el flujo
+    if (typeof Chart === 'undefined') {
+        console.warn("⚠️ Chart.js no se encuentra disponible globalmente en el objeto window.");
+        return;
+    }
+
+    if (balanceChart) {
+        balanceChart.destroy();
+        balanceChart = null;
+    }
+    
     balanceChart = new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: { labels: ['USDT', 'BTC'], datasets: [{ data: [100, 0], backgroundColor: ['#10b981', '#fb923c'], borderWidth: 0, cutout: '75%' }] },
@@ -229,15 +248,19 @@ export function updatePnLBar(id, pnlValue) {
 
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
-    const usdt = parseFloat(state.lastAvailableUSDT || 0);
-    const btcAmount = parseFloat(state.lastAvailableBTC || 0);
-    const price = parseFloat(state.price || 0);
+
+    // Escáner resiliente de propiedades (soporta variaciones de nomenclatura del backend)
+    const usdt = parseFloat(state.lastAvailableUSDT ?? state.availableUsdt ?? state.usdtBalance ?? 0);
+    const btcAmount = parseFloat(state.lastAvailableBTC ?? state.availableBtc ?? state.btcBalance ?? 0);
+    const price = parseFloat(state.price ?? state.btcPrice ?? state.lastPrice ?? 0);
+
     if (price > 0) {
         const btcInUsdt = btcAmount * price;
         const total = usdt + btcInUsdt;
         if (total > 0) {
             balanceChart.data.datasets[0].data = [usdt, btcInUsdt];
             balanceChart.update('none');
+            
             const uBar = document.getElementById('usdt-bar');
             const bBar = document.getElementById('btc-bar');
             if (uBar) uBar.style.width = `${(usdt / total) * 100}%`;
@@ -247,7 +270,6 @@ export function updateDistributionWidget(state) {
 }
 
 function updateQuickStats(kpiData) {
-    console.group("📊 CALCULATION AUDIT: PROFIT/D");
     const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
     const totalCycles = parseInt(kpiData.totalCycles) || 0;
     const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
@@ -263,52 +285,46 @@ function updateQuickStats(kpiData) {
         profitElement.innerText = finalValue;
         profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
     }
-    console.groupEnd();
 }
 
 export function renderAiPulseUI(aiData) {
     if (!aiData) return;
 
-    // 1. We expand the filter to accept the new indicators
     const cleanData = {
         aiConfidence: Math.round(aiData.aiConfidence || 0),
         aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
         aiAdx: parseFloat(aiData.aiAdx || 0).toFixed(1),
-        aiStochK: parseFloat(aiData.aiStochK || 0).toFixed(1), // New
-        aiStochD: parseFloat(aiData.aiStochD || 0).toFixed(1), // New
-        aiRsi: parseFloat(aiData.aiRsi || 0).toFixed(1),       // New
-        aiMacd: parseFloat(aiData.aiMacd || 0).toFixed(4),     // New
+        aiStochK: parseFloat(aiData.aiStochK || 0).toFixed(1), 
+        aiStochD: parseFloat(aiData.aiStochD || 0).toFixed(1), 
+        aiRsi: parseFloat(aiData.aiRsi || 0).toFixed(1),       
+        aiMacd: parseFloat(aiData.aiMacd || 0).toFixed(4),     
         aiEngineMsg: aiData.aiEngineMsg || 'System Live'
     };
 
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
     lastRenderedAiData = cleanData;
 
-    // 2. Visual element updates
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
         'ai-adx-val': cleanData.aiAdx,
-        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, // We show both
+        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, 
         'ai-rsi-val': cleanData.aiRsi,
         'ai-macd-val': cleanData.aiMacd,
         'ai-engine-msg': cleanData.aiEngineMsg
     };
 
-    // We apply the values to the IDs (make sure they exist in your HTML)
     Object.entries(elements).forEach(([id, value]) => {
         const el = document.getElementById(id);
         if (el) el.innerText = value;
     });
 
-    // Confidence chart
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
         dbCircle.style.strokeDashoffset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
     }
 
-    // Progress bars (If you have the IDs, they will update)
     const adxBar = document.getElementById('ai-adx-bar');
     if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
 }
