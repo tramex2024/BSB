@@ -21,6 +21,9 @@ import { applyRolePermissions } from './modules/role.js';
 // Importamos el servicio de API para poder guardar los cambios de los checkboxes
 import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
 
+// Agrega esta función en main.js (o impórtala de controls.js)
+import { setupBotInput } from './modules/controls.js';
+
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
@@ -122,7 +125,15 @@ export async function initializeTab(tabName) {
     try {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
-        if (mainContent.innerHTML !== html) mainContent.innerHTML = html;
+        
+        // Inyectamos el contenido
+        if (mainContent.innerHTML !== html) {
+            mainContent.innerHTML = html;
+            
+            // --- [BLINDAJE] REGISTRO DE CANDADOS ---
+            // Se ejecuta inmediatamente después de que el HTML entra al DOM
+            bindLocksForView(tabName); 
+        }
         
         if (views[tabName]) {
             const module = await views[tabName]();
@@ -147,6 +158,27 @@ export async function initializeTab(tabName) {
         await updateBotUI(currentBotState);
         syncAIElementsInDOM();
     } catch (error) { console.error("❌ View Loading Error:", error); }
+}
+
+/**
+ * Función auxiliar para registrar los listeners de bloqueo 
+ * después de cargar la vista
+ */
+function bindLocksForView(tabName) {
+    if (tabName === 'autobot') {
+        // Registra inputs LONG
+        ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l']
+            .forEach(id => setupBotInput(id, 'long', false));
+        
+        // Registra inputs SHORT
+        ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s']
+            .forEach(id => setupBotInput(id, 'short', false));
+    } 
+    else if (tabName === 'aibot') {
+        // Registra inputs AI
+        ['auamountai-usdt', 'ai-amount-usdt']
+            .forEach(id => setupBotInput(id, 'ai', false));
+    }
 }
 
 function syncAIElementsInDOM() {

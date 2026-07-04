@@ -142,7 +142,7 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
-            // Carga inicial segura del valor
+            // Carga inicial segura
             if (currentBotState?.config?.[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
@@ -153,12 +153,12 @@ function setupActionButtons() {
 
                 const strategy = input.strategy;
 
-                // 🚀 ACTUALIZACIÓN OPTIMISTA LOCAL DE INMEDIATO
+                // 🚀 ACTUALIZACIÓN OPTIMISTA LOCAL
                 if (!currentBotState.config) currentBotState.config = {};
                 if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
                 currentBotState.config[strategy].amountUsdt = newVal;
 
-                // 🛡️payload no destructivo: preservamos los parámetros hermanos de la estrategia
+                // 🛡️ payload con el flag de recálculo en TRUE
                 const strategyConfigSnapshot = {
                     ...currentBotState.config[strategy],
                     amountUsdt: newVal
@@ -169,6 +169,7 @@ function setupActionButtons() {
                         ...currentBotState.config,
                         [strategy]: strategyConfigSnapshot
                     },
+                    recalculate: true, // <--- AQUÍ ESTÁ EL CAMBIO CRÍTICO
                     applyShield: true,
                     strategy: strategy
                 };
@@ -178,7 +179,7 @@ function setupActionButtons() {
                     if (res?.success && res.data) {
                         currentBotState.config = res.data;
                         if (typeof addTerminalLog === 'function') {
-                            addTerminalLog(`${strategy.toUpperCase()}: INSTANT AMOUNT ALIGNED TO $${newVal}`, 'success');
+                            addTerminalLog(`${strategy.toUpperCase()}: AMOUNT MODIFIED. RECALCULATING GRID...`, 'success');
                         }
                     }
                 } catch (error) {

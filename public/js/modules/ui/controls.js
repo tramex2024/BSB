@@ -158,5 +158,47 @@ export function syncInputsFromConfig(conf) {
     });
 }
 
+/**
+ * 🎯 ENCAPSULADOR DE EVENTOS (Factory)
+ * Une el control de concurrencia (Locks) con la lógica de persistencia.
+ */
+export function setupBotInput(id, strategy, isStructural = false) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    // 1. Bloqueo de concurrencia: Evita que el WebSocket sobrescriba mientras el usuario escribe
+    el.addEventListener('focus', () => uiLocks.acquire(id));
+    el.addEventListener('blur', () => uiLocks.release(id));
+
+    el.addEventListener('change', async (e) => {
+        const newVal = parseFloat(e.target.value);
+        if (isNaN(newVal)) return;
+
+        // Actualización optimista local
+        // Nota: Asegúrate de tener acceso a currentBotState o importarlo
+        // En un patrón de arquitectura limpia, esto podría ir a un stateManager
+        
+        const payload = {
+            config: { 
+                [strategy]: { 
+                    [e.target.dataset.key || 'amountUsdt']: newVal 
+                } 
+            },
+            strategy: strategy,
+            recalculate: isStructural, // <--- LA CLAVE DEL RENDIMIENTO
+            applyShield: true
+        };
+
+        try {
+            await sendConfigToBackend(payload);
+            console.log(`✅ ${strategy.toUpperCase()} ${isStructural ? 'STRUCTURAL' : 'PARAM'} UPDATED: ${newVal}`);
+        } catch (err) {
+            console.error(`❌ Sync error on ${id}:`, err);
+        } finally {
+            uiLocks.release(id);
+        }
+    });
+}
+
 // Al final de public/js/ui/controls.js
 export const activeEdits = {};

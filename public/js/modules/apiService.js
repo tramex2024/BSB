@@ -1,11 +1,11 @@
 /**
  * apiService.js - Comunicaciones REST Sincronizadas (2026)
- * Versión: Auditoría Final - Integración completa con getSanitizedValue
+ * Versión: Auditoría Final + Control de Recálculo Integrado
  */
 import { displayMessage, getSanitizedValue } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
-// Control transaccional real libre de temporizadores arbitrarios
+// Control transaccional real
 export let isSavingConfig = false;
 export let inTransitConfig = null; 
 export let socketIsActive = false;
@@ -24,7 +24,6 @@ export function setSocketActive(status) {
 
 /**
  * 🛡️ VALIDADOR DE RECONOCIMIENTO (Acknowledge Engine)
- * Evalúa si el estado enviado por el WebSocket ya refleja los cambios del cliente.
  */
 export function checkConfigAcknowledgment(incomingConfig) {
     if (!inTransitConfig) return true;
@@ -97,7 +96,6 @@ export async function fetchEquityCurveData(strategy = 'all') {
 
 /**
  * 🛡️ RECOLECTA CONFIGURACIÓN DESDE EL DOM
- * Blindaje extremo: Asegura que el JSON resultante NUNCA contenga NaN
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
@@ -105,14 +103,9 @@ export function getBotConfiguration() {
         const parts = path.split('.');
         const stateVal = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
 
-        // 1. Prioridad: Input del usuario (si está limpio)
         if (sanitized !== undefined && !isNaN(sanitized)) return sanitized;
-
-        // 2. Prioridad: Valor del estado (casteado a float estricto)
         const parsedState = parseFloat(stateVal);
         if (!isNaN(parsedState) && isFinite(parsedState)) return parsedState;
-
-        // 3. Fallback absoluto
         return minVal;
     };
 
@@ -133,7 +126,6 @@ export function getBotConfiguration() {
             price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), 
             profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit), 
             size_var:        getNum('auincrementl', 'long.size_var', 1),
-            //price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
             stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
             enabled:         currentBotState.lstate !== 'STOPPED'
         },
@@ -143,13 +135,12 @@ export function getBotConfiguration() {
             price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation), 
             profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit), 
             size_var:        getNum('auincrements', 'short.size_var', 1),
-            //price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
             stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
             enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
             amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
-            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
+            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || getCheck('ai-stop-ai-at-cycle', 'ai.stopAtCycle'), // corregido ID
             enabled:         currentBotState.config?.ai?.enabled || false
         }
     };
@@ -159,17 +150,22 @@ export function getBotConfiguration() {
 
 /**
  * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND
+ * @param {Object|null} manualPayload - Payload personalizado si es necesario
+ * @param {Boolean} shouldRecalculate - Flag para indicar al backend si debe recalcular el grid
  */
-export async function sendConfigToBackend(manualPayload = null) {
+export async function sendConfigToBackend(manualPayload = null, shouldRecalculate = false) {
     const botConfig = getBotConfiguration();
     
     isSavingConfig = true; 
     inTransitConfig = botConfig;
     
-    // Log de seguridad antes de enviar
-    console.log("📤 Enviando config (blindada):", botConfig);
+    // Si no hay payload manual, creamos la estructura estándar con el flag
+    const payload = manualPayload || { 
+        config: botConfig, 
+        recalculate: shouldRecalculate 
+    };
 
-    const payload = manualPayload || { config: botConfig };
+    console.log(`📤 Enviando config (blindada, recalc=${payload.recalculate || 'false'}):`, payload);
 
     try {
         const data = await privateFetch('/api/v1/config/update-config', {
