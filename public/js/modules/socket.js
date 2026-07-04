@@ -143,7 +143,6 @@ export function initSocket() {
             if (!s.config) return s;
             ['long', 'short'].forEach(side => {
                 if (s.config[side]) {
-                    // Validamos específicamente las variables numéricas críticas
                     s.config[side].size_var = isNaN(parseFloat(s.config[side].size_var)) ? 1 : parseFloat(s.config[side].size_var);
                     s.config[side].price_var = isNaN(parseFloat(s.config[side].price_var)) ? 0.1 : parseFloat(s.config[side].price_var);
                     s.config[side].amountUsdt = isNaN(parseFloat(s.config[side].amountUsdt)) ? 6.0 : parseFloat(s.config[side].amountUsdt);
@@ -172,7 +171,7 @@ export function initSocket() {
             currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
             currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
         } else {
-            // Merge seguro: Solo actualizamos config si no es nula
+            // Merge seguro
             if (state.config) {
                 currentBotState.config = { ...currentBotState.config, ...state.config };
             }
@@ -183,6 +182,40 @@ export function initSocket() {
             
             updateBotUI(currentBotState);
         }
+
+        // Sincronización dinámica de métricas avanzadas e historial de ciclos
+        const historyData = state.history || state.cycleHistory;
+        if (historyData) {
+            try {
+                const Metrics = await import('./metricsManager.js');
+                const { updateQuickStats } = await import('./dashboard.js');
+                
+                Metrics.setAnalyticsData(historyData);
+                
+                if (state.kpis) {
+                    updateQuickStats(state.kpis);
+                }
+            } catch (err) {
+                console.error("Error injecting metrics:", err);
+            }
+        }
+
+        const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
+        currentBotState.isRunning = aiIsActive;
+
+        if (document.getElementById('balanceDonutChart')) {
+            const { updateDistributionWidget } = await import('./dashboard.js');
+            updateDistributionWidget(currentBotState);
+        }
+
+        if (aiBotUI && typeof aiBotUI.setRunningStatus === 'function') {
+            aiBotUI.setRunningStatus(
+                aiIsActive, 
+                currentBotState.config?.ai?.stopAtCycle, 
+                state.historyCount || 0
+            );
+        }
+    }); // <-- ESTE CIERRE ES CRÍTICO Y SUELE SER EL QUE FALTA
 
     // --- PRIVATE LOGS & DEBUG STREAM ---
     socket.on('bot-log', (data) => {
