@@ -21,14 +21,12 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
     const s = Math.min(parseFloat(amtS) || 0, MAX_CAP);
 
     const calculateScalpingGrid = (totalAmount, side) => {
-        const sizeData = calculateDistributedSizes(totalAmount);
-        
-        // Validación corregida: accedemos a .levels y verificamos la estructura
-        if (!sizeData || sizeData.levels < 3) return null;
+        const sizes = calculateDistributedSizes(totalAmount);
+        if (!sizes || sizes.length < 3) return null;
 
-        const n = sizeData.levels;
+        const n = sizes.length;
         const stepInc = calculateStepGrow(n); 
-        const sizeMultiplier = sizeData.sizeMultiplier; 
+        const sizeMultiplier = sizes[1] / sizes[0]; 
         
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
