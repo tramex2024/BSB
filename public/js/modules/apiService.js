@@ -96,29 +96,25 @@ export async function fetchEquityCurveData(strategy = 'all') {
 }
 
 /**
- * RECOLECTA CONFIGURACIÓN DESDE EL DOM
- * Integrado con getSanitizedValue para evitar contaminación de datos
+ * 🛡️ RECOLECTA CONFIGURACIÓN DESDE EL DOM
+ * Blindaje extremo: Asegura que el JSON resultante NUNCA contenga NaN
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
-    const sanitized = getSanitizedValue(id);
-    const parts = path.split('.');
-    const stateVal = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
+        const sanitized = getSanitizedValue(id);
+        const parts = path.split('.');
+        const stateVal = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
 
-    // LOG DE AUDITORÍA
-    if (path === 'long.size_var') {
-        console.log(`🔍 DEBUG [${path}]: Sanitized=${sanitized}, StateValue=${stateVal}`);
-    }
+        // 1. Prioridad: Input del usuario (si está limpio)
+        if (sanitized !== undefined && !isNaN(sanitized)) return sanitized;
 
-    if (sanitized !== undefined) return sanitized;
+        // 2. Prioridad: Valor del estado (casteado a float estricto)
+        const parsedState = parseFloat(stateVal);
+        if (!isNaN(parsedState) && isFinite(parsedState)) return parsedState;
 
-    // Si el estado es inválido, forzamos minVal
-    if (stateVal === undefined || stateVal === null || isNaN(parseFloat(stateVal))) {
+        // 3. Fallback absoluto
         return minVal;
-    }
-    
-    return stateVal;
-};
+    };
 
     const getCheck = (id, path) => {
         const el = document.getElementById(id);
@@ -129,7 +125,7 @@ export function getBotConfiguration() {
         return el.checked;
     };
 
-    return {
+    const config = {
         symbol: "BTC_USDT",
         long: {
             amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
@@ -152,25 +148,27 @@ export function getBotConfiguration() {
             enabled:         currentBotState.sstate !== 'STOPPED' 
         },
         ai: {
-            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
-                             getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
-            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || 
-                             getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
+            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
+            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || getCheck('ai-stop-at-cycle', 'ai.stopAtCycle'),
             enabled:         currentBotState.config?.ai?.enabled || false
         }
     };
+    
+    return config;
 }
 
 /**
- * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND (V1 RUTA MAESTRA)
+ * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND
  */
 export async function sendConfigToBackend(manualPayload = null) {
     const botConfig = getBotConfiguration();
     
-    // 🛡️ Activación del candado transaccional para el Acknowledge Engine del WebSocket
     isSavingConfig = true; 
     inTransitConfig = botConfig;
     
+    // Log de seguridad antes de enviar
+    console.log("📤 Enviando config (blindada):", botConfig);
+
     const payload = manualPayload || { config: botConfig };
 
     try {
@@ -183,11 +181,11 @@ export async function sendConfigToBackend(manualPayload = null) {
             inTransitConfig = null;
             isSavingConfig = false;
         } else {
-            console.log("💾 HTTP: Configuración guardada con éxito. Esperando confirmación de propagación del WS...");
+            console.log("💾 HTTP: Configuración guardada con éxito.");
         }
         return data;
     } catch (err) {
-        console.error("❌ Error de red o crítico al sincronizar configuración:", err);
+        console.error("❌ Error al sincronizar configuración:", err);
         inTransitConfig = null;
         isSavingConfig = false;
         return { success: false };
