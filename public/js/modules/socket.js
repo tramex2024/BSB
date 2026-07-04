@@ -80,25 +80,23 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (PRICE, VARIATION & REALTIME AI PULSE) ---
+    // --- MARKET DATA (BLINDADA) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
-        if (!data?.aiPulse) {
-            console.warn("⚠️ [DEBUG] Backend envió marketData sin aiPulse. Datos recibidos:", data);
-        }
-
-        if (data?.price) {
-            const newPrice = parseFloat(data.price);
-            currentBotState.price = newPrice;
+        // 1. Blindaje contra precio NaN/Indefinido
+        const rawPrice = parseFloat(data?.price);
+        
+        if (!isNaN(rawPrice)) {
+            currentBotState.price = rawPrice;
             
             const priceEl = document.getElementById('auprice');
             if (priceEl) {
-                formatCurrency(priceEl, newPrice, currentBotState.lastPrice || 0);
-                currentBotState.lastPrice = newPrice;
+                formatCurrency(priceEl, rawPrice, currentBotState.lastPrice || 0);
+                currentBotState.lastPrice = rawPrice;
             }
 
-            // Efecto Memoria / Persistencia del Pulso Neural
+            // 2. Persistencia segura del pulso neural
             if (data.aiPulse) {
                 currentBotState.aiLastPulse = data.aiPulse;
                 renderAiPulseUI(data.aiPulse);
@@ -138,7 +136,7 @@ export function initSocket() {
     socket.on('bot-state-update', async (rawState) => {
         if (!rawState) return;
 
-        // 🛡️ FUNCIÓN DE SANEAMIENTO (Filtro Anti-NaN)
+        // 1. FUNCIÓN DE SANEAMIENTO (Anti-NaN)
         const sanitizeState = (s) => {
             if (!s.config) return s;
             ['long', 'short'].forEach(side => {
@@ -153,14 +151,7 @@ export function initSocket() {
 
         const state = sanitizeState(rawState);
 
-        // Auditoría e inyección inmediata de flujos de IA
-        if (state.aiPulse || state.aiLastPulse) {
-            const pulseData = state.aiPulse || state.aiLastPulse;
-            currentBotState.aiLastPulse = pulseData;
-            renderAiPulseUI(pulseData);
-        }
-
-        // Mecanismo de blindaje contra sobreescritura (User Typing Shield)
+        // 2. ESCUDO: Detectar si el usuario está editando activamente
         const now = Date.now();
         const isEditing = activeEdits && typeof activeEdits === 'object' 
             ? Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000)
@@ -168,14 +159,20 @@ export function initSocket() {
 
         if (isEditing) {
             console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
-            currentBotState.lastAvailableUSDT = state.lastAvailableUSDT || currentBotState.lastAvailableUSDT;
-            currentBotState.lastAvailableBTC = state.lastAvailableBTC || currentBotState.lastAvailableBTC;
         } else {
-            // Merge seguro
+            // 3. FUSIÓN SEGURA (Evita borrar configs existentes)
             if (state.config) {
-                currentBotState.config = { ...currentBotState.config, ...state.config };
+                ['long', 'short'].forEach(side => {
+                    if (state.config[side]) {
+                        currentBotState.config[side] = { 
+                            ...currentBotState.config[side], 
+                            ...state.config[side] 
+                        };
+                    }
+                });
             }
-            // Asignación controlada
+            
+            // Asignación controlada para el resto del estado
             Object.keys(state).forEach(key => {
                 if (key !== 'config') currentBotState[key] = state[key];
             });
@@ -183,30 +180,19 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // Sincronización dinámica de métricas avanzadas e historial de ciclos
-        const historyData = state.history || state.cycleHistory;
-        if (historyData) {
+        // 4. Sincronización de métricas
+        if (state.history || state.cycleHistory) {
             try {
                 const Metrics = await import('./metricsManager.js');
                 const { updateQuickStats } = await import('./dashboard.js');
-                
-                Metrics.setAnalyticsData(historyData);
-                
-                if (state.kpis) {
-                    updateQuickStats(state.kpis);
-                }
-            } catch (err) {
-                console.error("Error injecting metrics:", err);
-            }
+                Metrics.setAnalyticsData(state.history || state.cycleHistory);
+                if (state.kpis) updateQuickStats(state.kpis);
+            } catch (err) { console.error("Error injecting metrics:", err); }
         }
 
+        // 5. Estado de la IA
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
-
-        if (document.getElementById('balanceDonutChart')) {
-            const { updateDistributionWidget } = await import('./dashboard.js');
-            updateDistributionWidget(currentBotState);
-        }
 
         if (aiBotUI && typeof aiBotUI.setRunningStatus === 'function') {
             aiBotUI.setRunningStatus(
@@ -215,7 +201,7 @@ export function initSocket() {
                 state.historyCount || 0
             );
         }
-    }); // <-- ESTE CIERRE ES CRÍTICO Y SUELE SER EL QUE FALTA
+    });
 
     // --- PRIVATE LOGS & DEBUG STREAM ---
     socket.on('bot-log', (data) => {
@@ -359,26 +345,25 @@ function renderAiPulseUI(aiData) {
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (!dbCircle) return;
 
-    const confidence = aiData.aiConfidence || 0;
+    // Validación atómica de confianza
+    const confidence = parseFloat(aiData.aiConfidence) || 0;
     const perimeter = 364.42;
     const offset = perimeter - (confidence / 100) * perimeter;
     dbCircle.style.strokeDashoffset = offset;
     
     const elements = {
         confVal: document.getElementById('ai-confidence-value'),
-        trendLabel: document.getElementById('ai-trend-label'),
         adxVal: document.getElementById('ai-adx-val'),
         adxBar: document.getElementById('ai-adx-bar'),
         stochVal: document.getElementById('ai-stoch-val'),
         stochBar: document.getElementById('ai-stoch-bar'),
         rsiVal: document.getElementById('ai-rsi-val'), 
-        rsiBar: document.getElementById('ai-rsi-bar'), 
-        engineMsg: document.getElementById('ai-engine-msg')
+        rsiBar: document.getElementById('ai-rsi-bar')
     };
 
     if (elements.confVal) elements.confVal.innerText = `${confidence}%`;
-    if (elements.trendLabel) elements.trendLabel.innerText = aiData.aiTrendLabel || 'N/A';
     
+    // Normalización de valores para evitar errores de renderizado
     if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
     if (elements.adxBar) elements.adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
     
@@ -387,6 +372,4 @@ function renderAiPulseUI(aiData) {
     
     if (elements.rsiVal) elements.rsiVal.innerText = Number(aiData.aiRsi || 0).toFixed(1);
     if (elements.rsiBar) elements.rsiBar.style.width = `${Math.min(aiData.aiRsi || 0, 100)}%`;
-
-    if (elements.engineMsg) elements.engineMsg.innerText = aiData.aiEngineMsg || 'Waiting...';
 }
