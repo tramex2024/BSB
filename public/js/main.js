@@ -22,7 +22,7 @@ import { applyRolePermissions } from './modules/role.js';
 import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
 
 // Agrega esta función en main.js (o impórtala de controls.js)
-import { setupBotInput } from './modules/controls.js';
+import { setupBotInput } from './modules/ui/controls.js';
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
