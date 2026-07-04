@@ -174,10 +174,10 @@ export async function sendConfigToBackend(manualPayload = null) {
     // =========================================================================
     
     // OPCIÓN 1: Estructura Envuelta (Tu versión original)
-    //const payload = manualPayload || { config: botConfig };
+    const payload = manualPayload || { config: botConfig };
     
     // OPCIÓN 2: Estructura Plana (Si el backend lee directamente req.body.long)
-     const payload = manualPayload || botConfig;
+    // const payload = manualPayload || botConfig;
     
     // OPCIÓN 3: Con UserId Explícito (Si el backend lo requiere para buscar en la DB)
     // const payload = manualPayload || { 
