@@ -1,25 +1,41 @@
 /**
  * ui/controls.js - Gestión de Botones e Inputs
- * ETAPA 1 FINAL: Eliminación total de parpadeo mediante persistencia de estado.
+ * ETAPA 1 FINAL: Eliminación total de parpadeo mediante persistencia y cerraduras transaccionales.
  */
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981', // Verde esmeralda
-    'STOPPED': '#ef4444', // Rojo (antes estaba vacío o incorrecto)
+    'STOPPED': '#ef4444', // Rojo
     'BUYING': '#60a5fa',  // Azul
     'SELLING': '#fbbf24', // Amarillo
     'PAUSED': '#fb923c',  // Naranja
 };
 
-export const activeEdits = {};
-
-document.addEventListener('input', (e) => {
-    if (e.target.tagName === 'INPUT') {
-        activeEdits[e.target.id] = Date.now();
+/**
+ * 🔐 REGISTRO DE CERRADURAS TRANSACCIONALES
+ * Reemplaza los parches de tiempo por control de flujo asíncrono real.
+ */
+export const uiLocks = {
+    _activeIds: new Set(),
+    
+    acquire(id) {
+        this._activeIds.add(id);
+    },
+    
+    release(id) {
+        this._activeIds.delete(id);
+    },
+    
+    isLocked(id) {
+        return this._activeIds.has(id);
+    },
+    
+    clearAll() {
+        this._activeIds.clear();
     }
-});
+};
 
 /**
  * Actualiza el estado visual de los botones (Start/Stop)
@@ -41,65 +57,52 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         if (label.textContent !== currentStatus) {
             label.textContent = currentStatus;
         }
-        
-        // FORZAR EL COLOR: Eliminamos clases de texto existentes y aplicamos el color del objeto
         label.style.color = STATUS_COLORS[currentStatus] || '#9ca3af';
-        
-        // Limpiamos clases de Tailwind que puedan estar forzando colores (como text-white o text-blue-500)
         label.classList.remove('text-white', 'text-blue-500', 'text-emerald-500', 'text-red-500');
     }
 
     // --- 2. Lógica de Persistencia del Botón (EVITA EL FLASH) ---
-    // Usamos el dataset del botón para saber qué estado tiene actualmente dibujado
     if (btn.dataset.lastAppliedStatus === currentStatus) {
-        return; // SI EL ESTADO NO CAMBIÓ, ABORTAMOS TODO. NO TOCAMOS EL DOM.
+        return; 
     }
 
     const suffix = (type === 'AI') ? 'AI CORE' : type.toUpperCase();
     const newText = isBusy ? `STOP ${suffix}` : `START ${suffix}`;
     
-    // Actualización Atómica de Texto
     const spanText = btn.querySelector('.btn-text') || btn; 
-if (spanText.innerText !== newText) {
-    // Si el botón tiene un icono, no queremos borrarlo con textContent
-    const icon = btn.querySelector('i');
-    btn.innerHTML = ''; // Limpiamos
-    if (icon) btn.appendChild(icon); // Mantenemos el icono
-    const textNode = document.createTextNode(` ${newText}`);
-    btn.appendChild(textNode);
-}
+    if (spanText.innerText !== newText) {
+        const icon = btn.querySelector('i');
+        btn.innerHTML = ''; 
+        if (icon) btn.appendChild(icon); 
+        const textNode = document.createTextNode(` ${newText}`);
+        btn.appendChild(textNode);
+    }
 
-    // Actualización Atómica de Clases
     btn.classList.remove('bg-emerald-600', 'bg-blue-600', 'bg-red-600', 'hover:bg-blue-500', 'hover:bg-emerald-500', 'hover:bg-red-500');
     
     if (isBusy) {
         btn.classList.add('bg-red-600', 'hover:bg-red-500');
     } else {
-        // Ahora, todos los estados 'OFF' serán verdes (Emerald)
         btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
     }
 
-    // Guardamos el nuevo estado para la próxima comparación
     btn.dataset.lastAppliedStatus = currentStatus;
 
     // --- 3. Bloqueo de Seguridad para Inputs ---
     inputIds.forEach(id => {
         const el = document.getElementById(id);
-        if (el) {
-            if (document.activeElement !== el) {
-                // Solo cambiar si es estrictamente necesario
-                if (el.disabled !== isBusy) {
-                    el.disabled = isBusy;
-                    el.style.opacity = isBusy ? "0.6" : "1";
-                    el.style.cursor = isBusy ? "not-allowed" : "text";
-                }
+        if (el && document.activeElement !== el) {
+            if (el.disabled !== isBusy) {
+                el.disabled = isBusy;
+                el.style.opacity = isBusy ? "0.6" : "1";
+                el.style.cursor = isBusy ? "not-allowed" : "text";
             }
         }
     });
 }
 
 /**
- * Sincroniza los valores de los inputs (Sin cambios drásticos, solo optimización)
+ * Sincroniza los valores de los inputs provenientes del WebSocket/Configuración del servidor
  */
 export function syncInputsFromConfig(conf) {
     if (!conf) return;
@@ -108,35 +111,29 @@ export function syncInputsFromConfig(conf) {
         'auamountl-usdt': conf.long?.amountUsdt,
         'aupurchasel-usdt': conf.long?.purchaseUsdt,
         'auincrementl': conf.long?.size_var,
-        
-        // MAPEOS CORRECTOS (Sin cruces artificiales)
-        'audecrementl': conf.long?.price_var,       // Safety Drop -> price_var
-        'autriggerl': conf.long?.profit_percent,   // Take Profit -> profit_percent
-        
+        'audecrementl': conf.long?.price_var,       
+        'autriggerl': conf.long?.profit_percent,   
         'aupricestep-l': conf.long?.price_step_inc,
         
         'auamounts-usdt': conf.short?.amountUsdt,
         'aupurchases-usdt': conf.short?.purchaseUsdt,
         'auincrements': conf.short?.size_var,
-        
         'audecrements': conf.short?.price_var,
         'autriggers': conf.short?.profit_percent,
-        
         'aupricestep-s': conf.short?.price_step_inc,
+        
         'auamountai-usdt': conf.ai?.amountUsdt,
         'ai-amount-usdt': conf.ai?.amountUsdt
     };
-
-    const now = Date.now();
 
     for (const [id, value] of Object.entries(mapping)) {
         const input = document.getElementById(id);
         if (!input || value === undefined || value === null) continue;
 
-        const lastEdit = activeEdits[id] || 0;
-        const isFreshlyEdited = (now - lastEdit < 3000);
-
-        if (document.activeElement === input || isFreshlyEdited) continue; 
+        // 🛡️ EL ESCUDO DEFINITIVO: Si el usuario tiene el foco puesto O la llave está bloqueada por red, se ignora el WebSocket
+        if (document.activeElement === input || uiLocks.isLocked(id)) {
+            continue; 
+        }
 
         const currentVal = parseFloat(input.value) || 0;
         const newVal = parseFloat(value) || 0;
@@ -146,15 +143,16 @@ export function syncInputsFromConfig(conf) {
         }
     }
     
+    // Sincronización de switches / checkboxes de ciclos
     ['long', 'short', 'ai'].forEach(side => {
         const ids = [`au-stop-${side}-at-cycle`, `ai-stop-at-cycle`].filter(i => side === 'ai' || i.includes(side));
         ids.forEach(id => {
             const el = document.getElementById(id);
-            if (!el) return;
+            if (!el || uiLocks.isLocked(id)) return;
+            
             const val = !!conf[side]?.stopAtCycle;
-            const lastEdit = activeEdits[id] || 0;
-            if (document.activeElement !== el && (now - lastEdit >= 3000)) {
-                if (el.checked !== val) el.checked = val;
+            if (document.activeElement !== el && el.checked !== val) {
+                el.checked = val;
             }
         });
     });

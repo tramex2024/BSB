@@ -1,10 +1,11 @@
 /**
  * uiManager.js - Orquestador Atómico (Sincronizado & Blindado 2026)
- * Etapa 1: Protección Total contra parpadeo y reseteo de estados - AUDITADO
+ * Etapa 1: Protección Total contra parpadeo y reseteo de estados - AUDITADO & INTEGRADO
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig } from './ui/controls.js';
-import { isSavingConfig } from './apiService.js';
+// 🛡️ INTEGRACIÓN: Importamos el validador determinista de datos
+import { isSavingConfig, checkConfigAcknowledgment } from './apiService.js';
 import { updateMetricsFromState } from './metricsManager.js';
 
 export { displayMessage } from './ui/notifications.js';
@@ -133,7 +134,6 @@ export async function updateBotUI(state) {
         const el = document.getElementById(metric.id);
         if (!el) return;
 
-        // Búsqueda elástica usando la llave principal o su alternativa de respaldo
         const val = state[metric.key] !== undefined ? state[metric.key] : state[metric.fallbackKey]; 
 
         if (val !== undefined && val !== null) {
@@ -153,35 +153,43 @@ export async function updateBotUI(state) {
     }
 
     // =========================================================================
-    // 5. [BLINDAJE INTERACTIVO 2026] Sincronización Avanzada con Escudo Temporal
+    // 5. [BLINDAJE INTERACTIVO DOBLE CAPA] Sincronización Avanzada
     // =========================================================================
-    if (state.config && !isSavingConfig) {
-        const activeLocks = {};
+    if (state.config) {
+        // 🔄 CAPA 1: Procesamos el paquete entrante en el motor determinista de red
+        checkConfigAcknowledgment(state.config);
 
-        // Escaneamos campo por campo buscando ediciones en curso o mutaciones muy recientes
-        CRITICAL_INPUTS.forEach(id => {
-            const inputEl = document.getElementById(id);
-            if (!inputEl) return;
+        // Si no hay transacciones de guardado pendientes (o acaban de liberarse), evaluamos la UI
+        if (!isSavingConfig) {
+            const activeLocks = {};
 
-            const isFocused = inputEl === document.activeElement;
-            const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
-            const isInsideGracePeriod = (Date.now() - lastMutation) < 2500; // 2.5 segundos de inmunidad post-escritura
+            // 🛡️ CAPA 2: Escudo de Edición Activa Local (Previene sobreescrituras en caliente)
+            CRITICAL_INPUTS.forEach(id => {
+                const inputEl = document.getElementById(id);
+                if (!inputEl) return;
 
-            if (isFocused || isInsideGracePeriod) {
-                activeLocks[id] = inputEl.value; // Capturamos el estado actual para que el WS no lo altere
-            }
-        });
+                const isFocused = inputEl === document.activeElement;
+                const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
+                const isInsideGracePeriod = (Date.now() - lastMutation) < 2500; // 2.5s inmunidad post-escritura
 
-        // Ejecutamos la sincronización por defecto de los controles
-        syncInputsFromConfig(state.config);
+                if (isFocused || isInsideGracePeriod) {
+                    activeLocks[id] = inputEl.value; // Snapshot de la voluntad del usuario
+                }
+            });
 
-        // Capa de Restauración Inmediata: Imponemos la voluntad local sobre los retrasos del WebSocket
-        Object.entries(activeLocks).forEach(([id, preservedValue]) => {
-            const inputEl = document.getElementById(id);
-            if (inputEl && inputEl.value !== preservedValue) {
-                inputEl.value = preservedValue;
-            }
-        });
+            // Sincronización base del config limpio del WebSocket
+            syncInputsFromConfig(state.config);
+
+            // Capa de Restauración Inmediata: Imponemos la edición activa sobre los datos del WS
+            Object.entries(activeLocks).forEach(([id, preservedValue]) => {
+                const inputEl = document.getElementById(id);
+                if (inputEl && inputEl.value !== preservedValue) {
+                    inputEl.value = preservedValue;
+                }
+            });
+        } else {
+            console.log("🛡️ [WS LOCK]: Bloqueo de consistencia activo. Evitando snap-back por retraso del WebSocket.");
+        }
     }
 
     // 6. Control de Botones
@@ -210,7 +218,6 @@ export async function updateBotUI(state) {
                 dashboard.updatePnLBar('ai', aiProfit);
             }
             
-            // 🛡️ REPARACIÓN: Forzamos la actualización completa del gráfico circular y barras asociadas
             if (typeof dashboard.updateDistributionWidget === 'function') {
                 dashboard.updateDistributionWidget(state);
             }

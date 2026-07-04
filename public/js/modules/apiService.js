@@ -1,11 +1,13 @@
 /**
  * apiService.js - Comunicaciones REST Sincronizadas (2026)
- * Versión: Corregida para apuntar a la ruta V1 y evitar cruce de variables
+ * Versión: Auditoría Final - Eliminación de Parches Temporales mediante Bloqueo Determinista
  */
 import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 
+// Control transaccional real libre de temporizadores arbitrarios
 export let isSavingConfig = false;
+export let inTransitConfig = null; 
 export let socketIsActive = false;
 
 const MINIMOS = {
@@ -18,6 +20,35 @@ const MINIMOS = {
 
 export function setSocketActive(status) {
     socketIsActive = status;
+}
+
+/**
+ * 🛡️ VALIDADOR DE RECONOCIMIENTO (Acknowledge Engine)
+ * Evalúa si el estado enviado por el WebSocket ya refleja los cambios del cliente.
+ * Es invocado de forma cooperativa por el sincronizador visual.
+ */
+export function checkConfigAcknowledgment(incomingConfig) {
+    if (!inTransitConfig) return true;
+
+    // Comparamos los campos numéricos críticos que son propensos al parpadeo
+    const isMatching = (
+        Math.abs((incomingConfig.long?.amountUsdt || 0) - (inTransitConfig.long?.amountUsdt || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.long?.purchaseUsdt || 0) - (inTransitConfig.long?.purchaseUsdt || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.long?.price_var || 0) - (inTransitConfig.long?.price_var || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.long?.profit_percent || 0) - (inTransitConfig.long?.profit_percent || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.short?.amountUsdt || 0) - (inTransitConfig.short?.amountUsdt || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.short?.purchaseUsdt || 0) - (inTransitConfig.short?.purchaseUsdt || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.short?.price_var || 0) - (inTransitConfig.short?.price_var || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.short?.profit_percent || 0) - (inTransitConfig.short?.profit_percent || 0)) < 0.000001 &&
+        Math.abs((incomingConfig.ai?.amountUsdt || 0) - (inTransitConfig.ai?.amountUsdt || 0)) < 0.000001
+    );
+
+    if (isMatching) {
+        console.log("🎯 [CONCORDANCIA]: El servidor se ha sincronizado con el cliente. Liberando cerraduras.");
+        inTransitConfig = null;
+        isSavingConfig = false;
+    }
+    return isMatching;
 }
 
 async function privateFetch(endpoint, options = {}) {
@@ -48,12 +79,10 @@ async function privateFetch(endpoint, options = {}) {
             return { success: false, message: "Unauthorized" };
         }
 
-        const result = await response.json().catch(() => ({ 
+        return await response.json().catch(() => ({ 
             success: response.ok, 
             message: response.statusText 
         }));
-
-        return result; 
     } catch (error) {
         return { success: false, message: error.message };
     }
@@ -69,24 +98,20 @@ export async function fetchEquityCurveData(strategy = 'all') {
 }
 
 /**
- * RECOLECTA CONFIGURACIÓN
- * Asegura que los IDs del HTML mapeen correctamente a las variables del servidor
+ * RECOLECTA CONFIGURACIÓN DESDE EL DOM
  */
 export function getBotConfiguration() {
     const getNum = (id, path, minVal = 0) => {
         const el = document.getElementById(id);
-        
         if (!el) {
             const parts = path.split('.');
-            const val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
-            return val ?? minVal;
+            return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? minVal;
         }
         
         let rawValue = el.value.trim();
         if (rawValue === "") {
             const parts = path.split('.');
-            const val = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
-            return val ?? minVal;
+            return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? minVal;
         }
 
         const val = parseFloat(rawValue.replace(/[^0-9.-]+/g,""));
@@ -103,33 +128,27 @@ export function getBotConfiguration() {
     };
 
     return {
-    symbol: "BTC_USDT",
-    long: {
-        amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
-        purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
-        
-        // ESTA ES LA CORRECCIÓN CRÍTICA:
-        price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), // Safety Drop
-        profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit), // Take Profit
-        
-        size_var:        getNum('auincrementl', 'long.size_var', 1),
-        price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
-        stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
-        enabled:         currentBotState.lstate !== 'STOPPED'
-    },
-    short: {
-        amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
-        purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
-        
-        // ESTA ES LA CORRECCIÓN CRÍTICA:
-        price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation), // Safety Rise
-        profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit), // Take Profit
-        
-        size_var:        getNum('auincrements', 'short.size_var', 1),
-        price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
-        stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
-        enabled:         currentBotState.sstate !== 'STOPPED' 
-    },
+        symbol: "BTC_USDT",
+        long: {
+            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
+            purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
+            price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), 
+            profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit), 
+            size_var:        getNum('auincrementl', 'long.size_var', 1),
+            price_step_inc:  getNum('aupricestep-l', 'long.price_step_inc', MINIMOS.step),
+            stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
+            enabled:         currentBotState.lstate !== 'STOPPED'
+        },
+        short: {
+            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
+            purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
+            price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation), 
+            profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit), 
+            size_var:        getNum('auincrements', 'short.size_var', 1),
+            price_step_inc:  getNum('aupricestep-s', 'short.price_step_inc', MINIMOS.step),
+            stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
+            enabled:         currentBotState.sstate !== 'STOPPED' 
+        },
         ai: {
             amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || 
                              getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
@@ -141,31 +160,37 @@ export function getBotConfiguration() {
 }
 
 /**
- * Sincroniza la configuración del Autobot (Dashboard o Advanced)
- * CORRECCIÓN: Ruta actualizada a /api/v1/config/update-config
+ * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND (V1 RUTA MAESTRA)
  */
 export async function sendConfigToBackend(manualPayload = null) {
     const payload = manualPayload || { config: getBotConfiguration() };
     
+    // Activamos la cerradura transaccional y guardamos el snapshot de los datos enviados
     isSavingConfig = true; 
+    inTransitConfig = payload.config;
     
     try {
-        // RUTA CORREGIDA: Apuntando a V1 para que el servidor responda
         const data = await privateFetch('/api/v1/config/update-config', {
             method: 'POST',
             body: JSON.stringify(payload)
         });
 
-        if (data && data.success) {
-            console.log("💾 Configuración sincronizada en DB");
+        if (!data || !data.success) {
+            // Si el servidor rechaza la transacción, liberamos el bloqueo de inmediato
+            inTransitConfig = null;
+            isSavingConfig = false;
+        } else {
+            console.log("💾 HTTP: Configuración guardada con éxito. Esperando confirmación de propagación del WS...");
         }
         return data;
     } catch (err) {
         console.error("❌ Error al sincronizar configuración:", err);
+        inTransitConfig = null;
+        isSavingConfig = false;
         return { success: false };
-    } finally {
-        setTimeout(() => { isSavingConfig = false; }, 500);
     }
+    // 📝 SE ELIMINÓ EL FINALLY CON SETTIMEOUT. 
+    // Ahora el desbloqueo ocurre únicamente cuando checkConfigAcknowledgment comprueba la consistencia de los datos.
 }
 
 export async function toggleBotSideState(isRunning, side, providedConfig = null) {
@@ -213,25 +238,11 @@ export async function triggerPanicStop() {
     }
 }
 
-/**
- * BSB/client/src/services/apiService.js
- * Función optimizada para capturar los ciclos reales de la DB
- */
-// apiService.js
-
 export async function fetchRawTradeCycles(strategy = 'all') {
     try {
-        // Forzamos 'all' si queremos ver todo el inventario de la DB
         const response = await privateFetch(`/api/v1/analytics/cycles?strategy=${strategy}`);
-        
-        console.log("📦 [DEBUG] Respuesta bruta del servidor:", response);
-
         if (response && response.success) {
-            const data = response.data || [];
-            
-            // Si esto sigue diciendo 20, el problema es el FILTRO o la QUERY en el Backend.
-            console.log(`📊 [DEBUG] Procesando ${data.length} ciclos desde el servidor.`);
-            return data;
+            return response.data || [];
         }
         return [];
     } catch (err) {
