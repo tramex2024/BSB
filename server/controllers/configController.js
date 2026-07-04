@@ -148,6 +148,22 @@ async function updateBotConfig(req, res) {
             }
         }
 
+        // =========================================================================
+        // 🛡️ FILTRO DE SEGURIDAD GENERAL: ELIMINAR CAMPOS CORRUPTOS (NaN)
+        // =========================================================================
+        for (const key in update) {
+            if (update.hasOwnProperty(key)) {
+                const value = update[key];
+                
+                if (typeof value === 'number' && isNaN(value)) {
+                    console.warn(`[SANITY-CHECK] ⚠️ Se detectó y bloqueó un valor NaN en la ruta: "${key}". Se mantendrá el valor actual de la DB.`);
+                    delete update[key];
+                }
+            }
+        }
+        // =========================================================================
+
+        // 🛡️ Se remueve .lean() para mantener los setters/getters de Mongoose activos para logic sync
         const updatedBot = await Autobot.findOneAndUpdate(
             { userId }, 
             { $set: update }, 
@@ -166,7 +182,6 @@ async function updateBotConfig(req, res) {
 
     } catch (error) {
         console.error("❌ Error en updateBotConfig:", error);
-        // 2. 🔍 TEMPORAL: Cambiamos "Error interno." por error.message para verlo en la consola del navegador
         return res.status(500).json({ success: false, message: error.message });
     }
 }

@@ -8,6 +8,17 @@ const {
     calculateStepGrow 
 } = require('../autobotCalculations');
 
+/**
+ * 🛡️ Valida y parsea un número de forma segura.
+ * Si el valor es una cadena vacía, null, undefined o no numérico, devuelve undefined 
+ * para evitar que Mongoose intente castear un "NaN".
+ */
+function safeParseFloat(val) {
+    if (val === undefined || val === null || val === "") return undefined;
+    const parsed = parseFloat(val);
+    return isNaN(parsed) ? undefined : parsed;
+}
+
 function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
     const MAX_CAP = 6140.0; // Regla 6
     const l = Math.min(parseFloat(amtL) || 0, MAX_CAP);
@@ -25,8 +36,8 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
             purchaseUsdt: 6.0, // Regla 1
             price_var: 0.015, // Regla 8: 1.5% inicial en formato estándar multiplicador
-            price_step_inc: parseFloat(stepInc.toFixed(4)), // CORREGIDO NOMBRE (Antes gridStepMultiplier)
-            size_var: parseFloat(sizeMultiplier.toFixed(4)), // CORREGIDO NOMBRE (Antes sizeMultiplier)
+            price_step_inc: parseFloat(stepInc.toFixed(4)), 
+            size_var: parseFloat(sizeMultiplier.toFixed(4)), 
             profit_percent: 0.013, // Convertido a estándar decimal (1.3%)
             trailing_percent: 0.003, // Convertido a estándar decimal (0.3%)
             levels: n,
@@ -47,12 +58,12 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
 function processAdvancedInputs(data) {
     if (!data) return null;
     return {
-        amountUsdt: data.amountUsdt !== undefined ? parseFloat(data.amountUsdt) : undefined,
-        purchaseUsdt: data.purchaseUsdt !== undefined ? parseFloat(data.purchaseUsdt) : undefined,
-        price_var: data.price_var !== undefined ? parseFloat(data.price_var) : undefined,
-        size_var: data.size_var !== undefined ? parseFloat(data.size_var) : undefined,
-        profit_percent: data.profit_percent !== undefined ? parseFloat(data.profit_percent) : undefined,
-        price_step_inc: data.price_step_inc !== undefined ? parseFloat(data.price_step_inc) : undefined,
+        amountUsdt: safeParseFloat(data.amountUsdt),
+        purchaseUsdt: safeParseFloat(data.purchaseUsdt),
+        price_var: safeParseFloat(data.price_var),
+        size_var: safeParseFloat(data.size_var),
+        profit_percent: safeParseFloat(data.profit_percent),
+        price_step_inc: safeParseFloat(data.price_step_inc),
         stopAtCycle: data.stopAtCycle !== undefined ? !!data.stopAtCycle : undefined
     };
 }
