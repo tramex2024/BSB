@@ -1,6 +1,7 @@
 /**
  * BSB/server/services/inputs.js
  * ESTRATEGIA: REMANENTE DISTRIBUIDO EXPONENCIAL
+ * Lógica normalizada para trabajar con porcentajes directos (ej: 1.5 = 1.5%)
  */
 
 const { 
@@ -30,11 +31,12 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
             purchaseUsdt: 6.0,
-            price_var: Math.max(0.015, 0.01),
+            // Valores en formato porcentaje real (1.5 = 1.5%)
+            price_var: 1.5, 
             price_step_inc: parseFloat(stepInc.toFixed(4)),
             size_var: Math.max(parseFloat(sizeMultiplier.toFixed(4)), 1.0),
-            profit_percent: Math.max(0.013, 0.01),
-            trailing_percent: Math.max(0.003, 0.01),
+            profit_percent: 1.3,
+            trailing_percent: 0.3,
             levels: n,
             stopAtCycle: existingConfig[side]?.stopAtCycle || false
         };

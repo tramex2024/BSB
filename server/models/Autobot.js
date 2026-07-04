@@ -86,9 +86,9 @@ const autobotSchema = new mongoose.Schema({
             enabled: { type: Boolean, default: false },
             amountUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
             purchaseUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
-            price_var: { type: Number, default: 0.1, min: 0.01 }, // Mínimo reducido para permitir lógicas finas
+            price_var: { type: Number, default: 0.5, min: 0.01 },
             size_var: { type: Number, default: 1.1, min: 1.0 },   // Ajustado a rango lógico (1.0 = lineal, >1.0 = exponencial)
-            profit_percent: { type: Number, default: 0.3, min: 0.01 }, // Mínimo reducido
+            profit_percent: { type: Number, default: 1.2, min: 0.01 },
             price_step_inc: { type: Number, default: 0, min: 0 },
             stopAtCycle: { type: Boolean, default: false }
         },
@@ -96,9 +96,9 @@ const autobotSchema = new mongoose.Schema({
             enabled: { type: Boolean, default: false },
             amountUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
             purchaseUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
-            price_var: { type: Number, default: 0.1, min: 0.01 },
+            price_var: { type: Number, default: 0.5, min: 0.01 },
             size_var: { type: Number, default: 1.1, min: 1.0 },
-            profit_percent: { type: Number, default: 0.3, min: 0.01 },
+            profit_percent: { type: Number, default: 1.2, min: 0.01 },
             price_step_inc: { type: Number, default: 0, min: 0 },
             stopAtCycle: { type: Boolean, default: false }
         },
