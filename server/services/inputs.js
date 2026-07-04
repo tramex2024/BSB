@@ -8,11 +8,6 @@ const {
     calculateStepGrow 
 } = require('../autobotCalculations');
 
-/**
- * 🛡️ Valida y parsea un número de forma segura.
- * Si el valor es una cadena vacía, null, undefined o no numérico, devuelve undefined 
- * para evitar que Mongoose intente castear un "NaN".
- */
 function safeParseFloat(val) {
     if (val === undefined || val === null || val === "") return undefined;
     const parsed = parseFloat(val);
@@ -20,13 +15,13 @@ function safeParseFloat(val) {
 }
 
 function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
-    const MAX_CAP = 6140.0; // Regla 6
+    const MAX_CAP = 6140.0;
     const l = Math.min(parseFloat(amtL) || 0, MAX_CAP);
     const s = Math.min(parseFloat(amtS) || 0, MAX_CAP);
 
     const calculateScalpingGrid = (totalAmount, side) => {
         const sizes = calculateDistributedSizes(totalAmount);
-        if (!sizes || sizes.length < 3) return null; // Mínimo 42.00 USDT genera 3 niveles
+        if (!sizes || sizes.length < 3) return null;
 
         const n = sizes.length;
         const stepInc = calculateStepGrow(n); 
@@ -34,16 +29,27 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
         
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
-            purchaseUsdt: 6.0, // Regla 1
-            price_var: 0.015, // Regla 8: 1.5% inicial en formato estándar multiplicador
-            price_step_inc: parseFloat(stepInc.toFixed(4)), 
-            size_var: parseFloat(sizeMultiplier.toFixed(4)), 
-            profit_percent: 0.013, // Convertido a estándar decimal (1.3%)
-            trailing_percent: 0.003, // Convertido a estándar decimal (0.3%)
+            purchaseUsdt: 6.0,
+            // Aplicamos Math.max para asegurar que nunca bajemos del límite del modelo
+            price_var: Math.max(0.015, 0.01), 
+            price_step_inc: parseFloat(stepInc.toFixed(4)),
+            size_var: Math.max(parseFloat(sizeMultiplier.toFixed(4)), 1.0), 
+            profit_percent: Math.max(0.013, 0.01), 
+            trailing_percent: Math.max(0.003, 0.01), 
             levels: n,
             stopAtCycle: existingConfig[side]?.stopAtCycle || false
         };
     };
+
+    return {
+        long: calculateScalpingGrid(l, 'long'),
+        short: calculateScalpingGrid(s, 'short'),
+        ai: { 
+            amountUsdt: amtAI,
+            stopAtCycle: existingConfig.ai?.stopAtCycle || false 
+        }
+    };
+}
 
     return {
         long: calculateScalpingGrid(l, 'long'),

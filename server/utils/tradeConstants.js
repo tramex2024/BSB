@@ -1,4 +1,4 @@
-// BSB/server/src/au/utils/tradeConstants.js
+// BSB/server/src/utils/tradeConstants.js
 
 /**
  * BITMART TECHNICAL TRADING CONFIGURATION

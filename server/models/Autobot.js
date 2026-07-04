@@ -1,12 +1,12 @@
 /**
  * BSB/server/models/Autobot.js
- * Modelo Unificado - Versión preservando estados originales
+ * Modelo Unificado - Versión blindada con constantes de sistema
  */
 
 const mongoose = require('mongoose');
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../utils/tradeConstants');
 
 const autobotSchema = new mongoose.Schema({
-    // VÍNCULO CON EL USUARIO (Único cambio estructural necesario)
     userId: { 
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User', 
@@ -17,17 +17,15 @@ const autobotSchema = new mongoose.Schema({
 
     total_profit: { type: Number, default: 0 },
     
-    // --- ESTADOS DE OPERACIÓN (Sin restricciones de enum) ---
+    // Estados y Saldos
     lstate: { type: String, default: 'STOPPED' },
     sstate: { type: String, default: 'STOPPED' },
     aistate: { type: String, default: 'STOPPED' }, 
-    
-    // --- SALDOS OPERATIVOS ---
     lbalance: { type: Number, default: 0 }, 
     sbalance: { type: Number, default: 0 },
     aibalance: { type: Number, default: 0 }, 
 
-    // --- RAÍZ LONG (L...) ---
+    // Raíces operativas (Long/Short/AI)
     lppc: { type: Number, default: 0 },
     lac: { type: Number, default: 0 },
     lai: { type: Number, default: 0 },
@@ -41,7 +39,6 @@ const autobotSchema = new mongoose.Schema({
     lstartTime: { type: Date, default: null },
     lnorder: { type: Number, default: 0 },
 
-    // --- RAÍZ SHORT (S...) ---
     sppc: { type: Number, default: 0 },
     sac: { type: Number, default: 0 },
     sai: { type: Number, default: 0 },
@@ -55,7 +52,7 @@ const autobotSchema = new mongoose.Schema({
     sstartTime: { type: Date, default: null },
     snorder: { type: Number, default: 0 },
 
-    // --- RAÍZ AI (AI...) ---
+    // AI
     aippc: { type: Number, default: 0 }, 
     aiac: { type: Number, default: 0 }, 
     ailastEntryPrice: { type: Number, default: 0 },
@@ -64,7 +61,7 @@ const autobotSchema = new mongoose.Schema({
     aistartTime: { type: Date, default: null },
     ainorder: { type: Number, default: 0 },
 
-    // --- CONTROL DE TARGETS Y CICLOS ---
+    // Targets y Ciclos
     ltprice: { type: Number, default: 0 }, 
     stprice: { type: Number, default: 0 }, 
     aitprice: { type: Number, default: 0 }, 
@@ -77,43 +74,43 @@ const autobotSchema = new mongoose.Schema({
     slep: { type: Number, default: 0 }, 
     llep: { type: Number, default: 0 }, 
 
-    // --- SINCRONIZACIÓN DE EXCHANGE ---
+    // Sincronización
     lastAvailableUSDT: { type: Number, default: 0 },
     lastAvailableBTC: { type: Number, default: 0 },
     lastBalanceCheck: { type: Date, default: Date.now },
 
-    // --- CONFIGURACIÓN ---
+    // CONFIGURACIÓN (Blindada)
     config: {
         symbol: { type: String, default: "BTC_USDT" },
         long: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number, default: 6, min: 6 },
-            purchaseUsdt: { type: Number, default: 6, min: 6 },
-            price_var: { type: Number, default: 0.5, min: 0.1 },
-            size_var: { type: Number, default: 55, min: 1 },
-            profit_percent: { type: Number, default: 1.2, min: 0.3 },
+            amountUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
+            purchaseUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
+            price_var: { type: Number, default: 0.1, min: 0.01 }, // Mínimo reducido para permitir lógicas finas
+            size_var: { type: Number, default: 1.1, min: 1.0 },   // Ajustado a rango lógico (1.0 = lineal, >1.0 = exponencial)
+            profit_percent: { type: Number, default: 0.3, min: 0.01 }, // Mínimo reducido
             price_step_inc: { type: Number, default: 0, min: 0 },
             stopAtCycle: { type: Boolean, default: false }
         },
         short: {
             enabled: { type: Boolean, default: false },
-            amountUsdt: { type: Number, default: 6, min: 6 },
-            purchaseUsdt: { type: Number, default: 6, min: 6 },
-            price_var: { type: Number, default: 0.5, min: 0.1 },
-            size_var: { type: Number, default: 55, min: 1 },
-            profit_percent: { type: Number, default: 1.2, min: 0.3 },
+            amountUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
+            purchaseUsdt: { type: Number, default: MIN_USDT_VALUE_FOR_BITMART, min: MIN_USDT_VALUE_FOR_BITMART },
+            price_var: { type: Number, default: 0.1, min: 0.01 },
+            size_var: { type: Number, default: 1.1, min: 1.0 },
+            profit_percent: { type: Number, default: 0.3, min: 0.01 },
             price_step_inc: { type: Number, default: 0, min: 0 },
             stopAtCycle: { type: Boolean, default: false }
         },
         ai: {
-    	    enabled: { type: Boolean, default: false },
-    	    amountUsdt: { type: Number, default: 100 }, // Capital Total del ciclo
-    	    minConfidence: { type: Number, default: 0.60 }, // Umbral de entrada
-    	    profitPercent: { type: Number, default: 1.2 }, // Objetivo base de salida
-    	    trailingPercent: { type: Number, default: 0.6 }, // Retroceso para vender
-    	    maxOrders: { type: Number, default: 3 }, // Máximo de particiones
-    	    stopAtCycle: { type: Boolean, default: false }
-	}
+            enabled: { type: Boolean, default: false },
+            amountUsdt: { type: Number, default: 100 },
+            minConfidence: { type: Number, default: 0.60 },
+            profitPercent: { type: Number, default: 0.3 }, 
+            trailingPercent: { type: Number, default: 0.1 }, 
+            maxOrders: { type: Number, default: 3 },
+            stopAtCycle: { type: Boolean, default: false }
+        }
     },
 
     lastUpdate: { type: Date, default: Date.now },
@@ -122,7 +119,6 @@ const autobotSchema = new mongoose.Schema({
     minimize: false 
 });
 
-// Mantengo tus middlewares de tiempo tal cual
 autobotSchema.pre('save', function(next) {
     this.lastUpdate = new Date();
     this.lastUpdateTime = new Date();
