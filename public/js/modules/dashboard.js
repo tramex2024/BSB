@@ -10,7 +10,7 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
-import { BACKEND_URL } from './main.js'; // O desde donde la exportes
+import { BACKEND_URL } from '../main.js'; // O desde donde la exportes
 
 // Global chart instances
 let balanceChart = null; 
