@@ -43,12 +43,13 @@ export function initSocket() {
 
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        auth: { token },      
-        query: { userId }     
-    });
+    reconnection: true,
+    reconnectionAttempts: 10, // Aumentado para insistir mientras Render despierta
+    reconnectionDelay: 2000,   // Espera 2 segundos entre intentos
+    timeout: 45000,            // ⏱️ CRÍTICO: Le damos 45 segundos de margen al handshake
+    auth: { token },      
+    query: { userId }     
+});
 
     socket.onAny((event, ...args) => {
         // En producción se mantiene apagado para optimizar rendimiento de red

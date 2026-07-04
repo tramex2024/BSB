@@ -10,6 +10,7 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
+import { BACKEND_URL } from './main.js'; // O desde donde la exportes
 
 // Global chart instances
 let balanceChart = null; 
@@ -104,7 +105,7 @@ async function refreshAnalytics() {
         const [curveRes, cyclesRes, kpiRes] = await Promise.all([
             fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
             fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
-            fetch('/api/v1/analytics/kpis', {
+            fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             }).then(res => {
                 if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
