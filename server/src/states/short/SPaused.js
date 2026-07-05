@@ -1,7 +1,7 @@
 /**
- * BSB/server/src/au/states/short/SPaused.js
- * Gestión de la espera cuando el capital es insuficiente para el siguiente DCA.
- * Corregido: Sincronización de cobertura con precio de mercado real (2026).
+ * BSB/server/src/states/short/SPaused.js
+ * Wait management when capital is insufficient for the next DCA.
+ * Fixed: Coverage synchronization with real market price (2026).
  */
 
 const { calculateShortTargets, calculateShortCoverage } = require('../../../autobotCalculations');
@@ -16,29 +16,29 @@ async function run(dependencies) {
         availableUSDT: realUSDT 
     } = dependencies;
     
-    // SOLUCIÓN: Envoltura global para evitar congelamientos por errores de cálculo o datos nulos
+    // SOLUTION: Global wrapper to prevent freezing due to calculation errors or null data
     try {
         if (!currentPrice || currentPrice <= 0) return;
 
         const availableUSDT = parseFloat(realUSDT || 0);
         const currentSBalance = parseFloat(botState.sbalance || 0);
 
-        const ac = parseFloat(botState.sac || 0);  // Monedas vendidas (posición Short abierta)
-        const ppc = parseFloat(botState.sppc || 0); // Precio promedio de venta
+        const ac = parseFloat(botState.sac || 0);  // Coins sold (Short position open)
+        const ppc = parseFloat(botState.sppc || 0); // Average selling price
         const orderCountInCycle = parseInt(botState.socc || 0);
         
-        // Priorizamos el Stop de recompra (PC) del Trailing si existe
+        // Prioritize Trailing repurchase (PC) stop if it exists
         const targetPrice = parseFloat(botState.spc || botState.stprice || 0);
 
-        // --- 1. LÓGICA DE RECUPERACIÓN (SALIDA A BUYING) ---
-        // Si el precio cae a zona de profit, podemos cerrar independientemente del balance
+        // --- 1. RECOVERY LOGIC (EXIT TO BUYING) ---
+        // If the price hits the profit zone, we can close regardless of balance
         if (ac > 0 && targetPrice > 0 && currentPrice <= targetPrice) {
-            log(`🚀 [S-RECOVERY] Precio en zona de profit (${currentPrice.toFixed(2)}). Saltando a BUYING para cerrar posición.`, 'success');
+            log(`🚀 [S-RECOVERY] Price in profit zone (${currentPrice.toFixed(2)}). Jumping to BUYING to close position.`, 'success');
             await updateBotState('BUYING', 'short'); 
             return;
         }
 
-        // --- 2. RECALCULAR REQUERIMIENTOS Y PROYECCIÓN ---
+        // --- 2. RECALCULATE REQUIREMENTS AND PROJECTION ---
         const recalculation = calculateShortTargets(
             ppc || currentPrice,
             config.short, 
@@ -47,7 +47,7 @@ async function run(dependencies) {
 
         const requiredAmount = parseFloat(recalculation.requiredCoverageAmount || 0);
 
-        // SOLUCIÓN: Sanitización de variables mediante parseo seguro para evitar colapsos por datos vacíos
+        // SOLUTION: Sanitization of variables using safe parsing to avoid crashes from empty data
         const priceVar = parseFloat(config.short?.price_var || 0) / 100;
         const priceStepInc = parseFloat(config.short?.price_step_inc || 0) / 100;
         const initialPurchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
@@ -62,7 +62,7 @@ async function run(dependencies) {
             priceStepInc
         );
 
-        // Actualizamos indicadores Short para limpiar valores basura de la DB
+        // Update Short indicators to clean garbage values from DB
         await updateGeneralBotState({ 
             srca: requiredAmount, 
             sncp: recalculation.nextCoveragePrice,
@@ -70,17 +70,17 @@ async function run(dependencies) {
             snorder: coverageInfo.numberOfOrders
         });
 
-        // --- 3. RESET DE INDICADORES (Si no hay posición y no hay fondos) ---
+        // --- 3. RESET INDICATORS (If no position and no funds) ---
         if (ac <= 0 && currentSBalance < (initialPurchaseAmount || MIN_USDT_VALUE_FOR_BITMART)) {
             if (parseFloat(botState.scoverage || 0) !== 0) {
-                log(`[S-RESET] Sin fondos para nueva apertura Short. Limpiando proyección visual.`, 'warning');
+                log(`[S-RESET] Insufficient funds for new Short opening. Clearing visual projection.`, 'warning');
                 await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
             }
             return; 
         }
 
-        // --- 4. VERIFICACIÓN DE REANUDACIÓN (SOLUCIÓN AL COMPORTAMIENTO LOCKUP) ---
-        // Si el ciclo está limpio (ac === 0) requerimos el monto inicial; si ya hay DCA pendiente, requerimos requiredAmount
+        // --- 4. RESUMPTION VERIFICATION (LOCKUP BEHAVIOR SOLUTION) ---
+        // If the cycle is clear (ac === 0) we require the initial amount; if there is a pending DCA, we require requiredAmount
         const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmount;
         const finalMinLimit = Math.max(MIN_USDT_VALUE_FOR_BITMART, amountNeededToResume);
 
@@ -89,15 +89,14 @@ async function run(dependencies) {
                           finalMinLimit >= MIN_USDT_VALUE_FOR_BITMART;
 
         if (canResume) {
-            log(`✅ [S-FUNDS] Capital recuperado (${amountNeededToResume.toFixed(2)} USDT necesarios). Reanudando en SELLING...`, 'success');
+            log(`✅ [S-FUNDS] Capital recovered (${amountNeededToResume.toFixed(2)} USDT required). Resuming in SELLING...`, 'success');
             await updateBotState('SELLING', 'short');
         } else {
-            // Reemplazado console.log silencioso por una trazabilidad estandarizada
             const missing = (amountNeededToResume - Math.min(availableUSDT, currentSBalance)).toFixed(2);
-            log(`[S-PAUSED] 👁️ Esperando fondos. Balance: ${currentSBalance.toFixed(2)} USDT | Requerido: ${amountNeededToResume.toFixed(2)} USDT (Faltan: ${missing} USDT)`, 'debug');
+            log(`[S-PAUSED] 👁️ Waiting for funds. Balance: ${currentSBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (Missing: ${missing} USDT)`, 'debug');
         }
     } catch (criticalError) {
-        log(`🔥 [CRITICAL] Error inesperado dentro del estado SPaused: ${criticalError.message}`, 'error');
+        log(`🔥 [CRITICAL] Unexpected error within SPaused state: ${criticalError.message}`, 'error');
     }
 } 
 
