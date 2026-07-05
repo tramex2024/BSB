@@ -19,7 +19,7 @@ async function run(dependencies) {
         availableUSDT: realUSDT 
     } = dependencies;
     
-    // SOLUCIÓN: Envoltura global para evitar congelamientos del motor por errores menores
+    // SOLUTION: Global wrapper to prevent engine freezing due to minor errors
     try {
         const availableUSDT = parseFloat(realUSDT || 0);
         const currentLBalance = parseFloat(botState.lbalance || 0);
@@ -74,8 +74,8 @@ async function run(dependencies) {
             return; 
         }
 
-        // --- 4. RESUMPTION VERIFICATION (SOLUCIÓN AL COMPORTAMIENTO LOCKUP) ---
-        // Si no hay posición, necesitamos el capital de la primera orden; si hay, el del siguiente DCA.
+        // --- 4. RESUMPTION VERIFICATION (LOCKUP BEHAVIOR SOLUTION) ---
+        // If no position, we need the capital for the first order; if there is one, we need the capital for the next DCA.
         const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmount;
         const finalMinLimit = Math.max(MIN_USDT_VALUE_FOR_BITMART, amountNeededToResume);
 
@@ -84,7 +84,7 @@ async function run(dependencies) {
                           finalMinLimit >= MIN_USDT_VALUE_FOR_BITMART;
 
         if (canResume) {
-            log(`✅ [L-FUNDS] Capital suficiente detectado (${amountNeededToResume.toFixed(2)} USDT necesarios). Reanudando BUYING...`, 'success');
+            log(`✅ [L-FUNDS] Sufficient capital detected (${amountNeededToResume.toFixed(2)} USDT required). Resuming BUYING...`, 'success');
             await updateBotState('BUYING', 'long');
         } else {
             // Monitoring log (Heartbeat in Pause)
