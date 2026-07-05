@@ -26,7 +26,7 @@ export function initializeChart(containerId, symbol) {
             "interval": savedInterval,
             "timezone": "Etc/UTC",
             "theme": "dark",
-            "style": "1",
+            "style": "2",
             "locale": "es",
             "toolbar_bg": "#111827",
             "enable_publishing": false,
