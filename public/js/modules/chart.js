@@ -41,11 +41,17 @@ export function initializeChart(containerId, symbol) {
                 "MACD@tv-basicstudies"      
             ],
             "overrides": {
-                "mainSeriesProperties.style": 1,
-                "paneProperties.background": "#111827",
-                "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.08)",
-                "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.08)",
-            }
+    "mainSeriesProperties.style": 1,
+    "paneProperties.background": "#111827",
+    
+    // REDUCIR INTENSIDAD: Cambia 0.08 por 0.02
+    "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.02)",
+    "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.02)",
+    
+    // ESTILO PUNTEADO: El estilo 2 es dashed/dotted, mucho más limpio que la línea sólida
+    "paneProperties.vertGridProperties.style": 2,
+    "paneProperties.horzGridProperties.style": 2
+}
         });
     }
 }
