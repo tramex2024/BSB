@@ -155,7 +155,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                 scales: {
                     y: {
                         grid: { 
-                            color: 'rgba(255, 255, 255, 0.05)',
+                            color: 'rgba(255, 255, 255, 0.02)',
                             drawBorder: false 
                         },
                         ticks: { 
