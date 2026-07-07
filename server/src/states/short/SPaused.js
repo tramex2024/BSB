@@ -93,7 +93,10 @@ async function run(dependencies) {
             await updateBotState('SELLING', 'short');
         } else {
             const missing = (amountNeededToResume - Math.min(availableUSDT, currentSBalance)).toFixed(2);
-            log(`[S-PAUSED] 👁️ Waiting for funds. Balance: ${currentSBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (Missing: ${missing} USDT)`, 'debug');
+            // Calculate BTC equivalent needed
+            const btcNeeded = (amountNeededToResume / currentPrice).toFixed(6);
+            
+            log(`[S-PAUSED] 👁️ Waiting for funds. Balance: ${currentSBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (~${btcNeeded} BTC) (Missing: ${missing} USDT)`, 'debug');
         }
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected error within SPaused state: ${criticalError.message}`, 'error');
