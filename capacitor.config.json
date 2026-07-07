@@ -1,6 +1,6 @@
 {
   "appId": "com.nexuslabs.bsb",
-  "appName": "bsb",
+  "appName": "BSB",
   "webDir": "public",
   "server": {
     "url": "https://bsb-lime.vercel.app",
