@@ -107,6 +107,7 @@ async function processSingleBot(botState, currentPrice) {
             lcycle: botState.lcycle || 0,
             scycle: botState.scycle || 0,
             aicycle: botState.aicycle || 0,
+            availableUSDT: botState.lastAvailableUSDT || 0,
 
             placeLongOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `L_${botState.lcycle || 0}_${Date.now()}`),
             placeShortOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `S_${botState.scycle || 0}_${Date.now()}`),
