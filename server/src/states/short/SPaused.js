@@ -2,6 +2,7 @@
  * BSB/server/src/states/short/SPaused.js
  * Wait management when capital is insufficient for the next DCA.
  * Fixed: Coverage synchronization with real market price (2026).
+ * Updated: Recovery logic now validates funds before transitioning to BUYING.
  */
 
 const { calculateShortTargets, calculateShortCoverage } = require('../../../autobotCalculations');
@@ -31,11 +32,17 @@ async function run(dependencies) {
         const targetPrice = parseFloat(botState.spc || botState.stprice || 0);
 
         // --- 1. RECOVERY LOGIC (EXIT TO BUYING) ---
-        // If the price hits the profit zone, we can close regardless of balance
+        // Validate funds before closing the position to avoid failed API orders
         if (ac > 0 && targetPrice > 0 && currentPrice <= targetPrice) {
-            log(`🚀 [S-RECOVERY] Price in profit zone (${currentPrice.toFixed(2)}). Jumping to BUYING to close position.`, 'success');
-            await updateBotState('BUYING', 'short'); 
-            return;
+            const buybackCost = ac * currentPrice;
+            
+            if (availableUSDT >= buybackCost) {
+                log(`🚀 [S-RECOVERY] Price in profit zone (${currentPrice.toFixed(2)}). Sufficient funds (${availableUSDT.toFixed(2)} USDT) to cover buyback. Jumping to BUYING to close position.`, 'success');
+                await updateBotState('BUYING', 'short'); 
+                return;
+            } else {
+                log(`⚠️ [S-RECOVERY-BLOCKED] Price in profit zone (${currentPrice.toFixed(2)}), but insufficient funds to close. Need: ${buybackCost.toFixed(2)} USDT | Available: ${availableUSDT.toFixed(2)} USDT`, 'warning');
+            }
         }
 
         // --- 2. RECALCULATE REQUIREMENTS AND PROJECTION ---
@@ -83,9 +90,6 @@ async function run(dependencies) {
         // If the cycle is clear (ac === 0) we require the initial amount; if there is a pending DCA, we require requiredAmount
         const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmount;
         const finalMinLimit = Math.max(MIN_USDT_VALUE_FOR_BITMART, amountNeededToResume);
-
-        // LOG DE DIAGNÓSTICO: Ver los valores exactos antes de la comparación
-        log(`[S-DEBUG] Evaluating Resumption -> AvailUSDT: ${availableUSDT} | SBalance: ${currentSBalance} | Need: ${amountNeededToResume}`, 'debug');
 
         const canResume = currentSBalance >= amountNeededToResume && 
                           availableUSDT >= amountNeededToResume && 

@@ -1,7 +1,8 @@
 /**
- * L-PAUSED STATE:
+ * BSB/server/src/states/long/LPaused.js
  * Manages waiting periods due to insufficient funds and cycle recovery.
- * Corrected: Coverage synchronization with real-time market price (2026).
+ * Fixed: Coverage synchronization with real-time market price (2026).
+ * Updated: Recovery logic now includes position validation before selling.
  */
 
 const { calculateLongTargets, calculateLongCoverage } = require('../../../autobotCalculations');
@@ -26,16 +27,23 @@ async function run(dependencies) {
         const availableUSDT = parseFloat(realUSDT || 0);
         const currentLBalance = parseFloat(botState.lbalance || 0);
 
-        const ac = parseFloat(botState.lac || 0);
+        const ac = parseFloat(botState.lac || 0); // Coins accumulated (Long position)
         const ppc = parseFloat(botState.lppc || 0);
         const orderCountInCycle = parseInt(botState.locc || 0);
 
         // --- 1. RECOVERY LOGIC (EXIT TO SELLING) ---
+        // Validate position exists before attempting to sell to avoid API errors
         const targetPrice = parseFloat(botState.ltprice || 0);
         if (ac > 0 && targetPrice > 0 && currentPrice >= targetPrice) {
-            log(`🚀 [L-RECOVERY] TP Price reached (${targetPrice.toFixed(2)})! Exiting pause to SELL.`, 'success');
-            await updateBotState('SELLING', 'long'); 
-            return;
+            
+            // Safety Check: Do we actually have the coins?
+            if (ac > 0) {
+                log(`🚀 [L-RECOVERY] TP Price reached (${targetPrice.toFixed(2)}). Position detected (${ac.toFixed(6)} BTC). Exiting pause to SELL.`, 'success');
+                await updateBotState('SELLING', 'long'); 
+                return;
+            } else {
+                log(`⚠️ [L-RECOVERY-BLOCKED] TP Price reached, but no position (ac: ${ac}) found to sell. Check data sync.`, 'error');
+            }
         }
 
         // --- 2. RECALCULATE TARGETS AND COVERAGE ---
@@ -77,7 +85,6 @@ async function run(dependencies) {
         }
 
         // --- 4. RESUMPTION VERIFICATION (LOCKUP BEHAVIOR SOLUTION) ---
-        // If no position, we need the capital for the first order; if there is one, we need the capital for the next DCA.
         const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmount;
         const finalMinLimit = Math.max(MIN_USDT_VALUE_FOR_BITMART, amountNeededToResume);
 
@@ -90,11 +97,9 @@ async function run(dependencies) {
             await updateBotState('BUYING', 'long');
         } else {
             const missing = (amountNeededToResume - Math.min(availableUSDT, currentLBalance)).toFixed(2);
-            // Calculate BTC equivalent needed
             const btcNeeded = (amountNeededToResume / currentPrice).toFixed(6);
             
-            // Monitoring log (Heartbeat in Pause)
-            log(`[L-PAUSED] 👁️ Waiting for funds. Balance: ${currentLBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (~${btcNeeded} BTC) (Missing: ${missing} USDT)`, 'debug');
+            log(`[L-PAUSED] 👁️ Waiting for funds. Balance: ${currentLBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (Poder de compra: ~${btcNeeded} BTC) | Missing: ${missing} USDT`, 'debug');
         }
         
     } catch (criticalError) {
