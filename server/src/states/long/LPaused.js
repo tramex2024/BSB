@@ -21,6 +21,8 @@ async function run(dependencies) {
     
     // SOLUTION: Global wrapper to prevent engine freezing due to minor errors
     try {
+        if (!currentPrice || currentPrice <= 0) return;
+
         const availableUSDT = parseFloat(realUSDT || 0);
         const currentLBalance = parseFloat(botState.lbalance || 0);
 
@@ -87,8 +89,12 @@ async function run(dependencies) {
             log(`✅ [L-FUNDS] Sufficient capital detected (${amountNeededToResume.toFixed(2)} USDT required). Resuming BUYING...`, 'success');
             await updateBotState('BUYING', 'long');
         } else {
+            const missing = (amountNeededToResume - Math.min(availableUSDT, currentLBalance)).toFixed(2);
+            // Calculate BTC equivalent needed
+            const btcNeeded = (amountNeededToResume / currentPrice).toFixed(6);
+            
             // Monitoring log (Heartbeat in Pause)
-            log(`[L-PAUSED] 👁️ Waiting for funds. Balance: ${currentLBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT`, 'debug');
+            log(`[L-PAUSED] 👁️ Waiting for funds. Balance: ${currentLBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (~${btcNeeded} BTC) (Missing: ${missing} USDT)`, 'debug');
         }
         
     } catch (criticalError) {

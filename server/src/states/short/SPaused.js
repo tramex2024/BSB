@@ -84,6 +84,9 @@ async function run(dependencies) {
         const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmount;
         const finalMinLimit = Math.max(MIN_USDT_VALUE_FOR_BITMART, amountNeededToResume);
 
+        // LOG DE DIAGNÓSTICO: Ver los valores exactos antes de la comparación
+        log(`[S-DEBUG] Evaluating Resumption -> AvailUSDT: ${availableUSDT} | SBalance: ${currentSBalance} | Need: ${amountNeededToResume}`, 'debug');
+
         const canResume = currentSBalance >= amountNeededToResume && 
                           availableUSDT >= amountNeededToResume && 
                           finalMinLimit >= MIN_USDT_VALUE_FOR_BITMART;
