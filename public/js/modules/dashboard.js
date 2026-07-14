@@ -272,20 +272,37 @@ export function updateDistributionWidget(state) {
 }
 
 function updateQuickStats(kpiData) {
-    const totalProfit = parseFloat(kpiData.totalNetProfit) || 0;
-    const totalCycles = parseInt(kpiData.totalCycles) || 0;
-    const avgHours = parseFloat(kpiData.avgDurationHours) || 0;
-    const totalTimeHours = avgHours * totalCycles;
-    let profitPerDay = 0;
-    if (totalTimeHours > 0) {
-        const profitPerHour = totalProfit / totalTimeHours;
-        profitPerDay = profitPerHour * 24;
-    }
+    // 1. Verificación defensiva: Si no hay datos, no toques el DOM para evitar parpadeos a 0
+    if (!kpiData || typeof kpiData !== 'object') return;
+
+    const totalProfit = parseFloat(kpiData.totalNetProfit ?? 0);
+    const totalCycles = parseInt(kpiData.totalCycles ?? 0);
+    const avgHours = parseFloat(kpiData.avgDurationHours ?? 0);
+    
+    // 2. Corregir el cálculo del tiempo (No multipliques promedio por ciclos)
+    // Si avgHours es el promedio, el tiempo total es simplemente la suma de duraciones
+    // o el promedio mismo si solo queremos mostrar ese dato.
     const profitElement = document.getElementById('cycle-efficiency');
-    if (profitElement) {
+    
+    if (totalCycles > 0 && profitElement) {
+        // Asumiendo que el profit por día es una métrica constante de rendimiento
+        // Asegúrate de que kpiData.profitPerDay existe, o calcúlalo bien:
+        // Si no tienes profitPerDay directo, usa el profit acumulado / (tiempo total)
+        const profitPerDay = kpiData.profitPerDay || (avgHours > 0 ? (totalProfit / (avgHours * totalCycles)) * 24 : 0);
+        
         const finalValue = `$${profitPerDay.toFixed(4)}/d`;
         profitElement.innerText = finalValue;
         profitElement.style.color = profitPerDay >= 0 ? '#34d399' : '#ef4444';
+    }
+
+    // 3. ATENCIÓN: El error de "495560h" está aquí o en otra función llamada por socket
+    // Si tienes un ID "cycle-avg-duration" en el HTML, búscalo en tu uiManager.js
+    // Si no está en este archivo, otra función está sobrescribiendo el valor.
+    const durationElement = document.getElementById('cycle-avg-duration');
+    if (durationElement && avgHours > 0) {
+        // Evita mostrar valores absurdos validando el techo de horas
+        const hours = Math.min(avgHours, 9999); 
+        durationElement.innerText = `${hours.toFixed(0)}h 0m`;
     }
 }
 

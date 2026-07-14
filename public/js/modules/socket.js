@@ -182,13 +182,28 @@ export function initSocket() {
 
         // 4. Sincronización de métricas
         if (state.history || state.cycleHistory) {
-            try {
-                const Metrics = await import('./metricsManager.js');
-                const { updateQuickStats } = await import('./dashboard.js');
-                Metrics.setAnalyticsData(state.history || state.cycleHistory);
-                if (state.kpis) updateQuickStats(state.kpis);
-            } catch (err) { console.error("Error injecting metrics:", err); }
+    try {
+        const Metrics = await import('./metricsManager.js');
+        const { updateQuickStats } = await import('./dashboard.js');
+        
+        Metrics.setAnalyticsData(state.history || state.cycleHistory);
+        
+        // --- ESCUDO DE INTEGRIDAD (AQUÍ ESTÁ LA SOLUCIÓN) ---
+        // Solo actualizamos si kpis tiene contenido real y no es un objeto vacío
+        const hasValidKpis = state.kpis && 
+                             typeof state.kpis === 'object' && 
+                             Object.keys(state.kpis).length > 0 && 
+                             (parseFloat(state.kpis.totalCycles || 0) > 0);
+
+        if (hasValidKpis) {
+            updateQuickStats(state.kpis);
+        } else {
+            console.log("🛡️ Socket: KPI update blocked (Invalid or empty payload). Keeping historical data.");
         }
+    } catch (err) { 
+        console.error("Error injecting metrics:", err); 
+    }
+}
 
         // 5. Estado de la IA
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
