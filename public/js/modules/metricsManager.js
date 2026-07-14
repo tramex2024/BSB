@@ -56,7 +56,7 @@ export function setAnalyticsData(data) {
 
 /**
  * updateMetricsDisplay
- * Versión corregida: Utiliza durationMs para evitar ceros.
+ * Versión optimizada 2026: Cálculo consistente de Profit/D y blindaje de métricas.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
@@ -76,7 +76,7 @@ function updateMetricsDisplay() {
     let totalOrders = 0;
     let totalRecovery = 0;
     let winningCycles = 0;
-    let totalDurationMs = 0; // Cambiado para claridad
+    let totalDurationMs = 0; 
 
     filtered.forEach(cycle => {
         totalProfitPct += (cycle.profitPercentage || 0);
@@ -85,7 +85,6 @@ function updateMetricsDisplay() {
         totalRecovery += (cycle.finalRecovery || 0);
         if (cycle.netProfit > 0) winningCycles++;
 
-        // USAR EL DURATION MS YA CALCULADO
         totalDurationMs += (cycle.durationMs || 0);
     });
 
@@ -96,10 +95,13 @@ function updateMetricsDisplay() {
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     
-    // Cálculo de Eficiencia (Profit/H)
+    // Cálculo de Eficiencia: Profit por Día
+    // totalHours = totalDurationMs / 3600000;
+    // profitPerHour = totalNetProfitUsdt / totalHours;
+    // profitPerDay = profitPerHour * 24;
     const totalHours = totalDurationMs / 3600000;
+    const profitPerDay = totalHours > 0.0001 ? ((totalNetProfitUsdt / totalHours) * 24) : 0;
     const avgDurationMs = totalDurationMs / totalCycles;
-    const profitPerHour = totalHours > 0.0001 ? (totalNetProfitUsdt / totalHours) : 0;
 
     const fmtDuration = (ms) => {
         if (ms <= 0) return "0h 0m";
@@ -116,7 +118,9 @@ function updateMetricsDisplay() {
     renderText('cycle-avg-duration', fmtDuration(avgDurationMs));
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
-    renderText('cycle-efficiency', `$${profitPerHour.toFixed(4)}/h`);
+    
+    // Ajustado para mostrar /d
+    renderText('cycle-efficiency', `$${profitPerDay.toFixed(4)}/d`);
 
     const chartData = prepareChartData(filtered);
     window.dispatchEvent(new CustomEvent('metricsUpdated', { detail: chartData }));
@@ -198,16 +202,23 @@ export function updateMetricsFromState(state) {
     };
 
     const now = new Date();
-    const lStart = new Date(state.lstartTime);
+    // CORRECCIÓN: Si lstartTime es 0 o null, no calculamos duración
     let durationHours = 0;
-
-    if (!isNaN(lStart.getTime())) {
-        durationHours = (now - lStart) / 3600000;
+    if (state.lstartTime) {
+        const lStart = new Date(state.lstartTime);
+        // Validamos que la fecha sea mayor al 2025 para evitar el bug de 1970
+        if (!isNaN(lStart.getTime()) && lStart.getFullYear() >= 2025) {
+            durationHours = (now - lStart) / 3600000;
+        }
     }
 
     renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
     renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
-    renderValue('cycle-avg-duration', formatDuration(durationHours));
+    
+    // Solo actualizamos la duración si calculamos algo válido
+    if (durationHours > 0) {
+        renderValue('cycle-avg-duration', formatDuration(durationHours));
+    }
 }
 
 function renderValue(id, value) {
@@ -267,4 +278,47 @@ export function calculateSummary(allCycles) {
     console.log(`[AUDITORÍA] Total: ${summary.total} | L: ${summary.long} | S: ${summary.short} | AI: ${summary.ai}`);
     
     return summary;
+}
+
+/**
+ * processStateUpdate
+ * Único punto de entrada para actualizar métricas desde el socket.
+ */
+export async function processStateUpdate(state) {
+    // 1. Procesar historial
+    if (state.history || state.cycleHistory) {
+        setAnalyticsData(state.history || state.cycleHistory);
+    }
+
+    // 2. Procesar KPIs con validación interna
+    if (state.kpis) {
+        const { updateQuickStats } = await import('./dashboard.js');
+        
+        const hasValidKpis = state.kpis && 
+                             typeof state.kpis === 'object' && 
+                             Object.keys(state.kpis).length > 0 && 
+                             (parseFloat(state.kpis.totalCycles || 0) > 0);
+
+        if (hasValidKpis) {
+            updateQuickStats(state.kpis);
+        } else {
+            console.log("🛡️ MetricsManager: KPI update blocked (Invalid payload).");
+        }
+    }
+}
+
+// metricsManager.js (Ejemplo de función exportada)
+export function getProcessedStats(kpiData) {
+    const totalProfit = parseFloat(kpiData.totalNetProfit ?? 0);
+    const totalCycles = parseInt(kpiData.totalCycles ?? 0);
+    const avgHours = parseFloat(kpiData.avgDurationHours ?? 0);
+
+    // Mueve la fórmula lógica aquí
+    const profitPerDay = kpiData.profitPerDay || (avgHours > 0 ? (totalProfit / (avgHours * totalCycles)) * 24 : 0);
+    
+    return {
+        profitPerDay: profitPerDay.toFixed(4),
+        avgHours: Math.min(avgHours, 9999),
+        raw: kpiData
+    };
 }

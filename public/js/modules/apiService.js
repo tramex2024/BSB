@@ -4,6 +4,8 @@
  */
 import { displayMessage, getSanitizedValue } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
+import { mapConfigFromDOM } from './configMapper.js';
+import { currentBotState } from '../main.js';
 
 // Control transaccional real
 export let isSavingConfig = false;
@@ -98,54 +100,7 @@ export async function fetchEquityCurveData(strategy = 'all') {
  * 🛡️ RECOLECTA CONFIGURACIÓN DESDE EL DOM
  */
 export function getBotConfiguration() {
-    const getNum = (id, path, minVal = 0) => {
-        const sanitized = getSanitizedValue(id);
-        const parts = path.split('.');
-        const stateVal = parts.reduce((obj, key) => obj?.[key], currentBotState.config);
-
-        if (sanitized !== undefined && !isNaN(sanitized)) return sanitized;
-        const parsedState = parseFloat(stateVal);
-        if (!isNaN(parsedState) && isFinite(parsedState)) return parsedState;
-        return minVal;
-    };
-
-    const getCheck = (id, path) => {
-        const el = document.getElementById(id);
-        if (!el) {
-            const parts = path.split('.');
-            return parts.reduce((obj, key) => obj?.[key], currentBotState.config) ?? false;
-        }
-        return el.checked;
-    };
-
-    const config = {
-        symbol: "BTC_USDT",
-        long: {
-            amountUsdt:      getNum('auamountl-usdt', 'long.amountUsdt', MINIMOS.amount),
-            purchaseUsdt:    getNum('aupurchasel-usdt', 'long.purchaseUsdt', MINIMOS.purchase),
-            price_var:       getNum('audecrementl', 'long.price_var', MINIMOS.variation), 
-            profit_percent:  getNum('autriggerl', 'long.profit_percent', MINIMOS.profit), 
-            size_var:        getNum('auincrementl', 'long.size_var', 1),
-            stopAtCycle:     getCheck('au-stop-long-at-cycle', 'long.stopAtCycle'),
-            enabled:         currentBotState.lstate !== 'STOPPED'
-        },
-        short: {
-            amountUsdt:      getNum('auamounts-usdt', 'short.amountUsdt', MINIMOS.amount),
-            purchaseUsdt:    getNum('aupurchases-usdt', 'short.purchaseUsdt', MINIMOS.purchase),
-            price_var:       getNum('audecrements', 'short.price_var', MINIMOS.variation), 
-            profit_percent:  getNum('autriggers', 'short.profit_percent', MINIMOS.profit), 
-            size_var:        getNum('auincrements', 'short.size_var', 1),
-            stopAtCycle:     getCheck('au-stop-short-at-cycle', 'short.stopAtCycle'),
-            enabled:         currentBotState.sstate !== 'STOPPED' 
-        },
-        ai: {
-            amountUsdt:      getNum('auamountai-usdt', 'ai.amountUsdt', 100) || getNum('ai-amount-usdt', 'ai.amountUsdt', 100),
-            stopAtCycle:     getCheck('au-stop-ai-at-cycle', 'ai.stopAtCycle') || getCheck('ai-stop-ai-at-cycle', 'ai.stopAtCycle'), // corregido ID
-            enabled:         currentBotState.config?.ai?.enabled || false
-        }
-    };
-    
-    return config;
+    return mapConfigFromDOM(currentBotState);
 }
 
 /**
@@ -153,38 +108,54 @@ export function getBotConfiguration() {
  * @param {Object|null} manualPayload - Payload personalizado si es necesario
  * @param {Boolean} shouldRecalculate - Flag para indicar al backend si debe recalcular el grid
  */
+/**
+ * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND
+ * Integra la capa de validación automática antes del envío.
+ */
 export async function sendConfigToBackend(manualPayload = null, shouldRecalculate = false) {
-    const botConfig = getBotConfiguration();
-    
-    isSavingConfig = true; 
-    inTransitConfig = botConfig;
-    
-    // Si no hay payload manual, creamos la estructura estándar con el flag
-    const payload = manualPayload || { 
-        config: botConfig, 
-        recalculate: shouldRecalculate 
-    };
-
-    console.log(`📤 Enviando config (blindada, recalc=${payload.recalculate || 'false'}):`, payload);
-
     try {
+        // 1. Obtención y Validación (Esto disparará el error si la config no es segura)
+        const botConfig = getBotConfiguration();
+        
+        isSavingConfig = true; 
+        inTransitConfig = botConfig;
+        
+        // 2. Construcción del Payload
+        const payload = manualPayload || { 
+            config: botConfig, 
+            recalculate: shouldRecalculate 
+        };
+
+        console.log(`📤 Enviando config (blindada, recalc=${payload.recalculate || 'false'}):`, payload);
+
+        // 3. Envío al Backend
         const data = await privateFetch('/api/v1/config/update-config', {
             method: 'POST',
             body: JSON.stringify(payload)
         });
 
+        // 4. Gestión de respuesta
         if (!data || !data.success) {
             inTransitConfig = null;
             isSavingConfig = false;
         } else {
             console.log("💾 HTTP: Configuración guardada con éxito.");
         }
+        
         return data;
+
     } catch (err) {
+        // Captura errores de validación (del mapper) o errores de red
         console.error("❌ Error al sincronizar configuración:", err);
+        
+        // Si el error es de validación, se lo mostramos al usuario
+        if (typeof displayMessage === 'function') {
+            displayMessage(err.message || "Error al procesar configuración", 'error');
+        }
+
         inTransitConfig = null;
         isSavingConfig = false;
-        return { success: false };
+        return { success: false, message: err.message };
     }
 }
 

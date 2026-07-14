@@ -184,24 +184,11 @@ export function initSocket() {
         if (state.history || state.cycleHistory) {
     try {
         const Metrics = await import('./metricsManager.js');
-        const { updateQuickStats } = await import('./dashboard.js');
-        
-        Metrics.setAnalyticsData(state.history || state.cycleHistory);
-        
-        // --- ESCUDO DE INTEGRIDAD (AQUÍ ESTÁ LA SOLUCIÓN) ---
-        // Solo actualizamos si kpis tiene contenido real y no es un objeto vacío
-        const hasValidKpis = state.kpis && 
-                             typeof state.kpis === 'object' && 
-                             Object.keys(state.kpis).length > 0 && 
-                             (parseFloat(state.kpis.totalCycles || 0) > 0);
-
-        if (hasValidKpis) {
-            updateQuickStats(state.kpis);
-        } else {
-            console.log("🛡️ Socket: KPI update blocked (Invalid or empty payload). Keeping historical data.");
-        }
+        // socket.js ya NO necesita importar dashboard.js
+        // Pasamos el estado completo y dejamos que Metrics decida qué hacer
+        Metrics.processStateUpdate(state); 
     } catch (err) { 
-        console.error("Error injecting metrics:", err); 
+        console.error("Error delegando métricas:", err); 
     }
 }
 

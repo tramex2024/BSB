@@ -1,6 +1,6 @@
 /**
  * main.js - Central Hub (Pro-Sync 2026)
- * Estado: Auditado y Blindado contra condiciones de carrera y re-renderizados destructivos
+ * Estado: Auditado, Blindado (Race Conditions, Rollback Automático, UI Declarativa)
  */
 import { setupNavTabs } from './modules/navigation.js';
 import { initializeAppEvents, updateLoginIcon } from './modules/appEvents.js';
@@ -17,11 +17,7 @@ import { initPayments } from './modules/payments.js';
 
 import { initializeGlobalButtonListeners } from './modules/botControls.js';
 import { applyRolePermissions } from './modules/role.js';
-
-// Importamos el servicio de API para poder guardar los cambios de los checkboxes
 import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
-
-// Agrega esta función en main.js (o impórtala de controls.js)
 import { setupBotInput } from './modules/ui/controls.js';
 
 // --- CONFIGURATION ---
@@ -29,40 +25,23 @@ export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
 export const TRADE_SYMBOL_TV = 'BTCUSDT';
 
 export const currentBotState = {
-    price: 0,
-    lastPrice: 0,
-    lstate: 'STOPPED',
-    sstate: 'STOPPED',
-    aistate: 'STOPPED',
-    aibalance: 0,
-    isRunning: false,
-    stopAtCycle: false,
-    historyCount: 0,
-    lastAvailableUSDT: 0,
-    lastAvailableBTC: 0,
-    lprofit: 0,
-    sprofit: 0,
-    aiprofit: 0,
+    price: 0, lastPrice: 0,
+    lstate: 'STOPPED', sstate: 'STOPPED', aistate: 'STOPPED',
+    aibalance: 0, isRunning: false, stopAtCycle: false,
+    historyCount: 0, lastAvailableUSDT: 0, lastAvailableBTC: 0,
+    lprofit: 0, sprofit: 0, aiprofit: 0,
     config: {
         symbol: 'BTC_USDT', 
-        long: { 
-            amountUsdt: 0, purchaseUsdt: 0, price_var: 0.1, 
-            profit_percent: 0.1, size_var: 1, price_step_inc: 0, 
-            enabled: false, stopAtCycle: false 
-        },
-        short: { 
-            amountUsdt: 0, purchaseUsdt: 0, price_var: 0.1, 
-            profit_percent: 0.1, size_var: 1, price_step_inc: 0, 
-            enabled: false, stopAtCycle: false 
-        },
+        long: { amountUsdt: 0, purchaseUsdt: 0, price_var: 0.1, profit_percent: 0.1, size_var: 1, price_step_inc: 0, enabled: false, stopAtCycle: false },
+        short: { amountUsdt: 0, purchaseUsdt: 0, price_var: 0.1, profit_percent: 0.1, size_var: 1, price_step_inc: 0, enabled: false, stopAtCycle: false },
         ai: { amountUsdt: 0, enabled: false, stopAtCycle: false }
     }
 };
 
 export let intervals = {}; 
-
 let logQueue = [];
 let isProcessingLog = false;
+let isNavigating = false; // [BLINDAJE]: Lock de navegación
 
 const views = {
     dashboard: () => import('./modules/dashboard.js'),
@@ -117,21 +96,20 @@ export function initializeFullApp() {
 
 // --- TAB MANAGEMENT ---
 export async function initializeTab(tabName) {
+    if (isNavigating) return; 
+    isNavigating = true;
+    
     Object.values(intervals).forEach(clearInterval);
     intervals = {};
     const mainContent = document.getElementById('main-content');
-    if (!mainContent) return;
+    if (!mainContent) { isNavigating = false; return; }
 
     try {
         const response = await fetch(`./${tabName}.html`);
         const html = await response.text();
         
-        // Inyectamos el contenido
         if (mainContent.innerHTML !== html) {
             mainContent.innerHTML = html;
-            
-            // --- [BLINDAJE] REGISTRO DE CANDADOS ---
-            // Se ejecuta inmediatamente después de que el HTML entra al DOM
             bindLocksForView(tabName); 
         }
         
@@ -157,37 +135,45 @@ export async function initializeTab(tabName) {
         }
         await updateBotUI(currentBotState);
         syncAIElementsInDOM();
-    } catch (error) { console.error("❌ View Loading Error:", error); }
+    } catch (error) { 
+        console.error("❌ View Loading Error:", error); 
+    } finally {
+        isNavigating = false;
+    }
 }
 
-/**
- * Función auxiliar para registrar los listeners de bloqueo 
- * después de cargar la vista
- */
 function bindLocksForView(tabName) {
     if (tabName === 'autobot') {
-        // Registra inputs LONG
         ['auamountl-usdt', 'aupurchasel-usdt', 'auincrementl', 'audecrementl', 'autriggerl', 'aupricestep-l']
             .forEach(id => setupBotInput(id, 'long', false));
-        
-        // Registra inputs SHORT
         ['auamounts-usdt', 'aupurchases-usdt', 'auincrements', 'audecrements', 'autriggers', 'aupricestep-s']
             .forEach(id => setupBotInput(id, 'short', false));
-    } 
-    else if (tabName === 'aibot') {
-        // Registra inputs AI
+    } else if (tabName === 'aibot') {
         ['auamountai-usdt', 'ai-amount-usdt']
             .forEach(id => setupBotInput(id, 'ai', false));
     }
 }
 
 function syncAIElementsInDOM() {
-    const aiInput = document.getElementById('ai-amount-usdt');
-    const stopAtCycleCheck = document.getElementById('ai-stop-at-cycle');
-    if (aiInput) aiInput.value = currentBotState.config.ai.amountUsdt || "";
-    if (stopAtCycleCheck) stopAtCycleCheck.checked = currentBotState.config.ai.stopAtCycle || false;
+    // [BLINDAJE]: Sincronización declarativa
+    const mapping = {
+        'ai-amount-usdt': currentBotState.config.ai.amountUsdt,
+        'ai-stop-at-cycle': currentBotState.config.ai.stopAtCycle
+    };
+
+    Object.entries(mapping).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = !!value;
+        else el.value = value || "";
+    });
+
     if (aiBotUI) {
-        aiBotUI.setRunningStatus(currentBotState.aistate === 'RUNNING', currentBotState.config.ai.stopAtCycle, currentBotState.historyCount || 0);
+        aiBotUI.setRunningStatus(
+            currentBotState.aistate === 'RUNNING', 
+            currentBotState.config.ai.stopAtCycle, 
+            currentBotState.historyCount || 0
+        );
     }
 }
 
@@ -195,45 +181,44 @@ function syncAIElementsInDOM() {
 document.addEventListener('change', async (e) => {
     if (!e.target) return;
 
-    // [BLINDAJE 2026]: Los inputs de la IA ('ai-amount-usdt' y 'ai-stop-at-cycle') ya se gestionan 
-    // de forma atómica dentro de su propio ciclo en aiBot.js. Se eliminan de aquí para prevenir peticiones dobles.
-
-    // Manejo de Checkboxes LONG / SHORT (Dashboard y Autobot de forma delegada global)
+    // Manejo de Checkboxes LONG / SHORT con Rollback
     if (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle') {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         const isChecked = e.target.checked;
-        
+        const previousValue = !isChecked; // Estado previo para posible rollback
+
         logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
         
-        // Actualizamos el estado local inmediatamente para evitar discrepancias visuales
         if (!currentBotState.config[side]) currentBotState.config[side] = {};
         currentBotState.config[side].stopAtCycle = isChecked;
 
-        // Enviamos la configuración completa al servidor de forma segura
-        const fullConfig = getBotConfiguration();
-        await sendConfigToBackend({ config: fullConfig });
+        try {
+            const data = await sendConfigToBackend({ config: getBotConfiguration() });
+            if (!data || !data.success) throw new Error("Sync failed");
+        } catch (err) {
+            // [BLINDAJE]: Rollback ante error de servidor o validación
+            currentBotState.config[side].stopAtCycle = previousValue;
+            e.target.checked = previousValue;
+            logStatus(`Error: Cambio no guardado. Revirtiendo ${side.toUpperCase()}...`, "error");
+        }
     }
 });
 
 // --- INITIAL EVENTS ---
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. GESTIÓN DEL SPLASH SCREEN
-const splash = document.getElementById('welcome-splash');
-const closeSplash = document.getElementById('close-splash');
+    const splash = document.getElementById('welcome-splash');
+    const closeSplash = document.getElementById('close-splash');
 
-// Usamos sessionStorage para que se resetee al cerrar la pestaña/navegador
-if (sessionStorage.getItem('splash-hidden') === 'true') {
-    if (splash) splash.remove();
-} else {
-    closeSplash?.addEventListener('click', () => {
-        splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
-        setTimeout(() => splash.remove(), 500);
-        // Marcamos que ya se vio, pero solo por esta sesión
-        sessionStorage.setItem('splash-hidden', 'true');
-    });
-}
+    if (sessionStorage.getItem('splash-hidden') === 'true') {
+        if (splash) splash.remove();
+    } else {
+        closeSplash?.addEventListener('click', () => {
+            splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+            setTimeout(() => splash.remove(), 500);
+            sessionStorage.setItem('splash-hidden', 'true');
+        });
+    }
 
-    // 2. INICIALIZACIÓN DE LA APLICACIÓN
     applyRolePermissions();
     initializeGlobalButtonListeners();
 
@@ -243,15 +228,11 @@ if (sessionStorage.getItem('splash-hidden') === 'true') {
         logStatus("Please sign in to access bot controls.", "warning");
     }
 
-    // 3. CARGA DE MÓDULOS Y VISTAS
     setupNavTabs(initializeTab); 
     initializeAppEvents(initializeFullApp);
     updateLoginIcon();
-    
-    // Carga inicial del dashboard
     initializeTab('dashboard'); 
     
-    // Servicios de soporte y utilidades
     initializeSupport();
     initializeSettings();
     initializeProfile();
@@ -261,15 +242,8 @@ if (sessionStorage.getItem('splash-hidden') === 'true') {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         import('./modules/socket.js').then(m => {
-            if (!m.socket || !m.socket.connected) {
-                m.initSocket();
-            } else {
-                // Al recuperar foco, solicitamos el estado en caliente de forma sutil vía WebSocket
-                m.socket.emit('get-bot-state');
-            }
+            if (!m.socket || !m.socket.connected) m.initSocket();
+            else m.socket.emit('get-bot-state');
         });
-        
-        // [BLINDAJE]: Quitamos el re-fetch destructivo de 'initializeTab' para evitar parpadeos visuales 
-        // agresivos si el WebSocket ya se encuentra listo para inyectar los datos en tiempo real.
     }
 });
