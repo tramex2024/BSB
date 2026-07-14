@@ -108,7 +108,19 @@ export async function updateBotUI(state) {
         'ai-engine-msg': 'aiMessage',  
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
-        'ai-mode-status': 'aistate' 
+        'ai-mode-status': 'aistate',
+
+        // IDs de las métricas de ciclo
+    	'cycle-avg-duration': 'avg_duration',  // ID del HTML -> Propiedad en el estado
+    	'cycle-efficiency': 'profit_per_day',  // ID del HTML -> Propiedad en el estado
+	    
+        // Si también quieres asegurar los otros campos de esa tarjeta:
+    	'cycle-avg-profit': 'avg_profit_percent',
+        'cycle-net-profit': 'net_avg_profit',
+    	'total-cycles-closed': 'total_cycles',
+    	'cycle-avg-orders': 'avg_orders',
+    	'cycle-avg-recovery': 'avg_recovery',
+    	'cycle-win-rate': 'win_rate' 
     };
 
     Object.entries(elements).forEach(([id, key]) => {
@@ -117,6 +129,17 @@ export async function updateBotUI(state) {
         
         let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
         if (val === undefined || val === null) return;
+
+        // --- 🛡️ EXCEPCIONES PARA NUEVAS MÉTRICAS (PREVENCIÓN DE REDONDEO) ---
+        if (id === 'cycle-efficiency') {
+            el.textContent = `$${parseFloat(val).toFixed(2)}/d`;
+            return;
+        }
+        if (id === 'cycle-avg-duration' || id === 'cycle-avg-profit' || id === 'cycle-avg-orders' || id === 'cycle-avg-recovery' || id === 'cycle-win-rate' || id === 'cycle-net-profit') {
+            el.textContent = val; 
+            return;
+        }
+        // --- FIN DE EXCEPCIONES ---
 
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = val.toString().toUpperCase().trim();
@@ -133,6 +156,7 @@ export async function updateBotUI(state) {
             const btcVal = parseFloat(val).toFixed(6);
             if (el.textContent !== btcVal) el.textContent = btcVal;
         } else if (id.includes('cycle') || id.includes('norder')) {
+            // Este bloque solo se ejecutará para IDs que NO sean los de arriba
             const cycleVal = Math.floor(val).toString();
             if (el.textContent !== cycleVal) el.textContent = cycleVal;
         } else if (id.includes('coverage')) {
