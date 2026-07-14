@@ -2,23 +2,14 @@
  * apiService.js - Comunicaciones REST Sincronizadas (2026)
  * Versión: Auditoría Final + Control de Recálculo Integrado
  */
-import { displayMessage, getSanitizedValue } from './uiManager.js';
+import { displayMessage } from './uiManager.js';
 import { BACKEND_URL, logStatus, currentBotState } from '../main.js';
 import { mapConfigFromDOM } from './configMapper.js';
-import { currentBotState } from '../main.js';
 
 // Control transaccional real
 export let isSavingConfig = false;
 export let inTransitConfig = null; 
 export let socketIsActive = false;
-
-const MINIMOS = {
-    amount: 6.0,
-    purchase: 6.0,
-    variation: 0.1,
-    profit: 0.1,
-    step: 0
-};
 
 export function setSocketActive(status) {
     socketIsActive = status;
@@ -105,16 +96,11 @@ export function getBotConfiguration() {
 
 /**
  * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND
- * @param {Object|null} manualPayload - Payload personalizado si es necesario
- * @param {Boolean} shouldRecalculate - Flag para indicar al backend si debe recalcular el grid
- */
-/**
- * SINCRONIZA LA CONFIGURACIÓN CON EL BACKEND
  * Integra la capa de validación automática antes del envío.
  */
 export async function sendConfigToBackend(manualPayload = null, shouldRecalculate = false) {
     try {
-        // 1. Obtención y Validación (Esto disparará el error si la config no es segura)
+        // 1. Obtención y Validación
         const botConfig = getBotConfiguration();
         
         isSavingConfig = true; 
@@ -145,10 +131,8 @@ export async function sendConfigToBackend(manualPayload = null, shouldRecalculat
         return data;
 
     } catch (err) {
-        // Captura errores de validación (del mapper) o errores de red
         console.error("❌ Error al sincronizar configuración:", err);
         
-        // Si el error es de validación, se lo mostramos al usuario
         if (typeof displayMessage === 'function') {
             displayMessage(err.message || "Error al procesar configuración", 'error');
         }

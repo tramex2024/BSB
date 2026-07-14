@@ -185,7 +185,7 @@ document.addEventListener('change', async (e) => {
     if (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle') {
         const side = e.target.id.includes('long') ? 'long' : 'short';
         const isChecked = e.target.checked;
-        const previousValue = !isChecked; // Estado previo para posible rollback
+        const previousValue = !isChecked;
 
         logStatus(`${side.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, "info");
         
@@ -193,10 +193,10 @@ document.addEventListener('change', async (e) => {
         currentBotState.config[side].stopAtCycle = isChecked;
 
         try {
-            const data = await sendConfigToBackend({ config: getBotConfiguration() });
-            if (!data || !data.success) throw new Error("Sync failed");
+            // AQUÍ ES DONDE COLOCAS EL CÓDIGO. 
+            // Lo envolvemos en { config: ... } para asegurar que el backend reciba el formato correcto.
+            await sendConfigToBackend({ config: currentBotState.config });
         } catch (err) {
-            // [BLINDAJE]: Rollback ante error de servidor o validación
             currentBotState.config[side].stopAtCycle = previousValue;
             e.target.checked = previousValue;
             logStatus(`Error: Cambio no guardado. Revirtiendo ${side.toUpperCase()}...`, "error");
