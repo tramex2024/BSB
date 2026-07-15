@@ -1,5 +1,3 @@
-// BSB/server/src/states/short/SSelling.js
-
 const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
 
@@ -66,7 +64,8 @@ async function run(dependencies) {
                     await updateBotState('PAUSED', SSTATE);
                 }
             } else {
-                log(`⚠️ [S-SELL] Insufficient funds to open Short position.`, 'warning');
+                // LOG DE DIAGNÓSTICO AÑADIDO
+                log(`⚠️ [S-SELL DEBUG] Insufficient funds to open position. Available: ${availableUSDT} | S-Balance: ${currentSBalance} | Required: ${purchaseAmount}`, 'error');
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
@@ -112,7 +111,8 @@ async function run(dependencies) {
                     await updateBotState('PAUSED', SSTATE);
                 }
             } else {
-                log(`🚫 [S-SELL] DCA failed due to insufficient balance. Pausing bot.`, 'error');
+                // LOG DE DIAGNÓSTICO AÑADIDO
+                log(`🚫 [S-SELL DEBUG] DCA failed due to insufficient balance. Available: ${availableUSDT} | S-Balance: ${currentSBalance} | Required: ${requiredAmount}`, 'error');
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
