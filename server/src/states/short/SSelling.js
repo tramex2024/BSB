@@ -10,13 +10,13 @@ async function run(dependencies) {
         userId, 
         botState, currentPrice, config, log,
         updateBotState, updateSStateData, updateGeneralBotState,
-        availableUSDT,
         placeShortOrder,
         userCreds 
     } = dependencies;
 
     const SYMBOL = String(config.symbol || 'BTC_USDT');
     const SSTATE = 'short';
+    const availableBTC = parseFloat(botState.lastAvailableBTC || 0); // Extraemos BTC disponible
 
     try {
         // 1. ACTIVE ORDER MONITOR
@@ -31,32 +31,29 @@ async function run(dependencies) {
             userCreds
         );        
         
-        // --- THE BLOCK: We only return if there's an actual active order ---
         if (orderIsActive) return; 
 
-        // 2. MONITORING LOG (The "Eye" 👁️)
+        // 2. MONITORING LOG
         if (parseFloat(botState.sppc || 0) > 0) {
             const nextPrice = parseFloat(botState.sncp || 0); 
             const targetActivation = parseFloat(botState.stprice || 0); 
-            
             const distToDCA = nextPrice > 0 ? ((nextPrice / currentPrice - 1) * 100).toFixed(2) : "0.00";
             const distToTP = targetActivation > 0 ? ((1 - currentPrice / targetActivation) * 100).toFixed(2) : "0.00";
             const pnlActual = botState.sprofit || 0;
-            
             log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA : ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }
 
-        // 3. OPENING LOGIC (First order of the cycle)
+        // 3. OPENING LOGIC
         const currentPPC = parseFloat(botState.sppc || 0);
         const pendingOrder = botState.slastOrder; 
 
         if (currentPPC === 0 && !pendingOrder) {
             const purchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
-            const currentSBalance = parseFloat(botState.sbalance || 0);
+            const btcNeeded = purchaseAmount / currentPrice;
 
-            if (availableUSDT >= purchaseAmount && currentSBalance >= purchaseAmount) {
-                log(`🚀 [S-SELL] Starting SIGNED Short cycle.`, 'info');
-                // SOLUCIÓN: Envolver en try/catch para manejar caídas del exchange por saldo u otros motivos
+            // VALIDACIÓN POR BTC
+            if (availableBTC >= btcNeeded) {
+                log(`🚀 [S-SELL] Starting SIGNED Short cycle. (BTC Available: ${availableBTC.toFixed(6)})`, 'info');
                 try {
                     await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
                 } catch (orderError) {
@@ -64,55 +61,43 @@ async function run(dependencies) {
                     await updateBotState('PAUSED', SSTATE);
                 }
             } else {
-                // LOG DE DIAGNÓSTICO AÑADIDO
-                log(`⚠️ [S-SELL DEBUG] Insufficient funds to open position. Available: ${availableUSDT} | S-Balance: ${currentSBalance} | Required: ${purchaseAmount}`, 'error');
+                log(`⚠️ [S-SELL DEBUG] Insufficient BTC. Available: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)}`, 'error');
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
         }
 
-        // 4. TAKE PROFIT EVALUATION (Move to S-BUYING)
+        // 4. TAKE PROFIT EVALUATION
         const targetActivation = parseFloat(botState.stprice || 0); 
         if (targetActivation > 0 && currentPrice <= targetActivation) {
-            log(`💰 [S-SELL] Target reached (${targetActivation.toFixed(2)}). Moving to BUYING for repurchase...`, 'success');
-            
-            await updateGeneralBotState({
-                spm: 0, 
-                spc: 0 
-            });
-
+            log(`💰 [S-SELL] Target reached (${targetActivation.toFixed(2)}). Moving to BUYING...`, 'success');
+            await updateGeneralBotState({ spm: 0, spc: 0 });
             await updateBotState('BUYING', SSTATE);
             return;
         }
 
-        // 5. EXPONENTIAL DCA (If price goes up)
+        // 5. EXPONENTIAL DCA
         const requiredAmount = parseFloat(botState.srca || 0); 
         const nextCoveragePrice = parseFloat(botState.sncp || 0); 
         const lastExecutionPrice = parseFloat(botState.slep || 0);
-
         const isPriceHighEnough = nextCoveragePrice > 0 && currentPrice >= nextCoveragePrice;
 
         if (!pendingOrder && isPriceHighEnough) {
-            
-            if (lastExecutionPrice > 0 && currentPrice <= lastExecutionPrice) {
-                return; 
-            }
+            if (lastExecutionPrice > 0 && currentPrice <= lastExecutionPrice) return; 
 
-            const currentSBalance = parseFloat(botState.sbalance || 0);
-            const hasBalance = currentSBalance >= requiredAmount && availableUSDT >= requiredAmount;
+            const btcNeeded = requiredAmount / currentPrice;
 
-            if (hasBalance && requiredAmount > 0) {
+            // VALIDACIÓN POR BTC
+            if (availableBTC >= btcNeeded && requiredAmount > 0) {
                 log(`📈 [S-SELL] Price in DCA zone. Increasing SIGNED coverage...`, 'warning');
                 try {
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice, placeShortOrder);
                 } catch (error) {
-                    // SOLUCIÓN: Si falla la colocación en el exchange, forzar transición a PAUSED
-                    log(`❌ [S-SELL] Error placing coverage on Exchange: ${error.message}. Pausing bot to secure funds.`, 'error');
+                    log(`❌ [S-SELL] Error placing coverage: ${error.message}. Pausing.`, 'error');
                     await updateBotState('PAUSED', SSTATE);
                 }
             } else {
-                // LOG DE DIAGNÓSTICO AÑADIDO
-                log(`🚫 [S-SELL DEBUG] DCA failed due to insufficient balance. Available: ${availableUSDT} | S-Balance: ${currentSBalance} | Required: ${requiredAmount}`, 'error');
+                log(`🚫 [S-SELL DEBUG] DCA failed. Insufficient BTC. Available: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)}`, 'error');
                 await updateBotState('PAUSED', SSTATE);
             }
             return;
@@ -120,12 +105,7 @@ async function run(dependencies) {
 
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected error in SSelling: ${criticalError.message}`, 'error');
-        // Salvaguarda: Si algo totalmente imprevisto rompe el flujo, pausamos por seguridad.
-        try {
-            await updateBotState('PAUSED', SSTATE);
-        } catch (dbError) {
-            log(`🚨 [CRITICAL] Could not even update state to PAUSED: ${dbError.message}`, 'error');
-        }
+        try { await updateBotState('PAUSED', SSTATE); } catch (dbError) {}
     }
 }
 
