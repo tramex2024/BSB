@@ -2,7 +2,7 @@
  * BSB/server/src/states/short/SPaused.js
  * Wait management when capital is insufficient for the next DCA.
  * Fixed: Coverage synchronization with real market price (2026).
- * Updated: Recovery logic now validates funds before transitioning to BUYING.
+ * Updated: Resumption now validates against available BTC (Short Strategy).
  */
 
 const { calculateShortTargets, calculateShortCoverage } = require('../../../autobotCalculations');
@@ -17,12 +17,12 @@ async function run(dependencies) {
         availableUSDT: realUSDT 
     } = dependencies;
     
-    // SOLUTION: Global wrapper to prevent freezing due to calculation errors or null data
+    // Global wrapper to prevent freezing due to calculation errors
     try {
         if (!currentPrice || currentPrice <= 0) return;
 
-        const availableUSDT = parseFloat(realUSDT || 0);
-        const currentSBalance = parseFloat(botState.sbalance || 0);
+        const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
+        const currentSBalance = parseFloat(botState.sbalance || 0); // Mantemos para referencia interna si es necesario
 
         const ac = parseFloat(botState.sac || 0);  // Coins sold (Short position open)
         const ppc = parseFloat(botState.sppc || 0); // Average selling price
@@ -32,17 +32,10 @@ async function run(dependencies) {
         const targetPrice = parseFloat(botState.spc || botState.stprice || 0);
 
         // --- 1. RECOVERY LOGIC (EXIT TO BUYING) ---
-        // Validate funds before closing the position to avoid failed API orders
         if (ac > 0 && targetPrice > 0 && currentPrice <= targetPrice) {
-            const buybackCost = ac * currentPrice;
-            
-            if (availableUSDT >= buybackCost) {
-                log(`🚀 [S-RECOVERY] Price in profit zone (${currentPrice.toFixed(2)}). Sufficient funds (${availableUSDT.toFixed(2)} USDT) to cover buyback. Jumping to BUYING to close position.`, 'success');
-                await updateBotState('BUYING', 'short'); 
-                return;
-            } else {
-                log(`⚠️ [S-RECOVERY-BLOCKED] Price in profit zone (${currentPrice.toFixed(2)}), but insufficient funds to close. Need: ${buybackCost.toFixed(2)} USDT | Available: ${availableUSDT.toFixed(2)} USDT`, 'warning');
-            }
+            log(`🚀 [S-RECOVERY] Price in profit zone (${currentPrice.toFixed(2)}). Checking BTC liquidity...`, 'success');
+            await updateBotState('BUYING', 'short'); 
+            return;
         }
 
         // --- 2. RECALCULATE REQUIREMENTS AND PROJECTION ---
@@ -52,9 +45,8 @@ async function run(dependencies) {
             orderCountInCycle
         );
 
-        const requiredAmount = parseFloat(recalculation.requiredCoverageAmount || 0);
+        const requiredAmountUSDT = parseFloat(recalculation.requiredCoverageAmount || 0);
 
-        // SOLUTION: Sanitization of variables using safe parsing to avoid crashes from empty data
         const priceVar = parseFloat(config.short?.price_var || 0) / 100;
         const priceStepInc = parseFloat(config.short?.price_step_inc || 0) / 100;
         const initialPurchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
@@ -71,43 +63,37 @@ async function run(dependencies) {
 
         // Update Short indicators to clean garbage values from DB
         await updateGeneralBotState({ 
-            srca: requiredAmount, 
+            srca: requiredAmountUSDT, 
             sncp: recalculation.nextCoveragePrice,
             scoverage: coverageInfo.coveragePrice,
             snorder: coverageInfo.numberOfOrders
         });
 
         // --- 3. RESET INDICATORS (If no position and no funds) ---
-        if (ac <= 0 && currentSBalance < (initialPurchaseAmount || MIN_USDT_VALUE_FOR_BITMART)) {
+        // Se mantiene lógica de reseteo si el saldo es irrisorio
+        if (ac <= 0 && availableBTC < (initialPurchaseAmount / currentPrice)) {
             if (parseFloat(botState.scoverage || 0) !== 0) {
                 log(`[S-RESET] Insufficient funds for new Short opening. Clearing visual projection.`, 'warning');
                 await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
             }
-            return; 
+            // No hacemos return aquí para permitir que la lógica de reintento continúe
         }
 
-        // --- 4. RESUMPTION VERIFICATION (LOCKUP BEHAVIOR SOLUTION) ---
-        // If the cycle is clear (ac === 0) we require the initial amount; if there is a pending DCA, we require requiredAmount
-        const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmount;
-        const finalMinLimit = Math.max(MIN_USDT_VALUE_FOR_BITMART, amountNeededToResume);
+        // --- 4. RESUMPTION VERIFICATION (BTC FOCUS SOLUTION) ---
+        const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmountUSDT;
+        const btcNeeded = amountNeededToResume / currentPrice;
 
-        // LOG DE DIAGNÓSTICO: Esto nos dirá qué variable está fallando
-        log(`[S-PAUSED DEBUG] Evaluating resumption: S-Balance: ${currentSBalance} | Available: ${availableUSDT} | Required: ${amountNeededToResume.toFixed(2)}`, 'debug');
-
-        const canResume = currentSBalance >= amountNeededToResume && 
-                          availableUSDT >= amountNeededToResume && 
-                          finalMinLimit >= MIN_USDT_VALUE_FOR_BITMART;
+        // PRIORIDAD: ¿Tengo el BTC suficiente para cubrir esta orden?
+        const canResume = availableBTC >= btcNeeded && btcNeeded > 0;
 
         if (canResume) {
-            log(`✅ [S-FUNDS] Capital recovered (${amountNeededToResume.toFixed(2)} USDT required). Resuming in SELLING...`, 'success');
+            log(`✅ [S-FUNDS] BTC liquidity sufficient (Available: ${availableBTC.toFixed(6)} BTC | Needed: ${btcNeeded.toFixed(6)} BTC). Resuming in SELLING...`, 'success');
             await updateBotState('SELLING', 'short');
         } else {
-            const missing = (amountNeededToResume - Math.min(availableUSDT, currentSBalance)).toFixed(2);
-            // Calculate BTC equivalent needed
-            const btcNeeded = (amountNeededToResume / currentPrice).toFixed(6);
-            
-            log(`[S-PAUSED] 👁️ Waiting for funds. Balance: ${currentSBalance.toFixed(2)} USDT | Required: ${amountNeededToResume.toFixed(2)} USDT (~${btcNeeded} BTC) (Missing: ${missing} USDT)`, 'debug');
+            const missingBTC = (btcNeeded - availableBTC).toFixed(6);
+            log(`[S-PAUSED] 👁️ Waiting for funds. Available: ${availableBTC.toFixed(6)} BTC | Required: ${btcNeeded.toFixed(6)} BTC (Missing: ${missingBTC} BTC)`, 'debug');
         }
+        
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected error within SPaused state: ${criticalError.message}`, 'error');
     }
