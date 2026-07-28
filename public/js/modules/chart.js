@@ -14,7 +14,7 @@ export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const fullSymbol = `BITMART:${symbol}`;
+    //const fullSymbol = `BITMART:${symbol}`;
 
     // [BLINDAJE]: Si el contenedor ya tiene un iframe activo y el símbolo es idéntico, 
     // evitamos destruir el DOM para prevenir cortes en el flujo de precios en tiempo real.
@@ -32,7 +32,7 @@ export function initializeChart(containerId, symbol) {
         tvWidgetInstances[containerId] = fullSymbol;
         new TradingView.widget({
             "autosize": true, 
-            "symbol": fullSymbol,
+            "symbol": "BINANCE:BTCUSDT",
             "interval": savedInterval,
             "timezone": "Etc/UTC",
             "theme": "dark",
