@@ -1,17 +1,26 @@
 /**
- * chart.js - Visualización de Rendimiento (Versión Completa + Auditoría)
+ * chart.js - Visualización de Rendimiento (Versión Optimizada + Blindaje DOM)
  * Estado: Estable - Manejo de TradingView y Chart.js
  */
 
 let equityChartInstance = null;
+let tvWidgetInstances = {}; // [BLINDAJE]: Registro para evitar recargas innecesarias del widget
 
 /**
  * Gráfico de TradingView (Precios en vivo)
- * Configura el widget principal para ver el mercado en tiempo real.
+ * Configura el widget principal evitando destrucción de iframes al cambiar de pestaña.
  */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
+
+    const fullSymbol = `BITMART:${symbol}`;
+
+    // [BLINDAJE]: Si el contenedor ya tiene un iframe activo y el símbolo es idéntico, 
+    // evitamos destruir el DOM para prevenir cortes en el flujo de precios en tiempo real.
+    if (container.querySelector('iframe') && tvWidgetInstances[containerId] === fullSymbol) {
+        return; 
+    }
 
     container.innerHTML = '';
     container.style.height = "650px"; 
@@ -20,9 +29,10 @@ export function initializeChart(containerId, symbol) {
     const savedInterval = localStorage.getItem('tv_preferred_interval') || '1';
 
     if (window.TradingView) {
+        tvWidgetInstances[containerId] = fullSymbol;
         new TradingView.widget({
             "autosize": true, 
-            "symbol": `BITMART:${symbol}`,
+            "symbol": fullSymbol,
             "interval": savedInterval,
             "timezone": "Etc/UTC",
             "theme": "dark",
@@ -37,21 +47,17 @@ export function initializeChart(containerId, symbol) {
             "support_host": "https://www.tradingview.com",
             "studies": [
                 "RSI@tv-basicstudies",      
-                "BB@tv-basicstudies",           
+                "BB@tv-basicstudies",         
                 "MACD@tv-basicstudies"      
             ],
             "overrides": {
-    "mainSeriesProperties.style": 1,
-    "paneProperties.background": "#111827",
-    
-    // REDUCIR INTENSIDAD: Cambia 0.08 por 0.02
-    "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.02)",
-    "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.02)",
-    
-    // ESTILO PUNTEADO: El estilo 2 es dashed/dotted, mucho más limpio que la línea sólida
-    "paneProperties.vertGridProperties.style": 2,
-    "paneProperties.horzGridProperties.style": 2
-}
+                "mainSeriesProperties.style": 1,
+                "paneProperties.background": "#111827",
+                "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.02)",
+                "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.02)",
+                "paneProperties.vertGridProperties.style": 2,
+                "paneProperties.horzGridProperties.style": 2
+            }
         });
     }
 }
@@ -67,7 +73,6 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         return;
     }
 
-    // Asegurar dimensiones del contenedor para evitar colapsos visuales
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
@@ -85,12 +90,9 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const hasData = rawPoints.length > 0;
     
-    // Placeholder si no hay datos
     const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
-
     const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
     
-    // Blindaje de extracción de valores numéricos
     const dataPoints = points.map(p => {
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
         return parseFloat(parseFloat(val).toFixed(4));
