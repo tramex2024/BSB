@@ -15,6 +15,7 @@ const parseNumber = (val) => {
 
 /**
  * Calcula el monto total requerido para N órdenes exponenciales.
+ * sizeVar actúa como factor de multiplicación directo (ej. 2.0).
  * Incluye protección contra desbordamiento (Overflow Protection).
  */
 function getExponentialAmount(baseAmount, orderCount, sizeVar) {
@@ -26,17 +27,15 @@ function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     if (base <= 0) return 0;
 
     // 2. VÁLVULA DE SEGURIDAD (Safety Valve)
-    // Definimos un límite lógico de niveles. Si el sistema intenta calcular 
-    // más de 50 niveles, es un error de estado o de persistencia.
     const MAX_ALLOWED_ORDERS = 50; 
     const count = Math.min(rawCount, MAX_ALLOWED_ORDERS);
 
-    // Logging de alerta para auditoría si detectamos datos basura
     if (rawCount > MAX_ALLOWED_ORDERS) {
         console.error(`[SEGURIDAD] Intento de cálculo exponencial con ${rawCount} órdenes. Limitado a ${MAX_ALLOWED_ORDERS}.`);
     }
 
-    const multiplier = 1 + (sVar / 100);
+    // size_var es un factor de multiplicación directo (ej. 2). Si no está definido o es 0, por defecto es 1.
+    const multiplier = sVar > 0 ? sVar : 1;
     
     // 3. Cálculo protegido
     return base * Math.pow(multiplier, count);
