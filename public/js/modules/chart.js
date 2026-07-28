@@ -14,7 +14,7 @@ export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const fullSymbol = "BITMART:BTC_USDT";
+    const fullSymbol = "BINANCE:BTCUSDT";
 
     // [BLINDAJE]: Si el contenedor ya tiene un iframe activo y el símbolo es idéntico, 
     // evitamos destruir el DOM para prevenir cortes en el flujo de precios en tiempo real.
