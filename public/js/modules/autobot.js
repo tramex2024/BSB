@@ -110,17 +110,11 @@ export async function initializeAutobotView() {
     updateControlsState(currentBotState);
 
     const chartContainer = document.getElementById('au-tvchart');
-    if (chartContainer) {
-        setTimeout(() => {
-            if (window.currentChart) {
-                try { window.currentChart.remove(); window.currentChart = null; } 
-                catch(e) { console.warn("Chart removal mitigation:", e); }
-            }
-            window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
-        }, 300);
+if (chartContainer) {
+    // Solo inicializar si el contenedor está vacío
+    if (!chartContainer.hasChildNodes()) {
+        window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
     }
-
-    if (auOrderList) setupOrderTabs(auOrderList);
 }
 
 function setupOrderTabs(container) {
