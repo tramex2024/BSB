@@ -19,6 +19,7 @@ import { initializeGlobalButtonListeners } from './modules/botControls.js';
 import { applyRolePermissions } from './modules/role.js';
 import { sendConfigToBackend, getBotConfiguration } from './modules/apiService.js';
 import { setupBotInput } from './modules/ui/controls.js';
+import { checkForAppUpdates } from './modules/apkupdate.js'; // [NEW]: Módulo de actualización APK
 
 // --- CONFIGURATION ---
 export const BACKEND_URL = 'https://bsb-ppex.onrender.com';
@@ -193,8 +194,6 @@ document.addEventListener('change', async (e) => {
         currentBotState.config[side].stopAtCycle = isChecked;
 
         try {
-            // AQUÍ ES DONDE COLOCAS EL CÓDIGO. 
-            // Lo envolvemos en { config: ... } para asegurar que el backend reciba el formato correcto.
             await sendConfigToBackend({ config: currentBotState.config });
         } catch (err) {
             currentBotState.config[side].stopAtCycle = previousValue;
@@ -237,6 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSettings();
     initializeProfile();
     initPayments();
+
+    // [NEW]: Comprobación automática de actualización de la APK al iniciar
+    checkForAppUpdates();
 });
 
 document.addEventListener('visibilitychange', () => {
