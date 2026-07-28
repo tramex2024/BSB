@@ -1,6 +1,6 @@
 /**
  * autobot.js - Core Logic for Trading Tabs
- * Versión Purificada y Blindada 2026: Solo Autobot (Long & Short) con saneamiento integral de listeners
+ * Versión Purificada y Blindada: Solo Autobot (Long & Short) con saneamiento integral de listeners
  */
 import { initializeChart } from './chart.js';
 import { fetchOrders } from './orders.js';
@@ -15,7 +15,6 @@ let configDebounceTimeout = null;
 
 /**
  * Escucha cambios en los inputs exclusivamente del Autobot de forma segura
- * Con Actualización Optimista Inmediata y Blindaje [V2.1 - 2026]
  */
 function setupConfigListeners() {
     const configIds = [
@@ -31,22 +30,15 @@ function setupConfigListeners() {
         const handler = () => {
             activeEdits[id] = Date.now();
 
-            // 1. OBTENCIÓN Y VALIDACIÓN ATÓMICA
             const rawValue = el.type === 'checkbox' ? el.checked : parseFloat(el.value);
-            
-            // Si es un input numérico y no es un número válido (ej: está vacío o tiene caracteres raros), no hacemos nada.
-            // Esto evita que NaN entre en el sistema.
             if (el.type !== 'checkbox' && isNaN(rawValue)) return;
 
-            // Identificación atómica del lado (Long / Short)
             const side = id.includes('l') ? 'long' : 'short';
             const s = side === 'long' ? 'l' : 's';
 
-            // 2. MUTACIÓN PROTEGIDA (Solo si rawValue es seguro)
             if (!currentBotState.config) currentBotState.config = {};
             if (!currentBotState.config[side]) currentBotState.config[side] = {};
 
-            // Mapeo seguro
             if (id.includes('amount')) currentBotState.config[side].amountUsdt = rawValue;
             else if (id.includes('purchase')) currentBotState.config[side].purchaseUsdt = rawValue;
             else if (id.includes('trigger')) currentBotState.config[side].price_var = rawValue;
@@ -55,11 +47,9 @@ function setupConfigListeners() {
             else if (id.includes('pricestep')) currentBotState.config[side].price_step_inc = rawValue;
             else if (id.includes('stop')) currentBotState.config[side].stopAtCycle = rawValue;
 
-            // 3. DEBOUNCE CONTROLADO
             if (configDebounceTimeout) clearTimeout(configDebounceTimeout);
             
             configDebounceTimeout = setTimeout(async () => {
-                // Validación final: extraemos del DOM solo valores numéricos válidos
                 const getVal = (selector, fallback) => {
                     const el = document.getElementById(selector);
                     const val = parseFloat(el?.value);
@@ -110,11 +100,13 @@ export async function initializeAutobotView() {
     updateControlsState(currentBotState);
 
     const chartContainer = document.getElementById('au-tvchart');
-if (chartContainer) {
-    // Solo inicializar si el contenedor está vacío
-    if (!chartContainer.hasChildNodes()) {
-        window.currentChart = initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+    if (chartContainer) {
+        setTimeout(() => {
+            initializeChart('au-tvchart', TRADE_SYMBOL_TV);
+        }, 300);
     }
+
+    if (auOrderList) setupOrderTabs(auOrderList);
 }
 
 function setupOrderTabs(container) {
