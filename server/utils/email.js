@@ -4,13 +4,18 @@
  */
 
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// [BLINDAJE]: Forzar resolución IPv4 para evitar errores ENETUNREACH en servidores cloud (Render)
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
 
 // --- CREDENTIALS CONFIGURATION ---
 const EMAIL_USER = process.env.GMAIL_USER; // || 'info.nexuslabs@gmail.com';
 const EMAIL_PASS = process.env.GMAIL_PASS; // || 'pceifioovapsofol';
 
-console.log("🔍 [DEBUG-EMAIL] Initializing Nodemailer with App Password...");
-console.log("🔍 GMAIL_USER:", EMAIL_USER ? "Loaded" : "NOT FOUND");
+console.log("🔍 [DEBUG-EMAIL] Initializing Nodemailer with App Password (IPv4 forced)...");
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
