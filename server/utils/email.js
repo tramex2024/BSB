@@ -1,68 +1,43 @@
 /**
  * BSB/server/utils/email.js
- * EMAIL DELIVERY SERVICE VIA GMAIL API (HTTPS / NO-SMTP)
+ * EMAIL DELIVERY SERVICE VIA NODEMAILER (GMAIL SMTP / APP PASSWORD)
  */
 
-const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 
-// --- CRITICAL DEBUGGING ---
-console.log("🔍 [DEBUG-EMAIL] Verifying Gmail API credentials...");
-console.log("🔍 GMAIL_USER:", process.env.GMAIL_USER ? "Loaded" : "NOT FOUND");
-console.log("🔍 GMAIL_CLIENT_ID:", process.env.GMAIL_CLIENT_ID ? "Loaded" : "NOT FOUND");
-// -------------------------
+// --- CREDENTIALS CONFIGURATION ---
+const EMAIL_USER = process.env.GMAIL_USER; // || 'info.nexuslabs@gmail.com';
+const EMAIL_PASS = process.env.GMAIL_PASS; // || 'pceifioovapsofol';
 
-// Google OAuth2 client configuration
-const oAuth2Client = new google.auth.OAuth2(
-    process.env.GMAIL_CLIENT_ID,
-    process.env.GMAIL_CLIENT_SECRET,
-    'https://developers.google.com/oauthplayground' // Must match the configured redirect URI
-);
+console.log("🔍 [DEBUG-EMAIL] Initializing Nodemailer with App Password...");
+console.log("🔍 GMAIL_USER:", EMAIL_USER ? "Loaded" : "NOT FOUND");
 
-oAuth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-
-/**
- * Helper to encode the email into the secure Base64 format required by the Google API (RFC 2822)
- */
-function encodeEmail(to, from, subject, htmlContent) {
-    const str = [
-        `To: ${to}`,
-        `From: ${from}`,
-        `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=utf-8',
-        'Content-Transfer-Encoding: 7bit',
-        '',
-        htmlContent
-    ].join('\n');
-
-    return Buffer.from(str)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-}
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+    }
+});
 
 /**
- * Generic send function via HTTPS POST
+ * Generic send function via Nodemailer
  */
 async function sendMail(to, subject, htmlContent) {
     try {
-        console.log(`[EMAIL-SERVICE] Attempting to send via GMAIL API to: ${to}`);
+        console.log(`[EMAIL-SERVICE] Attempting to send via Nodemailer to: ${to}`);
         
-        const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-        const rawMessage = encodeEmail(to, `"Nexus Labs Support" <${process.env.GMAIL_USER}>`, subject, htmlContent);
-        
-        const response = await gmail.users.messages.send({
-            userId: 'me',
-            requestBody: {
-                raw: rawMessage
-            }
+        const info = await transporter.sendMail({
+            from: `"Nexus Labs Support" <${EMAIL_USER}>`,
+            to: to,
+            subject: subject,
+            html: htmlContent
         });
 
-        console.log(`[EMAIL-SERVICE] SUCCESS: Email sent. ID: ${response.data.id}`);
-        return { messageId: response.data.id };
+        console.log(`[EMAIL-SERVICE] SUCCESS: Email sent. ID: ${info.messageId}`);
+        return { messageId: info.messageId };
     } catch (error) {
-        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR VIA API]:", error.message);
+        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR]:", error.message);
         throw error;
     }
 }
@@ -90,14 +65,14 @@ async function sendSupportTicketEmail(ticketData) {
     const { email, category, message, ticketId } = ticketData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Ticket: ${ticketId}</h2><p><b>From:</b> ${email}</p><p>${message}</p></div>`;
     
-    return await sendMail(process.env.GMAIL_USER, `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
+    return await sendMail(EMAIL_USER, `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
 }
 
 async function sendPaymentNotificationEmail(paymentData) {
     const { email, amount, hash, type } = paymentData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Payment</h2><p>User: ${email}</p><p>Amount: ${amount} USDT</p><p>TXID: ${hash}</p></div>`;
     
-    return await sendMail(process.env.GMAIL_USER, `💰 [PAYMENT: ${type}] from ${email}`, html);
+    return await sendMail(EMAIL_USER, `💰 [PAYMENT: ${type}] from ${email}`, html);
 }
 
 module.exports = { sendTokenEmail, sendSupportTicketEmail, sendPaymentNotificationEmail };
