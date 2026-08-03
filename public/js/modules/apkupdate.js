@@ -1,15 +1,19 @@
 /**
- * apkupdate.js - GitHub Releases Update Checker Module
+ * apkupdate.js - GitHub Releases Update Checker Module (Mobile Native Only)
  */
 
-const GITHUB_USER = 'tramex2024';
-const GITHUB_REPO = 'BSB';
+const GITHUB_USER = 'YOUR_GITHUB_USER';
+const GITHUB_REPO = 'YOUR_REPOSITORY';
 const CURRENT_VERSION = '1.0.0'; 
 
 /**
- * Checks if a new version is published in GitHub Releases
+ * Checks if a new version is published in GitHub Releases (Only on native mobile apps)
  */
 export async function checkForAppUpdates() {
+    // [BLINDAJE]: Si no es una app móvil nativa (ej. navegador web o Vercel), omite la comprobación
+    const isNativeApp = window.Capacitor && window.Capacitor.isNativePlatform();
+    if (!isNativeApp) return;
+
     const repoUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`;
 
     try {
