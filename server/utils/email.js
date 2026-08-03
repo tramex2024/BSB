@@ -1,24 +1,23 @@
 /**
  * BSB/server/utils/email.js
- * EMAIL DELIVERY SERVICE VIA SMTP (PORT 2525 - RENDER COMPATIBLE)
+ * EMAIL DELIVERY SERVICE VIA BREVO SMTP (PORT 2525 - RENDER COMPATIBLE)
  */
 
 const nodemailer = require('nodemailer');
 
-// Configuración de Brevo (o cualquier SMTP) usando el puerto 2525 permitido por Render
 const transporter = nodemailer.createTransport({
     host: 'smtp-relay.brevo.com',
     port: 2525,
-    secure: false, // false para el puerto 2525
+    secure: false,
     auth: {
-        user: process.env.SMTP_USER, // Tu usuario/email de Brevo
-        pass: process.env.SMTP_PASS  // Tu clave SMTP de Brevo
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
     }
 });
 
 async function sendMail(to, subject, htmlContent) {
     try {
-        console.log(`[EMAIL-SERVICE] Attempting to send via SMTP to: ${to}`);
+        console.log(`[EMAIL-SERVICE] Attempting to send via Brevo SMTP to: ${to}`);
         
         const info = await transporter.sendMail({
             from: `"Nexus Labs Support" <info.nexuslabs@gmail.com>`,
