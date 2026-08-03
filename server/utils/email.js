@@ -1,51 +1,12 @@
 /**
  * BSB/server/utils/email.js
- * EMAIL DELIVERY SERVICE VIA NODEMAILER (GMAIL SMTP / APP PASSWORD)
+ * EMAIL DELIVERY SERVICE VIA RESEND API (HTTPS / NO-EXPIRATION)
  */
 
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+const { Resend } = require('resend');
 
-// [BLINDAJE]: Forzar resolución IPv4 para evitar errores ENETUNREACH en servidores cloud (Render)
-if (dns.setDefaultResultOrder) {
-    dns.setDefaultResultOrder('ipv4first');
-}
-
-// --- CREDENTIALS CONFIGURATION ---
-const EMAIL_USER = process.env.GMAIL_USER; // || 'info.nexuslabs@gmail.com';
-const EMAIL_PASS = process.env.GMAIL_PASS; // || 'pceifioovapsofol';
-
-console.log("🔍 [DEBUG-EMAIL] Initializing Nodemailer with App Password (IPv4 forced)...");
-
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    }
-});
-
-/**
- * Generic send function via Nodemailer
- */
-async function sendMail(to, subject, htmlContent) {
-    try {
-        console.log(`[EMAIL-SERVICE] Attempting to send via Nodemailer to: ${to}`);
-        
-        const info = await transporter.sendMail({
-            from: `"Nexus Labs Support" <${EMAIL_USER}>`,
-            to: to,
-            subject: subject,
-            html: htmlContent
-        });
-
-        console.log(`[EMAIL-SERVICE] SUCCESS: Email sent. ID: ${info.messageId}`);
-        return { messageId: info.messageId };
-    } catch (error) {
-        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR]:", error.message);
-        throw error;
-    }
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'onboarding@resend.dev'; // O tu dominio verificado
 
 async function sendTokenEmail(email, token) {
     console.log(`[EMAIL-SERVICE] 📨 Sending access code to: ${email}...`);
@@ -61,23 +22,44 @@ async function sendTokenEmail(email, token) {
             <p style="font-size: 14px; line-height: 1.5;">This code is valid for 10 minutes.</p>
         </div>`;
 
-    const info = await sendMail(email, "🔑 Your BSB Access Code", html);
-    console.log(`[EMAIL-SERVICE] ✅ Email sent. ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    try {
+        const data = await resend.emails.send({
+            from: `BSB Bot <${SENDER_EMAIL}>`,
+            to: [email],
+            subject: '🔑 Your BSB Access Code',
+            html: html
+        });
+
+        console.log(`[EMAIL-SERVICE] ✅ Email sent. ID: ${data.id}`);
+        return { success: true, messageId: data.id };
+    } catch (error) {
+        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR]:", error.message);
+        throw error;
+    }
 }
 
 async function sendSupportTicketEmail(ticketData) {
     const { email, category, message, ticketId } = ticketData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Ticket: ${ticketId}</h2><p><b>From:</b> ${email}</p><p>${message}</p></div>`;
     
-    return await sendMail(EMAIL_USER, `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
+    await resend.emails.send({
+        from: `BSB Support <${SENDER_EMAIL}>`,
+        to: [process.env.GMAIL_USER || 'info.nexuslabs@gmail.com'],
+        subject: `[${category.toUpperCase()}] Ticket: ${ticketId}`,
+        html: html
+    });
 }
 
 async function sendPaymentNotificationEmail(paymentData) {
     const { email, amount, hash, type } = paymentData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Payment</h2><p>User: ${email}</p><p>Amount: ${amount} USDT</p><p>TXID: ${hash}</p></div>`;
     
-    return await sendMail(EMAIL_USER, `💰 [PAYMENT: ${type}] from ${email}`, html);
+    await resend.emails.send({
+        from: `BSB Payments <${SENDER_EMAIL}>`,
+        to: [process.env.GMAIL_USER || 'info.nexuslabs@gmail.com'],
+        subject: `💰 [PAYMENT: ${type}] from ${email}`,
+        html: html
+    });
 }
 
 module.exports = { sendTokenEmail, sendSupportTicketEmail, sendPaymentNotificationEmail };
