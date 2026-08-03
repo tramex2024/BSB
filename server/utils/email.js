@@ -1,12 +1,39 @@
 /**
  * BSB/server/utils/email.js
- * EMAIL DELIVERY SERVICE VIA RESEND API (HTTPS / NO-EXPIRATION)
+ * EMAIL DELIVERY SERVICE VIA SMTP (PORT 2525 - RENDER COMPATIBLE)
  */
 
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const SENDER_EMAIL = process.env.SENDER_EMAIL; // || 'onboarding@resend.dev'; // O tu dominio verificado
+// Configuración de Brevo (o cualquier SMTP) usando el puerto 2525 permitido por Render
+const transporter = nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 2525,
+    secure: false, // false para el puerto 2525
+    auth: {
+        user: process.env.SMTP_USER, // Tu usuario/email de Brevo
+        pass: process.env.SMTP_PASS  // Tu clave SMTP de Brevo
+    }
+});
+
+async function sendMail(to, subject, htmlContent) {
+    try {
+        console.log(`[EMAIL-SERVICE] Attempting to send via SMTP to: ${to}`);
+        
+        const info = await transporter.sendMail({
+            from: `"Nexus Labs Support" <info.nexuslabs@gmail.com>`,
+            to: to,
+            subject: subject,
+            html: htmlContent
+        });
+
+        console.log(`[EMAIL-SERVICE] SUCCESS: Email sent. ID: ${info.messageId}`);
+        return { messageId: info.messageId };
+    } catch (error) {
+        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR]:", error.message);
+        throw error;
+    }
+}
 
 async function sendTokenEmail(email, token) {
     console.log(`[EMAIL-SERVICE] 📨 Sending access code to: ${email}...`);
@@ -22,44 +49,20 @@ async function sendTokenEmail(email, token) {
             <p style="font-size: 14px; line-height: 1.5;">This code is valid for 10 minutes.</p>
         </div>`;
 
-    try {
-        const data = await resend.emails.send({
-            from: `BSB Bot <${SENDER_EMAIL}>`,
-            to: [email],
-            subject: '🔑 Your BSB Access Code',
-            html: html
-        });
-
-        console.log(`[EMAIL-SERVICE] ✅ Email sent. ID: ${data.id}`);
-        return { success: true, messageId: data.id };
-    } catch (error) {
-        console.error("❌ [EMAIL-SERVICE ACTUAL ERROR]:", error.message);
-        throw error;
-    }
+    const info = await sendMail(email, "🔑 Your BSB Access Code", html);
+    return { success: true, messageId: info.messageId };
 }
 
 async function sendSupportTicketEmail(ticketData) {
     const { email, category, message, ticketId } = ticketData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Ticket: ${ticketId}</h2><p><b>From:</b> ${email}</p><p>${message}</p></div>`;
-    
-    await resend.emails.send({
-        from: `BSB Support <${SENDER_EMAIL}>`,
-        to: [process.env.GMAIL_USER || 'info.nexuslabs@gmail.com'],
-        subject: `[${category.toUpperCase()}] Ticket: ${ticketId}`,
-        html: html
-    });
+    return await sendMail('info.nexuslabs@gmail.com', `[${category.toUpperCase()}] Ticket: ${ticketId}`, html);
 }
 
 async function sendPaymentNotificationEmail(paymentData) {
     const { email, amount, hash, type } = paymentData;
     const html = `<div style="font-family: sans-serif; padding: 20px;"><h2>New Payment</h2><p>User: ${email}</p><p>Amount: ${amount} USDT</p><p>TXID: ${hash}</p></div>`;
-    
-    await resend.emails.send({
-        from: `BSB Payments <${SENDER_EMAIL}>`,
-        to: [process.env.GMAIL_USER || 'info.nexuslabs@gmail.com'],
-        subject: `💰 [PAYMENT: ${type}] from ${email}`,
-        html: html
-    });
+    return await sendMail('info.nexuslabs@gmail.com', `💰 [PAYMENT: ${type}] from ${email}`, html);
 }
 
 module.exports = { sendTokenEmail, sendSupportTicketEmail, sendPaymentNotificationEmail };
