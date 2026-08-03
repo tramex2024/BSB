@@ -6,7 +6,7 @@
 const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const SENDER_EMAIL = process.env.SENDER_EMAIL || 'onboarding@resend.dev'; // O tu dominio verificado
+const SENDER_EMAIL = process.env.SENDER_EMAIL; // || 'onboarding@resend.dev'; // O tu dominio verificado
 
 async function sendTokenEmail(email, token) {
     console.log(`[EMAIL-SERVICE] 📨 Sending access code to: ${email}...`);
