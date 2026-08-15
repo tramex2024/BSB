@@ -344,31 +344,29 @@ function updateConnectionStatus(status) {
  * Renderiza de forma atómica las variables y componentes de la IA en el DOM
  */
 function renderAiPulseUI(aiData) {
-    const dbCircle = document.getElementById('ai-confidence-circle');
-    if (!dbCircle) return;
-
     // 1. NORMALIZACIÓN: Buscamos el valor en diferentes claves posibles
-    // Esto previene que se vaya a 0 si el evento trae la clave distinta
     const rawVal = aiData.aiConfidence ?? aiData.confidence ?? 0;
     const confidence = parseFloat(rawVal) || 0;
     
-    // Log temporal para detectar si algo viene vacío (puedes borrarlo luego)
-    if (confidence === 0 && rawVal !== 0) {
-        console.warn("⚠️ renderAiPulseUI recibió datos sin confidence válida:", aiData);
-    }
+    // Perímetros específicos de cada SVG (Dashboard usa 364.42, Aibot usa 364.4)
+    const targets = [
+        { circle: document.getElementById('ai-confidence-circle-dashboard'), text: document.getElementById('ai-confidence-value-dashboard'), perimeter: 364.42 },
+        { circle: document.getElementById('ai-confidence-circle-aibot'), text: document.getElementById('ai-confidence-value-aibot'), perimeter: 364.4 }
+    ];
 
-    // 2. CÁLCULO DEL BORDE
-    const perimeter = 364.42;
-    const offset = perimeter - (confidence / 100) * perimeter;
-    dbCircle.style.strokeDashoffset = offset;
+    targets.forEach(target => {
+        if (target.circle) {
+            const offset = target.perimeter - (confidence / 100) * target.perimeter;
+            target.circle.style.strokeDashoffset = offset;
+            target.circle.style.strokeDasharray = `${target.perimeter}`;
+        }
+        if (target.text) {
+            target.text.innerText = `${Math.round(confidence)}%`;
+        }
+    });
     
-    // Asegurarse de que el elemento tiene el dasharray configurado para que la animación funcione
-    if (dbCircle.style.strokeDasharray !== `${perimeter}`) {
-        dbCircle.style.strokeDasharray = `${perimeter}`;
-    }
-    
+    // Resto de elementos de la barra de pulso de la IA
     const elements = {
-        confVal: document.getElementById('ai-confidence-value'),
         adxVal: document.getElementById('ai-adx-val'),
         adxBar: document.getElementById('ai-adx-bar'),
         stochVal: document.getElementById('ai-stoch-val'),
@@ -377,8 +375,6 @@ function renderAiPulseUI(aiData) {
         rsiBar: document.getElementById('ai-rsi-bar')
     };
 
-    if (elements.confVal) elements.confVal.innerText = `${Math.round(confidence)}%`;
-    
     // Normalización de valores para evitar errores de renderizado
     if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
     if (elements.adxBar) elements.adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
