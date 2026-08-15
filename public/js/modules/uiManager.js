@@ -204,11 +204,22 @@ export async function updateBotUI(state) {
         stochBar.style.width = `${percent}%`;
     }
 
-    // 🎯 CONFIANZA DE LA IA (Por si también viene dentro de aiLastPulse)
-    const confidenceVal = pulseSource.aiConfidence !== undefined ? pulseSource.aiConfidence : state.aiConfidence;
-    if (confidenceVal !== undefined) {
-        const bar = document.getElementById('ai-confidence-fill');
-        if (bar) bar.style.width = `${Math.min(Math.max(confidenceVal, 0), 100)}%`;
+    // 🎯 CONFIANZA DE LA IA (Actualización precisa del círculo SVG)
+    const confidenceVal = parseFloat(pulseSource.aiConfidence ?? state.aiConfidence ?? 0);
+    
+    // Actualizar texto numérico del porcentaje
+    const confidenceTextEl = document.getElementById('ai-confidence-value');
+    if (confidenceTextEl) {
+        confidenceTextEl.textContent = `${Math.round(confidenceVal)}%`;
+    }
+
+    // Actualizar el círculo SVG basado en el perímetro exacto (r = 58 -> Perímetro = 364.42)
+    const circleEl = document.getElementById('ai-confidence-circle');
+    if (circleEl) {
+        const perimeter = 364.42;
+        // Si la confianza es 100%, el offset es 0 (círculo lleno). Si es 0%, el offset es igual al perímetro (vacío).
+        const strokeOffset = perimeter - (Math.min(Math.max(confidenceVal, 0), 100) / 100) * perimeter;
+        circleEl.style.strokeDashoffset = strokeOffset;
     }
 
     const hasStateData = state.lstate !== undefined || state.sstate !== undefined || state.aistate !== undefined || state.isRunning !== undefined;
