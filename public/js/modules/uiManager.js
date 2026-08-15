@@ -43,6 +43,9 @@ window.addEventListener('input', (e) => {
 export async function updateBotUI(state) {
     if (!state) return;
 
+    // 🔍 LOG DE AUDITORÍA: Veremos exactamente qué datos llegan al frontend
+    console.log("📥 [FRONTEND RECEIVED STATE]:", state);
+
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
