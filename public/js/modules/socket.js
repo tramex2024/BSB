@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Consolidación de Emisiones de Pulso + Sincronización del Círculo de IA
+ * Actualización: Consolidación de Emisiones de Pulso + Blindaje de Inputs
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -43,15 +43,16 @@ export function initSocket() {
 
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 2000,
-        timeout: 45000,
-        auth: { token },      
-        query: { userId }     
-    });
+    reconnection: true,
+    reconnectionAttempts: 10, // Aumentado para insistir mientras Render despierta
+    reconnectionDelay: 2000,   // Espera 2 segundos entre intentos
+    timeout: 45000,            // ⏱️ CRÍTICO: Le damos 45 segundos de margen al handshake
+    auth: { token },      
+    query: { userId }     
+});
 
     socket.onAny((event, ...args) => {
+        // En producción se mantiene apagado para optimizar rendimiento de red
         // console.log(`📡 SOCKET EVENTO: [${event}]`, args);
     });
 
@@ -83,6 +84,7 @@ export function initSocket() {
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
+        // 1. Blindaje contra precio NaN/Indefinido
         const rawPrice = parseFloat(data?.price);
         
         if (!isNaN(rawPrice)) {
@@ -94,6 +96,7 @@ export function initSocket() {
                 currentBotState.lastPrice = rawPrice;
             }
 
+            // 2. Persistencia segura del pulso neural
             if (data.aiPulse) {
                 currentBotState.aiLastPulse = data.aiPulse;
                 renderAiPulseUI(data.aiPulse);
@@ -114,37 +117,33 @@ export function initSocket() {
         }
     });
         
-    // 🧠 LISTENER UNIFICADO PARA EL PULSO NEURAL
+    // 🧠 LISTENER UNIFICADO PARA EL PULSO NEURAL (Soporte Aislado y Persistencia)
     socket.on('ai-pulse-broadcast', (data) => {
         if (!data) return;
+        
         currentBotState.aiLastPulse = data;
 
+        // Sincronización automática de PnL de la IA
         if (data.aiprofit !== undefined) {
             updatePnLBar('ai', data.aiprofit);
         }
 
+        // Delegación atómica al renderizador del DOM (Evita duplicados)
         renderAiPulseUI(data); 
     });
 
-    // --- GLOBAL BOT STATE (SHIELDED & DEEP MERGE) ---
+    // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (rawState) => {
         if (!rawState) return;
 
-        // 1. SANEAMIENTO PROFUNDO (Anti-NaN y Anti-Ceros Indeseados)
+        // 1. FUNCIÓN DE SANEAMIENTO (Anti-NaN)
         const sanitizeState = (s) => {
             if (!s.config) return s;
-            ['long', 'short', 'ai'].forEach(side => {
+            ['long', 'short'].forEach(side => {
                 if (s.config[side]) {
-                    if (s.config[side].size_var !== undefined) {
-                        s.config[side].size_var = isNaN(parseFloat(s.config[side].size_var)) ? 1 : parseFloat(s.config[side].size_var);
-                    }
-                    if (s.config[side].price_var !== undefined) {
-                        s.config[side].price_var = isNaN(parseFloat(s.config[side].price_var)) ? 0.1 : parseFloat(s.config[side].price_var);
-                    }
-                    if (s.config[side].amountUsdt !== undefined) {
-                        const parsedAmount = parseFloat(s.config[side].amountUsdt);
-                        s.config[side].amountUsdt = isNaN(parsedAmount) || parsedAmount <= 0 ? (currentBotState.config?.[side]?.amountUsdt || 6.0) : parsedAmount;
-                    }
+                    s.config[side].size_var = isNaN(parseFloat(s.config[side].size_var)) ? 1 : parseFloat(s.config[side].size_var);
+                    s.config[side].price_var = isNaN(parseFloat(s.config[side].price_var)) ? 0.1 : parseFloat(s.config[side].price_var);
+                    s.config[side].amountUsdt = isNaN(parseFloat(s.config[side].amountUsdt)) ? 6.0 : parseFloat(s.config[side].amountUsdt);
                 }
             });
             return s;
@@ -152,69 +151,46 @@ export function initSocket() {
 
         const state = sanitizeState(rawState);
 
-        // 2. ESCUDO INTELIGENTE: Verificación por timestamp y por elemento activo en DOM
+        // 2. ESCUDO: Detectar si el usuario está editando activamente
         const now = Date.now();
-        const hasActiveEdits = activeEdits && typeof activeEdits === 'object' 
-            ? Object.values(activeEdits).some(timestamp => (now - timestamp) < 3500)
+        const isEditing = activeEdits && typeof activeEdits === 'object' 
+            ? Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000)
             : false;
-        
-        const isInputFocused = document.activeElement && document.activeElement.tagName === 'INPUT';
 
-        if (hasActiveEdits || isInputFocused) {
-            console.log("🛡️ Socket: Active editing or focused input detected. Preserving local state...");
-            Object.keys(state).forEach(key => {
-                if (key !== 'config' && state[key] !== undefined) {
-                    currentBotState[key] = state[key];
-                }
-            });
+        if (isEditing) {
+            console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
         } else {
-            // 3. FUSIÓN SEGURA PROFUNDA (Deep Merge)
+            // 3. FUSIÓN SEGURA (Evita borrar configs existentes)
             if (state.config) {
-                if (!currentBotState.config) currentBotState.config = {};
-                ['long', 'short', 'ai'].forEach(side => {
+                ['long', 'short'].forEach(side => {
                     if (state.config[side]) {
                         currentBotState.config[side] = { 
-                            ...(currentBotState.config[side] || {}), 
+                            ...currentBotState.config[side], 
                             ...state.config[side] 
                         };
                     }
                 });
             }
             
+            // Asignación controlada para el resto del estado
             Object.keys(state).forEach(key => {
-                if (key !== 'config' && state[key] !== undefined) {
-                    currentBotState[key] = state[key];
-                }
+                if (key !== 'config') currentBotState[key] = state[key];
             });
             
             updateBotUI(currentBotState);
         }
 
-        // 🧠 SINCRONIZACIÓN DE PULSO / CÍRCULO DE IA EN ESTADO GLOBAL
-        if (state.aiLastPulse) {
-            currentBotState.aiLastPulse = state.aiLastPulse;
-        } else if (state.aiConfidence !== undefined || state.aiRsi !== undefined) {
-            currentBotState.aiLastPulse = {
-                aiConfidence: state.aiConfidence ?? currentBotState.aiLastPulse?.aiConfidence,
-                aiAdx: state.aiAdx ?? currentBotState.aiLastPulse?.aiAdx,
-                aiStoch: state.stochStoch ?? state.aiStoch ?? currentBotState.aiLastPulse?.aiStoch,
-                aiRsi: state.aiRsi ?? currentBotState.aiLastPulse?.aiRsi
-            };
-        }
-
-        if (currentBotState.aiLastPulse) {
-            renderAiPulseUI(currentBotState.aiLastPulse);
-        }
-
         // 4. Sincronización de métricas
         if (state.history || state.cycleHistory) {
-            try {
-                const Metrics = await import('./metricsManager.js');
-                Metrics.processStateUpdate(state); 
-            } catch (err) { 
-                console.error("Error delegando métricas:", err); 
-            }
-        }
+    try {
+        const Metrics = await import('./metricsManager.js');
+        // socket.js ya NO necesita importar dashboard.js
+        // Pasamos el estado completo y dejamos que Metrics decida qué hacer
+        Metrics.processStateUpdate(state); 
+    } catch (err) { 
+        console.error("Error delegando métricas:", err); 
+    }
+}
 
         // 5. Estado de la IA
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
@@ -371,6 +347,7 @@ function renderAiPulseUI(aiData) {
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (!dbCircle) return;
 
+    // Validación atómica de confianza
     const confidence = parseFloat(aiData.aiConfidence) || 0;
     const perimeter = 364.42;
     const offset = perimeter - (confidence / 100) * perimeter;
@@ -388,11 +365,12 @@ function renderAiPulseUI(aiData) {
 
     if (elements.confVal) elements.confVal.innerText = `${confidence}%`;
     
+    // Normalización de valores para evitar errores de renderizado
     if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
     if (elements.adxBar) elements.adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
     
     if (elements.stochVal) elements.stochVal.innerText = Number(aiData.aiStoch || 0).toFixed(1);
-    if (elements.stochBar) elements.stochBar.style.width = `${Math.min(aiData.stochStoch || aiData.aiStoch || 0, 100)}%`;
+    if (elements.stochBar) elements.stochBar.style.width = `${Math.min(aiData.aiStoch || 0, 100)}%`;
     
     if (elements.rsiVal) elements.rsiVal.innerText = Number(aiData.aiRsi || 0).toFixed(1);
     if (elements.rsiBar) elements.rsiBar.style.width = `${Math.min(aiData.aiRsi || 0, 100)}%`;
