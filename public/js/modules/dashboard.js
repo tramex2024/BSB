@@ -293,15 +293,22 @@ function updateQuickStats(kpiData) {
 export function renderAiPulseUI(aiData) {
     if (!aiData) return;
 
+    // 🛡️ Blindaje y soporte flexible para nombres de propiedades (DB vs Frontend)
+    const stochKVal = parseFloat(aiData.stochK ?? aiData.aiStochK ?? 0);
+    const stochDVal = parseFloat(aiData.stochD ?? aiData.aiStochD ?? 0);
+    const adxVal = parseFloat(aiData.adx ?? aiData.aiAdx ?? 0);
+    const rsiVal = parseFloat(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi ?? 0);
+    const macdVal = parseFloat(aiData.macdValue ?? aiData.aiMacd ?? 0);
+
     const cleanData = {
         aiConfidence: Math.round(aiData.aiConfidence || 0),
-        aiTrendLabel: aiData.aiTrendLabel || 'NEUTRAL',
-        aiAdx: parseFloat(aiData.aiAdx || 0).toFixed(1),
-        aiStochK: parseFloat(aiData.aiStochK || 0).toFixed(1), 
-        aiStochD: parseFloat(aiData.aiStochD || 0).toFixed(1), 
-        aiRsi: parseFloat(aiData.aiRsi || 0).toFixed(1),       
-        aiMacd: parseFloat(aiData.aiMacd || 0).toFixed(4),     
-        aiEngineMsg: aiData.aiEngineMsg || 'System Live'
+        aiTrendLabel: aiData.aiTrendLabel || aiData.signal || 'HOLD',
+        aiAdx: adxVal.toFixed(1),
+        aiStochK: stochKVal.toFixed(1), 
+        aiStochD: stochDVal.toFixed(1), 
+        aiRsi: rsiVal.toFixed(1),        
+        aiMacd: macdVal.toFixed(4),     
+        aiEngineMsg: aiData.aiEngineMsg || aiData.reason || 'System Live'
     };
 
     if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
@@ -311,7 +318,7 @@ export function renderAiPulseUI(aiData) {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
         'ai-adx-val': cleanData.aiAdx,
-        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, 
+        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, // Muestra K / D
         'ai-rsi-val': cleanData.aiRsi,
         'ai-macd-val': cleanData.aiMacd,
         'ai-engine-msg': cleanData.aiEngineMsg
@@ -329,5 +336,12 @@ export function renderAiPulseUI(aiData) {
     }
 
     const adxBar = document.getElementById('ai-adx-bar');
-    if (adxBar) adxBar.style.width = `${Math.min(cleanData.aiAdx, 100)}%`;
+    if (adxBar) adxBar.style.width = `${Math.min(adxVal, 100)}%`;
+
+    // 📊 NUEVO: Actualización dinámica de la barra de Stoch en el UI
+    const stochBar = document.getElementById('ai-stoch-bar');
+    if (stochBar) {
+        const stochPercentage = Math.min(100, Math.max(0, stochKVal));
+        stochBar.style.width = `${stochPercentage}%`;
+    }
 }
