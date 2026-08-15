@@ -311,9 +311,6 @@ export function renderAiPulseUI(aiData) {
         aiEngineMsg: aiData.aiEngineMsg || aiData.reason || 'System Live'
     };
 
-    if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
-    lastRenderedAiData = cleanData;
-
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
@@ -329,6 +326,7 @@ export function renderAiPulseUI(aiData) {
         if (el) el.innerText = value;
     });
 
+    // 🎯 ACTUALIZACIÓN GARANTIZADA DEL CÍRCULO SVG (Fuera de la caché)
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
@@ -338,10 +336,15 @@ export function renderAiPulseUI(aiData) {
     const adxBar = document.getElementById('ai-adx-bar');
     if (adxBar) adxBar.style.width = `${Math.min(adxVal, 100)}%`;
 
-    // 📊 NUEVO: Actualización dinámica de la barra de Stoch en el UI
+    // 📊 Actualización dinámica de la barra de Stoch en el UI
     const stochBar = document.getElementById('ai-stoch-bar');
     if (stochBar) {
         const stochPercentage = Math.min(100, Math.max(0, stochKVal));
         stochBar.style.width = `${stochPercentage}%`;
     }
+
+    // Guardamos caché solo para evitar re-renderizados innecesarios de texto si se desea,
+    // pero habiendo asegurado que las barras y círculos se pinten siempre.
+    if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
+    lastRenderedAiData = cleanData;
 }
