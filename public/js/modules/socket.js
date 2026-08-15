@@ -347,11 +347,25 @@ function renderAiPulseUI(aiData) {
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (!dbCircle) return;
 
-    // Validación atómica de confianza
-    const confidence = parseFloat(aiData.aiConfidence) || 0;
+    // 1. NORMALIZACIÓN: Buscamos el valor en diferentes claves posibles
+    // Esto previene que se vaya a 0 si el evento trae la clave distinta
+    const rawVal = aiData.aiConfidence ?? aiData.confidence ?? 0;
+    const confidence = parseFloat(rawVal) || 0;
+    
+    // Log temporal para detectar si algo viene vacío (puedes borrarlo luego)
+    if (confidence === 0 && rawVal !== 0) {
+        console.warn("⚠️ renderAiPulseUI recibió datos sin confidence válida:", aiData);
+    }
+
+    // 2. CÁLCULO DEL BORDE
     const perimeter = 364.42;
     const offset = perimeter - (confidence / 100) * perimeter;
     dbCircle.style.strokeDashoffset = offset;
+    
+    // Asegurarse de que el elemento tiene el dasharray configurado para que la animación funcione
+    if (dbCircle.style.strokeDasharray !== `${perimeter}`) {
+        dbCircle.style.strokeDasharray = `${perimeter}`;
+    }
     
     const elements = {
         confVal: document.getElementById('ai-confidence-value'),
@@ -363,7 +377,7 @@ function renderAiPulseUI(aiData) {
         rsiBar: document.getElementById('ai-rsi-bar')
     };
 
-    if (elements.confVal) elements.confVal.innerText = `${confidence}%`;
+    if (elements.confVal) elements.confVal.innerText = `${Math.round(confidence)}%`;
     
     // Normalización de valores para evitar errores de renderizado
     if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
