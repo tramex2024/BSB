@@ -1,8 +1,8 @@
 /**
  * apkupdate.js - Módulo de Actualización de APK para Capacitor
  */
-import { App } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
+import { App } from 'https://esm.sh/@capacitor/app';
+import { Capacitor } from 'https://esm.sh/@capacitor/core';
 
 export async function checkForAppUpdates() {
     // [BLINDAJE]: Si no es una app móvil nativa, omite la comprobación
@@ -17,7 +17,7 @@ export async function checkForAppUpdates() {
         const token = localStorage.getItem('jwtToken'); // O el método donde guardes tu token
         if (!token) return;
 
-        // 3. Consultar a tu backend en Vercel (la ruta que acabamos de crear)
+        // 3. Consultar a tu backend en Vercel
         const response = await fetch('/check-app-version', {
             method: 'POST',
             headers: {
