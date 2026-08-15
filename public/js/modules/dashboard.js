@@ -290,32 +290,48 @@ function updateQuickStats(kpiData) {
     }
 }
 
+// Variable global para recordar el último pulso de IA válido y evitar que caiga a 0 en ticks parciales
+let persistentAiPulseCache = {
+    aiConfidence: 0,
+    aiTrendLabel: 'HOLD',
+    aiAdx: '0.0',
+    aiStochK: '0.0',
+    aiStochD: '0.0',
+    aiRsi: '0.0',
+    aiMacd: '0.0000',
+    aiEngineMsg: 'Waiting for market pulse...'
+};
+
 export function renderAiPulseUI(aiData) {
-    if (!aiData) return;
+    // Si viene un objeto nuevo, actualizamos nuestra caché persistente
+    if (aiData && typeof aiData === 'object') {
+        const stochKVal = parseFloat(aiData.stochK ?? aiData.aiStochK ?? persistentAiPulseCache.aiStochK);
+        const stochDVal = parseFloat(aiData.stochD ?? aiData.aiStochD ?? persistentAiPulseCache.aiStochD);
+        const adxVal = parseFloat(aiData.adx ?? aiData.aiAdx ?? persistentAiPulseCache.aiAdx);
+        const rsiVal = parseFloat(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi ?? persistentAiPulseCache.aiRsi);
+        const macdVal = parseFloat(aiData.macdValue ?? aiData.aiMacd ?? persistentAiPulseCache.aiMacd);
+        const confidenceVal = Math.round(aiData.aiConfidence ?? persistentAiPulseCache.aiConfidence);
 
-    // 🛡️ Blindaje y soporte flexible para nombres de propiedades (DB vs Frontend)
-    const stochKVal = parseFloat(aiData.stochK ?? aiData.aiStochK ?? 0);
-    const stochDVal = parseFloat(aiData.stochD ?? aiData.aiStochD ?? 0);
-    const adxVal = parseFloat(aiData.adx ?? aiData.aiAdx ?? 0);
-    const rsiVal = parseFloat(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi ?? 0);
-    const macdVal = parseFloat(aiData.macdValue ?? aiData.aiMacd ?? 0);
+        persistentAiPulseCache = {
+            aiConfidence: confidenceVal,
+            aiTrendLabel: aiData.aiTrendLabel || aiData.signal || persistentAiPulseCache.aiTrendLabel,
+            aiAdx: adxVal.toFixed(1),
+            aiStochK: stochKVal.toFixed(1),
+            aiStochD: stochDVal.toFixed(1),
+            aiRsi: rsiVal.toFixed(1),
+            aiMacd: macdVal.toFixed(4),
+            aiEngineMsg: aiData.aiEngineMsg || aiData.reason || persistentAiPulseCache.aiEngineMsg
+        };
+    }
 
-    const cleanData = {
-        aiConfidence: Math.round(aiData.aiConfidence || 0),
-        aiTrendLabel: aiData.aiTrendLabel || aiData.signal || 'HOLD',
-        aiAdx: adxVal.toFixed(1),
-        aiStochK: stochKVal.toFixed(1), 
-        aiStochD: stochDVal.toFixed(1), 
-        aiRsi: rsiVal.toFixed(1),        
-        aiMacd: macdVal.toFixed(4),     
-        aiEngineMsg: aiData.aiEngineMsg || aiData.reason || 'System Live'
-    };
+    const cleanData = persistentAiPulseCache;
 
+    // Pintar elementos en el DOM
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
         'ai-adx-val': cleanData.aiAdx,
-        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`, // Muestra K / D
+        'ai-stoch-val': `${cleanData.aiStochK} / ${cleanData.aiStochD}`,
         'ai-rsi-val': cleanData.aiRsi,
         'ai-macd-val': cleanData.aiMacd,
         'ai-engine-msg': cleanData.aiEngineMsg
@@ -326,25 +342,23 @@ export function renderAiPulseUI(aiData) {
         if (el) el.innerText = value;
     });
 
-    // 🎯 ACTUALIZACIÓN GARANTIZADA DEL CÍRCULO SVG (Fuera de la caché)
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
-        dbCircle.style.strokeDashoffset = perimeter - (cleanData.aiConfidence / 100) * perimeter;
+        dbCircle.style.transition = 'none';
+        const targetOffset = perimeter - (Math.min(Math.max(cleanData.aiConfidence, 0), 100) / 100) * perimeter;
+        dbCircle.style.strokeDashoffset = targetOffset;
+        setTimeout(() => {
+            if (dbCircle) dbCircle.style.transition = 'stroke-dashoffset 1s ease-out';
+        }, 50);
     }
 
     const adxBar = document.getElementById('ai-adx-bar');
-    if (adxBar) adxBar.style.width = `${Math.min(adxVal, 100)}%`;
+    if (adxBar) adxBar.style.width = `${Math.min(parseFloat(cleanData.aiAdx), 100)}%`;
 
-    // 📊 Actualización dinámica de la barra de Stoch en el UI
     const stochBar = document.getElementById('ai-stoch-bar');
     if (stochBar) {
-        const stochPercentage = Math.min(100, Math.max(0, stochKVal));
+        const stochPercentage = Math.min(100, Math.max(0, parseFloat(cleanData.aiStochK)));
         stochBar.style.width = `${stochPercentage}%`;
     }
-
-    // Guardamos caché solo para evitar re-renderizados innecesarios de texto si se desea,
-    // pero habiendo asegurado que las barras y círculos se pinten siempre.
-    if (lastRenderedAiData && JSON.stringify(lastRenderedAiData) === JSON.stringify(cleanData)) return;
-    lastRenderedAiData = cleanData;
 }
