@@ -303,30 +303,56 @@ let persistentAiPulseCache = {
 };
 
 export function renderAiPulseUI(aiData) {
-    // Si viene un objeto nuevo, actualizamos nuestra caché persistente
     if (aiData && typeof aiData === 'object') {
-        const stochKVal = parseFloat(aiData.stochK ?? aiData.aiStochK ?? persistentAiPulseCache.aiStochK);
-        const stochDVal = parseFloat(aiData.stochD ?? aiData.aiStochD ?? persistentAiPulseCache.aiStochD);
-        const adxVal = parseFloat(aiData.adx ?? aiData.aiAdx ?? persistentAiPulseCache.aiAdx);
-        const rsiVal = parseFloat(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi ?? persistentAiPulseCache.aiRsi);
-        const macdVal = parseFloat(aiData.macdValue ?? aiData.aiMacd ?? persistentAiPulseCache.aiMacd);
-        const confidenceVal = Math.round(aiData.aiConfidence ?? persistentAiPulseCache.aiConfidence);
+        // BLINDAJE ANTI-CAÍDA A 0: Si el nuevo valor es 0, null o NaN, mantenemos el valor previo en caché si era válido
+        const rawConfidence = aiData.aiConfidence !== undefined ? Math.round(aiData.aiConfidence) : NaN;
+        const confidenceVal = !isNaN(rawConfidence) && rawConfidence > 0 ? rawConfidence : persistentAiPulseCache.aiConfidence;
 
+        const rawStochK = parseFloat(aiData.stochK ?? aiData.aiStochK);
+        const stochKVal = !isNaN(rawStochK) && rawStochK > 0 ? rawStochK : parseFloat(persistentAiPulseCache.aiStochK);
+
+        const rawStochD = parseFloat(aiData.stochD ?? aiData.aiStochD);
+        const stochDVal = !isNaN(rawStochD) && rawStochD > 0 ? rawStochD : parseFloat(persistentAiPulseCache.aiStochD);
+
+        const rawAdx = parseFloat(aiData.adx ?? aiData.aiAdx);
+        const adxVal = !isNaN(rawAdx) && rawAdx > 0 ? rawAdx : parseFloat(persistentAiPulseCache.aiAdx);
+
+        const rawRsi = parseFloat(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi);
+        const rsiVal = !isNaN(rawRsi) && rawRsi > 0 ? rawRsi : parseFloat(persistentAiPulseCache.aiRsi);
+
+        const rawMacd = parseFloat(aiData.macdValue ?? aiData.aiMacd);
+        const macdVal = !isNaN(rawMacd) ? rawMacd : parseFloat(persistentAiPulseCache.aiMacd);
+
+        const trendLabel = aiData.aiTrendLabel || aiData.signal || persistentAiPulseCache.aiTrendLabel;
+        const engineMsg = aiData.aiEngineMsg || aiData.reason || persistentAiPulseCache.aiEngineMsg;
+
+        // DETECCIÓN DE CAMBIOS: Comprobamos si realmente hay una variación técnica
+        const hasChanged = 
+            confidenceVal !== persistentAiPulseCache.aiConfidence ||
+            trendLabel !== persistentAiPulseCache.aiTrendLabel ||
+            adxVal.toFixed(1) !== persistentAiPulseCache.aiAdx ||
+            stochKVal.toFixed(1) !== persistentAiPulseCache.aiStochK ||
+            rsiVal.toFixed(1) !== persistentAiPulseCache.aiRsi;
+
+        // Actualizamos la caché persistente
         persistentAiPulseCache = {
             aiConfidence: confidenceVal,
-            aiTrendLabel: aiData.aiTrendLabel || aiData.signal || persistentAiPulseCache.aiTrendLabel,
+            aiTrendLabel: trendLabel,
             aiAdx: adxVal.toFixed(1),
             aiStochK: stochKVal.toFixed(1),
             aiStochD: stochDVal.toFixed(1),
             aiRsi: rsiVal.toFixed(1),
             aiMacd: macdVal.toFixed(4),
-            aiEngineMsg: aiData.aiEngineMsg || aiData.reason || persistentAiPulseCache.aiEngineMsg
+            aiEngineMsg: engineMsg
         };
+
+        // Si los datos son idénticos al tick anterior, omitimos actualizar el DOM para evitar parpadeos
+        if (!hasChanged) return;
     }
 
     const cleanData = persistentAiPulseCache;
 
-    // Pintar elementos en el DOM
+    // Pintar elementos en el DOM de forma optimizada
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
@@ -339,18 +365,25 @@ export function renderAiPulseUI(aiData) {
 
     Object.entries(elements).forEach(([id, value]) => {
         const el = document.getElementById(id);
-        if (el) el.innerText = value;
+        if (el && el.innerText !== value) {
+            el.innerText = value;
+        }
     });
 
+    // Círculo SVG de confianza blindado contra reflows innecesarios
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
-        dbCircle.style.transition = 'none';
         const targetOffset = perimeter - (Math.min(Math.max(cleanData.aiConfidence, 0), 100) / 100) * perimeter;
-        dbCircle.style.strokeDashoffset = targetOffset;
-        setTimeout(() => {
-            if (dbCircle) dbCircle.style.transition = 'stroke-dashoffset 1s ease-out';
-        }, 50);
+        const currentOffset = parseFloat(dbCircle.style.strokeDashoffset) || 0;
+
+        if (Math.abs(currentOffset - targetOffset) > 0.1) {
+            dbCircle.style.transition = 'none';
+            dbCircle.style.strokeDashoffset = targetOffset;
+            setTimeout(() => {
+                if (dbCircle) dbCircle.style.transition = 'stroke-dashoffset 1s ease-out';
+            }, 50);
+        }
     }
 
     const adxBar = document.getElementById('ai-adx-bar');
