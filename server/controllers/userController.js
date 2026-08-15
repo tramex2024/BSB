@@ -221,3 +221,35 @@ exports.updateBotConfig = async (req, res) => {
         res.status(500).json({ message: 'Error updating bot config.' });
     }
 };
+
+/**
+ * Actualiza la versión de la app móvil y devuelve si hay una actualización disponible
+ */
+exports.checkAppVersion = async (req, res) => {
+    try {
+        const { appVersion } = req.body;
+        const userId = req.user.id; // Viene del middleware de autenticación
+
+        if (appVersion) {
+            // Guardamos la versión que está usando el usuario en la base de datos
+            await User.findByIdAndUpdate(userId, { appVersion });
+        }
+
+        const latestVersion = process.env.LATEST_APK_VERSION || '1.0.0';
+        const apkDownloadUrl = process.env.LATEST_APK_URL || '#';
+
+        // Comparamos si la versión del celular es diferente a la última en Vercel
+        const updateRequired = appVersion && appVersion !== latestVersion;
+
+        res.status(200).json({
+            success: true,
+            currentVersion: appVersion,
+            latestVersion,
+            updateRequired,
+            apkDownloadUrl
+        });
+    } catch (error) {
+        console.error('[CHECK-VERSION-ERROR]', error);
+        res.status(500).json({ success: false, message: 'Error al verificar la versión de la app.' });
+    }
+};

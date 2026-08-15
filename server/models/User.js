@@ -22,6 +22,12 @@ const userSchema = new mongoose.Schema({
         index: true 
     },
     
+    // Apk Version:
+    appVersion: {
+        type: String,
+        default: null
+    },
+
     // --- ROL DE USUARIO --- Define qué partes de la aplicación puede ver y usar
     
     role: {   

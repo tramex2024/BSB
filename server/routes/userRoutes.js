@@ -58,5 +58,7 @@ router.post('/autobot/update-config', userController.updateBotConfig);
 // Obtener precio actual de un símbolo (No necesita llaves privadas)
 router.get('/bitmart/ticker', userController.getTickerPrice);
 
+// --- SECCIÓN: Control de Versión de la App Móvil ---
+router.post('/check-app-version', userController.checkAppVersion);
 
 module.exports = router;
