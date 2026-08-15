@@ -228,17 +228,23 @@ exports.updateBotConfig = async (req, res) => {
 exports.checkAppVersion = async (req, res) => {
     try {
         const { appVersion } = req.body;
-        const userId = req.user.id; // Viene del middleware de autenticación
+        const userId = req.user.id; 
+
+        // LOG 1: Ver si llega la petición y qué versión trae
+        console.log(`[VERSION-CHECK] Usuario: ${userId}, Versión recibida: ${appVersion}`);
 
         if (appVersion) {
-            // Guardamos la versión que está usando el usuario en la base de datos
-            await User.findByIdAndUpdate(userId, { appVersion });
+            const updatedUser = await User.findByIdAndUpdate(
+                userId, 
+                { appVersion }, 
+                { new: true } // Esto nos devuelve el usuario actualizado para verificar
+            );
+            // LOG 2: Verificar si MongoDB realmente actualizó algo
+            console.log(`[VERSION-CHECK] Base de datos actualizada: ${updatedUser ? 'Sí' : 'No'}`);
         }
 
         const latestVersion = process.env.LATEST_APK_VERSION || '1.0.0';
         const apkDownloadUrl = process.env.LATEST_APK_URL || '#';
-
-        // Comparamos si la versión del celular es diferente a la última en Vercel
         const updateRequired = appVersion && appVersion !== latestVersion;
 
         res.status(200).json({
@@ -249,7 +255,7 @@ exports.checkAppVersion = async (req, res) => {
             apkDownloadUrl
         });
     } catch (error) {
-        console.error('[CHECK-VERSION-ERROR]', error);
-        res.status(500).json({ success: false, message: 'Error al verificar la versión de la app.' });
+        console.error('[VERSION-CHECK-ERROR]', error);
+        res.status(500).json({ success: false, message: 'Error al verificar la versión' });
     }
 };
