@@ -166,11 +166,11 @@ export async function updateBotUI(state) {
         }
     });
 
+    // --- MAPEO CORREGIDO DE PULSE METRICS ---
     const pulseMetrics = [
-        { id: 'ai-adx-val', key: 'lai', fallbackKey: 'aiAdx', barId: 'ai-adx-bar' },
-        { id: 'ai-stoch-val', key: 'lac', fallbackKey: 'aiStochK', barId: 'ai-stoch-bar' },
-        { id: 'ai-rsi-val', key: 'aiRsi', fallbackKey: 'rsi', barId: null },
-        { id: 'ai-macd-val', key: 'aiMacd', fallbackKey: 'macd', barId: null }
+        { id: 'ai-adx-val', key: 'adx', fallbackKey: 'aiAdx', barId: 'ai-adx-bar' },
+        { id: 'ai-rsi-val', key: 'rsi14', fallbackKey: 'aiRsi', barId: null },
+        { id: 'ai-macd-val', key: 'macdValue', fallbackKey: 'aiMacd', barId: null }
     ];
 
     pulseMetrics.forEach(metric => {
@@ -183,6 +183,21 @@ export async function updateBotUI(state) {
             if (metric.barId) updatePulseBars(metric.id, floatVal);
         }
     });
+
+    // 📊 MANEXIÓN ESPECÍFICA PARA STOCH (K / D) Y SU BARRA VISUAL
+    const stochEl = document.getElementById('ai-stoch-val');
+    const stochBar = document.getElementById('ai-stoch-bar');
+    
+    const kVal = parseFloat(state.stochK ?? state.aiStochK ?? 0);
+    const dVal = parseFloat(state.stochD ?? state.aiStochD ?? 0);
+
+    if (stochEl) {
+        stochEl.textContent = `${kVal.toFixed(1)} / ${dVal.toFixed(1)}`;
+    }
+    if (stochBar) {
+        const percent = Math.min(Math.max(kVal, 0), 100);
+        stochBar.style.width = `${percent}%`;
+    }
 
     if (state.aiConfidence !== undefined) {
         const bar = document.getElementById('ai-confidence-fill');
