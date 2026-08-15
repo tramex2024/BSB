@@ -169,17 +169,19 @@ export async function updateBotUI(state) {
         }
     });
 
-    // --- MAPEO CORREGIDO DE PULSE METRICS ---
+    // --- MAPEO ROBUSTO DE PULSE METRICS (Soporte para nivel raíz y aiLastPulse) -->
+    const pulseSource = state.aiLastPulse || state;
+
     const pulseMetrics = [
-        { id: 'ai-adx-val', key: 'adx', fallbackKey: 'aiAdx', barId: 'ai-adx-bar' },
-        { id: 'ai-rsi-val', key: 'rsi14', fallbackKey: 'aiRsi', barId: null },
-        { id: 'ai-macd-val', key: 'macdValue', fallbackKey: 'aiMacd', barId: null }
+        { id: 'ai-adx-val', key: 'aiAdx', fallbackKey: 'lai', barId: 'ai-adx-bar' },
+        { id: 'ai-rsi-val', key: 'aiRsi', fallbackKey: 'rsi14', barId: null },
+        { id: 'ai-macd-val', key: 'aiMacd', fallbackKey: 'macdValue', barId: null }
     ];
 
     pulseMetrics.forEach(metric => {
         const el = document.getElementById(metric.id);
         if (!el) return;
-        const val = state[metric.key] !== undefined ? state[metric.key] : state[metric.fallbackKey]; 
+        const val = pulseSource[metric.key] !== undefined ? pulseSource[metric.key] : pulseSource[metric.fallbackKey]; 
         if (val !== undefined && val !== null) {
             const floatVal = parseFloat(val);
             el.textContent = metric.id.includes('macd') ? floatVal.toFixed(4) : floatVal.toFixed(1);
@@ -187,12 +189,12 @@ export async function updateBotUI(state) {
         }
     });
 
-    // 📊 MANEXIÓN ESPECÍFICA PARA STOCH (K / D) Y SU BARRA VISUAL
+    // 📊 EXTRACCIÓN Y PINTADO SEGURO DE STOCH (K / D) DESDE aiLastPulse O RAÍZ
     const stochEl = document.getElementById('ai-stoch-val');
     const stochBar = document.getElementById('ai-stoch-bar');
     
-    const kVal = parseFloat(state.stochK ?? state.aiStochK ?? 0);
-    const dVal = parseFloat(state.stochD ?? state.aiStochD ?? 0);
+    const kVal = parseFloat(pulseSource.aiStochK ?? pulseSource.stochK ?? state.stochK ?? 0);
+    const dVal = parseFloat(pulseSource.aiStochD ?? pulseSource.stochD ?? state.stochD ?? 0);
 
     if (stochEl) {
         stochEl.textContent = `${kVal.toFixed(1)} / ${dVal.toFixed(1)}`;
@@ -202,9 +204,11 @@ export async function updateBotUI(state) {
         stochBar.style.width = `${percent}%`;
     }
 
-    if (state.aiConfidence !== undefined) {
+    // 🎯 CONFIANZA DE LA IA (Por si también viene dentro de aiLastPulse)
+    const confidenceVal = pulseSource.aiConfidence !== undefined ? pulseSource.aiConfidence : state.aiConfidence;
+    if (confidenceVal !== undefined) {
         const bar = document.getElementById('ai-confidence-fill');
-        if (bar) bar.style.width = `${Math.min(Math.max(state.aiConfidence, 0), 100)}%`;
+        if (bar) bar.style.width = `${Math.min(Math.max(confidenceVal, 0), 100)}%`;
     }
 
     const hasStateData = state.lstate !== undefined || state.sstate !== undefined || state.aistate !== undefined || state.isRunning !== undefined;
