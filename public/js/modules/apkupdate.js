@@ -3,22 +3,30 @@
  */
 import { App } from 'https://esm.sh/@capacitor/app';
 import { Capacitor } from 'https://esm.sh/@capacitor/core';
+// Importamos la URL de tu backend que ya tienes en main.js
+import { BACKEND_URL } from '../main.js'; 
 
 export async function checkForAppUpdates() {
-    // [BLINDAJE]: Si no es una app móvil nativa, omite la comprobación
-    if (!Capacitor.isNativePlatform()) return;
+    // [LOG DE PRUEBA]: Vamos a ver en la consola del celular si esto se ejecuta
+    console.log("🔍 [APK-UPDATE] Iniciando comprobación de actualización...");
+
+    if (!Capacitor.isNativePlatform()) {
+        console.log("🔍 [APK-UPDATE] No es plataforma nativa, omitiendo.");
+        return;
+    }
 
     try {
-        // 1. Obtener la versión que está instalada físicamente en el celular
         const info = await App.getInfo();
-        const localVersion = info.version; // Ej: "1.0.192"
+        const localVersion = info.version;
+        const token = localStorage.getItem('token'); // Asegúrate que sea 'token' o 'jwtToken' según tu app
+        
+        if (!token) {
+            console.log("🔍 [APK-UPDATE] No hay token, saltando.");
+            return;
+        }
 
-        // 2. Obtener el token del usuario logueado para autenticar la petición al servidor
-        const token = localStorage.getItem('jwtToken'); // O el método donde guardes tu token
-        if (!token) return;
-
-        // 3. Consultar a tu backend en Vercel
-        const response = await fetch('/check-app-version', {
+        // AQUÍ ESTÁ EL CAMBIO: Usamos BACKEND_URL + la ruta
+        const response = await fetch(`${BACKEND_URL}/check-app-version`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -27,16 +35,19 @@ export async function checkForAppUpdates() {
             body: JSON.stringify({ appVersion: localVersion })
         });
 
-        if (!response.ok) return;
+        if (!response.ok) {
+            console.error("❌ Error en respuesta del servidor:", response.status);
+            return;
+        }
 
         const data = await response.json();
+        console.log("🔍 [APK-UPDATE] Respuesta recibida:", data);
 
-        // 4. Si el servidor indica que hay una actualización requerida, mostramos el modal
         if (data.success && data.updateRequired) {
             showUpdateModal(data.latestVersion, data.apkDownloadUrl);
         }
     } catch (error) {
-        console.error("❌ Error al verificar actualizaciones de la app:", error);
+        console.error("❌ Error al verificar actualizaciones:", error);
     }
 }
 
