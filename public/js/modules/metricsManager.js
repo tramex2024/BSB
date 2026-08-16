@@ -7,8 +7,16 @@ const globalCyclesMap = new Map();
 let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
 
+
 /**
- * setAnalyticsData - Versión Optimizada 2026
+ * forceRefreshUI - Fuerza la actualización visual con los datos actuales en memoria.
+ */
+export function forceRefreshUI() {
+    updateMetricsDisplay();
+}
+
+/**
+ * setAnalyticsData - Versión Optimizada y Blindada 2026
  */
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || data?.cycles || []);
@@ -30,24 +38,27 @@ export function setAnalyticsData(data) {
         const dateEnd = new Date(c.endTime || c.timestamp || c.processedDate);
         if (isNaN(dateEnd.getTime())) return; 
 
+        // Blindaje de duración: busca en varias propiedades comunes o calcula por diferencia de fechas si existen inicio y fin
+        let duration = parseInt(c.durationMs || c.duration || 0);
+        if (duration <= 0 && c.startTime && c.endTime) {
+            const start = new Date(c.startTime).getTime();
+            const end = new Date(c.endTime).getTime();
+            if (!isNaN(start) && !isNaN(end) && end > start) {
+                duration = end - start;
+            }
+        }
+
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profit,
             profitPercentage: pct,
             finalRecovery: recovery,
             processedDate: dateEnd,
-            strategy: (c.strategy || 'UNKNOWN').toUpperCase(),
-            durationMs: parseInt(c.durationMs || 0) 
+            strategy: (c.strategy || c.type || 'UNKNOWN').toUpperCase(),
+            durationMs: duration
         });
     });
 
-    updateMetricsDisplay();
-}
-
-/**
- * forceRefreshUI - Fuerza la actualización visual con los datos actuales en memoria.
- */
-export function forceRefreshUI() {
     updateMetricsDisplay();
 }
 
@@ -78,7 +89,7 @@ function updateMetricsDisplay() {
     filtered.forEach(cycle => {
         totalProfitPct += (cycle.profitPercentage || 0);
         totalNetProfitUsdt += (cycle.netProfit || 0);
-        totalOrders += (cycle.orderCount || 0);
+        totalOrders += (cycle.orderCount || cycle.orders || 0);
         totalRecovery += (cycle.finalRecovery || 0);
         if (cycle.netProfit > 0) winningCycles++;
 
@@ -93,8 +104,15 @@ function updateMetricsDisplay() {
     const winRate = totalCycles > 0 ? ((winningCycles / totalCycles) * 100) : 0;
     
     // --- CORRECCIÓN CRÍTICA DE PROFIT/D ---
-    const totalHours = totalDurationMs / 3600000;
-    const profitPerDay = totalHours > 0.0001 ? ((totalNetProfitUsdt / totalHours) * 24) : 0;
+    let totalHours = totalDurationMs / 3600000;
+    
+    // Fallback de emergencia: Si la suma de duraciones es 0 pero hay ciclos cerrados,
+    // estimamos 1 hora por ciclo para evitar que el Profit/D colapse a $0.00/d.
+    if (totalHours <= 0 && totalCycles > 0) {
+        totalHours = totalCycles * 1; 
+    }
+
+    const profitPerDay = totalHours > 0 ? ((totalNetProfitUsdt / totalHours) * 24) : 0;
     
     const avgDurationMs = totalCycles > 0 ? (totalDurationMs / totalCycles) : 0;
 
