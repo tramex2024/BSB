@@ -1,18 +1,16 @@
 /**
- * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * VERSIÓN INTEGRAL CORREGIDA 2026
+ * metricsManager.js - Motor de Análisis de Rendimiento (Versión Original Completa + Optimizaciones)
  */
 
 const globalCyclesMap = new Map(); 
 let currentChartParameter = 'accumulatedProfit';
 let currentBotFilter = 'all';
+let lastProcessedHash = ''; // <--- AGREGADO: Guardia de seguridad para evitar recálculos innecesarios
 
 /**
- * setAnalyticsData - Versión Optimizada 2026
- * Procesa y almacena los ciclos en el mapa global para su análisis.
+ * setAnalyticsData - Procesa y almacena los ciclos.
  */
 export function setAnalyticsData(data) {
-    // 1. Extraer el array de datos independientemente de la envoltura
     const rawData = Array.isArray(data) ? data : (data?.data || data?.cycles || []);
     
     if (rawData.length === 0) {
@@ -20,24 +18,20 @@ export function setAnalyticsData(data) {
         return;
     }
 
+    let hasChanged = false; // <--- AGREGADO: Control de cambios
+
     rawData.forEach((c) => {
-        // 2. Normalización de Identidad (Fingerprint)
-        // Priorizamos el ID de MongoDB, si no, generamos uno único basado en tiempo y beneficio
         const fingerPrint = c._id?.$oid || c._id || `fallback-${c.endTime || c.timestamp}-${c.netProfit}`;
 
         if (globalCyclesMap.has(fingerPrint)) return;
 
-        // 3. Extracción Segura de Valores Numéricos
-        // Aquí es donde vinculamos con lo que envía el API Service
         const profit = parseFloat(c.netProfit || c.profit || 0);
         const recovery = parseFloat(c.finalRecovery || c.recovery || 0);
         const pct = parseFloat(c.profitPercentage || c.percentage || 0);
         
-        // 4. Procesamiento de Fechas
         const dateEnd = new Date(c.endTime || c.timestamp || c.processedDate);
         if (isNaN(dateEnd.getTime())) return; 
 
-        // 5. Guardado en Memoria
         globalCyclesMap.set(fingerPrint, {
             ...c,
             netProfit: profit,
@@ -45,22 +39,27 @@ export function setAnalyticsData(data) {
             finalRecovery: recovery,
             processedDate: dateEnd,
             strategy: (c.strategy || 'UNKNOWN').toUpperCase(),
-            // Si no hay duración, calculamos 0 por defecto
             durationMs: parseInt(c.durationMs || 0) 
         });
+        hasChanged = true; // Marcamos que entró dato nuevo
     });
 
-    // 6. Disparar la actualización de la UI
-    updateMetricsDisplay();
+    if (hasChanged) {
+        updateMetricsDisplay();
+    }
 }
 
 /**
- * updateMetricsDisplay
- * Versión optimizada 2026: Cálculo consistente de Profit/D y blindaje de métricas.
+ * updateMetricsDisplay - Cálculo consistente de Profit/D con blindaje.
  */
 function updateMetricsDisplay() {
     const allData = Array.from(globalCyclesMap.values());
     
+    // <--- AGREGADO: Optimización para no repintar si nada ha cambiado
+    const currentHash = allData.map(c => c._id || c.timestamp).sort().join('|');
+    if (currentHash === lastProcessedHash) return;
+    lastProcessedHash = currentHash;
+
     const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
         return c.strategy === currentBotFilter.toUpperCase();
@@ -84,23 +83,18 @@ function updateMetricsDisplay() {
         totalOrders += (cycle.orderCount || 0);
         totalRecovery += (cycle.finalRecovery || 0);
         if (cycle.netProfit > 0) winningCycles++;
-
         totalDurationMs += (cycle.durationMs || 0);
     });
 
-    // Cálculos Finales
     const avgProfit = totalProfitPct / totalCycles;
     const avgNetProfit = totalNetProfitUsdt / totalCycles;
     const avgOrders = totalOrders / totalCycles;
     const avgRecovery = totalRecovery / totalCycles;
     const winRate = (winningCycles / totalCycles) * 100;
     
-    // Cálculo de Eficiencia: Profit por Día
-    // totalHours = totalDurationMs / 3600000;
-    // profitPerHour = totalNetProfitUsdt / totalHours;
-    // profitPerDay = profitPerHour * 24;
+    // <--- CORRECCIÓN: Blindaje matemático para Profit/D
     const totalHours = totalDurationMs / 3600000;
-    const profitPerDay = totalHours > 0.0001 ? ((totalNetProfitUsdt / totalHours) * 24) : 0;
+    const profitPerDay = totalHours >= 0.01 ? ((totalNetProfitUsdt / totalHours) * 24) : 0;
     const avgDurationMs = totalDurationMs / totalCycles;
 
     const fmtDuration = (ms) => {
@@ -110,7 +104,6 @@ function updateMetricsDisplay() {
         return `${h}h ${m}m`;
     };
 
-    // --- RENDERIZADO ---
     renderText('cycle-avg-profit', `${avgProfit >= 0 ? '+' : ''}${avgProfit.toFixed(2)}%`, `text-sm font-bold ${avgProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`);
     renderText('cycle-net-profit', `+$${avgNetProfit.toFixed(4)}`);
     renderText('total-cycles-closed', totalCycles);
@@ -119,7 +112,6 @@ function updateMetricsDisplay() {
     renderText('cycle-avg-recovery', `$${avgRecovery.toFixed(2)}`);
     renderText('cycle-win-rate', `${winRate.toFixed(1)}%`, `text-sm font-bold ${winRate >= 50 ? 'text-emerald-400' : 'text-orange-400'}`);
     
-    // Ajustado para mostrar /d
     renderText('cycle-efficiency', `$${profitPerDay.toFixed(4)}/d`);
 
     const chartData = prepareChartData(filtered);
@@ -128,7 +120,6 @@ function updateMetricsDisplay() {
 
 /**
  * prepareChartData
- * Genera los puntos para el gráfico de Equity/Profit.
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
@@ -190,7 +181,6 @@ function renderText(id, text, className = null) {
 
 /**
  * updateMetricsFromState
- * Sincroniza métricas en tiempo real con el estado actual del bot.
  */
 export function updateMetricsFromState(state) {
     if (!state) return;
@@ -202,11 +192,9 @@ export function updateMetricsFromState(state) {
     };
 
     const now = new Date();
-    // CORRECCIÓN: Si lstartTime es 0 o null, no calculamos duración
     let durationHours = 0;
     if (state.lstartTime) {
         const lStart = new Date(state.lstartTime);
-        // Validamos que la fecha sea mayor al 2025 para evitar el bug de 1970
         if (!isNaN(lStart.getTime()) && lStart.getFullYear() >= 2025) {
             durationHours = (now - lStart) / 3600000;
         }
@@ -215,7 +203,6 @@ export function updateMetricsFromState(state) {
     renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
     renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
     
-    // Solo actualizamos la duración si calculamos algo válido
     if (durationHours > 0) {
         renderValue('cycle-avg-duration', formatDuration(durationHours));
     }
@@ -234,11 +221,9 @@ function formatDuration(hours) {
 }
 
 /**
- * metricsManager.js - Auditoría de Ciclos y Estadísticas
+ * AUDITORÍA DE CICLOS
  */
-
 export function calculateSummary(allCycles) {
-    // 1. Inicialización limpia de contadores
     const summary = {
         total: allCycles.length,
         long: 0,
@@ -250,13 +235,10 @@ export function calculateSummary(allCycles) {
 
     let wins = 0;
 
-    // 2. Procesamiento con validación estricta de tipo
     allCycles.forEach(cycle => {
-        // Normalizamos el tipo a minúsculas para evitar errores de "Long" vs "long"
         const type = (cycle.type || 'ai').toLowerCase();
         const profit = parseFloat(cycle.netProfit || 0);
 
-        // Clasificación
         if (type === 'long') {
             summary.long++;
         } else if (type === 'short') {
@@ -265,32 +247,25 @@ export function calculateSummary(allCycles) {
             summary.ai++;
         }
 
-        // Cálculo de rentabilidad
         summary.totalProfit += profit;
         if (profit > 0) wins++;
     });
 
-    // 3. Cálculo de Win Rate (Evitar división por cero)
     summary.winRate = summary.total > 0 
         ? ((wins / summary.total) * 100).toFixed(2) 
         : 0;
-
-    console.log(`[AUDITORÍA] Total: ${summary.total} | L: ${summary.long} | S: ${summary.short} | AI: ${summary.ai}`);
     
     return summary;
 }
 
 /**
  * processStateUpdate
- * Único punto de entrada para actualizar métricas desde el socket.
  */
 export async function processStateUpdate(state) {
-    // 1. Procesar historial
     if (state.history || state.cycleHistory) {
         setAnalyticsData(state.history || state.cycleHistory);
     }
 
-    // 2. Procesar KPIs con validación interna
     if (state.kpis) {
         const { updateQuickStats } = await import('./dashboard.js');
         
@@ -301,19 +276,15 @@ export async function processStateUpdate(state) {
 
         if (hasValidKpis) {
             updateQuickStats(state.kpis);
-        } else {
-            console.log("🛡️ MetricsManager: KPI update blocked (Invalid payload).");
         }
     }
 }
 
-// metricsManager.js (Ejemplo de función exportada)
 export function getProcessedStats(kpiData) {
     const totalProfit = parseFloat(kpiData.totalNetProfit ?? 0);
     const totalCycles = parseInt(kpiData.totalCycles ?? 0);
     const avgHours = parseFloat(kpiData.avgDurationHours ?? 0);
 
-    // Mueve la fórmula lógica aquí
     const profitPerDay = kpiData.profitPerDay || (avgHours > 0 ? (totalProfit / (avgHours * totalCycles)) * 24 : 0);
     
     return {
