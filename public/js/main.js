@@ -139,7 +139,7 @@ export async function initializeTab(tabName) {
 
         // [NUEVO]: Si entramos al dashboard o la vista de métricas, restauramos los datos al instante
         if (tabName === 'dashboard') {
-            import('./metricsManager.js').then(metrics => {
+            import('./modules/metricsManager.js').then(metrics => {
                 metrics.forceRefreshUI();
             }).catch(err => console.error("Error refreshing metrics:", err));
         }
