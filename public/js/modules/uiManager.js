@@ -1,15 +1,17 @@
 /**
- * uiManager.js - Orquestador Atómico (Sincronizado & Blindado 2026)
- * Integración Final: Mapeo maestro intacto + Protección contra parpadeo
+ * uiManager.js - Atomic Orchestrator (Synchronized & Shielded 2026)
+ * Final Integration: Static Dashboard Import + DOM Diffing Guard + State Persistence
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig, uiLocks } from './ui/controls.js';
 import { isSavingConfig, checkConfigAcknowledgment } from './apiService.js';
 import { updateMetricsFromState } from './metricsManager.js';
+import * as dashboard from './dashboard.js';
 
 export { displayMessage } from './ui/notifications.js';
 
 let lastPrice = 0;
+let lastKnownState = null;
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
@@ -40,17 +42,14 @@ window.addEventListener('input', (e) => {
     }
 }, true);
 
-// Variable de memoria para persistencia de datos (colócala fuera de la función, al nivel del módulo)
-let lastKnownState = null;
-
 export async function updateBotUI(state) {
-    // --- 🛡️ MEMORY BUFFER: Protege contra estados vacíos durante transiciones ---
+    // --- 🛡️ STATE GUARD: Protects against empty states during tab transitions ---
     if (!state || Object.keys(state).length === 0) {
         if (lastKnownState) {
             console.warn("⚠️ Received empty or null state during transition. Using memory cache.");
             state = lastKnownState;
         } else {
-            return; // No hay estado ni caché, abortamos
+            return;
         }
     } else {
         lastKnownState = state;
@@ -79,7 +78,6 @@ export async function updateBotUI(state) {
                 const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
                 const isInsideGracePeriod = (Date.now() - lastMutation) < 2500;
 
-                // Capture state if user is interacting or lock is active
                 if (isFocused || isInsideGracePeriod || uiLocks.isLocked(id)) {
                     activeLocks[id] = inputEl.value;
                 }
@@ -87,7 +85,6 @@ export async function updateBotUI(state) {
 
             syncInputsFromConfig(state.config);
 
-            // Force restoration of active editing
             Object.entries(activeLocks).forEach(([id, preservedValue]) => {
                 const inputEl = document.getElementById(id);
                 if (inputEl && inputEl.value !== preservedValue) {
@@ -97,7 +94,7 @@ export async function updateBotUI(state) {
         }
     }
 
-    // --- MASTER MAPPING ---
+    // --- MASTER MAPPING WITH DOM DIFFING GUARD ---
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -142,37 +139,39 @@ export async function updateBotUI(state) {
         let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
         if (val === undefined || val === null) return;
 
-        // --- EXCEPTIONS FOR METRICS ---
-        if (id === 'cycle-efficiency') {
-            el.textContent = `$${parseFloat(val).toFixed(2)}/d`;
-            return;
-        }
-        if (id === 'cycle-avg-duration' || id === 'cycle-avg-profit' || id === 'cycle-avg-orders' || id === 'cycle-avg-recovery' || id === 'cycle-win-rate' || id === 'cycle-net-profit') {
-            el.textContent = val; 
-            return;
-        }
+        let formattedText = '';
 
-        if (id.includes('state') || id.includes('status')) {
-            const currentStatus = val.toString().toUpperCase().trim();
-            if (el.textContent !== currentStatus) {
-                el.textContent = currentStatus;
-                el.style.color = id.includes('aistate') && currentStatus === 'RUNNING' ? '#818cf8' : (STATUS_COLORS[currentStatus] || '#9ca3af');
+        if (id === 'cycle-efficiency') {
+            formattedText = `$${parseFloat(val).toFixed(2)}/d`;
+        } else if (id === 'cycle-avg-duration' || id === 'cycle-avg-profit' || id === 'cycle-avg-orders' || id === 'cycle-avg-recovery' || id === 'cycle-win-rate' || id === 'cycle-net-profit') {
+            formattedText = val.toString();
+        } else if (id.includes('state') || id.includes('status')) {
+            formattedText = val.toString().toUpperCase().trim();
+            if (el.textContent !== formattedText) {
+                el.textContent = formattedText;
+                el.style.color = id.includes('aistate') && formattedText === 'RUNNING' ? '#818cf8' : (STATUS_COLORS[formattedText] || '#9ca3af');
             }
             return;
+        } else if (id.includes('btc') || id === 'aubalance-btc') {
+            formattedText = parseFloat(val).toFixed(6);
+        } else if (id.includes('cycle') || id.includes('norder')) {
+            formattedText = Math.floor(val).toString();
+        } else if (id.includes('coverage')) {
+            formattedText = parseFloat(val).toLocaleString();
+        } else {
+            // For general formatted values, delegate or compute diffing inside formatters if possible, 
+            // but we can check assignment directly where appropriate.
+        }
+
+        // --- DOM DIFFING CHECK: Only update DOM if text actually changed ---
+        if (formattedText && el.textContent !== formattedText) {
+            el.textContent = formattedText;
+        } else if (!formattedText && !id.includes('profit')) {
+            formatValue(el, val, false, false);
         }
 
         if (id.includes('profit')) {
             formatProfit(el, val);
-        } else if (id.includes('btc') || id === 'aubalance-btc') {
-            const btcVal = parseFloat(val).toFixed(6);
-            if (el.textContent !== btcVal) el.textContent = btcVal;
-        } else if (id.includes('cycle') || id.includes('norder')) {
-            const cycleVal = Math.floor(val).toString();
-            if (el.textContent !== cycleVal) el.textContent = cycleVal;
-        } else if (id.includes('coverage')) {
-            el.textContent = parseFloat(val).toLocaleString(); 
-        } else {
-            formatValue(el, val, false, false);
         }
     });
 
@@ -190,7 +189,10 @@ export async function updateBotUI(state) {
         const val = pulseSource[metric.key] !== undefined ? pulseSource[metric.key] : pulseSource[metric.fallbackKey]; 
         if (val !== undefined && val !== null) {
             const floatVal = parseFloat(val);
-            el.textContent = metric.id.includes('macd') ? floatVal.toFixed(4) : floatVal.toFixed(1);
+            const newText = metric.id.includes('macd') ? floatVal.toFixed(4) : floatVal.toFixed(1);
+            if (el.textContent !== newText) {
+                el.textContent = newText;
+            }
             if (metric.barId) updatePulseBars(metric.id, floatVal);
         }
     });
@@ -202,18 +204,27 @@ export async function updateBotUI(state) {
     const dVal = parseFloat(pulseSource.aiStochD ?? pulseSource.stochD ?? state.stochD ?? 0);
 
     if (stochEl) {
-        stochEl.textContent = `${kVal.toFixed(1)} / ${dVal.toFixed(1)}`;
+        const stochText = `${kVal.toFixed(1)} / ${dVal.toFixed(1)}`;
+        if (stochEl.textContent !== stochText) {
+            stochEl.textContent = stochText;
+        }
     }
     if (stochBar) {
         const percent = Math.min(Math.max(kVal, 0), 100);
-        stochBar.style.width = `${percent}%`;
+        const newWidth = `${percent}%`;
+        if (stochBar.style.width !== newWidth) {
+            stochBar.style.width = newWidth;
+        }
     }
 
     // --- AI CONFIDENCE ---
     const confidenceVal = parseFloat(pulseSource.aiConfidence ?? state.aiConfidence ?? 0);
     const confidenceTextEl = document.getElementById('ai-confidence-value');
     if (confidenceTextEl) {
-        confidenceTextEl.textContent = `${Math.round(confidenceVal)}%`;
+        const confText = `${Math.round(confidenceVal)}%`;
+        if (confidenceTextEl.textContent !== confText) {
+            confidenceTextEl.textContent = confText;
+        }
     }
 
     const circleEl = document.getElementById('ai-confidence-circle');
@@ -226,8 +237,8 @@ export async function updateBotUI(state) {
     const hasStateData = state.lstate !== undefined || state.sstate !== undefined || state.aistate !== undefined || state.isRunning !== undefined;
     if (hasStateData) updateControlsState(state);
 
+    // --- DASHBOARD SYNC (Using static import) ---
     try {
-        const dashboard = await import('./dashboard.js');
         if (dashboard) {
             const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);
             const sProfit = parseFloat(state.sprofit ?? state.stats?.sprofit ?? 0);
@@ -254,7 +265,10 @@ function updatePulseBars(id, value) {
     const bar = document.getElementById(barId);
     if (!bar) return;
     let percent = id.includes('adx') ? (value / 50) * 100 : value; 
-    bar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
+    const newWidth = `${Math.min(Math.max(percent, 0), 100)}%`;
+    if (bar.style.width !== newWidth) {
+        bar.style.width = newWidth;
+    }
 }
 
 export function updateControlsState(state) {
