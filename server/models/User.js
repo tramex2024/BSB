@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
     
     // --- ROL DE USUARIO --- Define qué partes de la aplicación puede ver y usar
     
-    role: {   
+    role: {    
         type: String,
         enum: ['current', 'advanced', 'admin'],
         default: 'current',
@@ -78,6 +78,12 @@ const userSchema = new mongoose.Schema({
     bitmartApiValidated: {
         type: Boolean,
         default: false
+    },
+
+    // --- CONTROL DE VERSIÓN MÓVIL ---
+    appVersion: {
+        type: String,
+        default: null
     }
 
 }, { 

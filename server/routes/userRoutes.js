@@ -58,5 +58,7 @@ router.post('/autobot/update-config', userController.updateBotConfig);
 // Obtener precio actual de un símbolo (No necesita llaves privadas)
 router.get('/bitmart/ticker', userController.getTickerPrice);
 
+// Ejemplo en tu archivo de rutas:
+router.post('/check-app-version', userController.authenticateToken, userController.checkAppVersion);
 
 module.exports = router;
