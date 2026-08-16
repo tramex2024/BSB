@@ -208,14 +208,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const splash = document.getElementById('welcome-splash');
     const closeSplash = document.getElementById('close-splash');
 
-    if (sessionStorage.getItem('splash-hidden') === 'true') {
-        if (splash) splash.remove();
-    } else {
-        closeSplash?.addEventListener('click', () => {
-            splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
-            setTimeout(() => splash.remove(), 500);
-            sessionStorage.setItem('splash-hidden', 'true');
-        });
+    if (splash) {
+        // Si ya estaba oculto en sessionStorage, lo removemos de una vez
+        if (sessionStorage.getItem('splash-hidden') === 'true') {
+            splash.remove();
+        } else if (closeSplash) {
+            // Forzamos el evento tanto para click como para toque en pantallas táctiles (móvil)
+            const hideSplash = () => {
+                splash.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+                setTimeout(() => splash.remove(), 500);
+                sessionStorage.setItem('splash-hidden', 'true');
+            };
+
+            closeSplash.addEventListener('click', hideSplash);
+            closeSplash.addEventListener('touchend', (e) => {
+                e.preventDefault(); // Evita doble disparo en móviles
+                hideSplash();
+            });
+        }
     }
 
     applyRolePermissions();
