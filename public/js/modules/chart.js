@@ -62,7 +62,7 @@ export function initializeChart(containerId, symbol) {
 }
 
 /**
- * Gráfico de Curva de Capital (Chart.js) - Optimizado con Blindaje de Pestañas y Actualización In-Place
+ * Gráfico de Curva de Capital (Chart.js) - Optimizado sin líneas falsas en 0
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
@@ -72,8 +72,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     }
 
     // [BLINDAJE DE NAVEGACIÓN ENTRE PESTAÑAS]: 
-    // Si ya existía un gráfico pero el canvas del DOM cambió (porque cambiaste de pestaña y volviste),
-    // destruimos la instancia vieja y limpiamos la caché para forzar la creación en el nuevo canvas.
+    // Si ya existía un gráfico pero el canvas del DOM cambió, destruimos y limpiamos caché.
     if (equityChartInstance && equityChartInstance.canvas !== canvas) {
         equityChartInstance.destroy();
         equityChartInstance = null;
@@ -88,7 +87,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const dataJson = JSON.stringify(rawPoints);
 
-    // [BLINDAJE DE RENDIMIENTO]: Si los datos y el parámetro son idénticos y el gráfico ya está activo, salimos.
+    // [BLINDAJE DE RENDIMIENTO]: Si los datos y el parámetro son idénticos, salimos.
     if (equityChartInstance && lastRenderedEquityDataJson === dataJson && lastParameter === parameter) {
         return;
     }
@@ -98,17 +97,17 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const ctx = canvas.getContext('2d');
     const hasData = rawPoints.length > 0;
-    const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
-    const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
-    
-    const dataPoints = points.map(p => {
+
+    // 2. MAPEO LIMPIO (Sin puntos falsos de valor 0 si no hay datos)
+    const labels = rawPoints.map((d, i) => d.time || `Punto ${i + 1}`);
+    const dataPoints = rawPoints.map(p => {
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
         return parseFloat(parseFloat(val).toFixed(4));
     });
 
     const color = '#10b981'; // Esmeralda (Verde bot)
 
-    // 2. ACTUALIZACIÓN IN-PLACE (Si el gráfico ya existe y estamos en la misma pestaña)
+    // 3. ACTUALIZACIÓN IN-PLACE (Si el gráfico ya existe)
     if (equityChartInstance) {
         equityChartInstance.data.labels = labels;
         equityChartInstance.data.datasets[0].data = dataPoints;
@@ -118,7 +117,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         return;
     }
 
-    // 3. CREACIÓN INICIAL DE LA INSTANCIA (O al regresar a la pestaña del dashboard)
+    // 4. CREACIÓN INICIAL DE LA INSTANCIA
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
     
@@ -142,7 +141,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     pointHoverRadius: 6,
                     tension: 0.35, 
                     fill: true,
-                    pointRadius: (hasData && points.length < 50) ? 3 : 0
+                    pointRadius: (hasData && rawPoints.length < 50) ? 3 : 0
                 }]
             },
             options: {
