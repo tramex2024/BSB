@@ -75,7 +75,6 @@ function updateMetricsDisplay() {
         totalRecovery += (cycle.finalRecovery || 0);
         if (cycle.netProfit > 0) winningCycles++;
 
-        // Sumamos solo si existe duración válida
         totalDurationMs += (cycle.durationMs || 0);
     });
 
@@ -87,7 +86,6 @@ function updateMetricsDisplay() {
     const winRate = totalCycles > 0 ? ((winningCycles / totalCycles) * 100) : 0;
     
     // --- CORRECCIÓN CRÍTICA DE PROFIT/D ---
-    // Usamos un umbral de 0.0001 horas para evitar divisiones por cero o valores absurdos
     const totalHours = totalDurationMs / 3600000;
     const profitPerDay = totalHours > 0.0001 ? ((totalNetProfitUsdt / totalHours) * 24) : 0;
     
