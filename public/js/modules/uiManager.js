@@ -40,11 +40,24 @@ window.addEventListener('input', (e) => {
     }
 }, true);
 
-export async function updateBotUI(state) {
-    if (!state) return;
+// Variable de memoria para persistencia de datos (colócala fuera de la función, al nivel del módulo)
+let lastKnownState = null;
 
-    // 🔍 LOG DE AUDITORÍA: Veremos exactamente qué datos llegan al frontend
-    //console.log("📥 [FRONTEND RECEIVED STATE]:", state);
+export async function updateBotUI(state) {
+    // --- 🛡️ MEMORY BUFFER: Protege contra estados vacíos durante transiciones ---
+    if (!state || Object.keys(state).length === 0) {
+        if (lastKnownState) {
+            console.warn("⚠️ Received empty or null state during transition. Using memory cache.");
+            state = lastKnownState;
+        } else {
+            return; // No hay estado ni caché, abortamos
+        }
+    } else {
+        lastKnownState = state;
+    }
+
+    // 🔍 AUDIT LOG: Checking exact data received by frontend
+    // console.log("📥 [FRONTEND RECEIVED STATE]:", state);
 
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
@@ -52,7 +65,7 @@ export async function updateBotUI(state) {
         lastPrice = formatCurrency(priceEl, currentMarketPrice, lastPrice);
     }
 
-    // --- 🛡️ [NUEVO] BLINDAJE DE SINCRONIZACIÓN ---
+    // --- 🛡️ SYNC SHIELD ---
     if (state.config) {
         checkConfigAcknowledgment(state.config);
 
@@ -66,7 +79,7 @@ export async function updateBotUI(state) {
                 const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
                 const isInsideGracePeriod = (Date.now() - lastMutation) < 2500;
 
-                // Captura el estado si el usuario está interactuando o tiene el lock activo
+                // Capture state if user is interacting or lock is active
                 if (isFocused || isInsideGracePeriod || uiLocks.isLocked(id)) {
                     activeLocks[id] = inputEl.value;
                 }
@@ -74,7 +87,7 @@ export async function updateBotUI(state) {
 
             syncInputsFromConfig(state.config);
 
-            // Restauración forzosa de la edición activa
+            // Force restoration of active editing
             Object.entries(activeLocks).forEach(([id, preservedValue]) => {
                 const inputEl = document.getElementById(id);
                 if (inputEl && inputEl.value !== preservedValue) {
@@ -84,25 +97,25 @@ export async function updateBotUI(state) {
         }
     }
 
-    // --- MAPEO MAESTRO (Tu lógica original intacta) ---
+    // --- MASTER MAPPING ---
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
         'aubalance-btc': 'lastAvailableBTC',
         'aulprofit-val': 'lprofit',   
         'aulbalance': 'lbalance',     
-        'aulcycle': 'lcycle',          
-        'aulsprice': 'lpc',            
-        'aultprice': 'ltprice',        
-        'aultppc': 'lppc',           
+        'aulcycle': 'lcycle',         
+        'aulsprice': 'lpc',           
+        'aultprice': 'ltprice',       
+        'aultppc': 'lppc',          
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'lnorder', 
         'ausprofit-val': 'sprofit',   
         'ausbalance': 'sbalance',     
-        'auscycle': 'scycle',          
-        'ausbprice': 'spc',            
-        'austprice': 'stprice',        
-        'austppc': 'sppc',           
+        'auscycle': 'scycle',         
+        'ausbprice': 'spc',           
+        'austprice': 'stprice',       
+        'austppc': 'sppc',          
         'auscoverage': 'scoverage',   
         'ausnorder': 'snorder', 
         'ai-virtual-balance': 'aibalance', 
@@ -112,18 +125,14 @@ export async function updateBotUI(state) {
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
         'ai-mode-status': 'aistate',
-
-        // IDs de las métricas de ciclo
-    	'cycle-avg-duration': 'avg_duration',  // ID del HTML -> Propiedad en el estado
-    	'cycle-efficiency': 'profit_per_day',  // ID del HTML -> Propiedad en el estado
-	    
-        // Si también quieres asegurar los otros campos de esa tarjeta:
-    	'cycle-avg-profit': 'avg_profit_percent',
+        'cycle-avg-duration': 'avg_duration',
+        'cycle-efficiency': 'profit_per_day',
+        'cycle-avg-profit': 'avg_profit_percent',
         'cycle-net-profit': 'net_avg_profit',
-    	'total-cycles-closed': 'total_cycles',
-    	'cycle-avg-orders': 'avg_orders',
-    	'cycle-avg-recovery': 'avg_recovery',
-    	'cycle-win-rate': 'win_rate' 
+        'total-cycles-closed': 'total_cycles',
+        'cycle-avg-orders': 'avg_orders',
+        'cycle-avg-recovery': 'avg_recovery',
+        'cycle-win-rate': 'win_rate' 
     };
 
     Object.entries(elements).forEach(([id, key]) => {
@@ -133,7 +142,7 @@ export async function updateBotUI(state) {
         let val = state[key] !== undefined ? state[key] : (state.stats ? state.stats[key] : undefined);
         if (val === undefined || val === null) return;
 
-        // --- 🛡️ EXCEPCIONES PARA NUEVAS MÉTRICAS (PREVENCIÓN DE REDONDEO) ---
+        // --- EXCEPTIONS FOR METRICS ---
         if (id === 'cycle-efficiency') {
             el.textContent = `$${parseFloat(val).toFixed(2)}/d`;
             return;
@@ -142,7 +151,6 @@ export async function updateBotUI(state) {
             el.textContent = val; 
             return;
         }
-        // --- FIN DE EXCEPCIONES ---
 
         if (id.includes('state') || id.includes('status')) {
             const currentStatus = val.toString().toUpperCase().trim();
@@ -159,7 +167,6 @@ export async function updateBotUI(state) {
             const btcVal = parseFloat(val).toFixed(6);
             if (el.textContent !== btcVal) el.textContent = btcVal;
         } else if (id.includes('cycle') || id.includes('norder')) {
-            // Este bloque solo se ejecutará para IDs que NO sean los de arriba
             const cycleVal = Math.floor(val).toString();
             if (el.textContent !== cycleVal) el.textContent = cycleVal;
         } else if (id.includes('coverage')) {
@@ -169,9 +176,8 @@ export async function updateBotUI(state) {
         }
     });
 
-    // --- MAPEO ROBUSTO DE PULSE METRICS (Soporte para nivel raíz y aiLastPulse) -->
+    // --- PULSE METRICS ---
     const pulseSource = state.aiLastPulse || state;
-
     const pulseMetrics = [
         { id: 'ai-adx-val', key: 'aiAdx', fallbackKey: 'lai', barId: 'ai-adx-bar' },
         { id: 'ai-rsi-val', key: 'aiRsi', fallbackKey: 'rsi14', barId: null },
@@ -189,10 +195,9 @@ export async function updateBotUI(state) {
         }
     });
 
-    // 📊 EXTRACCIÓN Y PINTADO SEGURO DE STOCH (K / D) DESDE aiLastPulse O RAÍZ
+    // --- STOCH METRICS ---
     const stochEl = document.getElementById('ai-stoch-val');
     const stochBar = document.getElementById('ai-stoch-bar');
-    
     const kVal = parseFloat(pulseSource.aiStochK ?? pulseSource.stochK ?? state.stochK ?? 0);
     const dVal = parseFloat(pulseSource.aiStochD ?? pulseSource.stochD ?? state.stochD ?? 0);
 
@@ -204,20 +209,16 @@ export async function updateBotUI(state) {
         stochBar.style.width = `${percent}%`;
     }
 
-    // 🎯 CONFIANZA DE LA IA (Actualización precisa del círculo SVG)
+    // --- AI CONFIDENCE ---
     const confidenceVal = parseFloat(pulseSource.aiConfidence ?? state.aiConfidence ?? 0);
-    
-    // Actualizar texto numérico del porcentaje
     const confidenceTextEl = document.getElementById('ai-confidence-value');
     if (confidenceTextEl) {
         confidenceTextEl.textContent = `${Math.round(confidenceVal)}%`;
     }
 
-    // Actualizar el círculo SVG basado en el perímetro exacto (r = 58 -> Perímetro = 364.42)
     const circleEl = document.getElementById('ai-confidence-circle');
     if (circleEl) {
         const perimeter = 364.42;
-        // Si la confianza es 100%, el offset es 0 (círculo lleno). Si es 0%, el offset es igual al perímetro (vacío).
         const strokeOffset = perimeter - (Math.min(Math.max(confidenceVal, 0), 100) / 100) * perimeter;
         circleEl.style.strokeDashoffset = strokeOffset;
     }
@@ -242,7 +243,7 @@ export async function updateBotUI(state) {
             }
         }
     } catch (err) {
-        console.error("⚠️ Falló el enlace de actualización cruzada con dashboard.js:", err);
+        console.error("⚠️ Failed to link cross-update with dashboard.js:", err);
     }
 
     updateMetricsFromState(state);
