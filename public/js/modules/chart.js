@@ -62,13 +62,22 @@ export function initializeChart(containerId, symbol) {
 }
 
 /**
- * Gráfico de Curva de Capital (Chart.js) - Optimizado con Blindaje y Actualización In-Place
+ * Gráfico de Curva de Capital (Chart.js) - Optimizado con Blindaje de Pestañas y Actualización In-Place
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
     if (!canvas) {
         console.error("❌ ERROR: No existe #equityCurveChart en el DOM");
         return;
+    }
+
+    // [BLINDAJE DE NAVEGACIÓN ENTRE PESTAÑAS]: 
+    // Si ya existía un gráfico pero el canvas del DOM cambió (porque cambiaste de pestaña y volviste),
+    // destruimos la instancia vieja y limpiamos la caché para forzar la creación en el nuevo canvas.
+    if (equityChartInstance && equityChartInstance.canvas !== canvas) {
+        equityChartInstance.destroy();
+        equityChartInstance = null;
+        lastRenderedEquityDataJson = null; 
     }
 
     if (canvas.parentElement) {
@@ -79,7 +88,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const dataJson = JSON.stringify(rawPoints);
 
-    // [BLINDAJE DE RENDIMIENTO]: Si los datos y el parámetro son idénticos al tick anterior, salimos sin hacer nada.
+    // [BLINDAJE DE RENDIMIENTO]: Si los datos y el parámetro son idénticos y el gráfico ya está activo, salimos.
     if (equityChartInstance && lastRenderedEquityDataJson === dataJson && lastParameter === parameter) {
         return;
     }
@@ -99,17 +108,17 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const color = '#10b981'; // Esmeralda (Verde bot)
 
-    // 2. ACTUALIZACIÓN IN-PLACE (Evita destruir y recrear el gráfico si ya existe)
+    // 2. ACTUALIZACIÓN IN-PLACE (Si el gráfico ya existe y estamos en la misma pestaña)
     if (equityChartInstance) {
         equityChartInstance.data.labels = labels;
         equityChartInstance.data.datasets[0].data = dataPoints;
         equityChartInstance.data.datasets[0].label = parameter === 'accumulatedProfit' ? 'Capital Acumulado (USDT)' : 'Retorno (%)';
         equityChartInstance.data.datasets[0].borderColor = hasData ? color : 'rgba(255, 255, 255, 0.2)';
-        equityChartInstance.update('none'); // Actualización fluida instantánea sin parpadeos
+        equityChartInstance.update('none'); 
         return;
     }
 
-    // 3. CREACIÓN INICIAL DE LA INSTANCIA (Solo ocurre la primera vez que se carga el dashboard)
+    // 3. CREACIÓN INICIAL DE LA INSTANCIA (O al regresar a la pestaña del dashboard)
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
     
