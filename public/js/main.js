@@ -136,6 +136,14 @@ export async function initializeTab(tabName) {
         }
         await updateBotUI(currentBotState);
         syncAIElementsInDOM();
+
+        // [NUEVO]: Si entramos al dashboard o la vista de métricas, restauramos los datos al instante
+        if (tabName === 'dashboard') {
+            import('./metricsManager.js').then(metrics => {
+                metrics.forceRefreshUI();
+            }).catch(err => console.error("Error refreshing metrics:", err));
+        }
+
     } catch (error) { 
         console.error("❌ View Loading Error:", error); 
     } finally {

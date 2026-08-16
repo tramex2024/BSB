@@ -221,11 +221,12 @@ function formatDuration(hours) {
 }
 
 /**
- * Fuerza el repintado de la UI sin esperar datos nuevos del socket.
- * Útil al cambiar de pestaña.
+ * Fuerza el repintado inmediato de la UI usando los datos en memoria.
+ * Soluciona el problema de perder los datos al cambiar de pestaña.
  */
 export function forceRefreshUI() {
-    console.log("🔄 [METRICS] Refrescando UI con datos en memoria...");
+    // Forzamos el reseteo del hash para obligar a actualizar la pantalla
+    lastProcessedHash = ''; 
     updateMetricsDisplay();
 }
 
