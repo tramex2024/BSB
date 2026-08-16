@@ -3,19 +3,29 @@
  */
 import { App } from 'https://esm.sh/@capacitor/app';
 import { Capacitor } from 'https://esm.sh/@capacitor/core';
-import { BACKEND_URL } from '../main.js'; // Esto apunta a 'https://bsb-ppex.onrender.com'
+import { BACKEND_URL } from '../main.js'; 
 
 export async function checkForAppUpdates() {
-    if (!Capacitor.isNativePlatform()) return;
+    console.log("🚀 [DEBUG] checkForAppUpdates iniciada.");
+
+    if (!Capacitor.isNativePlatform()) {
+        console.log("⚠️ [DEBUG] No es plataforma nativa.");
+        return;
+    }
 
     try {
         const info = await App.getInfo();
         const localVersion = info.version;
-        const token = localStorage.getItem('token'); 
-        
-        if (!token) return;
+        console.log("📱 [DEBUG] Versión local detectada:", localVersion);
 
-        // Aquí usamos BACKEND_URL para ir directo a Render
+        const token = localStorage.getItem('token');
+        if (!token) {
+            console.log("❌ [DEBUG] No hay token en localStorage.");
+            return;
+        }
+
+        console.log("📡 [DEBUG] Intentando enviar petición a:", `${BACKEND_URL}/check-app-version`);
+
         const response = await fetch(`${BACKEND_URL}/check-app-version`, {
             method: 'POST',
             headers: {
@@ -25,15 +35,22 @@ export async function checkForAppUpdates() {
             body: JSON.stringify({ appVersion: localVersion })
         });
 
-        if (!response.ok) return;
+        console.log("📥 [DEBUG] Respuesta del servidor status:", response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ [DEBUG] Error en fetch:", errorText);
+            return;
+        }
 
         const data = await response.json();
+        console.log("✅ [DEBUG] Respuesta exitosa:", data);
 
         if (data.success && data.updateRequired) {
             showUpdateModal(data.latestVersion, data.apkDownloadUrl);
         }
     } catch (error) {
-        console.error("❌ Error al verificar actualizaciones:", error);
+        console.error("🔥 [DEBUG] Error en catch:", error);
     }
 }
 
