@@ -7,7 +7,7 @@ const GITHUB_USER = 'tramex2024'; // <--- Reemplaza con tu usuario o empresa en 
 const GITHUB_REPO = 'BSB';    // <--- Reemplaza con el nombre de tu repositorio
 
 /**
- * Comprueba si hay una nueva versión publicada en GitHub Releases
+ * Comprueba si hay una nueva versión publicada en GitHub Releases (Solo en apps móviles nativas)
  */
 export async function checkForAppUpdates() {
     // [BLINDAJE]: Si no es una app móvil nativa, omite la comprobación
@@ -15,9 +15,12 @@ export async function checkForAppUpdates() {
     if (!isNativeApp) return;
 
     try {
-        // 1. Obtenemos la versión actual instalada en el dispositivo dinámicamente
-        const info = await App.getInfo();
-        const currentVersion = info.version; // Ej: "1.0.0"
+        // 1. Obtenemos la versión actual instalada usando el puente global de Capacitor
+        let currentVersion = '1.0.0';
+        if (window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+            const info = await window.Capacitor.Plugins.App.getInfo();
+            currentVersion = info.version;
+        }
 
         // 2. Consultamos la última release pública en GitHub
         const repoUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`;
