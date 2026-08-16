@@ -1,50 +1,42 @@
 /**
- * apkupdate.js - Módulo de Actualización vía GitHub Releases (Nativo Móvil)
+ * apkupdate.js - GitHub Releases Update Checker Module (Mobile Native Only)
  */
-import { App } from '@capacitor/app';
 
-const GITHUB_USER = 'tramex2024'; // <--- Reemplaza con tu usuario o empresa en GitHub
-const GITHUB_REPO = 'BSB';    // <--- Reemplaza con el nombre de tu repositorio
+const GITHUB_USER = 'YOUR_GITHUB_USER';
+const GITHUB_REPO = 'YOUR_REPOSITORY';
+const CURRENT_VERSION = '1.0.0'; 
 
 /**
- * Comprueba si hay una nueva versión publicada en GitHub Releases (Solo en apps móviles nativas)
+ * Checks if a new version is published in GitHub Releases (Only on native mobile apps)
  */
 export async function checkForAppUpdates() {
-    // [BLINDAJE]: Si no es una app móvil nativa, omite la comprobación
+    // [BLINDAJE]: Si no es una app móvil nativa (ej. navegador web o Vercel), omite la comprobación
     const isNativeApp = window.Capacitor && window.Capacitor.isNativePlatform();
     if (!isNativeApp) return;
 
-    try {
-        // 1. Obtenemos la versión actual instalada usando el puente global de Capacitor
-        let currentVersion = '1.0.0';
-        if (window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-            const info = await window.Capacitor.Plugins.App.getInfo();
-            currentVersion = info.version;
-        }
+    const repoUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`;
 
-        // 2. Consultamos la última release pública en GitHub
-        const repoUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`;
+    try {
         const response = await fetch(repoUrl);
         if (!response.ok) return;
 
         const data = await response.json();
         const latestVersion = data.tag_name.replace('v', '').trim();
-        
-        // Buscamos el archivo .apk adjunto en la release
         const apkAsset = data.assets?.find(asset => asset.name.endsWith('.apk'));
+
         if (!apkAsset) return;
 
-        // 3. Comparamos versiones semánticas (ej: "1.1.0" vs "1.0.0")
-        if (compareVersions(latestVersion, currentVersion) > 0) {
+        // Compares semantic versions (e.g., "1.1.0" vs "1.0.0")
+        if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
             showUpdateModal(latestVersion, apkAsset.browser_download_url);
         }
     } catch (error) {
-        console.error("❌ Error al verificar actualizaciones en GitHub:", error);
+        console.error("❌ Error checking for app updates:", error);
     }
 }
 
 /**
- * Función auxiliar para comparar versiones semánticas
+ * Helper function to compare semantic versions
  */
 function compareVersions(v1, v2) {
     const p1 = v1.split('.').map(Number);
@@ -60,19 +52,19 @@ function compareVersions(v1, v2) {
 }
 
 /**
- * Muestra el modal de actualización
+ * Displays an update notification modal
  */
 function showUpdateModal(version, downloadUrl) {
     if (document.getElementById('update-modal')) return;
 
     const modalHtml = `
-        <div id="update-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;padding:16px;">
-            <div style="background:#1f2937;padding:24px;border-radius:12px;width:100%;max-width:360px;text-align:center;border:1px solid #374151;color:#ffffff;font-family:sans-serif;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
-                <h3 style="margin-top:0;color:#10b981;font-size:1.25rem;">¡Nueva versión disponible!</h3>
-                <p style="color:#9ca3af;font-size:0.9rem;margin:12px 0;">Se ha detectado la versión <b>v${version}</b>. Actualiza para disfrutar de las últimas mejoras.</p>
+        <div id="update-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;">
+            <div style="background:#1f2937;padding:24px;border-radius:12px;width:90%;max-width:360px;text-align:center;border:1px solid #374151;color:#ffffff;font-family:sans-serif;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                <h3 style="margin-top:0;color:#10b981;font-size:1.25rem;">New version available!</h3>
+                <p style="color:#9ca3af;font-size:0.9rem;margin:12px 0;">Version <b>v${version}</b> has been detected. Update to enjoy the latest improvements and fixes.</p>
                 <div style="display:flex;gap:10px;margin-top:20px;">
-                    <button id="btn-update-cancel" style="flex:1;padding:10px;background:#374151;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;">Más tarde</button>
-                    <button id="btn-update-now" style="flex:1;padding:10px;background:#10b981;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;">Actualizar</button>
+                    <button id="btn-update-cancel" style="flex:1;padding:10px;background:#374151;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;">Later</button>
+                    <button id="btn-update-now" style="flex:1;padding:10px;background:#10b981;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:600;">Update</button>
                 </div>
             </div>
         </div>

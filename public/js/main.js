@@ -237,10 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeProfile();
     initPayments();
 
-    // [BLINDAJE]: Comprobación de actualización no bloqueante (diferida 2.5 segundos)
-    setTimeout(() => {
-        checkForAppUpdates();
-    }, 2500);
+    // [NEW]: Comprobación automática de actualización de la APK al iniciar
+    checkForAppUpdates();
 });
 
 document.addEventListener('visibilitychange', () => {
