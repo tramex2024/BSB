@@ -221,6 +221,15 @@ function formatDuration(hours) {
 }
 
 /**
+ * Fuerza el repintado de la UI sin esperar datos nuevos del socket.
+ * Útil al cambiar de pestaña.
+ */
+export function forceRefreshUI() {
+    console.log("🔄 [METRICS] Refrescando UI con datos en memoria...");
+    updateMetricsDisplay();
+}
+
+/**
  * AUDITORÍA DE CICLOS
  */
 export function calculateSummary(allCycles) {
