@@ -1,6 +1,6 @@
 /**
  * metricsManager.js - Motor de Análisis de Rendimiento (TradeCycles Only)
- * VERSIÓN INTEGRAL CORREGIDA 2026
+ * VERSIÓN INTEGRAL CORREGIDA 2026.
  */
 
 const globalCyclesMap = new Map(); 
