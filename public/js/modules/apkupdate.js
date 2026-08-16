@@ -3,29 +3,19 @@
  */
 import { App } from 'https://esm.sh/@capacitor/app';
 import { Capacitor } from 'https://esm.sh/@capacitor/core';
-// Importamos la URL de tu backend que ya tienes en main.js
-import { BACKEND_URL } from '../main.js'; 
+import { BACKEND_URL } from '../main.js'; // Esto apunta a 'https://bsb-ppex.onrender.com'
 
 export async function checkForAppUpdates() {
-    // [LOG DE PRUEBA]: Vamos a ver en la consola del celular si esto se ejecuta
-    console.log("🔍 [APK-UPDATE] Iniciando comprobación de actualización...");
-
-    if (!Capacitor.isNativePlatform()) {
-        console.log("🔍 [APK-UPDATE] No es plataforma nativa, omitiendo.");
-        return;
-    }
+    if (!Capacitor.isNativePlatform()) return;
 
     try {
         const info = await App.getInfo();
         const localVersion = info.version;
-        const token = localStorage.getItem('token'); // Asegúrate que sea 'token' o 'jwtToken' según tu app
+        const token = localStorage.getItem('token'); 
         
-        if (!token) {
-            console.log("🔍 [APK-UPDATE] No hay token, saltando.");
-            return;
-        }
+        if (!token) return;
 
-        // AQUÍ ESTÁ EL CAMBIO: Usamos BACKEND_URL + la ruta
+        // Aquí usamos BACKEND_URL para ir directo a Render
         const response = await fetch(`${BACKEND_URL}/check-app-version`, {
             method: 'POST',
             headers: {
@@ -35,13 +25,9 @@ export async function checkForAppUpdates() {
             body: JSON.stringify({ appVersion: localVersion })
         });
 
-        if (!response.ok) {
-            console.error("❌ Error en respuesta del servidor:", response.status);
-            return;
-        }
+        if (!response.ok) return;
 
         const data = await response.json();
-        console.log("🔍 [APK-UPDATE] Respuesta recibida:", data);
 
         if (data.success && data.updateRequired) {
             showUpdateModal(data.latestVersion, data.apkDownloadUrl);
