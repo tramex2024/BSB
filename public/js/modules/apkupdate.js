@@ -6,25 +6,25 @@ import { Capacitor } from 'https://esm.sh/@capacitor/core';
 import { BACKEND_URL } from '../main.js'; 
 
 export async function checkForAppUpdates() {
-    console.log("🚀 [DEBUG] checkForAppUpdates iniciada.");
-
+    // 1. Verificamos si entra al modo nativo
     if (!Capacitor.isNativePlatform()) {
-        console.log("⚠️ [DEBUG] No es plataforma nativa.");
+        console.log("No es nativo");
         return;
     }
 
     try {
+        // 2. Intentamos obtener la versión de la app
         const info = await App.getInfo();
         const localVersion = info.version;
-        console.log("📱 [DEBUG] Versión local detectada:", localVersion);
-
+        
         const token = localStorage.getItem('token');
         if (!token) {
-            console.log("❌ [DEBUG] No hay token en localStorage.");
+            alert("⚠️ APK DEBUG: No hay token guardado en localStorage");
             return;
         }
 
-        console.log("📡 [DEBUG] Intentando enviar petición a:", `${BACKEND_URL}/check-app-version`);
+        // 3. Mostramos que va a hacer el intento de conexión
+        // alert(`📡 Conectando a: ${BACKEND_URL}/check-app-version con versión ${localVersion}`);
 
         const response = await fetch(`${BACKEND_URL}/check-app-version`, {
             method: 'POST',
@@ -35,22 +35,22 @@ export async function checkForAppUpdates() {
             body: JSON.stringify({ appVersion: localVersion })
         });
 
-        console.log("📥 [DEBUG] Respuesta del servidor status:", response.status);
-        
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error("❌ [DEBUG] Error en fetch:", errorText);
+            alert(`❌ Servidor respondió con error: ${response.status}`);
             return;
         }
 
         const data = await response.json();
-        console.log("✅ [DEBUG] Respuesta exitosa:", data);
+        
+        // 4. Si llegó hasta aquí, ¡la conexión fue exitosa!
+        alert(`✅ Éxito! Servidor respondió. Versión actual: ${data.currentVersion}, Admin dice que la última es: ${data.latestVersion}`);
 
         if (data.success && data.updateRequired) {
             showUpdateModal(data.latestVersion, data.apkDownloadUrl);
         }
     } catch (error) {
-        console.error("🔥 [DEBUG] Error en catch:", error);
+        // Si hay un fallo de red (CORS, URL mal escrita, sin internet)
+        alert(`🔥 Error de red/catch: ${error.message}`);
     }
 }
 
