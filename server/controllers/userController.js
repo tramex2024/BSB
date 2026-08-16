@@ -258,4 +258,4 @@ exports.checkAppVersion = async (req, res) => {
         console.error('[VERSION-CHECK-ERROR]', error);
         res.status(500).json({ success: false, message: 'Error al verificar la versión' });
     }
-};
+};11:18 16/08/2026

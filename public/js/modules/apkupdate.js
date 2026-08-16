@@ -1,56 +1,43 @@
 /**
  * apkupdate.js - Módulo de Actualización de APK para Capacitor
  */
-import { App } from 'https://esm.sh/@capacitor/app';
-import { Capacitor } from 'https://esm.sh/@capacitor/core';
+// CAMBIA ESTO:
+// import { App } from 'https://esm.sh/@capacitor/app';
+// import { Capacitor } from 'https://esm.sh/@capacitor/core';
+
+// POR ESTO (importación local estándar de Capacitor):
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { BACKEND_URL } from '../main.js'; 
 
 export async function checkForAppUpdates() {
-    // 1. Verificamos si entra al modo nativo
-    if (!Capacitor.isNativePlatform()) {
-        console.log("No es nativo");
-        return;
-    }
+    if (!Capacitor.isNativePlatform()) return;
 
     try {
-        // 2. Intentamos obtener la versión de la app
         const info = await App.getInfo();
         const localVersion = info.version;
         
         const token = localStorage.getItem('token');
-        if (!token) {
-            alert("⚠️ APK DEBUG: No hay token guardado en localStorage");
-            return;
-        }
-
-        // 3. Mostramos que va a hacer el intento de conexión
-        // alert(`📡 Conectando a: ${BACKEND_URL}/check-app-version con versión ${localVersion}`);
+        if (!token) return;
 
         const response = await fetch(`${BACKEND_URL}/check-app-version`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer `
             },
             body: JSON.stringify({ appVersion: localVersion })
         });
 
-        if (!response.ok) {
-            alert(`❌ Servidor respondió con error: ${response.status}`);
-            return;
-        }
+        if (!response.ok) return;
 
         const data = await response.json();
-        
-        // 4. Si llegó hasta aquí, ¡la conexión fue exitosa!
-        alert(`✅ Éxito! Servidor respondió. Versión actual: ${data.currentVersion}, Admin dice que la última es: ${data.latestVersion}`);
 
         if (data.success && data.updateRequired) {
             showUpdateModal(data.latestVersion, data.apkDownloadUrl);
         }
     } catch (error) {
-        // Si hay un fallo de red (CORS, URL mal escrita, sin internet)
-        alert(`🔥 Error de red/catch: ${error.message}`);
+        console.error("Error al verificar actualizaciones:", error);
     }
 }
 
