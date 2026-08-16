@@ -45,6 +45,13 @@ export function setAnalyticsData(data) {
 }
 
 /**
+ * forceRefreshUI - Fuerza la actualización visual con los datos actuales en memoria.
+ */
+export function forceRefreshUI() {
+    updateMetricsDisplay();
+}
+
+/**
  * updateMetricsDisplay
  * Versión optimizada 2026: Cálculo consistente de Profit/D y blindaje de métricas.
  */
