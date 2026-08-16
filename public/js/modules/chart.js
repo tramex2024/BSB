@@ -1,12 +1,14 @@
 /**
- * chart.js - Visualización de Rendimiento (Optimizada sin destrucción)
+ * chart.js - Visualización de Rendimiento (Versión Optimizada + Blindaje DOM)
+ * Estado: Estable - Manejo de TradingView y Chart.js
  */
 
 let equityChartInstance = null;
-let tvWidgetInstances = {}; 
+let tvWidgetInstances = {}; // [BLINDAJE]: Registro para evitar recargas innecesarias del widget
 
 /**
  * Gráfico de TradingView (Precios en vivo)
+ * Configura el widget principal evitando destrucción de iframes al cambiar de pestaña.
  */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
@@ -14,6 +16,8 @@ export function initializeChart(containerId, symbol) {
 
     const fullSymbol = "BINANCE:BTCUSDT";
 
+    // [BLINDAJE]: Si el contenedor ya tiene un iframe activo y el símbolo es idéntico, 
+    // evitamos destruir el DOM para prevenir cortes en el flujo de precios en tiempo real.
     if (container.querySelector('iframe') && tvWidgetInstances[containerId] === fullSymbol) {
         return; 
     }
@@ -75,6 +79,13 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
 
     const ctx = canvas.getContext('2d');
 
+    // 1. LIMPIEZA TOTAL: Evita que se solapen gráficos al actualizar
+    if (equityChartInstance) {        
+        equityChartInstance.destroy();
+        equityChartInstance = null;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     // 2. PROCESAMIENTO DE PUNTOS
     const rawPoints = Array.isArray(data) ? data : (data?.points || []);
     const hasData = rawPoints.length > 0;
@@ -87,15 +98,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         return parseFloat(parseFloat(val).toFixed(4));
     });
 
-    // 1. LÓGICA DE ACTUALIZACIÓN (Si ya existe la instancia, solo actualizamos los datos)
-    if (equityChartInstance) {
-        equityChartInstance.data.labels = labels;
-        equityChartInstance.data.datasets[0].data = dataPoints;
-        equityChartInstance.update('none'); // Actualiza sin parpadeo (el 'none' es opcional, puedes quitarlo si prefieres la animación completa)
-        return;
-    }
-
-    // 3. GRADIENTE DINÁMICO (Solo se crea en la instancia inicial)
+    // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
     const color = '#10b981'; // Esmeralda (Verde bot)
@@ -103,7 +106,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
     gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
-    // 4. CREACIÓN DE INSTANCIA (Solo se ejecuta la primera vez)
+    // 4. CREACIÓN DE INSTANCIA
     try {
         equityChartInstance = new Chart(ctx, {
             type: 'line',
