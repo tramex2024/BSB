@@ -4,12 +4,11 @@
  */
 
 let equityChartInstance = null;
-let lastRenderedEquityDataJson = null;
-let lastParameter = null;
 let tvWidgetInstances = {}; // [BLINDAJE]: Registro para evitar recargas innecesarias del widget
 
 /**
  * Gráfico de TradingView (Precios en vivo)
+ * Configura el widget principal evitando destrucción de iframes al cambiar de pestaña.
  */
 export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
@@ -17,6 +16,8 @@ export function initializeChart(containerId, symbol) {
 
     const fullSymbol = "BINANCE:BTCUSDT";
 
+    // [BLINDAJE]: Si el contenedor ya tiene un iframe activo y el símbolo es idéntico, 
+    // evitamos destruir el DOM para prevenir cortes en el flujo de precios en tiempo real.
     if (container.querySelector('iframe') && tvWidgetInstances[containerId] === fullSymbol) {
         return; 
     }
@@ -62,7 +63,8 @@ export function initializeChart(containerId, symbol) {
 }
 
 /**
- * Gráfico de Curva de Capital (Chart.js) - Optimizado sin líneas falsas en 0
+ * Gráfico de Curva de Capital (Chart.js)
+ * Renderiza el historial de beneficios acumulados del bot.
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
@@ -71,59 +73,40 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
         return;
     }
 
-    // [BLINDAJE DE NAVEGACIÓN ENTRE PESTAÑAS]: 
-    // Si ya existía un gráfico pero el canvas del DOM cambió, destruimos y limpiamos caché.
-    if (equityChartInstance && equityChartInstance.canvas !== canvas) {
-        equityChartInstance.destroy();
-        equityChartInstance = null;
-        lastRenderedEquityDataJson = null; 
-    }
-
     if (canvas.parentElement) {
         canvas.parentElement.style.height = "450px"; 
     }
 
-    // 1. PROCESAMIENTO Y HUELLA DIGITAL DE DATOS
-    const rawPoints = Array.isArray(data) ? data : (data?.points || []);
-    const dataJson = JSON.stringify(rawPoints);
-
-    // [BLINDAJE DE RENDIMIENTO]: Si los datos y el parámetro son idénticos, salimos.
-    if (equityChartInstance && lastRenderedEquityDataJson === dataJson && lastParameter === parameter) {
-        return;
-    }
-
-    lastRenderedEquityDataJson = dataJson;
-    lastParameter = parameter;
-
     const ctx = canvas.getContext('2d');
-    const hasData = rawPoints.length > 0;
 
-    // 2. MAPEO LIMPIO (Sin puntos falsos de valor 0 si no hay datos)
-    const labels = rawPoints.map((d, i) => d.time || `Punto ${i + 1}`);
-    const dataPoints = rawPoints.map(p => {
+    // 1. LIMPIEZA TOTAL: Evita que se solapen gráficos al actualizar
+    if (equityChartInstance) {        
+        equityChartInstance.destroy();
+        equityChartInstance = null;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 2. PROCESAMIENTO DE PUNTOS
+    const rawPoints = Array.isArray(data) ? data : (data?.points || []);
+    const hasData = rawPoints.length > 0;
+    
+    const points = hasData ? rawPoints : [{ time: 'Esperando datos...', value: 0 }];
+    const labels = points.map((d, i) => d.time || `Punto ${i + 1}`);
+    
+    const dataPoints = points.map(p => {
         let val = p.value !== undefined ? p.value : (p.netProfit || 0);
         return parseFloat(parseFloat(val).toFixed(4));
     });
 
-    const color = '#10b981'; // Esmeralda (Verde bot)
-
-    // 3. ACTUALIZACIÓN IN-PLACE (Si el gráfico ya existe)
-    if (equityChartInstance) {
-        equityChartInstance.data.labels = labels;
-        equityChartInstance.data.datasets[0].data = dataPoints;
-        equityChartInstance.data.datasets[0].label = parameter === 'accumulatedProfit' ? 'Capital Acumulado (USDT)' : 'Retorno (%)';
-        equityChartInstance.data.datasets[0].borderColor = hasData ? color : 'rgba(255, 255, 255, 0.2)';
-        equityChartInstance.update('none'); 
-        return;
-    }
-
-    // 4. CREACIÓN INICIAL DE LA INSTANCIA
+    // 3. GRADIENTE DINÁMICO
     const chartHeight = canvas.offsetHeight || 450;
     const gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
+    const color = '#10b981'; // Esmeralda (Verde bot)
     
     gradient.addColorStop(0, hasData ? `${color}44` : 'rgba(255, 255, 255, 0.05)'); 
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
 
+    // 4. CREACIÓN DE INSTANCIA
     try {
         equityChartInstance = new Chart(ctx, {
             type: 'line',
@@ -141,7 +124,7 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                     pointHoverRadius: 6,
                     tension: 0.35, 
                     fill: true,
-                    pointRadius: (hasData && rawPoints.length < 50) ? 3 : 0
+                    pointRadius: (hasData && points.length < 50) ? 3 : 0
                 }]
             },
             options: {
