@@ -23,6 +23,12 @@ const BUY_FEE_PERCENT = 0.001;
 const SELL_FEE_PERCENT = 0.001; 
 
 /**
+ * Trailing Stop fijo utilizado en la operativa.
+ * Valor: 0.3% (0.003 en formato decimal).
+ */
+const TRAILING_STOP_PERCENT = 0.001; // 0.1%
+
+/**
  * Precision requirements for BitMart API (BTC_USDT pair).
  * BTC (Qty): 6 decimals (e.g., 0.000123)
  * USDT (Price/Amount): 2 decimals (e.g., 50000.50)
@@ -35,6 +41,7 @@ module.exports = {
     MIN_USDT_VALUE_FOR_BITMART,
     BUY_FEE_PERCENT,
     SELL_FEE_PERCENT,
+    TRAILING_STOP_PERCENT,
     BTC_PRECISION,
     USDT_PRECISION
 };

@@ -5,10 +5,10 @@
 
 const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./ShortBuyConsolidator');
+const { TRAILING_STOP_PERCENT } = require('../../utils/tradeConstants');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
 const SSTATE = 'short';
-const TRAILING_STOP_PERCENTAGE = 0.3; // Default 0.3%
 
 /**
  * S-BUYING STATE (SHORT):
@@ -45,8 +45,10 @@ async function run(dependencies) {
         }
 
         // 2. INVERSE TRAILING STOP LOGIC
-        const configPercent = config.short?.trailing_percent || TRAILING_STOP_PERCENTAGE;
-        const trailingStopPercent = configPercent / 100;
+        const configPercent = config.short?.trailing_percent || (TRAILING_STOP_PERCENT * 100);
+        const trailingStopPercent = config.short?.trailing_percent 
+            ? (parseFloat(config.short.trailing_percent) / 100) 
+            : TRAILING_STOP_PERCENT;
 
         let currentMin = (pm > 0) ? pm : currentPrice;
         const newPm = Math.min(currentMin, currentPrice);
@@ -58,7 +60,7 @@ async function run(dependencies) {
 
             await updateGeneralBotState({ 
                 spm: newPm, 
-                spc: newPc
+                spc: newPc 
             });
         }
 

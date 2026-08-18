@@ -1,6 +1,7 @@
 // BSB/server/src/states/long/LSelling.js
 
 const { placeLongSellOrder } = require('../../managers/longOrderManager');
+const { TRAILING_STOP_PERCENT } = require('../../utils/tradeConstants');
 
 const MIN_SELL_AMOUNT_BTC = 0.00005; // BitMart BTC minimum
 const LSTATE = 'long';
@@ -34,8 +35,10 @@ async function run(dependencies) {
             return;
         }
 
-        // 2. TRAILING STOP LOGIC
-        const trailingStopPercent = (parseFloat(config.long?.trailing_percent || 0.3)) / 100;
+        // 2. TRAILING STOP LOGIC (Obtenido desde tradeConstants o configuración de usuario si existe)
+        const trailingStopPercent = config.long?.trailing_percent 
+            ? (parseFloat(config.long.trailing_percent) / 100) 
+            : TRAILING_STOP_PERCENT;
 
         let newPm = pm;
         if (pm === 0 || currentPrice > pm) {
@@ -50,7 +53,7 @@ async function run(dependencies) {
 
             await updateGeneralBotState({ 
                 lpm: newPm, 
-                lpc: newPc
+                lpc: newPc 
             });
         }
 
