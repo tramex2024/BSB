@@ -47,6 +47,11 @@ const AI_MIN_TRADE_AMOUNT = 5.0;
 const AI_SAFETY_MARGIN = 0.02;
 
 /**
+ * Maximum capital cap per strategy side (Long/Short).
+ */
+const MAX_CAP = 6140.0;
+
+/**
  * Exponential Grid / Autobot Calculation Limits & Defaults (2026 Logic)
  */
 const MAX_ALLOWED_ORDERS = 30;
@@ -66,5 +71,6 @@ module.exports = {
     AI_SAFETY_MARGIN,
     MAX_ALLOWED_ORDERS,
     DEFAULT_START_STEP,
-    DEFAULT_TARGET_COVERAGE
+    DEFAULT_TARGET_COVERAGE,
+    MAX_CAP
 };

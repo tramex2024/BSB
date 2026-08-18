@@ -8,7 +8,10 @@ const {
     calculateDistributedSizes, 
     calculateStepGrow 
 } = require('../autobotCalculations');
-const { TRAILING_STOP_PERCENT } = require('../utils/tradeConstants');
+const { 
+    TRAILING_STOP_PERCENT, 
+    MAX_CAP 
+} = require('../utils/tradeConstants');
 
 function safeParseFloat(val) {
     if (val === undefined || val === null || val === "") return undefined;
@@ -17,14 +20,12 @@ function safeParseFloat(val) {
 }
 
 function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
-    const MAX_CAP = 6140.0;
     const l = Math.min(parseFloat(amtL) || 0, MAX_CAP);
     const s = Math.min(parseFloat(amtS) || 0, MAX_CAP);
 
     const calculateScalpingGrid = (totalAmount, side) => {
         const sizeData = calculateDistributedSizes(totalAmount);
         
-        // Validación corregida: accedemos a .levels y verificamos la estructura
         if (!sizeData || sizeData.levels < 3) return null;
 
         const n = sizeData.levels;
@@ -34,7 +35,6 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
         return {
             amountUsdt: parseFloat(totalAmount.toFixed(2)),
             purchaseUsdt: 6.0,
-            // Valores en formato porcentaje real (1.5 = 1.5%)
             price_var: 1.5, 
             price_step_inc: parseFloat(stepInc.toFixed(4)),
             size_var: Math.max(parseFloat(sizeMultiplier.toFixed(4)), 1.0),
