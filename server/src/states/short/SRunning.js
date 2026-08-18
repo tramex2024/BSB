@@ -7,7 +7,7 @@
 
 const MarketSignal = require('../../../models/MarketSignal');
 const { calculateShortCoverage } = require('../../../autobotCalculations');
-const { TRADE_SYMBOL } = require('../../utils/tradeConstants');
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 async function run(dependencies) {
     // 1. Injected Context

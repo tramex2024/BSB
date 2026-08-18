@@ -6,7 +6,7 @@
 
 const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
-const { TRADE_SYMBOL } = require('../../utils/tradeConstants');
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 async function run(dependencies) {
     const {
