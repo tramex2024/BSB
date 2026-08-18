@@ -5,7 +5,7 @@
 
 const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./ShortBuyConsolidator');
-const { TRAILING_STOP_PERCENT } = require('../../utils/tradeConstants');
+const { TRAILING_STOP_PERCENT } = require('../../../utils/tradeConstants');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
 const SSTATE = 'short';
