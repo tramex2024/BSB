@@ -1,9 +1,8 @@
 // BSB/server/src/states/long/LSelling.js
 
 const { placeLongSellOrder } = require('../../managers/longOrderManager');
-const { TRAILING_STOP_PERCENT } = require('../../../utils/tradeConstants');
+const { TRAILING_STOP_PERCENT, MIN_SELL_AMOUNT_BTC } = require('../../../utils/tradeConstants');
 
-const MIN_SELL_AMOUNT_BTC = 0.00005; // BitMart BTC minimum
 const LSTATE = 'long';
 
 /**

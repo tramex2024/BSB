@@ -6,7 +6,7 @@
  */
 
 const { calculateShortTargets, calculateShortCoverage } = require('../../../autobotCalculations');
-const MIN_USDT_VALUE_FOR_BITMART = 5.0;
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../../../utils/tradeConstants');
 
 async function run(dependencies) {
     const { 
@@ -22,7 +22,7 @@ async function run(dependencies) {
         if (!currentPrice || currentPrice <= 0) return;
 
         const availableBTC = parseFloat(botState.lastAvailableBTC || 0);
-        const currentSBalance = parseFloat(botState.sbalance || 0); // Mantemos para referencia interna si es necesario
+        const currentSBalance = parseFloat(botState.sbalance || 0); // Kept for internal reference if needed
 
         const ac = parseFloat(botState.sac || 0);  // Coins sold (Short position open)
         const ppc = parseFloat(botState.sppc || 0); // Average selling price
@@ -70,20 +70,18 @@ async function run(dependencies) {
         });
 
         // --- 3. RESET INDICATORS (If no position and no funds) ---
-        // Se mantiene lógica de reseteo si el saldo es irrisorio
         if (ac <= 0 && availableBTC < (initialPurchaseAmount / currentPrice)) {
             if (parseFloat(botState.scoverage || 0) !== 0) {
                 log(`[S-RESET] Insufficient funds for new Short opening. Clearing visual projection.`, 'warning');
                 await updateGeneralBotState({ scoverage: 0, snorder: 0 }); 
             }
-            // No hacemos return aquí para permitir que la lógica de reintento continúe
         }
 
         // --- 4. RESUMPTION VERIFICATION (BTC FOCUS SOLUTION) ---
         const amountNeededToResume = ac === 0 ? initialPurchaseAmount : requiredAmountUSDT;
         const btcNeeded = amountNeededToResume / currentPrice;
 
-        // PRIORIDAD: ¿Tengo el BTC suficiente para cubrir esta orden?
+        // PRIORITY: Do I have enough BTC to cover this order?
         const canResume = availableBTC >= btcNeeded && btcNeeded > 0;
 
         if (canResume) {

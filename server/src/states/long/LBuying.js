@@ -2,6 +2,7 @@
 
 const { placeFirstLongOrder, placeCoverageBuyOrder } = require('../../managers/longOrderManager'); 
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 /**
  * BUYING STATE (LONG):
@@ -21,7 +22,7 @@ async function run(dependencies) {
         placeLongOrder 
     } = dependencies;
 
-    const SYMBOL = String(config.symbol || 'BTC_USDT');
+    const SYMBOL = String(config.symbol || TRADE_SYMBOL);
     const LSTATE = 'long';
 
     try {
@@ -61,7 +62,6 @@ async function run(dependencies) {
             if (availableUSDT >= purchaseAmount && botState.lbalance >= purchaseAmount) {
                 log("🚀 [L-BUY] Iniciando ciclo Long. Ejecutando primera orden firmada...", 'info');
                 
-                // SOLUCIÓN: Envolver en try/catch para controlar rechazos de la API del exchange
                 try {
                     await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, placeLongOrder); 
                 } catch (orderError) {
@@ -103,7 +103,6 @@ async function run(dependencies) {
                 try {
                     await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, placeLongOrder);
                 } catch (error) {
-                    // SOLUCIÓN: Si falla la colocación real de la cobertura, forzar transición a PAUSED
                     log(`❌ [L-BUY] Error en ejecución de DCA en el Exchange: ${error.message}. Pausando bot por seguridad.`, 'error');
                     await updateBotState('PAUSED', LSTATE);
                 }
@@ -116,7 +115,6 @@ async function run(dependencies) {
 
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Error inesperado en LBuying: ${criticalError.message}`, 'error');
-        // Red de seguridad: Forzar transición a PAUSED ante cualquier desastre inesperado
         try {
             await updateBotState('PAUSED', LSTATE);
         } catch (dbError) {

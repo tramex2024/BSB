@@ -1,36 +1,37 @@
-// BSB/server/src/au/states/long/LongSellConsolidator.js
+/**
+ * BSB/server/src/states/long/LongSellConsolidator.js
+ * SELL CONSOLIDATOR (LONG): Confirms the closure of the Long cycle.
+ */
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 const { handleSuccessfulSell } = require('../../managers/longDataManager');
 const { logSuccessfulCycle } = require('../../../services/cycleLogService'); 
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 /**
- * VIGILANCIA DE VENTA: Confirma el cierre del ciclo Long.
- * @param {userId} - Inyectado para asegurar que consultamos la API Key correcta.
+ * @param {string} userId - Injected to ensure we query the correct API Key.
  */
-async function monitorAndConsolidateLongSell(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) { // <--- AÑADIDO userCreds y nombre cambiado
+async function monitorAndConsolidateLongSell(botState, SYMBOL = TRADE_SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) {
     
     const lastOrder = botState.llastOrder;
 
-    // Validación de seguridad
+    // Safety validation
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'sell') {
         return false; 
     }
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Usamos las credenciales inyectadas
+    // 🟢 AUDIT: Using injected credentials
     const creds = userCreds;
 
     try {
-        // 1. CONSULTA AISLADA: Pasamos creds (extraídas del config) para usar su API KEY
-        // 🟢 CORRECCIÓN: Se reemplaza userId por creds para cumplir con la firma V4
+        // 1. ISOLATED QUERY: Passing creds to use their API KEY
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         let filledVolume = parseFloat(finalDetails?.filledSize || finalDetails?.filled_volume || finalDetails?.filledVolume || 0);
 
-        // Respaldo: Si la API no responde el detalle, buscamos en el historial reciente del usuario
+        // Fallback: If API does not respond with details, search in user's recent history
         if (!finalDetails || (isNaN(filledVolume) && finalDetails.state !== 'new')) {
-            // 🟢 CORRECCIÓN: Se reemplaza userId por creds
             const recentOrders = await getRecentOrders(SYMBOL, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) filledVolume = parseFloat(finalDetails.filledVolume || finalDetails.filledSize || 0);
@@ -39,9 +40,9 @@ async function monitorAndConsolidateLongSell(botState, SYMBOL, log, updateLState
         const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
-        // === CASO A: VENTA CONFIRMADA (Ciclo Exitoso) ===
+        // === CASE A: CONFIRMED SELL (Successful Cycle) ===
         if (isFilled) {
-            log(`💰 [L-SELL-SUCCESS] Venta confirmada. Procesando liquidación de ciclo...`, 'success');
+            log(`💰 [L-SELL-SUCCESS] Sell confirmed. Processing cycle liquidation...`, 'success');
             
             const handlerDependencies = { 
                 log, 
@@ -49,26 +50,26 @@ async function monitorAndConsolidateLongSell(botState, SYMBOL, log, updateLState
                 updateLStateData, 
                 updateGeneralBotState, 
                 logSuccessfulCycle,
-                userId, // Identidad para persistencia de profit en BD
+                userId, // Identity for profit persistence in DB
                 config: botState.config
             };
             
-            // Enviamos al manager para calcular profit neto y resetear variables de raíz
+            // Send to manager to calculate net profit and reset root variables
             await handleSuccessfulSell(botState, finalDetails, handlerDependencies);
 
             return true;
         }
 
-        // === CASO B: LA ORDEN SIGUE ACTIVA ===
+        // === CASE B: ORDER STILL ACTIVE ===
         if (finalDetails?.state === 'new' || finalDetails?.state === 'partially_filled') {
             return true; 
         }
 
-        // === CASO C: CANCELACIÓN MANUAL O POR ERROR ===
+        // === CASE C: MANUAL OR ERROR CANCELLATION ===
         if (isCanceled) {
-            log(`⚠️ [L-SELL-CANCEL] Orden de venta cancelada en Exchange. Liberando slot para reintento.`, 'warning');
+            log(`⚠️ [L-SELL-CANCEL] Sell order canceled on Exchange. Releasing slot for retry.`, 'warning');
             
-            // Limpiamos llastOrder para que LSelling.js pueda volver a colocar la orden si el precio sigue bajo el stop
+            // Clear llastOrder so LSelling.js can place the order again if price remains below stop
             await updateGeneralBotState({ llastOrder: null });
             return true;
         }
@@ -76,7 +77,7 @@ async function monitorAndConsolidateLongSell(botState, SYMBOL, log, updateLState
         return true;
 
     } catch (error) {
-        log(`[L-SELL-ERROR] Error en monitoreo (User: ${userId}): ${error.message}`, 'error');
+        log(`[L-SELL-ERROR] Monitoring error (User: ${userId}): ${error.message}`, 'error');
         return true; 
     }
 }

@@ -1,10 +1,10 @@
-// BSB/server/src/au/managers/longOrderManager.js
-
 /**
+ * BSB/server/src/au/managers/longOrderManager.js
  * LONG ORDER MANAGER:
  * Responsible for triggering executions to BitMart using signed functions.
  */
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/tradeConstants');
+
+const { MIN_USDT_VALUE_FOR_BITMART, TRADE_SYMBOL } = require('../../utils/tradeConstants');
 
 /**
  * LONG OPENING: Initial buy (Market Buy).
@@ -12,7 +12,7 @@ const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/tradeConstants');
  */
 async function placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, executeOrder) {
     const { purchaseUsdt } = config.long || {}; 
-    const SYMBOL = config.symbol || 'BTC_USDT';
+    const SYMBOL = config.symbol || TRADE_SYMBOL;
     const amountNominal = parseFloat(purchaseUsdt || 0);
 
     if (amountNominal < MIN_USDT_VALUE_FOR_BITMART) {
@@ -25,7 +25,6 @@ async function placeFirstLongOrder(config, botState, log, updateBotState, update
 
     try {
         // ✅ We use the injected function so it originates with the L_ prefix
-        // Depending on how placeLongOrder is defined, we pass the parameter object.
         const orderResult = await executeOrder({ 
             symbol: SYMBOL, 
             side: 'buy', 
@@ -54,7 +53,7 @@ async function placeFirstLongOrder(config, botState, log, updateBotState, update
  * LONG COVERAGE (DCA).
  */
 async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState, executeOrder) {
-    const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+    const SYMBOL = botState.config?.symbol || TRADE_SYMBOL;
 
     log(`📉 [L-DCA] Executing SIGNED coverage: ${usdtAmount.toFixed(2)} USDT...`, 'warning');
 
@@ -87,7 +86,7 @@ async function placeCoverageBuyOrder(botState, usdtAmount, log, updateGeneralBot
  * CLOSING SALE (Take Profit).
  */
 async function placeLongSellOrder(config, botState, btcAmount, log, updateGeneralBotState, executeOrder) {
-    const SYMBOL = config.symbol || 'BTC_USDT';
+    const SYMBOL = config.symbol || TRADE_SYMBOL;
     
     if (btcAmount <= 0) {
         log(`[L-PROFIT] ❌ Error: Invalid BTC amount (${btcAmount})`, 'error');

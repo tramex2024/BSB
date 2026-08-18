@@ -6,7 +6,7 @@
  */
 
 const { calculateLongTargets, calculateLongCoverage } = require('../../../autobotCalculations');
-const MIN_USDT_VALUE_FOR_BITMART = 5.0;
+const { MIN_USDT_VALUE_FOR_BITMART } = require('../../../utils/tradeConstants');
 
 async function run(dependencies) {
     const { 

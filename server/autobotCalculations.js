@@ -4,6 +4,14 @@
  * Optimización: Centralización de Métricas de Cobertura en Vivo (SRP)
  */
 
+const { 
+    AI_MIN_TRADE_AMOUNT, 
+    AI_SAFETY_MARGIN,
+    MAX_ALLOWED_ORDERS,
+    DEFAULT_START_STEP,
+    DEFAULT_TARGET_COVERAGE 
+} = require('./utils/tradeConstants');
+
 // ==========================================
 // 1. HELPERS Y FUNCIONES DE COMPATIBILIDAD
 // ==========================================
@@ -27,7 +35,6 @@ function getExponentialAmount(baseAmount, orderCount, sizeVar) {
     if (base <= 0) return 0;
 
     // 2. VÁLVULA DE SEGURIDAD (Safety Valve)
-    const MAX_ALLOWED_ORDERS = 50; 
     const count = Math.min(rawCount, MAX_ALLOWED_ORDERS);
 
     if (rawCount > MAX_ALLOWED_ORDERS) {
@@ -108,9 +115,6 @@ function calculateStepGrow(levels) {
     const n = parseInt(levels);
     const numSteps = n - 1;
     if (numSteps <= 0) return 1.0;
-
-    const TARGET_COVERAGE = 0.18;
-    const START_STEP = 0.015;
     
     let low = 0.1;
     let high = 5.0;
@@ -121,7 +125,7 @@ function calculateStepGrow(levels) {
         let invalid = false;
         
         for (let j = 0; j < numSteps; j++) {
-            let step = START_STEP * Math.pow(mid, j);
+            let step = DEFAULT_START_STEP * Math.pow(mid, j);
             if (step >= 1.0) { invalid = true; break; }
             prod *= (1.0 - step);
         }
@@ -129,7 +133,7 @@ function calculateStepGrow(levels) {
         if (invalid) { high = mid; continue; }
         
         let actualCoverage = 1.0 - prod;
-        if (actualCoverage < TARGET_COVERAGE) { low = mid; } else { high = mid; }
+        if (actualCoverage < DEFAULT_TARGET_COVERAGE) { low = mid; } else { high = mid; }
     }
     
     return parseFloat(((low + high) / 2).toFixed(4));
@@ -153,9 +157,8 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
         distanceFromPrevious: "0.00%"
     });
     
-    const START_STEP = 0.015;
     for (let i = 1; i < n; i++) {
-        let currentStep = START_STEP * Math.pow(gridStepMultiplier, i - 1);
+        let currentStep = DEFAULT_START_STEP * Math.pow(gridStepMultiplier, i - 1);
         if (side.toLowerCase() === 'long') {
             currentPrice = currentPrice * (1.0 - currentStep);
         } else {
@@ -188,7 +191,6 @@ function generateAutobotGrid(amount, initialPrice, side = 'long') {
 
 function calculateLongCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
     const currentPrice = parseFloat(entryPrice) || 1;
-    // Usamos el presupuesto inicial total asignado para fijar la geometría real de la malla
     const grid = generateAutobotGrid(totalAmount || purchaseUsdt || 50, currentPrice, 'long');
     
     if (!grid || grid.orders.length === 0) {
@@ -196,7 +198,6 @@ function calculateLongCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar, 
     }
     
     const lastOrder = grid.orders[grid.orders.length - 1];
-    // Dynamic MaxSO: Restamos las órdenes vivas (occ) del total de niveles diseñado
     const remainingOrders = Math.max(0, grid.totalLevels - parseNumber(occ));
     
     return { coveragePrice: lastOrder.price, numberOfOrders: remainingOrders };
@@ -204,7 +205,6 @@ function calculateLongCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar, 
 
 function calculateShortCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar, sizeVar, occ, priceStepInc) {
     const currentPrice = parseFloat(entryPrice) || 1;
-    // Usamos el presupuesto inicial total asignado para fijar la geometría real de la malla
     const grid = generateAutobotGrid(totalAmount || purchaseUsdt || 50, currentPrice, 'short');
     
     if (!grid || grid.orders.length === 0) {
@@ -212,7 +212,6 @@ function calculateShortCoverage(totalAmount, entryPrice, purchaseUsdt, priceVar,
     }
     
     const lastOrder = grid.orders[grid.orders.length - 1];
-    // Dynamic MaxSO: Restamos las órdenes vivas (occ) del total de niveles diseñado
     const remainingOrders = Math.max(0, grid.totalLevels - parseNumber(occ));
     
     return { coveragePrice: lastOrder.price, numberOfOrders: remainingOrders };
@@ -255,10 +254,6 @@ function calculateShortTargets(lastPrice, config, currentOrderCount) {
     };
 }
 
-/**
- * Versión limpia y corregida de calculatePotentialProfit
- * Sin filtros de reset a 0.
- */
 function calculatePotentialProfit(ppc, ac, currentPrice, side) {
     const avgPrice = parseFloat(ppc);
     const capital = parseFloat(ac);
@@ -280,10 +275,6 @@ function calculatePotentialProfit(ppc, ac, currentPrice, side) {
 // 4. NUEVA CENTRALIZACIÓN DE CÁLCULOS EN VIVO
 // ==========================================
 
-/**
- * Procesa el estado completo del bot y devuelve un objeto de métricas 
- * limpio listo para inyectarse al changeset de la base de datos.
- */
 function calculateLiveBotMetrics(botState, currentPrice) {
     const metrics = {};
     const price = parseNumber(currentPrice);
@@ -346,6 +337,6 @@ if (typeof module !== 'undefined' && module.exports) {
         calculateDistributedSizes,
         calculateStepGrow,
         generateAutobotGrid,
-        calculateLiveBotMetrics // Exportada correctamente para autobotLogic.js
+        calculateLiveBotMetrics
     };
 }

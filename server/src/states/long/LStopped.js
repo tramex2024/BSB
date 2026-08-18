@@ -1,13 +1,12 @@
-// BSB/server/src/au/states/long/LStopped.js
-
 /**
+ * BSB/server/src/au/states/long/LStopped.js
  * L-STOPPED STATE:
- * Monitorea si hay posiciones abiertas mientras la estrategia está apagada.
- * Evita el spam de logs pero mantiene la alerta crítica por usuario.
+ * Monitors if there are open positions while the strategy is turned off.
+ * Prevents log spam while maintaining critical user alerts.
  */
 
-// Mapa persistente en memoria del proceso para control de frecuencia de logs
-// 🟢 AUDITORÍA: El uso de Map es eficiente para acceso por userId (userKey)
+// Persistent in-memory map for log frequency control per userId
+// 🟢 AUDIT: Using a Map is efficient for userId lookup (userKey)
 const lastLogTimes = new Map();
 
 async function run(dependencies) {
@@ -17,29 +16,29 @@ async function run(dependencies) {
     const userKey = userId.toString();
     const userLastLog = lastLogTimes.get(userKey) || 0;
 
-    // 1. CONTROL DE SPAM: Solo actuamos cada 10 minutos por usuario
+    // 1. SPAM CONTROL: Only act every 10 minutes per user
     if (now - userLastLog < 600000) return;
 
-    // 2. DETECCIÓN DE POSICIONES HUÉRFANAS
+    // 2. ORPHAN POSITION DETECTION
     const ac = parseFloat(botState.lac || 0);
 
     if (ac > 0) {
-        // Alerta visible para el usuario en su Dashboard
-        // 🟢 AUDITORÍA: Importante para evitar que el usuario olvide activos "atrapados" sin gestión de riesgo.
-        log(`[L-STOPPED] ⚠️ Bot detenido con posición activa (${ac.toFixed(6)} BTC). TP y DCA desactivados. Requiere atención manual.`, 'warning');
+        // Visible alert for the user on their Dashboard
+        // 🟢 AUDIT: Important to prevent the user from forgetting "trapped" assets without risk management.
+        log(`[L-STOPPED] ⚠️ Bot stopped with active position (${ac.toFixed(6)} BTC). TP and DCA disabled. Manual attention required.`, 'warning');
     } else {
-        // Log interno del sistema (no molesta al usuario)
+        // Internal system log (does not disturb the user)
         console.log(`[SYS] Strategy Stopped - User: ${userId} - No orphans found.`);
     }
 
-    // 3. ACTUALIZACIÓN DE ÚLTIMO LOG
+    // 3. UPDATE LAST LOG TIMESTAMP
     lastLogTimes.set(userKey, now);
 
-    // 4. MANTENIMIENTO DEL MAP (Evitar fuga de memoria)
-    // Realizamos limpieza solo si el mapa es grande, de forma asíncrona o esporádica
-    // 🟢 AUDITORÍA: Crítico en multiusuario para mantener la estabilidad del servidor.
+    // 4. MAP MAINTENANCE (Prevent memory leaks)
+    // Cleanup performed only when the map is large, asynchronously or sporadically
+    // 🟢 AUDIT: Critical in multi-user environments to maintain server stability.
     if (lastLogTimes.size > 1000) {
-        // Limpiamos entradas con más de 2 horas de antigüedad
+        // Clean entries older than 2 hours
         for (const [key, time] of lastLogTimes) {
             if (now - time > 7200000) {
                 lastLogTimes.delete(key);

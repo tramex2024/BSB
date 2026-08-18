@@ -1,13 +1,12 @@
-// BSB/server/src/au/states/short/SStopped.js
-
 /**
+ * BSB/server/src/states/short/SStopped.js
  * S-STOPPED STATE (SHORT):
- * Monitorea si hay deuda pendiente (sac > 0) mientras la estrategia Short está apagada.
- * Implementa throttling de logs por usuario para no saturar el Dashboard.
+ * Monitors if there is pending debt (sac > 0) while the Short strategy is turned off.
+ * Implements log throttling per user to prevent Dashboard saturation.
  */
 
-// Mapa persistente para control de frecuencia de logs por userId
-// 🟢 AUDITORÍA: Estructura de datos óptima para segmentación por usuario en Node.js.
+// Persistent map for log frequency control per userId
+// 🟢 AUDIT: Optimal data structure for user segmentation in Node.js.
 const userLastLogTimes = new Map();
 
 async function run(dependencies) {
@@ -15,29 +14,29 @@ async function run(dependencies) {
     const now = Date.now();
     const userKey = userId.toString();
 
-    // 1. CONTROL DE SPAM: Recuperamos el tiempo del último log de este usuario
+    // 1. SPAM CONTROL: Retrieve the timestamp of the last log for this user
     const lastLogTime = userLastLogTimes.get(userKey) || 0;
 
-    // Log cada 10 minutos por usuario para evitar saturar sockets/DB
+    // Log every 10 minutes per user to prevent socket/DB saturation
     if (now - lastLogTime < 600000) return;
 
-    // 2. VERIFICACIÓN DE DEUDA (sac = Short Accumulated Coins)
+    // 2. DEBT VERIFICATION (sac = Short Accumulated Coins)
     const ac = parseFloat(botState.sac || 0);
 
     if (ac > 0) {
-        // ALERTA DE RIESGO: Hay deuda de BTC pero el bot está apagado.
-        // 🟢 AUDITORÍA: El mensaje es específico y urgente, indicando al usuario que la gestión de riesgo está inactiva.
-        log(`[S-STOPPED] ⚠️ Estrategia Short detenida con deuda activa (${ac.toFixed(8)} BTC). El bot NO está gestionando Recompra ni DCA. ¡Riesgo alto si el precio sube!`, 'warning');
+        // RISK ALERT: There is BTC debt but the bot is stopped.
+        // 🟢 AUDIT: The message is specific and urgent, indicating to the user that risk management is inactive.
+        log(`[S-STOPPED] ⚠️ Short strategy stopped with active debt (${ac.toFixed(8)} BTC). The bot is NOT managing Buyback or DCA. High risk if price rises!`, 'warning');
     } else {
-        // Heartbeat silencioso en consola de servidor (para debugeo de ciclo sin molestar al usuario)
+        // Silent heartbeat on server console (for cycle debugging without disturbing the user)
         console.log(`[SYS-HB] Short Stopped - User: ${userId} - No debt found.`);
     }
 
-    // 3. ACTUALIZACIÓN DE TIEMPO Y LIMPIEZA
+    // 3. TIMESTAMP UPDATE AND CLEANUP
     userLastLogTimes.set(userKey, now);
 
-    // Mantenimiento preventivo: si el mapa es muy grande, limpiamos registros viejos (> 2h)
-    // 🟢 AUDITORÍA: Vital para evitar memory leaks en servidores que gestionan >1000 usuarios activos simultáneos.
+    // Preventive maintenance: if map is too large, clean old records (> 2h)
+    // 🟢 AUDIT: Essential to prevent memory leaks in servers managing >1000 active concurrent users.
     if (userLastLogTimes.size > 1000) {
         for (const [key, time] of userLastLogTimes) {
             if (now - time > 7200000) userLastLogTimes.delete(key);

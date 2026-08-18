@@ -1,10 +1,10 @@
-// BSB/server/src/au/managers/shortOrderManager.js
-
 /**
+ * BSB/server/src/managers/shortOrderManager.js
  * SHORT ORDER MANAGER:
  * Executes sell orders (opening/DCA) and buy orders (closing) with strategy signatures.
  */
-const { MIN_USDT_VALUE_FOR_BITMART } = require('../../utils/tradeConstants');
+
+const { MIN_USDT_VALUE_FOR_BITMART, TRADE_SYMBOL } = require('../../utils/tradeConstants');
 
 /**
  * Converts USDT amounts to BTC units based on current price.
@@ -22,7 +22,7 @@ function convertUsdtToBtc(usdtAmount, currentPrice) {
  */
 async function placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, injectedPrice = 0, executeOrder) {
     const { purchaseUsdt } = config.short || {};
-    const SYMBOL = config.symbol || 'BTC_USDT';
+    const SYMBOL = config.symbol || TRADE_SYMBOL;
     const amountNominal = parseFloat(purchaseUsdt || 0);
     const currentPrice = injectedPrice || botState.price || 0; 
 
@@ -49,7 +49,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
             await updateGeneralBotState({
                 sstartTime: new Date(),
                 socc: 1, 
-                slastOrder: {                                     
+                slastOrder: {                             
                     order_id: orderId,
                     side: 'sell',
                     btc_size: btcSize,
@@ -68,7 +68,7 @@ async function placeFirstShortOrder(config, botState, log, updateBotState, updat
  * SHORT DCA: Sells more BTC (Average up).
  */
 async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralBotState, updateBotState, injectedPrice = 0, executeOrder) { 
-    const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+    const SYMBOL = botState.config?.symbol || TRADE_SYMBOL;
     const currentPrice = injectedPrice || botState.price || 0;
     const btcSize = convertUsdtToBtc(usdtAmount, currentPrice);
 
@@ -102,7 +102,7 @@ async function placeCoverageShortOrder(botState, usdtAmount, log, updateGeneralB
  * CLOSING REPURCHASE (Take Profit).
  */
 async function placeShortBuyOrder(config, botState, btcAmount, log, updateGeneralBotState, injectedPrice = 0, executeOrder) { 
-    const SYMBOL = config.symbol || 'BTC_USDT';
+    const SYMBOL = config.symbol || TRADE_SYMBOL;
     const currentPrice = injectedPrice || botState.price || 0;
     
     // BitMart Market Buy requires the amount in the quote currency (USDT)

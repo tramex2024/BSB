@@ -1,12 +1,12 @@
 /**
  * BSB/server/src/aiStrategy.js
- * Versión Final: Adaptador optimizado sin redundancia de telemetría.
+ * Final Version: Optimized adapter without telemetry redundancy.
  */
 
 const aiEngine = require('./states/ai/AIEngine');
 
 async function runAIStrategy(dependencies) {
-    // 1. Validación de integridad (Fail-fast)
+    // 1. Integrity verification (Fail-fast)
     if (!dependencies || !dependencies.botState || !dependencies.currentPrice || !dependencies.userId) {
         return;
     }
@@ -16,7 +16,7 @@ async function runAIStrategy(dependencies) {
         botState, 
         userId, 
         log, 
-        marketContext, // Datos limpios provenientes de MarketSignal
+        marketContext, // Clean data coming from MarketSignal
         placeAIOrder,           
         updateBotState          
     } = dependencies;
@@ -24,13 +24,13 @@ async function runAIStrategy(dependencies) {
     const currentState = botState.aistate || 'STOPPED';
 
     try {
-        // 2. Filtro de estado operativo
+        // 2. Operational state filter
         if (currentState === 'STOPPED') return;
 
         /**
-         * 3. Ejecución estratégica centralizada
-         * Pasamos el marketContext directo de MarketSignal para que el AIEngine 
-         * tome decisiones analíticas inmediatas sin recalcular nada.
+         * 3. Centralized strategic execution
+         * Pass marketContext directly from MarketSignal so AIEngine 
+         * makes immediate analytical decisions without recalculating anything.
          */
         await aiEngine.analyze(currentPrice, userId, {
             botState,
@@ -45,13 +45,13 @@ async function runAIStrategy(dependencies) {
         if (log) log(`❌ [AI-STRATEGY-ERROR]: ${error.message}`, 'error');
         console.error(`[AI-STRATEGY][User: ${userId}]:`, error);
 
-        // [Mitigación de Pánico]
+        // [Panic Mitigation]
         if (currentState === 'RUNNING') {
             try {
-                log(`🚨 [FALLBACK AI] Pausa de emergencia activada por excepción en el motor.`, 'warning');
+                log(`🚨 [AI FALLBACK] Emergency pause activated due to engine exception.`, 'warning');
                 await updateBotState('PAUSED', 'ai');
             } catch (fallbackError) {
-                console.error(`💥 Falla crítica en mitigación de pánico IA para usuario ${userId}:`, fallbackError.message);
+                console.error(`💥 Critical failure in AI panic mitigation for user ${userId}:`, fallbackError.message);
             }
         }
     }

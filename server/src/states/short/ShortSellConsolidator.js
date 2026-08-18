@@ -1,13 +1,14 @@
-// BSB/server/src/au/states/short/ShortSellConsolidator.js
-
-const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
-const { handleSuccessfulShortSell } = require('../../managers/shortDataManager'); 
-
 /**
+ * BSB/server/src/states/short/ShortSellConsolidator.js
  * SHORT SELL CONSOLIDATOR:
  * Monitors SELL orders (Opening or Short DCA).
  * Ensures sold assets are correctly registered in the user's 'sac'.
  */
+
+const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
+const { handleSuccessfulShortSell } = require('../../managers/shortDataManager'); 
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
+
 async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateData, updateBotState, updateGeneralBotState, userId, userCreds) {
     
     const lastOrder = botState.slastOrder;
@@ -19,10 +20,11 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
     const orderIdString = String(lastOrder.order_id);
     const creds = userCreds; 
+    const effectiveSymbol = String(SYMBOL || TRADE_SYMBOL);
 
     try {
         // Consult BitMart using the specific user's context
-        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
+        let finalDetails = await getOrderDetail(effectiveSymbol, orderIdString, creds);
         
         let filledSize = parseFloat(
             finalDetails?.filledSize || 
@@ -32,7 +34,7 @@ async function monitorAndConsolidateShort(botState, SYMBOL, log, updateSStateDat
 
         // 1. Back-up: If direct query is ambiguous, check user's recent history
         if (!finalDetails || (isNaN(filledSize) && finalDetails.state !== 'new')) {
-            const recentOrders = await getRecentOrders(SYMBOL, creds);
+            const recentOrders = await getRecentOrders(effectiveSymbol, creds);
             finalDetails = recentOrders.find(o => String(o.orderId || o.order_id) === orderIdString);
             if (finalDetails) {
                 filledSize = parseFloat(finalDetails.filledSize || finalDetails.size || 0);

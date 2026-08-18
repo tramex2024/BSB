@@ -3,10 +3,12 @@
  * Versión Híbrida: Validación de Saldo + Validación de Tendencia
  */
 
+const { AI_MIN_TRADE_AMOUNT, AI_SAFETY_MARGIN } = require('../../utils/tradeConstants');
+
 class AIRiskManager {
     constructor() {
-        this.MIN_TRADE_AMOUNT = 5.0; 
-        this.SAFETY_MARGIN = 0.02; 
+        this.MIN_TRADE_AMOUNT = AI_MIN_TRADE_AMOUNT; 
+        this.SAFETY_MARGIN = AI_SAFETY_MARGIN; 
     }
 
     /**

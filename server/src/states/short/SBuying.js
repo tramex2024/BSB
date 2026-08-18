@@ -5,7 +5,7 @@
 
 const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./ShortBuyConsolidator');
-const { TRAILING_STOP_PERCENT } = require('../../../utils/tradeConstants');
+const { TRAILING_STOP_PERCENT, TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
 const SSTATE = 'short';
@@ -32,7 +32,7 @@ async function run(dependencies) {
     try {
         if (!currentPrice || currentPrice <= 0) return;
 
-        const SYMBOL = String(config.symbol || 'BTC_USDT');
+        const SYMBOL = String(config.symbol || TRADE_SYMBOL);
         const slastOrder = botState.slastOrder;  
         const acBuying = parseFloat(botState.sac || 0); 
         const pm = parseFloat(botState.spm || 0);       // Floor (minimum price reached)

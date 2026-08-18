@@ -1,10 +1,13 @@
-const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
-const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
-
 /**
+ * BSB/server/src/states/short/SSelling.js
  * SELLING STATE (SHORT):
  * Manages Short openings and exponential coverage (DCA upwards).
  */
+
+const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
+const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
+const { TRADE_SYMBOL } = require('../../utils/tradeConstants');
+
 async function run(dependencies) {
     const {
         userId, 
@@ -14,9 +17,9 @@ async function run(dependencies) {
         userCreds 
     } = dependencies;
 
-    const SYMBOL = String(config.symbol || 'BTC_USDT');
+    const SYMBOL = String(config.symbol || TRADE_SYMBOL);
     const SSTATE = 'short';
-    const availableBTC = parseFloat(botState.lastAvailableBTC || 0); // Extraemos BTC disponible
+    const availableBTC = parseFloat(botState.lastAvailableBTC || 0); // Extract available BTC
 
     try {
         // 1. ACTIVE ORDER MONITOR
@@ -39,7 +42,7 @@ async function run(dependencies) {
             const targetActivation = parseFloat(botState.stprice || 0); 
             const distToDCA = nextPrice > 0 ? ((nextPrice / currentPrice - 1) * 100).toFixed(2) : "0.00";
             const distToTP = targetActivation > 0 ? ((1 - currentPrice / targetActivation) * 100).toFixed(2) : "0.00";
-            const pnlActual = botState.sprofit || 0;
+            const pnlActual = parseFloat(botState.sprofit || 0);
             log(`[S-SELLING] 👁️ BTC: ${currentPrice.toFixed(2)} | DCA : ${nextPrice.toFixed(2)} (+${distToDCA}%) | TP Target: ${targetActivation.toFixed(2)} (-${distToTP}%) | PNL: ${pnlActual.toFixed(2)} USDT`, 'info');
         }
 
@@ -51,7 +54,7 @@ async function run(dependencies) {
             const purchaseAmount = parseFloat(config.short?.purchaseUsdt || 0);
             const btcNeeded = purchaseAmount / currentPrice;
 
-            // VALIDACIÓN POR BTC
+            // BTC VALIDATION
             if (availableBTC >= btcNeeded) {
                 log(`🚀 [S-SELL] Starting SIGNED Short cycle. (BTC Available: ${availableBTC.toFixed(6)})`, 'info');
                 try {
@@ -87,7 +90,7 @@ async function run(dependencies) {
 
             const btcNeeded = requiredAmount / currentPrice;
 
-            // VALIDACIÓN POR BTC
+            // BTC VALIDATION
             if (availableBTC >= btcNeeded && requiredAmount > 0) {
                 log(`📈 [S-SELL] Price in DCA zone. Increasing SIGNED coverage...`, 'warning');
                 try {

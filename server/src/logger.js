@@ -1,37 +1,36 @@
-//BSB/server/src/logger.js
-
 /**
- * Módulo de logging avanzado para el Autobot Multi-usuario.
- * Soporta prefijos de color y vinculación de logs a usuarios específicos.
+ * BSB/server/src/logger.js
+ * Advanced logging module for the Multi-user Autobot.
+ * Supports color prefixes and linking logs to specific users.
  */
 
 const colors = {
     reset: "\x1b[0m",
     info: "\x1b[36m",    // Cyan
-    debug: "\x1b[90m",   // Gris
-    error: "\x1b[31m",   // Rojo
-    warning: "\x1b[33m", // Amarillo
-    success: "\x1b[32m", // Verde
+    debug: "\x1b[90m",   // Gray
+    error: "\x1b[31m",   // Red
+    warning: "\x1b[33m", // Yellow
+    success: "\x1b[32m", // Green
     header: "\x1b[35m",  // Magenta
 };
 
 /**
- * Función principal para registrar mensajes.
- * @param {string} message - El mensaje a registrar.
- * @param {string} level - Nivel: 'info', 'debug', 'error', 'success', 'warning'.
- * @param {string} userId - (Opcional) ID del usuario para rastreo multi-usuario.
+ * Main function to log messages.
+ * @param {string} message - The message to log.
+ * @param {string} level - Level: 'info', 'debug', 'error', 'success', 'warning'.
+ * @param {string} userId - (Optional) User ID for multi-user tracking.
  */
 function log(message, level = 'info', userId = 'SYSTEM') {
     const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const color = colors[level] || colors.info;
     
-    // Formateamos el ID de usuario para que todos los logs queden alineados
+    // Format the user ID so all logs are aligned
     const userPrefix = userId ? `[${userId.slice(-6)}]` : `[GLOBAL]`;
     const prefix = `[${timestamp}] ${userPrefix} [${level.toUpperCase()}]`;
     
-    // Control de verbosidad para modo Debug
+    // Verbosity control for Debug mode
     if (level === 'debug') {
-        // Descomenta la siguiente línea para silenciar los logs de cálculo pesado
+        // Uncomment the following line to silence heavy calculation logs
         // return; 
     }
 

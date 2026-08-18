@@ -1,6 +1,5 @@
-// BSB/server/src/states/short/SRunning.js
-
 /**
+ * BSB/server/src/states/short/SRunning.js
  * S-RUNNING STATE (SHORT):
  * Monitors market signals to open a short position.
  * Fixed: Real-time visual projection synchronization (2026).
@@ -8,6 +7,7 @@
 
 const MarketSignal = require('../../../models/MarketSignal');
 const { calculateShortCoverage } = require('../../../autobotCalculations');
+const { TRADE_SYMBOL } = require('../../utils/tradeConstants');
 
 async function run(dependencies) {
     // 1. Injected Context
@@ -31,7 +31,6 @@ async function run(dependencies) {
     const currentAC = parseFloat(botState.sac || 0); 
     
     if (currentAC > 0) {
-//         log("[S-RUNNING] 🛡️ Active Short position detected (sac > 0). Correcting state to SELLING...", 'warning');
         await updateBotState('SELLING', 'short'); 
         return; 
     }
@@ -57,20 +56,20 @@ async function run(dependencies) {
 
     try {
         // 2. GLOBAL SIGNALS QUERY
-        const SYMBOL = botState.config?.symbol || 'BTC_USDT';
+        const SYMBOL = botState.config?.symbol || TRADE_SYMBOL;
         
-        // Obtenemos la señal de la DB primero como fuente de verdad
+        // Fetch signal from DB first as the source of truth
         const dbSignal = await MarketSignal.findOne({ symbol: SYMBOL });
         
-        // Evaluamos: si la inyección atómica (marketContext) es nueva, la usamos, 
-        // pero si hay discrepancia, priorizamos la base de datos.
+        // Evaluate: if atomic injection (marketContext) is fresh, use it, 
+        // but if there is a discrepancy, prioritize database.
         let globalSignal = dbSignal; 
         
         if (marketContext && marketContext.lastUpdate && dbSignal) {
              const contextTime = new Date(marketContext.lastUpdate).getTime();
              const dbTime = new Date(dbSignal.lastUpdate).getTime();
              
-             // Si el contexto es más reciente, lo usamos, si no, usamos la DB
+             // If context is more recent, use it, otherwise use DB
              if (contextTime > dbTime) {
                  globalSignal = marketContext;
              }
@@ -78,8 +77,6 @@ async function run(dependencies) {
 
         if (!globalSignal) return;
 
-        // DEBUG LOG PARA VER SI REALMENTE ES 'SELL'
-        
         const rsiValue = globalSignal.currentRSI ?? globalSignal.rsi14 ?? 50;        
 
         // Monitoring log (Heartbeat)
@@ -95,7 +92,6 @@ async function run(dependencies) {
 
         const signalAgeMinutes = (Date.now() - new Date(signalTime).getTime()) / 60000;
         if (signalAgeMinutes > 5) {
-//             log(`[S-RUNNING] ⚠️ Obsolete Short signal (${signalAgeMinutes.toFixed(1)} min). Ignoring.`, 'warning');
             return;
         }
 

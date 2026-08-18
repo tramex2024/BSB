@@ -1,16 +1,19 @@
-// BSB/server/src/states/long/LongBuyConsolidator.js
+/**
+ * BSB/server/src/states/long/LongBuyConsolidator.js
+ * BUY CONSOLIDATOR (LONG):
+ * The "watchdog" that waits for BitMart confirmation of order execution.
+ */
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 const { handleSuccessfulBuy } = require('../../managers/longDataManager'); 
+const { TRADE_SYMBOL } = require('../../utils/tradeConstants');
 
 /**
- * CONSOLIDADOR DE COMPRA (LONG):
- * El "vigilante" que espera a que BitMart confirme la ejecución.
- * @param {userId} - Añadido para soporte multi-usuario.
+ * @param {string} userId - Added for multi-user support.
  */
-async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) { 
+async function monitorAndConsolidate(botState, SYMBOL = TRADE_SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) {    
     
-    // 1. Verificación de existencia de orden
+    // 1. Order existence check
     const lastOrder = botState.llastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
@@ -19,28 +22,27 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
 
     const orderIdString = String(lastOrder.order_id);
 
-    // 🟢 AUDITORÍA: Usamos las credenciales inyectadas, no las de botState.config
+    // 🟢 AUDIT: Using injected credentials instead of botState.config
     const creds = userCreds; 
 
     try {
-        // 2. CONSULTA AISLADA POR USUARIO
+        // 2. ISOLATED QUERY PER USER
         let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
-        // CORRECCIÓN: BitMart V4 usa filled_size para el volumen ejecutado
+        // CORRECTION: BitMart V4 uses filled_size for executed volume
         let filledVolume = parseFloat(
-            finalDetails?.filled_size ||   // <--- Agregar este (API V4)
+            finalDetails?.filled_size ||   // <--- Add this (API V4)
             finalDetails?.filledSize ||    // (API V2/V4 fallback)
-            finalDetails?.filled_volume || // (Websocket/Historial)
+            finalDetails?.filled_volume || // (Websocket/History)
             0
         );
 
-        // Si la orden está 'filled', pero el objeto no tiene el campo 'size' normalizado, 
-        // lo inyectamos para que saveExecutedOrder lo encuentre.
+        // If order is 'filled' but object lacks normalized 'size', inject it for saveExecutedOrder.
         if (finalDetails && !finalDetails.size && filledVolume > 0) {
             finalDetails.size = filledVolume;
         }
         
-        // Lo mismo para el precio promedio si viene como price_avg o priceAvg
+        // Same for average price if it comes as price_avg or priceAvg
         if (finalDetails && !finalDetails.priceAvg) {
             finalDetails.priceAvg = finalDetails.price_avg || finalDetails.avg_price || 0;
         }
@@ -49,10 +51,10 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
 
         // =================================================================
-        // CASO 1: ÉXITO (La orden se llenó)
+        // CASE 1: SUCCESS (Order filled)
         // =================================================================
         if (isFilled) {
-            log(`[CONSOLIDATOR] ✅ Compra confirmada: ${orderIdString}. Actualizando balances...`, 'success');
+            log(`[CONSOLIDATOR] ✅ Buy confirmed: ${orderIdString}. Updating balances...`, 'success');
             
             const dependencies = { 
                 updateGeneralBotState, 
@@ -66,27 +68,27 @@ async function monitorAndConsolidate(botState, SYMBOL, log, updateLStateData, up
         } 
 
         // =================================================================
-        // CASO 2: ORDEN ACTIVA (Aún esperando)
+        // CASE 2: ACTIVE ORDER (Still waiting)
         // =================================================================
         if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
             return true; 
         } 
 
         // =================================================================
-        // CASO 3: FALLO O CANCELACIÓN
+        // CASE 3: FAILURE OR CANCELLATION
         // =================================================================
         if (isCanceled && filledVolume === 0) {
-            log(`[CONSOLIDATOR] ❌ Orden ${orderIdString} cancelada. Liberando slot.`, 'error');
+            log(`[CONSOLIDATOR] ❌ Order ${orderIdString} canceled. Releasing slot.`, 'error');
             await updateGeneralBotState({ llastOrder: null });
-            return false; // <--- CAMBIO ACORDADO
+            return false; 
         }
 
-        // Si llegó aquí y no hay un estado claro de 'new' o 'filled'
-        return false; // <--- CAMBIO ACORDADO
+        // If it reaches here and there's no clear 'new' or 'filled' state
+        return false; 
 
     } catch (error) {
-        log(`[CONSOLIDATOR] ⚠️ Error en monitoreo (User: ${userId}): ${error.message}`, 'warning');
-        return false; // <--- CAMBIO ACORDADO
+        log(`[CONSOLIDATOR] ⚠️ Error in monitoring (User: ${userId}): ${error.message}`, 'warning');
+        return false; 
     }
 }
 

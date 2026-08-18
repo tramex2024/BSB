@@ -1,11 +1,15 @@
-// BSB/server/src/managers/long/LongDataManager.js
+/**
+ * BSB/server/src/managers/long/LongDataManager.js
+ * LONG DATA MANAGER:
+ * Processes successful buy and sell orders for the Long strategy.
+ */
 
 const { saveExecutedOrder } = require('../../services/orderPersistenceService');
 const { calculateLongCoverage, parseNumber, getExponentialAmount } = require('../../autobotCalculations');
 const { CLEAN_LONG_ROOT } = require('../../utils/cleanState');
+const { TRADE_SYMBOL, SELL_FEE_PERCENT } = require('../../utils/tradeConstants');
 
 const LSTATE = 'long';
-const SELL_FEE_PERCENT = 0.001; // 0.1% BitMart Fee
 
 /**
  * Processes the success of a Long Buy (Opening or DCA).
@@ -70,12 +74,12 @@ async function handleSuccessfulBuy(botState, orderDetails, log, dependencies = {
     await updateGeneralBotState({
         lbalance: finalizedLBalance,
         lac: newTotalQty,        
-        lai: newAI,             
-        lppc: newPPC,           
+        lai: newAI,              
+        lppc: newPPC,            
         locc: newOrderCount,    
         ltprice: newLTPrice,   
-        lpc: 0,                 
-        lpm: 0,                 
+        lpc: 0,                  
+        lpm: 0,                  
         lncp: newNextPrice,     
         lrca: nextRequiredAmount, 
         lcoverage: coveragePrice, 
@@ -97,9 +101,9 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
     try {
         const totalBtcToSell = parseFloat(botStateObj.lac || 0);
         if (totalBtcToSell <= 0) {
-    // Si ya no hay monedas, otro proceso ya cerró este ciclo.
-    return; 
-}
+            // If there are no coins left, another process already closed this cycle.
+            return; 
+        }
         const sellPrice = parseFloat(orderDetails.priceAvg || orderDetails.price || 0);
         
         const totalUsdtReceived = (totalBtcToSell * sellPrice) * (1 - SELL_FEE_PERCENT);
@@ -125,7 +129,7 @@ async function handleSuccessfulSell(botStateObj, orderDetails, dependencies) {
                 await logSuccessfulCycle({
                     userId,
                     autobotId: botStateObj._id,
-                    symbol: botStateObj.config.symbol || 'BTC_USDT',
+                    symbol: botStateObj.config.symbol || TRADE_SYMBOL,
                     strategy: 'Long',
                     cycleIndex: currentCycleIndex + 1,
                     startTime: botStateObj.lstartTime,

@@ -2,6 +2,7 @@
 
 const MarketSignal = require('../../../models/MarketSignal');
 const { calculateLongCoverage } = require('../../../autobotCalculations');
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 /**
  * RUNNING STATE (LONG):
@@ -48,7 +49,7 @@ async function run(dependencies) {
 
     // 2. GLOBAL SIGNAL QUERY
     try {
-        const currentSymbol = botState.config?.symbol || 'BTC_USDT';
+        const currentSymbol = botState.config?.symbol || TRADE_SYMBOL;
         
         // 🟢 AUDITORÍA: Usamos prioritariamente la inyección atómica del motor para evitar sobrecarga I/O de la DB. 
         // Si no existe, recurrimos al fallback de lectura directa.

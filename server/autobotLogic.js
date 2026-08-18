@@ -14,6 +14,7 @@ const { runShortStrategy } = require('./src/shortStrategy');
 const { runAIStrategy } = require('./src/aiStrategy'); 
 const { canExecuteStrategy } = require('./utils/strategyValidator');
 const MarketSignal = require('./models/MarketSignal');
+const { TRADE_SYMBOL } = require('./utils/tradeConstants');
 
 // Centralized mathematical engine imports
 const { 
@@ -40,7 +41,7 @@ async function processSingleBot(botState, currentPrice) {
 
     try {
         // --- 0. CENTRALIZED MARKET DATA RETRIEVAL (SOURCE OF TRUTH) ---
-        const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || 'BTC_USDT' }).lean();
+        const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || TRADE_SYMBOL }).lean();
         
         // Total injection of technical indicators required by the AIEngine execution context
         const marketContext = marketData ? {
@@ -122,7 +123,7 @@ async function processSingleBot(botState, currentPrice) {
             syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
         };
 
-        const currentSymbol = botState.config.symbol || 'BTC_USDT';
+        const currentSymbol = botState.config.symbol || TRADE_SYMBOL;
 
         // --- 1. ORDER LIFECYCLE MONITORING ---
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {

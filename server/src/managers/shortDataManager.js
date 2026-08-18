@@ -1,11 +1,15 @@
-// BSB/server/src/au/managers/short/shortDataManager.js
+/**
+ * BSB/server/src/au/managers/short/shortDataManager.js
+ * SHORT DATA MANAGER:
+ * Processes successful sell and buy orders for the Short strategy.
+ */
 
 const { saveExecutedOrder } = require('../../services/orderPersistenceService');
 const { calculateShortCoverage, parseNumber, getExponentialAmount } = require('../../autobotCalculations'); 
 const { CLEAN_SHORT_ROOT } = require('../../utils/cleanState');
+const { TRADE_SYMBOL, BUY_FEE_PERCENT } = require('../../utils/tradeConstants');
 
 const SSTATE = 'short';
-const BUY_FEE_PERCENT = 0.001; 
 
 /**
  * Handles the success of a SELL (Short Opening or DCA).
@@ -128,7 +132,7 @@ async function handleSuccessfulShortBuy(botStateObj, orderDetails, dependencies)
                 await logSuccessfulCycle({
                     userId, 
                     autobotId: botStateObj._id,
-                    symbol: botStateObj.config?.symbol || 'BTC_USDT',
+                    symbol: botStateObj.config?.symbol || TRADE_SYMBOL,
                     strategy: 'Short',
                     cycleIndex: currentCycleIndex + 1,
                     startTime: botStateObj.sstartTime,
