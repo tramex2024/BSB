@@ -6,7 +6,7 @@
 
 const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
 const { handleSuccessfulBuy } = require('../../managers/longDataManager'); 
-const { TRADE_SYMBOL } = require('../../utils/tradeConstants');
+const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 /**
  * @param {string} userId - Added for multi-user support.
