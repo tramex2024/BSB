@@ -235,8 +235,11 @@ export function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
     if (!bar) return;
     const pnl = parseFloat(pnlValue) || 0;
-    const sensitivity = 0.5; 
-    const visualSize = Math.min(Math.abs(pnl) * (50 / sensitivity), 50);
+    
+    // Cambiamos el límite máximo a 1.3% para que la barra se llene completamente en ese valor
+    const maxPnL = 1.3; 
+    const visualSize = Math.min(Math.abs(pnl) * (50 / maxPnL), 50);
+
     if (pnl >= 0) {
         bar.style.left = '50%'; 
         bar.style.width = `${visualSize}%`;
@@ -247,7 +250,6 @@ export function updatePnLBar(id, pnlValue) {
         bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
     }
 }
-
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
 
