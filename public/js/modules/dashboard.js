@@ -236,8 +236,8 @@ export function updatePnLBar(id, pnlValue) {
     if (!bar) return;
     const pnl = parseFloat(pnlValue) || 0;
     
-    // Cambiamos el límite máximo a 1.3% para que la barra se llene completamente en ese valor
-    const maxPnL = 0.3; 
+    // Cambiamos el límite máximo a 1% para que la barra se llene completamente en ese valor
+    const maxPnL = 0.2; 
     const visualSize = Math.min(Math.abs(pnl) * (50 / maxPnL), 50);
 
     if (pnl >= 0) {
