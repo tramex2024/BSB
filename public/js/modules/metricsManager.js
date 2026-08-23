@@ -186,7 +186,9 @@ function prepareChartData(filteredArray) {
             finalValue = parseInt(cycle.orderCount || cycle.orders || 0);
         } else if (currentChartParameter === 'initialInvestment') {
             finalValue = parseFloat(cycle.initialInvestment || 0);
-        } else {
+        } else if (currentChartParameter === 'finalRecovery') {
+            finalValue = parseFloat(cycle.finalRecovery || 0);
+	} else {
             // Fallback por defecto (ej. porcentaje de beneficio)
             finalValue = parseFloat(cycle.profitPercentage || cycle.percentage || 0);
         }
