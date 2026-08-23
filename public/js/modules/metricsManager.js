@@ -223,32 +223,9 @@ function renderText(id, text, className = null) {
 }
 
 export function updateMetricsFromState(state) {
-    if (!state) return;
-
-    // 🛡️ Si el usuario está filtrando por una estrategia específica, no pisamos con métricas globales
-    if (currentBotFilter !== 'all') return;
-
-    const metrics = {
-        totalProfit: parseFloat(state.total_profit || 0),
-        longOrders: parseInt(state.lnorder || 0),
-        shortOrders: parseInt(state.snorder || 0)
-    };
-
-    const now = new Date();
-    let durationHours = 0;
-    if (state.lstartTime) {
-        const lStart = new Date(state.lstartTime);
-        if (!isNaN(lStart.getTime()) && lStart.getFullYear() >= 2025) {
-            durationHours = (now - lStart) / 3600000;
-        }
-    }
-
-    renderValue('cycle-avg-orders', ((metrics.longOrders + metrics.shortOrders) / 2).toFixed(1));
-    renderValue('cycle-net-profit', `$${metrics.totalProfit.toFixed(4)}`);
-    
-    if (durationHours > 0) {
-        renderValue('cycle-avg-duration', formatDuration(durationHours));
-    }
+    // 🛡️ [AUDITORÍA]: Desactivamos que el estado en vivo sobrescriba las métricas de ciclos cerrados.
+    // El motor de TradeCycles (updateMetricsDisplay) es el único dueño de estos KPIs.
+    return;
 }
 
 function renderValue(id, value) {
