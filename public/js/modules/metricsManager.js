@@ -103,17 +103,26 @@ function updateMetricsDisplay() {
     filtered.forEach(cycle => {
         totalProfitPct += (cycle.profitPercentage || 0);
         totalNetProfitUsdt += (cycle.netProfit || 0);
-        totalOrders += (cycle.orderCount || cycle.orders || 0);
+        
+        // 🛡️ CORRECCIÓN DE ÓRDENES: Asegurar que extraiga un número entero válido de órdenes por ciclo
+        const ordersInCycle = parseInt(cycle.orderCount ?? cycle.orders ?? cycle.ordersCount ?? 0);
+        totalOrders += isNaN(ordersInCycle) ? 0 : ordersInCycle;
+
         totalRecovery += (cycle.finalRecovery || 0);
         if (cycle.netProfit > 0) winningCycles++;
 
         totalDurationMs += (cycle.durationMs || 0);
     });
 
-    // Cálculos Finales
+    // --- CÁLCULOS FINALES MATEMÁTICAMENTE EXACTOS ---
     const avgProfit = totalCycles > 0 ? (totalProfitPct / totalCycles) : 0;
+    
+    // 🛡️ Net Avg (Promedio Neto por Ciclo): Total acumulado de USDT / Total de Ciclos filtrados
     const avgNetProfit = totalCycles > 0 ? (totalNetProfitUsdt / totalCycles) : 0;
+    
+    // 🛡️ Avg Orders: Total absoluto de órdenes de los ciclos filtrados / Total de Ciclos filtrados
     const avgOrders = totalCycles > 0 ? (totalOrders / totalCycles) : 0;
+    
     const avgRecovery = totalCycles > 0 ? (totalRecovery / totalCycles) : 0;
     const winRate = totalCycles > 0 ? ((winningCycles / totalCycles) * 100) : 0;
     
