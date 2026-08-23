@@ -119,8 +119,9 @@ export function initializeDashboardView(initialState) {
 async function refreshAnalytics() {
     try {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
-        const [curveRes, cyclesRes, kpiRes] = await Promise.all([
-            fetchEquityCurveData(Metrics.getCurrentBotFilter?.() || 'all'),
+        
+        // Ya no necesitamos fetchEquityCurveData porque metricsManager calcula la curva localmente desde los ciclos crudos
+        const [cyclesRes, kpiRes] = await Promise.all([
             fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
             fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -133,12 +134,14 @@ async function refreshAnalytics() {
             })
         ]);
 
-        if (curveRes?.success) requestAnimationFrame(() => renderEquityCurve(curveRes.data));
+        // Únicamente alimentamos al metricsManager con los ciclos crudos
         if (cyclesRes && cyclesRes.length > 0) {
             Metrics.setAnalyticsData(cyclesRes);
             addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
         }
+        
         if (kpiRes && kpiRes.success) updateQuickStats(kpiRes.data || kpiRes);
+
     } catch (e) {
         console.error("Dashboard Analytics Sync Error:", e);
         addTerminalLog("ERROR SYNCING ANALYTICS", 'error');
