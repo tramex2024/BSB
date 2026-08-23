@@ -1,6 +1,6 @@
 /**
  * uiManager.js - Atomic Orchestrator (Synchronized & Shielded 2026)
- * Final Integration: Static Dashboard Import + DOM Diffing Guard + State Persistence
+ * Final Integration: Static Dashboard Import + DOM Diffing Guard + Sovereign Metrics Partition
  */
 import { formatCurrency, formatValue, formatProfit } from './ui/formatters.js';
 import { updateButtonState, syncInputsFromConfig, uiLocks } from './ui/controls.js';
@@ -55,9 +55,6 @@ export async function updateBotUI(state) {
         lastKnownState = state;
     }
 
-    // 🔍 AUDIT LOG: Checking exact data received by frontend
-    // console.log("📥 [FRONTEND RECEIVED STATE]:", state);
-
     const priceEl = document.getElementById('auprice');
     const currentMarketPrice = state.price || state.marketPrice || lastPrice;
     if (priceEl && currentMarketPrice) {
@@ -94,7 +91,7 @@ export async function updateBotUI(state) {
         }
     }
 
-    // --- MASTER MAPPING WITH DOM DIFFING GUARD ---
+    // --- MASTER MAPPING WITH DOM DIFFING GUARD (Excluding Sovereign Cycle KPIs) ---
     const elements = {
         'auprofit': 'total_profit', 
         'aubalance-usdt': 'lastAvailableUSDT', 
@@ -121,15 +118,7 @@ export async function updateBotUI(state) {
         'ai-engine-msg': 'aiMessage',  
         'aubot-lstate': 'lstate',
         'aubot-sstate': 'sstate',
-        'ai-mode-status': 'aistate',
-        'cycle-avg-duration': 'avg_duration',
-        'cycle-efficiency': 'profit_per_day',
-        'cycle-avg-profit': 'avg_profit_percent',
-        'cycle-net-profit': 'net_avg_profit',
-        'total-cycles-closed': 'total_cycles',
-        'cycle-avg-orders': 'avg_orders',
-        'cycle-avg-recovery': 'avg_recovery',
-        'cycle-win-rate': 'win_rate' 
+        'ai-mode-status': 'aistate'
     };
 
     Object.entries(elements).forEach(([id, key]) => {
@@ -141,11 +130,7 @@ export async function updateBotUI(state) {
 
         let formattedText = '';
 
-        if (id === 'cycle-efficiency') {
-            formattedText = `$${parseFloat(val).toFixed(2)}/d`;
-        } else if (id === 'cycle-avg-duration' || id === 'cycle-avg-profit' || id === 'cycle-avg-orders' || id === 'cycle-avg-recovery' || id === 'cycle-win-rate' || id === 'cycle-net-profit') {
-            formattedText = val.toString();
-        } else if (id.includes('state') || id.includes('status')) {
+        if (id.includes('state') || id.includes('status')) {
             formattedText = val.toString().toUpperCase().trim();
             if (el.textContent !== formattedText) {
                 el.textContent = formattedText;
@@ -158,12 +143,9 @@ export async function updateBotUI(state) {
             formattedText = Math.floor(val).toString();
         } else if (id.includes('coverage')) {
             formattedText = parseFloat(val).toLocaleString();
-        } else {
-            // For general formatted values, delegate or compute diffing inside formatters if possible, 
-            // but we can check assignment directly where appropriate.
         }
 
-        // --- DOM DIFFING CHECK: Only update DOM if text actually changed ---
+        // --- DOM DIFFING CHECK ---
         if (formattedText && el.textContent !== formattedText) {
             el.textContent = formattedText;
         } else if (!formattedText && !id.includes('profit')) {
@@ -237,7 +219,7 @@ export async function updateBotUI(state) {
     const hasStateData = state.lstate !== undefined || state.sstate !== undefined || state.aistate !== undefined || state.isRunning !== undefined;
     if (hasStateData) updateControlsState(state);
 
-    // --- DASHBOARD SYNC (Using static import) ---
+    // --- DASHBOARD SYNC ---
     try {
         if (dashboard) {
             const lProfit = parseFloat(state.lprofit ?? state.stats?.lprofit ?? 0);

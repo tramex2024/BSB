@@ -7,10 +7,10 @@ import { fetchEquityCurveData, fetchRawTradeCycles, sendConfigToBackend } from '
 import { currentBotState } from '../main.js'; 
 import { socket } from './socket.js';
 import { updateBotUI } from './uiManager.js';
-import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
-import { BACKEND_URL } from '../main.js'; // O desde donde la exportes
+import * as Metrics from './metricsManager.js'; // <--- CORRECCIÓN CRÍTICA: Importación del motor de métricas
+import { BACKEND_URL } from '../main.js';
 
 // Global chart instances
 let balanceChart = null; 
@@ -142,7 +142,6 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
-            // Carga inicial segura
             if (currentBotState?.config?.[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
@@ -153,12 +152,10 @@ function setupActionButtons() {
 
                 const strategy = input.strategy;
 
-                // 🚀 ACTUALIZACIÓN OPTIMISTA LOCAL
                 if (!currentBotState.config) currentBotState.config = {};
                 if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
                 currentBotState.config[strategy].amountUsdt = newVal;
 
-                // 🛡️ payload con el flag de recálculo en TRUE
                 const strategyConfigSnapshot = {
                     ...currentBotState.config[strategy],
                     amountUsdt: newVal
@@ -169,7 +166,7 @@ function setupActionButtons() {
                         ...currentBotState.config,
                         [strategy]: strategyConfigSnapshot
                     },
-                    recalculate: true, // <--- AQUÍ ESTÁ EL CAMBIO CRÍTICO
+                    recalculate: true,
                     applyShield: true,
                     strategy: strategy
                 };
@@ -213,7 +210,6 @@ function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
     
-    // Si la librería Chart no está mapeada globalmente en este ciclo de la SPA, salimos sin romper el flujo
     if (typeof Chart === 'undefined') {
         console.warn("⚠️ Chart.js no se encuentra disponible globalmente en el objeto window.");
         return;
@@ -236,7 +232,6 @@ export function updatePnLBar(id, pnlValue) {
     if (!bar) return;
     const pnl = parseFloat(pnlValue) || 0;
     
-    // Cambiamos el límite máximo a 1% para que la barra se llene completamente en ese valor
     const maxPnL = 0.2; 
     const visualSize = Math.min(Math.abs(pnl) * (50 / maxPnL), 50);
 
@@ -250,10 +245,10 @@ export function updatePnLBar(id, pnlValue) {
         bar.className = 'absolute h-full transition-all duration-500 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
     }
 }
+
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
 
-    // Escáner resiliente de propiedades (soporta variaciones de nomenclatura del backend)
     const usdt = parseFloat(state.lastAvailableUSDT ?? state.availableUsdt ?? state.usdtBalance ?? 0);
     const btcAmount = parseFloat(state.lastAvailableBTC ?? state.availableBtc ?? state.btcBalance ?? 0);
     const price = parseFloat(state.price ?? state.btcPrice ?? state.lastPrice ?? 0);
@@ -273,26 +268,6 @@ export function updateDistributionWidget(state) {
     }
 }
 
-function updateQuickStats(kpiData) {
-    if (!kpiData) return;
-
-    // Pedimos al manager que nos dé los datos listos para mostrar
-    const { profitPerDay, avgHours } = Metrics.getProcessedStats(kpiData);
-
-    const profitElement = document.getElementById('cycle-efficiency');
-    const durationElement = document.getElementById('cycle-avg-duration');
-
-    if (profitElement) {
-        profitElement.innerText = `$${profitPerDay}/d`;
-        profitElement.style.color = parseFloat(profitPerDay) >= 0 ? '#34d399' : '#ef4444';
-    }
-
-    if (durationElement) {
-        durationElement.innerText = `${parseInt(avgHours)}h 0m`;
-    }
-}
-
-// Variable global para recordar el último pulso de IA válido y evitar que caiga a 0 en ticks parciales
 let persistentAiPulseCache = {
     aiConfidence: 0,
     aiTrendLabel: 'HOLD',
@@ -306,7 +281,6 @@ let persistentAiPulseCache = {
 
 export function renderAiPulseUI(aiData) {
     if (aiData && typeof aiData === 'object') {
-        // BLINDAJE ANTI-CAÍDA A 0: Si el nuevo valor es 0, null o NaN, mantenemos el valor previo en caché si era válido
         const rawConfidence = aiData.aiConfidence !== undefined ? Math.round(aiData.aiConfidence) : NaN;
         const confidenceVal = !isNaN(rawConfidence) && rawConfidence > 0 ? rawConfidence : persistentAiPulseCache.aiConfidence;
 
@@ -328,7 +302,6 @@ export function renderAiPulseUI(aiData) {
         const trendLabel = aiData.aiTrendLabel || aiData.signal || persistentAiPulseCache.aiTrendLabel;
         const engineMsg = aiData.aiEngineMsg || aiData.reason || persistentAiPulseCache.aiEngineMsg;
 
-        // DETECCIÓN DE CAMBIOS: Comprobamos si realmente hay una variación técnica
         const hasChanged = 
             confidenceVal !== persistentAiPulseCache.aiConfidence ||
             trendLabel !== persistentAiPulseCache.aiTrendLabel ||
@@ -336,7 +309,6 @@ export function renderAiPulseUI(aiData) {
             stochKVal.toFixed(1) !== persistentAiPulseCache.aiStochK ||
             rsiVal.toFixed(1) !== persistentAiPulseCache.aiRsi;
 
-        // Actualizamos la caché persistente
         persistentAiPulseCache = {
             aiConfidence: confidenceVal,
             aiTrendLabel: trendLabel,
@@ -348,13 +320,11 @@ export function renderAiPulseUI(aiData) {
             aiEngineMsg: engineMsg
         };
 
-        // Si los datos son idénticos al tick anterior, omitimos actualizar el DOM para evitar parpadeos
         if (!hasChanged) return;
     }
 
     const cleanData = persistentAiPulseCache;
 
-    // Pintar elementos en el DOM de forma optimizada
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
@@ -372,7 +342,6 @@ export function renderAiPulseUI(aiData) {
         }
     });
 
-    // Círculo SVG de confianza blindado contra reflows innecesarios
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
