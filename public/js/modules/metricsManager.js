@@ -83,7 +83,9 @@ function updateMetricsDisplay() {
     
     const filtered = allData.filter(c => {
         if (currentBotFilter === 'all') return true;
-        return c.strategy === currentBotFilter.toUpperCase();
+        const strat = (c.strategy || c.type || '').toUpperCase();
+        const filterVal = currentBotFilter.toUpperCase();
+        return strat === filterVal || strat.includes(filterVal);
     });
 
     filtered.sort((a, b) => a.processedDate - b.processedDate);
@@ -214,6 +216,9 @@ function renderText(id, text, className = null) {
 export function updateMetricsFromState(state) {
     if (!state) return;
 
+    // 🛡️ Si el usuario está filtrando por una estrategia específica, no pisamos con métricas globales
+    if (currentBotFilter !== 'all') return;
+
     const metrics = {
         totalProfit: parseFloat(state.total_profit || 0),
         longOrders: parseInt(state.lnorder || 0),
@@ -318,4 +323,8 @@ export function getProcessedStats(kpiData) {
         avgHours: Math.min(avgHours, 9999),
         raw: kpiData
     };
+}
+
+export function getCurrentBotFilter() {
+    return currentBotFilter;
 }
