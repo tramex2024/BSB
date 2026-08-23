@@ -280,15 +280,14 @@ export async function processStateUpdate(state) {
     }
 
     if (state.kpis) {
-        const { updateQuickStats } = await import('./dashboard.js');
-        
         const hasValidKpis = state.kpis && 
                              typeof state.kpis === 'object' && 
                              Object.keys(state.kpis).length > 0 && 
                              (parseFloat(state.kpis.totalCycles || 0) > 0);
 
         if (hasValidKpis) {
-            updateQuickStats(state.kpis);
+            // Desacoplado: El manager avisa con un evento en lugar de importar el dashboard
+            window.dispatchEvent(new CustomEvent('kpisUpdated', { detail: state.kpis }));
         } else {
             console.log("🛡️ MetricsManager: KPI update blocked (Invalid payload).");
         }

@@ -29,6 +29,9 @@ export function initializeDashboardView(initialState) {
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);
 
+    window.removeEventListener('kpisUpdated', handleKpisUpdate);
+    window.addEventListener('kpisUpdated', handleKpisUpdate);
+
     // 2. INITIALIZE VISUAL COMPONENTS (Wrapped defensively to prevent cascading failures)
     try {
         initBalanceChart();
@@ -130,6 +133,12 @@ async function refreshAnalytics() {
 
 function handleMetricsUpdate(e) {
     if (e.detail && e.detail.points) requestAnimationFrame(() => renderEquityCurve(e.detail.points));
+}
+
+function handleKpisUpdate(e) {
+    if (e.detail) {
+        updateQuickStats(e.detail);
+    }
 }
 
 function setupActionButtons() {
