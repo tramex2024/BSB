@@ -1,6 +1,6 @@
 /**
  * chart.js - Visualización de Rendimiento (Versión Optimizada + Blindaje DOM)
- * Estado: Estable - Manejo de TradingView y Chart.js
+ * Estado: Estable - Manejo de TradingView y Chart.js con soporte dinámico de símbolos y tooltips.
  */
 
 let equityChartInstance = null;
@@ -14,7 +14,9 @@ export function initializeChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const fullSymbol = "BINANCE:BTCUSDT";
+    // [CORRECCIÓN]: Uso dinámico del símbolo recibido por parámetro
+    const rawSymbol = symbol || 'BTCUSDT';
+    const fullSymbol = rawSymbol.includes(':') ? rawSymbol : `BINANCE:${rawSymbol}`;
 
     // [BLINDAJE]: Si el contenedor ya tiene un iframe activo y el símbolo es idéntico, 
     // evitamos destruir el DOM para prevenir cortes en el flujo de precios en tiempo real.
@@ -64,7 +66,7 @@ export function initializeChart(containerId, symbol) {
 
 /**
  * Gráfico de Curva de Capital (Chart.js)
- * Renderiza el historial de beneficios acumulados del bot.
+ * Renderiza el historial de beneficios acumulados o porcentaje del bot.
  */
 export function renderEquityCurve(data, parameter = 'accumulatedProfit') {        
     const canvas = document.getElementById('equityCurveChart');
@@ -150,7 +152,15 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                         padding: 10,
                         displayColors: false,
                         callbacks: {
-                            label: (ctx) => ` Profit: $${ctx.parsed.y.toFixed(2)} USDT`
+                            // [CORRECCIÓN]: Tooltip adaptativo según el parámetro activo
+                            label: (ctx) => {
+                                const val = ctx.parsed.y;
+                                if (parameter === 'accumulatedProfit') {
+                                    return ` Profit: $${val.toFixed(2)} USDT`;
+                                } else {
+                                    return ` Retorno: ${val.toFixed(2)}%`;
+                                }
+                            }
                         }
                     }
                 },
@@ -163,7 +173,8 @@ export function renderEquityCurve(data, parameter = 'accumulatedProfit') {
                         ticks: { 
                             color: '#9ca3af', 
                             font: { size: 10, family: 'monospace' },
-                            callback: (v) => `$${v.toFixed(2)}` 
+                            // [CORRECCIÓN]: Formato del eje Y dinámico
+                            callback: (v) => parameter === 'accumulatedProfit' ? `$${v.toFixed(2)}` : `${v.toFixed(2)}%`
                         }
                     },
                     x: {
