@@ -23,6 +23,10 @@ let carouselInterval;
  */
 export function initializeDashboardView(initialState) {
     console.log("📊 Dashboard: Synchronizing system...");
+
+    // 👇 SOLUCIÓN: Limpiamos la memoria del gráfico al entrar para obligarlo a pintar
+    lastRenderedData = null;
+
     const stateToUse = initialState || currentBotState;
 
     // 1. CONFIGURE METRICS LISTENERS
