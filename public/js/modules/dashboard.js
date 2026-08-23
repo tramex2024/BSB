@@ -27,10 +27,7 @@ export function initializeDashboardView(initialState) {
 
     // 1. CONFIGURE METRICS LISTENERS
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
-    window.addEventListener('metricsUpdated', handleMetricsUpdate);
-
-    window.removeEventListener('kpisUpdated', handleKpisUpdate);
-    window.addEventListener('kpisUpdated', handleKpisUpdate);
+    window.addEventListener('metricsUpdated', handleMetricsUpdate);    
 
     // 🛡️ [CORRECCIÓN] Listener de visibilidad: Si el usuario cambia de pestaña en el navegador y regresa, refrescamos el gráfico al instante con memoria local
     if (!window._dashboardVisibilityInitialized) {
@@ -120,27 +117,13 @@ async function refreshAnalytics() {
     try {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
         
-        // Ya no necesitamos fetchEquityCurveData porque metricsManager calcula la curva localmente desde los ciclos crudos
-        const [cyclesRes, kpiRes] = await Promise.all([
-            fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all'),
-            fetch(`${BACKEND_URL}/api/v1/analytics/kpis`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            }).then(res => {
-                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-                return res.json();
-            }).catch(err => {
-                console.warn("KPIs not available yet:", err.message);
-                return null;
-            })
-        ]);
+        // Únicamente pedimos los ciclos crudos al backend
+        const cyclesRes = await fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all');
 
-        // Únicamente alimentamos al metricsManager con los ciclos crudos
         if (cyclesRes && cyclesRes.length > 0) {
             Metrics.setAnalyticsData(cyclesRes);
             addTerminalLog(`ANALYTICS: ${cyclesRes.length} CYCLES LOADED`, 'success');
         }
-        
-        if (kpiRes && kpiRes.success) updateQuickStats(kpiRes.data || kpiRes);
 
     } catch (e) {
         console.error("Dashboard Analytics Sync Error:", e);
@@ -152,11 +135,6 @@ function handleMetricsUpdate(e) {
     if (e.detail && e.detail.points) requestAnimationFrame(() => renderEquityCurve(e.detail.points));
 }
 
-function handleKpisUpdate(e) {
-    if (e.detail) {
-        updateQuickStats(e.detail);
-    }
-}
 
 function setupActionButtons() {
     const quickInputs = [
@@ -294,25 +272,6 @@ export function updateDistributionWidget(state) {
             if (uBar) uBar.style.width = `${(usdt / total) * 100}%`;
             if (bBar) bBar.style.width = `${(btcInUsdt / total) * 100}%`;
         }
-    }
-}
-
-function updateQuickStats(kpiData) {
-    if (!kpiData) return;
-
-    // Pedimos al manager que nos dé los datos listos para mostrar
-    const { profitPerDay, avgHours } = Metrics.getProcessedStats(kpiData);
-
-    const profitElement = document.getElementById('cycle-efficiency');
-    const durationElement = document.getElementById('cycle-avg-duration');
-
-    if (profitElement) {
-        profitElement.innerText = `$${profitPerDay}/d`;
-        profitElement.style.color = parseFloat(profitPerDay) >= 0 ? '#34d399' : '#ef4444';
-    }
-
-    if (durationElement) {
-        durationElement.innerText = `${parseInt(avgHours)}h 0m`;
     }
 }
 

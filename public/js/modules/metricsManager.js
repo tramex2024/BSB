@@ -40,13 +40,18 @@ export function setAnalyticsData(data) {
         const dateEnd = new Date(c.endTime || c.timestamp || c.processedDate);
         if (isNaN(dateEnd.getTime())) return; 
 
-        // Duration shielding: search common properties or calculate by date difference if start and end exist
-        let duration = parseInt(c.durationMs || c.duration || 0);
-        if (duration <= 0 && c.startTime && c.endTime) {
-            const start = new Date(c.startTime).getTime();
-            const end = new Date(c.endTime).getTime();
-            if (!isNaN(start) && !isNaN(end) && end > start) {
-                duration = end - start;
+        // 🛡️ [CORRECCIÓN]: Leer directamente 'durationHours' de la BD y convertirlo a milisegundos
+        let duration = 0;
+        if (c.durationHours !== undefined && !isNaN(parseFloat(c.durationHours))) {
+            duration = parseFloat(c.durationHours) * 3600000; // Horas a Milisegundos
+        } else {
+            duration = parseInt(c.durationMs || c.duration || 0);
+            if (duration <= 0 && c.startTime && c.endTime) {
+                const start = new Date(c.startTime).getTime();
+                const end = new Date(c.endTime).getTime();
+                if (!isNaN(start) && !isNaN(end) && end > start) {
+                    duration = end - start;
+                }
             }
         }
 
