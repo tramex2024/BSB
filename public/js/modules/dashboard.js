@@ -32,6 +32,17 @@ export function initializeDashboardView(initialState) {
     window.removeEventListener('kpisUpdated', handleKpisUpdate);
     window.addEventListener('kpisUpdated', handleKpisUpdate);
 
+    // 🛡️ [CORRECCIÓN] Listener de visibilidad: Si el usuario cambia de pestaña en el navegador y regresa, refrescamos el gráfico al instante con memoria local
+    if (!window._dashboardVisibilityInitialized) {
+        window._dashboardVisibilityInitialized = true;
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                console.log("👁️ [DASHBOARD] Tab visible again. Forcing UI refresh from memory...");
+                Metrics.forceRefreshUI();
+            }
+        });
+    }
+
     // 2. INITIALIZE VISUAL COMPONENTS (Wrapped defensively to prevent cascading failures)
     try {
         initBalanceChart();
@@ -89,8 +100,11 @@ export function initializeDashboardView(initialState) {
         };
     }
     
-    // 5. LOAD HISTORICAL DATA
+    // 5. LOAD HISTORICAL DATA (Network + Immediate Memory Render)
     refreshAnalytics();
+
+    // 🚀 [CORRECCIÓN CRÍTICA]: Pintar el gráfico al instante con los datos en memoria local sin esperar la red
+    Metrics.forceRefreshUI();
 
     // Activate automatic carousel
     startAutoCarousel();
