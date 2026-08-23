@@ -16,15 +16,17 @@ export function forceRefreshUI() {
 }
 
 /**
- * setAnalyticsData - Versión Optimizada y Blindada 2026
+ * setAnalyticsData - Optimized and Shielded Version 2026
  */
 export function setAnalyticsData(data) {
     const rawData = Array.isArray(data) ? data : (data?.data || data?.cycles || []);
     
     if (rawData.length === 0) {
-        console.warn("⚠️ [METRICS] No hay datos para procesar.");
+        console.warn("⚠️ [METRICS] No data to process.");
         return;
     }
+
+    let hasNewData = false; // 🛡️ Flag to detect actual new entries
 
     rawData.forEach((c) => {
         const fingerPrint = c._id?.$oid || c._id || `fallback-${c.endTime || c.timestamp}-${c.netProfit}`;
@@ -38,7 +40,7 @@ export function setAnalyticsData(data) {
         const dateEnd = new Date(c.endTime || c.timestamp || c.processedDate);
         if (isNaN(dateEnd.getTime())) return; 
 
-        // Blindaje de duración: busca en varias propiedades comunes o calcula por diferencia de fechas si existen inicio y fin
+        // Duration shielding: search common properties or calculate by date difference if start and end exist
         let duration = parseInt(c.durationMs || c.duration || 0);
         if (duration <= 0 && c.startTime && c.endTime) {
             const start = new Date(c.startTime).getTime();
@@ -57,9 +59,14 @@ export function setAnalyticsData(data) {
             strategy: (c.strategy || c.type || 'UNKNOWN').toUpperCase(),
             durationMs: duration
         });
+
+        hasNewData = true; // 🎯 Mark that at least one new cycle was added
     });
 
-    updateMetricsDisplay();
+    // 🚀 Only update KPIs and redraw the chart if there is new data
+    if (hasNewData) {
+        updateMetricsDisplay();
+    }
 }
 
 /**
