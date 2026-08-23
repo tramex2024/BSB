@@ -129,7 +129,19 @@ async function refreshAnalytics() {
 }
 
 function handleMetricsUpdate(e) {
-    if (e.detail && e.detail.points) requestAnimationFrame(() => renderEquityCurve(e.detail.points));
+    if (e.detail && e.detail.points) {
+        // Convertimos los puntos a texto para compararlos fácilmente
+        const newDataString = JSON.stringify(e.detail.points);
+
+        // Si los datos son exactamente iguales a los que ya están pintados, NO HACEMOS NADA
+        if (newDataString === lastRenderedData) return;
+
+        // Guardamos los nuevos datos como los últimos conocidos
+        lastRenderedData = newDataString;
+
+        // Solo si realmente cambiaron, redibujamos el gráfico
+        requestAnimationFrame(() => renderEquityCurve(e.detail.points));
+    }
 }
 
 function setupActionButtons() {
