@@ -71,6 +71,9 @@ export function setAnalyticsData(data) {
         });
     });
 
+    updateMetricsDisplay();
+}
+
 /**
  * updateMetricsDisplay
  * Versión optimizada 2026: Cálculo consistente de Profit/D y blindaje de métricas.
