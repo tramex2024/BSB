@@ -162,7 +162,7 @@ function updateMetricsDisplay() {
 }
 
 /**
- * prepareChartData
+ * prepareChartData - Versión multicriterio 2026
  */
 function prepareChartData(filteredArray) {
     let accumulated = 0;
@@ -175,9 +175,21 @@ function prepareChartData(filteredArray) {
         const d = cycle.processedDate;
         const label = `${d.getDate()}/${d.getMonth()+1} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 
-        let finalValue = (currentChartParameter === 'accumulatedProfit') 
-            ? accumulated 
-            : (parseFloat(cycle.profitPercentage) || 0);
+        let finalValue = 0;
+
+        // Selector dinámico según el parámetro elegido en el UI
+        if (currentChartParameter === 'accumulatedProfit') {
+            finalValue = accumulated;
+        } else if (currentChartParameter === 'durationHours') {
+            finalValue = parseFloat(cycle.durationHours || (cycle.durationMs ? cycle.durationMs / 3600000 : 0));
+        } else if (currentChartParameter === 'orderCount') {
+            finalValue = parseInt(cycle.orderCount || cycle.orders || 0);
+        } else if (currentChartParameter === 'initialInvestment') {
+            finalValue = parseFloat(cycle.initialInvestment || 0);
+        } else {
+            // Fallback por defecto (ej. porcentaje de beneficio)
+            finalValue = parseFloat(cycle.profitPercentage || cycle.percentage || 0);
+        }
 
         points.push({ time: label, value: finalValue });
     });
