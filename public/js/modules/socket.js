@@ -136,10 +136,13 @@ export function initSocket() {
     socket.on('bot-state-update', async (rawState) => {
         if (!rawState) return;
 
-        // 1. FUNCIÓN DE SANEAMIENTO (Anti-NaN)
+        // 🔍 DIAGNÓSTICO: Verificamos qué configuración exacta manda el backend
+        console.log("🔍 [SOCKET DEBUG] rawState.config recibido:", rawState.config);
+
+        // 1. FUNCIÓN DE SANEAMIENTO (Anti-NaN) - Ampliada para IA
         const sanitizeState = (s) => {
             if (!s.config) return s;
-            ['long', 'short'].forEach(side => {
+            ['long', 'short', 'ai', 'aibot', 'aiBot'].forEach(side => {
                 if (s.config[side]) {
                     s.config[side].size_var = isNaN(parseFloat(s.config[side].size_var)) ? 1 : parseFloat(s.config[side].size_var);
                     s.config[side].price_var = isNaN(parseFloat(s.config[side].price_var)) ? 0.1 : parseFloat(s.config[side].price_var);
@@ -160,9 +163,11 @@ export function initSocket() {
         if (isEditing) {
             console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
         } else {
-            // 3. FUSIÓN SEGURA (Evita borrar configs existentes)
+            // 3. FUSIÓN SEGURA (Ampliada para incluir claves de IA)
             if (state.config) {
-                ['long', 'short'].forEach(side => {
+                if (!currentBotState.config) currentBotState.config = {};
+                
+                ['long', 'short', 'ai', 'aibot', 'aiBot'].forEach(side => {
                     if (state.config[side]) {
                         currentBotState.config[side] = { 
                             ...currentBotState.config[side], 
