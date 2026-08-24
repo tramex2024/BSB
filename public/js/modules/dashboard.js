@@ -238,9 +238,13 @@ function initBalanceChart() {
 export function updatePnLBar(id, pnlValue) {
     const bar = document.getElementById(`pnl-bar-${id}`);
     if (!bar) return;
+    
     const pnl = parseFloat(pnlValue) || 0;
-    const sensitivity = 0.2; 
-    const visualSize = Math.min(Math.abs(pnl) * (50 / sensitivity), 50);
+    
+    // Si quieres que el 1% llene toda la mitad (50% del ancho total)
+    const maxPnLRange = 1.0; // 1%
+    const visualSize = Math.min((Math.abs(pnl) / maxPnLRange) * 50, 50);
+
     if (pnl >= 0) {
         bar.style.left = '50%'; 
         bar.style.width = `${visualSize}%`;
