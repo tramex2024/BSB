@@ -65,34 +65,50 @@ export async function updateBotUI(state) {
     }
 
     // --- 🛡️ SYNC SHIELD ---
-    if (state.config) {
-        checkConfigAcknowledgment(state.config);
+        if (state.config) {
+            checkConfigAcknowledgment(state.config);
 
-        if (!isSavingConfig) {
-            const activeLocks = {};
-            CRITICAL_INPUTS.forEach(id => {
-                const inputEl = document.getElementById(id);
-                if (!inputEl) return;
-                
-                const isFocused = inputEl === document.activeElement;
-                const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
-                const isInsideGracePeriod = (Date.now() - lastMutation) < 2500;
+            if (!isSavingConfig) {
+                const activeLocks = {};
+                CRITICAL_INPUTS.forEach(id => {
+                    const inputEl = document.getElementById(id);
+                    if (!inputEl) return;
+                    
+                    const isFocused = inputEl === document.activeElement;
+                    const lastMutation = parseInt(inputEl.dataset.lastUserMutation || 0);
+                    const isInsideGracePeriod = (Date.now() - lastMutation) < 2500;
 
-                if (isFocused || isInsideGracePeriod || uiLocks.isLocked(id)) {
-                    activeLocks[id] = inputEl.value;
+                    if (isFocused || isInsideGracePeriod || uiLocks.isLocked(id)) {
+                        activeLocks[id] = inputEl.value;
+                    }
+                });
+
+                syncInputsFromConfig(state.config);
+
+                // 🛡️ Sincronización explícita para los inputs de la IA (dentro del escudo)
+                const aiConfig = state.config.ai || state.config.aibot || state.config.aiBot;
+                if (aiConfig) {
+                    const aiVal = aiConfig.amountUsdt ?? aiConfig.amount ?? 0;
+                    
+                    ['auamountai-usdt', 'ai-amount-usdt'].forEach(inputId => {
+                        const inputEl = document.getElementById(inputId);
+                        if (inputEl && inputEl !== document.activeElement) {
+                            const currentVal = parseFloat(inputEl.value);
+                            if (isNaN(currentVal) || currentVal !== Number(aiVal)) {
+                                inputEl.value = aiVal;
+                            }
+                        }
+                    });
                 }
-            });
 
-            syncInputsFromConfig(state.config);
-
-            Object.entries(activeLocks).forEach(([id, preservedValue]) => {
-                const inputEl = document.getElementById(id);
-                if (inputEl && inputEl.value !== preservedValue) {
-                    inputEl.value = preservedValue;
-                }
-            });
+                Object.entries(activeLocks).forEach(([id, preservedValue]) => {
+                    const inputEl = document.getElementById(id);
+                    if (inputEl && inputEl.value !== preservedValue) {
+                        inputEl.value = preservedValue;
+                    }
+                });
+            }
         }
-    }
 
     // --- MASTER MAPPING WITH DOM DIFFING GUARD ---
     const elements = {
