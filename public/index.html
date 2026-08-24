@@ -7,6 +7,17 @@
     <title>BSB - Bitmart Spot Bots (Test Mode)</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Script para silenciar la advertencia de producción de Tailwind en consola -->
+    <script>
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+            if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')) {
+                return;
+            }
+            originalWarn.apply(console, args);
+        };
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex flex-col">
@@ -67,11 +78,11 @@
     <div id="notifications-dropdown" class="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl hidden">
         </div>
 </div>
-            
+        
             <i class="fas fa-gem cursor-pointer hover:text-emerald-400 transition" id="btn-upgrade" title="Upgrade to Advanced"></i>
 
             <i class="fas fa-headset cursor-pointer hover:text-blue-400 transition" id="btn-support" title="Technical Support"></i>
-            
+        
             <i class="fas fa-key cursor-pointer hover:text-white transition" id="api-key-icon" title="API Config"></i>
 
             <i class="fas fa-cog cursor-pointer hover:text-white transition" id="settings-icon" title="General Settings"></i>
