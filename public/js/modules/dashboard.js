@@ -242,7 +242,7 @@ export function updatePnLBar(id, pnlValue) {
     const pnl = parseFloat(pnlValue) || 0;
     
     // Si quieres que el 1% llene toda la mitad (50% del ancho total)
-    const maxPnLRange = 1.0; // 1%
+    const maxPnLRange = 0.2; 
     const visualSize = Math.min((Math.abs(pnl) / maxPnLRange) * 50, 50);
 
     if (pnl >= 0) {
