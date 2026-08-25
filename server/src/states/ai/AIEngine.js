@@ -1,8 +1,8 @@
-// Linea 326 comentada referente a la actualizacion del total_profit
 /**
  * BSB/server/src/states/ai/AIEngine.js
  * Ejecución del Aibot (paper/simulado).
  * La señal vive en marketContext; aquí: filtros, riesgo, DCA, salidas y persistencia.
+ * Linea 326 comentada referente a la actualizacion del total_profit.
  */
 const Order = require('../../../models/Order');
 const RiskManager = require('../../managers/AIRiskManager');
@@ -208,10 +208,12 @@ class AIEngine {
                 const posPpc = parseFloat(botState.aippc || 0);
                 const pnl = (price * qty) - (qty * posPpc);
                 const pct = this._profitPct(price, posPpc).toFixed(2);
-                safeLog(
-                    `[AI-MONITOR] BTC: ${price} | PPC: ${posPpc.toFixed(2)} (${pct}%) | Orders: ${botState.ainorder} | PNL: ${pnl.toFixed(2)} USDT | ${signal} ${confidencePct}% | ADX ${adx.toFixed(1)}`,
-                    'info'
-                );
+//                safeLog(
+//                    `[AI-MONITOR] BTC: ${price} | PPC: ${posPpc.toFixed(2)} (${pct}%) | Orders: ${botState.ainorder} | PNL: ${pnl.toFixed(2)} USDT | ${signal} ${confidencePct}% | ADX ${adx.toFixed(1)}`,
+//                    'info'
+//                );
+            // 3.5 LOG DE MONITOREO (mismo formato que L/S)
+            this._emitMonitor(price, botState, marketContext, cfg, riskStatus, safeLog);
             }
 
             this._emit(uid, {
@@ -237,6 +239,65 @@ class AIEngine {
         if (now - last < this.EMIT_MS) return;
         this.lastEmitByUser.set(uid, now);
         this.io.to(uid).emit('ai-pulse-broadcast', payload);
+    }
+
+        _monitorTag(bot, cfg, riskStatus, inPos, profitPct) {
+        if (!cfg.enabled || bot.aistate === 'STOPPED') return 'AI-STOPPED';
+        if (bot.aistate === 'PAUSED' || !riskStatus.canOperate && !inPos) {
+            return 'AI-PAUSED';
+        }
+        if (inPos && profitPct > 0.12) return 'AI-TRAILING';
+        if (inPos) return 'AI-BUYING';
+        return 'AI-IDLE';
+    }
+
+    _emitMonitor(price, bot, marketContext, cfg, riskStatus, safeLog) {
+        const inPos = (bot.ainorder || 0) > 0;
+        const ppc = parseFloat(bot.aippc || 0);
+        const profitPct = inPos ? this._profitPct(price, ppc) : 0;
+        const pnl = inPos ? (price * (bot.aiac || 0)) - ((bot.aiac || 0) * ppc) : 0;
+        const tag = this._monitorTag(bot, cfg, riskStatus, inPos, profitPct);
+        const signal = marketContext.signal || 'HOLD';
+        const conf = Math.round(parseFloat(marketContext.aiConfidence ?? marketContext.confidence ?? 0) * 100);
+        const adx = parseFloat(marketContext.adx || 0).toFixed(1);
+        const level = 'info';
+
+        if (tag === 'AI-STOPPED') {
+            safeLog(`[${tag}] 👁️ IA desactivada`, 'debug');
+            return;
+        }
+
+        if (tag === 'AI-PAUSED') {
+            const need = (cfg.amountUsdt / cfg.maxOrders);
+            const have = parseFloat(bot.aibalance || 0);
+            const missing = Math.max(0, need - have);
+            safeLog(
+                `[${tag}] 👁️ ${riskStatus.reason || 'paused'} | Available: ${have.toFixed(2)} USDT | Required: ${need.toFixed(2)} USDT (Missing: ${missing.toFixed(2)} USDT) | ${signal} ${conf}%`,
+                'debug'
+            );
+            return;
+        }
+
+        if (!inPos) {
+            safeLog(
+                `[${tag}] 👁️ BTC: ${price.toFixed(2)} | Waiting ${cfg.minConfidence * 100}%+ BUY/STRONG_BUY | Signal: ${signal} ${conf}% | ADX ${adx}`,
+                'info'
+            );
+            return;
+        }
+
+        const dropNeed = this._dcaTriggerPct(marketContext, cfg);
+        const lastEntry = parseFloat(bot.ailastEntryPrice || ppc);
+        const dcaPx = lastEntry * (1 - dropNeed);
+        const dcaDist = ((price - dcaPx) / price) * 100;
+        const tpPx = ppc * (1 + cfg.takeProfitPct);
+        const slPx = ppc * (1 - cfg.stopLossPct);
+        const trailPx = parseFloat(bot.aihighestPrice || price) * (1 - cfg.trailingPercent);
+
+        safeLog(
+            `[${tag}] 👁️ BTC: ${price.toFixed(2)} | PPC: ${ppc.toFixed(2)} (${profitPct.toFixed(2)}%) | DCA: ${dcaPx.toFixed(2)} (${dcaDist >= 0 ? '-' : '+'}${Math.abs(dcaDist).toFixed(2)}%) | TP Target: ${tpPx.toFixed(2)} (+${(cfg.takeProfitPct * 100).toFixed(2)}%) | SL: ${slPx.toFixed(2)} | Trail: ${trailPx.toFixed(2)} | PNL: ${pnl.toFixed(2)} USDT | Orders: ${bot.ainorder}/${cfg.maxOrders} | ${signal} ${conf}% | ADX ${adx}`,
+            level
+        );
     }
 
     async _manageTrailingStop(price, userId, bot, safeLog, cfg, currentProfit) {
