@@ -1,3 +1,4 @@
+// Linea 326 comentada referente a la actualizacion del total_profit
 /**
  * BSB/server/src/states/ai/AIEngine.js
  * Ejecución del Aibot (paper/simulado).
@@ -323,7 +324,7 @@ class AIEngine {
                 };
                 incFields = {
                     aicycle: 1,
-                    total_profit: parseFloat(netProfit.toFixed(4)),
+                    //total_profit: parseFloat(netProfit.toFixed(4)),
                 };
 
                 if (cfg.stopAtCycle) {
