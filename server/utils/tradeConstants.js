@@ -28,9 +28,9 @@ const SELL_FEE_PERCENT = 0.001;
 
 /**
  * Trailing Stop fijo utilizado en la operativa.
- * Valor: 0.1% (0.001 en formato decimal).
+ * Valor: 0.15% (0.0015 en formato decimal).
  */
-const TRAILING_STOP_PERCENT = 0.001; // 0.1%
+const TRAILING_STOP_PERCENT = 0.0015; // 0.15%
 
 /**
  * Precision requirements for BitMart API (BTC_USDT pair).
