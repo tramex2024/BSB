@@ -1,7 +1,10 @@
 /**
- * ui/controls.js - Gestión de Botones e Inputs
+ * ui/controls.js - Botones e Inputs Management
  * ETAPA 1 FINAL: Eliminación total de parpadeo mediante persistencia y cerraduras transaccionales.
  */
+
+import { sendConfigToBackend } from '../apiService.js';
+import { currentBotState } from '../main.js';
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
@@ -15,7 +18,6 @@ const STATUS_COLORS = {
 
 /**
  * 🔐 REGISTRO DE CERRADURAS TRANSACCIONALES
- * Reemplaza los parches de tiempo por control de flujo asíncrono real.
  */
 export const uiLocks = {
     _activeIds: new Set(),
@@ -39,7 +41,6 @@ export const uiLocks = {
 
 /**
  * Actualiza el estado visual de los botones (Start/Stop)
- * BLOQUEO DE PARPADEO: Solo actúa si el estado cambia.
  */
 export function updateButtonState(btnId, status, type, inputIds = []) {
     const btn = document.getElementById(btnId);
@@ -48,7 +49,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     const currentStatus = (status || 'STOPPED').toString().toUpperCase().trim();
     const isBusy = BUSY_STATES.includes(currentStatus);
 
-    // --- 1. Sincronización de Label ---
     const typeKey = type.charAt(0).toLowerCase(); 
     const labelId = `aubot-${typeKey}state`; 
     const label = document.getElementById(labelId);
@@ -61,7 +61,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
         label.classList.remove('text-white', 'text-blue-500', 'text-emerald-500', 'text-red-500');
     }
 
-    // --- 2. Lógica de Persistencia del Botón (EVITA EL FLASH) ---
     if (btn.dataset.lastAppliedStatus === currentStatus) {
         return; 
     }
@@ -88,7 +87,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
 
     btn.dataset.lastAppliedStatus = currentStatus;
 
-    // --- 3. Bloqueo de Seguridad para Inputs ---
     inputIds.forEach(id => {
         const el = document.getElementById(id);
         if (el && document.activeElement !== el) {
@@ -101,9 +99,6 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
     });
 }
 
-/**
- * Sincroniza los valores de los inputs provenientes del WebSocket/Configuración del servidor
- */
 /**
  * Sincroniza los valores de los inputs provenientes del WebSocket/Configuración del servidor
  */
@@ -145,7 +140,7 @@ export function syncInputsFromConfig(conf) {
         }
     }
     
-    // Sincronización de switches / checkboxes de ciclos con soporte para logs en terminal
+    // Sincronización de checkboxes de ciclos protegida por locks
     ['long', 'short', 'ai'].forEach(side => {
         const id = side === 'ai' ? 'ai-stop-at-cycle' : `au-stop-${side}-at-cycle`;
         const el = document.getElementById(id);
@@ -159,14 +154,12 @@ export function syncInputsFromConfig(conf) {
 }
 
 /**
- * 🎯 ENCAPSULADOR DE EVENTOS (Factory)
- * Une el control de concurrencia (Locks) con la lógica de persistencia.
+ * Encapsulador de eventos para inputs numéricos
  */
 export function setupBotInput(id, strategy, isStructural = false) {
     const el = document.getElementById(id);
     if (!el) return;
 
-    // 1. Bloqueo de concurrencia: Evita que el WebSocket sobrescriba mientras el usuario escribe
     el.addEventListener('focus', () => uiLocks.acquire(id));
     el.addEventListener('blur', () => uiLocks.release(id));
 
@@ -174,10 +167,7 @@ export function setupBotInput(id, strategy, isStructural = false) {
         const newVal = parseFloat(e.target.value);
         if (isNaN(newVal)) return;
 
-        // Actualización optimista local
-        // Nota: Asegúrate de tener acceso a currentBotState o importarlo
-        // En un patrón de arquitectura limpia, esto podría ir a un stateManager
-        
+        uiLocks.acquire(id);
         const payload = {
             config: { 
                 [strategy]: { 
@@ -185,7 +175,7 @@ export function setupBotInput(id, strategy, isStructural = false) {
                 } 
             },
             strategy: strategy,
-            recalculate: isStructural, // <--- LA CLAVE DEL RENDIMIENTO
+            recalculate: isStructural,
             applyShield: true
         };
 
@@ -200,5 +190,76 @@ export function setupBotInput(id, strategy, isStructural = false) {
     });
 }
 
-// Al final de public/js/ui/controls.js
+/**
+ * 🛡️ Inicialización centralizada de los Checkboxes "Stop At Cycle" (Long, Short, AI)
+ */
+export function setupStopCheckboxes() {
+    const stopCheckboxes = [
+        { id: 'au-stop-long-at-cycle', strategy: 'long' },
+        { id: 'au-stop-short-at-cycle', strategy: 'short' },
+        { id: 'ai-stop-at-cycle', strategy: 'ai' }
+    ];
+
+    stopCheckboxes.forEach(item => {
+        const checkbox = document.getElementById(item.id);
+        if (!checkbox) return;
+        
+        const strategy = item.strategy;
+
+        // Carga inicial basada en el estado actual
+        if (currentBotState?.config?.[strategy]) {
+            checkbox.checked = !!currentBotState.config[strategy].stopAtCycle;
+        }
+
+        // Evitar duplicar listeners si se invoca múltiples veces
+        if (checkbox.dataset.listenerInitialized) return;
+        checkbox.dataset.listenerInitialized = 'true';
+
+        checkbox.onchange = async () => {
+            const isChecked = checkbox.checked;
+            uiLocks.acquire(item.id);
+
+            if (!currentBotState.config) currentBotState.config = {};
+            if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
+            currentBotState.config[strategy].stopAtCycle = isChecked;
+
+            const strategyConfigSnapshot = {
+                ...currentBotState.config[strategy],
+                stopAtCycle: isChecked
+            };
+
+            const configPayload = {
+                config: { 
+                    ...currentBotState.config,
+                    [strategy]: strategyConfigSnapshot
+                },
+                recalculate: false,
+                applyShield: true,
+                strategy: strategy
+            };
+
+            try {
+                const res = await sendConfigToBackend(configPayload);
+                if (res?.success) {
+                    if (typeof window.addTerminalLog === 'function') {
+                        window.addTerminalLog(`${strategy.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, 'success');
+                    }
+                } else {
+                    checkbox.checked = !isChecked;
+                    currentBotState.config[strategy].stopAtCycle = !isChecked;
+                    if (typeof window.addTerminalLog === 'function') {
+                        window.addTerminalLog(`${strategy.toUpperCase()}: CONFIG REJECTED BY BACKEND`, 'error');
+                    }
+                }
+            } catch (error) {
+                console.error(`❌ Critical sync failure for [${strategy}] stopAtCycle:`, error);
+                checkbox.checked = !isChecked;
+                currentBotState.config[strategy].stopAtCycle = !isChecked;
+            } finally {
+                uiLocks.release(item.id);
+            }
+        };
+    });
+}
+
 export const activeEdits = {};

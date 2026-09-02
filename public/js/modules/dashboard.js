@@ -11,6 +11,7 @@ import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
 import { BACKEND_URL } from '../main.js';
+import { setupStopCheckboxes } from './ui/controls.js';
 
 // Global chart instances
 let balanceChart = null; 
@@ -82,6 +83,7 @@ export function initializeDashboardView(initialState) {
     // 4. CONFIGURE INTERACTIVITY AND CAROUSEL BUTTON
     setupActionButtons();
     setupAnalyticsFilters();
+    setupStopCheckboxes(); // <--- ¡AQUÍ ESTÁ LA MAGIA PARA QUE FUNCIONEN LOS LOGS!
 
     const btnToggle = document.getElementById('btn-toggle-carousel');
     if (btnToggle) {
