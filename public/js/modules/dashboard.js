@@ -10,7 +10,7 @@ import { updateBotUI } from './uiManager.js';
 import * as Metrics from './metricsManager.js';
 import { renderEquityCurve, initializeChart } from './chart.js';
 import { checkAndHideGuide, startAutoCarousel } from './carousel.js';
-import { BACKEND_URL } from '../main.js';
+import { BACKEND_URL } from '../main.js'; // O desde donde la exportes
 
 // Global chart instances
 let balanceChart = null; 
@@ -29,6 +29,7 @@ export function initializeDashboardView(initialState) {
     window.removeEventListener('metricsUpdated', handleMetricsUpdate);
     window.addEventListener('metricsUpdated', handleMetricsUpdate);    
 
+    // 🛡️ [CORRECCIÓN] Listener de visibilidad: Si el usuario cambia de pestaña en el navegador y regresa, refrescamos el gráfico al instante con memoria local
     if (!window._dashboardVisibilityInitialized) {
         window._dashboardVisibilityInitialized = true;
         document.addEventListener('visibilitychange', () => {
@@ -39,7 +40,7 @@ export function initializeDashboardView(initialState) {
         });
     }
 
-    // 2. INITIALIZE VISUAL COMPONENTS
+    // 2. INITIALIZE VISUAL COMPONENTS (Wrapped defensively to prevent cascading failures)
     try {
         initBalanceChart();
     } catch (chartError) {
@@ -70,6 +71,7 @@ export function initializeDashboardView(initialState) {
                 } catch (e) { console.warn("Deferred widget distribution failed:", e); }
             }, 150);
 
+            // [MIGUARD] PERSISTENCE SHIELD
             if (stateToUse.aiLastPulse) {
                 console.log("🧠 Memory Recovered: Painting AI pulse instantly...");
                 requestAnimationFrame(() => renderAiPulseUI(stateToUse.aiLastPulse));
@@ -95,10 +97,13 @@ export function initializeDashboardView(initialState) {
         };
     }
     
-    // 5. LOAD HISTORICAL DATA
+    // 5. LOAD HISTORICAL DATA (Network + Immediate Memory Render)
     refreshAnalytics();
+
+    // 🚀 [CORRECCIÓN CRÍTICA]: Pintar el gráfico al instante con los datos en memoria local sin esperar la red
     Metrics.forceRefreshUI();
 
+    // Activate automatic carousel
     startAutoCarousel();
     
     const container = document.querySelector('.custom-scrollbar');
@@ -112,6 +117,7 @@ async function refreshAnalytics() {
     try {
         addTerminalLog("ANALYTICS: FETCHING DATA...", 'info');
         
+        // Únicamente pedimos los ciclos crudos al backend
         const cyclesRes = await fetchRawTradeCycles(Metrics.getCurrentBotFilter?.() || 'all');
 
         if (cyclesRes && cyclesRes.length > 0) {
@@ -129,6 +135,7 @@ function handleMetricsUpdate(e) {
     if (e.detail && e.detail.points) requestAnimationFrame(() => renderEquityCurve(e.detail.points));
 }
 
+
 function setupActionButtons() {
     const quickInputs = [
         { id: 'auamountl-usdt', strategy: 'long' },
@@ -139,6 +146,7 @@ function setupActionButtons() {
     quickInputs.forEach(input => {
         const el = document.getElementById(input.id);
         if (el) {
+            // Carga inicial segura
             if (currentBotState?.config?.[input.strategy]) {
                 el.value = currentBotState.config[input.strategy].amountUsdt || "";
             }
@@ -149,10 +157,12 @@ function setupActionButtons() {
 
                 const strategy = input.strategy;
 
+                // 🚀 ACTUALIZACIÓN OPTIMISTA LOCAL
                 if (!currentBotState.config) currentBotState.config = {};
                 if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
                 currentBotState.config[strategy].amountUsdt = newVal;
 
+                // 🛡️ payload con el flag de recálculo en TRUE
                 const strategyConfigSnapshot = {
                     ...currentBotState.config[strategy],
                     amountUsdt: newVal
@@ -163,7 +173,7 @@ function setupActionButtons() {
                         ...currentBotState.config,
                         [strategy]: strategyConfigSnapshot
                     },
-                    recalculate: true,
+                    recalculate: true, // <--- AQUÍ ESTÁ EL CAMBIO CRÍTICO
                     applyShield: true,
                     strategy: strategy
                 };
@@ -178,68 +188,6 @@ function setupActionButtons() {
                     }
                 } catch (error) {
                     console.error(`❌ Fallo crítico al sincronizar input de estrategia [${strategy}]:`, error);
-                }
-            };
-        }
-    });
-
-    // ==========================================
-    // STOP AT CYCLE CHECKBOXES SYNCHRONIZATION
-    // ==========================================
-    const stopCheckboxes = [
-        { id: 'au-stop-long-at-cycle', strategy: 'long' },
-        { id: 'au-stop-short-at-cycle', strategy: 'short' },
-        { id: 'ai-stop-at-cycle', strategy: 'ai' }
-    ];
-
-    stopCheckboxes.forEach(item => {
-        const checkbox = document.getElementById(item.id);
-        if (checkbox) {
-            const strategy = item.strategy;
-
-            if (currentBotState?.config?.[strategy]) {
-                checkbox.checked = !!currentBotState.config[strategy].stopAtCycle;
-            }
-
-            checkbox.onchange = async () => {
-                const isChecked = checkbox.checked;
-
-                if (!currentBotState.config) currentBotState.config = {};
-                if (!currentBotState.config[strategy]) currentBotState.config[strategy] = {};
-                currentBotState.config[strategy].stopAtCycle = isChecked;
-
-                const strategyConfigSnapshot = {
-                    ...currentBotState.config[strategy],
-                    stopAtCycle: isChecked
-                };
-
-                const configPayload = {
-                    config: { 
-                        ...currentBotState.config,
-                        [strategy]: strategyConfigSnapshot
-                    },
-                    recalculate: false,
-                    applyShield: true,
-                    strategy: strategy
-                };
-
-                try {
-                    const res = await sendConfigToBackend(configPayload);
-                    if (res?.success) {
-                        if (typeof addTerminalLog === 'function') {
-                            addTerminalLog(`${strategy.toUpperCase()}: STOP AT CYCLE UPDATED`, 'success');
-                        }
-                    } else {
-                        checkbox.checked = !isChecked;
-                        currentBotState.config[strategy].stopAtCycle = !isChecked;
-                        if (typeof addTerminalLog === 'function') {
-                            addTerminalLog(`${strategy.toUpperCase()}: CONFIG REJECTED BY BACKEND`, 'error');
-                        }
-                    }
-                } catch (error) {
-                    console.error(`❌ Critical sync failure for [${strategy}] stopAtCycle:`, error);
-                    checkbox.checked = !isChecked;
-                    currentBotState.config[strategy].stopAtCycle = !isChecked;
                 }
             };
         }
@@ -269,8 +217,9 @@ function initBalanceChart() {
     const canvas = document.getElementById('balanceDonutChart');
     if (!canvas) return;
     
+    // Si la librería Chart no está mapeada globalmente en este ciclo de la SPA, salimos sin romper el flujo
     if (typeof Chart === 'undefined') {
-        console.warn("⚠️ Chart.js is not globally available.");
+        console.warn("⚠️ Chart.js no se encuentra disponible globalmente en el objeto window.");
         return;
     }
 
@@ -291,6 +240,8 @@ export function updatePnLBar(id, pnlValue) {
     if (!bar) return;
     
     const pnl = parseFloat(pnlValue) || 0;
+    
+    // Si quieres que el 1% llene toda la mitad (50% del ancho total)
     const maxPnLRange = 0.2; 
     const visualSize = Math.min((Math.abs(pnl) / maxPnLRange) * 50, 50);
 
@@ -308,6 +259,7 @@ export function updatePnLBar(id, pnlValue) {
 export function updateDistributionWidget(state) {
     if (!balanceChart || !state) return;
 
+    // Escáner resiliente de propiedades (soporta variaciones de nomenclatura del backend)
     const usdt = parseFloat(state.lastAvailableUSDT ?? state.availableUsdt ?? state.usdtBalance ?? 0);
     const btcAmount = parseFloat(state.lastAvailableBTC ?? state.availableBtc ?? state.btcBalance ?? 0);
     const price = parseFloat(state.price ?? state.btcPrice ?? state.lastPrice ?? 0);
@@ -327,6 +279,7 @@ export function updateDistributionWidget(state) {
     }
 }
 
+// Variable global para recordar el último pulso de IA válido y evitar que caiga a 0 en ticks parciales
 let persistentAiPulseCache = {
     aiConfidence: 0,
     aiTrendLabel: 'HOLD',
@@ -340,6 +293,7 @@ let persistentAiPulseCache = {
 
 export function renderAiPulseUI(aiData) {
     if (aiData && typeof aiData === 'object') {
+        // 🛡️ BLINDAJE EXPONENCIAL: Permite valores 0 reales pero ignora undefined, null o NaN
         const rawConfidence = aiData.aiConfidence !== undefined && aiData.aiConfidence !== null ? Math.round(aiData.aiConfidence) : NaN;
         const confidenceVal = !isNaN(rawConfidence) ? rawConfidence : persistentAiPulseCache.aiConfidence;
 
@@ -371,6 +325,7 @@ export function renderAiPulseUI(aiData) {
         const trendLabel = aiData.aiTrendLabel || aiData.signal || persistentAiPulseCache.aiTrendLabel;
         const engineMsg = aiData.aiEngineMsg || aiData.reason || persistentAiPulseCache.aiEngineMsg;
 
+        // DETECCIÓN DE CAMBIOS: Comprobamos si realmente hay una variación técnica
         const hasChanged = 
             confidenceVal !== persistentAiPulseCache.aiConfidence ||
             trendLabel !== persistentAiPulseCache.aiTrendLabel ||
@@ -380,6 +335,7 @@ export function renderAiPulseUI(aiData) {
             rsiVal.toFixed(1) !== persistentAiPulseCache.aiRsi ||
             macdVal.toFixed(4) !== persistentAiPulseCache.aiMacd;
 
+        // Actualizamos la caché persistente
         persistentAiPulseCache = {
             aiConfidence: confidenceVal,
             aiTrendLabel: trendLabel,
@@ -391,11 +347,13 @@ export function renderAiPulseUI(aiData) {
             aiEngineMsg: engineMsg
         };
 
+        // Si los datos son idénticos al tick anterior, omitimos actualizar el DOM para evitar parpadeos
         if (!hasChanged) return;
     }
 
     const cleanData = persistentAiPulseCache;
 
+    // Pintar elementos en el DOM de forma optimizada
     const elements = {
         'ai-confidence-value': `${cleanData.aiConfidence}%`,
         'ai-trend-label': cleanData.aiTrendLabel,
@@ -413,6 +371,7 @@ export function renderAiPulseUI(aiData) {
         }
     });
 
+    // Círculo SVG de confianza blindado contra reflows innecesarios
     const dbCircle = document.getElementById('ai-confidence-circle');
     if (dbCircle) {
         const perimeter = 364.42;
