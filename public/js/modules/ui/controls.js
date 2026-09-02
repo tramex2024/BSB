@@ -104,6 +104,9 @@ export function updateButtonState(btnId, status, type, inputIds = []) {
 /**
  * Sincroniza los valores de los inputs provenientes del WebSocket/Configuración del servidor
  */
+/**
+ * Sincroniza los valores de los inputs provenientes del WebSocket/Configuración del servidor
+ */
 export function syncInputsFromConfig(conf) {
     if (!conf) return;
 
@@ -111,8 +114,8 @@ export function syncInputsFromConfig(conf) {
         'auamountl-usdt': conf.long?.amountUsdt,
         'aupurchasel-usdt': conf.long?.purchaseUsdt,
         'auincrementl': conf.long?.size_var,
-        'audecrementl': conf.long?.price_var,       
-        'autriggerl': conf.long?.profit_percent,   
+        'audecrementl': conf.long?.price_var,        
+        'autriggerl': conf.long?.profit_percent,    
         'aupricestep-l': conf.long?.price_step_inc,
         
         'auamounts-usdt': conf.short?.amountUsdt,
@@ -130,7 +133,6 @@ export function syncInputsFromConfig(conf) {
         const input = document.getElementById(id);
         if (!input || value === undefined || value === null) continue;
 
-        // 🛡️ EL ESCUDO DEFINITIVO: Si el usuario tiene el foco puesto O la llave está bloqueada por red, se ignora el WebSocket
         if (document.activeElement === input || uiLocks.isLocked(id)) {
             continue; 
         }
@@ -143,18 +145,16 @@ export function syncInputsFromConfig(conf) {
         }
     }
     
-    // Sincronización de switches / checkboxes de ciclos
+    // Sincronización de switches / checkboxes de ciclos con soporte para logs en terminal
     ['long', 'short', 'ai'].forEach(side => {
-        const ids = [`au-stop-${side}-at-cycle`, `ai-stop-at-cycle`].filter(i => side === 'ai' || i.includes(side));
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el || uiLocks.isLocked(id)) return;
-            
-            const val = !!conf[side]?.stopAtCycle;
-            if (document.activeElement !== el && el.checked !== val) {
-                el.checked = val;
-            }
-        });
+        const id = side === 'ai' ? 'ai-stop-at-cycle' : `au-stop-${side}-at-cycle`;
+        const el = document.getElementById(id);
+        if (!el || uiLocks.isLocked(id)) return;
+        
+        const val = !!conf[side]?.stopAtCycle;
+        if (document.activeElement !== el && el.checked !== val) {
+            el.checked = val;
+        }
     });
 }
 
