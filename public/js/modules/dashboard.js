@@ -293,24 +293,34 @@ let persistentAiPulseCache = {
 
 export function renderAiPulseUI(aiData) {
     if (aiData && typeof aiData === 'object') {
-        // BLINDAJE ANTI-CAÍDA A 0: Si el nuevo valor es 0, null o NaN, mantenemos el valor previo en caché si era válido
-        const rawConfidence = aiData.aiConfidence !== undefined ? Math.round(aiData.aiConfidence) : NaN;
-        const confidenceVal = !isNaN(rawConfidence) && rawConfidence > 0 ? rawConfidence : persistentAiPulseCache.aiConfidence;
+        // 🛡️ BLINDAJE EXPONENCIAL: Permite valores 0 reales pero ignora undefined, null o NaN
+        const rawConfidence = aiData.aiConfidence !== undefined && aiData.aiConfidence !== null ? Math.round(aiData.aiConfidence) : NaN;
+        const confidenceVal = !isNaN(rawConfidence) ? rawConfidence : persistentAiPulseCache.aiConfidence;
 
-        const rawStochK = parseFloat(aiData.stochK ?? aiData.aiStochK);
-        const stochKVal = !isNaN(rawStochK) && rawStochK > 0 ? rawStochK : parseFloat(persistentAiPulseCache.aiStochK);
+        const rawStochK = aiData.stochK ?? aiData.aiStochK;
+        const stochKVal = rawStochK !== undefined && rawStochK !== null && !isNaN(parseFloat(rawStochK)) 
+            ? parseFloat(rawStochK) 
+            : parseFloat(persistentAiPulseCache.aiStochK);
 
-        const rawStochD = parseFloat(aiData.stochD ?? aiData.aiStochD);
-        const stochDVal = !isNaN(rawStochD) && rawStochD > 0 ? rawStochD : parseFloat(persistentAiPulseCache.aiStochD);
+        const rawStochD = aiData.stochD ?? aiData.aiStochD;
+        const stochDVal = rawStochD !== undefined && rawStochD !== null && !isNaN(parseFloat(rawStochD)) 
+            ? parseFloat(rawStochD) 
+            : parseFloat(persistentAiPulseCache.aiStochD);
 
-        const rawAdx = parseFloat(aiData.adx ?? aiData.aiAdx);
-        const adxVal = !isNaN(rawAdx) && rawAdx > 0 ? rawAdx : parseFloat(persistentAiPulseCache.aiAdx);
+        const rawAdx = aiData.adx ?? aiData.aiAdx;
+        const adxVal = rawAdx !== undefined && rawAdx !== null && !isNaN(parseFloat(rawAdx)) 
+            ? parseFloat(rawAdx) 
+            : parseFloat(persistentAiPulseCache.aiAdx);
 
-        const rawRsi = parseFloat(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi);
-        const rsiVal = !isNaN(rawRsi) && rawRsi > 0 ? rawRsi : parseFloat(persistentAiPulseCache.aiRsi);
+        const rawRsi = aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi;
+        const rsiVal = rawRsi !== undefined && rawRsi !== null && !isNaN(parseFloat(rawRsi)) 
+            ? parseFloat(rawRsi) 
+            : parseFloat(persistentAiPulseCache.aiRsi);
 
-        const rawMacd = parseFloat(aiData.macdValue ?? aiData.aiMacd);
-        const macdVal = !isNaN(rawMacd) ? rawMacd : parseFloat(persistentAiPulseCache.aiMacd);
+        const rawMacd = aiData.macdValue ?? aiData.aiMacd;
+        const macdVal = rawMacd !== undefined && rawMacd !== null && !isNaN(parseFloat(rawMacd)) 
+            ? parseFloat(rawMacd) 
+            : parseFloat(persistentAiPulseCache.aiMacd);
 
         const trendLabel = aiData.aiTrendLabel || aiData.signal || persistentAiPulseCache.aiTrendLabel;
         const engineMsg = aiData.aiEngineMsg || aiData.reason || persistentAiPulseCache.aiEngineMsg;
@@ -321,7 +331,9 @@ export function renderAiPulseUI(aiData) {
             trendLabel !== persistentAiPulseCache.aiTrendLabel ||
             adxVal.toFixed(1) !== persistentAiPulseCache.aiAdx ||
             stochKVal.toFixed(1) !== persistentAiPulseCache.aiStochK ||
-            rsiVal.toFixed(1) !== persistentAiPulseCache.aiRsi;
+            stochDVal.toFixed(1) !== persistentAiPulseCache.aiStochD ||
+            rsiVal.toFixed(1) !== persistentAiPulseCache.aiRsi ||
+            macdVal.toFixed(4) !== persistentAiPulseCache.aiMacd;
 
         // Actualizamos la caché persistente
         persistentAiPulseCache = {
