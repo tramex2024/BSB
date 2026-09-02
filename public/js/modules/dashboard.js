@@ -227,7 +227,7 @@ function setupActionButtons() {
                     const res = await sendConfigToBackend(configPayload);
                     if (res?.success) {
                         if (typeof addTerminalLog === 'function') {
-                            addTerminalLog(`${strategy.toUpperCase()}: STOP AT CYCLE UPDATED`, 'success');
+                            addTerminalLog(`${strategy.toUpperCase()}: STOP AT CYCLE -> ${isChecked ? 'ON' : 'OFF'}`, 'success');
                         }
                     } else {
                         checkbox.checked = !isChecked;
