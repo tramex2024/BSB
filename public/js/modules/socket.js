@@ -1,7 +1,7 @@
 /**
  * socket.js - Communication Layer (Full Sync 2026)
  * Versión: BSB 2026 - Soporte Multiusuario y Salas Privadas
- * Actualización: Consolidación de Emisiones de Pulso + Blindaje de Inputs
+ * Actualización: Blindaje contra parpadeos, fusión profunda de IA y soporte nativo para ceros.
  */
 import { BACKEND_URL, currentBotState, logStatus } from '../main.js';
 import aiBotUI from './aiBotUI.js';
@@ -43,16 +43,15 @@ export function initSocket() {
 
     socket = io(BACKEND_URL, { 
         transports: ['websocket', 'polling'],
-    reconnection: true,
-    reconnectionAttempts: 10, // Aumentado para insistir mientras Render despierta
-    reconnectionDelay: 2000,   // Espera 2 segundos entre intentos
-    timeout: 45000,            // ⏱️ CRÍTICO: Le damos 45 segundos de margen al handshake
-    auth: { token },      
-    query: { userId }     
-});
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
+        timeout: 45000,
+        auth: { token },      
+        query: { userId }     
+    });
 
     socket.onAny((event, ...args) => {
-        // En producción se mantiene apagado para optimizar rendimiento de red
         // console.log(`📡 SOCKET EVENTO: [${event}]`, args);
     });
 
@@ -80,11 +79,10 @@ export function initSocket() {
         if (typeof updateSystemHealth === 'function') updateSystemHealth('offline');
     });
 
-    // --- MARKET DATA (BLINDADA) ---
+    // --- MARKET DATA (BLINDADA CONTRA RE-RENDERIZADOS INNECESARIOS) ---
     socket.on('marketData', async (data) => {
         resetWatchdog();
         
-        // 1. Blindaje contra precio NaN/Indefinido
         const rawPrice = parseFloat(data?.price);
         
         if (!isNaN(rawPrice)) {
@@ -96,11 +94,13 @@ export function initSocket() {
                 currentBotState.lastPrice = rawPrice;
             }
 
-            // 2. Persistencia segura del pulso neural
+            // 🛡️ BLINDAJE: Solo actualizamos la IA si el tick de mercado trae un 'aiPulse' explícito.
+            // Esto evita que los ticks de precio ultrarrápidos limpien los indicadores técnicos.
             if (data.aiPulse) {
-                currentBotState.aiLastPulse = data.aiPulse;
-                renderAiPulseUI(data.aiPulse);
-            } else if (currentBotState.aiLastPulse) {
+                currentBotState.aiLastPulse = { 
+                    ...(currentBotState.aiLastPulse || {}), 
+                    ...data.aiPulse 
+                };
                 renderAiPulseUI(currentBotState.aiLastPulse);
             }
 
@@ -117,29 +117,27 @@ export function initSocket() {
         }
     });
         
-    // 🧠 LISTENER UNIFICADO PARA EL PULSO NEURAL (Soporte Aislado y Persistencia)
+    // 🧠 LISTENER UNIFICADO PARA EL PULSO NEURAL
     socket.on('ai-pulse-broadcast', (data) => {
         if (!data) return;
         
-        currentBotState.aiLastPulse = data;
+        // Fusión profunda para conservar datos anteriores intactos
+        currentBotState.aiLastPulse = { 
+            ...(currentBotState.aiLastPulse || {}), 
+            ...data 
+        };
 
-        // Sincronización automática de PnL de la IA
         if (data.aiprofit !== undefined) {
             updatePnLBar('ai', data.aiprofit);
         }
 
-        // Delegación atómica al renderizador del DOM (Evita duplicados)
-        renderAiPulseUI(data); 
+        renderAiPulseUI(currentBotState.aiLastPulse); 
     });
 
     // --- GLOBAL BOT STATE (SHIELDED) ---
     socket.on('bot-state-update', async (rawState) => {
         if (!rawState) return;
 
-        // 🔍 DIAGNÓSTICO: Verificamos qué configuración exacta manda el backend
-        //console.log("🔍 [SOCKET DEBUG] rawState.config recibido:", rawState.config);
-
-        // 1. FUNCIÓN DE SANEAMIENTO (Anti-NaN) - Ampliada para IA
         const sanitizeState = (s) => {
             if (!s.config) return s;
             ['long', 'short', 'ai'].forEach(side => {
@@ -154,16 +152,12 @@ export function initSocket() {
 
         const state = sanitizeState(rawState);
 
-        // 2. ESCUDO: Detectar si el usuario está editando activamente
         const now = Date.now();
         const isEditing = activeEdits && typeof activeEdits === 'object' 
             ? Object.values(activeEdits).some(timestamp => (now - timestamp) < 2000)
             : false;
 
-        if (isEditing) {
-            console.log("🛡️ Socket: Active editing detected. Shielding inputs...");
-        } else {
-            // 3. FUSIÓN SEGURA (Ampliada para incluir claves de IA)
+        if (!isEditing) {
             if (state.config) {
                 if (!currentBotState.config) currentBotState.config = {};
                 
@@ -177,7 +171,6 @@ export function initSocket() {
                 });
             }
             
-            // Asignación controlada para el resto del estado
             Object.keys(state).forEach(key => {
                 if (key !== 'config') currentBotState[key] = state[key];
             });
@@ -185,19 +178,15 @@ export function initSocket() {
             updateBotUI(currentBotState);
         }
 
-        // 4. Sincronización de métricas
         if (state.history || state.cycleHistory) {
-    try {
-        const Metrics = await import('./metricsManager.js');
-        // socket.js ya NO necesita importar dashboard.js
-        // Pasamos el estado completo y dejamos que Metrics decida qué hacer
-        Metrics.processStateUpdate(state); 
-    } catch (err) { 
-        console.error("Error delegando métricas:", err); 
-    }
-}
+            try {
+                const Metrics = await import('./metricsManager.js');
+                Metrics.processStateUpdate(state); 
+            } catch (err) { 
+                console.error("Error delegando métricas:", err); 
+            }
+        }
 
-        // 5. Estado de la IA
         const aiIsActive = (state.aistate === 'RUNNING' || state.isRunning === true);
         currentBotState.isRunning = aiIsActive;
 
@@ -346,14 +335,25 @@ function updateConnectionStatus(status) {
 }
 
 /**
- * Renderiza de forma atómica las variables y componentes de la IA en el DOM
+ * Renderiza de forma atómica y segura las variables y componentes de la IA en el DOM
  */
 function renderAiPulseUI(aiData) {
-    // 1. NORMALIZACIÓN: Buscamos el valor en diferentes claves posibles
-    const rawVal = aiData.aiConfidence ?? aiData.confidence ?? 0;
-    const confidence = parseFloat(rawVal) || 0;
-    
-    // Perímetros específicos de cada SVG (Dashboard usa 364.42, Aibot usa 364.4)
+    if (!aiData) return;
+
+    // Helper robusto: Extrae números válidos admitiendo el '0' real y descartando NaN/undefined
+    const parseNum = (val, fallback = 0) => {
+        if (val === undefined || val === null || val === '') return fallback;
+        const num = parseFloat(val);
+        return !isNaN(num) ? num : fallback;
+    };
+
+    const confidence = parseNum(aiData.aiConfidence ?? aiData.confidence, 0);
+    const adx = parseNum(aiData.aiAdx ?? aiData.adx, 0);
+    const stochK = parseNum(aiData.stochK ?? aiData.aiStochK ?? aiData.aiStoch, 0);
+    const stochD = parseNum(aiData.stochD ?? aiData.aiStochD, 0);
+    const rsi = parseNum(aiData.rsi14 ?? aiData.currentRsi ?? aiData.aiRsi, 0);
+
+    // Perímetros específicos de cada SVG
     const targets = [
         { circle: document.getElementById('ai-confidence-circle-dashboard'), text: document.getElementById('ai-confidence-value-dashboard'), perimeter: 364.42 },
         { circle: document.getElementById('ai-confidence-circle-aibot'), text: document.getElementById('ai-confidence-value-aibot'), perimeter: 364.4 }
@@ -361,7 +361,8 @@ function renderAiPulseUI(aiData) {
 
     targets.forEach(target => {
         if (target.circle) {
-            const offset = target.perimeter - (confidence / 100) * target.perimeter;
+            const boundedConf = Math.min(Math.max(confidence, 0), 100);
+            const offset = target.perimeter - (boundedConf / 100) * target.perimeter;
             target.circle.style.strokeDashoffset = offset;
             target.circle.style.strokeDasharray = `${target.perimeter}`;
         }
@@ -370,7 +371,7 @@ function renderAiPulseUI(aiData) {
         }
     });
     
-    // Resto de elementos de la barra de pulso de la IA
+    // Mapeo seguro de elementos del DOM
     const elements = {
         adxVal: document.getElementById('ai-adx-val'),
         adxBar: document.getElementById('ai-adx-bar'),
@@ -380,13 +381,12 @@ function renderAiPulseUI(aiData) {
         rsiBar: document.getElementById('ai-rsi-bar')
     };
 
-    // Normalización de valores para evitar errores de renderizado
-    if (elements.adxVal) elements.adxVal.innerText = Number(aiData.aiAdx || 0).toFixed(1);
-    if (elements.adxBar) elements.adxBar.style.width = `${Math.min(aiData.aiAdx || 0, 100)}%`;
+    if (elements.adxVal) elements.adxVal.innerText = adx.toFixed(1);
+    if (elements.adxBar) elements.adxBar.style.width = `${Math.min(adx, 100)}%`;
     
-    if (elements.stochVal) elements.stochVal.innerText = Number(aiData.aiStoch || 0).toFixed(1);
-    if (elements.stochBar) elements.stochBar.style.width = `${Math.min(aiData.aiStoch || 0, 100)}%`;
+    if (elements.stochVal) elements.stochVal.innerText = `${stochK.toFixed(1)} / ${stochD.toFixed(1)}`;
+    if (elements.stochBar) elements.stochBar.style.width = `${Math.min(stochK, 100)}%`;
     
-    if (elements.rsiVal) elements.rsiVal.innerText = Number(aiData.aiRsi || 0).toFixed(1);
-    if (elements.rsiBar) elements.rsiBar.style.width = `${Math.min(aiData.aiRsi || 0, 100)}%`;
+    if (elements.rsiVal) elements.rsiVal.innerText = rsi.toFixed(1);
+    if (elements.rsiBar) elements.rsiBar.style.width = `${Math.min(rsi, 100)}%`;
 }
