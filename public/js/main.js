@@ -190,9 +190,9 @@ function syncAIElementsInDOM() {
 document.addEventListener('change', async (e) => {
     if (!e.target) return;
 
-    // Manejo de Checkboxes LONG / SHORT con Rollback
-    if (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle') {
-        const side = e.target.id.includes('long') ? 'long' : 'short';
+    // Manejo de Checkboxes LONG / SHORT / AI con Rollback
+    if (e.target.id === 'au-stop-long-at-cycle' || e.target.id === 'au-stop-short-at-cycle' || e.target.id === 'ai-stop-at-cycle') {
+        const side = e.target.id.includes('long') ? 'long' : (e.target.id.includes('short') ? 'short' : 'ai');
         const isChecked = e.target.checked;
         const previousValue = !isChecked;
 
