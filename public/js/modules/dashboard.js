@@ -177,7 +177,7 @@ function setupActionButtons() {
                         }
                     }
                 } catch (error) {
-                    console.error(`❌ Fallo crítico al sincronizar input de estrategia [${strategy}]:`, error);
+                    console.error(`❌ Critical sync failure for the strategy input [${strategy}]:`, error);
                 }
             };
         }
