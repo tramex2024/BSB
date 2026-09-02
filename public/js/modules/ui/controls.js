@@ -4,7 +4,7 @@
  */
 
 import { sendConfigToBackend } from '../apiService.js';
-import { currentBotState } from '../main.js';
+import { currentBotState } from '../../main.js';
 
 const BUSY_STATES = ['RUNNING', 'BUYING', 'SELLING', 'PAUSED']; 
 
