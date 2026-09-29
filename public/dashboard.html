@@ -136,6 +136,10 @@
                     <input id="auamounts-usdt" type="number" step="1" class="w-full p-1 rounded bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-emerald-500"/>
                 </div>
                 <div>
+                    <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase text-center">Amt-G</label>
+                    <input id="auamountg-usdt" type="number" step="1" class="w-full p-1 rounded bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-indigo-500"/>
+                </div>
+		<div>
                     <label class="block text-[8px] text-gray-500 mb-0.5 font-bold uppercase text-center">Amt-AI</label>
                     <input id="auamountai-usdt" type="number" step="1" class="w-full p-1 rounded bg-gray-900 border border-gray-700 text-white text-[10px] text-center outline-none focus:border-indigo-500"/>
                 </div>
@@ -150,6 +154,10 @@
                     <input type="checkbox" id="au-stop-short-at-cycle" class="w-3 h-3 bg-gray-800 border-gray-600 rounded text-emerald-500">
                     <label class="text-[7px] text-gray-500 font-bold uppercase mt-1">Stop S</label>
                 </div>
+		<div class="flex flex-col items-center bg-gray-900/60 p-1 rounded border border-gray-700">
+                    <input type="checkbox" id="au-stop-global-at-cycle" class="w-3 h-3 bg-gray-800 border-gray-600 rounded text-emerald-500">
+                    <label class="text-[7px] text-gray-500 font-bold uppercase mt-1">Stop G</label>
+                </div>
                 <div class="flex flex-col items-center bg-gray-900/60 p-1 rounded border border-gray-700">
                     <input type="checkbox" id="ai-stop-at-cycle" class="w-3 h-3 bg-gray-800 border-gray-600 rounded text-indigo-500">
                     <label class="text-[7px] text-gray-500 font-bold uppercase mt-1">Stop AI</label>
@@ -159,6 +167,7 @@
             <div class="grid grid-cols-3 gap-1.5">
                 <button id="austartl-btn" class="bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-all active:scale-95">L</button>      
                 <button id="austarts-btn" class="bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-all active:scale-95">S</button> 
+		<button id="austartg-btn" class="bg-emerald-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-emerald-500 transition-all active:scale-95">G</button>
                 <button id="btn-start-ai" class="bg-indigo-600 py-2 rounded-lg font-bold text-[9px] text-white uppercase shadow-lg hover:bg-indigo-500 transition-all active:scale-95">AI</button>
             </div>
 
