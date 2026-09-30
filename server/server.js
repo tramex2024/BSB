@@ -4,10 +4,6 @@
  * Estado: Completamente Auditado y Secuenciado contra condiciones de carrera
  */
 
-// [PARCHE DNS CRÍTICO]: Forzamos servidores DNS públicos para evitar bloqueos ENOTFOUND en Render
-const dns = require('dns');
-dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -26,6 +22,7 @@ const orderPersistenceService = require('./services/orderPersistenceService');
 const marketService = require('./services/marketService');
 const cronService = require('./services/cronService'); 
 
+//dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
@@ -119,15 +116,17 @@ mongoose.connect(process.env.MONGO_URI)
     })
     .catch(err => {
         console.error('❌ [CRITICAL] Error Fatal de Conexión en MongoDB:', err.message);
-        process.exit(1);
+        process.exit(1); // Finalizar ejecución para que el orquestador de contenedores actúe
     });
 
 // --- 6. ESCUDO DE PROTECCIÓN GLOBAL (Manejo de Errores Críticos Fuera de Contexto) ---
 process.on('unhandledRejection', (reason, promise) => {
     console.error('⚠️ [PROCESO-ALERTA] Promesa no capturada detectada en el servidor:', reason);
+    // Espacio reservado para telemetría o alertas internas (ej. Slack/Sentry) sin detener la ejecución
 });
 
 process.on('uncaughtException', (error) => {
     console.error('💥 [PROCESO-CRASH] Excepción no controlada en el hilo principal:', error.message);
     console.error(error.stack);
+    // Si el error compromete críticamente el estado, se recomienda un cierre controlado, de lo contrario se mitiga en vivo
 });

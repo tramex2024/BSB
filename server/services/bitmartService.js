@@ -1,6 +1,6 @@
 /**
  * BSB/server/services/bitmartService.js
- * SERVICIO REST BITMART - Versión 2026 Auditada, Robustecida y con Reintentos de Red
+ * SERVICIO REST BITMART - Versión 2026 Auditada y Robustecida (Fix 401 & Memoria)
  */
 
 const axios = require('axios');
@@ -15,7 +15,7 @@ const LOG_PREFIX = '[BITMART_SERVICE]';
 const tickerCache = new Map(); 
 const CACHE_TTL = 2000;  
 
-async function makeRequest(method, path, params = {}, body = {}, userCreds = null, retries = 3, delay = 2000) {
+async function makeRequest(method, path, params = {}, body = {}, userCreds = null) {
     // 1. Extracción y Normalización de Credenciales
     const apiKey = (userCreds?.apiKey || process.env.BITMART_API_KEY || "").trim();
     const secretKey = (userCreds?.secretKey || process.env.BITMART_SECRET_KEY || "").trim();
@@ -72,22 +72,8 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
         throw new Error(`BitMart Error: ${response.data.message} (Code: ${response.data.code})`);
 
     } catch (error) {
-        // [MEJORA ROBUSTA]: Detección de errores de red/DNS (ENOTFOUND, ETIMEDOUT, ECONNRESET)
-        const isNetworkError = error.code === 'ENOTFOUND' || 
-                               error.code === 'ETIMEDOUT' || 
-                               error.code === 'ECONNRESET' ||
-                               error.message.includes('ENOTFOUND') ||
-                               error.message.includes('network');
-
-        if (isNetworkError && retries > 0) {
-            console.warn(`${LOG_PREFIX} ⚠️ Network/DNS error on ${path} (${error.message}). Retrying in ${delay}ms... (${retries} attempts left)`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            // Llamada recursiva con un intento menos y duplicando el tiempo de espera (Backoff exponencial)
-            return makeRequest(method, path, params, body, userCreds, retries - 1, delay * 2);
-        }
-
         if (error.response?.status === 401) {
-            console.error(`${LOG_PREFIX} ❌ Error 401 en ${path}. Verifica las API Keys del usuario.`);
+            console.error(`[BITMART] ❌ Error 401 en ${path}. Verifica las API Keys del usuario.`);
         }
         throw new Error(`BitMart Request Failed [${path}]: ${error.response?.data?.message || error.message}`);
     }
@@ -123,7 +109,7 @@ const bitmartService = {
             };
         } catch (e) { 
             console.error(`${LOG_PREFIX} ⚠️ Error consultando balances (Evitando falsos ceros):`, e.message);
-            throw e; 
+            throw e; // Lanza el error para evitar que la estrategia tome decisiones con saldos en 0 falsos
         }
     },
 
@@ -181,6 +167,7 @@ const bitmartService = {
         
         return (Array.isArray(rawOrders) ? rawOrders : []).map(o => ({
             ...o,
+            // [SANEAMIENTO]: Aseguramos el casteo numérico real para prevenir problemas de tipado en los cálculos del bot
             price: parseFloat(parseFloat(o.priceAvg) > 0 ? o.priceAvg : o.price) || 0,
             size: parseFloat(parseFloat(o.filledSize) > 0 ? o.filledSize : o.size) || 0,
             orderTime: Number(o.orderTime || o.updateTime || o.createTime || Date.now())
@@ -218,9 +205,11 @@ const bitmartService = {
             const res = await makeRequest('GET', '/spot/v1/ticker', { symbol });
             const data = res.data.tickers.find(t => t.symbol === symbol);
             
+            // [SANEAMIENTO]: Guardamos en caché y liberamos memoria si expira de forma activa
             tickerCache.set(symbol, { data, timestamp: now });
             return data;
         } catch (err) {
+            // Mitigación preventiva: si falla el fetch, retenemos la caché un ciclo extra en lugar de quebrar el flujo
             if (cached) return cached.data;
             throw err;
         }

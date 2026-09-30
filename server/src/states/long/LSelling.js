@@ -1,4 +1,4 @@
-// BSB/server/src/states/long/LSelling.js    // 
+// BSB/server/src/states/long/LSelling.js
 
 const { placeLongSellOrder } = require('../../managers/longOrderManager');
 const { TRAILING_STOP_PERCENT, MIN_SELL_AMOUNT_BTC } = require('../../../utils/tradeConstants');
@@ -68,20 +68,9 @@ async function run(dependencies) {
                 try {
                     await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, placeLongOrder); 
                 } catch (error) {
-                    // [MEJORA]: Detectar si es un error temporal de red/DNS
-                    const isNetworkError = error.code === 'ENOTFOUND' || 
-                                           error.code === 'ETIMEDOUT' || 
-                                           error.code === 'ECONNRESET' ||
-                                           error.message.includes('ENOTFOUND');
-
-                    if (isNetworkError) {
-                        log(`⚠️️ [L-SELL] Transient network/DNS error (${error.message}). Retrying automatically in next cycle...`, 'warning');
-                        // No pausamos el bot, permitimos que reintente en cuanto la red de Render se estabilice
-                    } else {
-                        // Errores de API reales (fondos, permisos, etc.) sí pausan por seguridad
-                        log(`❌ Critical exchange error: ${error.message}. Pausing bot to prevent loops.`, 'error');
-                        await updateBotState('PAUSED', LSTATE); 
-                    }
+                    // Any error during critical liquidation forces a safety pause
+                    log(`❌ Critical error in sell execution on Exchange: ${error.message}. Pausing bot to prevent API loops.`, 'error');
+                    await updateBotState('PAUSED', LSTATE); 
                 }
             } else {
                 // Monitoring log (The Eye 👁️)
