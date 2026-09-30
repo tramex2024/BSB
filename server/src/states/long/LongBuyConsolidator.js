@@ -1,19 +1,53 @@
 /**
  * BSB/server/src/states/long/LongBuyConsolidator.js
  * BUY CONSOLIDATOR (LONG):
- * The "watchdog" that waits for BitMart confirmation of order execution.
+ * El "watchdog" que verifica la confirmación de ejecución de órdenes de compra en BitMart.
+ * Protegido contra desconexiones temporales de red/DNS, latencia API y parcialmente llenados (2026).
  */
 
-const { getOrderDetail, getRecentOrders } = require('../../../services/bitmartService');
+const { getOrderDetail } = require('../../../services/bitmartService');
 const { handleSuccessfulBuy } = require('../../managers/longDataManager'); 
 const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
 /**
- * @param {string} userId - Added for multi-user support.
+ * Helper estandarizado para detectar errores temporales de red, timeout o DNS
  */
-async function monitorAndConsolidate(botState, SYMBOL = TRADE_SYMBOL, log, updateLStateData, updateBotState, updateGeneralBotState, userId, userCreds) {    
-    
-    // 1. Order existence check
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    const code = err?.code || '';
+    return code === 'ENOTFOUND' || 
+           code === 'ETIMEDOUT' || 
+           code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network') ||
+           msg.includes('socket hang up');
+};
+
+/**
+ * Monitorea y consolida órdenes de compra Long activas en BitMart.
+ * 
+ * @param {Object} botState - Estado actual del bot
+ * @param {string} SYMBOL - Par de trading (ej. BMX_USDT)
+ * @param {Function} log - Logger del sistema
+ * @param {Function} updateLStateData - Actualizador de sub-estado Long
+ * @param {Function} updateBotState - Actualizador genérico del bot
+ * @param {Function} updateGeneralBotState - Actualizador raíz de MongoDB/memoria
+ * @param {string} userId - ID del usuario para arquitectura multi-cuenta
+ * @param {Object} userCreds - Credenciales API de BitMart
+ * @returns {Promise<boolean>} true = orden activa o procesada con éxito; false = slot liberado / libre
+ */
+async function monitorAndConsolidate(
+    botState, 
+    SYMBOL = TRADE_SYMBOL, 
+    log, 
+    updateLStateData, 
+    updateBotState, 
+    updateGeneralBotState, 
+    userId, 
+    userCreds
+) {    
+    // 1. Verificación de existencia de la orden en memoria
     const lastOrder = botState.llastOrder;
 
     if (!lastOrder || !lastOrder.order_id || lastOrder.side !== 'buy') {
@@ -21,73 +55,90 @@ async function monitorAndConsolidate(botState, SYMBOL = TRADE_SYMBOL, log, updat
     }
 
     const orderIdString = String(lastOrder.order_id);
-
-    // 🟢 AUDIT: Using injected credentials instead of botState.config
     const creds = userCreds; 
 
     try {
-        // 2. ISOLATED QUERY PER USER
-        let finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
+        // 2. Consulta aislada de detalles de orden por credenciales de usuario
+        const finalDetails = await getOrderDetail(SYMBOL, orderIdString, creds);
         
-        // CORRECTION: BitMart V4 uses filled_size for executed volume
-        let filledVolume = parseFloat(
-            finalDetails?.filled_size ||   // <--- Add this (API V4)
-            finalDetails?.filledSize ||    // (API V2/V4 fallback)
-            finalDetails?.filled_volume || // (Websocket/History)
+        // Normalización de volumen ejecutado (Soporte BitMart V2/V4/Websocket)
+        const filledVolume = parseFloat(
+            finalDetails?.filled_size ||    // BitMart API V4
+            finalDetails?.filledSize ||     // BitMart API V2
+            finalDetails?.filled_volume ||  // Fallback WS/Historial
+            finalDetails?.size ||
             0
         );
 
-        // If order is 'filled' but object lacks normalized 'size', inject it for saveExecutedOrder.
-        if (finalDetails && !finalDetails.size && filledVolume > 0) {
-            finalDetails.size = filledVolume;
+        // Inyección de compatibilidad para saveExecutedOrder / handleSuccessfulBuy
+        if (finalDetails) {
+            if (!finalDetails.size && filledVolume > 0) {
+                finalDetails.size = filledVolume;
+            }
+            if (!finalDetails.priceAvg) {
+                finalDetails.priceAvg = parseFloat(
+                    finalDetails.price_avg || 
+                    finalDetails.avg_price || 
+                    finalDetails.price || 
+                    0
+                );
+            }
         }
+
+        const rawState = (finalDetails?.state || finalDetails?.status || '').toLowerCase();
+
+        // 3. Evaluación rigurosa de estados
+        const isFullyFilled = rawState === 'filled';
+        const isCanceled = rawState === 'canceled' || rawState === 'partially_canceled';
         
-        // Same for average price if it comes as price_avg or priceAvg
-        if (finalDetails && !finalDetails.priceAvg) {
-            finalDetails.priceAvg = finalDetails.price_avg || finalDetails.avg_price || 0;
-        }
-
-        const isFilled = finalDetails?.state === 'filled' || filledVolume > 0;
-        const isCanceled = finalDetails?.state === 'canceled' || finalDetails?.state === 'partially_canceled';
+        // Solo consolidamos si está 100% llena O si fue cancelada habiendo ejecutado una parte
+        const isReadyToConsolidate = isFullyFilled || (isCanceled && filledVolume > 0);
 
         // =================================================================
-        // CASE 1: SUCCESS (Order filled)
+        // CASO 1: ÉXITO (Orden ejecutada totalmente o parcial cancelada)
         // =================================================================
-        if (isFilled) {
-            log(`[CONSOLIDATOR] ✅ Buy confirmed: ${orderIdString}. Updating balances...`, 'success');
+        if (isReadyToConsolidate) {
+            log(`[CONSOLIDATOR LONG BUY] ✅ Orden confirmada: ${orderIdString} (Vol: ${filledVolume}). Consolidando posición...`, 'success');
             
             const dependencies = { 
                 updateGeneralBotState, 
                 updateLStateData,
+                updateBotState,
                 userId 
             };
             
             await handleSuccessfulBuy(botState, finalDetails, log, dependencies);
-            
             return true; 
         } 
 
         // =================================================================
-        // CASE 2: ACTIVE ORDER (Still waiting)
+        // CASO 2: ORDEN ACTIVA EN LIBRO (new / partially_filled)
         // =================================================================
-        if (finalDetails && ['new', 'partially_filled'].includes(finalDetails.state)) {
+        if (!finalDetails || rawState === 'new' || rawState === 'partially_filled') {
+            // Se mantiene retenido el ciclo (true) mientras siga abierta en el libro
             return true; 
         } 
 
         // =================================================================
-        // CASE 3: FAILURE OR CANCELLATION
+        // CASO 3: CANCELACIÓN TOTAL SIN EJECUCIÓN (Volumen 0)
         // =================================================================
         if (isCanceled && filledVolume === 0) {
-            log(`[CONSOLIDATOR] ❌ Order ${orderIdString} canceled. Releasing slot.`, 'error');
+            log(`[CONSOLIDATOR LONG BUY] ❌ Orden ${orderIdString} cancelada sin ejecuciones. Liberando slot...`, 'error');
             await updateGeneralBotState({ llastOrder: null });
             return false; 
         }
 
-        // If it reaches here and there's no clear 'new' or 'filled' state
-        return false; 
+        // Por defecto, ante estados ambiguos de la API, mantenemos el candado activado por seguridad
+        return true; 
 
     } catch (error) {
-        log(`[CONSOLIDATOR] ⚠️ Error in monitoring (User: ${userId}): ${error.message}`, 'warning');
+        log(`[CONSOLIDATOR LONG BUY] ⚠️ Error en monitoreo (User: ${userId}): ${error.message}`, 'warning');
+        
+        // Ante errores de red/DNS o timeouts, retenemos la orden para reintentar en la siguiente pasada
+        if (isNetworkError(error)) {
+            return true;
+        }
+        
         return false; 
     }
 }

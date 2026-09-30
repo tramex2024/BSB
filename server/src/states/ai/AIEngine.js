@@ -2,7 +2,7 @@
  * BSB/server/src/states/ai/AIEngine.js
  * Ejecución del Aibot (paper/simulado).
  * La señal vive en marketContext; aquí: filtros, riesgo, DCA, salidas y persistencia.
- * Linea 326 comentada referente a la actualizacion del total_profit.
+ * Auditado y verificado (2026).
  */
 const Order = require('../../../models/Order');
 const RiskManager = require('../../managers/AIRiskManager');
@@ -204,16 +204,7 @@ class AIEngine {
             }
 
             if ((botState.ainorder || 0) > 0) {
-                const qty = botState.aiac || 0;
-                const posPpc = parseFloat(botState.aippc || 0);
-                const pnl = (price * qty) - (qty * posPpc);
-                const pct = this._profitPct(price, posPpc).toFixed(2);
-//                safeLog(
-//                    `[AI-MONITOR] BTC: ${price} | PPC: ${posPpc.toFixed(2)} (${pct}%) | Orders: ${botState.ainorder} | PNL: ${pnl.toFixed(2)} USDT | ${signal} ${confidencePct}% | ADX ${adx.toFixed(1)}`,
-//                    'info'
-//                );
-            // 3.5 LOG DE MONITOREO (mismo formato que L/S)
-            this._emitMonitor(price, botState, marketContext, cfg, riskStatus, safeLog);
+                this._emitMonitor(price, botState, marketContext, cfg, riskStatus, safeLog);
             }
 
             this._emit(uid, {
@@ -241,7 +232,7 @@ class AIEngine {
         this.io.to(uid).emit('ai-pulse-broadcast', payload);
     }
 
-        _monitorTag(bot, cfg, riskStatus, inPos, profitPct) {
+    _monitorTag(bot, cfg, riskStatus, inPos, profitPct) {
         if (!cfg.enabled || bot.aistate === 'STOPPED') return 'AI-STOPPED';
         if (bot.aistate === 'PAUSED' || !riskStatus.canOperate && !inPos) {
             return 'AI-PAUSED';
@@ -385,7 +376,6 @@ class AIEngine {
                 };
                 incFields = {
                     aicycle: 1,
-                    //total_profit: parseFloat(netProfit.toFixed(4)),
                 };
 
                 if (cfg.stopAtCycle) {
@@ -417,7 +407,7 @@ class AIEngine {
                 }
             }
 
-            const update = incFields ? { $set: setFields, $inc: incFields } : { $set: setFields };
+            const update = incFields ? { $set: setFields, $inc: incFields } : {$set: setFields };
             const updatedBot = await AutoBot.findOneAndUpdate({ userId }, update, { new: true });
 
             if (updatedBot) {

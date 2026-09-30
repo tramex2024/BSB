@@ -30,6 +30,7 @@ const { monitorAndConsolidateShortBuy: monitorShortBuy } = require('./src/states
 const { updateConfig, startSide, stopSide } = require('./startStop');
 
 let isProcessing = false;
+let isSyncingBalances = false;
 
 /**
  * Processes an individual trading cycle for a specific bot in an isolated and safe manner.
@@ -41,7 +42,7 @@ async function processSingleBot(botState, currentPrice) {
 
     try {
         // --- 0. CENTRALIZED MARKET DATA RETRIEVAL (SOURCE OF TRUTH) ---
-        const marketData = await MarketSignal.findOne({ symbol: botState.config.symbol || TRADE_SYMBOL }).lean();
+        const marketData = await MarketSignal.findOne({ symbol: botState.config?.symbol || TRADE_SYMBOL }).lean();
         
         // Total injection of technical indicators required by the AIEngine execution context
         const marketContext = marketData ? {
@@ -110,59 +111,107 @@ async function processSingleBot(botState, currentPrice) {
             aicycle: botState.aicycle || 0,
             availableUSDT: botState.lastAvailableUSDT || 0,
 
-            placeLongOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `L_${botState.lcycle || 0}_${Date.now()}`),
-            placeShortOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `S_${botState.scycle || 0}_${Date.now()}`),
-            placeAIOrder: async (params) => bitmartService.placeOrder(params.symbol, params.side, params.type, params.notional || params.size, params.price || null, userCreds, `AI_${botState.aicycle || 0}_${Date.now()}`),
+            // Order execution delegates
+            placeLongOrder: async (params) => bitmartService.placeOrder(
+                params.symbol, 
+                params.side, 
+                params.type, 
+                params.notional || params.size, 
+                params.price || null, 
+                userCreds, 
+                `L_${botState.lcycle || 0}_${Date.now()}`
+            ),
+            placeShortOrder: async (params) => bitmartService.placeOrder(
+                params.symbol, 
+                params.side, 
+                params.type, 
+                params.notional || params.size, 
+                params.price || null, 
+                userCreds, 
+                `S_${botState.scycle || 0}_${Date.now()}`
+            ),
+            placeAIOrder: async (params) => bitmartService.placeOrder(
+                params.symbol, 
+                params.side, 
+                params.type, 
+                params.notional || params.size, 
+                params.price || null, 
+                userCreds, 
+                `AI_${botState.aicycle || 0}_${Date.now()}`
+            ),
             placeMarketOrder: async (params) => bitmartService.placeMarketOrder(params, userCreds),
+            cancelOrder: async (params) => bitmartService.cancelOrder(params.symbol, params.order_id, userCreds),
 
-            updateBotState: async (val, strat) => { changeSet[strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate')] = val; },
-            updateLStateData: async (fields) => { Object.assign(changeSet, fields); },
-            updateSStateData: async (fields) => { Object.assign(changeSet, fields); },
-            updateAIStateData: async (fields) => { Object.assign(changeSet, fields); },
-            updateGeneralBotState: async (fields) => { Object.assign(changeSet, fields); },
+            // In-memory & DB synchronized state mutation handlers
+            updateBotState: async (val, strat) => { 
+                const targetKey = strat === 'long' ? 'lstate' : (strat === 'short' ? 'sstate' : 'aistate');
+                changeSet[targetKey] = val; 
+                botState[targetKey] = val;
+            },
+            updateLStateData: async (fields) => { 
+                Object.assign(changeSet, fields); 
+                Object.assign(botState, fields);
+            },
+            updateSStateData: async (fields) => { 
+                Object.assign(changeSet, fields); 
+                Object.assign(botState, fields);
+            },
+            updateAIStateData: async (fields) => { 
+                Object.assign(changeSet, fields); 
+                Object.assign(botState, fields);
+            },
+            updateGeneralBotState: async (fields) => { 
+                Object.assign(changeSet, fields); 
+                Object.assign(botState, fields);
+            },
             syncFrontendState: (price, state) => orchestrator.syncFrontendState(price, state, userId)
         };
 
-        const currentSymbol = botState.config.symbol || TRADE_SYMBOL;
+        const currentSymbol = botState.config?.symbol || TRADE_SYMBOL;
 
         // --- 1. ORDER LIFECYCLE MONITORING ---
         if (botState.llastOrder && botState.lstate !== 'STOPPED') {
             try {
-                if (botState.llastOrder.side === 'buy') await monitorLongBuy(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-                else await monitorLongSell(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-            } catch (e) { orchestrator.log(`Long Monitor Error: ${e.message}`, 'error', userId); }
+                if (botState.llastOrder.side === 'buy') {
+                    await monitorLongBuy(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                } else {
+                    await monitorLongSell(botState, currentSymbol, dependencies.log, dependencies.updateLStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                }
+            } catch (e) { 
+                orchestrator.log(`Long Monitor Error: ${e.message}`, 'error', userId); 
+            }
         }
 
         if (botState.slastOrder && botState.sstate !== 'STOPPED') {
             try {
-                if (botState.slastOrder.side === 'sell') await monitorShortSell(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-                else await monitorShortBuy(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
-            } catch (e) { orchestrator.log(`Short Monitor Error: ${e.message}`, 'error', userId); }
+                if (botState.slastOrder.side === 'sell') {
+                    await monitorShortSell(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                } else {
+                    await monitorShortBuy(botState, currentSymbol, dependencies.log, dependencies.updateSStateData, dependencies.updateBotState, dependencies.updateGeneralBotState, userId, dependencies.userCreds);
+                }
+            } catch (e) { 
+                orchestrator.log(`Short Monitor Error: ${e.message}`, 'error', userId); 
+            }
         }
-
-        // Apply critical changes found during order monitoring stage before processing calculations
-        Object.assign(botState, changeSet);
 
         // --- 2. MATHEMATICAL & COVERAGE CALCULATIONS ---
-        // 🟢 DECOUPLED: Mathematical matrix evaluation is offloaded completely to the calculations module
         const liveMetrics = calculateLiveBotMetrics(botState, currentPrice);
         Object.assign(changeSet, liveMetrics);
+        Object.assign(botState, liveMetrics);
 
         // Separate calculation layer for active AI profit matrix tracking
-        if (botState.aistate !== 'STOPPED' && botState.config.ai) {
-            changeSet.aiprofit = (botState.aippc || 0) > 0 ? calculatePotentialProfit(botState.aippc, botState.ailastEntryPrice || 0, currentPrice, 'ai') : 0;
+        if (botState.aistate !== 'STOPPED' && botState.config?.ai) {
+            const aiProfit = (botState.aippc || 0) > 0 
+                ? calculatePotentialProfit(botState.aippc, botState.ailastEntryPrice || 0, currentPrice, 'ai') 
+                : 0;
+            changeSet.aiprofit = aiProfit;
+            botState.aiprofit = aiProfit;
         }
-
-        // Synchronize structural calculations data into bot state instance prior to engine hand-off
-        Object.assign(botState, changeSet);
 
         // --- 3. STRATEGY EXECUTION ENGINE ---
         if (botState.lstate !== 'STOPPED') await runLongStrategy(dependencies);
         if (botState.sstate !== 'STOPPED') await runShortStrategy(dependencies);
         if (botState.aistate !== 'STOPPED') await runAIStrategy(dependencies);
-
-        // Final merge of strategy execution mutations before atomic storage commit
-        Object.assign(botState, changeSet);
 
         changeSet.lastUpdate = new Date();
         await orchestrator.commitChanges(userId, botState, currentPrice);
@@ -209,9 +258,8 @@ async function botCycle(priceFromWebSocket) {
  */
 function startGlobalSync() {
     setInterval(async () => {
-        // 🟢 SHIELDED: Process lock wraps the entire loop sequence to fully prevent collection deadlocks
-        if (isProcessing) return; 
-        isProcessing = true;
+        if (isSyncingBalances) return; 
+        isSyncingBalances = true;
         try {
             const allBots = await Autobot.find({}).lean();
             for (const bot of allBots) {
@@ -220,7 +268,7 @@ function startGlobalSync() {
         } catch (err) {
             console.error("[GLOBAL-SYNC-ERROR]:", err.message);
         } finally {
-            isProcessing = false;
+            isSyncingBalances = false;
         }
     }, 45000); // 45s threshold to gracefully clear high-volume Exchange rate limiting rules
 }
@@ -236,5 +284,7 @@ module.exports = {
     slowBalanceCacheUpdate: orchestrator.slowBalanceCacheUpdate, 
     syncFrontendState: orchestrator.syncFrontendState, 
     getLastPrice: orchestrator.getLastPrice, 
-    updateConfig, startSide, stopSide
+    updateConfig, 
+    startSide, 
+    stopSide
 };
