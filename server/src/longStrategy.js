@@ -1,6 +1,7 @@
 /**
  * LONG STRATEGY - STATE MACHINE (BSB 2026)
  * Safe life cycle management of Long positions with panic mitigation.
+ * Protegido contra desconexiones temporales de red/DNS (2026).
  */
 
 const LRunning = require('./states/long/LRunning');
@@ -8,6 +9,17 @@ const LBuying  = require('./states/long/LBuying');
 const LSelling = require('./states/long/LSelling');
 const LPaused  = require('./states/long/LPaused');
 const LStopped = require('./states/long/LStopped');
+
+// 🟢 Helper estandarizado para detectar errores temporales de red/DNS
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    return err?.code === 'ENOTFOUND' || 
+           err?.code === 'ETIMEDOUT' || 
+           err?.code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network');
+};
 
 /**
  * Executes the corresponding step of the Long State Machine.
@@ -62,8 +74,8 @@ async function runLongStrategy(dependencies) {
         log(`🔥 Critical error in LongStrategy [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-LONG][User: ${userId}]:`, error);
 
-        // If the error occurs in a crucial operational state, pause the bot for capital safety
-        if (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING') {
+        // 🟢 Solo forzar la pausa de emergencia si NO fue un error temporal de red/DNS
+        if (!isNetworkError(error) && (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING')) {
             try {
                 log(`🚨 [FALLBACK ACTIVATED] Forcing emergency transition [${currentState} ➡️ PAUSED] to prevent cycle corruption.`, 'warning');
                 if (typeof updateBotState === 'function') {

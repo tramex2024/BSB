@@ -35,15 +35,9 @@ async function run(dependencies) {
         // Validate position exists before attempting to sell to avoid API errors
         const targetPrice = parseFloat(botState.ltprice || 0);
         if (ac > 0 && targetPrice > 0 && currentPrice >= targetPrice) {
-            
-            // Safety Check: Do we actually have the coins?
-            if (ac > 0) {
-                log(`🚀 [L-RECOVERY] TP Price reached (${targetPrice.toFixed(2)}). Position detected (${ac.toFixed(6)} BTC). Exiting pause to SELL.`, 'success');
-                await updateBotState('SELLING', 'long'); 
-                return;
-            } else {
-                log(`⚠️ [L-RECOVERY-BLOCKED] TP Price reached, but no position (ac: ${ac}) found to sell. Check data sync.`, 'error');
-            }
+            log(`🚀 [L-RECOVERY] TP Price reached (${targetPrice.toFixed(2)}). Position detected (${ac.toFixed(6)} BTC). Exiting pause to SELL.`, 'success');
+            await updateBotState('SELLING', 'long'); 
+            return;
         }
 
         // --- 2. RECALCULATE TARGETS AND COVERAGE ---

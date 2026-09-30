@@ -1,13 +1,25 @@
-// BSB/server/src/states/long/LSelling.js    // 
+// BSB/server/src/states/long/LSelling.js
 
 const { placeLongSellOrder } = require('../../managers/longOrderManager');
 const { TRAILING_STOP_PERCENT, MIN_SELL_AMOUNT_BTC } = require('../../../utils/tradeConstants');
 
 const LSTATE = 'long';
 
+// 🟢 Helper estandarizado para detectar errores temporales de red/DNS
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    return err?.code === 'ENOTFOUND' || 
+           err?.code === 'ETIMEDOUT' || 
+           err?.code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network');
+};
+
 /**
  * SELLING STATE (LONG):
  * Manages Trailing Stop Loss and executes the final sale of the cycle.
+ * Protegido contra desconexiones temporales de red/DNS (2026).
  */
 async function run(dependencies) {
     const { 
@@ -25,12 +37,12 @@ async function run(dependencies) {
     try {
         const lastOrder = botState.llastOrder; 
         const acSelling = parseFloat(botState.lac || 0); 
-        const pm = parseFloat(botState.lpm || 0);        
-        const pc = parseFloat(botState.lpc || 0);        
+        const pm = parseFloat(botState.lpm || 0);         
+        const pc = parseFloat(botState.lpc || 0);         
 
         // 1. Safety Lock: Avoid double execution
         if (lastOrder) {
-            log(`[L-SELLING] ⏳ Sell order ${lastOrder.order_id} pending confirmation...`, 'debug');
+            log(`[L-SELLING] ⏳ Sell order ${lastOrder.order_id || 'pending'} confirmation...`, 'debug');
             return;
         }
 
@@ -68,13 +80,7 @@ async function run(dependencies) {
                 try {
                     await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, placeLongOrder); 
                 } catch (error) {
-                    // [MEJORA]: Detectar si es un error temporal de red/DNS
-                    const isNetworkError = error.code === 'ENOTFOUND' || 
-                                           error.code === 'ETIMEDOUT' || 
-                                           error.code === 'ECONNRESET' ||
-                                           error.message.includes('ENOTFOUND');
-
-                    if (isNetworkError) {
+                    if (isNetworkError(error)) {
                         log(`⚠️️ [L-SELL] Transient network/DNS error (${error.message}). Retrying automatically in next cycle...`, 'warning');
                         // No pausamos el bot, permitimos que reintente en cuanto la red de Render se estabilice
                     } else {
@@ -106,7 +112,9 @@ async function run(dependencies) {
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected crash in LSelling: ${criticalError.message}`, 'error');
         try {
-            await updateBotState('PAUSED', LSTATE);
+            if (!isNetworkError(criticalError)) {
+                await updateBotState('PAUSED', LSTATE);
+            }
         } catch (dbError) {
             log(`🚨 [CRITICAL] Database unreachable during emergency pause: ${dbError.message}`, 'error');
         }

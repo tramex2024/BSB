@@ -6,10 +6,17 @@
 const axios = require('axios');
 const CryptoJS = require('crypto-js');
 const querystring = require('querystring');
+const https = require('https'); // 🟢 Agregado: Módulo nativo HTTPS
 const { initOrderWebSocket } = require('./bitmartWs'); 
 
 const BASE_URL = 'https://api-cloud.bitmart.com';
 const LOG_PREFIX = '[BITMART_SERVICE]';
+
+// 🟢 Agregado: Agente HTTPS que fuerza la resolución DNS a IPv4 en Render
+const httpsAgent = new https.Agent({
+    keepAlive: true,
+    family: 4
+});
 
 // Motores de caché
 const tickerCache = new Map(); 
@@ -54,7 +61,8 @@ async function makeRequest(method, path, params = {}, body = {}, userCreds = nul
             method, 
             url: `${BASE_URL}${path}`, 
             headers, 
-            timeout: 10000 
+            timeout: 10000,
+            httpsAgent // 🟢 Agregado: Agente IPv4 aplicado a las peticiones
         };
 
         if (method === 'GET') {

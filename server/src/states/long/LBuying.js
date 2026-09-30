@@ -4,9 +4,21 @@ const { placeFirstLongOrder, placeCoverageBuyOrder } = require('../../managers/l
 const { monitorAndConsolidate } = require('./LongBuyConsolidator'); 
 const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
 
+// 🟢 Helper para detectar si un error fue provocado por problemas temporales de red/DNS
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    return err?.code === 'ENOTFOUND' || 
+           err?.code === 'ETIMEDOUT' || 
+           err?.code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network');
+};
+
 /**
  * BUYING STATE (LONG):
  * Monitorea el mercado para ejecutar compras iniciales o promediado exponencial (DCA).
+ * Protegido contra desconexiones temporales de red/DNS (2026).
  */
 async function run(dependencies) {
     const {
@@ -65,12 +77,18 @@ async function run(dependencies) {
                 try {
                     await placeFirstLongOrder(config, botState, log, updateBotState, updateGeneralBotState, placeLongOrder); 
                 } catch (orderError) {
-                    log(`❌ [L-BUY] Error al colocar orden inicial en Exchange: ${orderError.message}. Pausando bot.`, 'error');
-                    await updateBotState('PAUSED', LSTATE);
+                    log(`❌ [L-BUY] Error al colocar orden inicial en Exchange: ${orderError.message}.`, 'error');
+                    // 🟢 Solo pausar si NO es un error de red/DNS
+                    if (!isNetworkError(orderError)) {
+                        await updateBotState('PAUSED', LSTATE);
+                    }
                 }
             } else {
                 log(`⚠️ [L-BUY] Fondos insuficientes para apertura.`, 'warning');
-                await updateBotState('PAUSED', LSTATE); 
+                // 🟢 Evitar pausar si availableUSDT es 0 por falla de sincronización de la API
+                if (availableUSDT > 0) {
+                    await updateBotState('PAUSED', LSTATE); 
+                }
             }
             return; 
         }
@@ -103,12 +121,17 @@ async function run(dependencies) {
                 try {
                     await placeCoverageBuyOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, placeLongOrder);
                 } catch (error) {
-                    log(`❌ [L-BUY] Error en ejecución de DCA en el Exchange: ${error.message}. Pausando bot por seguridad.`, 'error');
-                    await updateBotState('PAUSED', LSTATE);
+                    log(`❌ [L-BUY] Error en ejecución de DCA en el Exchange: ${error.message}.`, 'error');
+                    // 🟢 Solo pausar si NO es un error de red/DNS
+                    if (!isNetworkError(error)) {
+                        await updateBotState('PAUSED', LSTATE);
+                    }
                 }
             } else {
-                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial. Pausando bot.`, 'error');
-                await updateBotState('PAUSED', LSTATE);
+                log(`🚫 [L-BUY] Saldo insuficiente para DCA exponencial.`, 'error');
+                if (availableUSDT > 0) {
+                    await updateBotState('PAUSED', LSTATE);
+                }
             }
             return;
         }
@@ -116,7 +139,9 @@ async function run(dependencies) {
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Error inesperado en LBuying: ${criticalError.message}`, 'error');
         try {
-            await updateBotState('PAUSED', LSTATE);
+            if (!isNetworkError(criticalError)) {
+                await updateBotState('PAUSED', LSTATE);
+            }
         } catch (dbError) {
             log(`🚨 [CRITICAL] Error masivo: No se pudo actualizar el estado a PAUSED en DB: ${dbError.message}`, 'error');
         }

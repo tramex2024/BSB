@@ -1,6 +1,7 @@
 /**
  * SHORT STRATEGY - STATE MACHINE (BSB 2026)
  * Life cycle management for Sell/Buyback operations with panic mitigation.
+ * Protegido contra desconexiones temporales de red/DNS (2026).
  */
 
 const SRunning = require('./states/short/SRunning'); // Entry scan
@@ -8,6 +9,17 @@ const SSelling = require('./states/short/SSelling'); // DCA (BTC Short Selling)
 const SBuying  = require('./states/short/SBuying');  // Take Profit (BTC Buyback)
 const SPaused  = require('./states/short/SPaused');
 const SStopped = require('./states/short/SStopped');
+
+// 🟢 Helper estandarizado para detectar errores temporales de red/DNS
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    return err?.code === 'ENOTFOUND' || 
+           err?.code === 'ETIMEDOUT' || 
+           err?.code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network');
+};
 
 /**
  * Executes the corresponding logic based on the current Short state.
@@ -60,8 +72,8 @@ async function runShortStrategy(dependencies) {
         log(`🔥 Critical error in ShortStrategy [${currentState}]: ${error.message}`, 'error');
         console.error(`[CRITICAL-SHORT][User: ${userId}]:`, error);
 
-        // If the error occurs in an active transactional state, pause the bot to freeze market exposure
-        if (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING') {
+        // 🟢 Solo forzar la pausa de emergencia si NO fue un error temporal de red/DNS
+        if (!isNetworkError(error) && (currentState === 'BUYING' || currentState === 'SELLING' || currentState === 'RUNNING')) {
             try {
                 log(`🚨 [SHORT FALLBACK ACTIVATED] Forcing emergency transition [${currentState} ➡️ PAUSED] to mitigate risks in Short mode.`, 'warning');
                 if (typeof updateBotState === 'function') {

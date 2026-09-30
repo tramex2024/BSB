@@ -1,6 +1,7 @@
 /**
  * BSB/server/src/states/short/SBuying.js
  * Inverse Trailing Stop Management and Buyback Monitoring
+ * Protegido contra desconexiones temporales de red/DNS (2026).
  */
 
 const { placeShortBuyOrder } = require('../../managers/shortOrderManager');
@@ -9,6 +10,17 @@ const { TRAILING_STOP_PERCENT, TRADE_SYMBOL } = require('../../../utils/tradeCon
 
 const MIN_CLOSE_AMOUNT_BTC = 0.00001; 
 const SSTATE = 'short';
+
+// 🟢 Helper estandarizado para detectar errores temporales de red/DNS
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    return err?.code === 'ENOTFOUND' || 
+           err?.code === 'ETIMEDOUT' || 
+           err?.code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network');
+};
 
 /**
  * S-BUYING STATE (SHORT):
@@ -40,7 +52,7 @@ async function run(dependencies) {
 
         // 1. SIMPLIFIED SAFETY LOCK
         if (slastOrder) {
-            log(`[S-BUYING] ⏳ Buy order ${slastOrder.order_id} pending confirmation...`, 'debug');
+            log(`[S-BUYING] ⏳ Buy order ${slastOrder.order_id || slastOrder.orderId || 'pending'} pending confirmation...`, 'debug');
             return;
         }
 
@@ -76,9 +88,13 @@ async function run(dependencies) {
                 try {
                     await placeShortBuyOrder(config, botState, acBuying, log, updateGeneralBotState, currentPrice, placeShortOrder); 
                 } catch (error) {
-                    // Safety protection: Any unexpected exchange rejection forces a safety pause
-                    log(`❌ Critical error in Short buyback execution on Exchange: ${error.message}. Pausing bot for safety.`, 'error');
-                    await updateBotState('PAUSED', SSTATE); 
+                    if (isNetworkError(error)) {
+                        log(`⚠ [S-BUYING] Transient network/DNS error (${error.message}). Retrying in next cycle...`, 'warning');
+                    } else {
+                        // Safety protection: Any unexpected exchange rejection forces a safety pause
+                        log(`❌ Critical error in Short buyback execution on Exchange: ${error.message}. Pausing bot for safety.`, 'error');
+                        await updateBotState('PAUSED', SSTATE); 
+                    }
                 }
             } else {
                 // Tracking heartbeat metrics
@@ -99,7 +115,9 @@ async function run(dependencies) {
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected error in SBuying: ${criticalError.message}`, 'error');
         try {
-            await updateBotState('PAUSED', SSTATE);
+            if (!isNetworkError(criticalError)) {
+                await updateBotState('PAUSED', SSTATE);
+            }
         } catch (dbError) {
             log(`🚨 [CRITICAL] Unable to update database to PAUSED: ${dbError.message}`, 'error');
         }

@@ -2,11 +2,23 @@
  * BSB/server/src/states/short/SSelling.js
  * SELLING STATE (SHORT):
  * Manages Short openings and exponential coverage (DCA upwards).
+ * Protegido contra desconexiones temporales de red/DNS (2026).
  */
 
 const { placeFirstShortOrder, placeCoverageShortOrder } = require('../../managers/shortOrderManager');
 const { monitorAndConsolidateShort: monitorShortSell } = require('./ShortSellConsolidator');
 const { TRADE_SYMBOL } = require('../../../utils/tradeConstants');
+
+// 🟢 Helper para detectar si un error fue provocado por problemas temporales de red/DNS
+const isNetworkError = (err) => {
+    const msg = err?.message || '';
+    return err?.code === 'ENOTFOUND' || 
+           err?.code === 'ETIMEDOUT' || 
+           err?.code === 'ECONNRESET' || 
+           msg.includes('ENOTFOUND') || 
+           msg.includes('Request Failed') ||
+           msg.includes('Network');
+};
 
 async function run(dependencies) {
     const {
@@ -60,12 +72,18 @@ async function run(dependencies) {
                 try {
                     await placeFirstShortOrder(config, botState, log, updateBotState, updateGeneralBotState, currentPrice, placeShortOrder);
                 } catch (orderError) {
-                    log(`❌ [S-SELL] Failed to place first Short order: ${orderError.message}. Pausing bot.`, 'error');
-                    await updateBotState('PAUSED', SSTATE);
+                    log(`❌ [S-SELL] Failed to place first Short order: ${orderError.message}.`, 'error');
+                    // 🟢 Solo pausar si NO es un fallo temporal de red/DNS
+                    if (!isNetworkError(orderError)) {
+                        await updateBotState('PAUSED', SSTATE);
+                    }
                 }
             } else {
                 log(`⚠️ [S-SELL DEBUG] Insufficient BTC. Available: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)}`, 'error');
-                await updateBotState('PAUSED', SSTATE);
+                // 🟢 Evitar pausar si availableBTC es 0 debido a que la sincronización con la API falló
+                if (availableBTC > 0) {
+                    await updateBotState('PAUSED', SSTATE);
+                }
             }
             return;
         }
@@ -96,19 +114,28 @@ async function run(dependencies) {
                 try {
                     await placeCoverageShortOrder(botState, requiredAmount, log, updateGeneralBotState, updateBotState, currentPrice, placeShortOrder);
                 } catch (error) {
-                    log(`❌ [S-SELL] Error placing coverage: ${error.message}. Pausing.`, 'error');
-                    await updateBotState('PAUSED', SSTATE);
+                    log(`❌ [S-SELL] Error placing coverage: ${error.message}.`, 'error');
+                    // 🟢 Solo pausar si NO es un fallo temporal de red/DNS
+                    if (!isNetworkError(error)) {
+                        await updateBotState('PAUSED', SSTATE);
+                    }
                 }
             } else {
                 log(`🚫 [S-SELL DEBUG] DCA failed. Insufficient BTC. Available: ${availableBTC.toFixed(6)} | Needed: ${btcNeeded.toFixed(6)}`, 'error');
-                await updateBotState('PAUSED', SSTATE);
+                if (availableBTC > 0) {
+                    await updateBotState('PAUSED', SSTATE);
+                }
             }
             return;
         }
 
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected error in SSelling: ${criticalError.message}`, 'error');
-        try { await updateBotState('PAUSED', SSTATE); } catch (dbError) {}
+        try { 
+            if (!isNetworkError(criticalError)) {
+                await updateBotState('PAUSED', SSTATE); 
+            }
+        } catch (dbError) {}
     }
 }
 
