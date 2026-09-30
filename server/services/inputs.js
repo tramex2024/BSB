@@ -38,7 +38,7 @@ function processUserInputs(amtL, amtS, amtAI, existingConfig = {}) {
             price_var: 1.5, 
             price_step_inc: parseFloat(stepInc.toFixed(4)),
             size_var: Math.max(parseFloat(sizeMultiplier.toFixed(4)), 1.0),
-            profit_percent: 0.8,
+            profit_percent: 0.9,
             trailing_percent: TRAILING_STOP_PERCENT * 100,
             levels: n,
             stopAtCycle: existingConfig[side]?.stopAtCycle || false

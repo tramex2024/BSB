@@ -12,6 +12,7 @@ export { displayMessage } from './ui/notifications.js';
 
 let lastPrice = 0;
 let lastKnownState = null;
+let lastAiPulse = {}; // 🛡️ Caché persistente para el último pulso válido de la IA
 
 const STATUS_COLORS = {
     'RUNNING': '#10b981',      
@@ -120,7 +121,9 @@ export async function updateBotUI(state) {
         'aulcycle': 'lcycle',         
         'aulsprice': 'lpc',           
         'aultprice': 'ltprice',       
-        'aultppc': 'lppc',          
+        'aultppc': 'lppc', 
+        'aulncp': 'lncp',
+        'aulrca': 'lrca',
         'aulcoverage': 'lcoverage',   
         'aulnorder': 'lnorder', 
         'ausprofit-val': 'sprofit',   
@@ -128,7 +131,9 @@ export async function updateBotUI(state) {
         'auscycle': 'scycle',         
         'ausbprice': 'spc',           
         'austprice': 'stprice',       
-        'austppc': 'sppc',          
+        'austppc': 'sppc', 
+        'ausncp': 'sncp', 
+        'ausrca': 'srca', 
         'auscoverage': 'scoverage',   
         'ausnorder': 'snorder', 
         'ai-virtual-balance': 'aibalance', 
@@ -191,8 +196,12 @@ export async function updateBotUI(state) {
         }
     });
 
-    // --- PULSE METRICS ---
-    const pulseSource = state.aiLastPulse || state;
+    // --- PULSE METRICS (Shielded with Persistent Cache) ---
+    if (state.aiLastPulse && typeof state.aiLastPulse === 'object' && Object.keys(state.aiLastPulse).length > 0) {
+        lastAiPulse = state.aiLastPulse;
+    }
+    const pulseSource = lastAiPulse;
+
     const pulseMetrics = [
         { id: 'ai-adx-val', key: 'aiAdx', fallbackKey: 'lai', barId: 'ai-adx-bar' },
         { id: 'ai-rsi-val', key: 'aiRsi', fallbackKey: 'rsi14', barId: null },
@@ -216,8 +225,8 @@ export async function updateBotUI(state) {
     // --- STOCH METRICS ---
     const stochEl = document.getElementById('ai-stoch-val');
     const stochBar = document.getElementById('ai-stoch-bar');
-    const kVal = parseFloat(pulseSource.aiStochK ?? pulseSource.stochK ?? state.stochK ?? 0);
-    const dVal = parseFloat(pulseSource.aiStochD ?? pulseSource.stochD ?? state.stochD ?? 0);
+    const kVal = parseFloat(pulseSource.aiStochK ?? pulseSource.stochK ?? 0);
+    const dVal = parseFloat(pulseSource.aiStochD ?? pulseSource.stochD ?? 0);
 
     if (stochEl) {
         const stochText = `${kVal.toFixed(1)} / ${dVal.toFixed(1)}`;
@@ -234,7 +243,7 @@ export async function updateBotUI(state) {
     }
 
     // --- AI CONFIDENCE ---
-    const confidenceVal = parseFloat(pulseSource.aiConfidence ?? state.aiConfidence ?? 0);
+    const confidenceVal = parseFloat(pulseSource.aiConfidence ?? 0);
     const confidenceTextEl = document.getElementById('ai-confidence-value');
     if (confidenceTextEl) {
         const confText = `${Math.round(confidenceVal)}%`;
