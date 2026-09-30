@@ -95,11 +95,22 @@ async function run(dependencies) {
     } catch (criticalError) {
         log(`🔥 [CRITICAL] Unexpected crash in LSelling: ${criticalError.message}`, 'error');
         try {
-            await updateBotState('PAUSED', LSTATE);
-        } catch (dbError) {
-            log(`🚨 [CRITICAL] Database unreachable during emergency pause: ${dbError.message}`, 'error');
-        }
-    }
-}
+                await placeLongSellOrder(config, botState, acSelling, log, updateGeneralBotState, placeLongOrder); 
+            } catch (error) {
+                // [MEJORA]: Detectar si es un error temporal de red/DNS
+                const isNetworkError = error.code === 'ENOTFOUND' || 
+                                       error.code === 'ETIMEDOUT' || 
+                                       error.code === 'ECONNRESET' ||
+                                       error.message.includes('ENOTFOUND');
+
+                if (isNetworkError) {
+                    log(`⚠️ [L-SELL] Transient network/DNS error (${error.message}). Retrying automatically in next cycle...`, 'warning');
+                    // No pausamos el bot, permitimos que reintente en cuanto la red de Render se estabilice
+                } else {
+                    // Errores de API reales (fondos, permisos, etc.) sí pausan por seguridad
+                    log(`❌ Critical exchange error: ${error.message}. Pausing bot to prevent loops.`, 'error');
+                    await updateBotState('PAUSED', LSTATE); 
+                }
+            }
 
 module.exports = { run };
